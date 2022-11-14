@@ -16,10 +16,20 @@ pub struct Scatter {
     expr: Expr,
 }
 
+pub enum BinaryOp {
+    Add, Sub, Mul, Div, Mod, Eq, NEq, Gt, GtE, Lt, LtE, And, Or, Xor, In, Arrow,
+    Index, IndexRange
+}
+
+pub enum UnaryOp {
+    Neg, Not
+}
+
 pub enum Expr {
     VarExpr(Var),
     Id(usize),
-    Binary(Box<Expr>, Box<Expr>),
+    Binary(BinaryOp, Box<Expr>, Box<Expr>),
+    Unary(UnaryOp, Box<Expr>),
     Prop{location: Box<Expr>, property: Box<Expr>},
     Call{function: i64, args: Vec<Arg>},
     Verb{location: Box<Expr>, verb: Box<Expr>, args: Vec<Arg>},

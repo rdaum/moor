@@ -1,7 +1,8 @@
+use paste::paste;
 use crate::compiler::ast::Expr::VarExpr;
-use crate::compiler::ast::{Arg, CondArm, ExceptArm, Expr, LoopKind, Stmt};
+use crate::compiler::ast::{Arg, BinaryOp, UnaryOp, CondArm, ExceptArm, Expr, LoopKind, Stmt};
 use crate::grammar::moolexer::mooLexer;
-use crate::grammar::mooparser::{mooParser, mooParserContextType, ArgContext, ArgContextAttrs, BreakContext, BreakContextAttrs, CodesContext, CodesContextAttrs, ContinueContext, ContinueContextAttrs, ElseifsContext, ElseifsContextAttrs, ErrorContext, ExceptContext, ExceptContextAttrs, ExceptsContext, ExceptsContextAttrs, ExprContextAll, ExprStmtContext, ExprStmtContextAttrs, FloatContext, ForExprContext, ForExprContextAttrs, ForRangeContext, ForRangeContextAttrs, ForkContext, ForkContextAttrs, IdentifierContext, IfContext, IfContextAttrs, IntContext, LiteralExprContext, Ne_arglistContext, Ne_arglistContextAttrs, ObjectContext, ProgramContext, ProgramContextAttrs, PropertyExprReferenceContext, PropertyReferenceContext, PropertyReferenceContextAttrs, ReturnContext, ReturnContextAttrs, SpliceArgContext, SpliceArgContextAttrs, StatementsContext, StatementsContextAll, StatementsContextAttrs, StringContext, SysPropContext, SysVerbContext, TryExceptContext, TryExceptContextAttrs, TryFinallyContext, TryFinallyContextAttrs, VerbCallContext, VerbExprCallContext, WhileContext, WhileContextAttrs, ArglistContext, ArglistContextAttrs, VerbCallContextAttrs, VerbExprCallContextAttrs, SysVerbContextAttrs};
+use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
 use crate::model::Var::{Obj, Str};
 use crate::model::{Error, Objid, Var};
@@ -218,6 +219,32 @@ impl ASTGenVisitor {
     }
 }
 
+macro_rules! binary_expr {
+    ( $op:ident ) => {
+        paste! {
+            fn [<visit_ $op Expr>](&mut self, ctx: &[<$op ExprContext>]<'node>) {
+                let left = self.reduce_expr(&ctx.expr(0));
+                let right = self.reduce_expr(&ctx.expr(1));
+                self._expr_stack
+                    .push(Expr::Binary(BinaryOp::$op, Box::new(left), Box::new(right)));
+            }
+        }
+
+    };
+}
+
+macro_rules! unary_expr {
+    ( $op:ident ) => {
+        paste! {
+            fn [<visit_ $op Expr>](&mut self, ctx: &[<$op ExprContext>]<'node>) {
+                let expr = self.reduce_expr(&ctx.expr());
+                self._expr_stack
+                    .push(Expr::Unary(UnaryOp::$op, Box::new(expr)));
+            }
+        }
+
+    };
+}
 impl<'node> ParseTreeVisitor<'node, mooParserContextType> for ASTGenVisitor {}
 
 impl<'node> mooVisitor<'node> for ASTGenVisitor {
@@ -400,9 +427,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let id = id.map(|id| self.find_id(&id));
 
         self._args_stack.push(vec![]);
-        ctx.codes().iter().for_each(|c| {
-            c.accept(self)
-        });
+        ctx.codes().iter().for_each(|c| c.accept(self));
         let codes = self._args_stack.pop().unwrap();
         let statements = self.reduce_statements(&ctx.statements());
         let except_arm = ExceptArm {
@@ -527,15 +552,13 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let obj = Objid(0);
 
         self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| {
-            c.accept(self)
-        });
+        ctx.arglist().iter().for_each(|c| c.accept(self));
         let args = self._args_stack.pop().unwrap();
 
         self._expr_stack.push(Expr::Verb {
             location: Box::new(VarExpr(Obj(obj))),
             verb: Box::new(VarExpr(Str(verb))),
-            args
+            args,
         });
     }
 
@@ -544,15 +567,13 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let verb = self.reduce_expr(&ctx.verb);
 
         self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| {
-            c.accept(self)
-        });
+        ctx.arglist().iter().for_each(|c| c.accept(self));
         let args = self._args_stack.pop().unwrap();
 
         self._expr_stack.push(Expr::Verb {
             location: Box::new(expr),
             verb: Box::new(verb),
-            args
+            args,
         });
     }
 
@@ -562,18 +583,41 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let verb = Var::Str(String::from(verb_id.get_text()));
 
         self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| {
-            c.accept(self)
-        });
+        ctx.arglist().iter().for_each(|c| c.accept(self));
         let args = self._args_stack.pop().unwrap();
 
         self._expr_stack.push(Expr::Verb {
             location: Box::new(expr),
             verb: Box::new(VarExpr(verb)),
-            args
+            args,
         });
     }
 
+    fn visit_ListExpr(&mut self, ctx: &ListExprContext<'node>) {
+        self._args_stack.push(vec![]);
+        ctx.arglist().iter().for_each(|c| c.accept(self));
+        let list = self._args_stack.pop().unwrap();
+        self._expr_stack.push(Expr::List(list));
+    }
+
+    binary_expr!(Mul);
+    binary_expr!(Div);
+    binary_expr!(Add);
+    binary_expr!(Sub);
+    binary_expr!(And);
+    binary_expr!(Or);
+    binary_expr!(Lt);
+    binary_expr!(LtE);
+    binary_expr!(Gt);
+    binary_expr!(GtE);
+    binary_expr!(Xor);
+    binary_expr!(Index);
+    binary_expr!(IndexRange);
+    binary_expr!(Arrow);
+    binary_expr!(In);
+
+    unary_expr!(Not);
+    unary_expr!(Negate);
 }
 
 pub fn parse(program: &str) {

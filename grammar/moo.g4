@@ -36,15 +36,13 @@ literal:
 
 
 expr:
-        '$'? id=ID #SysProp
-    |   '$'? id=ID '(' arglist ')' #SysVerb
-    |   '$' #End
+       '$' #RangeEnd
+    |   '{' scatter '}' '=' expr #ScatterEXpr
+    |   '{' arglist  '}' #ListExpr
     |   expr '[' expr TO expr ']' #IndexRangeExpr
     |   expr '[' expr ']' #IndexExpr
-    |   '{' scatter '}' '=' expr #ScatterEXpr
-    |   '{' arglist  '}' #ArgListEXpr
     |   <assoc=right> expr '=' expr #AssigneXpr
-    |   expr '+' expr #AddEXpr
+    |   expr '+' expr #AddExpr
     |   expr '-' expr #SubExpr
     |   expr '*' expr #MulExpr
     |   expr '/' expr #DivExpr
@@ -55,10 +53,9 @@ expr:
     |   expr '==' expr #EqExpr
     |   expr '!=' expr #NeExpr
     |   expr '<' expr #LtExpr
-    |   expr '<=' expr #LteExpr
-    |   expr '<=' expr #LteExpr
+    |   expr '<=' expr #LtEExpr
     |   expr '>' expr #GtExpr
-    |   expr '>=' expr #GteExpr
+    |   expr '>=' expr #GtEExpr
     |   expr 'in' expr #InExpr
     |   expr '=>' expr #ArrowExpr
     |   '-' expr #NegateExpr
@@ -67,8 +64,10 @@ expr:
     |   expr '?' expr '|' expr #IfExpr
     |  '`' expr '!' codes default_br '\'' #ErrorEscape
     |  literal #LiteralExpr
+    |  '$'? id=ID '(' arglist ')' #SysVerb
     |  location=expr ':' '(' verb=expr ')' '(' arglist ')' # VerbExprCall
     |  location=expr ':' verb=ID '(' arglist ')' #VerbCall
+    |  '$'? id=ID #SysProp
     |  location=expr '.' property=ID  #PropertyReference
     |  location=expr '.' '(' property=expr ')' #PropertyExprReference
     ;
