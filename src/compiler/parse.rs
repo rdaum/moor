@@ -68,6 +68,7 @@ impl Names {
 }
 
 pub struct ASTGenVisitor {
+    program : Vec<Stmt>,
     _statement_stack: Vec<Vec<Stmt>>,
     _expr_stack: Vec<Expr>,
     _cond_arm_stack: Vec<Vec<CondArm>>,
@@ -80,6 +81,7 @@ pub struct ASTGenVisitor {
 impl ASTGenVisitor {
     pub fn new() -> Self {
         Self {
+            program: Default::default(),
             _statement_stack: Default::default(),
             _expr_stack: Default::default(),
             _cond_arm_stack: Default::default(),
@@ -250,6 +252,7 @@ impl<'node> ParseTreeVisitor<'node, mooParserContextType> for ASTGenVisitor {}
 impl<'node> mooVisitor<'node> for ASTGenVisitor {
     fn visit_program(&mut self, ctx: &ProgramContext<'node>) {
         ctx.statements().iter().for_each(|item| item.accept(self));
+        self.program = self._statement_stack.pop().unwrap();
     }
 
     fn visit_statements(&mut self, ctx: &StatementsContext<'node>) {
@@ -267,7 +270,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             condition,
             statements,
         }]);
-        for ei in ctx.elseifs().iter() {
+        for ei in ctx.elseif_all().iter() {
             ei.accept(self);
         }
         let cond_arms = self._cond_arm_stack.pop().unwrap();
@@ -283,17 +286,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             otherwise,
         };
         self._statement_stack.last_mut().unwrap().push(cond);
-    }
-
-    fn visit_elseifs(&mut self, ctx: &ElseifsContext<'node>) {
-        let condition = self.reduce_expr(&ctx.expr());
-        let statements = self.reduce_statements(&ctx.statements());
-
-        let cond_arm = CondArm {
-            condition,
-            statements,
-        };
-        self._cond_arm_stack.last_mut().unwrap().push(cond_arm);
     }
 
     fn visit_ForExpr(&mut self, ctx: &ForExprContext<'node>) {
@@ -360,16 +352,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._statement_stack.last_mut().unwrap().push(stmt);
     }
 
-    fn visit_ExprStmt(&mut self, ctx: &ExprStmtContext<'node>) {
-        match self.reduce_opt_expr(&ctx.expr()) {
-            None => {}
-            Some(expr) => {
-                let stmt = Stmt::Expr(expr);
-                self._statement_stack.last_mut().unwrap().push(stmt);
-            }
-        }
-    }
-
     fn visit_Break(&mut self, ctx: &BreakContext<'node>) {
         let id = Self::get_opt_id(&ctx.ID());
         // TODO propagate error correctly
@@ -416,6 +398,27 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             .push(Stmt::Finally { body, handler })
     }
 
+    fn visit_ExprStmt(&mut self, ctx: &ExprStmtContext<'node>) {
+        match self.reduce_opt_expr(&ctx.expr()) {
+            None => {}
+            Some(expr) => {
+                let stmt = Stmt::Expr(expr);
+                self._statement_stack.last_mut().unwrap().push(stmt);
+            }
+        }
+    }
+
+    fn visit_elseif(&mut self, ctx: &ElseifContext<'node>) {
+        let condition = self.reduce_expr(&ctx.condition);
+        let statements = self.reduce_statements(&ctx.statements());
+
+        let cond_arm = CondArm {
+            condition,
+            statements,
+        };
+        self._cond_arm_stack.last_mut().unwrap().push(cond_arm);
+    }
+
     fn visit_excepts(&mut self, ctx: &ExceptsContext<'node>) {
         // Just visit each 'except' arm, and that will fill the _excepts_stack
         ctx.except_all().iter().for_each(|e| e.accept(self));
@@ -438,40 +441,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._excepts_stack.last_mut().unwrap().push(except_arm);
     }
 
-    fn visit_codes(&mut self, ctx: &CodesContext<'node>) {
-        // Push to the arglist.
-        ctx.ne_arglist().iter().for_each(|al| al.accept(self));
-    }
-
-    fn visit_arglist(&mut self, ctx: &ArglistContext<'node>) {
-        ctx.ne_arglist().iter().for_each(|al| al.accept(self));
-    }
-
-    fn visit_ne_arglist(&mut self, ctx: &Ne_arglistContext<'node>) {
-        ctx.argument_all().iter().for_each(|a| a.accept(self));
-    }
-
-    fn visit_Arg(&mut self, ctx: &ArgContext<'node>) {
-        let expr = self.reduce_expr(&ctx.expr());
-        self._args_stack.last_mut().unwrap().push(Arg::Normal(expr));
-    }
-
-    fn visit_SpliceArg(&mut self, ctx: &SpliceArgContext<'node>) {
-        let expr = self.reduce_expr(&ctx.expr());
-        self._args_stack.last_mut().unwrap().push(Arg::Splice(expr));
-    }
-
-    fn visit_LiteralExpr(&mut self, ctx: &LiteralExprContext<'node>) {
-        ctx.get_children().for_each(|c| c.accept(self))
-    }
-
-    fn visit_String(&mut self, ctx: &StringContext<'node>) {
-        let string = ctx.get_text();
-        let string = string.as_str().clone();
-        self._expr_stack
-            .push(VarExpr(Var::Str(String::from(string))));
-    }
-
     fn visit_Int(&mut self, ctx: &IntContext<'node>) {
         let i = i64::from_str(ctx.get_text().as_str()).unwrap();
         self._expr_stack.push(VarExpr(Var::Int(i)));
@@ -482,8 +451,16 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(VarExpr(Var::Float(f)));
     }
 
+    fn visit_String(&mut self, ctx: &StringContext<'node>) {
+        let string = ctx.get_text();
+        let string = string.as_str().clone();
+        self._expr_stack
+            .push(VarExpr(Var::Str(String::from(string))));
+    }
+
     fn visit_Object(&mut self, ctx: &ObjectContext<'node>) {
-        let i = i64::from_str(ctx.get_text().as_str()).unwrap();
+        let oid_txt = ctx.get_text();
+        let i = i64::from_str(&oid_txt.as_str()[1..]).unwrap();
         self._expr_stack.push(VarExpr(Var::Obj(Objid(i))));
     }
 
@@ -517,14 +494,8 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(Expr::Id(id.0))
     }
 
-    fn visit_SysProp(&mut self, ctx: &SysPropContext<'node>) {
-        let prop_id = ctx.id.as_ref().unwrap();
-        let property = String::from(prop_id.get_text());
-        let obj = Objid(0);
-        self._expr_stack.push(Expr::Prop {
-            location: Box::new(VarExpr(Var::Obj(obj))),
-            property: Box::new(VarExpr(Var::Str(property))),
-        });
+    fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
+
     }
 
     fn visit_PropertyExprReference(&mut self, ctx: &PropertyExprReferenceContext<'node>) {
@@ -536,14 +507,40 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         })
     }
 
-    fn visit_PropertyReference(&mut self, ctx: &PropertyReferenceContext<'node>) {
+    fn visit_LiteralExpr(&mut self, ctx: &LiteralExprContext<'node>) {
+        ctx.get_children().for_each(|c| c.accept(self))
+    }
+
+    fn visit_ListExpr(&mut self, ctx: &ListExprContext<'node>) {
+        self._args_stack.push(vec![]);
+        ctx.arglist().iter().for_each(|c| c.accept(self));
+        let list = self._args_stack.pop().unwrap();
+        self._expr_stack.push(Expr::List(list));
+    }
+
+    fn visit_VerbExprCall(&mut self, ctx: &VerbExprCallContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
-        let prop_id = &ctx.property.as_ref().unwrap();
-        let property = Var::Str(String::from(prop_id.get_text()));
-        self._expr_stack.push(Expr::Prop {
+        let verb = self.reduce_expr(&ctx.verb);
+
+        self._args_stack.push(vec![]);
+        ctx.arglist().iter().for_each(|c| c.accept(self));
+        let args = self._args_stack.pop().unwrap();
+
+        self._expr_stack.push(Expr::Verb {
             location: Box::new(expr),
-            property: Box::new(VarExpr(property)),
-        })
+            verb: Box::new(verb),
+            args,
+        });
+    }
+
+    fn visit_SysProp(&mut self, ctx: &SysPropContext<'node>) {
+        let prop_id = ctx.id.as_ref().unwrap();
+        let property = String::from(prop_id.get_text());
+        let obj = Objid(0);
+        self._expr_stack.push(Expr::Prop {
+            location: Box::new(VarExpr(Var::Obj(obj))),
+            property: Box::new(VarExpr(Var::Str(property))),
+        });
     }
 
     fn visit_SysVerb(&mut self, ctx: &SysVerbContext<'node>) {
@@ -562,19 +559,27 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         });
     }
 
-    fn visit_VerbExprCall(&mut self, ctx: &VerbExprCallContext<'node>) {
+    fn visit_PropertyReference(&mut self, ctx: &PropertyReferenceContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
-        let verb = self.reduce_expr(&ctx.verb);
-
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let args = self._args_stack.pop().unwrap();
-
-        self._expr_stack.push(Expr::Verb {
+        let prop_id = &ctx.property.as_ref().unwrap();
+        let property = Var::Str(String::from(prop_id.get_text()));
+        self._expr_stack.push(Expr::Prop {
             location: Box::new(expr),
-            verb: Box::new(verb),
-            args,
-        });
+            property: Box::new(VarExpr(property)),
+        })
+    }
+
+    fn visit_ErrorEscape(&mut self, ctx: &ErrorEscapeContext<'node>) {
+        let try_expr = self.reduce_expr(&ctx.try_e);
+        self._args_stack.push(vec![]);
+        ctx.codes().iter().for_each(|c| c.accept(self));
+        let codes = self._args_stack.pop().unwrap();
+        let except = self.reduce_opt_expr(&ctx.except_expr).map(|e| Box::new(e));
+        self._expr_stack.push(Expr::Catch {
+            trye: Box::new(try_expr),
+            codes,
+            except
+        })
     }
 
     fn visit_VerbCall(&mut self, ctx: &VerbCallContext<'node>) {
@@ -593,12 +598,30 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         });
     }
 
-    fn visit_ListExpr(&mut self, ctx: &ListExprContext<'node>) {
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let list = self._args_stack.pop().unwrap();
-        self._expr_stack.push(Expr::List(list));
+    fn visit_codes(&mut self, ctx: &CodesContext<'node>) {
+        // Push to the arglist.
+        ctx.ne_arglist().iter().for_each(|al| al.accept(self));
     }
+
+    fn visit_arglist(&mut self, ctx: &ArglistContext<'node>) {
+        ctx.ne_arglist().iter().for_each(|al| al.accept(self));
+    }
+
+    fn visit_ne_arglist(&mut self, ctx: &Ne_arglistContext<'node>) {
+        ctx.argument_all().iter().for_each(|a| a.accept(self));
+    }
+
+    fn visit_Arg(&mut self, ctx: &ArgContext<'node>) {
+        let expr = self.reduce_expr(&ctx.expr());
+        self._args_stack.last_mut().unwrap().push(Arg::Normal(expr));
+    }
+
+    fn visit_SpliceArg(&mut self, ctx: &SpliceArgContext<'node>) {
+        let expr = self.reduce_expr(&ctx.expr());
+        self._args_stack.last_mut().unwrap().push(Arg::Splice(expr));
+    }
+
+
 
     binary_expr!(Mul);
     binary_expr!(Div);
@@ -617,10 +640,10 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     binary_expr!(In);
 
     unary_expr!(Not);
-    unary_expr!(Negate);
+    unary_expr!(Neg);
 }
 
-pub fn parse(program: &str) {
+pub fn compile_program(program: &str) -> Result<Vec<Stmt>, anyhow::Error> {
     let is = InputStream::new(program);
     let lexer = mooLexer::new(is);
     let source = CommonTokenStream::new(lexer);
@@ -635,7 +658,6 @@ pub fn parse(program: &str) {
     let program_context = parser.program().unwrap();
 
     let mut astgen_visitor = ASTGenVisitor::new();
-
     program_context.accept(&mut astgen_visitor);
-    // let tree = program_context.to_string_tree(&*parser);
+    Ok(astgen_visitor.program)
 }

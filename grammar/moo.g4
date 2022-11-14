@@ -6,7 +6,7 @@ program: statements EOF;
 statements: statement*;
 
 statement:
-        'if' '(' expr ')' statements elseifs ('else' elsepart=statements)? 'endif' #If
+        'if' '(' expr ')' statements (elseif)* ('else' elsepart=statements)? 'endif' #If
     |   'for' ID 'in' '(' expr ')' statements 'endfor' #ForExpr
     |   'for' ID 'in' '[' from=expr TO to=expr ']' statements 'endfor' #ForRange
     |   'while' ID? '(' condition=expr ')' statements 'endwhile' #While
@@ -19,8 +19,8 @@ statement:
     |   expr? ';' #ExprStmt
     ;
 
-elseifs: /* */ |
-    elseifs 'elseif' '(' expr ')' statements
+elseif:
+   'elseif' '(' condition=expr ')' statements
     ;
 
 excepts: except+;
@@ -37,7 +37,7 @@ literal:
 
 expr:
        '$' #RangeEnd
-    |   '{' scatter '}' '=' expr #ScatterEXpr
+    |   '{' scatter '}' '=' expr #ScatterExpr
     |   '{' arglist  '}' #ListExpr
     |   expr '[' expr TO expr ']' #IndexRangeExpr
     |   expr '[' expr ']' #IndexExpr
@@ -58,11 +58,11 @@ expr:
     |   expr '>=' expr #GtEExpr
     |   expr 'in' expr #InExpr
     |   expr '=>' expr #ArrowExpr
-    |   '-' expr #NegateExpr
+    |   '-' expr #NegExpr
     |   '!' expr #NotExpr
     |   '(' expr ')' #ParenExpr
     |   expr '?' expr '|' expr #IfExpr
-    |  '`' expr '!' codes default_br '\'' #ErrorEscape
+    |  '`' try_e=expr '!' codes ('=>' except_expr=expr)? '\'' #ErrorEscape
     |  literal #LiteralExpr
     |  '$'? id=ID '(' arglist ')' #SysVerb
     |  location=expr ':' '(' verb=expr ')' '(' arglist ')' # VerbExprCall
@@ -74,9 +74,6 @@ expr:
 
 codes:
     'any' | ne_arglist;
-
-default_br:
-    /* nothing */ | ne_arglist;
 
 arglist: /* emmpty*/ |
         ne_arglist;

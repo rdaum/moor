@@ -35,7 +35,7 @@ pub enum Expr {
     Verb{location: Box<Expr>, verb: Box<Expr>, args: Vec<Arg>},
     Range{base: Box<Expr>, from: Box<Expr>, to: Box<Expr>},
     Cond{condition: Box<Expr>, consequence: Box<Expr>, alternative: Box<Expr>},
-    Catch{trye: Box<Expr>, code: Vec<Arg>, except: Box<Expr>},
+    Catch{trye: Box<Expr>, codes: Vec<Arg>, except: Option<Box<Expr>>},
     Expr(Box<Expr>),
     List(Vec<Arg>),
     Scatter(Vec<Scatter>)

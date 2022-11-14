@@ -15,7 +15,7 @@ use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::tree::{ParseTree};
 
 use symbol_table::{SymbolTable};
-use crate::compiler::parse::VerbCompileErrorListener;
+use crate::compiler::parse::{compile_program, VerbCompileErrorListener};
 
 
 use crate::grammar::mooparser::{mooParser};
@@ -41,17 +41,6 @@ fn main() {
     // Now iterate and compile each verb...
     for v in &td.verbs {
         println!("Compiling verb {}:{}", v.objid.0, v.verbnum);
-        let is = InputStream::new(v.program.as_str());
-        let lexer = mooLexer::new(is);
-        let source = CommonTokenStream::new(lexer);
-        let mut parser = mooParser::new(source);
-        println!("Compiled");
-        
-        let err_listener = Box::new(VerbCompileErrorListener { program: v.program.clone() });
-        
-        parser.add_error_listener(err_listener);
-        let program_context = parser.program().unwrap();
-
-        let _tree = program_context.to_string_tree(&*parser);
+        compile_program(&v.program).unwrap();
     }
 }
