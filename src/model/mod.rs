@@ -44,7 +44,7 @@ pub enum VarType {
 pub enum Var {
     Clear,
     None,
-    Str(Symbol),
+    Str(String),
     Obj(Objid),
     Int(i64),
     Float(f64),

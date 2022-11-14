@@ -111,7 +111,7 @@ impl<R: Read> TextdumpReader<R> {
         let v = match vtype {
             VarType::TYPE_INT => Var::Int(self.read_num()?),
             VarType::TYPE_OBJ => Var::Obj(self.read_objid()?),
-            VarType::TYPE_STR => Var::Str(self.read_string_intern()?),
+            VarType::TYPE_STR => Var::Str(self.read_string()?),
             VarType::TYPE_ERR => {
                 let e_num = self.read_num()?;
                 let etype: Error = Error::from_int(e_num as u8)?;

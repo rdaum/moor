@@ -1,5 +1,5 @@
 use crate::compiler::parse::Name;
-use crate::model::Var;
+use crate::model::{Objid, Var};
 
 pub enum Arg {
     Normal(Expr),
@@ -18,10 +18,11 @@ pub struct Scatter {
 
 pub enum Expr {
     VarExpr(Var),
-    Id(i64),
+    Id(usize),
     Binary(Box<Expr>, Box<Expr>),
+    Prop{location: Box<Expr>, property: Box<Expr>},
     Call{function: i64, args: Vec<Arg>},
-    Verb{obj: Box<Expr>, verb: Box<Expr>, args: Vec<Arg>},
+    Verb{location: Box<Expr>, verb: Box<Expr>, args: Vec<Arg>},
     Range{base: Box<Expr>, from: Box<Expr>, to: Box<Expr>},
     Cond{condition: Box<Expr>, consequence: Box<Expr>, alternative: Box<Expr>},
     Catch{trye: Box<Expr>, code: Vec<Arg>, except: Box<Expr>},

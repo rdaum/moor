@@ -36,7 +36,8 @@ literal:
 
 
 expr:
-        '$'? ID ('(' arglist ')')? #SysObjExpr
+        '$'? id=ID #SysProp
+    |   '$'? id=ID '(' arglist ')' #SysVerb
     |   '$' #End
     |   expr '[' expr TO expr ']' #IndexRangeExpr
     |   expr '[' expr ']' #IndexExpr
@@ -66,9 +67,10 @@ expr:
     |   expr '?' expr '|' expr #IfExpr
     |  '`' expr '!' codes default_br '\'' #ErrorEscape
     |  literal #LiteralExpr
-    |  expr ':' '(' expr ')' '(' arglist ')' # VerbCall
-    |  expr '.' (ID | '(' arglist ')') #PropertyReference
-    |  expr ':' ID '(' arglist ')' #VerbExprCall
+    |  location=expr ':' '(' verb=expr ')' '(' arglist ')' # VerbExprCall
+    |  location=expr ':' verb=ID '(' arglist ')' #VerbCall
+    |  location=expr '.' property=ID  #PropertyReference
+    |  location=expr '.' '(' property=expr ')' #PropertyExprReference
     ;
 
 codes:
