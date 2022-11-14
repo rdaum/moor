@@ -1,0 +1,13 @@
+[package]
+name = "moor"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+antlr-rust = {git = "https://github.com/rrevenantt/antlr4rust"}
+lazy_static = "1.4.0"
+anyhow = "1.0.66"
+symbol_table = "0.3.0"
+int-enum = "0.5.0"
+text_io = "0.1.12"
