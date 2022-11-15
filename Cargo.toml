@@ -12,3 +12,4 @@ symbol_table = "0.3.0"
 int-enum = "0.5.0"
 text_io = "0.1.12"
 paste = "1.0.9"
+cyclebox = { git = "https://github.com/rdaum/the-cyclebox.git" }

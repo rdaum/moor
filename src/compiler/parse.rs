@@ -4,8 +4,8 @@ use crate::compiler::ast::{Arg, BinaryOp, UnaryOp, CondArm, ExceptArm, Expr, Loo
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
-use crate::model::Var::{Obj, Str};
-use crate::model::{Error, Objid, Var};
+use crate::model::var::Var::{Obj, Str};
+use crate::model::var::{Error, Objid, Var};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
 use antlr_rust::errors::ANTLRError;

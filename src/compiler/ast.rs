@@ -1,5 +1,5 @@
 use crate::compiler::parse::Name;
-use crate::model::{Var};
+use crate::model::var::{Var};
 
 #[derive(Debug)]
 pub enum Arg {

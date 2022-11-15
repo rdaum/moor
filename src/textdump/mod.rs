@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Read};
 use anyhow::anyhow;
 use symbol_table::{Symbol, SymbolTable};
 use text_io::scan;
-use crate::model::{Error, Objid, Var, VarType};
+use crate::model::var::{Error, Objid, Var, VarType};
 use int_enum::IntEnum;
 
 pub struct Verbdef {
