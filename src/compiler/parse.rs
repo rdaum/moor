@@ -40,6 +40,7 @@ impl<'a, T: Recognizer<'a>> ErrorListener<'a, T> for VerbCompileErrorListener {
     }
 }
 
+#[derive(Debug)]
 struct LoopEntry {
     name: Option<String>,
     is_barrier: bool,
@@ -107,8 +108,8 @@ impl ASTGenVisitor {
             is_barrier: false,
         })
     }
-    fn resume_loop_scope(&mut self) -> LoopEntry {
-        let last_entry = self._loop_stack.pop();
+    fn resume_loop_scope(&mut self)  {
+        let last_entry = self._loop_stack.last();
         match last_entry {
             None => {
                 // TODO should be a recoverable error?
@@ -116,9 +117,11 @@ impl ASTGenVisitor {
             }
             Some(loop_entry) if !loop_entry.is_barrier => {
                 // TODO should be a recoverable error?
-                panic!("PARSER: Tried to resume non-loop-scope barrier!")
+                panic!("PARSER: Tried to resume non-loop-scope barrier! (current loop: {:?}", loop_entry)
             }
-            Some(loop_entry) => loop_entry,
+            Some(_) => {
+                self._loop_stack.pop();
+            },
         }
     }
     fn pop_loop_name(&mut self) -> LoopEntry {
@@ -336,6 +339,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             condition,
             body,
         };
+        self.pop_loop_name();
 
         self._statement_stack.last_mut().unwrap().push(stmt);
     }
@@ -343,15 +347,14 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     fn visit_Fork(&mut self, ctx: &ForkContext<'node>) {
         self.suspend_loop_scope();
         let id = Self::get_opt_id(&ctx.ID());
-        self.push_loop_name(id.as_ref());
         let id = id.map(|id| self.find_id(&id));
 
         let time = self.reduce_expr(&ctx.time);
-
         let body = self.reduce_statements(&ctx.statements());
 
         let stmt = Stmt::Fork { id, time, body };
         self._statement_stack.last_mut().unwrap().push(stmt);
+        self.resume_loop_scope();
     }
 
     fn visit_Break(&mut self, ctx: &BreakContext<'node>) {
