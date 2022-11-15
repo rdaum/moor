@@ -46,6 +46,7 @@ struct LoopEntry {
     is_barrier: bool,
 }
 
+#[derive(Debug)]
 pub struct Name(usize);
 struct Names {
     names: Vec<String>,
@@ -510,7 +511,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         })
     }
 
-    fn visit_RangeEnd(&mut self, ctx: &RangeEndContext<'node>) {
+    fn visit_RangeEnd(&mut self, _ctx: &RangeEndContext<'node>) {
         self._expr_stack.push(Expr::Length);
     }
 
@@ -590,7 +591,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._args_stack.push(vec![]);
         ctx.codes().iter().for_each(|c| c.accept(self));
         let codes = self._args_stack.pop().unwrap();
-        let except = self.reduce_opt_expr(&ctx.except_expr).map(|e| Box::new(e));
+        let except = self.reduce_opt_expr(&ctx.except_expr).map(Box::new);
         self._expr_stack.push(Expr::Catch {
             trye: Box::new(try_expr),
             codes,

@@ -1,4 +1,4 @@
-use symbol_table::Symbol;
+
 use int_enum::IntEnum;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -41,6 +41,7 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
+#[derive(Debug)]
 pub enum Var {
     Clear,
     None,

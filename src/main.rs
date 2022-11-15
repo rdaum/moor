@@ -1,24 +1,24 @@
-use crate::grammar::moolexer::mooLexer;
-use antlr_rust::{InputStream, Parser};
+
+
 
 
 use std::fs::{File};
 
 use std::io::BufReader;
 
-use antlr_rust::common_token_stream::CommonTokenStream;
 
 
 
 
 
-use antlr_rust::tree::{ParseTree};
+
+
 
 use symbol_table::{SymbolTable};
-use crate::compiler::parse::{compile_program, VerbCompileErrorListener};
+use crate::compiler::parse::{compile_program};
 
 
-use crate::grammar::mooparser::{mooParser};
+
 use crate::textdump::{TextdumpReader};
 
 pub mod grammar;
@@ -41,6 +41,7 @@ fn main() {
     // Now iterate and compile each verb...
     for v in &td.verbs {
         println!("Compiling verb {}:{}", v.objid.0, v.verbnum);
-        compile_program(&v.program).unwrap();
+        let program = compile_program(&v.program).unwrap();
+        println!("Compiled to AST {:?}", program);
     }
 }

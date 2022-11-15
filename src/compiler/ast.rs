@@ -1,30 +1,36 @@
 use crate::compiler::parse::Name;
-use crate::model::{Objid, Var};
+use crate::model::{Var};
 
+#[derive(Debug)]
 pub enum Arg {
     Normal(Expr),
-    Splice(Expr)
+    Splice(Expr),
 }
 
+#[derive(Debug)]
 pub enum ScatterKind {
     Required, Optional, Rest
 }
 
+#[derive(Debug)]
 pub struct Scatter {
     pub kind: ScatterKind,
     pub id: Name,
     pub expr: Option<Expr>,
 }
 
+#[derive(Debug)]
 pub enum BinaryOp {
     Add, Sub, Mul, Div, Mod, Eq, NEq, Gt, GtE, Lt, LtE, And, Or, Xor, In, Arrow,
     Index, IndexRange
 }
 
+#[derive(Debug)]
 pub enum UnaryOp {
     Neg, Not
 }
 
+#[derive(Debug)]
 pub enum Expr {
     VarExpr(Var),
     Id(usize),
@@ -42,21 +48,25 @@ pub enum Expr {
     Length,
 }
 
+#[derive(Debug)]
 pub struct CondArm {
     pub condition: Expr,
     pub statements: Vec<Stmt>,
 }
 
+#[derive(Debug)]
 pub struct ExceptArm {
     pub id: Option<Name>,
     pub codes: Vec<Arg>,
     pub statements: Vec<Stmt>,
 }
 
+#[derive(Debug)]
 pub enum LoopKind {
     While
 }
 
+#[derive(Debug)]
 pub enum Stmt {
     Cond{arms: Vec<CondArm>, otherwise:Vec<Stmt>},
     List{expr: Expr, body: Vec<Stmt>},
