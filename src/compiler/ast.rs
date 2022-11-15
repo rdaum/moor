@@ -11,9 +11,9 @@ pub enum ScatterKind {
 }
 
 pub struct Scatter {
-    kind: ScatterKind,
-    id: Name,
-    expr: Expr,
+    pub kind: ScatterKind,
+    pub id: Name,
+    pub expr: Option<Expr>,
 }
 
 pub enum BinaryOp {

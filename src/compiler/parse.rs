@@ -1,6 +1,6 @@
 use paste::paste;
 use crate::compiler::ast::Expr::VarExpr;
-use crate::compiler::ast::{Arg, BinaryOp, UnaryOp, CondArm, ExceptArm, Expr, LoopKind, Stmt};
+use crate::compiler::ast::{Arg, BinaryOp, UnaryOp, CondArm, ExceptArm, Expr, LoopKind, Stmt, Scatter, ScatterKind};
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
@@ -75,6 +75,7 @@ pub struct ASTGenVisitor {
     _loop_stack: Vec<LoopEntry>,
     _excepts_stack: Vec<Vec<ExceptArm>>,
     _args_stack: Vec<Vec<Arg>>,
+    _scatter_stack: Vec<Vec<Scatter>>,
     _names: Names,
 }
 
@@ -88,6 +89,7 @@ impl ASTGenVisitor {
             _loop_stack: Default::default(),
             _excepts_stack: Default::default(),
             _args_stack: Default::default(),
+            _scatter_stack: Default::default(),
             _names: Default::default(),
         }
     }
@@ -408,6 +410,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         }
     }
 
+
     fn visit_elseif(&mut self, ctx: &ElseifContext<'node>) {
         let condition = self.reduce_expr(&ctx.condition);
         let statements = self.reduce_statements(&ctx.statements());
@@ -494,9 +497,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(Expr::Id(id.0))
     }
 
-    fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
-
-    }
 
     fn visit_PropertyExprReference(&mut self, ctx: &PropertyExprReferenceContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
@@ -531,6 +531,15 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             verb: Box::new(verb),
             args,
         });
+    }
+
+    fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
+        self._scatter_stack.push(vec![]);
+        ctx.scatter().iter().for_each(|s| {
+            s.accept(self)
+        });
+        let scatters = self._scatter_stack.pop().unwrap();
+        self._expr_stack.push(Expr::Scatter(scatters));
     }
 
     fn visit_SysProp(&mut self, ctx: &SysPropContext<'node>) {
@@ -619,6 +628,47 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     fn visit_SpliceArg(&mut self, ctx: &SpliceArgContext<'node>) {
         let expr = self.reduce_expr(&ctx.expr());
         self._args_stack.last_mut().unwrap().push(Arg::Splice(expr));
+    }
+
+
+    fn visit_scatter(&mut self, ctx: &ScatterContext<'node>) {
+        ctx.scatter_item_all().iter().for_each(|si| {
+            si.accept(self)
+        });
+        ctx.scatter_rest_item().iter().for_each(|si| {
+            si.accept(self)
+        })
+    }
+
+    fn visit_ScatterOptionalTarget(&mut self, ctx: &ScatterOptionalTargetContext<'node>) {
+        let expr = self.reduce_opt_expr(&ctx.expr());
+        let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
+        let sd = Scatter{
+            kind: ScatterKind::Optional,
+            id,
+            expr
+        };
+        self._scatter_stack.last_mut().unwrap().push(sd);
+    }
+
+    fn visit_ScatterTarget(&mut self, ctx: &ScatterTargetContext<'node>) {
+        let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
+        let sd = Scatter{
+            kind: ScatterKind::Required,
+            id,
+            expr: None
+        };
+        self._scatter_stack.last_mut().unwrap().push(sd);
+    }
+
+    fn visit_ScatterRestTarget(&mut self, ctx: &ScatterRestTargetContext<'node>) {
+        let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
+        let sd = Scatter{
+            kind: ScatterKind::Rest,
+            id,
+            expr: None
+        };
+        self._scatter_stack.last_mut().unwrap().push(sd);
     }
 
 

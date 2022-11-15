@@ -83,18 +83,14 @@ ne_arglist:
       ;
 argument: expr #Arg | '@' expr #SpliceArg;
 
-scatter:
-        ne_arglist ',' scatter_item
-    |   scatter ',' scatter_item
-    |   scatter ',' ID
-    |   scatter ',' '@' ID
-    |   scatter_item
-;
+scatter: scatter_item (',' scatter_item)* (',' scatter_rest_item)?;
 
 scatter_item:
-        '?' ID
-    |   '?' ID '=' expr;
+       '?' sid=ID ('=' expr)? #ScatterOptionalTarget
+     | sid=ID                 #ScatterTarget
+     ;
 
+scatter_rest_item : '@' sid=ID             #ScatterRestTarget;
 
 // Lexer
 Whitespace
