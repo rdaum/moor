@@ -35,16 +35,14 @@ client connectivity with websockets and such.
 
    * I've converted the full LambdaMOO 1.8.x grammar into an ANTLR V4 grammar. And it works to compile existing MOO
      source.
-   * Work is progressing on turning that compile tree into an abstract syntax tree which fairly closely resembles the 
-one that LambdaMOO uses. This is about 85% - 90% done.
+   * Compilation from ANTLR compilation tree to abstract syntax tree complete, so is theoretically ready for codgen.
 
 ### Next steps
 
-   * After AST gen, I will work on (probably in this order):
-     * the data model / persistence 
-     * virtual machine & bytecode generation
-     * decompilation
-     * network layer
+   * The data model / persistence 
+   * virtual machine & bytecode generation
+   * decompilation
+   * network layer
 #
 Contributions are welcome and encouraged. 
 
