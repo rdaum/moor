@@ -507,6 +507,10 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         })
     }
 
+    fn visit_RangeEnd(&mut self, ctx: &RangeEndContext<'node>) {
+        self._expr_stack.push(Expr::Length);
+    }
+
     fn visit_LiteralExpr(&mut self, ctx: &LiteralExprContext<'node>) {
         ctx.get_children().for_each(|c| c.accept(self))
     }

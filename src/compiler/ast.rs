@@ -38,7 +38,8 @@ pub enum Expr {
     Catch{trye: Box<Expr>, codes: Vec<Arg>, except: Option<Box<Expr>>},
     Expr(Box<Expr>),
     List(Vec<Arg>),
-    Scatter(Vec<Scatter>)
+    Scatter(Vec<Scatter>),
+    Length,
 }
 
 pub struct CondArm {
