@@ -38,7 +38,7 @@ fn main() {
         oid: o,
         pname: String::from("test"),
         owner: o,
-        flags: vec![PropFlag::Chown, PropFlag::Read],
+        flags: PropFlag::Chown | PropFlag::Read,
         val: Var::Str(String::from("testing"))
     }).unwrap();
 

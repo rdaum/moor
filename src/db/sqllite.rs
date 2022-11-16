@@ -1,6 +1,6 @@
 
 use crate::model::objects::{ObjAttr, ObjAttrs, Objects};
-use crate::model::props::{PropDefs, PropFlag, Propdef};
+use crate::model::props::{PropDefs, Propdef};
 use crate::model::var::{Objid, Var};
 
 use anyhow::Error;
@@ -8,10 +8,7 @@ use bincode::config::Configuration;
 use bincode::{config};
 use enumset::{EnumSet};
 use rusqlite::{Row, Transaction};
-use sea_query::{
-    BlobSize, ColumnDef, DynIden, Expr, Func, Iden, Index, IntoIden,
-    Query, SqliteQueryBuilder, Table,
-};
+use sea_query::{BlobSize, ColumnDef, DynIden, Expr, Func, Iden, Index, IntoIden, Query, SqliteQueryBuilder, Table};
 use sea_query_rusqlite::RusqliteBinder;
 
 
@@ -89,7 +86,7 @@ impl<'a> SQLiteTx<'a> {
             .col(ColumnDef::new(PropertyDefinition::Owner).integer())
             .col(
                 ColumnDef::new(PropertyDefinition::Flags)
-                    .blob(BlobSize::Tiny)
+                    .integer()
                     .not_null(),
             )
             .col(
@@ -113,8 +110,7 @@ impl<'a> SQLiteTx<'a> {
 impl<'a> PropDefs for SQLiteTx<'a> {
     fn add_propdef(&mut self, propdef: Propdef) -> Result<(), Error> {
         let encoded_val: Vec<u8> = bincode::encode_to_vec(&propdef.val, self.bincode_cfg).unwrap();
-        let encoded_flags: Vec<u8> =
-            bincode::encode_to_vec(&propdef.flags, self.bincode_cfg).unwrap();
+        let encoded_flags: u8 = propdef.flags.as_u8();
 
         let (insert_sql, values) = Query::insert()
             .into_table(PropertyDefinition::Table)
@@ -192,10 +188,8 @@ impl<'a> PropDefs for SQLiteTx<'a> {
         let mut query = self.tx.prepare(&query)?;
         let results = query
             .query_map(&*values.as_params(), |r| {
-                let flags_bytes: Vec<u8> = r.get(3)?;
-                let (flags, _): (Vec<PropFlag>, usize) =
-                    bincode::decode_from_slice(&flags_bytes[..], self.bincode_cfg).unwrap();
-
+                let flags : u8 = r.get(3)?;
+                let flags = EnumSet::from_u8(flags);
                 let val_bytes: Vec<u8> = r.get(4)?;
                 let (val, _): (Var, usize) =
                     bincode::decode_from_slice(&val_bytes[..], self.bincode_cfg).unwrap();
@@ -425,7 +419,7 @@ mod tests {
             oid: o,
             pname: String::from("test"),
             owner: o,
-            flags: vec![PropFlag::Chown, PropFlag::Read],
+            flags: PropFlag::Chown | PropFlag::Read,
             val: Var::Str(String::from("testing")),
         })
         .unwrap();
