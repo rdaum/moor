@@ -1,11 +1,11 @@
-
+use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Encode, Decode)]
 pub struct Objid(pub i64);
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode)]
 #[allow(non_camel_case_types)]
 pub enum Error {
     E_TYPE = 0,
@@ -26,7 +26,7 @@ pub enum Error {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode)]
 #[allow(non_camel_case_types)]
 pub enum VarType {
     TYPE_INT = 0,
@@ -41,7 +41,7 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum Var {
     Clear,
     None,
