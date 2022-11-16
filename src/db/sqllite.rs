@@ -1,16 +1,18 @@
-
 use crate::model::objects::{ObjAttr, ObjAttrs, Objects};
-use crate::model::props::{PropDefs, Propdef};
+use crate::model::props::{Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties};
 use crate::model::var::{Objid, Var};
 
 use anyhow::Error;
+use bincode::config;
 use bincode::config::Configuration;
-use bincode::{config};
-use enumset::{EnumSet};
+use enumset::EnumSet;
 use rusqlite::{Row, Transaction};
-use sea_query::{BlobSize, ColumnDef, DynIden, Expr, Func, Iden, Index, IntoIden, Query, SqliteQueryBuilder, Table};
+use sea_query::QueryStatement::Insert;
+use sea_query::{
+    BlobSize, ColumnDef, DynIden, Expr, ForeignKey, ForeignKeyAction, Func, Iden, Index, IndexType,
+    IntoIden, OnConflict, Query, SqliteQueryBuilder, Table,
+};
 use sea_query_rusqlite::RusqliteBinder;
-
 
 #[derive(Iden)]
 enum Object {
@@ -26,11 +28,18 @@ enum Object {
 #[derive(Iden)]
 enum PropertyDefinition {
     Table,
-    Oid,
+    Pid,
+    Definer,
     Name,
+}
+
+#[derive(Iden)]
+enum Property {
+    Table,
+    Pid,
+    Value,
     Owner,
     Flags,
-    Value,
 }
 
 pub struct SQLiteTx<'a> {
@@ -47,6 +56,14 @@ fn object_attr_to_column<'a>(attr: ObjAttr) -> DynIden {
         ObjAttr::Flags => Object::Flags.into_iden(),
     }
 }
+
+// fn prop_attr_to_column<'a>(attr: PropAttr) -> DynIden {
+//     match attr {
+//         PropAttr::Value => Property::Value.into_iden(),
+//         PropAttr::Owner => PropAttr::Owner.into_iden(),
+//         PropAttr::Flags => PropAttr::Flags.into_iden(),
+//     }
+// }
 
 fn retr_objid(r: &Row, c_num: usize) -> Result<Option<Objid>, rusqlite::Error> {
     let x: Option<i64> = r.get(c_num)?;
@@ -78,136 +95,62 @@ impl<'a> SQLiteTx<'a> {
             .col(ColumnDef::new(Object::Parent).integer())
             .col(ColumnDef::new(Object::Flags).integer().not_null())
             .build(SqliteQueryBuilder);
+
         let property_def_table_create = Table::create()
             .table(PropertyDefinition::Table)
             .if_not_exists()
-            .col(ColumnDef::new(PropertyDefinition::Oid).integer().not_null())
-            .col(ColumnDef::new(PropertyDefinition::Name).string().not_null())
-            .col(ColumnDef::new(PropertyDefinition::Owner).integer())
             .col(
-                ColumnDef::new(PropertyDefinition::Flags)
+                ColumnDef::new(PropertyDefinition::Pid)
                     .integer()
-                    .not_null(),
+                    .primary_key()
+                    .auto_increment(),
             )
+            .col(ColumnDef::new(PropertyDefinition::Definer).integer().not_null())
+            .col(ColumnDef::new(PropertyDefinition::Name).string().not_null())
+            .build(SqliteQueryBuilder);
+
+        let property_def_index_create = Index::create()
+            .table(PropertyDefinition::Table)
+            .index_type(IndexType::Hash)
+            .name("property_lookup_index")
+            .col(PropertyDefinition::Definer)
+            .col(PropertyDefinition::Name)
+            .build(SqliteQueryBuilder);
+
+        let pval_table_create = Table::create()
+            .table(Property::Table)
+            .if_not_exists()
             .col(
-                ColumnDef::new(PropertyDefinition::Value)
-                    .blob(BlobSize::Medium)
+                ColumnDef::new(Property::Pid)
+                    .integer()
+                    .primary_key()
                     .not_null(),
             )
-            .primary_key(
-                Index::create()
-                    .col(PropertyDefinition::Oid)
-                    .col(PropertyDefinition::Name),
+            .col(ColumnDef::new(Property::Owner).integer().not_null())
+            .col(ColumnDef::new(Property::Flags).integer().not_null())
+            .col(ColumnDef::new(Property::Value).integer().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .from_col(Property::Pid)
+                    .to_col(PropertyDefinition::Pid)
+                    .to_tbl(PropertyDefinition::Table),
             )
             .build(SqliteQueryBuilder);
 
-        self.tx
-            .execute_batch(&[object_table_create, property_def_table_create].join(";"))?;
+        self.tx.execute_batch(
+            &[
+                object_table_create,
+                property_def_table_create,
+                property_def_index_create,
+                pval_table_create,
+            ]
+            .join(";"),
+        )?;
         Ok(())
     }
 }
 
-impl<'a> PropDefs for SQLiteTx<'a> {
-    fn add_propdef(&mut self, propdef: Propdef) -> Result<(), Error> {
-        let encoded_val: Vec<u8> = bincode::encode_to_vec(&propdef.val, self.bincode_cfg).unwrap();
-        let encoded_flags: u8 = propdef.flags.as_u8();
-
-        let (insert_sql, values) = Query::insert()
-            .into_table(PropertyDefinition::Table)
-            .columns([
-                PropertyDefinition::Oid,
-                PropertyDefinition::Name,
-                PropertyDefinition::Owner,
-                PropertyDefinition::Flags,
-                PropertyDefinition::Value,
-            ])
-            .values_panic([
-                propdef.oid.0.into(),
-                propdef.pname.into(),
-                propdef.owner.0.into(),
-                encoded_flags.into(),
-                encoded_val.into(),
-            ])
-            .build_rusqlite(SqliteQueryBuilder);
-        self.tx.execute(&insert_sql, &*values.as_params())?;
-
-        Ok(())
-    }
-
-    fn rename_propdef(&mut self, _oid: Objid, old: &str, new: &str) -> Result<(), Error> {
-        let (update_query, values) = Query::update()
-            .table(PropertyDefinition::Table)
-            .value(PropertyDefinition::Name, new)
-            .and_where(Expr::col(PropertyDefinition::Name).eq(old))
-            .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.execute(&update_query, &*values.as_params())?;
-        // TODO proper meaningful error codes
-        assert_eq!(result, 1);
-        Ok(())
-    }
-
-    fn delete_propdef(&mut self, oid: Objid, pname: &str) -> Result<(), Error> {
-        let (delete_sql, values) = Query::delete()
-            .from_table(PropertyDefinition::Table)
-            .cond_where(Expr::col(PropertyDefinition::Oid).eq(oid.0))
-            .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
-            .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.execute(&delete_sql, &*values.as_params())?;
-        // TODO proper meaningful error codes
-        assert_eq!(result, 1);
-        Ok(())
-    }
-
-    fn count_propdefs(&mut self, oid: Objid) -> Result<usize, Error> {
-        let (count_query, values) = Query::select()
-            .from(PropertyDefinition::Table)
-            .expr(Func::count(Expr::col(PropertyDefinition::Oid)))
-            .cond_where(Expr::col(PropertyDefinition::Oid).eq(oid.0))
-            .build_rusqlite(SqliteQueryBuilder);
-
-        let mut query = self.tx.prepare(&count_query)?;
-        let count = query.query_row(&*values.as_params(), |r| {
-            let count: usize = r.get(0)?;
-            Ok(count)
-        })?;
-        Ok(count)
-    }
-
-    fn get_propdefs(&mut self, oid: Objid) -> Result<Vec<Propdef>, Error> {
-        let (query, values) = Query::select()
-            .from(PropertyDefinition::Table)
-            .columns([
-                PropertyDefinition::Oid,
-                PropertyDefinition::Name,
-                PropertyDefinition::Owner,
-                PropertyDefinition::Flags,
-                PropertyDefinition::Value,
-            ])
-            .cond_where(Expr::col(PropertyDefinition::Owner).eq(oid.0))
-            .build_rusqlite(SqliteQueryBuilder);
-        let mut query = self.tx.prepare(&query)?;
-        let results = query
-            .query_map(&*values.as_params(), |r| {
-                let flags : u8 = r.get(3)?;
-                let flags = EnumSet::from_u8(flags);
-                let val_bytes: Vec<u8> = r.get(4)?;
-                let (val, _): (Var, usize) =
-                    bincode::decode_from_slice(&val_bytes[..], self.bincode_cfg).unwrap();
-                let propdef = Propdef {
-                    oid: Objid(r.get(0)?),
-                    pname: r.get(1)?,
-                    owner: Objid(r.get(2)?),
-                    flags,
-                    val,
-                };
-                Ok(propdef)
-            })
-            .unwrap();
-        let results = results.map(|r| r.expect("could not decode propdef tuple"));
-        let results: Vec<Propdef> = results.collect();
-        Ok(results)
-    }
-}
 
 // TODO translate -1 to and from null
 impl<'a> Objects for SQLiteTx<'a> {
@@ -350,12 +293,188 @@ impl<'a> Objects for SQLiteTx<'a> {
     }
 }
 
+impl<'a> PropDefs for SQLiteTx<'a> {
+    fn find_propdef(&mut self, target: Objid, pname: &str) -> Result<Option<Propdef>, Error> {
+        todo!()
+    }
+
+    fn add_propdef(
+        &mut self,
+        oid: Objid,
+        pname: &str,
+        owner: Objid,
+        flags: EnumSet<PropFlag>,
+        val: Var,
+    ) -> Result<Pid, Error> {
+        let (insert_sql, values) = Query::insert()
+            .into_table(PropertyDefinition::Table)
+            .columns([
+                PropertyDefinition::Definer,
+                PropertyDefinition::Name,
+            ])
+            .values_panic([
+                oid.0.into(),
+                pname.into(),
+            ])
+            .build_rusqlite(SqliteQueryBuilder);
+        self.tx.execute(&insert_sql, &*values.as_params())?;
+
+        let pid = Pid(self.tx.last_insert_rowid());
+        self.set_property(pid, val, owner, flags)?;
+        Ok(pid)
+    }
+
+    fn rename_propdef(&mut self, _oid: Objid, old: &str, new: &str) -> Result<(), Error> {
+        let (update_query, values) = Query::update()
+            .table(PropertyDefinition::Table)
+            .value(PropertyDefinition::Name, new)
+            .and_where(Expr::col(PropertyDefinition::Name).eq(old))
+            .build_rusqlite(SqliteQueryBuilder);
+        let result = self.tx.execute(&update_query, &*values.as_params())?;
+        // TODO proper meaningful error codes
+        assert_eq!(result, 1);
+        Ok(())
+    }
+
+    fn delete_propdef(&mut self, oid: Objid, pname: &str) -> Result<(), Error> {
+        let (delete_sql, values) = Query::delete()
+            .from_table(PropertyDefinition::Table)
+            .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
+            .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
+            .build_rusqlite(SqliteQueryBuilder);
+        let result = self.tx.execute(&delete_sql, &*values.as_params())?;
+        // TODO proper meaningful error codes
+        assert_eq!(result, 1);
+        Ok(())
+    }
+
+    fn count_propdefs(&mut self, oid: Objid) -> Result<usize, Error> {
+        let (count_query, values) = Query::select()
+            .from(PropertyDefinition::Table)
+            .expr(Func::count(Expr::col(PropertyDefinition::Definer)))
+            .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let mut query = self.tx.prepare(&count_query)?;
+        let count = query.query_row(&*values.as_params(), |r| {
+            let count: usize = r.get(0)?;
+            Ok(count)
+        })?;
+        Ok(count)
+    }
+
+    fn get_propdefs(&mut self, oid: Objid) -> Result<Vec<Propdef>, Error> {
+        let (query, values) = Query::select()
+            .from(PropertyDefinition::Table)
+            .columns([
+                PropertyDefinition::Pid,
+                PropertyDefinition::Definer,
+                PropertyDefinition::Name,
+            ])
+            .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut query = self.tx.prepare(&query)?;
+        let results = query
+            .query_map(&*values.as_params(), |r| {
+                let propdef = Propdef {
+                    pid: Pid(r.get(0)?),
+                    definer: Objid(r.get(1)?),
+                    pname: r.get(2)?,
+                };
+                Ok(propdef)
+            })
+            .unwrap();
+        let results = results.map(|r| r.expect("could not decode propdef tuple"));
+        let results: Vec<Propdef> = results.collect();
+        Ok(results)
+    }
+}
+
+/// Objects either have or don't have a property value for a given definition defined by a parent.
+/// If they do not have a defined value, the value is inherited from either a parent, or the
+/// definition
+/// So to search we run a query which:
+///             checks property def for the oid/pname combination, recursively walking up the inheritance tree
+///             and then joins the resulting property handle onto the property value table somehow
+///
+/// will have to play with recursive WITH queries & object inheritance
+/// should be possible to make an ordered transitive closure up to root from a child, and ORDER and LIMIT to find the first not-null occurrence of a given pname
+///
+
+impl<'a> Properties for SQLiteTx<'a> {
+    /*
+ Draft for query that does transitive resolution through inheritance
+
+ WITH RECURSIVE parents_of(n) AS (SELECT oid
+                                 from object
+                                 where oid = 2
+                                 UNION
+                                 SELECT parent
+                                 FROM object,
+                                      parents_of
+                                 where oid = parents_of.n)
+select pd.pid,
+       pd.oid   as definer,
+       pd.name  as name,
+       p.owner  as location,
+       p.value  as value
+from property_definition pd
+         left outer join property p on pd.pid = p.pid
+where pd.name = 'test';
+
+     */
+    fn get_property(&self, handle: Pid, attrs: EnumSet<PropAttr>) -> Result<PropAttrs, Error> {
+        todo!()
+    }
+
+    fn set_property(
+        &self,
+        handle: Pid,
+        value: Var,
+        owner: Objid,
+        flags: EnumSet<PropFlag>,
+    ) -> Result<(), Error> {
+        let flags_encoded = flags.as_u8();
+        let encoded_val: Vec<u8> = bincode::encode_to_vec(&value, self.bincode_cfg).unwrap();
+
+        let (query, values) = Query::insert()
+            .into_table(Property::Table)
+            .columns([
+                Property::Pid,
+                Property::Owner,
+                Property::Flags,
+                Property::Value,
+            ])
+            .values_panic([
+                handle.0.into(),
+                owner.0.into(),
+                flags_encoded.into(),
+                encoded_val.clone().into(),
+            ])
+            .on_conflict(
+                OnConflict::new()
+                    .values([
+                        (Property::Owner, owner.0.into()),
+                        (Property::Flags, flags_encoded.into()),
+                        (Property::Value, encoded_val.into()),
+                    ])
+                    .action_and_where(Expr::col(Property::Pid).eq(handle.0))
+                    .to_owned(),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+
+        self.tx.execute(&query, &*values.as_params()).unwrap();
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db::sqllite::SQLiteTx;
     use crate::model::objects::{ObjAttr, ObjAttrs, Objects};
-    use crate::model::props::{PropDefs, PropFlag, Propdef};
+    use crate::model::props::{PropDefs, PropFlag, Propdef, Properties};
     use crate::model::var::{Objid, Var};
+    use antlr_rust::CoerceTo;
     use rusqlite::Connection;
 
     #[test]
@@ -369,6 +488,7 @@ mod tests {
         assert!(s.object_valid(o).unwrap());
         s.destroy_object(o).unwrap();
         assert_eq!(s.object_valid(o).unwrap(), false);
+        s.tx.commit().unwrap();
     }
 
     #[test]
@@ -404,6 +524,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(attrs.name.unwrap(), "test");
+        s.tx.commit().unwrap();
     }
 
     #[test]
@@ -415,21 +536,30 @@ mod tests {
 
         let o = s.create_object().unwrap();
 
-        s.add_propdef(Propdef {
-            oid: o,
-            pname: String::from("test"),
-            owner: o,
-            flags: PropFlag::Chown | PropFlag::Read,
-            val: Var::Str(String::from("testing")),
-        })
+        let pid = s.add_propdef(
+            o,
+            "test",
+            o,
+            PropFlag::Chown | PropFlag::Read,
+            Var::Str(String::from("testing")),
+        )
         .unwrap();
 
         let pds = s.get_propdefs(o).unwrap();
         assert_eq!(pds.len(), 1);
-        assert_eq!(pds[0].owner, o);
+        assert_eq!(pds[0].definer, o);
         assert_eq!(pds[0].pname, "test");
+        assert_eq!(pds[0].pid, pid);
 
         s.rename_propdef(o, "test", "test2").unwrap();
+
+        s.set_property(
+            pds[0].pid,
+            Var::Str(String::from("testing")),
+            o,
+            PropFlag::Read | PropFlag::Write,
+        )
+        .unwrap();
 
         let c = s.count_propdefs(o).unwrap();
         assert_eq!(c, 1);
@@ -438,5 +568,59 @@ mod tests {
 
         let c = s.count_propdefs(o).unwrap();
         assert_eq!(c, 0);
+        s.tx.commit().unwrap();
     }
+
+    #[test]
+    fn property_inheritance() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut s = SQLiteTx::new(tx).unwrap();
+        s.initialize_schema().unwrap();
+
+        let parent = s.create_object().unwrap();
+        let child1 = s.create_object().unwrap();
+        let child2 = s.create_object().unwrap();
+        s.object_set_attrs(child1, ObjAttrs {
+            owner: None,
+            name: None,
+            parent: Some(parent),
+            location: None,
+            flags: None
+        }).unwrap();
+        s.object_set_attrs(child2, ObjAttrs {
+            owner: None,
+            name: None,
+            parent: Some(child1),
+            location: None,
+            flags: None
+        }).unwrap();
+
+        let pid = s.add_propdef(
+            parent,
+            "test",
+            parent,
+            PropFlag::Chown | PropFlag::Read,
+            Var::Str(String::from("testing")),
+        )
+            .unwrap();
+
+        let pds = s.get_propdefs(parent).unwrap();
+        assert_eq!(pds.len(), 1);
+        assert_eq!(pds[0].definer, parent);
+        assert_eq!(pds[0].pid, pid
+                   , "test");
+
+        s.set_property(
+            pid,
+            Var::Str(String::from("testing")),
+            child1,
+            PropFlag::Read | PropFlag::Write,
+        )
+            .unwrap();
+
+        s.tx.commit().unwrap();
+    }
+
+
 }

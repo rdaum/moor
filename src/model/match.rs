@@ -3,7 +3,7 @@
 pub enum ArgSpec {
     None,
     Any,
-    This
+    This,
 }
 
 pub enum PrepSpec {
@@ -14,9 +14,7 @@ pub enum PrepSpec {
 pub struct VerbArgsSpec {
     dobj: ArgSpec,
     prep: PrepSpec,
-    iobj: ArgSpec
+    iobj: ArgSpec,
 }
 
-pub trait Match {
-
-}
+pub trait Match {}

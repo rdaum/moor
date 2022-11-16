@@ -1,6 +1,7 @@
-use paste::paste;
 use crate::compiler::ast::Expr::VarExpr;
-use crate::compiler::ast::{Arg, BinaryOp, UnaryOp, CondArm, ExceptArm, Expr, LoopKind, Stmt, Scatter, ScatterKind};
+use crate::compiler::ast::{
+    Arg, BinaryOp, CondArm, ExceptArm, Expr, LoopKind, Scatter, ScatterKind, Stmt, UnaryOp,
+};
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
@@ -15,6 +16,7 @@ use antlr_rust::token_factory::TokenFactory;
 use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
 use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
+use paste::paste;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -70,7 +72,7 @@ impl Names {
 }
 
 pub struct ASTGenVisitor {
-    program : Vec<Stmt>,
+    program: Vec<Stmt>,
     _statement_stack: Vec<Vec<Stmt>>,
     _expr_stack: Vec<Expr>,
     _cond_arm_stack: Vec<Vec<CondArm>>,
@@ -109,7 +111,7 @@ impl ASTGenVisitor {
             is_barrier: false,
         })
     }
-    fn resume_loop_scope(&mut self)  {
+    fn resume_loop_scope(&mut self) {
         let last_entry = self._loop_stack.last();
         match last_entry {
             None => {
@@ -118,11 +120,14 @@ impl ASTGenVisitor {
             }
             Some(loop_entry) if !loop_entry.is_barrier => {
                 // TODO should be a recoverable error?
-                panic!("PARSER: Tried to resume non-loop-scope barrier! (current loop: {:?}", loop_entry)
+                panic!(
+                    "PARSER: Tried to resume non-loop-scope barrier! (current loop: {:?}",
+                    loop_entry
+                )
             }
             Some(_) => {
                 self._loop_stack.pop();
-            },
+            }
         }
     }
     fn pop_loop_name(&mut self) -> LoopEntry {
@@ -237,7 +242,6 @@ macro_rules! binary_expr {
                     .push(Expr::Binary(BinaryOp::$op, Box::new(left), Box::new(right)));
             }
         }
-
     };
 }
 
@@ -250,7 +254,6 @@ macro_rules! unary_expr {
                     .push(Expr::Unary(UnaryOp::$op, Box::new(expr)));
             }
         }
-
     };
 }
 impl<'node> ParseTreeVisitor<'node, mooParserContextType> for ASTGenVisitor {}
@@ -414,7 +417,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         }
     }
 
-
     fn visit_elseif(&mut self, ctx: &ElseifContext<'node>) {
         let condition = self.reduce_expr(&ctx.condition);
         let statements = self.reduce_statements(&ctx.statements());
@@ -501,7 +503,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(Expr::Id(id.0))
     }
 
-
     fn visit_PropertyExprReference(&mut self, ctx: &PropertyExprReferenceContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
         let property_expr = self.reduce_expr(&ctx.property);
@@ -543,9 +544,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
         self._scatter_stack.push(vec![]);
-        ctx.scatter().iter().for_each(|s| {
-            s.accept(self)
-        });
+        ctx.scatter().iter().for_each(|s| s.accept(self));
         let scatters = self._scatter_stack.pop().unwrap();
         self._expr_stack.push(Expr::Scatter(scatters));
     }
@@ -595,7 +594,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(Expr::Catch {
             trye: Box::new(try_expr),
             codes,
-            except
+            except,
         })
     }
 
@@ -638,48 +637,43 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._args_stack.last_mut().unwrap().push(Arg::Splice(expr));
     }
 
-
     fn visit_scatter(&mut self, ctx: &ScatterContext<'node>) {
-        ctx.scatter_item_all().iter().for_each(|si| {
-            si.accept(self)
-        });
-        ctx.scatter_rest_item().iter().for_each(|si| {
-            si.accept(self)
-        })
+        ctx.scatter_item_all().iter().for_each(|si| si.accept(self));
+        ctx.scatter_rest_item()
+            .iter()
+            .for_each(|si| si.accept(self))
     }
 
     fn visit_ScatterOptionalTarget(&mut self, ctx: &ScatterOptionalTargetContext<'node>) {
         let expr = self.reduce_opt_expr(&ctx.expr());
         let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = Scatter{
+        let sd = Scatter {
             kind: ScatterKind::Optional,
             id,
-            expr
+            expr,
         };
         self._scatter_stack.last_mut().unwrap().push(sd);
     }
 
     fn visit_ScatterTarget(&mut self, ctx: &ScatterTargetContext<'node>) {
         let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = Scatter{
+        let sd = Scatter {
             kind: ScatterKind::Required,
             id,
-            expr: None
+            expr: None,
         };
         self._scatter_stack.last_mut().unwrap().push(sd);
     }
 
     fn visit_ScatterRestTarget(&mut self, ctx: &ScatterRestTargetContext<'node>) {
         let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = Scatter{
+        let sd = Scatter {
             kind: ScatterKind::Rest,
             id,
-            expr: None
+            expr: None,
         };
         self._scatter_stack.last_mut().unwrap().push(sd);
     }
-
-
 
     binary_expr!(Mul);
     binary_expr!(Div);

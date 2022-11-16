@@ -1,24 +1,24 @@
+use crate::model::var::{Error, Objid, Var, VarType};
+use anyhow::anyhow;
+use int_enum::IntEnum;
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db
 /// file.
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
-use anyhow::anyhow;
 use symbol_table::{Symbol, SymbolTable};
 use text_io::scan;
-use crate::model::var::{Error, Objid, Var, VarType};
-use int_enum::IntEnum;
 
 pub struct Verbdef {
     name: Symbol,
     owner: Objid,
-    perms: u16,
+    flags: u16,
     prep: u16,
 }
 
 pub struct Propval {
     var: Var,
     owner: Objid,
-    perms: u16,
+    flags: u16,
 }
 
 pub struct Object {
@@ -51,16 +51,19 @@ pub struct TextdumpReader<R: Read> {
 
 impl<R: Read> TextdumpReader<R> {
     pub fn new(reader: BufReader<R>) -> Self {
-        Self { reader, symtab: Default::default() }
+        Self {
+            reader,
+            symtab: Default::default(),
+        }
     }
 }
 
 pub struct Textdump {
     version: String,
-    objects : HashMap<Objid, Object>,
-    users : Vec<Objid>,
-    pub(crate) verbs : Vec<Verb>,
-    symtab: SymbolTable
+    objects: HashMap<Objid, Object>,
+    users: Vec<Objid>,
+    pub(crate) verbs: Vec<Verb>,
+    symtab: SymbolTable,
 }
 
 impl<R: Read> TextdumpReader<R> {
@@ -101,7 +104,7 @@ impl<R: Read> TextdumpReader<R> {
         Ok(Verbdef {
             name,
             owner,
-            perms,
+            flags: perms,
             prep,
         })
     }
@@ -122,12 +125,8 @@ impl<R: Read> TextdumpReader<R> {
                 let v: Vec<Var> = (0..l_size).map(|_l| self.read_var().unwrap()).collect();
                 Var::List(v)
             }
-            VarType::TYPE_CLEAR => {
-                Var::Clear
-            }
-            VarType::TYPE_NONE => {
-                Var::None
-            }
+            VarType::TYPE_CLEAR => Var::Clear,
+            VarType::TYPE_NONE => Var::None,
             VarType::TYPE_CATCH => Var::_Catch(self.read_num()? as usize),
             VarType::TYPE_FINALLY => Var::_Finally(self.read_num()? as usize),
             VarType::TYPE_FLOAT => Var::Float(self.read_float()?),
@@ -139,7 +138,7 @@ impl<R: Read> TextdumpReader<R> {
         Ok(Propval {
             var: self.read_var()?,
             owner: self.read_objid()?,
-            perms: self.read_num()? as u16,
+            flags: self.read_num()? as u16,
         })
     }
     fn read_object(&mut self) -> Result<Option<Object>, anyhow::Error> {
@@ -148,12 +147,10 @@ impl<R: Read> TextdumpReader<R> {
 
         let ospec_split = ospec.trim().split_once(' ');
         let ospec = match ospec_split {
-            None => {
-                ospec
-            }
+            None => ospec,
             Some(parts) => {
                 if parts.1.trim() == "recycled" {
-                    return Ok(None)
+                    return Ok(None);
                 }
                 parts.0
             }
@@ -214,7 +211,7 @@ impl<R: Read> TextdumpReader<R> {
 
     fn read_verb(&mut self) -> Result<Verb, anyhow::Error> {
         let header = self.read_string()?;
-        let (mut oid, mut verbnum) : (i64, usize) = (0, 0);
+        let (mut oid, mut verbnum): (i64, usize) = (0, 0);
         scan!(header.bytes() => "#{}:{}", oid, verbnum);
         let mut program = String::new();
         loop {
@@ -224,8 +221,7 @@ impl<R: Read> TextdumpReader<R> {
                     objid: Objid(oid),
                     verbnum,
                     program,
-
-                })
+                });
             }
             program.push_str(line.as_str());
         }
@@ -257,7 +253,7 @@ impl<R: Read> TextdumpReader<R> {
 
         println!("Reading verbs...");
         let mut verbs = Vec::with_capacity(nprogs);
-        for _p  in 0..nprogs {
+        for _p in 0..nprogs {
             let verb = self.read_verb()?;
             verbs.push(verb);
         }
@@ -267,7 +263,7 @@ impl<R: Read> TextdumpReader<R> {
             objects,
             users,
             verbs,
-            symtab: std::mem::take(&mut self.symtab) // I own you now.
+            symtab: std::mem::take(&mut self.symtab), // I own you now.
         })
     }
 }

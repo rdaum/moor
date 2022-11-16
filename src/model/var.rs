@@ -56,4 +56,3 @@ pub enum Var {
     _Catch(usize),
     _Finally(usize),
 }
-

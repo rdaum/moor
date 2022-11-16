@@ -1,7 +1,6 @@
-use crate::model::var::{Objid};
+use crate::model::var::Objid;
 use enumset::EnumSet;
 use enumset_derive::EnumSetType;
-
 
 #[derive(EnumSetType, Debug)]
 #[enumset(serialize_repr = "u8")]
@@ -44,11 +43,7 @@ pub trait Objects {
         oid: Objid,
         attributes: EnumSet<ObjAttr>,
     ) -> Result<ObjAttrs, anyhow::Error>;
-    fn object_set_attrs(
-        &mut self,
-        oid: Objid,
-        attributes: ObjAttrs,
-    ) -> Result<(), anyhow::Error>;
+    fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), anyhow::Error>;
 
     fn count_object_children(&self, oid: Objid) -> Result<usize, anyhow::Error>;
     fn object_children(&self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
