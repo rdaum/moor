@@ -419,13 +419,14 @@ impl<'a> Properties for SQLiteTx<'a> {
             .from_values([(oid.0)], Alias::new("oid"))
             .to_owned();
 
+        let parents_of = Alias::new("parents_of");
         let transitive = SelectStatement::new()
             .from(Object::Table)
             .column(Object::Parent)
             .join(
                 JoinType::InnerJoin,
-                Alias::new("parents_of"),
-                Expr::tbl(Alias::new("parents_of"), Alias::new("oid"))
+                parents_of.clone(),
+                Expr::tbl(parents_of.clone(), Alias::new("oid"))
                     .equals(Object::Table, Object::Oid)
                     .into_condition(),
             )
@@ -439,7 +440,7 @@ impl<'a> Properties for SQLiteTx<'a> {
                     .to_owned(),
             )
             .column(Alias::new("oid"))
-            .table_name(Alias::new("parents_of"))
+            .table_name(parents_of.clone())
             .to_owned();
 
         let columns = attributes.iter().map(property_attr_to_column);
@@ -455,7 +456,16 @@ impl<'a> Properties for SQLiteTx<'a> {
                 all![Expr::tbl(Property::Table, Property::Pid)
                     .equals(PropertyDefinition::Table, PropertyDefinition::Pid),],
             )
+            .join(
+                JoinType::LeftJoin,
+                parents_of.clone(),
+                all![Expr::tbl(PropertyDefinition::Table, PropertyDefinition::Definer)
+                    .equals(
+                        parents_of.clone(), Alias::new("oid"))
+                    ],
+            )
             .cond_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Pid)).eq(handle.0))
+            .and_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Definer)).equals(parents_of.clone(), Alias::new("oid")))
             .to_owned();
 
         let query = query
@@ -463,7 +473,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             .to_owned();
 
         let (query, values) = query.build(SqliteQueryBuilder);
-        println!("q: {}", query);
+        println!("{}", query);
         let mut query = self.tx.prepare(&query)?;
 
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
