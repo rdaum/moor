@@ -60,9 +60,10 @@ pub struct PropAttrs {
 pub trait Properties {
     fn get_property(
         &self,
+        oid: Objid,
         handle: Pid,
         attrs: EnumSet<PropAttr>,
-    ) -> Result<PropAttrs, anyhow::Error>;
+    ) -> Result<Option<PropAttrs>, anyhow::Error>;
     fn set_property(
         &self,
         handle: Pid,
