@@ -23,6 +23,37 @@ pub enum ObjAttr {
     Location,
     Flags,
 }
+impl ObjAttrs {
+    pub fn new() -> Self {
+        Self {
+            owner: None,
+            name: None,
+            parent: None,
+            location: None,
+            flags: None
+        }
+    }
+    pub fn owner(&mut self, o: Objid) -> &mut ObjAttrs {
+        self.owner = Some(o);
+        self
+    }
+    pub fn location(&mut self, o: Objid) -> &mut ObjAttrs {
+        self.location = Some(o);
+        self
+    }
+    pub fn parent(&mut self, o: Objid) -> &mut ObjAttrs {
+        self.parent = Some(o);
+        self
+    }
+    pub fn name(&mut self, s: &str) -> &mut ObjAttrs {
+        self.name = Some(String::from(s));
+        self
+    }
+    pub fn flags(&mut self, flags: EnumSet<ObjFlag>) -> &mut ObjAttrs {
+        self.flags = Some(flags);
+        self
+    }
+}
 
 #[derive(Debug)]
 pub struct ObjAttrs {
@@ -30,11 +61,11 @@ pub struct ObjAttrs {
     pub name: Option<String>,
     pub parent: Option<Objid>,
     pub location: Option<Objid>,
-    pub flags: Option<EnumSet<ObjAttr>>,
+    pub flags: Option<EnumSet<ObjFlag>>,
 }
 
 pub trait Objects {
-    fn create_object(&mut self) -> Result<Objid, anyhow::Error>;
+    fn create_object(&mut self, attrs: &ObjAttrs) -> Result<Objid, anyhow::Error>;
     fn destroy_object(&mut self, oid: Objid) -> Result<(), anyhow::Error>;
     fn object_valid(&self, oid: Objid) -> Result<bool, anyhow::Error>;
 
@@ -45,10 +76,7 @@ pub trait Objects {
     ) -> Result<ObjAttrs, anyhow::Error>;
     fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), anyhow::Error>;
 
-    fn count_object_children(&self, oid: Objid) -> Result<usize, anyhow::Error>;
     fn object_children(&self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
-
-    fn count_object_contents(&self, oid: Objid) -> Result<usize, anyhow::Error>;
     fn object_contents(&self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
 }
 

@@ -1,4 +1,4 @@
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects};
+use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
 use crate::model::props::{Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties};
 use crate::model::var::{Objid, Var};
 
@@ -8,11 +8,7 @@ use bincode::config::Configuration;
 use enumset::EnumSet;
 use rusqlite::{Row, Transaction};
 use sea_query::QueryStatement::Insert;
-use sea_query::{
-    all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
-    ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict,
-    Query, QueryStatementWriter, SelectStatement, SqliteQueryBuilder, Table, UnionType, Value,
-};
+use sea_query::{all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey, ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict, Query, QueryStatementWriter, SelectStatement, SqliteQueryBuilder, Table, UnionType, Value, SimpleExpr};
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
 
 #[derive(Iden)]
@@ -166,8 +162,29 @@ impl<'a> SQLiteTx<'a> {
 
 // TODO translate -1 to and from null
 impl<'a> Objects for SQLiteTx<'a> {
-    fn create_object(&mut self) -> Result<Objid, Error> {
-        let nullobj: Option<i64> = None;
+    fn create_object(&mut self, attrs: &ObjAttrs) -> Result<Objid, Error> {
+        let owner = match attrs.owner {
+            None => None::<i64>.into(),
+            Some(o) => o.0.into()
+        };
+        let parent = match attrs.parent {
+            None => None::<i64>.into(),
+            Some(o) => o.0.into()
+        };
+        let location = match attrs.location {
+            None =>  None::<i64>.into(),
+            Some(o) => o.0.into()
+        };
+        let name = match &attrs.name{
+            None => "".into(),
+            Some(s) => s.as_str().into()
+        };
+        let flags = match &attrs.flags {
+            None => 0.into(),
+            Some(f) => {
+                f.as_u8().into()
+            }
+        };
         let (insert_sql, values) = Query::insert()
             .into_table(Object::Table)
             .columns([
@@ -178,11 +195,11 @@ impl<'a> Objects for SQLiteTx<'a> {
                 Object::Flags,
             ])
             .values_panic([
-                nullobj.into(),
-                nullobj.into(),
-                nullobj.into(),
-                "".into(),
-                0.into(),
+                owner,
+                parent,
+                location,
+                name,
+                flags,
             ])
             .build_rusqlite(SqliteQueryBuilder);
 
@@ -248,7 +265,7 @@ impl<'a> Objects for SQLiteTx<'a> {
                     ObjAttr::Location => attrs.location = retr_objid(r, c_num)?,
                     ObjAttr::Flags => {
                         let u: u8 = r.get(c_num)?;
-                        let e: EnumSet<ObjAttr> = EnumSet::from_u8(u);
+                        let e: EnumSet<ObjFlag> = EnumSet::from_u8(u);
                         attrs.flags = Some(e);
                     }
                 }
@@ -283,25 +300,41 @@ impl<'a> Objects for SQLiteTx<'a> {
             .values(params)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let count = self.tx.execute(&query, &*values.as_params()).unwrap();
+        let count = self.tx.execute(&query, &*values.as_params())?;
         assert_eq!(count, 1);
         Ok(())
     }
 
-    fn count_object_children(&self, _oid: Objid) -> Result<usize, Error> {
-        todo!()
+    fn object_children(&self, oid: Objid) -> Result<Vec<Objid>, Error> {
+        let (query, params) = Query::select()
+            .column(Object::Oid)
+            .from(Object::Table)
+            .cond_where(Expr::col(Object::Parent).eq(oid.0))
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut query = self.tx.prepare(&query)?;
+        let results = query.query_map(&*params.as_params(), |r| {
+            let oid : i64 = r.get(0).unwrap();
+            Ok(Objid(oid))
+        })?;
+        Ok(results.map(|o| {
+            o.unwrap()
+        }).collect())
     }
 
-    fn object_children(&self, _oid: Objid) -> Result<Vec<Objid>, Error> {
-        todo!()
-    }
-
-    fn count_object_contents(&self, _oid: Objid) -> Result<usize, Error> {
-        todo!()
-    }
-
-    fn object_contents(&self, _oid: Objid) -> Result<Vec<Objid>, Error> {
-        todo!()
+    fn object_contents(&self, oid: Objid) -> Result<Vec<Objid>, Error> {
+        let (query, params) = Query::select()
+            .column(Object::Oid)
+            .from(Object::Table)
+            .cond_where(Expr::col(Object::Location).eq(oid.0))
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut query = self.tx.prepare(&query)?;
+        let results = query.query_map(&*params.as_params(), |r| {
+            let oid : i64 = r.get(0).unwrap();
+            Ok(Objid(oid))
+        })?;
+        Ok(results.map(|o| {
+            o.unwrap()
+        }).collect())
     }
 }
 
@@ -396,17 +429,6 @@ impl<'a> PropDefs for SQLiteTx<'a> {
     }
 }
 
-/// Objects either have or don't have a property value for a given definition defined by a parent.
-/// If they do not have a defined value, the value is inherited from either a parent, or the
-/// definition
-/// So to search we run a query which:
-///             checks property def for the oid/pname combination, recursively walking up the inheritance tree
-///             and then joins the resulting property handle onto the property value table somehow
-///
-/// will have to play with recursive WITH queries & object inheritance
-/// should be possible to make an ordered transitive closure up to root from a child, and ORDER and LIMIT to find the first not-null occurrence of a given pname
-///
-
 impl<'a> Properties for SQLiteTx<'a> {
     fn get_property(
         &self,
@@ -445,7 +467,6 @@ impl<'a> Properties for SQLiteTx<'a> {
 
         let columns = attributes.iter().map(property_attr_to_column);
 
-
         let with = Query::with().recursive(true).cte(cte).to_owned();
         let query = Query::select()
             .columns(columns)
@@ -459,56 +480,60 @@ impl<'a> Properties for SQLiteTx<'a> {
             .join(
                 JoinType::LeftJoin,
                 parents_of.clone(),
-                all![Expr::tbl(PropertyDefinition::Table, PropertyDefinition::Definer)
-                    .equals(
-                        parents_of.clone(), Alias::new("oid"))
-                    ],
+                all![
+                    Expr::tbl(PropertyDefinition::Table, PropertyDefinition::Definer)
+                        .equals(parents_of.clone(), Alias::new("oid"))
+                ],
             )
-            .cond_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Pid)).eq(handle.0))
-            .and_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Definer)).equals(parents_of.clone(), Alias::new("oid")))
+            .cond_where(
+                Expr::col((PropertyDefinition::Table, PropertyDefinition::Pid)).eq(handle.0),
+            )
+            .and_where(
+                Expr::col((PropertyDefinition::Table, PropertyDefinition::Definer))
+                    .equals(parents_of.clone(), Alias::new("oid")),
+            )
             .to_owned();
 
-        let query = query
-            .with(with)
-            .to_owned();
+        let query = query.with(with).to_owned();
 
         let (query, values) = query.build(SqliteQueryBuilder);
         println!("{}", query);
         let mut query = self.tx.prepare(&query)?;
 
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
-        let mut results = query.query_map(&*values.as_params(), |r| {
-            let mut ret_attrs = PropAttrs {
-                value: None,
-                owner: None,
-                flags: None
-            };
-            for (c_num, a) in attributes.iter().enumerate() {
-                match a {
-                    PropAttr::Owner => {
-                        ret_attrs.owner = retr_objid(r, c_num)?;
-                    },
-                    PropAttr::Value => {
-                        let val_encoded : Vec<u8> = r.get(c_num)?;
-                        let (decoded_val, _) = bincode::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
+        let mut results = query
+            .query_map(&*values.as_params(), |r| {
+                let mut ret_attrs = PropAttrs {
+                    value: None,
+                    owner: None,
+                    flags: None,
+                };
+                for (c_num, a) in attributes.iter().enumerate() {
+                    match a {
+                        PropAttr::Owner => {
+                            ret_attrs.owner = retr_objid(r, c_num)?;
+                        }
+                        PropAttr::Value => {
+                            let val_encoded: Vec<u8> = r.get(c_num)?;
+                            let (decoded_val, _) =
+                                bincode::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
 
-                        ret_attrs.value = Some(decoded_val);
-                    },
-                    PropAttr::Flags => {
-                        let u: u8 = r.get(c_num)?;
-                        let e: EnumSet<PropFlag> = EnumSet::from_u8(u);
-                        ret_attrs.flags = Some(e);
+                            ret_attrs.value = Some(decoded_val);
+                        }
+                        PropAttr::Flags => {
+                            let u: u8 = r.get(c_num)?;
+                            let e: EnumSet<PropFlag> = EnumSet::from_u8(u);
+                            ret_attrs.flags = Some(e);
+                        }
                     }
                 }
-            }
-            Ok(ret_attrs)
-        }).unwrap();
+                Ok(ret_attrs)
+            })
+            .unwrap();
 
         match results.nth(0) {
             None => Ok(None),
-            Some(r) => {
-                Ok(Some(r?))
-            }
+            Some(r) => Ok(Some(r?)),
         }
     }
 
@@ -556,7 +581,7 @@ impl<'a> Properties for SQLiteTx<'a> {
 #[cfg(test)]
 mod tests {
     use crate::db::sqllite::SQLiteTx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, Objects};
+    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
     use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
     use crate::model::var::{Objid, Var};
     use antlr_rust::CoerceTo;
@@ -569,7 +594,7 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o = s.create_object().unwrap();
+        let o = s.create_object(&ObjAttrs::new()).unwrap();
         assert!(s.object_valid(o).unwrap());
         s.destroy_object(o).unwrap();
         assert_eq!(s.object_valid(o).unwrap(), false);
@@ -577,38 +602,44 @@ mod tests {
     }
 
     #[test]
+    fn object_check_children_contents() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut s = SQLiteTx::new(tx).unwrap();
+        s.initialize_schema().unwrap();
+
+        let o1 = s.create_object(ObjAttrs::new().name("test")).unwrap();
+        let o2 = s.create_object(ObjAttrs::new().name("test2").location(o1).parent(o1)).unwrap();
+        let o3 = s.create_object(ObjAttrs::new().name("test3").location(o1).parent(o1)).unwrap();
+
+        let children = s.object_children(o1).unwrap();
+        assert_eq!(children, vec![o2, o3]);
+
+        let contents = s.object_contents(o1).unwrap();
+        assert_eq!(contents, vec![o2, o3]);
+
+        s.tx.commit().unwrap();
+    }
+    #[test]
     fn object_create_set_get_attrs() {
         let mut conn = Connection::open_in_memory().unwrap();
         let tx = conn.transaction().unwrap();
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o = s.create_object().unwrap();
-
-        s.object_set_attrs(
-            o,
-            ObjAttrs {
-                owner: Some(Objid(66)),
-                name: Some(String::from("test")),
-                parent: None,
-                location: None,
-                flags: None,
-            },
-        )
-        .unwrap();
+        let o = s.create_object(ObjAttrs::new().name("test").flags(ObjFlag::Write | ObjFlag::Read)).unwrap();
 
         let attrs = s
             .object_get_attrs(
                 o,
                 ObjAttr::Flags
-                    | ObjAttr::Location
-                    | ObjAttr::Parent
-                    | ObjAttr::Owner
                     | ObjAttr::Name,
             )
             .unwrap();
 
         assert_eq!(attrs.name.unwrap(), "test");
+        assert!(attrs.flags.unwrap().contains(ObjFlag::Write.into()));
+
         s.tx.commit().unwrap();
     }
 
@@ -619,7 +650,7 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o = s.create_object().unwrap();
+        let o = s.create_object(&ObjAttrs::new()).unwrap();
 
         let pid = s
             .add_propdef(
@@ -664,42 +695,12 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let parent = s.create_object().unwrap();
-        let child1 = s.create_object().unwrap();
-        let child2 = s.create_object().unwrap();
+        let parent = s.create_object(&ObjAttrs::new()).unwrap();
+        let child1 = s.create_object(ObjAttrs::new().parent(parent)).unwrap();
+        let child2 = s.create_object(ObjAttrs::new().parent(child1)).unwrap();
 
-        s.object_set_attrs(
-            child1,
-            ObjAttrs {
-                owner: None,
-                name: None,
-                parent: Some(parent),
-                location: None,
-                flags: None,
-            },
-        )
-        .unwrap();
-        s.object_set_attrs(
-            child2,
-            ObjAttrs {
-                owner: None,
-                name: None,
-                parent: Some(child1),
-                location: None,
-                flags: None,
-            },
-        )
-        .unwrap();
-
-        let other_root = s.create_object().unwrap();
-        let other_root_child = s.create_object().unwrap();
-        s.object_set_attrs(other_root_child, ObjAttrs {
-            owner: None,
-            name: None,
-            parent: Some(other_root),
-            location: None,
-            flags: None,
-        }).unwrap();
+        let other_root = s.create_object(&ObjAttrs::new()).unwrap();
+        let other_root_child = s.create_object(ObjAttrs::new().parent(other_root)).unwrap();
 
         let pid = s
             .add_propdef(
@@ -717,7 +718,10 @@ mod tests {
         assert_eq!(pds[0].pid, pid, "test");
 
         // Verify initially that we get the value all the way from root.
-        let v = s.get_property(child2, pid, PropAttr::Value | PropAttr::Owner).unwrap().unwrap();
+        let v = s
+            .get_property(child2, pid, PropAttr::Value | PropAttr::Owner)
+            .unwrap()
+            .unwrap();
         assert_eq!(v.owner, Some(parent));
 
         // Set it on the intermediate child...
@@ -730,7 +734,10 @@ mod tests {
         .unwrap();
 
         // And then verify we get it from there...
-        let v = s.get_property(child2, pid, PropAttr::Value | PropAttr::Owner).unwrap().unwrap();
+        let v = s
+            .get_property(child2, pid, PropAttr::Value | PropAttr::Owner)
+            .unwrap()
+            .unwrap();
         assert_eq!(v.owner, Some(child1));
 
         // Finally set it on the last child...
@@ -740,14 +747,19 @@ mod tests {
             child2,
             PropFlag::Read | PropFlag::Write,
         )
-            .unwrap();
+        .unwrap();
 
         // And then verify we get it from there...
-        let v = s.get_property(child2, pid, PropAttr::Value | PropAttr::Owner).unwrap().unwrap();
+        let v = s
+            .get_property(child2, pid, PropAttr::Value | PropAttr::Owner)
+            .unwrap()
+            .unwrap();
         assert_eq!(v.owner, Some(child2));
 
         // And verify we don't get it from other root or from its child
-        let v = s.get_property(other_root, pid, PropAttr::Value | PropAttr::Owner).unwrap();
+        let v = s
+            .get_property(other_root, pid, PropAttr::Value | PropAttr::Owner)
+            .unwrap();
         assert!(v.is_none());
 
         s.tx.commit().unwrap();
