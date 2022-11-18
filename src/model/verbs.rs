@@ -73,7 +73,7 @@ pub trait Verbs {
         verb: &str,
         arg_spec: VerbArgsSpec,
         attrs: EnumSet<VerbAttr>,
-    ) -> Result<Vec<VerbInfo>, anyhow::Error>;
+    ) -> Result<Option<VerbInfo>, anyhow::Error>;
 
     /// Find the verbs that match based on the provided name-stem.
     fn find_callable_verb(
@@ -81,7 +81,7 @@ pub trait Verbs {
         oid: Objid,
         verb: &str,
         attrs: EnumSet<VerbAttr>,
-    ) -> Result<Vec<VerbInfo>, anyhow::Error>;
+    ) -> Result<Option<VerbInfo>, anyhow::Error>;
 
     /// Find the verb that is the Nth verb in insertion order for the object.
     fn find_indexed_verb(

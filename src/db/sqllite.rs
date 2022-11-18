@@ -16,7 +16,7 @@ use sea_query::{
     all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
     ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict,
     Query, QueryStatementWriter, SelectStatement, SimpleExpr, SqliteQueryBuilder, Table, UnionType,
-    Value,
+    Value, WithClause,
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
 
@@ -92,19 +92,61 @@ fn property_attr_to_column<'a>(attr: PropAttr) -> DynIden {
     }
 }
 
-fn verb_attr_to_column<'a>(attr: VerbAttr) -> DynIden {
+fn verb_attr_to_column<'a>(attr: VerbAttr) -> (DynIden, DynIden) {
     match attr {
-        VerbAttr::Definer => Verb::Definer.into_iden(),
-        VerbAttr::Owner => Verb::Owner.into_iden(),
-        VerbAttr::Flags => Verb::Flags.into_iden(),
-        VerbAttr::ArgsSpec => Verb::ArgsSpec.into_iden(),
-        VerbAttr::Program => Verb::Program.into_iden(),
+        VerbAttr::Definer => (Verb::Table.into_iden(), Verb::Definer.into_iden()),
+        VerbAttr::Owner => (Verb::Table.into_iden(), Verb::Owner.into_iden()),
+        VerbAttr::Flags => (Verb::Table.into_iden(), Verb::Flags.into_iden()),
+        VerbAttr::ArgsSpec => (Verb::Table.into_iden(), Verb::ArgsSpec.into_iden()),
+        VerbAttr::Program => (Verb::Table.into_iden(), Verb::Program.into_iden()),
     }
 }
 
 fn retr_objid(r: &Row, c_num: usize) -> Result<Option<Objid>, rusqlite::Error> {
     let x: Option<i64> = r.get(c_num)?;
     Ok(x.map(Objid))
+}
+
+fn transitive_inheritance_clause(oid: Objid) -> WithClause {
+    let self_relval = SelectStatement::new()
+        .expr(Expr::asterisk())
+        .from_values([(oid.0)], Alias::new("oid"))
+        .to_owned();
+
+    let parents_of = Alias::new("parents_of");
+    let transitive = SelectStatement::new()
+        .from(Object::Table)
+        .column(Object::Parent)
+        .join(
+            JoinType::InnerJoin,
+            parents_of.clone(),
+            Expr::tbl(parents_of.clone(), Alias::new("oid"))
+                .equals(Object::Table, Object::Oid)
+                .into_condition(),
+        )
+        .to_owned();
+
+    let cte = CommonTableExpression::new()
+        .query(
+            self_relval
+                .clone()
+                .union(UnionType::All, transitive.clone())
+                .to_owned(),
+        )
+        .column(Alias::new("oid"))
+        .table_name(parents_of.clone())
+        .to_owned();
+
+    let with = Query::with().recursive(true).cte(cte).to_owned();
+
+    with
+}
+
+struct VerbPivot {
+    vid: i64,
+    name: String,
+    name_id: i64,
+    attrs: VerbAttrs,
 }
 
 impl<'a> SQLiteTx<'a> {
@@ -267,60 +309,69 @@ impl<'a> SQLiteTx<'a> {
     fn verb_attrs_from_result(
         &self,
         r: &Row,
-        attributes: EnumSet<VerbAttr>,
-    ) -> rusqlite::Result<(i64, String, i64, VerbAttrs)> {
+        req_attrs: EnumSet<VerbAttr>,
+    ) -> rusqlite::Result<VerbPivot> {
         let vid: i64 = r.get("vid")?;
         let name: String = r.get("name")?;
-        let nid: i64 = r.get("name_id")?;
+        let name_id: i64 = r.get("name_id")?;
 
-        let mut verb_attr = VerbAttrs {
+        let mut attrs = VerbAttrs {
             definer: None,
             owner: None,
             flags: None,
             args_spec: None,
             program: None,
         };
-        for (c_num, a) in attributes.iter().enumerate() {
+        for (c_num, a) in req_attrs.iter().enumerate() {
             match a {
-                VerbAttr::Definer => verb_attr.definer = retr_objid(r, c_num)?,
-                VerbAttr::Owner => verb_attr.owner = retr_objid(r, c_num)?,
+                VerbAttr::Definer => attrs.definer = retr_objid(r, c_num)?,
+                VerbAttr::Owner => attrs.owner = retr_objid(r, c_num)?,
                 VerbAttr::Flags => {
                     let fe: u16 = r.get(c_num)?;
                     let flags: EnumSet<VerbFlag> = EnumSet::from_u16(fe);
-                    verb_attr.flags = Some(flags);
+                    attrs.flags = Some(flags);
                 }
                 VerbAttr::ArgsSpec => {
                     let args_spec_encoded: Vec<u8> = r.get(c_num)?;
                     let (decoded_val, _) =
                         bincode::decode_from_slice(&args_spec_encoded, self.bincode_cfg).unwrap();
 
-                    verb_attr.args_spec = Some(decoded_val);
+                    attrs.args_spec = Some(decoded_val);
                 }
                 VerbAttr::Program => {
                     let prg_bytes: Vec<u8> = r.get(c_num)?;
                     let prg = Program(Bytes::from(prg_bytes));
-                    verb_attr.program = Some(prg);
+                    attrs.program = Some(prg);
                 }
             }
         }
-        Ok((vid, name, nid, verb_attr))
+        Ok(VerbPivot {
+            vid,
+            name,
+            name_id,
+            attrs,
+        })
     }
 
-    fn doit(
+    fn map_verbs(
         &self,
-        results: impl Iterator<Item = (i64, String, i64, VerbAttrs)>,
+        results: impl Iterator<Item = VerbPivot>,
     ) -> Result<Vec<VerbInfo>, anyhow::Error> {
-        let results = results.group_by(|r| r.0);
+        let by_vid = results.group_by(|r| r.vid);
 
-        let results = results.into_iter().map(|mut r| {
-            let mut group = &mut r.1;
-            let names = group.map(|g| g.1).collect();
-
-            let attrs = group.nth(0).unwrap().3.clone();
+        let results = by_vid.into_iter().map(|r| {
+            let mut attrs: Option<VerbAttrs> = None;
+            let mut names = vec![];
+            for i in r.1 {
+                names.push(i.name);
+                if attrs.is_none() {
+                    attrs = Some(i.attrs.clone());
+                }
+            }
             VerbInfo {
                 vid: Vid(r.0),
                 names,
-                attrs,
+                attrs: attrs.unwrap(),
             }
         });
 
@@ -618,52 +669,10 @@ impl<'a> Properties for SQLiteTx<'a> {
         handle: Pid,
         attributes: EnumSet<PropAttr>,
     ) -> Result<Option<PropAttrs>, Error> {
-        let self_relval = SelectStatement::new()
-            .expr(Expr::asterisk())
-            .from_values([(oid.0)], Alias::new("oid"))
-            .to_owned();
-
+        let with = transitive_inheritance_clause(oid);
         let parents_of = Alias::new("parents_of");
-        let transitive = SelectStatement::new()
-            .from(Object::Table)
-            .column(Object::Parent)
-            .join(
-                JoinType::InnerJoin,
-                parents_of.clone(),
-                Expr::tbl(parents_of.clone(), Alias::new("oid"))
-                    .equals(Object::Table, Object::Oid)
-                    .into_condition(),
-            )
-            .to_owned();
-
-        let cte = CommonTableExpression::new()
-            .query(
-                self_relval
-                    .clone()
-                    .union(UnionType::All, transitive.clone())
-                    .to_owned(),
-            )
-            .column(Alias::new("oid"))
-            .table_name(parents_of.clone())
-            .to_owned();
 
         let columns = attributes.iter().map(property_attr_to_column);
-
-        let with = Query::with().recursive(true).cte(cte).to_owned();
-
-        /*
-            WITH RECURSIVE parents_of (oid) AS (SELECT *
-                                            FROM (VALUES (2)) AS oid
-                                            UNION ALL
-                                            SELECT parent
-                                            FROM object
-                                                     INNER JOIN parents_of ON parents_of.oid = object.oid)
-        select p.pid, p.location, pd.name, pd.definer
-        from parents_of po join property p on p.location = po.oid
-                           join property_definition pd on p.pid = pd.pid
-        where p.pid = 566
-
-         */
         let query = Query::select()
             .columns(columns)
             .from(parents_of.clone())
@@ -840,27 +849,29 @@ impl<'a> Verbs for SQLiteTx<'a> {
         attributes: EnumSet<crate::model::verbs::VerbAttr>,
     ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
         let mut columns: Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
-        let vid_col = columns.len();
-        columns.push(Verb::Vid.into_iden());
+        columns.push((Verb::Table.into_iden(), Verb::Vid.into_iden()));
+        columns.push((VerbName::Table.into_iden(), VerbName::Name.into_iden()));
+        columns.push((VerbName::Table.into_iden(), VerbName::NameId.into_iden()));
         let (query, values) = Query::select()
             .from(Verb::Table)
             .columns(columns)
             .join(
                 JoinType::Join,
-                VerbName::Name,
+                VerbName::Table,
                 Expr::tbl(Verb::Table, Verb::Vid)
                     .equals(VerbName::Table, VerbName::Vid)
                     .into_condition(),
             )
             .cond_where(Expr::col(Verb::Definer).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
+        println!("{}", query);
         let mut stmt = self.tx.prepare(&query)?;
         let results = stmt.query_map(&*values.as_params(), |r| {
             self.verb_attrs_from_result(r, attributes)
         })?;
         let results = results.map(|v| v.unwrap());
 
-        self.doit(results)
+        self.map_verbs(results)
     }
 
     fn get_verb(
@@ -869,8 +880,9 @@ impl<'a> Verbs for SQLiteTx<'a> {
         attributes: EnumSet<crate::model::verbs::VerbAttr>,
     ) -> Result<crate::model::verbs::VerbInfo, Error> {
         let mut columns: Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
-        let vid_col = columns.len();
-        columns.push(Verb::Vid.into_iden());
+        columns.push((Verb::Table.into_iden(), Verb::Vid.into_iden()));
+        columns.push((VerbName::Table.into_iden(), VerbName::Name.into_iden()));
+        columns.push((VerbName::Table.into_iden(), VerbName::NameId.into_iden()));
         let (query, values) = Query::select()
             .from(Verb::Table)
             .columns(columns)
@@ -889,13 +901,15 @@ impl<'a> Verbs for SQLiteTx<'a> {
         })?;
         let results = results.map(|v| v.unwrap());
 
-        match self.doit(results) {
+        match self.map_verbs(results) {
             Ok(rv) => Ok(rv[0].clone()),
             Err(e) => Err(e),
         }
     }
 
     fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
+        // Ho-boy this is going to be fun for multiple name support. Easiest will be just to
+        // delete them all and re-add.
         todo!()
     }
 
@@ -905,7 +919,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
         verb: &str,
         argspec: VerbArgsSpec,
         attrs: EnumSet<crate::model::verbs::VerbAttr>,
-    ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
+    ) -> Result<Option<crate::model::verbs::VerbInfo>, Error> {
         todo!()
     }
 
@@ -914,8 +928,50 @@ impl<'a> Verbs for SQLiteTx<'a> {
         oid: Objid,
         verb: &str,
         attrs: EnumSet<crate::model::verbs::VerbAttr>,
-    ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
-        todo!()
+    ) -> Result<Option<crate::model::verbs::VerbInfo>, Error> {
+        let with = transitive_inheritance_clause(oid);
+        let parents_of = Alias::new("parents_of");
+        let mut columns: Vec<_> = attrs.iter().map(verb_attr_to_column).collect();
+        columns.push((Verb::Table.into_iden(), Verb::Vid.into_iden()));
+        columns.push((VerbName::Table.into_iden(), VerbName::Name.into_iden()));
+        columns.push((VerbName::Table.into_iden(), VerbName::NameId.into_iden()));
+        let query = Query::select()
+            .columns(columns)
+            .from(parents_of.clone())
+            .join(
+                JoinType::Join,
+                Verb::Table,
+                all![Expr::tbl(Verb::Table, Verb::Definer)
+                    .equals(parents_of.clone(), Alias::new("oid"))],
+            )
+            .join(
+                JoinType::Join,
+                VerbName::Table,
+                all![Expr::tbl(VerbName::Table, VerbName::Vid).equals(Verb::Table, Verb::Vid),],
+            )
+            .cond_where(Expr::col((VerbName::Table, VerbName::Name)).eq(verb))
+            .to_owned();
+
+        let (query, values) = query
+            .with(with)
+            .to_owned()
+            .build(SqliteQueryBuilder)
+            .to_owned();
+
+        let mut query = self.tx.prepare(&query)?;
+        let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
+
+        let results = query.query_map(&*values.as_params(), |r| {
+            self.verb_attrs_from_result(r, attrs)
+        })?;
+        let results = results.map(|v| v.unwrap());
+
+
+        let mapped = self.map_verbs(results)?;
+
+        if mapped.is_empty() { return Ok(None) }
+
+        Ok(Some(mapped[0].clone()))
     }
 
     fn find_indexed_verb(
@@ -932,7 +988,9 @@ mod tests {
     use crate::db::sqllite::SQLiteTx;
     use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
     use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
+    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
+    use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, Verbs};
     use antlr_rust::CoerceTo;
     use rusqlite::Connection;
 
@@ -1124,6 +1182,124 @@ mod tests {
         // And verify we don't get it from other root or from its child
         let v = s
             .get_property(other_root, pid, PropAttr::Value | PropAttr::Location)
+            .unwrap();
+        assert!(v.is_none());
+
+        s.tx.commit().unwrap();
+    }
+
+    #[test]
+    fn verb_inheritance() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut s = SQLiteTx::new(tx).unwrap();
+        s.initialize_schema().unwrap();
+
+        let parent = s.create_object(None, &ObjAttrs::new()).unwrap();
+        let child1 = s
+            .create_object(None, ObjAttrs::new().parent(parent))
+            .unwrap();
+        let child2 = s
+            .create_object(None, ObjAttrs::new().parent(child1))
+            .unwrap();
+
+        let other_root = s.create_object(None, &ObjAttrs::new()).unwrap();
+        let other_root_child = s
+            .create_object(None, ObjAttrs::new().parent(other_root))
+            .unwrap();
+
+        let thisnonethis = VerbArgsSpec {
+            dobj: ArgSpec::This,
+            prep: PrepSpec::None,
+            iobj: ArgSpec::This,
+        };
+        let vinfo = s
+            .add_verb(
+                parent,
+                vec!["look_down", "look_up"],
+                parent,
+                VerbFlag::Exec | VerbFlag::Read,
+                thisnonethis,
+                Program(bytes::Bytes::new()),
+            )
+            .unwrap();
+
+        let verbs = s
+            .get_verbs(
+                parent,
+                VerbAttr::Definer | VerbAttr::Owner | VerbAttr::Flags | VerbAttr::ArgsSpec,
+            )
+            .unwrap();
+        assert_eq!(verbs.len(), 1);
+        assert_eq!(verbs[0].attrs.definer.unwrap(), parent);
+        assert_eq!(verbs[0].attrs.args_spec.unwrap(), thisnonethis);
+        assert_eq!(verbs[0].attrs.owner.unwrap(), parent);
+        assert_eq!(verbs[0].names.len(), 2);
+
+        // Verify initially that we get the value all the way from root.
+        let v = s
+            .find_callable_verb(
+                child2,
+                "look_up",
+                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+            )
+            .unwrap();
+        assert!(v.is_some());
+        assert_eq!(v.unwrap().attrs.definer.unwrap(), parent);
+
+        // Set it on the intermediate child...
+        let vinfo = s
+            .add_verb(
+                child1,
+                vec!["look_down", "look_up"],
+                parent,
+                VerbFlag::Exec | VerbFlag::Read,
+                thisnonethis,
+                Program(bytes::Bytes::new()),
+            )
+            .unwrap();
+
+        // And then verify we get it from there...
+        let v = s
+            .find_callable_verb(
+                child2,
+                "look_up",
+                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+            )
+            .unwrap();
+        assert!(v.is_some());
+        assert_eq!(v.unwrap().attrs.definer.unwrap(), child1);
+
+        // Finally set it on the last child...
+        let vinfo = s
+            .add_verb(
+                child2,
+                vec!["look_down", "look_up"],
+                parent,
+                VerbFlag::Exec | VerbFlag::Read,
+                thisnonethis,
+                Program(bytes::Bytes::new()),
+            )
+            .unwrap();
+
+        // And then verify we get it from there...
+        let v = s
+            .find_callable_verb(
+                child2,
+                "look_up",
+                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+            )
+            .unwrap();
+        assert!(v.is_some());
+        assert_eq!(v.unwrap().attrs.definer.unwrap(), child2);
+
+        // And verify we don't get it from other root or from its child
+        let v = s
+            .find_callable_verb(
+                other_root,
+                "look_up",
+                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+            )
             .unwrap();
         assert!(v.is_none());
 
