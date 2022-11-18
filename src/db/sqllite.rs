@@ -1,14 +1,22 @@
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::props::{Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties};
 use crate::model::var::{Objid, Var};
 
+use crate::model::r#match::VerbArgsSpec;
+use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use anyhow::Error;
 use bincode::config;
 use bincode::config::Configuration;
+use bytes::Bytes;
 use enumset::EnumSet;
 use rusqlite::{Row, Transaction};
 use sea_query::QueryStatement::Insert;
-use sea_query::{all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey, ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict, Query, QueryStatementWriter, SelectStatement, SqliteQueryBuilder, Table, UnionType, Value, SimpleExpr};
+use sea_query::{
+    all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
+    ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict,
+    Query, QueryStatementWriter, SelectStatement, SimpleExpr, SqliteQueryBuilder, Table, UnionType,
+    Value,
+};
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
 
 #[derive(Iden)]
@@ -39,6 +47,18 @@ enum Property {
     Flags,
 }
 
+#[derive(Iden)]
+enum Verb {
+    Table,
+    Vid,
+    Owner,
+    Definer,
+    Names,
+    Flags,
+    ArgsSpec,
+    Program,
+}
+
 pub struct SQLiteTx<'a> {
     tx: Transaction<'a>,
     bincode_cfg: Configuration,
@@ -62,13 +82,16 @@ fn property_attr_to_column<'a>(attr: PropAttr) -> DynIden {
     }
 }
 
-// fn prop_attr_to_column<'a>(attr: PropAttr) -> DynIden {
-//     match attr {
-//         PropAttr::Value => Property::Value.into_iden(),
-//         PropAttr::Owner => PropAttr::Owner.into_iden(),
-//         PropAttr::Flags => PropAttr::Flags.into_iden(),
-//     }
-// }
+fn verb_attr_to_column<'a>(attr: VerbAttr) -> DynIden {
+    match attr {
+        VerbAttr::Definer => Verb::Definer.into_iden(),
+        VerbAttr::Names => Verb::Names.into_iden(),
+        VerbAttr::Owner => Verb::Owner.into_iden(),
+        VerbAttr::Flags => Verb::Flags.into_iden(),
+        VerbAttr::ArgsSpec => Verb::ArgsSpec.into_iden(),
+        VerbAttr::Program => Verb::Program.into_iden(),
+    }
+}
 
 fn retr_objid(r: &Row, c_num: usize) -> Result<Option<Objid>, rusqlite::Error> {
     let x: Option<i64> = r.get(c_num)?;
@@ -119,6 +142,7 @@ impl<'a> SQLiteTx<'a> {
             .build(SqliteQueryBuilder);
 
         let property_def_index_create = Index::create()
+            .if_not_exists()
             .table(PropertyDefinition::Table)
             .index_type(IndexType::Hash)
             .name("property_lookup_index")
@@ -147,17 +171,94 @@ impl<'a> SQLiteTx<'a> {
             )
             .build(SqliteQueryBuilder);
 
+        let verb_table_create = Table::create()
+            .if_not_exists()
+            .table(Verb::Table)
+            .col(ColumnDef::new(Verb::Vid).integer().primary_key().not_null())
+            .col(ColumnDef::new(Verb::Owner).integer().not_null())
+            .col(ColumnDef::new(Verb::Definer).integer().not_null())
+            .col(ColumnDef::new(Verb::Names).string().not_null())
+            .col(ColumnDef::new(Verb::Flags).integer().not_null())
+            .col(
+                ColumnDef::new(Verb::ArgsSpec)
+                    .blob(BlobSize::Tiny)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Verb::Program)
+                    .blob(BlobSize::Medium)
+                    .not_null(),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .from_col(Verb::Definer)
+                    .to_col(Object::Oid)
+                    .to_tbl(Object::Table),
+            )
+            .foreign_key(
+                ForeignKey::create()
+                    .on_delete(ForeignKeyAction::Cascade)
+                    .from_col(Verb::Owner)
+                    .to_col(Object::Oid)
+                    .to_tbl(Object::Table),
+            )
+            .build(SqliteQueryBuilder);
+
         self.tx.execute_batch(
             &[
                 object_table_create,
                 property_def_table_create,
                 property_def_index_create,
                 pval_table_create,
+                verb_table_create,
             ]
             .join(";"),
         )?;
         Ok(())
     }
+
+    fn verb_from_result(&self, r: &Row, attributes: EnumSet<VerbAttr>, vid_col: usize) -> rusqlite::Result<VerbInfo>{
+        let vid : i64 = r.get(vid_col)?;
+        let mut verb_attr = VerbAttrs {
+            definer: None,
+            names: None,
+            owner: None,
+            flags: None,
+            args_spec: None,
+            program: None
+        };
+        for (c_num, a) in attributes.iter().enumerate() {
+            match a {
+                VerbAttr::Definer => verb_attr.definer = retr_objid(r, c_num)?,
+                VerbAttr::Names => verb_attr.names = Some(r.get(c_num)?),
+                VerbAttr::Owner =>verb_attr.owner = retr_objid(r, c_num)?,
+                VerbAttr::Flags => {
+                    let fe : u8 = r.get(c_num)?;
+                    let flags : EnumSet<VerbFlag> = EnumSet::from_u8(fe);
+                    verb_attr.flags = Some(flags);
+                }
+                VerbAttr::ArgsSpec => {
+                    let args_spec_encoded: Vec<u8> = r.get(c_num)?;
+                    let (decoded_val, _) =
+                        bincode::decode_from_slice(&args_spec_encoded, self.bincode_cfg).unwrap();
+
+                    verb_attr.args_spec = Some(decoded_val);
+                }
+                VerbAttr::Program => {
+                    let prg_bytes : Vec<u8> = r.get(c_num)?;
+                    let prg = Program(Bytes::from(prg_bytes));
+                    verb_attr.program = Some(prg);
+                }
+            }
+        }
+        let v = VerbInfo {
+            vid: Vid(vid),
+            attrs: verb_attr,
+        };
+        Ok(v)
+    }
+
 }
 
 // TODO translate -1 to and from null
@@ -165,25 +266,23 @@ impl<'a> Objects for SQLiteTx<'a> {
     fn create_object(&mut self, attrs: &ObjAttrs) -> Result<Objid, Error> {
         let owner = match attrs.owner {
             None => None::<i64>.into(),
-            Some(o) => o.0.into()
+            Some(o) => o.0.into(),
         };
         let parent = match attrs.parent {
             None => None::<i64>.into(),
-            Some(o) => o.0.into()
+            Some(o) => o.0.into(),
         };
         let location = match attrs.location {
-            None =>  None::<i64>.into(),
-            Some(o) => o.0.into()
+            None => None::<i64>.into(),
+            Some(o) => o.0.into(),
         };
-        let name = match &attrs.name{
+        let name = match &attrs.name {
             None => "".into(),
-            Some(s) => s.as_str().into()
+            Some(s) => s.as_str().into(),
         };
         let flags = match &attrs.flags {
             None => 0.into(),
-            Some(f) => {
-                f.as_u8().into()
-            }
+            Some(f) => f.as_u8().into(),
         };
         let (insert_sql, values) = Query::insert()
             .into_table(Object::Table)
@@ -194,13 +293,7 @@ impl<'a> Objects for SQLiteTx<'a> {
                 Object::Name,
                 Object::Flags,
             ])
-            .values_panic([
-                owner,
-                parent,
-                location,
-                name,
-                flags,
-            ])
+            .values_panic([owner, parent, location, name, flags])
             .build_rusqlite(SqliteQueryBuilder);
 
         let result = self.tx.execute(&insert_sql, &*values.as_params())?;
@@ -313,12 +406,10 @@ impl<'a> Objects for SQLiteTx<'a> {
             .build_rusqlite(SqliteQueryBuilder);
         let mut query = self.tx.prepare(&query)?;
         let results = query.query_map(&*params.as_params(), |r| {
-            let oid : i64 = r.get(0).unwrap();
+            let oid: i64 = r.get(0).unwrap();
             Ok(Objid(oid))
         })?;
-        Ok(results.map(|o| {
-            o.unwrap()
-        }).collect())
+        Ok(results.map(|o| o.unwrap()).collect())
     }
 
     fn object_contents(&self, oid: Objid) -> Result<Vec<Objid>, Error> {
@@ -329,12 +420,10 @@ impl<'a> Objects for SQLiteTx<'a> {
             .build_rusqlite(SqliteQueryBuilder);
         let mut query = self.tx.prepare(&query)?;
         let results = query.query_map(&*params.as_params(), |r| {
-            let oid : i64 = r.get(0).unwrap();
+            let oid: i64 = r.get(0).unwrap();
             Ok(Objid(oid))
         })?;
-        Ok(results.map(|o| {
-            o.unwrap()
-        }).collect())
+        Ok(results.map(|o| o.unwrap()).collect())
     }
 }
 
@@ -578,10 +667,132 @@ impl<'a> Properties for SQLiteTx<'a> {
     }
 }
 
+impl<'a> Verbs for SQLiteTx<'a> {
+    fn add_verb(
+        &mut self,
+        oid: Objid,
+        names: &str,
+        owner: Objid,
+        flags: EnumSet<VerbFlag>,
+        argspec: VerbArgsSpec,
+        program: Program,
+    ) -> Result<crate::model::verbs::VerbInfo, Error> {
+        let argspec_encoded = bincode::encode_to_vec(argspec, self.bincode_cfg).unwrap();
+        let flags_encoded: SimpleExpr = flags.as_u8().into();
+        let (insert, values) = Query::insert()
+            .into_table(Verb::Table)
+            .columns([
+                Verb::Definer,
+                Verb::Owner,
+                Verb::Names,
+                Verb::Flags,
+                Verb::ArgsSpec,
+                Verb::Program,
+            ])
+            .values_panic([
+                oid.0.into(),
+                owner.0.into(),
+                names.into(),
+                flags_encoded,
+                argspec_encoded.as_slice().into(),
+                program.0[..].into(),
+            ])
+            .build_rusqlite(SqliteQueryBuilder);
+
+        self.tx.execute(&insert, &*values.as_params())?;
+
+        let vid = self.tx.last_insert_rowid();
+        Ok(VerbInfo {
+            vid: Vid(vid),
+            attrs: VerbAttrs {
+                definer: Some(oid),
+                names: Some(String::from(names)),
+                owner: Some(owner),
+                flags: Some(flags),
+                args_spec: Some(argspec),
+                program: Some(program),
+            },
+        })
+    }
+
+    fn get_verbs(
+        &self,
+        oid: Objid,
+        attributes: EnumSet<crate::model::verbs::VerbAttr>,
+    ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
+        let mut columns : Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
+        let vid_col = columns.len();
+        columns.push(Verb::Vid.into_iden());
+        let (query, values) = Query::select()
+            .from(Verb::Table)
+            .columns(columns)
+            .cond_where(Expr::col(Verb::Definer).eq(oid.0))
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.tx.prepare(&query)?;
+        let results = stmt.query_map(&*values.as_params(), |r| {
+            self.verb_from_result(r, attributes, vid_col)
+        })?;
+
+        Ok(results.map(|m| m.unwrap()).collect())
+    }
+
+    fn get_verb(
+        &self,
+        vid: Vid,
+        attributes: EnumSet<crate::model::verbs::VerbAttr>,
+    ) -> Result<crate::model::verbs::VerbInfo, Error> {
+        let mut columns : Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
+        let vid_col = columns.len();
+        columns.push(Verb::Vid.into_iden());
+        let (query, values) = Query::select()
+            .from(Verb::Table)
+            .columns(columns)
+            .cond_where(Expr::col(Verb::Vid).eq(vid.0))
+            .build_rusqlite(SqliteQueryBuilder);
+        let mut stmt = self.tx.prepare(&query)?;
+        let result = stmt.query_row(&*values.as_params(), |r| {
+            self.verb_from_result(r, attributes, vid_col)
+        })?;
+
+        Ok(result)
+    }
+
+    fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn find_command_verb(
+        &self,
+        oid: Objid,
+        verb: &str,
+        argspec: VerbArgsSpec,
+        attrs: EnumSet<crate::model::verbs::VerbAttr>,
+    ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
+        todo!()
+    }
+
+    fn find_callable_verb(
+        &self,
+        oid: Objid,
+        verb: &str,
+        attrs: EnumSet<crate::model::verbs::VerbAttr>,
+    ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
+        todo!()
+    }
+
+    fn find_indexed_verb(
+        &self,
+        oid: Objid,
+        index: usize,
+        attrs: EnumSet<crate::model::verbs::VerbAttr>,
+    ) -> Result<Option<crate::model::verbs::VerbInfo>, Error> {
+        todo!()
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::db::sqllite::SQLiteTx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
     use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
     use crate::model::var::{Objid, Var};
     use antlr_rust::CoerceTo;
@@ -609,8 +820,12 @@ mod tests {
         s.initialize_schema().unwrap();
 
         let o1 = s.create_object(ObjAttrs::new().name("test")).unwrap();
-        let o2 = s.create_object(ObjAttrs::new().name("test2").location(o1).parent(o1)).unwrap();
-        let o3 = s.create_object(ObjAttrs::new().name("test3").location(o1).parent(o1)).unwrap();
+        let o2 = s
+            .create_object(ObjAttrs::new().name("test2").location(o1).parent(o1))
+            .unwrap();
+        let o3 = s
+            .create_object(ObjAttrs::new().name("test3").location(o1).parent(o1))
+            .unwrap();
 
         let children = s.object_children(o1).unwrap();
         assert_eq!(children, vec![o2, o3]);
@@ -627,14 +842,16 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o = s.create_object(ObjAttrs::new().name("test").flags(ObjFlag::Write | ObjFlag::Read)).unwrap();
+        let o = s
+            .create_object(
+                ObjAttrs::new()
+                    .name("test")
+                    .flags(ObjFlag::Write | ObjFlag::Read),
+            )
+            .unwrap();
 
         let attrs = s
-            .object_get_attrs(
-                o,
-                ObjAttr::Flags
-                    | ObjAttr::Name,
-            )
+            .object_get_attrs(o, ObjAttr::Flags | ObjAttr::Name)
             .unwrap();
 
         assert_eq!(attrs.name.unwrap(), "test");

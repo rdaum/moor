@@ -1,6 +1,10 @@
+use enumset::EnumSet;
+use enumset_derive::EnumSetType;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::Objid;
 
+#[derive(EnumSetType, Debug)]
+#[enumset(serialize_repr = "u8")]
 pub enum VerbFlag {
     Read,
     Write,
@@ -8,7 +12,33 @@ pub enum VerbFlag {
     Debug,
 }
 
-pub struct VerbHandle(usize);
+pub struct Vid(pub i64);
+
+pub struct Program ( pub bytes::Bytes );
+
+#[derive(EnumSetType, Debug)]
+pub enum VerbAttr {
+    Definer,
+    Names,
+    Owner,
+    Flags,
+    ArgsSpec,
+    Program
+}
+
+pub struct VerbAttrs {
+    pub definer: Option<Objid>,
+    pub names: Option<String>,
+    pub owner: Option<Objid>,
+    pub flags: Option<EnumSet<VerbFlag>>,
+    pub args_spec: Option<VerbArgsSpec>,
+    pub program: Option<Program>
+}
+
+pub struct VerbInfo {
+    pub vid: Vid,
+    pub attrs: VerbAttrs,
+}
 
 /// Trait for the management of verbs; creating finding counting
 pub trait Verbs {
@@ -17,67 +47,31 @@ pub trait Verbs {
         oid: Objid,
         names: &str,
         owner: Objid,
-        flags: Vec<VerbFlag>,
-        argspec: VerbArgsSpec,
-    ) -> Result<(), anyhow::Error>;
+        flags: EnumSet<VerbFlag>,
+        arg_spec: VerbArgsSpec,
+        program: Program,
+    ) -> Result<VerbInfo, anyhow::Error>;
 
-    fn count_verbs(&self, oid: Objid) -> Result<usize, anyhow::Error>;
+    /// Get all verbs attached to the given object.
+    fn get_verbs(&self, oid: Objid, attrs: EnumSet<VerbAttr>) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
-    fn get_all_verbs(&self, oid: Objid) -> Result<Vec<String>, anyhow::Error>;
+    fn get_verb(&self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
 
+    fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), anyhow::Error>;
+
+    /// Match verbs using prepositional pieces.
     fn find_command_verb(
         &self,
         oid: Objid,
         verb: &str,
-        argspec: VerbArgsSpec,
-    ) -> Result<VerbHandle, anyhow::Error>;
+        arg_spec: VerbArgsSpec,
+        attrs: EnumSet<VerbAttr>
+    ) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
-    fn find_callable_verb(&self, oid: Objid, verb: &str) -> Result<VerbHandle, anyhow::Error>;
+    /// Find the verbs that match based on the provided name-stem.
+    fn find_callable_verb(&self, oid: Objid, verb: &str, attrs: EnumSet<VerbAttr>) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
-    fn find_defined_verb(
-        &self,
-        oid: Objid,
-        verb: &str,
-        allow_numbers: bool,
-    ) -> Result<VerbHandle, anyhow::Error>;
-
-    fn find_indexed_verb(&self, oid: Objid, index: usize) -> Result<VerbHandle, anyhow::Error>;
+    /// Find the verb that is the Nth verb in insertion order for the object.
+    fn find_indexed_verb(&self, oid: Objid, index: usize, attrs: EnumSet<VerbAttr>) -> Result<Option<VerbInfo>, anyhow::Error>;
 }
 
-/// TODO: contains the actual compiled verb for execution by VM
-pub struct Program {}
-
-/// Traits for using a given verb by its handle.
-pub trait Verb {
-    fn delete_verb(&self, handle: VerbHandle) -> Result<(), anyhow::Error>;
-    fn verb_program(&self, handle: VerbHandle) -> Result<Program, anyhow::Error>;
-    fn set_verb_program(&mut self, handle: VerbHandle, prg: Program) -> Result<(), anyhow::Error>;
-
-    fn verb_definer(&self, handle: VerbHandle) -> Result<Objid, anyhow::Error>;
-    fn verb_names(&self, handle: VerbHandle) -> Result<String, anyhow::Error>;
-    fn set_verb_names(&mut self, handle: VerbHandle, names: String) -> Result<(), anyhow::Error>;
-
-    fn verb_owner(&self, handle: VerbHandle) -> Result<Objid, anyhow::Error>;
-    fn set_verb_owner(&mut self, handle: VerbHandle) -> Result<Objid, anyhow::Error>;
-
-    fn verb_flags(&self, handle: VerbHandle) -> Result<Vec<VerbFlag>, anyhow::Error>;
-    fn set_verb_flags(
-        &mut self,
-        handle: VerbHandle,
-        flags: Vec<VerbFlag>,
-    ) -> Result<(), anyhow::Error>;
-
-    fn verb_arg_spcs(&self, handle: VerbHandle) -> Result<VerbArgsSpec, anyhow::Error>;
-    fn set_verb_arg_psecs(
-        &mut self,
-        handle: VerbHandle,
-        spec: VerbArgsSpec,
-    ) -> Result<(), anyhow::Error>;
-
-    fn verb_allows(
-        &self,
-        handle: VerbHandle,
-        oid: Objid,
-        flags: VerbFlag,
-    ) -> Result<bool, anyhow::Error>;
-}

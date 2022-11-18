@@ -1,3 +1,5 @@
+extern crate core;
+
 use rusqlite::Connection;
 
 use crate::db::sqllite::SQLiteTx;
