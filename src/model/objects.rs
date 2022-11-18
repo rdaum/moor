@@ -8,8 +8,10 @@ pub enum ObjFlag {
     User,
     Programmer,
     Wizard,
+    Obsolete1,
     Read,
     Write,
+    Obsolete2,
     Fertile,
 }
 
@@ -65,7 +67,7 @@ pub struct ObjAttrs {
 }
 
 pub trait Objects {
-    fn create_object(&mut self, attrs: &ObjAttrs) -> Result<Objid, anyhow::Error>;
+    fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, anyhow::Error>;
     fn destroy_object(&mut self, oid: Objid) -> Result<(), anyhow::Error>;
     fn object_valid(&self, oid: Objid) -> Result<bool, anyhow::Error>;
 

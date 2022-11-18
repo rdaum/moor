@@ -42,6 +42,7 @@ enum PropertyDefinition {
 enum Property {
     Table,
     Pid,
+    Location,
     Value,
     Owner,
     Flags,
@@ -60,7 +61,7 @@ enum Verb {
 }
 
 pub struct SQLiteTx<'a> {
-    tx: Transaction<'a>,
+    pub tx: Transaction<'a>,
     bincode_cfg: Configuration,
 }
 
@@ -77,6 +78,7 @@ fn object_attr_to_column<'a>(attr: ObjAttr) -> DynIden {
 fn property_attr_to_column<'a>(attr: PropAttr) -> DynIden {
     match attr {
         PropAttr::Value => Property::Value.into_iden(),
+        PropAttr::Location => Property::Location.into_iden(),
         PropAttr::Owner => Property::Owner.into_iden(),
         PropAttr::Flags => Property::Flags.into_iden(),
     }
@@ -153,13 +155,9 @@ impl<'a> SQLiteTx<'a> {
         let pval_table_create = Table::create()
             .table(Property::Table)
             .if_not_exists()
-            .col(
-                ColumnDef::new(Property::Pid)
-                    .integer()
-                    .primary_key()
-                    .not_null(),
-            )
+            .col(ColumnDef::new(Property::Pid).integer().not_null())
             .col(ColumnDef::new(Property::Owner).integer().not_null())
+            .col(ColumnDef::new(Property::Location).integer().not_null())
             .col(ColumnDef::new(Property::Flags).integer().not_null())
             .col(ColumnDef::new(Property::Value).integer().not_null())
             .foreign_key(
@@ -169,6 +167,15 @@ impl<'a> SQLiteTx<'a> {
                     .to_col(PropertyDefinition::Pid)
                     .to_tbl(PropertyDefinition::Table),
             )
+            .primary_key(Index::create().col(Property::Location).col(Property::Pid))
+            .build(SqliteQueryBuilder);
+
+        let pval_location_idx = Index::create()
+            .if_not_exists()
+            .table(Property::Table)
+            .index_type(IndexType::Hash)
+            .name("property_location_hash")
+            .col(Property::Location)
             .build(SqliteQueryBuilder);
 
         let verb_table_create = Table::create()
@@ -211,6 +218,7 @@ impl<'a> SQLiteTx<'a> {
                 property_def_table_create,
                 property_def_index_create,
                 pval_table_create,
+                pval_location_idx,
                 verb_table_create,
             ]
             .join(";"),
@@ -218,24 +226,29 @@ impl<'a> SQLiteTx<'a> {
         Ok(())
     }
 
-    fn verb_from_result(&self, r: &Row, attributes: EnumSet<VerbAttr>, vid_col: usize) -> rusqlite::Result<VerbInfo>{
-        let vid : i64 = r.get(vid_col)?;
+    fn verb_from_result(
+        &self,
+        r: &Row,
+        attributes: EnumSet<VerbAttr>,
+        vid_col: usize,
+    ) -> rusqlite::Result<VerbInfo> {
+        let vid: i64 = r.get(vid_col)?;
         let mut verb_attr = VerbAttrs {
             definer: None,
             names: None,
             owner: None,
             flags: None,
             args_spec: None,
-            program: None
+            program: None,
         };
         for (c_num, a) in attributes.iter().enumerate() {
             match a {
                 VerbAttr::Definer => verb_attr.definer = retr_objid(r, c_num)?,
                 VerbAttr::Names => verb_attr.names = Some(r.get(c_num)?),
-                VerbAttr::Owner =>verb_attr.owner = retr_objid(r, c_num)?,
+                VerbAttr::Owner => verb_attr.owner = retr_objid(r, c_num)?,
                 VerbAttr::Flags => {
-                    let fe : u8 = r.get(c_num)?;
-                    let flags : EnumSet<VerbFlag> = EnumSet::from_u8(fe);
+                    let fe: u8 = r.get(c_num)?;
+                    let flags: EnumSet<VerbFlag> = EnumSet::from_u8(fe);
                     verb_attr.flags = Some(flags);
                 }
                 VerbAttr::ArgsSpec => {
@@ -246,7 +259,7 @@ impl<'a> SQLiteTx<'a> {
                     verb_attr.args_spec = Some(decoded_val);
                 }
                 VerbAttr::Program => {
-                    let prg_bytes : Vec<u8> = r.get(c_num)?;
+                    let prg_bytes: Vec<u8> = r.get(c_num)?;
                     let prg = Program(Bytes::from(prg_bytes));
                     verb_attr.program = Some(prg);
                 }
@@ -258,12 +271,11 @@ impl<'a> SQLiteTx<'a> {
         };
         Ok(v)
     }
-
 }
 
 // TODO translate -1 to and from null
 impl<'a> Objects for SQLiteTx<'a> {
-    fn create_object(&mut self, attrs: &ObjAttrs) -> Result<Objid, Error> {
+    fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, Error> {
         let owner = match attrs.owner {
             None => None::<i64>.into(),
             Some(o) => o.0.into(),
@@ -284,16 +296,25 @@ impl<'a> Objects for SQLiteTx<'a> {
             None => 0.into(),
             Some(f) => f.as_u8().into(),
         };
+
+        let mut columns = vec![
+            Object::Owner,
+            Object::Parent,
+            Object::Location,
+            Object::Name,
+            Object::Flags,
+        ];
+
+        let mut values: Vec<SimpleExpr> = vec![owner, parent, location, name, flags];
+        if let Some(oid) = &oid {
+            columns.push(Object::Oid);
+            values.push(oid.0.into())
+        }
+
         let (insert_sql, values) = Query::insert()
             .into_table(Object::Table)
-            .columns([
-                Object::Owner,
-                Object::Parent,
-                Object::Location,
-                Object::Name,
-                Object::Flags,
-            ])
-            .values_panic([owner, parent, location, name, flags])
+            .columns(columns)
+            .values_panic(values)
             .build_rusqlite(SqliteQueryBuilder);
 
         let result = self.tx.execute(&insert_sql, &*values.as_params())?;
@@ -428,8 +449,23 @@ impl<'a> Objects for SQLiteTx<'a> {
 }
 
 impl<'a> PropDefs for SQLiteTx<'a> {
-    fn find_propdef(&mut self, target: Objid, pname: &str) -> Result<Option<Propdef>, Error> {
-        todo!()
+    fn get_propdef(&mut self, target: Objid, pname: &str) -> Result<Propdef, Error> {
+        let (query, values) = Query::select()
+            .from(PropertyDefinition::Table)
+            .columns([PropertyDefinition::Pid])
+            .cond_where(Expr::col(PropertyDefinition::Definer).eq(target.0))
+            .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let result = self.tx.query_row(&query, &*values.as_params(), |r| {
+            Ok(Propdef {
+                pid: Pid(r.get(0)?),
+                definer: target,
+                pname: String::from(pname),
+            })
+        })?;
+
+        Ok(result)
     }
 
     fn add_propdef(
@@ -438,7 +474,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
         pname: &str,
         owner: Objid,
         flags: EnumSet<PropFlag>,
-        val: Var,
+        val: Option<Var>,
     ) -> Result<Pid, Error> {
         let (insert_sql, values) = Query::insert()
             .into_table(PropertyDefinition::Table)
@@ -448,7 +484,9 @@ impl<'a> PropDefs for SQLiteTx<'a> {
         self.tx.execute(&insert_sql, &*values.as_params())?;
 
         let pid = Pid(self.tx.last_insert_rowid());
-        self.set_property(pid, val, owner, flags)?;
+        if let Some(val) = val {
+            self.set_property(pid, oid, val, owner, flags)?;
+        }
         Ok(pid)
     }
 
@@ -519,6 +557,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
 }
 
 impl<'a> Properties for SQLiteTx<'a> {
+
     fn get_property(
         &self,
         oid: Objid,
@@ -557,36 +596,43 @@ impl<'a> Properties for SQLiteTx<'a> {
         let columns = attributes.iter().map(property_attr_to_column);
 
         let with = Query::with().recursive(true).cte(cte).to_owned();
+
+        /*
+    WITH RECURSIVE parents_of (oid) AS (SELECT *
+                                    FROM (VALUES (2)) AS oid
+                                    UNION ALL
+                                    SELECT parent
+                                    FROM object
+                                             INNER JOIN parents_of ON parents_of.oid = object.oid)
+select p.pid, p.location, pd.name, pd.definer
+from parents_of po join property p on p.location = po.oid
+                   join property_definition pd on p.pid = pd.pid
+where p.pid = 566
+
+ */
         let query = Query::select()
             .columns(columns)
-            .from(PropertyDefinition::Table)
+            .from(parents_of.clone())
             .join(
-                JoinType::LeftJoin,
+                JoinType::Join,
                 Property::Table,
+                all![Expr::tbl(Property::Table, Property::Location)
+                    .equals(parents_of.clone(), Alias::new("oid"))],
+            )
+            .join(
+                JoinType::Join,
+                PropertyDefinition::Table,
                 all![Expr::tbl(Property::Table, Property::Pid)
                     .equals(PropertyDefinition::Table, PropertyDefinition::Pid),],
             )
-            .join(
-                JoinType::LeftJoin,
-                parents_of.clone(),
-                all![
-                    Expr::tbl(PropertyDefinition::Table, PropertyDefinition::Definer)
-                        .equals(parents_of.clone(), Alias::new("oid"))
-                ],
-            )
             .cond_where(
-                Expr::col((PropertyDefinition::Table, PropertyDefinition::Pid)).eq(handle.0),
-            )
-            .and_where(
-                Expr::col((PropertyDefinition::Table, PropertyDefinition::Definer))
-                    .equals(parents_of.clone(), Alias::new("oid")),
+                Expr::col((Property::Table, Property::Pid)).eq(handle.0),
             )
             .to_owned();
 
         let query = query.with(with).to_owned();
 
         let (query, values) = query.build(SqliteQueryBuilder);
-        println!("{}", query);
         let mut query = self.tx.prepare(&query)?;
 
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
@@ -594,6 +640,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             .query_map(&*values.as_params(), |r| {
                 let mut ret_attrs = PropAttrs {
                     value: None,
+                    location: None,
                     owner: None,
                     flags: None,
                 };
@@ -601,6 +648,9 @@ impl<'a> Properties for SQLiteTx<'a> {
                     match a {
                         PropAttr::Owner => {
                             ret_attrs.owner = retr_objid(r, c_num)?;
+                        }
+                        PropAttr::Location => {
+                            ret_attrs.location = retr_objid(r, c_num)?;
                         }
                         PropAttr::Value => {
                             let val_encoded: Vec<u8> = r.get(c_num)?;
@@ -629,6 +679,7 @@ impl<'a> Properties for SQLiteTx<'a> {
     fn set_property(
         &self,
         handle: Pid,
+        location: Objid,
         value: Var,
         owner: Objid,
         flags: EnumSet<PropFlag>,
@@ -640,12 +691,14 @@ impl<'a> Properties for SQLiteTx<'a> {
             .into_table(Property::Table)
             .columns([
                 Property::Pid,
+                Property::Location,
                 Property::Owner,
                 Property::Flags,
                 Property::Value,
             ])
             .values_panic([
                 handle.0.into(),
+                location.0.into(),
                 owner.0.into(),
                 flags_encoded.into(),
                 encoded_val.clone().into(),
@@ -653,11 +706,16 @@ impl<'a> Properties for SQLiteTx<'a> {
             .on_conflict(
                 OnConflict::new()
                     .values([
+                        (Property::Location, location.0.into()),
                         (Property::Owner, owner.0.into()),
                         (Property::Flags, flags_encoded.into()),
                         (Property::Value, encoded_val.into()),
                     ])
-                    .action_and_where(Expr::col(Property::Pid).eq(handle.0))
+                    .action_and_where(
+                        Expr::col(Property::Pid)
+                            .eq(handle.0)
+                            .and(Expr::col(Property::Location).eq(location.0)),
+                    )
                     .to_owned(),
             )
             .build_rusqlite(SqliteQueryBuilder);
@@ -720,7 +778,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
         oid: Objid,
         attributes: EnumSet<crate::model::verbs::VerbAttr>,
     ) -> Result<Vec<crate::model::verbs::VerbInfo>, Error> {
-        let mut columns : Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
+        let mut columns: Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
         let vid_col = columns.len();
         columns.push(Verb::Vid.into_iden());
         let (query, values) = Query::select()
@@ -741,7 +799,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
         vid: Vid,
         attributes: EnumSet<crate::model::verbs::VerbAttr>,
     ) -> Result<crate::model::verbs::VerbInfo, Error> {
-        let mut columns : Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
+        let mut columns: Vec<_> = attributes.iter().map(verb_attr_to_column).collect();
         let vid_col = columns.len();
         columns.push(Verb::Vid.into_iden());
         let (query, values) = Query::select()
@@ -805,7 +863,7 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o = s.create_object(&ObjAttrs::new()).unwrap();
+        let o = s.create_object(None, &ObjAttrs::new()).unwrap();
         assert!(s.object_valid(o).unwrap());
         s.destroy_object(o).unwrap();
         assert_eq!(s.object_valid(o).unwrap(), false);
@@ -819,12 +877,12 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o1 = s.create_object(ObjAttrs::new().name("test")).unwrap();
+        let o1 = s.create_object(None, ObjAttrs::new().name("test")).unwrap();
         let o2 = s
-            .create_object(ObjAttrs::new().name("test2").location(o1).parent(o1))
+            .create_object(None, ObjAttrs::new().name("test2").location(o1).parent(o1))
             .unwrap();
         let o3 = s
-            .create_object(ObjAttrs::new().name("test3").location(o1).parent(o1))
+            .create_object(None, ObjAttrs::new().name("test3").location(o1).parent(o1))
             .unwrap();
 
         let children = s.object_children(o1).unwrap();
@@ -844,6 +902,7 @@ mod tests {
 
         let o = s
             .create_object(
+                None,
                 ObjAttrs::new()
                     .name("test")
                     .flags(ObjFlag::Write | ObjFlag::Read),
@@ -867,7 +926,7 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let o = s.create_object(&ObjAttrs::new()).unwrap();
+        let o = s.create_object(None, &ObjAttrs::new()).unwrap();
 
         let pid = s
             .add_propdef(
@@ -875,7 +934,7 @@ mod tests {
                 "test",
                 o,
                 PropFlag::Chown | PropFlag::Read,
-                Var::Str(String::from("testing")),
+                Some(Var::Str(String::from("testing"))),
             )
             .unwrap();
 
@@ -889,6 +948,7 @@ mod tests {
 
         s.set_property(
             pds[0].pid,
+            o,
             Var::Str(String::from("testing")),
             o,
             PropFlag::Read | PropFlag::Write,
@@ -912,12 +972,18 @@ mod tests {
         let mut s = SQLiteTx::new(tx).unwrap();
         s.initialize_schema().unwrap();
 
-        let parent = s.create_object(&ObjAttrs::new()).unwrap();
-        let child1 = s.create_object(ObjAttrs::new().parent(parent)).unwrap();
-        let child2 = s.create_object(ObjAttrs::new().parent(child1)).unwrap();
+        let parent = s.create_object(None, &ObjAttrs::new()).unwrap();
+        let child1 = s
+            .create_object(None, ObjAttrs::new().parent(parent))
+            .unwrap();
+        let child2 = s
+            .create_object(None, ObjAttrs::new().parent(child1))
+            .unwrap();
 
-        let other_root = s.create_object(&ObjAttrs::new()).unwrap();
-        let other_root_child = s.create_object(ObjAttrs::new().parent(other_root)).unwrap();
+        let other_root = s.create_object(None, &ObjAttrs::new()).unwrap();
+        let other_root_child = s
+            .create_object(None, ObjAttrs::new().parent(other_root))
+            .unwrap();
 
         let pid = s
             .add_propdef(
@@ -925,7 +991,7 @@ mod tests {
                 "test",
                 parent,
                 PropFlag::Chown | PropFlag::Read,
-                Var::Str(String::from("testing")),
+                Some(Var::Str(String::from("testing"))),
             )
             .unwrap();
 
@@ -936,46 +1002,48 @@ mod tests {
 
         // Verify initially that we get the value all the way from root.
         let v = s
-            .get_property(child2, pid, PropAttr::Value | PropAttr::Owner)
+            .get_property(child2, pid, PropAttr::Value | PropAttr::Location)
             .unwrap()
             .unwrap();
-        assert_eq!(v.owner, Some(parent));
+        assert_eq!(v.location, Some(parent));
 
         // Set it on the intermediate child...
         s.set_property(
             pid,
-            Var::Str(String::from("testing")),
             child1,
+            Var::Str(String::from("testing")),
+            parent,
             PropFlag::Read | PropFlag::Write,
         )
         .unwrap();
 
         // And then verify we get it from there...
         let v = s
-            .get_property(child2, pid, PropAttr::Value | PropAttr::Owner)
+            .get_property(child2, pid, PropAttr::Value | PropAttr::Location)
             .unwrap()
             .unwrap();
-        assert_eq!(v.owner, Some(child1));
+        assert_eq!(v.location, Some(child1));
 
         // Finally set it on the last child...
         s.set_property(
             pid,
-            Var::Str(String::from("testing")),
             child2,
+            Var::Str(String::from("testing")),
+            parent,
             PropFlag::Read | PropFlag::Write,
         )
         .unwrap();
 
         // And then verify we get it from there...
         let v = s
-            .get_property(child2, pid, PropAttr::Value | PropAttr::Owner)
+            .get_property(child2, pid, PropAttr::Value | PropAttr::Location)
             .unwrap()
             .unwrap();
-        assert_eq!(v.owner, Some(child2));
+        assert_eq!(v.location, Some(child2));
 
         // And verify we don't get it from other root or from its child
         let v = s
-            .get_property(other_root, pid, PropAttr::Value | PropAttr::Owner)
+            .get_property(other_root, pid, PropAttr::Value | PropAttr::Location)
             .unwrap();
         assert!(v.is_none());
 

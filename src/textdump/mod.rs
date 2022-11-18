@@ -5,36 +5,37 @@ use int_enum::IntEnum;
 /// file.
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
-use symbol_table::{Symbol, SymbolTable};
 use text_io::scan;
 
+#[derive(Clone)]
 pub struct Verbdef {
-    name: Symbol,
-    owner: Objid,
-    flags: u16,
-    prep: u16,
+    pub name: String,
+    pub owner: Objid,
+    pub flags: u16,
+    pub prep: u16,
 }
 
+#[derive(Clone)]
 pub struct Propval {
-    var: Var,
-    owner: Objid,
-    flags: u16,
+    pub value: Var,
+    pub owner: Objid,
+    pub flags: u8,
 }
 
 pub struct Object {
-    id: Objid,
-    owner: Objid,
-    location: Objid,
-    contents: Objid,
-    next: Objid,
-    parent: Objid,
-    child: Objid,
-    sibling: Objid,
-    name: Symbol,
-    flags: u16,
-    verbdefs: Vec<Verbdef>,
-    propdefs: Vec<Symbol>,
-    propvals: Vec<Propval>,
+    pub id: Objid,
+    pub owner: Objid,
+    pub location: Objid,
+    pub contents: Objid,
+    pub next: Objid,
+    pub parent: Objid,
+    pub child: Objid,
+    pub sibling: Objid,
+    pub name: String,
+    pub flags: u8,
+    pub verbdefs: Vec<Verbdef>,
+    pub propdefs: Vec<String>,
+    pub propvals: Vec<Propval>,
 }
 
 #[derive(Clone, Debug)]
@@ -46,24 +47,21 @@ pub struct Verb {
 
 pub struct TextdumpReader<R: Read> {
     reader: BufReader<R>,
-    symtab: SymbolTable,
 }
 
 impl<R: Read> TextdumpReader<R> {
     pub fn new(reader: BufReader<R>) -> Self {
         Self {
             reader,
-            symtab: Default::default(),
         }
     }
 }
 
 pub struct Textdump {
-    version: String,
-    objects: HashMap<Objid, Object>,
-    users: Vec<Objid>,
-    pub(crate) verbs: Vec<Verb>,
-    symtab: SymbolTable,
+    pub version: String,
+    pub objects: HashMap<Objid, Object>,
+    pub users: Vec<Objid>,
+    pub verbs: Vec<Verb>,
 }
 
 impl<R: Read> TextdumpReader<R> {
@@ -88,16 +86,11 @@ impl<R: Read> TextdumpReader<R> {
     fn read_string(&mut self) -> Result<String, anyhow::Error> {
         let mut buf = String::new();
         let _r = self.reader.read_line(&mut buf)?;
+        let buf = String::from(buf.trim());
         Ok(buf)
     }
-    fn read_string_intern(&mut self) -> Result<Symbol, anyhow::Error> {
-        let mut buf = String::new();
-        let _r = self.reader.read_line(&mut buf)?;
-        let symbol = self.symtab.intern(buf.as_str());
-        Ok(symbol)
-    }
     fn read_verbdef(&mut self) -> Result<Verbdef, anyhow::Error> {
-        let name = self.read_string_intern()?;
+        let name = self.read_string()?;
         let owner = self.read_objid()?;
         let perms = self.read_num()? as u16;
         let prep = self.read_num()? as u16;
@@ -136,9 +129,9 @@ impl<R: Read> TextdumpReader<R> {
 
     fn read_propval(&mut self) -> Result<Propval, anyhow::Error> {
         Ok(Propval {
-            var: self.read_var()?,
+            value: self.read_var()?,
             owner: self.read_objid()?,
-            flags: self.read_num()? as u16,
+            flags: self.read_num()? as u8,
         })
     }
     fn read_object(&mut self) -> Result<Option<Object>, anyhow::Error> {
@@ -166,7 +159,7 @@ impl<R: Read> TextdumpReader<R> {
         let oid_str = &ospec[1..];
         let oid: i64 = oid_str.trim().parse()?;
         let oid = Objid(oid);
-        let name = self.read_string_intern()?;
+        let name = self.read_string()?;
         let _ohandles_string = self.read_string()?;
         let _flags = self.read_num()?;
         let owner = self.read_objid()?;
@@ -184,7 +177,7 @@ impl<R: Read> TextdumpReader<R> {
         let num_pdefs = self.read_num()? as usize;
         let mut propdefs = Vec::with_capacity(num_pdefs);
         for _ in 0..num_pdefs {
-            propdefs.push(self.read_string_intern()?);
+            propdefs.push(self.read_string()?);
         }
         let num_pvals = self.read_num()? as usize;
         let mut propvals = Vec::with_capacity(num_pvals);
@@ -263,7 +256,6 @@ impl<R: Read> TextdumpReader<R> {
             objects,
             users,
             verbs,
-            symtab: std::mem::take(&mut self.symtab), // I own you now.
         })
     }
 }
