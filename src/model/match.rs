@@ -11,18 +11,18 @@ pub enum ArgSpec {
     This = 2,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode)]
-#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode)]
 pub enum PrepSpec {
-    Any = 1,
-    None = 2,
+    Any,
+    None,
+    Other(u16)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct VerbArgsSpec {
-    dobj: ArgSpec,
-    prep: PrepSpec,
-    iobj: ArgSpec,
+    pub dobj: ArgSpec,
+    pub prep: PrepSpec,
+    pub iobj: ArgSpec,
 }
 
 pub trait Match {}

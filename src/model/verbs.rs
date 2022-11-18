@@ -1,10 +1,10 @@
+use crate::model::r#match::{ArgSpec, VerbArgsSpec};
+use crate::model::var::Objid;
 use enumset::EnumSet;
 use enumset_derive::EnumSetType;
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::var::Objid;
 
 #[derive(EnumSetType, Debug)]
-#[enumset(serialize_repr = "u8")]
+#[enumset(serialize_repr = "u16")]
 pub enum VerbFlag {
     Read,
     Write,
@@ -14,7 +14,7 @@ pub enum VerbFlag {
 
 pub struct Vid(pub i64);
 
-pub struct Program ( pub bytes::Bytes );
+pub struct Program(pub bytes::Bytes);
 
 #[derive(EnumSetType, Debug)]
 pub enum VerbAttr {
@@ -23,7 +23,7 @@ pub enum VerbAttr {
     Owner,
     Flags,
     ArgsSpec,
-    Program
+    Program,
 }
 
 pub struct VerbAttrs {
@@ -53,7 +53,11 @@ pub trait Verbs {
     ) -> Result<VerbInfo, anyhow::Error>;
 
     /// Get all verbs attached to the given object.
-    fn get_verbs(&self, oid: Objid, attrs: EnumSet<VerbAttr>) -> Result<Vec<VerbInfo>, anyhow::Error>;
+    fn get_verbs(
+        &self,
+        oid: Objid,
+        attrs: EnumSet<VerbAttr>,
+    ) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
     fn get_verb(&self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
 
@@ -65,13 +69,22 @@ pub trait Verbs {
         oid: Objid,
         verb: &str,
         arg_spec: VerbArgsSpec,
-        attrs: EnumSet<VerbAttr>
+        attrs: EnumSet<VerbAttr>,
     ) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
     /// Find the verbs that match based on the provided name-stem.
-    fn find_callable_verb(&self, oid: Objid, verb: &str, attrs: EnumSet<VerbAttr>) -> Result<Vec<VerbInfo>, anyhow::Error>;
+    fn find_callable_verb(
+        &self,
+        oid: Objid,
+        verb: &str,
+        attrs: EnumSet<VerbAttr>,
+    ) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
     /// Find the verb that is the Nth verb in insertion order for the object.
-    fn find_indexed_verb(&self, oid: Objid, index: usize, attrs: EnumSet<VerbAttr>) -> Result<Option<VerbInfo>, anyhow::Error>;
+    fn find_indexed_verb(
+        &self,
+        oid: Objid,
+        index: usize,
+        attrs: EnumSet<VerbAttr>,
+    ) -> Result<Option<VerbInfo>, anyhow::Error>;
 }
-

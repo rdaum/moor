@@ -12,7 +12,7 @@ pub struct Verbdef {
     pub name: String,
     pub owner: Objid,
     pub flags: u16,
-    pub prep: u16,
+    pub prep: i16,
 }
 
 #[derive(Clone)]
@@ -93,7 +93,7 @@ impl<R: Read> TextdumpReader<R> {
         let name = self.read_string()?;
         let owner = self.read_objid()?;
         let perms = self.read_num()? as u16;
-        let prep = self.read_num()? as u16;
+        let prep = self.read_num()? as i16;
         Ok(Verbdef {
             name,
             owner,

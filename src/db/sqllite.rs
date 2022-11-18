@@ -247,8 +247,8 @@ impl<'a> SQLiteTx<'a> {
                 VerbAttr::Names => verb_attr.names = Some(r.get(c_num)?),
                 VerbAttr::Owner => verb_attr.owner = retr_objid(r, c_num)?,
                 VerbAttr::Flags => {
-                    let fe: u8 = r.get(c_num)?;
-                    let flags: EnumSet<VerbFlag> = EnumSet::from_u8(fe);
+                    let fe: u16 = r.get(c_num)?;
+                    let flags: EnumSet<VerbFlag> = EnumSet::from_u16(fe);
                     verb_attr.flags = Some(flags);
                 }
                 VerbAttr::ArgsSpec => {
@@ -557,7 +557,6 @@ impl<'a> PropDefs for SQLiteTx<'a> {
 }
 
 impl<'a> Properties for SQLiteTx<'a> {
-
     fn get_property(
         &self,
         oid: Objid,
@@ -598,18 +597,18 @@ impl<'a> Properties for SQLiteTx<'a> {
         let with = Query::with().recursive(true).cte(cte).to_owned();
 
         /*
-    WITH RECURSIVE parents_of (oid) AS (SELECT *
-                                    FROM (VALUES (2)) AS oid
-                                    UNION ALL
-                                    SELECT parent
-                                    FROM object
-                                             INNER JOIN parents_of ON parents_of.oid = object.oid)
-select p.pid, p.location, pd.name, pd.definer
-from parents_of po join property p on p.location = po.oid
-                   join property_definition pd on p.pid = pd.pid
-where p.pid = 566
+            WITH RECURSIVE parents_of (oid) AS (SELECT *
+                                            FROM (VALUES (2)) AS oid
+                                            UNION ALL
+                                            SELECT parent
+                                            FROM object
+                                                     INNER JOIN parents_of ON parents_of.oid = object.oid)
+        select p.pid, p.location, pd.name, pd.definer
+        from parents_of po join property p on p.location = po.oid
+                           join property_definition pd on p.pid = pd.pid
+        where p.pid = 566
 
- */
+         */
         let query = Query::select()
             .columns(columns)
             .from(parents_of.clone())
@@ -625,9 +624,7 @@ where p.pid = 566
                 all![Expr::tbl(Property::Table, Property::Pid)
                     .equals(PropertyDefinition::Table, PropertyDefinition::Pid),],
             )
-            .cond_where(
-                Expr::col((Property::Table, Property::Pid)).eq(handle.0),
-            )
+            .cond_where(Expr::col((Property::Table, Property::Pid)).eq(handle.0))
             .to_owned();
 
         let query = query.with(with).to_owned();
@@ -736,7 +733,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
         program: Program,
     ) -> Result<crate::model::verbs::VerbInfo, Error> {
         let argspec_encoded = bincode::encode_to_vec(argspec, self.bincode_cfg).unwrap();
-        let flags_encoded: SimpleExpr = flags.as_u8().into();
+        let flags_encoded: SimpleExpr = flags.as_u16().into();
         let (insert, values) = Query::insert()
             .into_table(Verb::Table)
             .columns([
