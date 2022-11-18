@@ -36,10 +36,12 @@ client connectivity with websockets and such.
    * I've converted the full LambdaMOO 1.8.x grammar into an ANTLR V4 grammar. And it works to compile existing MOO
      source.
    * Compilation from ANTLR compilation tree to abstract syntax tree complete, so is theoretically ready for codgen.
+   * Implementation of SQLite backed storage for the MOO object model. (The first of potentially many implementations of
+     the object DB backend.) Supports verb properties, verbs, etc.
+   * Full import of an existing textdump into said DB.
 
 ### Next steps
 
-   * The data model / persistence 
    * virtual machine & bytecode generation
    * decompilation
    * network layer
