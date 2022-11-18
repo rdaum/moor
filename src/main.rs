@@ -163,11 +163,12 @@ fn main() {
                 iobj: cv_aspec_flag(iobjflags),
             };
 
+            let names = v.name.split(" ").collect();
             // TODO compile to bytecode and stick here
             let prg = bytes::Bytes::new();
             s.add_verb(
                 *objid,
-                v.name.as_str(),
+                names,
                 v.owner,
                 flags,
                 argspec,
@@ -176,5 +177,7 @@ fn main() {
             .unwrap();
         }
     }
+    println!("Verbs defined.\nImport complete.");
+
     s.tx.commit().unwrap();
 }

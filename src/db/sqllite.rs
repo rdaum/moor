@@ -9,7 +9,8 @@ use bincode::config;
 use bincode::config::Configuration;
 use bytes::Bytes;
 use enumset::EnumSet;
-use rusqlite::{Row, Transaction};
+use itertools::Itertools;
+use rusqlite::{MappedRows, Row, Transaction};
 use sea_query::QueryStatement::Insert;
 use sea_query::{
     all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
@@ -54,10 +55,17 @@ enum Verb {
     Vid,
     Owner,
     Definer,
-    Names,
     Flags,
     ArgsSpec,
     Program,
+}
+
+#[derive(Iden)]
+enum VerbName {
+    Table,
+    NameId,
+    Vid,
+    Name,
 }
 
 pub struct SQLiteTx<'a> {
@@ -87,7 +95,6 @@ fn property_attr_to_column<'a>(attr: PropAttr) -> DynIden {
 fn verb_attr_to_column<'a>(attr: VerbAttr) -> DynIden {
     match attr {
         VerbAttr::Definer => Verb::Definer.into_iden(),
-        VerbAttr::Names => Verb::Names.into_iden(),
         VerbAttr::Owner => Verb::Owner.into_iden(),
         VerbAttr::Flags => Verb::Flags.into_iden(),
         VerbAttr::ArgsSpec => Verb::ArgsSpec.into_iden(),
@@ -184,7 +191,6 @@ impl<'a> SQLiteTx<'a> {
             .col(ColumnDef::new(Verb::Vid).integer().primary_key().not_null())
             .col(ColumnDef::new(Verb::Owner).integer().not_null())
             .col(ColumnDef::new(Verb::Definer).integer().not_null())
-            .col(ColumnDef::new(Verb::Names).string().not_null())
             .col(ColumnDef::new(Verb::Flags).integer().not_null())
             .col(
                 ColumnDef::new(Verb::ArgsSpec)
@@ -212,6 +218,35 @@ impl<'a> SQLiteTx<'a> {
             )
             .build(SqliteQueryBuilder);
 
+        let verb_name_table_create = Table::create()
+            .if_not_exists()
+            .table(VerbName::Table)
+            .col(
+                ColumnDef::new(VerbName::NameId)
+                    .integer()
+                    .primary_key()
+                    .not_null(),
+            )
+            .col(ColumnDef::new(VerbName::Vid).integer().not_null())
+            .col(ColumnDef::new(VerbName::Name).string().not_null())
+            .build(SqliteQueryBuilder);
+
+        let vid_name_index = Index::create()
+            .if_not_exists()
+            .table(VerbName::Table)
+            .name("verb_and_vid_idx")
+            .col(VerbName::Vid)
+            .index_type(IndexType::Hash)
+            .col(VerbName::Name)
+            .build(SqliteQueryBuilder);
+        let vid_index = Index::create()
+            .if_not_exists()
+            .table(VerbName::Table)
+            .name("verb_name_idx")
+            .col(VerbName::Vid)
+            .index_type(IndexType::BTree)
+            .build(SqliteQueryBuilder);
+
         self.tx.execute_batch(
             &[
                 object_table_create,
@@ -220,22 +255,26 @@ impl<'a> SQLiteTx<'a> {
                 pval_table_create,
                 pval_location_idx,
                 verb_table_create,
+                verb_name_table_create,
+                vid_index,
+                vid_name_index,
             ]
             .join(";"),
         )?;
         Ok(())
     }
 
-    fn verb_from_result(
+    fn verb_attrs_from_result(
         &self,
         r: &Row,
         attributes: EnumSet<VerbAttr>,
-        vid_col: usize,
-    ) -> rusqlite::Result<VerbInfo> {
-        let vid: i64 = r.get(vid_col)?;
+    ) -> rusqlite::Result<(i64, String, i64, VerbAttrs)> {
+        let vid: i64 = r.get("vid")?;
+        let name: String = r.get("name")?;
+        let nid: i64 = r.get("name_id")?;
+
         let mut verb_attr = VerbAttrs {
             definer: None,
-            names: None,
             owner: None,
             flags: None,
             args_spec: None,
@@ -244,7 +283,6 @@ impl<'a> SQLiteTx<'a> {
         for (c_num, a) in attributes.iter().enumerate() {
             match a {
                 VerbAttr::Definer => verb_attr.definer = retr_objid(r, c_num)?,
-                VerbAttr::Names => verb_attr.names = Some(r.get(c_num)?),
                 VerbAttr::Owner => verb_attr.owner = retr_objid(r, c_num)?,
                 VerbAttr::Flags => {
                     let fe: u16 = r.get(c_num)?;
@@ -265,11 +303,28 @@ impl<'a> SQLiteTx<'a> {
                 }
             }
         }
-        let v = VerbInfo {
-            vid: Vid(vid),
-            attrs: verb_attr,
-        };
-        Ok(v)
+        Ok((vid, name, nid, verb_attr))
+    }
+
+    fn doit(
+        &self,
+        results: impl Iterator<Item = (i64, String, i64, VerbAttrs)>,
+    ) -> Result<Vec<VerbInfo>, anyhow::Error> {
+        let results = results.group_by(|r| r.0);
+
+        let results = results.into_iter().map(|mut r| {
+            let mut group = &mut r.1;
+            let names = group.map(|g| g.1).collect();
+
+            let attrs = group.nth(0).unwrap().3.clone();
+            VerbInfo {
+                vid: Vid(r.0),
+                names,
+                attrs,
+            }
+        });
+
+        Ok(results.collect())
     }
 }
 
@@ -726,7 +781,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
     fn add_verb(
         &mut self,
         oid: Objid,
-        names: &str,
+        names: Vec<&str>,
         owner: Objid,
         flags: EnumSet<VerbFlag>,
         argspec: VerbArgsSpec,
@@ -739,7 +794,6 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .columns([
                 Verb::Definer,
                 Verb::Owner,
-                Verb::Names,
                 Verb::Flags,
                 Verb::ArgsSpec,
                 Verb::Program,
@@ -747,7 +801,6 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .values_panic([
                 oid.0.into(),
                 owner.0.into(),
-                names.into(),
                 flags_encoded,
                 argspec_encoded.as_slice().into(),
                 program.0[..].into(),
@@ -755,13 +808,24 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .build_rusqlite(SqliteQueryBuilder);
 
         self.tx.execute(&insert, &*values.as_params())?;
-
         let vid = self.tx.last_insert_rowid();
+        let mut insert = Query::insert()
+            .into_table(VerbName::Table)
+            .columns([VerbName::Vid, VerbName::Name])
+            .to_owned();
+
+        for name in &names {
+            let name = *name;
+            insert.values_panic([vid.into(), name.into()]);
+        }
+        let (insert, values) = insert.build_rusqlite(SqliteQueryBuilder);
+        self.tx.execute(&insert, &*values.as_params())?;
+
         Ok(VerbInfo {
             vid: Vid(vid),
+            names: names.into_iter().map(|s| String::from(s)).collect(),
             attrs: VerbAttrs {
                 definer: Some(oid),
-                names: Some(String::from(names)),
                 owner: Some(owner),
                 flags: Some(flags),
                 args_spec: Some(argspec),
@@ -781,14 +845,22 @@ impl<'a> Verbs for SQLiteTx<'a> {
         let (query, values) = Query::select()
             .from(Verb::Table)
             .columns(columns)
+            .join(
+                JoinType::Join,
+                VerbName::Name,
+                Expr::tbl(Verb::Table, Verb::Vid)
+                    .equals(VerbName::Table, VerbName::Vid)
+                    .into_condition(),
+            )
             .cond_where(Expr::col(Verb::Definer).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
         let mut stmt = self.tx.prepare(&query)?;
         let results = stmt.query_map(&*values.as_params(), |r| {
-            self.verb_from_result(r, attributes, vid_col)
+            self.verb_attrs_from_result(r, attributes)
         })?;
+        let results = results.map(|v| v.unwrap());
 
-        Ok(results.map(|m| m.unwrap()).collect())
+        self.doit(results)
     }
 
     fn get_verb(
@@ -802,14 +874,25 @@ impl<'a> Verbs for SQLiteTx<'a> {
         let (query, values) = Query::select()
             .from(Verb::Table)
             .columns(columns)
+            .join(
+                JoinType::Join,
+                VerbName::Name,
+                Expr::tbl(Verb::Table, Verb::Vid)
+                    .equals(VerbName::Table, VerbName::Vid)
+                    .into_condition(),
+            )
             .cond_where(Expr::col(Verb::Vid).eq(vid.0))
             .build_rusqlite(SqliteQueryBuilder);
         let mut stmt = self.tx.prepare(&query)?;
-        let result = stmt.query_row(&*values.as_params(), |r| {
-            self.verb_from_result(r, attributes, vid_col)
+        let results = stmt.query_map(&*values.as_params(), |r| {
+            self.verb_attrs_from_result(r, attributes)
         })?;
+        let results = results.map(|v| v.unwrap());
 
-        Ok(result)
+        match self.doit(results) {
+            Ok(rv) => Ok(rv[0].clone()),
+            Err(e) => Err(e),
+        }
     }
 
     fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {

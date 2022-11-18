@@ -12,31 +12,34 @@ pub enum VerbFlag {
     Debug,
 }
 
+#[derive(Clone)]
 pub struct Vid(pub i64);
 
+#[derive(Clone)]
 pub struct Program(pub bytes::Bytes);
 
 #[derive(EnumSetType, Debug)]
 pub enum VerbAttr {
     Definer,
-    Names,
     Owner,
     Flags,
     ArgsSpec,
     Program,
 }
 
+#[derive(Clone)]
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
-    pub names: Option<String>,
     pub owner: Option<Objid>,
     pub flags: Option<EnumSet<VerbFlag>>,
     pub args_spec: Option<VerbArgsSpec>,
-    pub program: Option<Program>
+    pub program: Option<Program>,
 }
 
+#[derive(Clone)]
 pub struct VerbInfo {
     pub vid: Vid,
+    pub names: Vec<String>,
     pub attrs: VerbAttrs,
 }
 
@@ -45,7 +48,7 @@ pub trait Verbs {
     fn add_verb(
         &mut self,
         oid: Objid,
-        names: &str,
+        names: Vec<&str>,
         owner: Objid,
         flags: EnumSet<VerbFlag>,
         arg_spec: VerbArgsSpec,
