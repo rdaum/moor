@@ -49,9 +49,9 @@ struct LoopEntry {
 }
 
 #[derive(Debug)]
-pub struct Name(usize);
-struct Names {
-    names: Vec<String>,
+pub struct Name(pub usize);
+pub struct Names {
+    pub names: Vec<String>,
 }
 impl Default for Names {
     fn default() -> Self {
@@ -72,7 +72,8 @@ impl Names {
 }
 
 pub struct ASTGenVisitor {
-    program: Vec<Stmt>,
+    pub program: Vec<Stmt>,
+    pub names: Names,
     _statement_stack: Vec<Vec<Stmt>>,
     _expr_stack: Vec<Expr>,
     _cond_arm_stack: Vec<Vec<CondArm>>,
@@ -80,13 +81,13 @@ pub struct ASTGenVisitor {
     _excepts_stack: Vec<Vec<ExceptArm>>,
     _args_stack: Vec<Vec<Arg>>,
     _scatter_stack: Vec<Vec<Scatter>>,
-    _names: Names,
 }
 
 impl ASTGenVisitor {
     pub fn new() -> Self {
         Self {
             program: Default::default(),
+            names: Default::default(),
             _statement_stack: Default::default(),
             _expr_stack: Default::default(),
             _cond_arm_stack: Default::default(),
@@ -94,7 +95,6 @@ impl ASTGenVisitor {
             _excepts_stack: Default::default(),
             _args_stack: Default::default(),
             _scatter_stack: Default::default(),
-            _names: Default::default(),
         }
     }
 }
@@ -199,7 +199,7 @@ impl ASTGenVisitor {
 
     // Local names slot mgmt. Find or create.
     fn find_id(&mut self, name: &String) -> Name {
-        self._names.find_or_add_name(name)
+        self.names.find_or_add_name(name)
     }
 
     fn reduce_expr(&mut self, node: &Option<Rc<ExprContextAll>>) -> Expr {

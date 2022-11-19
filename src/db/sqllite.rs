@@ -10,7 +10,7 @@ use bincode::config::Configuration;
 use bytes::Bytes;
 use enumset::EnumSet;
 use itertools::Itertools;
-use rusqlite::{MappedRows, Row, Transaction};
+use rusqlite::{Connection, MappedRows, Row, Transaction};
 use sea_query::QueryStatement::Insert;
 use sea_query::{
     all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
@@ -19,6 +19,7 @@ use sea_query::{
     Value, WithClause,
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
+use crate::model::ObjDB;
 
 #[derive(Iden)]
 enum Object {
@@ -69,7 +70,7 @@ enum VerbName {
 }
 
 pub struct SQLiteTx<'a> {
-    pub tx: Transaction<'a>,
+    tx: Option<Transaction<'a>>,
     bincode_cfg: Configuration,
 }
 
@@ -150,15 +151,16 @@ struct VerbPivot {
 }
 
 impl<'a> SQLiteTx<'a> {
-    pub fn new(tx: Transaction<'a>) -> Result<Self, anyhow::Error> {
+    pub fn new(connection: &'a mut Connection) -> Result<Self, anyhow::Error> {
+        let mut tx = connection.transaction()?;
         let s = Self {
-            tx,
+            tx: Some(tx),
             bincode_cfg: config::standard(),
         };
         Ok(s)
     }
 
-    pub fn initialize_schema(&self) -> Result<(), anyhow::Error> {
+    pub fn initialize_schema(&mut self) -> Result<(), anyhow::Error> {
         let object_table_create = Table::create()
             .table(Object::Table)
             .if_not_exists()
@@ -289,7 +291,7 @@ impl<'a> SQLiteTx<'a> {
             .index_type(IndexType::BTree)
             .build(SqliteQueryBuilder);
 
-        self.tx.execute_batch(
+        self.tx.as_mut().unwrap().execute_batch(
             &[
                 object_table_create,
                 property_def_table_create,
@@ -423,10 +425,10 @@ impl<'a> Objects for SQLiteTx<'a> {
             .values_panic(values)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let result = self.tx.execute(&insert_sql, &*values.as_params())?;
+        let result = self.tx.as_mut().unwrap().execute(&insert_sql, &*values.as_params())?;
         // TODO replace with proper error handling
         assert_eq!(result, 1);
-        let oid = self.tx.last_insert_rowid();
+        let oid = self.tx.as_mut().unwrap().last_insert_rowid();
         Ok(Objid(oid))
     }
 
@@ -435,7 +437,7 @@ impl<'a> Objects for SQLiteTx<'a> {
             .from_table(Object::Table)
             .cond_where(Expr::col(Object::Oid).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.execute(&delete_sql, &*values.as_params())?;
+        let result = self.tx.as_mut().unwrap().execute(&delete_sql, &*values.as_params())?;
         // TODO replace with proper error handling
         assert_eq!(result, 1);
         Ok(())
@@ -448,7 +450,7 @@ impl<'a> Objects for SQLiteTx<'a> {
             .cond_where(Expr::col(Object::Oid).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut query = self.tx.prepare(&count_query)?;
+        let mut query = self.tx.as_ref().unwrap().prepare(&count_query)?;
         let count = query.query_row(&*values.as_params(), |r| {
             let count: usize = r.get(0)?;
             Ok(count)
@@ -468,7 +470,7 @@ impl<'a> Objects for SQLiteTx<'a> {
             .cond_where(Expr::col(Object::Oid).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut query = self.tx.prepare(&query)?;
+        let mut query = self.tx.as_mut().unwrap().prepare(&query)?;
         let attrs = query.query_row(&*values.as_params(), |r| {
             let mut attrs = ObjAttrs {
                 owner: None,
@@ -520,7 +522,7 @@ impl<'a> Objects for SQLiteTx<'a> {
             .values(params)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let count = self.tx.execute(&query, &*values.as_params())?;
+        let count = self.tx.as_mut().unwrap().execute(&query, &*values.as_params())?;
         assert_eq!(count, 1);
         Ok(())
     }
@@ -531,7 +533,7 @@ impl<'a> Objects for SQLiteTx<'a> {
             .from(Object::Table)
             .cond_where(Expr::col(Object::Parent).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        let mut query = self.tx.prepare(&query)?;
+        let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
         let results = query.query_map(&*params.as_params(), |r| {
             let oid: i64 = r.get(0).unwrap();
             Ok(Objid(oid))
@@ -545,7 +547,7 @@ impl<'a> Objects for SQLiteTx<'a> {
             .from(Object::Table)
             .cond_where(Expr::col(Object::Location).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        let mut query = self.tx.prepare(&query)?;
+        let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
         let results = query.query_map(&*params.as_params(), |r| {
             let oid: i64 = r.get(0).unwrap();
             Ok(Objid(oid))
@@ -563,7 +565,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let result = self.tx.query_row(&query, &*values.as_params(), |r| {
+        let result = self.tx.as_mut().unwrap().query_row(&query, &*values.as_params(), |r| {
             Ok(Propdef {
                 pid: Pid(r.get(0)?),
                 definer: target,
@@ -587,9 +589,9 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .columns([PropertyDefinition::Definer, PropertyDefinition::Name])
             .values_panic([oid.0.into(), pname.into()])
             .build_rusqlite(SqliteQueryBuilder);
-        self.tx.execute(&insert_sql, &*values.as_params())?;
+        self.tx.as_mut().unwrap().execute(&insert_sql, &*values.as_params())?;
 
-        let pid = Pid(self.tx.last_insert_rowid());
+        let pid = Pid(self.tx.as_mut().unwrap().last_insert_rowid());
         if let Some(val) = val {
             self.set_property(pid, oid, val, owner, flags)?;
         }
@@ -602,7 +604,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .value(PropertyDefinition::Name, new)
             .and_where(Expr::col(PropertyDefinition::Name).eq(old))
             .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.execute(&update_query, &*values.as_params())?;
+        let result = self.tx.as_mut().unwrap().execute(&update_query, &*values.as_params())?;
         // TODO proper meaningful error codes
         assert_eq!(result, 1);
         Ok(())
@@ -614,7 +616,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
             .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
             .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.execute(&delete_sql, &*values.as_params())?;
+        let result = self.tx.as_mut().unwrap().execute(&delete_sql, &*values.as_params())?;
         // TODO proper meaningful error codes
         assert_eq!(result, 1);
         Ok(())
@@ -627,7 +629,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let mut query = self.tx.prepare(&count_query)?;
+        let mut query = self.tx.as_mut().unwrap().prepare(&count_query)?;
         let count = query.query_row(&*values.as_params(), |r| {
             let count: usize = r.get(0)?;
             Ok(count)
@@ -645,7 +647,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             ])
             .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        let mut query = self.tx.prepare(&query)?;
+        let mut query = self.tx.as_mut().unwrap().prepare(&query)?;
         let results = query
             .query_map(&*values.as_params(), |r| {
                 let propdef = Propdef {
@@ -694,7 +696,7 @@ impl<'a> Properties for SQLiteTx<'a> {
         let query = query.with(with).to_owned();
 
         let (query, values) = query.build(SqliteQueryBuilder);
-        let mut query = self.tx.prepare(&query)?;
+        let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
 
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
         let mut results = query
@@ -781,7 +783,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             )
             .build_rusqlite(SqliteQueryBuilder);
 
-        self.tx.execute(&query, &*values.as_params()).unwrap();
+        self.tx.as_ref().unwrap().execute(&query, &*values.as_params()).unwrap();
         Ok(())
     }
 }
@@ -816,8 +818,8 @@ impl<'a> Verbs for SQLiteTx<'a> {
             ])
             .build_rusqlite(SqliteQueryBuilder);
 
-        self.tx.execute(&insert, &*values.as_params())?;
-        let vid = self.tx.last_insert_rowid();
+        self.tx.as_mut().unwrap().execute(&insert, &*values.as_params())?;
+        let vid = self.tx.as_mut().unwrap().last_insert_rowid();
         let mut insert = Query::insert()
             .into_table(VerbName::Table)
             .columns([VerbName::Vid, VerbName::Name])
@@ -828,7 +830,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
             insert.values_panic([vid.into(), name.into()]);
         }
         let (insert, values) = insert.build_rusqlite(SqliteQueryBuilder);
-        self.tx.execute(&insert, &*values.as_params())?;
+        self.tx.as_mut().unwrap().execute(&insert, &*values.as_params())?;
 
         Ok(VerbInfo {
             vid: Vid(vid),
@@ -865,7 +867,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .cond_where(Expr::col(Verb::Definer).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
         println!("{}", query);
-        let mut stmt = self.tx.prepare(&query)?;
+        let mut stmt = self.tx.as_ref().unwrap().prepare(&query)?;
         let results = stmt.query_map(&*values.as_params(), |r| {
             self.verb_attrs_from_result(r, attributes)
         })?;
@@ -895,7 +897,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
             )
             .cond_where(Expr::col(Verb::Vid).eq(vid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        let mut stmt = self.tx.prepare(&query)?;
+        let mut stmt = self.tx.as_ref().unwrap().prepare(&query)?;
         let results = stmt.query_map(&*values.as_params(), |r| {
             self.verb_attrs_from_result(r, attributes)
         })?;
@@ -958,7 +960,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .build(SqliteQueryBuilder)
             .to_owned();
 
-        let mut query = self.tx.prepare(&query)?;
+        let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
 
         let results = query.query_map(&*values.as_params(), |r| {
@@ -983,6 +985,25 @@ impl<'a> Verbs for SQLiteTx<'a> {
         todo!()
     }
 }
+
+impl<'a> ObjDB for SQLiteTx<'a> {
+    fn initialize(&mut self) -> Result<(), Error> {
+        self.initialize_schema()
+    }
+
+    fn commit(&mut self) -> Result<(), Error> {
+        let mut tx = std::mem::take(&mut self.tx);
+        tx.unwrap().commit()?;
+        Ok(())
+    }
+
+    fn rollback(&mut self) -> Result<(), Error> {
+        let mut tx = std::mem::take(&mut self.tx);
+        tx.unwrap().rollback()?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db::sqllite::SQLiteTx;
@@ -997,8 +1018,7 @@ mod tests {
     #[test]
     fn object_create_check_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        let mut s = SQLiteTx::new(tx).unwrap();
+        let mut s = SQLiteTx::new(&mut conn).unwrap();
         s.initialize_schema().unwrap();
 
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1011,8 +1031,7 @@ mod tests {
     #[test]
     fn object_check_children_contents() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        let mut s = SQLiteTx::new(tx).unwrap();
+        let mut s = SQLiteTx::new(&mut conn).unwrap();
         s.initialize_schema().unwrap();
 
         let o1 = s.create_object(None, ObjAttrs::new().name("test")).unwrap();
@@ -1034,8 +1053,7 @@ mod tests {
     #[test]
     fn object_create_set_get_attrs() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        let mut s = SQLiteTx::new(tx).unwrap();
+        let mut s = SQLiteTx::new(&mut conn).unwrap();
         s.initialize_schema().unwrap();
 
         let o = s
@@ -1060,8 +1078,7 @@ mod tests {
     #[test]
     fn propdef_create_get_update_count_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        let mut s = SQLiteTx::new(tx).unwrap();
+        let mut s = SQLiteTx::new(&mut conn).unwrap();
         s.initialize_schema().unwrap();
 
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1106,8 +1123,7 @@ mod tests {
     #[test]
     fn property_inheritance() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        let mut s = SQLiteTx::new(tx).unwrap();
+        let mut s = SQLiteTx::new(&mut conn).unwrap();
         s.initialize_schema().unwrap();
 
         let parent = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1191,8 +1207,7 @@ mod tests {
     #[test]
     fn verb_inheritance() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let tx = conn.transaction().unwrap();
-        let mut s = SQLiteTx::new(tx).unwrap();
+        let mut s = SQLiteTx::new(&mut conn).unwrap();
         s.initialize_schema().unwrap();
 
         let parent = s.create_object(None, &ObjAttrs::new()).unwrap();

@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 use crate::db::sqllite::SQLiteTx;
+use crate::model::ObjDB;
 use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
 use crate::model::props::{PropDefs, PropFlag, Propdef, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
@@ -21,6 +22,7 @@ mod db;
 pub mod grammar;
 pub mod model;
 pub mod textdump;
+pub mod vm;
 
 struct RProp {
     definer: Objid,
@@ -85,9 +87,8 @@ fn main() {
     println!("Hello, world!");
 
     let mut conn = Connection::open("test.db").unwrap();
-    let tx = conn.transaction().unwrap();
-    let mut s = SQLiteTx::new(tx).unwrap();
-    s.initialize_schema().unwrap();
+    let mut s : &mut dyn ObjDB   = &mut SQLiteTx::new(&mut conn).unwrap();
+    s.initialize().unwrap();
 
     let jhcore = File::open("JHCore-DEV-2.db").unwrap();
     let br = BufReader::new(jhcore);
@@ -179,5 +180,7 @@ fn main() {
     }
     println!("Verbs defined.\nImport complete.");
 
-    s.tx.commit().unwrap();
+    s.commit().unwrap();
+
+
 }
