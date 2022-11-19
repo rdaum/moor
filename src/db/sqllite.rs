@@ -1015,6 +1015,7 @@ mod tests {
     use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, Verbs};
     use antlr_rust::CoerceTo;
     use rusqlite::Connection;
+    use crate::model::ObjDB;
 
     #[test]
     fn object_create_check_delete() {
@@ -1026,7 +1027,7 @@ mod tests {
         assert!(s.object_valid(o).unwrap());
         s.destroy_object(o).unwrap();
         assert_eq!(s.object_valid(o).unwrap(), false);
-        s.tx.commit().unwrap();
+        s.commit().unwrap();
     }
 
     #[test]
@@ -1049,7 +1050,7 @@ mod tests {
         let contents = s.object_contents(o1).unwrap();
         assert_eq!(contents, vec![o2, o3]);
 
-        s.tx.commit().unwrap();
+        s.commit().unwrap();
     }
     #[test]
     fn object_create_set_get_attrs() {
@@ -1073,7 +1074,7 @@ mod tests {
         assert_eq!(attrs.name.unwrap(), "test");
         assert!(attrs.flags.unwrap().contains(ObjFlag::Write.into()));
 
-        s.tx.commit().unwrap();
+        s.commit().unwrap();
     }
 
     #[test]
@@ -1118,7 +1119,7 @@ mod tests {
 
         let c = s.count_propdefs(o).unwrap();
         assert_eq!(c, 0);
-        s.tx.commit().unwrap();
+        s.commit().unwrap();
     }
 
     #[test]
@@ -1202,7 +1203,7 @@ mod tests {
             .unwrap();
         assert!(v.is_none());
 
-        s.tx.commit().unwrap();
+        s.commit().unwrap();
     }
 
     #[test]
@@ -1319,6 +1320,6 @@ mod tests {
             .unwrap();
         assert!(v.is_none());
 
-        s.tx.commit().unwrap();
+        s.commit().unwrap();
     }
 }
