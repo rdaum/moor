@@ -19,6 +19,7 @@ use anyhow::anyhow;
 use paste::paste;
 use std::rc::Rc;
 use std::str::FromStr;
+use decorum::R64;
 
 pub struct VerbCompileErrorListener {
     pub program: String,
@@ -457,7 +458,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     fn visit_Float(&mut self, ctx: &FloatContext<'node>) {
         let f = f64::from_str(ctx.get_text().as_str()).unwrap();
-        self._expr_stack.push(VarExpr(Var::Float(f)));
+        self._expr_stack.push(VarExpr(Var::Float(R64::from(f))));
     }
 
     fn visit_String(&mut self, ctx: &StringContext<'node>) {

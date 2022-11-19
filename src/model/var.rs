@@ -1,11 +1,12 @@
-use bincode::{Decode, Encode};
+use decorum::R64;
 use int_enum::IntEnum;
+use serde_derive::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Objid(pub i64);
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum Error {
     E_TYPE = 0,
@@ -26,7 +27,7 @@ pub enum Error {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum VarType {
     TYPE_INT = 0,
@@ -41,14 +42,14 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum Var {
     Clear,
     None,
     Str(String),
     Obj(Objid),
     Int(i64),
-    Float(f64),
+    Float(R64),
     Err(Error),
     List(Vec<Var>),
 

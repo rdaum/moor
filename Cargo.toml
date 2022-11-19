@@ -14,7 +14,11 @@ text_io = "0.1.12"
 paste = "1.0.9"
 enumset = "1.0.12"
 enumset_derive = "0.6.1"
-bincode = "2.0.0-rc.2"
+serde = { version = "1.0.147", features = ["derive"] }
+bincode = { version = "2.0.0-rc.2", features = ["serde"] }
+bincode_derive = "2.0.0-rc.2"
+
+serde_derive = "1.0.147"
 rusqlite = { version = "0.28.0", features = ["bundled"] }
 sea-query = "0.27.2"
 sea-query-rusqlite = "0.1.0"
@@ -23,3 +27,4 @@ itertools = "0.10.5"
 rkyv = { version = "0.7.39", features = ["validation"] }
 rkyv_derive = "0.7.39"
 bytecheck = "0.6.9"
+decorum = "0.3.1"

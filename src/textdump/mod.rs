@@ -5,6 +5,7 @@ use int_enum::IntEnum;
 /// file.
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
+use decorum::R64;
 use text_io::scan;
 
 #[derive(Clone)]
@@ -122,7 +123,7 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_NONE => Var::None,
             VarType::TYPE_CATCH => Var::_Catch(self.read_num()? as usize),
             VarType::TYPE_FINALLY => Var::_Finally(self.read_num()? as usize),
-            VarType::TYPE_FLOAT => Var::Float(self.read_float()?),
+            VarType::TYPE_FLOAT => Var::Float(R64::from(self.read_float()?)),
         };
         Ok(v)
     }

@@ -717,8 +717,9 @@ impl<'a> Properties for SQLiteTx<'a> {
                         }
                         PropAttr::Value => {
                             let val_encoded: Vec<u8> = r.get(c_num)?;
+
                             let (decoded_val, _) =
-                                bincode::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
+                                bincode::serde::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
 
                             ret_attrs.value = Some(decoded_val);
                         }
@@ -748,7 +749,7 @@ impl<'a> Properties for SQLiteTx<'a> {
         flags: EnumSet<PropFlag>,
     ) -> Result<(), Error> {
         let flags_encoded = flags.as_u8();
-        let encoded_val: Vec<u8> = bincode::encode_to_vec(&value, self.bincode_cfg).unwrap();
+        let encoded_val: Vec<u8> = bincode::serde::encode_to_vec(&value, self.bincode_cfg).unwrap();
 
         let (query, values) = Query::insert()
             .into_table(Property::Table)
