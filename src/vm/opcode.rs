@@ -1,12 +1,9 @@
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::Program;
 use anyhow::anyhow;
-use bytecheck::CheckBytes;
-use rkyv::vec::ArchivedVec;
-use rkyv::{Archive, Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
-#[derive(Clone, Archive, Deserialize, Serialize, Debug, PartialEq)]
-#[archive_attr(derive(CheckBytes, Debug))]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub enum Op {
     Label(usize),
     If(usize),
@@ -46,8 +43,8 @@ pub enum Op {
     Div,
     Mod,
     Add,
-    And,
-    Or,
+    And(usize),
+    Or(usize),
     Not,
     UnaryMinus,
     Ref,
@@ -102,12 +99,11 @@ pub enum Op {
     Exit,
 }
 
-#[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
-#[archive_attr(derive(CheckBytes, Debug))]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Binary {
     pub(crate) first_lineno: usize,
     pub(crate) ref_count: usize,
-    pub(crate) num_literals: usize,
+    pub(crate) literals: Vec<Var>,
     pub(crate) var_names: Vec<String>,
     pub(crate) main_vector: Vec<Op>,
 }

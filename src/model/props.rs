@@ -23,11 +23,7 @@ pub struct Propdef {
 /// Property values (see below) can be overriden in children, but the definition remains.
 
 pub trait PropDefs {
-    fn get_propdef(
-        &mut self,
-        definer: Objid,
-        pname: &str,
-    ) -> Result<Propdef, anyhow::Error>;
+    fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, anyhow::Error>;
     fn add_propdef(
         &mut self,
         definer: Objid,
@@ -36,7 +32,8 @@ pub trait PropDefs {
         flags: EnumSet<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, anyhow::Error>;
-    fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), anyhow::Error>;
+    fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str)
+        -> Result<(), anyhow::Error>;
     fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), anyhow::Error>;
     fn count_propdefs(&mut self, definer: Objid) -> Result<usize, anyhow::Error>;
     fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, anyhow::Error>;
@@ -60,6 +57,12 @@ pub struct PropAttrs {
 }
 
 pub trait Properties {
+    fn find_property(
+        &self,
+        oid: Objid,
+        name: &str,
+        attrs: EnumSet<PropAttr>,
+    ) -> Result<Option<PropAttrs>, anyhow::Error>;
     fn get_property(
         &self,
         oid: Objid,

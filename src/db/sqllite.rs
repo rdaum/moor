@@ -665,6 +665,81 @@ impl<'a> PropDefs for SQLiteTx<'a> {
 }
 
 impl<'a> Properties for SQLiteTx<'a> {
+    fn find_property(
+        &self,
+        oid: Objid,
+        name: &str,
+        attributes: EnumSet<PropAttr>,
+    ) -> Result<Option<PropAttrs>, Error> {
+        let with = transitive_inheritance_clause(oid);
+        let parents_of = Alias::new("parents_of");
+
+        let columns = attributes.iter().map(property_attr_to_column);
+        let query = Query::select()
+            .columns(columns)
+            .from(parents_of.clone())
+            .join(
+                JoinType::Join,
+                Property::Table,
+                all![Expr::tbl(Property::Table, Property::Location)
+                    .equals(parents_of.clone(), Alias::new("oid"))],
+            )
+            .join(
+                JoinType::Join,
+                PropertyDefinition::Table,
+                all![Expr::tbl(Property::Table, Property::Pid)
+                    .equals(PropertyDefinition::Table, PropertyDefinition::Pid),],
+            )
+            .cond_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Name)).eq(name))
+            .to_owned();
+
+        let query = query.with(with).to_owned();
+
+        let (query, values) = query.build(SqliteQueryBuilder);
+        let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
+
+        let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
+        let mut results = query
+            .query_map(&*values.as_params(), |r| {
+                let mut ret_attrs = PropAttrs {
+                    value: None,
+                    location: None,
+                    owner: None,
+                    flags: None,
+                };
+                for (c_num, a) in attributes.iter().enumerate() {
+                    match a {
+                        PropAttr::Owner => {
+                            ret_attrs.owner = retr_objid(r, c_num)?;
+                        }
+                        PropAttr::Location => {
+                            ret_attrs.location = retr_objid(r, c_num)?;
+                        }
+                        PropAttr::Value => {
+                            let val_encoded: Vec<u8> = r.get(c_num)?;
+
+                            let (decoded_val, _) =
+                                bincode::serde::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
+
+                            ret_attrs.value = Some(decoded_val);
+                        }
+                        PropAttr::Flags => {
+                            let u: u8 = r.get(c_num)?;
+                            let e: EnumSet<PropFlag> = EnumSet::from_u8(u);
+                            ret_attrs.flags = Some(e);
+                        }
+                    }
+                }
+                Ok(ret_attrs)
+            })
+            .unwrap();
+
+        match results.nth(0) {
+            None => Ok(None),
+            Some(r) => Ok(Some(r?)),
+        }
+    }
+
     fn get_property(
         &self,
         oid: Objid,
@@ -867,7 +942,6 @@ impl<'a> Verbs for SQLiteTx<'a> {
             )
             .cond_where(Expr::col(Verb::Definer).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        println!("{}", query);
         let mut stmt = self.tx.as_ref().unwrap().prepare(&query)?;
         let results = stmt.query_map(&*values.as_params(), |r| {
             self.verb_attrs_from_result(r, attributes)
@@ -1197,6 +1271,12 @@ mod tests {
             .unwrap();
         assert_eq!(v.location, Some(child2));
 
+        // Finally, use the name to look it up instead of the pid
+        let v = s
+            .find_property(child2, "test", PropAttr::Value | PropAttr::Location)
+            .unwrap()
+            .unwrap();
+        assert_eq!(v.location, Some(child2));
         // And verify we don't get it from other root or from its child
         let v = s
             .get_property(other_root, pid, PropAttr::Value | PropAttr::Location)

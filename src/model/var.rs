@@ -1,9 +1,9 @@
-use crate::model::var::Error::E_TYPE;
+use crate::model::var::Error::{E_RANGE, E_TYPE};
 use decorum::R64;
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
 use serde_derive::{Deserialize, Serialize};
-use std::ops::{Mul, Div, Add, Sub};
+use std::ops::{Mul, Div, Add, Sub, Neg};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Objid(pub i64);
@@ -65,7 +65,7 @@ macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Var {
             match (self, v) {
-                (Var::Int(l), Var::Int(r)) => Var::Int(l * r),
+                (Var::Int(l), Var::Int(r)) => Var::Int(l.$op(r)),
                 (Var::Float(l), Var::Int(r)) => Var::Float(l.$op(*r as f64)),
                 (Var::Int(l), Var::Float(r)) => {
                     let l = R64::from(*l as f64);
@@ -98,7 +98,70 @@ impl Var {
 
     binary_numeric_coercion_op!(mul);
     binary_numeric_coercion_op!(div);
-    binary_numeric_coercion_op!(add);
     binary_numeric_coercion_op!(sub);
 
+    pub fn add(&self, v:&Var) -> Var {
+        match (self, v) {
+            (Var::Int(l), Var::Int(r)) => Var::Int(l + r),
+            (Var::Float(l), Var::Int(r)) => {
+                Var::Float(*l + (*r as f64))
+            },
+            (Var::Int(l), Var::Float(r)) => {
+                let l = R64::from(*l as f64);
+                Var::Float(l + (*r))
+            }
+            (Var::Str(s), Var::Str(r)) => {
+                let mut c = s.clone();
+                c.push_str(r);
+                Var::Str(c)
+            }
+            (_, _) => Var::Err(E_TYPE),
+        }
+    }
+
+    pub fn modulus(&self, v:&Var) -> Var {
+        match (self, v) {
+            (Var::Int(l), Var::Int(r)) => Var::Int(l % r),
+            (Var::Float(l), Var::Int(r)) => {
+                Var::Float(*l % (*r as f64))
+            },
+            (Var::Int(l), Var::Float(r)) => {
+                let l = R64::from(*l as f64);
+                Var::Float(l % (*r))
+            }
+            (_, _) => Var::Err(E_TYPE),
+        }
+    }
+
+    pub fn negative(&self) -> Var {
+        match self {
+            Var::Int(l) => Var::Int(-*l),
+            Var::Float(f) => Var::Float(f.neg()),
+            _ => {
+                Var::Err(E_TYPE)
+            }
+        }
+    }
+
+    pub fn index(&self, idx:usize) -> Var {
+        match self {
+            Var::List(l) => {
+                match l.get(idx) {
+                    None => Var::Err(E_RANGE),
+                    Some(v) => {
+                        v.clone()
+                    }
+                }
+            }
+            Var::Str(s) => {
+                match s.get(idx..idx) {
+                    None =>Var::Err(E_RANGE),
+                    Some(v) => {
+                        Var::Str(String::from(v))
+                    }
+                }
+            }
+            _ => Var::Err(E_TYPE)
+        }
+    }
 }

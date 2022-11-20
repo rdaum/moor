@@ -24,8 +24,6 @@ sea-query = "0.27.2"
 sea-query-rusqlite = "0.1.0"
 bytes = "1.2.1"
 itertools = "0.10.5"
-rkyv = { version = "0.7.39", features = ["validation"] }
-rkyv_derive = "0.7.39"
 bytecheck = "0.6.9"
 decorum = "0.3.1"
 num-traits = "0.2.15"

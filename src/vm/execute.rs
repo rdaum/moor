@@ -2,7 +2,13 @@ use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::Program;
 use crate::vm::opcode::{Binary, Op};
 use anyhow::anyhow;
+use bincode::config;
+use bincode::config::Configuration;
+use bincode::error::DecodeError;
 use itertools::Itertools;
+use crate::model::ObjDB;
+use crate::model::props::{PropAttr, PropAttrs};
+use crate::model::var::Error::{E_INVARG, E_INVIND, E_PROPNF, E_TYPE, E_VARNF};
 
 struct Activation {
     binary: Binary,
@@ -30,9 +36,11 @@ impl Activation {
         verb: String,
         verb_names: Vec<String>,
     ) -> Result<Self, anyhow::Error> {
-        // I believe this takes a copy. That's ok in this case though.
-        let binary = rkyv::from_bytes::<Binary>(&program.0[..]);
-        let Ok(binary) = binary else {
+        // TODO: move deserialization out into whatever does the actual verb retrieval?
+        let slc = &program.0[..];
+        let result: Result<(Binary, usize), DecodeError> =
+            bincode::serde::decode_from_slice(slc, config::standard());
+        let Ok((binary, size)) = result else {
             return Err(anyhow!("Invalid opcodes in binary program stream"));
         };
 
@@ -135,6 +143,10 @@ impl VM {
         self.top_mut().jump(label)
     }
 
+    fn get_env(&mut self, id: usize) -> Var {
+        self.top().rt_env[id].clone()
+    }
+
     fn set_env(&mut self, id: usize, v: &Var) {
         self.top_mut().rt_env[id] = v.clone();
     }
@@ -147,11 +159,15 @@ impl VM {
         self.top().peek(amt)
     }
 
+    fn peek_top(&self) -> Var {
+        self.top().peek(0)[0].clone()
+    }
+
     fn poke(&mut self, pos: usize, v: &Var) {
         self.top_mut().poke(pos, v);
     }
 
-    pub fn exec(&mut self) -> Result<(), anyhow::Error> {
+    pub fn exec(&mut self, db: &mut impl ObjDB) -> Result<(), anyhow::Error> {
         let op = self.next_op();
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
@@ -240,18 +256,77 @@ impl VM {
                 binary_var_op!(self, add);
             }
             Op::Mod => {
-
+                binary_var_op!(self, modulus);
             }
-            Op::And => {}
-            Op::Or => {}
-            Op::Not => {}
-            Op::UnaryMinus => {}
-            Op::Ref => {}
+            Op::And(label) => {
+                let v = self.pop().is_true();
+                if !v {
+                    self.jump(label)
+                }
+            }
+            Op::Or(label) => {
+                let v = self.pop().is_true();
+                if v {
+                    self.jump(label)
+                }
+            }
+            Op::Not => {
+                let v = !self.pop().is_true();
+                self.push(&Var::Int(if v { 1 } else { 0 }));
+            }
+            Op::UnaryMinus => {
+                let v = self.pop();
+                self.push(&v.negative())
+            }
+            Op::Ref => {
+                let index = self.pop();
+                let l= self.pop();
+                let Var::Int(index) = index else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(())
+                };
+                self.push(&l.index(index as usize));
+            }
             Op::PushRef => {}
             Op::RangeRef => {}
-            Op::GPut { id } => {}
-            Op::GPush { id } => {}
-            Op::GetProp => {}
+            Op::GPut { id } => {
+                self.set_env(id, &self.peek_top());
+            }
+            Op::GPush { id } => {
+                let v = self.get_env(id);
+                match v {
+                    Var::None => self.push(&Var::Err(E_VARNF)),
+                    _ => {
+                        self.push(&v);
+                    }
+                }
+            }
+            Op::GetProp => {
+                let (propname, obj) = (self.pop(), self.pop());
+                let Var::Str(propname) = propname else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(())
+                };
+
+                let Var::Obj(obj) = obj else {
+                    self.push(&Var::Err(E_INVIND));
+                    return Ok(())
+                };
+
+                // TODO builtin properties!
+
+                let find = db.find_property(obj, propname.as_str(), PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value)?;
+                self.push(&match find {
+                    None => Var::Err(E_PROPNF),
+                    Some(p) => {
+                        // TODO perform perms check; db_property_allows -> E_PERM
+                        match p.value {
+                            None => Var::Err(E_PROPNF),
+                            Some(p) => p
+                        }
+                    }
+                });
+            }
             Op::PushGetProp => {}
             Op::PutProp => {}
             Op::Fork { id, f_index } => {}
