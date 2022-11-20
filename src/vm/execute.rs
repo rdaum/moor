@@ -1,7 +1,7 @@
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropAttrs, PropFlag};
-use crate::model::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_TYPE, E_VARNF};
+use crate::model::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
 use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::Program;
 use crate::model::ObjDB;
@@ -20,7 +20,7 @@ struct Activation {
     rt_stack: Vec<Var>,
     pc: usize,
     error_pc: usize,
-
+    temp: Var,
     this: Objid,
     player: Objid,
     verb_owner: Objid,
@@ -55,6 +55,7 @@ impl Activation {
             rt_stack: vec![],
             pc: 0,
             error_pc: 0,
+            temp: Var::None,
             this,
             player,
             verb_owner,
@@ -293,13 +294,96 @@ impl VM {
                 self.push(&value);
             }
             Op::MkEmptyList => self.push(&Var::List(vec![])),
-            Op::ListAddTail => {}
-            Op::ListAppend => {}
-            Op::IndexSet => {}
-            Op::MakeSingletonList => {}
+            Op::ListAddTail => {
+                let tail = self.pop();
+                let list = self.pop();
+                let Var::List(list) = list else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(());
+                };
+
+                // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
+
+                let mut new_list = list.clone();
+                new_list.push(tail);
+                self.push(&Var::List(new_list))
+            }
+            Op::ListAppend => {
+                let tail = self.pop();
+                let list = self.pop();
+                let Var::List(list) = list else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(());
+                };
+
+                let Var::List(tail) = tail else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(());
+                };
+
+                // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
+                let new_list = list.into_iter().chain(tail.into_iter());
+                self.push(&Var::List(new_list.collect()))
+            }
+            Op::IndexSet => {
+                // collection[index] = value
+                let value = self.pop(); /* rhs value */
+                let index = self.pop(); /* index, must be int */
+                let list = self.pop(); /* lhs except last index, should be list or str */
+
+                let nval = match (list, index) {
+                    (Var::List(l), Var::Int(i)) => {
+                        if i < 0 || !i < l.len() as i64 {
+                            self.push(&Var::Err(E_RANGE));
+                            return Ok(())
+                        }
+
+                        let mut nval = l.clone();
+                        nval[i as usize] = value;
+                        Var::List(nval)
+                    }
+                    (Var::Str(s), Var::Int(i)) => {
+                        if i < 0 || !i < s.len() as i64 {
+                            self.push(&Var::Err(E_RANGE));
+                            return Ok(())
+                        }
+
+                        let Var::Str(value) = value else {
+                            self.push(&Var::Err(E_INVARG));
+                            return Ok(())
+                        };
+
+                        if value.len() != 1 {
+                            self.push(&Var::Err(E_INVARG));
+                            return Ok(())
+                        }
+
+                        let i = i as usize;
+                        let (mut head, tail) = (String::from(&s[0..i]), &s[i+1..]);
+                        head.push_str(&value[0..1]);
+                        head.push_str(tail);
+                        Var::Str(head)
+                    }
+                    (_, _) => {
+                        self.push(&Var::Err(E_TYPE));
+                        return Ok(())
+                    }
+                };
+                self.push(&nval);
+            }
+            Op::MakeSingletonList => {
+                let v =self.pop();
+                self.push(&Var::List(vec![v]))
+            }
             Op::CheckListForSplice => {}
-            Op::PutTemp => {}
-            Op::PushTemp => {}
+            Op::PutTemp => {
+                self.top_mut().temp = self.peek_top();
+            }
+            Op::PushTemp => {
+                let tmp = self.top().temp.clone();
+                self.push(&tmp);
+                self.top_mut().temp = Var::None;
+            }
             Op::Eq => {
                 binary_bool_op!(self, ==);
             }
