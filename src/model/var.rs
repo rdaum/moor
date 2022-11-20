@@ -1,5 +1,5 @@
 use crate::model::var::Error::{E_RANGE, E_TYPE};
-use decorum::R64;
+use decorum::{R64, Real};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
 use serde_derive::{Deserialize, Serialize};
@@ -128,6 +128,22 @@ impl Var {
             (Var::Int(l), Var::Float(r)) => {
                 let l = R64::from(*l as f64);
                 Var::Float(l % (*r))
+            }
+            (_, _) => Var::Err(E_TYPE),
+        }
+    }
+
+
+    // TODO this likely does not match MOO's impl, which is ... custom. but may not matter.
+    pub fn pow(&self, v:&Var) -> Var {
+        match (self, v) {
+            (Var::Int(l), Var::Int(r)) => Var::Int(l.pow(*r as u32)),
+            (Var::Float(l), Var::Int(r)) => {
+                Var::Float(l.powi(*r as i32))
+            },
+            (Var::Int(l), Var::Float(r)) => {
+                let l = R64::from(*l as f64);
+                Var::Float(l.powf(*r))
             }
             (_, _) => Var::Err(E_TYPE),
         }

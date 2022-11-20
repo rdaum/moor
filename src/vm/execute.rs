@@ -256,7 +256,7 @@ impl VM {
             }
             Op::ForList { label, id } => {
                 let peek = self.peek(2);
-                let (count, list) = (&peek[0], &peek[1]);
+                let (count, list) = (&peek[1], &peek[0]);
                 let Var::Int(count) = count else {
                     self.raise_error(Error::E_TYPE);
                     self.pop();
@@ -284,7 +284,7 @@ impl VM {
             }
             Op::ForRange { label, id } => {
                 let peek = self.peek(2);
-                let (to, from) = (&peek[0], &peek[1]);
+                let (to, from) = (&peek[1], &peek[0]);
 
                 // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
                 // Given we're 64-bit this is exceedling unlikely to ever be a concern for us, but
@@ -462,6 +462,9 @@ impl VM {
             Op::Add => {
                 binary_var_op!(self, add);
             }
+            Op::Exp => {
+                binary_var_op!(self, pow);
+            }
             Op::Mod => {
                 binary_var_op!(self, modulus);
             }
@@ -494,7 +497,23 @@ impl VM {
                 };
                 self.push(&l.index(index as usize));
             }
-            Op::PushRef => {}
+            Op::PushRef => {
+                let peek = self.peek(2);
+                let (index, list) = (peek[1].clone(), peek[0].clone());
+                let v = match (index, list) {
+                    (Var::Int(index), Var::List(list)) => {
+                        if index <= 0 || !index < list.len() as i64 {
+                            Var::Err(E_RANGE)
+                        } else {
+                            list[index]
+                        }
+                    }
+                    (_, _) => {
+                        Var::Err(E_TYPE)
+                    }
+                };
+                self.push(&v);
+            }
             Op::RangeRef => {}
             Op::GPut { id } => {
                 self.set_env(id, &self.peek_top());
@@ -508,6 +527,27 @@ impl VM {
                     }
                 }
             }
+            Op::Length { id } => {
+                let v = self.get_env(id);
+                match v {
+                    Var::Str(s) => {
+                        self.push(&Var::Int(s.len() as i64))
+                    }
+                    Var::List(l) => {
+                        self.push(&Var::Int(l.len() as i64))
+                    }
+                    _ => {
+                        self.push(&Var::Err(E_TYPE));
+                    }
+                }
+            }
+            Op::Scatter {
+                done,
+                nargs,
+                nreg,
+                rest,
+            } => {}
+
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
                 let prop = self.get_prop(db, player_flags, propname, obj);
@@ -557,20 +597,13 @@ impl VM {
                     return Ok(());
                 }
             }
+
             Op::Fork { id, f_index } => {}
             Op::CallVerb => {}
             Op::Return => {}
             Op::Return0 => {}
             Op::Done => {}
             Op::FuncCall { id } => {}
-            Op::Length { id } => {}
-            Op::Exp => {}
-            Op::Scatter {
-                done,
-                nargs,
-                nreg,
-                rest,
-            } => {}
             Op::PushLabel => {}
             Op::TryFinally => {}
             Op::Catch => {}
