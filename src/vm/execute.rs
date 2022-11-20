@@ -1,14 +1,17 @@
+use crate::model::objects::ObjFlag;
+use crate::model::permissions::Permissions;
+use crate::model::props::{PropAttr, PropAttrs, PropFlag};
+use crate::model::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_TYPE, E_VARNF};
 use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::Program;
+use crate::model::ObjDB;
 use crate::vm::opcode::{Binary, Op};
 use anyhow::anyhow;
 use bincode::config;
 use bincode::config::Configuration;
 use bincode::error::DecodeError;
+use enumset::EnumSet;
 use itertools::Itertools;
-use crate::model::ObjDB;
-use crate::model::props::{PropAttr, PropAttrs};
-use crate::model::var::Error::{E_INVARG, E_INVIND, E_PROPNF, E_TYPE, E_VARNF};
 
 struct Activation {
     binary: Binary,
@@ -167,7 +170,12 @@ impl VM {
         self.top_mut().poke(pos, v);
     }
 
-    pub fn exec(&mut self, db: &mut impl ObjDB) -> Result<(), anyhow::Error> {
+    pub fn exec(
+        &mut self,
+        db: &mut impl ObjDB,
+        player: Objid,
+        player_flags: EnumSet<ObjFlag>,
+    ) -> Result<(), anyhow::Error> {
         let op = self.next_op();
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
@@ -280,7 +288,7 @@ impl VM {
             }
             Op::Ref => {
                 let index = self.pop();
-                let l= self.pop();
+                let l = self.pop();
                 let Var::Int(index) = index else {
                     self.push(&Var::Err(E_TYPE));
                     return Ok(())
@@ -315,14 +323,27 @@ impl VM {
 
                 // TODO builtin properties!
 
-                let find = db.find_property(obj, propname.as_str(), PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value)?;
+                let find = db.find_property(
+                    obj,
+                    propname.as_str(),
+                    PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value,
+                )?;
                 self.push(&match find {
                     None => Var::Err(E_PROPNF),
                     Some(p) => {
-                        // TODO perform perms check; db_property_allows -> E_PERM
-                        match p.value {
-                            None => Var::Err(E_PROPNF),
-                            Some(p) => p
+                        if !db.property_allows(
+                            PropFlag::Read.into(),
+                            obj,
+                            player_flags,
+                            p.flags.unwrap(),
+                            p.owner.unwrap(),
+                        ) {
+                            Var::Err(E_PERM)
+                        } else {
+                            match p.value {
+                                None => Var::Err(E_PROPNF),
+                                Some(p) => p,
+                            }
                         }
                     }
                 });

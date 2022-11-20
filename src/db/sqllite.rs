@@ -20,6 +20,7 @@ use sea_query::{
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
 use crate::model::ObjDB;
+use crate::model::permissions::Permissions;
 
 #[derive(Iden)]
 enum Object {
@@ -1061,6 +1062,20 @@ impl<'a> Verbs for SQLiteTx<'a> {
     }
 }
 
+impl<'a> Permissions for SQLiteTx<'a> {
+    fn property_allows(
+        &self,
+        check_flags: EnumSet<PropFlag>,
+        player: Objid,
+        player_flags: EnumSet<ObjFlag>,
+        prop_flags: EnumSet<PropFlag>,
+        prop_owner: Objid,
+    ) -> bool {
+        player == prop_owner ||
+            prop_flags.intersection(check_flags) == check_flags || player_flags.contains(ObjFlag::Wizard)
+    }
+}
+
 impl<'a> ObjDB for SQLiteTx<'a> {
     fn initialize(&mut self) -> Result<(), Error> {
         self.initialize_schema()
@@ -1087,7 +1102,6 @@ mod tests {
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, Verbs};
-    use antlr_rust::CoerceTo;
     use rusqlite::Connection;
     use crate::model::ObjDB;
 
