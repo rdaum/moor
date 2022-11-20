@@ -48,12 +48,18 @@ pub enum PropAttr {
     Flags,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PropAttrs {
     pub value: Option<Var>,
     pub location: Option<Objid>,
     pub owner: Option<Objid>,
     pub flags: Option<EnumSet<PropFlag>>,
+}
+
+#[derive(Clone)]
+pub struct PropertyInfo {
+    pub pid: Pid,
+    pub attrs: PropAttrs,
 }
 
 pub trait Properties {
@@ -62,7 +68,7 @@ pub trait Properties {
         oid: Objid,
         name: &str,
         attrs: EnumSet<PropAttr>,
-    ) -> Result<Option<PropAttrs>, anyhow::Error>;
+    ) -> Result<Option<PropertyInfo>, anyhow::Error>;
     fn get_property(
         &self,
         oid: Objid,

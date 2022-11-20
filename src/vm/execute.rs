@@ -2,6 +2,7 @@ use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropAttrs, PropFlag};
 use crate::model::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
+use crate::model::var::Var::Obj;
 use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::Program;
 use crate::model::ObjDB;
@@ -12,7 +13,6 @@ use bincode::config::Configuration;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
 use itertools::Itertools;
-use crate::model::var::Var::Obj;
 
 struct Activation {
     binary: Binary,
@@ -67,7 +67,7 @@ impl Activation {
 
     pub fn next_op(&mut self) -> Option<Op> {
         if !self.pc < self.binary.main_vector.len() {
-            return None
+            return None;
         }
         let op = self.binary.main_vector[self.pc].clone();
         self.pc += 1;
@@ -76,13 +76,13 @@ impl Activation {
 
     pub fn lookahead(&self) -> Option<Op> {
         if !self.pc + 1 < self.binary.main_vector.len() {
-            return None
+            return None;
         }
-        Some(self.binary.main_vector[self.pc+1].clone())
+        Some(self.binary.main_vector[self.pc + 1].clone())
     }
 
     pub fn skip(&mut self) {
-        self.pc+=1;
+        self.pc += 1;
     }
 
     pub fn pop(&mut self) -> Option<Var> {
@@ -110,8 +110,6 @@ impl Activation {
     pub fn rewind(&mut self, amt: usize) {
         self.pc -= amt;
     }
-
-
 }
 
 struct VM {
@@ -188,6 +186,52 @@ impl VM {
         self.top_mut().poke(pos, v);
     }
 
+    fn get_prop(
+        &mut self,
+        db: &dyn ObjDB,
+        player_flags: EnumSet<ObjFlag>,
+        propname: Var,
+        obj: Var,
+    ) -> Var {
+        let Var::Str(propname) = propname else {
+            return Var::Err(E_TYPE);
+        };
+
+        let Var::Obj(obj) = obj else {
+            return Var::Err(E_INVIND);
+        };
+
+        // TODO builtin properties!
+
+        let find = db
+            .find_property(
+                obj,
+                propname.as_str(),
+                PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value,
+            )
+            .expect("db fail");
+        let prop_val = match find {
+            None => Var::Err(E_PROPNF),
+            Some(p) => {
+                if !db.property_allows(
+                    PropFlag::Read.into(),
+                    obj,
+                    player_flags,
+                    p.attrs.flags.unwrap(),
+                    p.attrs.owner.unwrap(),
+                ) {
+                    Var::Err(E_PERM)
+                } else {
+                    match p.attrs.value {
+                        None => Var::Err(E_PROPNF),
+                        Some(p) => p,
+                    }
+                }
+            }
+        };
+        return prop_val;
+    }
+
     pub fn exec(
         &mut self,
         db: &mut impl ObjDB,
@@ -252,22 +296,22 @@ impl VM {
                             self.pop();
                             self.pop();
                             self.jump(label);
-                            return Ok(())
+                            return Ok(());
                         }
-                        Var::Int(from_i+1)
+                        Var::Int(from_i + 1)
                     }
                     (Var::Obj(to_o), Var::Obj(from_o)) => {
                         if to_o.0 > from_o.0 {
                             self.pop();
                             self.pop();
                             self.jump(label);
-                            return Ok(())
+                            return Ok(());
                         }
-                        Var::Obj(Objid(from_o.0+1))
+                        Var::Obj(Objid(from_o.0 + 1))
                     }
                     (_, _) => {
                         self.raise_error(E_TYPE);
-                        return Ok(())
+                        return Ok(());
                     }
                 };
 
@@ -285,10 +329,9 @@ impl VM {
                     Some(Op::Pop) => {
                         // skip
                         self.top_mut().skip();
-                        return Ok(())
+                        return Ok(());
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
                 let value = self.top().binary.literals[slot].clone();
                 self.push(&value);
@@ -335,7 +378,7 @@ impl VM {
                     (Var::List(l), Var::Int(i)) => {
                         if i < 0 || !i < l.len() as i64 {
                             self.push(&Var::Err(E_RANGE));
-                            return Ok(())
+                            return Ok(());
                         }
 
                         let mut nval = l.clone();
@@ -345,7 +388,7 @@ impl VM {
                     (Var::Str(s), Var::Int(i)) => {
                         if i < 0 || !i < s.len() as i64 {
                             self.push(&Var::Err(E_RANGE));
-                            return Ok(())
+                            return Ok(());
                         }
 
                         let Var::Str(value) = value else {
@@ -355,24 +398,24 @@ impl VM {
 
                         if value.len() != 1 {
                             self.push(&Var::Err(E_INVARG));
-                            return Ok(())
+                            return Ok(());
                         }
 
                         let i = i as usize;
-                        let (mut head, tail) = (String::from(&s[0..i]), &s[i+1..]);
+                        let (mut head, tail) = (String::from(&s[0..i]), &s[i + 1..]);
                         head.push_str(&value[0..1]);
                         head.push_str(tail);
                         Var::Str(head)
                     }
                     (_, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(())
+                        return Ok(());
                     }
                 };
                 self.push(&nval);
             }
             Op::MakeSingletonList => {
-                let v =self.pop();
+                let v = self.pop();
                 self.push(&Var::List(vec![v]))
             }
             Op::CheckListForSplice => {}
@@ -467,45 +510,53 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                let Var::Str(propname) = propname else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(())
-                };
-
-                let Var::Obj(obj) = obj else {
-                    self.push(&Var::Err(E_INVIND));
-                    return Ok(())
-                };
-
-                // TODO builtin properties!
-
-                let find = db.find_property(
-                    obj,
-                    propname.as_str(),
-                    PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value,
-                )?;
-                self.push(&match find {
-                    None => Var::Err(E_PROPNF),
-                    Some(p) => {
-                        if !db.property_allows(
-                            PropFlag::Read.into(),
-                            obj,
-                            player_flags,
-                            p.flags.unwrap(),
-                            p.owner.unwrap(),
-                        ) {
-                            Var::Err(E_PERM)
-                        } else {
-                            match p.value {
-                                None => Var::Err(E_PROPNF),
-                                Some(p) => p,
-                            }
-                        }
-                    }
-                });
+                let prop = self.get_prop(db, player_flags, propname, obj);
+                self.push(&prop);
             }
-            Op::PushGetProp => {}
-            Op::PutProp => {}
+            Op::PushGetProp => {
+                let peeked = self.peek(2);
+                let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
+                let pop = self.get_prop(db, player_flags, propname, obj);
+                self.push(&pop);
+            }
+            Op::PutProp => {
+                let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
+                let (propname, obj) = match (propname, obj) {
+                    (Var::Str(propname), Var::Obj(obj)) => (propname, obj),
+                    (_, _) => {
+                        self.push(&Var::Err(E_TYPE));
+                        return Ok(());
+                    }
+                };
+                let h = db
+                    .find_property(obj, propname.as_str(), PropAttr::Owner | PropAttr::Flags)
+                    .expect("Unable to perform property lookup");
+
+                // TODO handle built-in properties
+                let Some(p) = h else {
+                    self.push(&Var::Err(E_PROPNF));
+                    return Ok(())
+                };
+
+                if !db.property_allows(
+                    PropFlag::Write.into(),
+                    obj,
+                    player_flags,
+                    p.attrs.flags.unwrap(),
+                    p.attrs.owner.unwrap(),
+                ) {
+                    db.set_property(
+                        p.pid,
+                        obj,
+                        rhs,
+                        p.attrs.owner.unwrap(),
+                        p.attrs.flags.unwrap(),
+                    )
+                    .expect("could not set property");
+                    self.push(&Var::None);
+                    return Ok(());
+                }
+            }
             Op::Fork { id, f_index } => {}
             Op::CallVerb => {}
             Op::Return => {}

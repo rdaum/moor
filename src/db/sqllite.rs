@@ -1,5 +1,5 @@
 use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties};
+use crate::model::props::{Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo};
 use crate::model::var::{Objid, Var};
 
 use crate::model::r#match::VerbArgsSpec;
@@ -85,12 +85,12 @@ fn object_attr_to_column<'a>(attr: ObjAttr) -> DynIden {
     }
 }
 
-fn property_attr_to_column<'a>(attr: PropAttr) -> DynIden {
+fn property_attr_to_column<'a>(attr: PropAttr) -> (DynIden, DynIden)  {
     match attr {
-        PropAttr::Value => Property::Value.into_iden(),
-        PropAttr::Location => Property::Location.into_iden(),
-        PropAttr::Owner => Property::Owner.into_iden(),
-        PropAttr::Flags => Property::Flags.into_iden(),
+        PropAttr::Value => (Property::Table.into_iden(), Property::Value.into_iden()),
+        PropAttr::Location => (Property::Table.into_iden(), Property::Location.into_iden()),
+        PropAttr::Owner => (Property::Table.into_iden(), Property::Owner.into_iden()),
+        PropAttr::Flags => (Property::Table.into_iden(), Property::Flags.into_iden()),
     }
 }
 
@@ -671,11 +671,13 @@ impl<'a> Properties for SQLiteTx<'a> {
         oid: Objid,
         name: &str,
         attributes: EnumSet<PropAttr>,
-    ) -> Result<Option<PropAttrs>, Error> {
+    ) -> Result<Option<PropertyInfo>, Error> {
         let with = transitive_inheritance_clause(oid);
         let parents_of = Alias::new("parents_of");
 
-        let columns = attributes.iter().map(property_attr_to_column);
+        let mut columns: Vec<_> = attributes.iter().map(property_attr_to_column).collect();
+        columns.push((Property::Table.into_iden(), Property::Pid.into_iden()));
+
         let query = Query::select()
             .columns(columns)
             .from(parents_of.clone())
@@ -708,6 +710,7 @@ impl<'a> Properties for SQLiteTx<'a> {
                     owner: None,
                     flags: None,
                 };
+                let pid = Pid(r.get("pid")?);
                 for (c_num, a) in attributes.iter().enumerate() {
                     match a {
                         PropAttr::Owner => {
@@ -731,7 +734,11 @@ impl<'a> Properties for SQLiteTx<'a> {
                         }
                     }
                 }
-                Ok(ret_attrs)
+                Ok(
+                    PropertyInfo{
+                        pid,
+                        attrs: ret_attrs
+                    })
             })
             .unwrap();
 
@@ -1290,7 +1297,7 @@ mod tests {
             .find_property(child2, "test", PropAttr::Value | PropAttr::Location)
             .unwrap()
             .unwrap();
-        assert_eq!(v.location, Some(child2));
+        assert_eq!(v.attrs.location, Some(child2));
         // And verify we don't get it from other root or from its child
         let v = s
             .get_property(other_root, pid, PropAttr::Value | PropAttr::Location)
