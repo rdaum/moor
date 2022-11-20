@@ -12,6 +12,7 @@ use bincode::config::Configuration;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
 use itertools::Itertools;
+use crate::model::var::Var::Obj;
 
 struct Activation {
     binary: Binary,
@@ -63,10 +64,24 @@ impl Activation {
         })
     }
 
-    pub fn next_op(&mut self) -> Op {
+    pub fn next_op(&mut self) -> Option<Op> {
+        if !self.pc < self.binary.main_vector.len() {
+            return None
+        }
         let op = self.binary.main_vector[self.pc].clone();
         self.pc += 1;
-        op
+        Some(op)
+    }
+
+    pub fn lookahead(&self) -> Option<Op> {
+        if !self.pc + 1 < self.binary.main_vector.len() {
+            return None
+        }
+        Some(self.binary.main_vector[self.pc+1].clone())
+    }
+
+    pub fn skip(&mut self) {
+        self.pc+=1;
     }
 
     pub fn pop(&mut self) -> Option<Var> {
@@ -94,6 +109,8 @@ impl Activation {
     pub fn rewind(&mut self, amt: usize) {
         self.pc -= amt;
     }
+
+
 }
 
 struct VM {
@@ -138,7 +155,7 @@ impl VM {
         self.top_mut().push(v.clone())
     }
 
-    fn next_op(&mut self) -> Op {
+    fn next_op(&mut self) -> Option<Op> {
         self.top_mut().next_op()
     }
 
@@ -177,6 +194,11 @@ impl VM {
         player_flags: EnumSet<ObjFlag>,
     ) -> Result<(), anyhow::Error> {
         let op = self.next_op();
+        let Some(op) = op else {
+            // Execution complete.
+            // TODO is this an error?
+            return Ok(())
+        };
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -215,11 +237,61 @@ impl VM {
                     self.rewind(3);
                 }
             }
-            Op::ForRange { label, id } => {}
+            Op::ForRange { label, id } => {
+                let peek = self.peek(2);
+                let (to, from) = (&peek[0], &peek[1]);
+
+                // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
+                // Given we're 64-bit this is exceedling unlikely to ever be a concern for us, but
+                // we also don't want to *crash* on obscene values, so impl that here.
+
+                let next_val = match (to, from) {
+                    (Var::Int(to_i), Var::Int(from_i)) => {
+                        if to_i > from_i {
+                            self.pop();
+                            self.pop();
+                            self.jump(label);
+                            return Ok(())
+                        }
+                        Var::Int(from_i+1)
+                    }
+                    (Var::Obj(to_o), Var::Obj(from_o)) => {
+                        if to_o.0 > from_o.0 {
+                            self.pop();
+                            self.pop();
+                            self.jump(label);
+                            return Ok(())
+                        }
+                        Var::Obj(Objid(from_o.0+1))
+                    }
+                    (_, _) => {
+                        self.raise_error(E_TYPE);
+                        return Ok(())
+                    }
+                };
+
+                self.set_env(id, &from);
+                self.poke(1, &next_val);
+                self.rewind(3);
+            }
             Op::Pop => {
                 self.pop();
             }
-            Op::Imm => {}
+            Op::Imm(slot) => {
+                // Peek ahead to see if the next operation is 'pop' and if so, just throw away.
+                // MOO uses this to optimize verbdoc/comments, etc.
+                match self.top().lookahead() {
+                    Some(Op::Pop) => {
+                        // skip
+                        self.top_mut().skip();
+                        return Ok(())
+                    }
+                    _ => {
+                    }
+                }
+                let value = self.top().binary.literals[slot].clone();
+                self.push(&value);
+            }
             Op::MkEmptyList => self.push(&Var::List(vec![])),
             Op::ListAddTail => {}
             Op::ListAppend => {}
