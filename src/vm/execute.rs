@@ -505,7 +505,7 @@ impl VM {
                         if index <= 0 || !index < list.len() as i64 {
                             Var::Err(E_RANGE)
                         } else {
-                            list[index]
+                            list[index as usize].clone()
                         }
                     }
                     (_, _) => {
@@ -514,7 +514,35 @@ impl VM {
                 };
                 self.push(&v);
             }
-            Op::RangeRef => {}
+            Op::RangeRef => {
+                let (to, from, base) = (self.pop(), self.pop(), self.pop());
+                let result = match (to, from, base) {
+                    (Var::Int(to), Var::Int(from), Var::Str(base)) => {
+                        if to <0 || !to < base.len() as i64 ||
+                            from <0 || !from < base.len() as i64 {
+                            Var::Err(E_RANGE)
+                        } else {
+                            let (from, to) = (from as usize, to as usize);
+                            let substr = &base[from..to];
+                            Var::Str(String::from(substr))
+                        }
+                    },
+                    (Var::Int(to), Var::Int(from), Var::List(base)) => {
+                        if to <0 || !to < base.len() as i64 ||
+                            from <0 || !from < base.len() as i64 {
+                            Var::Err(E_RANGE)
+                        } else {
+                            let (from, to) = (from as usize, to as usize);
+                            let sublist = &base[from..to];
+                            Var::List(Vec::from(sublist))
+                        }
+                    },
+                    (_, _, _) => {
+                        Var::Err(E_TYPE)
+                    }
+                };
+                self.push(&result);
+            }
             Op::GPut { id } => {
                 self.set_env(id, &self.peek_top());
             }
