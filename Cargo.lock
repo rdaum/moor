@@ -364,6 +364,7 @@ dependencies = [
  "int-enum",
  "itertools",
  "lazy_static",
+ "num-traits",
  "paste",
  "rkyv",
  "rkyv_derive",

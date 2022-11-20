@@ -8,7 +8,11 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[derive(Clone, Archive, Deserialize, Serialize, Debug, PartialEq)]
 #[archive_attr(derive(CheckBytes, Debug))]
 pub enum Op {
-    If,
+    Label(usize),
+    If(usize),
+    Eif(usize),
+    IfQues(usize),
+    While(usize),
     Jump {
         label: usize,
     },
@@ -101,10 +105,9 @@ pub enum Op {
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
 #[archive_attr(derive(CheckBytes, Debug))]
 pub struct Binary {
-    first_lineno: usize,
-    ref_count: usize,
-    num_literals: usize,
+    pub(crate) first_lineno: usize,
+    pub(crate) ref_count: usize,
+    pub(crate) num_literals: usize,
     pub(crate) var_names: Vec<String>,
     pub(crate) main_vector: Vec<Op>,
 }
-

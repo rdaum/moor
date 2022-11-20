@@ -1,6 +1,9 @@
+use crate::model::var::Error::E_TYPE;
 use decorum::R64;
 use int_enum::IntEnum;
+use num_traits::identities::Zero;
 use serde_derive::{Deserialize, Serialize};
+use std::ops::{Mul, Div, Add, Sub};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Objid(pub i64);
@@ -56,4 +59,46 @@ pub enum Var {
     // Special for parse
     _Catch(usize),
     _Finally(usize),
+}
+
+macro_rules! binary_numeric_coercion_op {
+    ($op:tt ) => {
+        pub fn $op(&self, v: &Var) -> Var {
+            match (self, v) {
+                (Var::Int(l), Var::Int(r)) => Var::Int(l * r),
+                (Var::Float(l), Var::Int(r)) => Var::Float(l.$op(*r as f64)),
+                (Var::Int(l), Var::Float(r)) => {
+                    let l = R64::from(*l as f64);
+                    Var::Float(l.$op(*r))
+                }
+                (_, _) => Var::Err(E_TYPE),
+            }
+        }
+    };
+}
+
+impl Var {
+    pub fn is_true(&self) -> bool {
+        match self {
+            Var::Str(s) => s != "",
+            Var::Int(i) => *i != 0,
+            Var::Float(f) => !f.is_zero(),
+            Var::List(l) => !l.is_empty(),
+            _ => false,
+        }
+    }
+
+    pub fn has_member(&self, v: &Var) -> Var {
+        let Var::List(l) = self else {
+            return Var::Err(E_TYPE);
+        };
+
+        Var::Int(if l.contains(v) { 1 } else { 0 })
+    }
+
+    binary_numeric_coercion_op!(mul);
+    binary_numeric_coercion_op!(div);
+    binary_numeric_coercion_op!(add);
+    binary_numeric_coercion_op!(sub);
+
 }

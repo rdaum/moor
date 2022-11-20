@@ -28,3 +28,4 @@ rkyv = { version = "0.7.39", features = ["validation"] }
 rkyv_derive = "0.7.39"
 bytecheck = "0.6.9"
 decorum = "0.3.1"
+num-traits = "0.2.15"
