@@ -1,7 +1,9 @@
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropAttrs, PropFlag};
-use crate::model::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
+use crate::model::var::Error::{
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF,
+};
 use crate::model::var::Var::Obj;
 use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::Program;
@@ -15,12 +17,12 @@ use enumset::EnumSet;
 use itertools::Itertools;
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
-const FinallyFallthrough : i64 = 0x00;
-const FinallyRaise : i64 = 0x01;
-const FinallyUncaught : i64 = 0x02;
-const FinallyReturn : i64 = 0x03;
-const FinallyAbort : i64 = 0x04;/* This doesn't actually get you into a FINALLY... */
-const FinallyExit : i64 = 0x65;
+const FinallyFallthrough: i64 = 0x00;
+const FinallyRaise: i64 = 0x01;
+const FinallyUncaught: i64 = 0x02;
+const FinallyReturn: i64 = 0x03;
+const FinallyAbort: i64 = 0x04; /* This doesn't actually get you into a FINALLY... */
+const FinallyExit: i64 = 0x65;
 
 struct Activation {
     binary: Binary,
@@ -516,9 +518,7 @@ impl VM {
                             list[index as usize].clone()
                         }
                     }
-                    (_, _) => {
-                        Var::Err(E_TYPE)
-                    }
+                    (_, _) => Var::Err(E_TYPE),
                 };
                 self.push(&v);
             }
@@ -526,28 +526,32 @@ impl VM {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
                 let result = match (to, from, base) {
                     (Var::Int(to), Var::Int(from), Var::Str(base)) => {
-                        if to <0 || !to < base.len() as i64 ||
-                            from <0 || !from < base.len() as i64 {
+                        if to < 0
+                            || !to < base.len() as i64
+                            || from < 0
+                            || !from < base.len() as i64
+                        {
                             Var::Err(E_RANGE)
                         } else {
                             let (from, to) = (from as usize, to as usize);
                             let substr = &base[from..to];
                             Var::Str(String::from(substr))
                         }
-                    },
+                    }
                     (Var::Int(to), Var::Int(from), Var::List(base)) => {
-                        if to <0 || !to < base.len() as i64 ||
-                            from <0 || !from < base.len() as i64 {
+                        if to < 0
+                            || !to < base.len() as i64
+                            || from < 0
+                            || !from < base.len() as i64
+                        {
                             Var::Err(E_RANGE)
                         } else {
                             let (from, to) = (from as usize, to as usize);
                             let sublist = &base[from..to];
                             Var::List(Vec::from(sublist))
                         }
-                    },
-                    (_, _, _) => {
-                        Var::Err(E_TYPE)
                     }
+                    (_, _, _) => Var::Err(E_TYPE),
                 };
                 self.push(&result);
             }
@@ -566,23 +570,73 @@ impl VM {
             Op::Length { id } => {
                 let v = self.get_env(id);
                 match v {
-                    Var::Str(s) => {
-                        self.push(&Var::Int(s.len() as i64))
-                    }
-                    Var::List(l) => {
-                        self.push(&Var::Int(l.len() as i64))
-                    }
+                    Var::Str(s) => self.push(&Var::Int(s.len() as i64)),
+                    Var::List(l) => self.push(&Var::Int(l.len() as i64)),
                     _ => {
                         self.push(&Var::Err(E_TYPE));
                     }
                 }
             }
+            // TODO This is all very frobby and copied 1:1 from the MOO C source and is pretty much
+            // guaranteed to not work the first ... N... times
             Op::Scatter {
-                done,
                 nargs,
-                nreg,
+                nreg: nreq,
                 rest,
-            } => {}
+                id,
+                label,
+                done,
+            } => {
+                let have_rest = rest > nargs;
+                let list = self.peek_top();
+                let Var::List(list) = list else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(());
+                };
+
+                let len = list.len();
+                if len < nreq || (!have_rest && len > nargs) {
+                    self.push(&Var::Err(E_ARGS));
+                    return Ok(());
+                }
+
+                let mut nopt_avail = len - nreq;
+                let nrest = if have_rest && len > nargs {
+                    len - nargs + 1
+                } else {
+                    0
+                };
+                let mut offset = 0;
+                let mut whr = 0;
+                for i in 1..nargs {
+                    if i == rest {
+                        // rest
+                        let sublist = &list[i..i + nrest - 1];
+                        let sublist = Var::List(Vec::from(sublist));
+                        self.set_env(id, &sublist);
+                    } else if label == 0 {
+                        // required
+                        self.set_env(id, &list[i + offset].clone());
+                    } else {
+                        // optional
+                        if nopt_avail > 0 {
+                            nopt_avail -= 1;
+
+                            self.set_env(id, &list[i + offset]);
+                        } else {
+                            offset -= 1;
+                            if whr == 0 && label != 1 {
+                                whr = label;
+                            }
+                        }
+                    }
+                }
+                if whr == 0 {
+                    self.jump(done);
+                } else {
+                    self.jump(whr);
+                }
+            }
 
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
@@ -643,10 +697,10 @@ impl VM {
             Op::PushLabel(label) => {
                 self.push(&Var::Int(label as i64));
             }
-            Op::TryFinally(labeL) => {
+            Op::TryFinally(label) => {
                 self.push(&Var::_Finally(label));
             }
-            Op::Catch=> {
+            Op::Catch => {
                 self.push(&Var::_Catch(1));
             }
             Op::TryExcept(label) => {
@@ -655,7 +709,7 @@ impl VM {
             Op::EndCatch(label) => {
                 let v = self.pop();
                 let marker = self.pop();
-                let Var::_Catch(market) = marker else {
+                let Var::_Catch(marker) = marker else {
                   panic!("Stack marker is not type Catch");
                 };
                 for i in 0..marker {
@@ -675,8 +729,8 @@ impl VM {
                 self.jump(label);
             }
             Op::EndFinally => {
-                let v= self.pop();
-                let Var::_Finally(marker) = marker else {
+                let v = self.pop();
+                let Var::_Finally(marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
                 self.push(&Var::Int(FinallyFallthrough));

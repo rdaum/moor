@@ -80,7 +80,9 @@ pub enum Op {
         nargs: usize,
         nreg: usize,
         rest: usize,
-        done: usize,
+        id: usize,
+        label: usize,
+        done : usize
     },
     PushLabel(usize),
     TryFinally(usize),
