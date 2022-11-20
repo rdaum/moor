@@ -632,11 +632,19 @@ impl VM {
             Op::Return0 => {}
             Op::Done => {}
             Op::FuncCall { id } => {}
-            Op::PushLabel => {}
-            Op::TryFinally => {}
-            Op::Catch => {}
-            Op::TryExcept => {}
-            Op::EndCatch => {}
+            Op::PushLabel(label) => {
+                self.push(&Var::Int(label as i64));
+            }
+            Op::TryFinally(labeL) => {
+                self.push(&Var::_Finally(label));
+            }
+            Op::Catch=> {
+                self.push(&Var::_Catch(1));
+            }
+            Op::TryExcept(usize) => {
+                self.push(&Var::_Catch(label));
+            }
+            Op::EndCatch(usize) => {}
             Op::EndExcept => {}
             Op::EndFinally => {}
             Op::Continue => {}
