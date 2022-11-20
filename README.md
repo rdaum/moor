@@ -12,16 +12,23 @@ modern LambdaMOO inspired thing and instead just building LambdaMOO itself
 
 The intent here is to start out at least fully compatible with LambdaMOO 1.8.x series and to be able to read and
 execute existing cores. 
-(To that end I've already written enough of the compiler to parse the entire existing JaysHouse MOO Core without errors 
-so the full language as-is will be initially supported.)
 
 ### But then...
 
-to actually implement the backend portions on a more modern foundation, with a proper disk-based 
+... to actually implement the backend portions on a more modern foundation, with a proper disk-based 
 transactionally safe database and full multithreaded concurrency, and replacing the classic `telnet` 
 client connectivity with websockets and such.
 
-### LambdaMOO is 30+ years old, why remain compatible?
+Eventual new feature goals, after full MOO backwards compatibility has been achieved:
+
+* Embedded JavaScript engine to allow implementation of MOO verbs in a more modern standard language.
+* Extended protocol support (WebSockets, HTTP, etc. inbound and outbound).
+* Incremental runtime changes:
+  * Remove object numbers and replace with capability references.
+  * Lightweight transient object values in addition to rooted objects.
+  * New primitive types in the language / properties.
+   
+## LambdaMOO is 30+ years old, why remain compatible?
 
 * Because it's easy to go into the weeds creating new things, and never finishing. By having a concrete goal, and something
   to compare and test against, I may actually get somewhere.
@@ -38,7 +45,8 @@ client connectivity with websockets and such.
    * Compilation from ANTLR compilation tree to abstract syntax tree complete, so is theoretically ready for codgen.
    * Implementation of SQLite backed storage for the MOO object model. (The first of potentially many implementations of
      the object DB backend.) Supports verb properties, verbs, etc.
-   * Full import of an existing textdump into said DB.
+   * Capability of full import of an existing textdump into said DB.
+   * About halfway through the implementation of a virtual machine 
 
 ### Next steps
 
