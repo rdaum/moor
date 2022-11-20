@@ -14,6 +14,14 @@ use bincode::error::DecodeError;
 use enumset::EnumSet;
 use itertools::Itertools;
 
+/* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
+const FinallyFallthrough : i64 = 0x00;
+const FinallyRaise : i64 = 0x01;
+const FinallyUncaught : i64 = 0x02;
+const FinallyReturn : i64 = 0x03;
+const FinallyAbort : i64 = 0x04;/* This doesn't actually get you into a FINALLY... */
+const FinallyExit : i64 = 0x65;
+
 struct Activation {
     binary: Binary,
     rt_env: Vec<Var>,
@@ -641,12 +649,39 @@ impl VM {
             Op::Catch=> {
                 self.push(&Var::_Catch(1));
             }
-            Op::TryExcept(usize) => {
+            Op::TryExcept(label) => {
                 self.push(&Var::_Catch(label));
             }
-            Op::EndCatch(usize) => {}
-            Op::EndExcept => {}
-            Op::EndFinally => {}
+            Op::EndCatch(label) => {
+                let v = self.pop();
+                let marker = self.pop();
+                let Var::_Catch(market) = marker else {
+                  panic!("Stack marker is not type Catch");
+                };
+                for i in 0..marker {
+                    self.pop();
+                }
+                self.push(&v);
+                self.jump(label);
+            }
+            Op::EndExcept(label) => {
+                let marker = self.pop();
+                let Var::_Catch(marker) = marker else {
+                    panic!("Stack marker is not type Catch");
+                };
+                for i in 0..marker {
+                    self.pop();
+                }
+                self.jump(label);
+            }
+            Op::EndFinally => {
+                let v= self.pop();
+                let Var::_Finally(marker) = marker else {
+                    panic!("Stack marker is not type Finally");
+                };
+                self.push(&Var::Int(FinallyFallthrough));
+                self.push(&Var::Int(0));
+            }
             Op::Continue => {}
             Op::WhileId { id } => {}
             Op::ExitId { id } => {}

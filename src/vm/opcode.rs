@@ -87,7 +87,7 @@ pub enum Op {
     Catch,
     TryExcept(usize),
     EndCatch(usize),
-    EndExcept,
+    EndExcept(usize),
     EndFinally,
     Continue,
     WhileId {
