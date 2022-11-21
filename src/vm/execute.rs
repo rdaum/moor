@@ -2,11 +2,11 @@ use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropAttrs, PropFlag};
 use crate::model::var::Error::{
-    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF,
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::Var::Obj;
 use crate::model::var::{Error, Objid, Var};
-use crate::model::verbs::Program;
+use crate::model::verbs::{Program, VerbAttr};
 use crate::model::ObjDB;
 use crate::vm::opcode::{Binary, Op};
 use anyhow::anyhow;
@@ -17,17 +17,17 @@ use enumset::EnumSet;
 use itertools::Itertools;
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
-const FinallyFallthrough: i64 = 0x00;
-const FinallyRaise: i64 = 0x01;
-const FinallyUncaught: i64 = 0x02;
-const FinallyReturn: i64 = 0x03;
-const FinallyAbort: i64 = 0x04; /* This doesn't actually get you into a FINALLY... */
-const FinallyExit: i64 = 0x65;
+const FINALLY_FALLTHROUGH: i64 = 0x00;
+const FINALLY_RAISE: i64 = 0x01;
+const FINALLY_UNCAUGHT: i64 = 0x02;
+const FINALLY_RETURN: i64 = 0x03;
+const FINALLY_ABORT: i64 = 0x04; /* This doesn't actually get you into a FINALLY... */
+const FINALLY_EXIT: i64 = 0x65;
 
 struct Activation {
     binary: Binary,
-    rt_env: Vec<Var>,
-    rt_stack: Vec<Var>,
+    environment: Vec<Var>,
+    valstack: Vec<Var>,
     pc: usize,
     error_pc: usize,
     temp: Var,
@@ -58,11 +58,11 @@ impl Activation {
             return Err(anyhow!("Invalid opcodes in binary program stream"));
         };
 
-        let rt_env = vec![Var::None; binary.var_names.len()];
+        let environment = vec![Var::None; binary.var_names.len()];
         Ok(Activation {
             binary,
-            rt_env,
-            rt_stack: vec![],
+            environment,
+            valstack: vec![],
             pc: 0,
             error_pc: 0,
             temp: Var::None,
@@ -96,21 +96,21 @@ impl Activation {
     }
 
     pub fn pop(&mut self) -> Option<Var> {
-        self.rt_stack.pop()
+        self.valstack.pop()
     }
 
     pub fn push(&mut self, v: Var) {
-        self.rt_stack.push(v)
+        self.valstack.push(v)
     }
 
     pub fn peek(&self, width: usize) -> Vec<Var> {
-        let l = self.rt_stack.len();
-        Vec::from(&self.rt_stack[l - width..])
+        let l = self.valstack.len();
+        Vec::from(&self.valstack[l - width..])
     }
 
     pub fn poke(&mut self, p: usize, v: &Var) {
-        let l = self.rt_stack.len();
-        self.rt_stack[l - p] = v.clone()
+        let l = self.valstack.len();
+        self.valstack[l - p] = v.clone()
     }
 
     pub fn jump(&mut self, label: usize) {
@@ -173,11 +173,11 @@ impl VM {
     }
 
     fn get_env(&mut self, id: usize) -> Var {
-        self.top().rt_env[id].clone()
+        self.top().environment[id].clone()
     }
 
     fn set_env(&mut self, id: usize, v: &Var) {
-        self.top_mut().rt_env[id] = v.clone();
+        self.top_mut().environment[id] = v.clone();
     }
 
     fn rewind(&mut self, amt: usize) {
@@ -240,6 +240,41 @@ impl VM {
             }
         };
         return prop_val;
+    }
+
+    pub fn call_verb(
+        &mut self,
+        db: &mut impl ObjDB,
+        vname: &str,
+        args: Var,
+        do_pass: bool,
+    ) -> Result<Var, anyhow::Error> {
+        // TODO do_pass get parent and delegate there instead.
+        // Requires adding db.object_parent.
+        let h = db.find_callable_verb(
+            self.top().this,
+            vname,
+            VerbAttr::Program | VerbAttr::Flags | VerbAttr::Owner | VerbAttr::Definer,
+        )?;
+        let Some(h) = h else {
+            return Ok(Var::Err(E_VERBNF));
+        };
+
+        let a = Activation::new(
+            &h.attrs.program.unwrap(),
+            self.top().this,
+            self.top().player,
+            h.attrs.owner.unwrap(),
+            h.attrs.definer.unwrap(),
+            String::from(vname),
+            h.names,
+        )?;
+
+        // TODO copy this, caller,player argstr,dobj,dobjstr, etc. into correct slots.
+        // and set verb & args slots
+        self.stack.push(a);
+
+        Ok(Var::Err(Error::E_NONE))
     }
 
     pub fn exec(
@@ -689,7 +724,19 @@ impl VM {
             }
 
             Op::Fork { id, f_index } => {}
-            Op::CallVerb => {}
+            Op::CallVerb => {
+                let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
+                let (args, verb, obj) = match (args, verb, obj) {
+                    (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
+                    (_, _, _) => {
+                        self.push(&Var::Err(E_TYPE));
+                        return Ok(());
+                    }
+                };
+                // store state variables
+                // call verb
+                // load state variables
+            }
             Op::Return => {}
             Op::Return0 => {}
             Op::Done => {}
@@ -733,7 +780,7 @@ impl VM {
                 let Var::_Finally(marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
-                self.push(&Var::Int(FinallyFallthrough));
+                self.push(&Var::Int(FINALLY_FALLTHROUGH));
                 self.push(&Var::Int(0));
             }
             Op::Continue => {}

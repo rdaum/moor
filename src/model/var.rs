@@ -12,21 +12,22 @@ pub struct Objid(pub i64);
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum Error {
-    E_TYPE = 0,
-    E_DIV = 1,
-    E_PERM = 2,
-    E_PROPNF = 3,
-    E_VERBNF = 4,
-    E_VARNF = 5,
-    E_INVIND = 6,
-    E_RECMOVE = 7,
-    E_MAXREC = 8,
-    E_RANGE = 9,
-    E_ARGS = 10,
-    E_NACC = 11,
-    E_INVARG = 12,
-    E_QUOTA = 13,
-    E_FLOAT = 14,
+    E_NONE = 0,
+    E_TYPE = 1,
+    E_DIV = 2,
+    E_PERM = 3,
+    E_PROPNF = 4,
+    E_VERBNF = 5,
+    E_VARNF = 6,
+    E_INVIND = 7,
+    E_RECMOVE = 8,
+    E_MAXREC = 9,
+    E_RANGE = 10,
+    E_ARGS = 11,
+    E_NACC = 12,
+    E_INVARG = 13,
+    E_QUOTA = 14,
+    E_FLOAT = 15,
 }
 
 #[repr(u8)]
