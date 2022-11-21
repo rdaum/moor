@@ -94,6 +94,7 @@ pub enum Op {
     Continue,
     WhileId {
         id: usize,
+        label: usize,
     },
     ExitId {
         id: usize,

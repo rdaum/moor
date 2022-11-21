@@ -299,6 +299,13 @@ impl VM {
             Op::Jump { label } => {
                 self.jump(label);
             }
+            Op::WhileId { id , label} => {
+                self.set_env(id, &self.peek_top());
+                let cond = self.pop();
+                if cond.is_true() {
+                    self.jump(label);
+                }
+            }
             Op::ForList { label, id } => {
                 let peek = self.peek(2);
                 let (count, list) = (&peek[1], &peek[0]);
@@ -783,8 +790,25 @@ impl VM {
                 self.push(&Var::Int(FINALLY_FALLTHROUGH));
                 self.push(&Var::Int(0));
             }
-            Op::Continue => {}
-            Op::WhileId { id } => {}
+            Op::Continue => {
+                let (v, why) = self.pop();
+                let Var::Int(why) = why else {
+                    panic!("Invalid type for continue marker");
+                };
+
+                match why {
+                    FINALLY_FALLTHROUGH => { // do nothing, normal case
+                    },
+                    FINALLY_EXIT | FINALLY_RAISE | FINALLY_RETURN | FINALLY_UNCAUGHT => {
+                        // store variables
+                        // if unwind stack return outcome
+                        // load variables
+                    }
+                    _ => {
+                        panic!("Continue marker contains unknown FINALLY reason")
+                    }
+                }
+            }
             Op::ExitId { id } => {}
             Op::Exit => {}
             _ => {
