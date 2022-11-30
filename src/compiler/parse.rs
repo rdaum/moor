@@ -49,7 +49,7 @@ struct LoopEntry {
     is_barrier: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Name(pub usize);
 pub struct Names {
     pub names: Vec<String>,
@@ -338,8 +338,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let condition = self.reduce_expr(&ctx.condition);
         let body = self.reduce_statements(&ctx.statements());
 
-        let stmt = Stmt::Loop {
-            kind: LoopKind::While,
+        let stmt = Stmt::While {
             id,
             condition,
             body,
@@ -501,7 +500,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     fn visit_Identifier(&mut self, ctx: &IdentifierContext<'node>) {
         let id = self.find_id(&ctx.get_text());
-        self._expr_stack.push(Expr::Id(id.0))
+        self._expr_stack.push(Expr::Id(id))
     }
 
     fn visit_PropertyExprReference(&mut self, ctx: &PropertyExprReferenceContext<'node>) {
@@ -676,24 +675,41 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._scatter_stack.last_mut().unwrap().push(sd);
     }
 
+    fn visit_AndExpr(&mut self, ctx: &AndExprContext<'node>) {
+        let left = self.reduce_expr(&ctx.expr(0));
+        let right = self.reduce_expr(&ctx.expr(1));
+        self._expr_stack
+            .push(Expr::And(Box::new(left), Box::new(right)));
+    }
+
+    fn visit_OrExpr(&mut self, ctx: &OrExprContext<'node>) {
+        let left = self.reduce_expr(&ctx.expr(0));
+        let right = self.reduce_expr(&ctx.expr(1));
+        self._expr_stack
+            .push(Expr::Or(Box::new(left), Box::new(right)));
+    }
+
+    fn visit_IndexExpr(&mut self, ctx: &IndexExprContext<'node>) {
+        let left = self.reduce_expr(&ctx.expr(0));
+        let right = self.reduce_expr(&ctx.expr(1));
+        self._expr_stack
+            .push(Expr::Index(Box::new(left), Box::new(right)));
+    }
+
     binary_expr!(Mul);
     binary_expr!(Div);
     binary_expr!(Add);
     binary_expr!(Sub);
-    binary_expr!(And);
-    binary_expr!(Or);
     binary_expr!(Lt);
     binary_expr!(LtE);
     binary_expr!(Gt);
     binary_expr!(GtE);
-    binary_expr!(Xor);
-    binary_expr!(Index);
-    binary_expr!(IndexRange);
-    binary_expr!(Arrow);
+    binary_expr!(Exp);
     binary_expr!(In);
 
     unary_expr!(Not);
     unary_expr!(Neg);
+
 }
 
 pub fn compile_program(program: &str) -> Result<Vec<Stmt>, anyhow::Error> {

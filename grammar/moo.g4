@@ -47,7 +47,7 @@ expr:
     |   expr '*' expr #MulExpr
     |   expr '/' expr #DivExpr
     |   expr '%' expr #ModExpr
-    |   expr '^' expr #XorExpr
+    |   expr '^' expr #ExpExpr
     |   expr '&&' expr #AndExpr
     |   expr '||' expr #OrExpr
     |   expr '==' expr #EqExpr
@@ -57,7 +57,6 @@ expr:
     |   expr '>' expr #GtExpr
     |   expr '>=' expr #GtEExpr
     |   expr 'in' expr #InExpr
-    |   expr '=>' expr #ArrowExpr
     |   '-' expr #NegExpr
     |   '!' expr #NotExpr
     |   '(' expr ')' #ParenExpr

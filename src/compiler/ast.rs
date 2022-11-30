@@ -34,13 +34,8 @@ pub enum BinaryOp {
     GtE,
     Lt,
     LtE,
-    And,
-    Or,
-    Xor,
+    Exp,
     In,
-    Arrow,
-    Index,
-    IndexRange,
 }
 
 #[derive(Debug)]
@@ -52,8 +47,10 @@ pub enum UnaryOp {
 #[derive(Debug)]
 pub enum Expr {
     VarExpr(Var),
-    Id(usize),
+    Id(Name),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
     Prop {
         location: Box<Expr>,
@@ -83,7 +80,7 @@ pub enum Expr {
         codes: Vec<Arg>,
         except: Option<Box<Expr>>,
     },
-    Expr(Box<Expr>),
+    Index(Box<Expr>, Box<Expr>),
     List(Vec<Arg>),
     Scatter(Vec<Scatter>),
     Length,
@@ -103,11 +100,6 @@ pub struct ExceptArm {
 }
 
 #[derive(Debug)]
-pub enum LoopKind {
-    While,
-}
-
-#[derive(Debug)]
 pub enum Stmt {
     Cond {
         arms: Vec<CondArm>,
@@ -123,8 +115,7 @@ pub enum Stmt {
         to: Expr,
         body: Vec<Stmt>,
     },
-    Loop {
-        kind: LoopKind,
+    While {
         id: Option<Name>,
         condition: Expr,
         body: Vec<Stmt>,

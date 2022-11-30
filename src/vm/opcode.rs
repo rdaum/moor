@@ -48,7 +48,9 @@ pub enum Op {
     Not,
     UnaryMinus,
     Ref,
+    Push(usize),
     PushRef,
+    Put(usize),
     RangeRef,
     GPut {
         id: usize,
@@ -103,10 +105,16 @@ pub enum Op {
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
+pub struct Label {
+    pub (crate) offset : usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Binary {
     pub(crate) first_lineno: usize,
     pub(crate) ref_count: usize,
     pub(crate) literals: Vec<Var>,
+    pub(crate) jump_labels: Vec<Label>,
     pub(crate) var_names: Vec<String>,
     pub(crate) main_vector: Vec<Op>,
 }

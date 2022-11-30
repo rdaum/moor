@@ -113,8 +113,9 @@ impl Activation {
         self.valstack[l - p] = v.clone()
     }
 
-    pub fn jump(&mut self, label: usize) {
-        self.pc += label;
+    pub fn jump(&mut self, label_id: usize) {
+        let label = &self.binary.jump_labels[label_id];
+        self.pc += label.offset;
     }
 
     pub fn rewind(&mut self, amt: usize) {
@@ -549,6 +550,21 @@ impl VM {
                 };
                 self.push(&l.index(index as usize));
             }
+            Op::Push(ident) => {
+                let v = self.get_env(ident);
+                match v {
+                    Var::None => {
+                        self.push(&Var::Err(E_VARNF))
+                    }
+                    _ => {
+                        self.push(&v)
+                    }
+                }
+            }
+            Op::Put(ident) => {
+                let v= self.pop();
+                self.set_env(ident, &v);
+            }
             Op::PushRef => {
                 let peek = self.peek(2);
                 let (index, list) = (peek[1].clone(), peek[0].clone());
@@ -791,7 +807,7 @@ impl VM {
                 self.push(&Var::Int(0));
             }
             Op::Continue => {
-                let (v, why) = self.pop();
+                let (v, why) = (self.pop(), self.pop());
                 let Var::Int(why) = why else {
                     panic!("Invalid type for continue marker");
                 };
@@ -809,7 +825,9 @@ impl VM {
                     }
                 }
             }
-            Op::ExitId { id } => {}
+            Op::ExitId { id } => {
+                todo!("Unimplemented op {:?}", op);
+            }
             Op::Exit => {}
             _ => {
                 panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut().pc)
