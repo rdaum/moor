@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::env::args;
 use std::fs::File;
 use std::io::BufReader;
+use bincode::config;
+use crate::compiler::codegen;
+use crate::compiler::parse::parse_program;
 
 use crate::db::sqllite::SQLiteTx;
 use crate::model::ObjDB;
@@ -15,7 +18,8 @@ use crate::model::props::{PropDefs, PropFlag, Propdef, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
-use crate::textdump::{Object, TextdumpReader};
+use crate::textdump::{Object, TextdumpReader, Verb};
+use crate::vm::opcode::Binary;
 
 pub mod compiler;
 mod db;
@@ -143,7 +147,7 @@ fn main() {
     println!("Set props\nDefining verbs...");
     // Pass 4 define verbs
     for (objid, o) in &td.objects {
-        for v in &o.verbdefs {
+        for (vn, v) in o.verbdefs.iter().enumerate() {
             let mut flags: EnumSet<VerbFlag> = EnumSet::new();
             let permflags = v.flags & VF_PERMMASK;
             if permflags & VF_READ != 0 {
@@ -165,8 +169,33 @@ fn main() {
             };
 
             let names = v.name.split(" ").collect();
-            // TODO compile to bytecode and stick here
+
+            let verb = match td.verbs.get(&(*objid, vn)) {
+                None => {
+                    println!("Could not find verb #{}/{} ({:?}", objid.0, vn, names);
+                    continue;
+                }
+                Some(v) => {v}
+            };
+
+            let ast = parse_program(verb.program.as_str()).expect("Could not parse");
+            let mut cg_state = codegen::State::new();
+            for x in ast {
+                cg_state.generate_stmt(&x).expect("Could not codegen");
+            }
+
+            // let binary = Binary {
+            //     first_lineno: 0,
+            //     ref_count: 0,
+            //     literals: cg_state.literals,
+            //     jump_labels: cg_state.jumps.iter().map(|jl| {
+            //         jl.id
+            //     }).collect(),
+            //     var_names: cg_state.vars.iter().map(|vn| vn.name.0).collect(),
+            //     main_vector: cg_state.ops,
+            // };
             let prg = bytes::Bytes::new();
+            // bincode::serde::encode_into_writer(binary, &prg, config::standard()).expect("Could not serialize program");
             s.add_verb(
                 *objid,
                 names,

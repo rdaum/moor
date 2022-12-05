@@ -1,6 +1,6 @@
 use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
-    Arg, BinaryOp, CondArm, ExceptArm, Expr, LoopKind, Scatter, ScatterKind, Stmt, UnaryOp,
+    Arg, BinaryOp, CondArm, ExceptArm, Expr, Scatter, ScatterKind, Stmt, UnaryOp,
 };
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
@@ -301,13 +301,14 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     fn visit_ForExpr(&mut self, ctx: &ForExprContext<'node>) {
         let id = Self::get_id(&ctx.ID());
         self.push_loop_name(Some(&id));
-        let _name = self.find_id(&id);
+        let id = self.find_id(&id);
 
         let expr_node = self.reduce_expr(&ctx.expr());
 
         let body = self.reduce_statements(&ctx.statements());
 
-        let stmt = Stmt::List {
+        let stmt = Stmt::ForList {
+            id,
             expr: expr_node,
             body,
         };
@@ -324,7 +325,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let to = self.reduce_expr(&ctx.to);
 
         let body = self.reduce_statements(&ctx.statements());
-        let stmt = Stmt::Range { id, from, to, body };
+        let stmt = Stmt::ForRange { id, from, to, body };
         self.pop_loop_name();
         self._statement_stack.last_mut().unwrap().push(stmt);
     }
@@ -696,6 +697,10 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             .push(Expr::Index(Box::new(left), Box::new(right)));
     }
 
+    fn visit_This(&mut self, ctx: &ThisContext<'node>) {
+        self._expr_stack.push(Expr::This);
+    }
+
     binary_expr!(Mul);
     binary_expr!(Div);
     binary_expr!(Add);
@@ -710,9 +715,10 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     unary_expr!(Not);
     unary_expr!(Neg);
 
+
 }
 
-pub fn compile_program(program: &str) -> Result<Vec<Stmt>, anyhow::Error> {
+pub fn parse_program(program: &str) -> Result<Vec<Stmt>, anyhow::Error> {
     let is = InputStream::new(program);
     let lexer = mooLexer::new(is);
     let source = CommonTokenStream::new(lexer);

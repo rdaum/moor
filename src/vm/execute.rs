@@ -300,7 +300,7 @@ impl VM {
             Op::Jump { label } => {
                 self.jump(label);
             }
-            Op::WhileId { id , label} => {
+            Op::WhileId { id, label } => {
                 self.set_env(id, &self.peek_top());
                 let cond = self.pop();
                 if cond.is_true() {
@@ -553,16 +553,12 @@ impl VM {
             Op::Push(ident) => {
                 let v = self.get_env(ident);
                 match v {
-                    Var::None => {
-                        self.push(&Var::Err(E_VARNF))
-                    }
-                    _ => {
-                        self.push(&v)
-                    }
+                    Var::None => self.push(&Var::Err(E_VARNF)),
+                    _ => self.push(&v),
                 }
             }
             Op::Put(ident) => {
-                let v= self.pop();
+                let v = self.pop();
                 self.set_env(ident, &v);
             }
             Op::PushRef => {
@@ -745,6 +741,9 @@ impl VM {
                     return Ok(());
                 }
             }
+            Op::This => {
+                self.push(&Var::Obj(self.top().this) );
+            }
 
             Op::Fork { id, f_index } => {}
             Op::CallVerb => {
@@ -806,29 +805,12 @@ impl VM {
                 self.push(&Var::Int(FINALLY_FALLTHROUGH));
                 self.push(&Var::Int(0));
             }
-            Op::Continue => {
-                let (v, why) = (self.pop(), self.pop());
-                let Var::Int(why) = why else {
-                    panic!("Invalid type for continue marker");
-                };
-
-                match why {
-                    FINALLY_FALLTHROUGH => { // do nothing, normal case
-                    },
-                    FINALLY_EXIT | FINALLY_RAISE | FINALLY_RETURN | FINALLY_UNCAUGHT => {
-                        // store variables
-                        // if unwind stack return outcome
-                        // load variables
-                    }
-                    _ => {
-                        panic!("Continue marker contains unknown FINALLY reason")
-                    }
-                }
+            Op::Continue(end_label) => {
+                unimplemented!("continue")
             }
-            Op::ExitId { id } => {
-                todo!("Unimplemented op {:?}", op);
+            Op::Break(end_label) => {
+                unimplemented!("break")
             }
-            Op::Exit => {}
             _ => {
                 panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut().pc)
             }

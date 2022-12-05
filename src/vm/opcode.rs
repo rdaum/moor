@@ -93,15 +93,13 @@ pub enum Op {
     EndCatch(usize),
     EndExcept(usize),
     EndFinally,
-    Continue,
     WhileId {
         id: usize,
         label: usize,
     },
-    ExitId {
-        id: usize,
-    },
-    Exit,
+    Continue(usize),
+    Break(usize),
+    This,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq)]

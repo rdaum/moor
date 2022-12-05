@@ -84,6 +84,7 @@ pub enum Expr {
     List(Vec<Arg>),
     Scatter(Vec<Scatter>),
     Length,
+    This,
 }
 
 #[derive(Debug)]
@@ -105,11 +106,12 @@ pub enum Stmt {
         arms: Vec<CondArm>,
         otherwise: Vec<Stmt>,
     },
-    List {
+    ForList {
+        id: Name,
         expr: Expr,
         body: Vec<Stmt>,
     },
-    Range {
+    ForRange {
         id: Name,
         from: Expr,
         to: Expr,

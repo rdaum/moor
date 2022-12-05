@@ -5,9 +5,10 @@ use crate::vm::opcode::{Binary, Op};
 use itertools::Itertools;
 
 // Fixup for a jump label
-struct JumpLabel {
+#[derive(Clone)]
+pub struct JumpLabel {
     // The unique id for the jump label, which is also its offset in the jump vector.
-    id: usize,
+    pub(crate) id: usize,
 
     // If there's a unique identifier assigned to this label, it goes here.
     label: Option<Name>,
@@ -17,19 +18,22 @@ struct JumpLabel {
 }
 
 // References to vars using the name idx.
-struct VarRef {
-    id: usize,
-    name: Name,
+pub struct VarRef {
+    pub(crate) id: usize,
+    pub(crate) name: Name,
 }
 
-struct State {
-    ops: Vec<Op>,
-    jumps: Vec<JumpLabel>,
-    vars: Vec<VarRef>,
-    literals: Vec<Var>,
-    cur_stack: usize,
-    saved_stack: usize,
-    loops: Vec<Loop>,
+pub struct Loop {
+    start_label: usize,
+    end_label: usize
+}
+
+pub struct State {
+    pub (crate) ops: Vec<Op>,
+    pub (crate) jumps: Vec<JumpLabel>,
+    pub (crate) vars: Vec<VarRef>,
+    pub (crate) literals: Vec<Var>,
+    pub (crate) loops: Vec<Loop>,
 }
 
 impl State {}
@@ -41,8 +45,6 @@ impl State {
             jumps: vec![],
             vars: vec![],
             literals: vec![],
-            cur_stack: 0,
-            saved_stack: 0,
             loops: vec![],
         }
     }
@@ -53,14 +55,6 @@ impl State {
         }
 
         todo!()
-    }
-
-    fn push_stack(&mut self, n: usize) {
-        self.cur_stack += n
-    }
-
-    fn pop_stack(&mut self, n: usize) {
-        self.cur_stack -= n
     }
 
     // Create an anonymous jump label and return its unique ID.
@@ -75,8 +69,8 @@ impl State {
         id
     }
 
-    fn find_named_jump(&self, name: &Name) -> Option<JumpLabel> {
-        self.jumps.into_iter().find(|j| {
+    fn find_named_jump(&self, name: &Name) -> Option<&JumpLabel> {
+        self.jumps.iter().find(|j| {
             if let Some(label) = j.label {
                 label.eq(name)
             } else {
@@ -123,46 +117,44 @@ impl State {
         self.ops.push(op);
     }
 
-    fn save_stack_top(&mut self) -> usize {
-        let old = self.saved_stack;
-        self.saved_stack = self.cur_stack - 1;
-        old
-    }
-
-    fn restore_stack_top(&mut self, old: usize) {
-        self.saved_stack = old;
+    fn find_loop(&self, loop_label: &Option<Name>) -> &Loop {
+        match loop_label {
+            None => {
+                let l = self.loops.last().expect("No loop to exit in codegen");
+                l
+            }
+            Some(eid) => {
+                let l = self.loops.iter().find(|l| {
+                    l.start_label == eid.0
+                });
+                l.expect("Can't find loop in continue / break")
+            }
+        }
     }
 
     fn generate_lvalue(&mut self, expr: &Expr, indexed_above: bool) -> Result<(), anyhow::Error> {
         match expr {
             Expr::Range { from, base, to } => {
                 self.generate_lvalue(base.as_ref(), true)?;
-                let old = self.save_stack_top();
                 self.generate_expr(from.as_ref())?;
                 self.generate_expr(to.as_ref())?;
-                self.restore_stack_top(old);
             }
             Expr::Index(lhs, rhs) => {
                 self.generate_lvalue(lhs.as_ref(), true)?;
-                let old = self.save_stack_top();
                 self.generate_expr(rhs.as_ref())?;
-                self.restore_stack_top(old);
                 if indexed_above {
                     self.emit(Op::PushRef);
-                    self.push_stack(1);
                 }
             }
             Expr::Id(id) => {
                 let v = self.add_var_ref(id);
                 self.emit(Op::Push(v));
-                self.push_stack(1);
             }
             Expr::Prop { property, location } => {
                 self.generate_expr(location.as_ref())?;
                 self.generate_expr(property.as_ref())?;
                 if indexed_above {
                     self.emit(Op::PushGetProp);
-                    self.push_stack(1);
                 }
             }
             _ => {
@@ -176,7 +168,6 @@ impl State {
             Expr::VarExpr(v) => {
                 let literal = self.add_literal(v);
                 self.emit(Op::Imm(literal));
-                self.push_stack(1);
             }
             Expr::Id(ident) => {
                 let ident = self.add_var_ref(ident);
@@ -201,7 +192,6 @@ impl State {
                     BinaryOp::In => Op::In,
                 };
                 self.emit(binop);
-                self.pop_stack(1);
             }
             Expr::Index(lhs, rhs) => {}
             Expr::Unary(op, expr) => {
@@ -215,7 +205,6 @@ impl State {
                 self.generate_expr(location.as_ref())?;
                 self.generate_expr(property.as_ref())?;
                 self.emit(Op::GetProp);
-                self.pop_stack(1);
             }
             Expr::Call { .. } => {}
             Expr::Verb { .. } => {}
@@ -229,7 +218,6 @@ impl State {
                 self.generate_expr(left.as_ref())?;
                 let label = self.add_jump(None);
                 self.emit(Op::And(label));
-                self.pop_stack(1);
                 self.generate_expr(right.as_ref())?;
                 self.commit_jump_fixup(label);
             }
@@ -237,77 +225,60 @@ impl State {
                 self.generate_expr(left.as_ref())?;
                 let label = self.add_jump(None);
                 self.emit(Op::Or(label));
-                self.pop_stack(1);
                 self.generate_expr(right.as_ref())?;
                 self.commit_jump_fixup(label);
+            }
+            Expr::This => {
+                self.emit(Op::This)
             }
         }
 
         Ok(())
     }
 
-    fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
+    pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
         match stmt {
             Stmt::Cond { arms, otherwise } => {}
-            Stmt::List { .. } => {}
-            Stmt::Range { .. } => {}
+            Stmt::ForList { .. } => {}
+            Stmt::ForRange { .. } => {}
             Stmt::While {
                 id,
                 condition,
                 body,
             } => {
-                let loop_label = self.add_jump(*id);
+                let loop_start_label = self.add_jump(*id);
                 // Push condition ops
-                self.generate_expr(condition).as_ref()?;
+                self.generate_expr(condition).as_ref().expect("compile expr");
                 match id {
                     None => {
-                        self.emit(Op::While(loop_label))
+                        self.emit(Op::While(loop_start_label))
                     }
                     Some(id) => {
                         let vr = self.add_var_ref(id);
-                        self.emit(Op::WhileId {id: id.0, label: loop_label})
+                        self.emit(Op::WhileId {id: id.0, label: loop_start_label })
                     }
                 }
-                let end_label = self.add_jump(None);
-                self.pop_stack(1);
-                self.enter_loop(loop_label);
-
+                let loop_end_label = self.add_jump(None);
+                self.loops.push(Loop {
+                    start_label: loop_start_label,
+                    end_label: loop_end_label,
+                });
             }
             Stmt::Fork { .. } => {}
             Stmt::Catch { .. } => {}
             Stmt::Finally { .. } => {}
-            Stmt::Break { exit } | Stmt::Continue { exit } => {
-                let lp = match exit {
-                    None => {
-                        self.emit(Op::Exit);
-                        let l = self.loops.last_mut().expect("No loop to exit in codegen");
-                        l
-                    }
-                    Some(eid) => {
-                        let loop_label = self.add_var_ref(eid);
-                        self.emit(Op::ExitId { id: loop_label });
-                        let l = self
-                            .loops
-                            .iter_mut()
-                            .find(|l| l.id == eid.0)
-                            .expect("Can't find loop in CONTINUE_LOOP");
-                        l
-                    }
-                };
-
-                if let Stmt::Continue { .. } = stmt {
-                    self.add_stack_ref(lp.top_stack);
-                    self.add_known_label(lp.top_label);
-                } else {
-                    self.add_stack_ref(lp.bottom_stack);
-                    lp.bottom_label = self.add_linked_label(lp.bottom_label);
-                }
+            Stmt::Break { exit } => {
+                let lp = self.find_loop(exit);
+                self.emit(Op::Break(lp.end_label));
+            }
+            Stmt::Continue { exit } => {
+                let lp = self.find_loop(exit);
+                self.emit(Op::Continue(lp.start_label));
             }
             Stmt::Return { expr } => match expr {
                 Some(expr) => {
                     self.generate_expr(expr)?;
                     self.emit(Op::Return);
-                    self.pop_stack(1);
                 }
                 None => {
                     self.emit(Op::Return);
@@ -316,7 +287,6 @@ impl State {
             Stmt::Expr(e) => {
                 self.generate_expr(e)?;
                 self.emit(Op::Pop);
-                self.pop_stack(1);
             }
             Stmt::Exit(_) => {}
         }

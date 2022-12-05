@@ -32,7 +32,8 @@ literal:
     |   STRING #String
     |   OBJECT #Object
     |   ERROR #Error
-    |   ID #Identifier;
+    |   ID #Identifier
+    |   'this' #This;
 
 
 expr:

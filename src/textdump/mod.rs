@@ -62,7 +62,7 @@ pub struct Textdump {
     pub version: String,
     pub objects: HashMap<Objid, Object>,
     pub users: Vec<Objid>,
-    pub verbs: Vec<Verb>,
+    pub verbs: HashMap<(Objid, usize), Verb>,
 }
 
 impl<R: Read> TextdumpReader<R> {
@@ -218,6 +218,7 @@ impl<R: Read> TextdumpReader<R> {
                 });
             }
             program.push_str(line.as_str());
+            program.push('\n');
         }
     }
 
@@ -246,10 +247,10 @@ impl<R: Read> TextdumpReader<R> {
         }
 
         println!("Reading verbs...");
-        let mut verbs = Vec::with_capacity(nprogs);
+        let mut verbs = HashMap::with_capacity(nprogs);
         for _p in 0..nprogs {
             let verb = self.read_verb()?;
-            verbs.push(verb);
+            verbs.insert((verb.objid, verb.verbnum), verb);
         }
 
         Ok(Textdump {
