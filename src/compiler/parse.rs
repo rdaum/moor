@@ -715,8 +715,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     unary_expr!(Not);
     unary_expr!(Neg);
-
-
 }
 
 pub struct Parse {
