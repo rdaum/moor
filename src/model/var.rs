@@ -66,6 +66,7 @@ macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Var {
             match (self, v) {
+                (Var::Float(l), Var::Float(r)) => Var::Float(l.$op(*r)),
                 (Var::Int(l), Var::Int(r)) => Var::Int(l.$op(r)),
                 (Var::Float(l), Var::Int(r)) => Var::Float(l.$op(*r as f64)),
                 (Var::Int(l), Var::Float(r)) => {
@@ -103,6 +104,9 @@ impl Var {
 
     pub fn add(&self, v:&Var) -> Var {
         match (self, v) {
+            (Var::Float(l), Var::Float(r)) => {
+                Var::Float(*l + *r)
+            }
             (Var::Int(l), Var::Int(r)) => Var::Int(l + r),
             (Var::Float(l), Var::Int(r)) => {
                 Var::Float(*l + (*r as f64))
@@ -122,6 +126,9 @@ impl Var {
 
     pub fn modulus(&self, v:&Var) -> Var {
         match (self, v) {
+            (Var::Float(l), Var::Float(r)) => {
+                Var::Float(*l % *r)
+            }
             (Var::Int(l), Var::Int(r)) => Var::Int(l % r),
             (Var::Float(l), Var::Int(r)) => {
                 Var::Float(*l % (*r as f64))
@@ -138,6 +145,9 @@ impl Var {
     // TODO this likely does not match MOO's impl, which is ... custom. but may not matter.
     pub fn pow(&self, v:&Var) -> Var {
         match (self, v) {
+            (Var::Float(l), Var::Float(r)) => {
+                Var::Float(l.powf(*r))
+            }
             (Var::Int(l), Var::Int(r)) => Var::Int(l.pow(*r as u32)),
             (Var::Float(l), Var::Int(r)) => {
                 Var::Float(l.powi(*r as i32))
@@ -171,7 +181,7 @@ impl Var {
                 }
             }
             Var::Str(s) => {
-                match s.get(idx..idx) {
+                match s.get(idx..idx+1) {
                     None =>Var::Err(E_RANGE),
                     Some(v) => {
                         Var::Str(String::from(v))
@@ -180,5 +190,77 @@ impl Var {
             }
             _ => Var::Err(E_TYPE)
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        assert_eq!(Var::Int(1).add(&Var::Int(2)), Var::Int(3));
+        assert_eq!(Var::Int(1).add(&Var::Float(R64::from(2.0))), Var::Float(R64::from(3.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).add(&Var::Int(2)), Var::Float(R64::from(3.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).add(&Var::Float(R64::from(2.0))), Var::Float(R64::from(3.0)));
+        assert_eq!(Var::Str(String::from("a")).add(&Var::Str(String::from("b"))), Var::Str(String::from("ab")));
+    }
+
+    #[test]
+    fn test_sub() {
+        assert_eq!(Var::Int(1).sub(&Var::Int(2)), Var::Int(-1));
+        assert_eq!(Var::Int(1).sub(&Var::Float(R64::from(2.0))), Var::Float(R64::from(-1.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).sub(&Var::Int(2)), Var::Float(R64::from(-1.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).sub(&Var::Float(R64::from(2.0))), Var::Float(R64::from(-1.0)));
+    }
+
+    #[test]
+    fn test_mul() {
+        assert_eq!(Var::Int(1).mul(&Var::Int(2)), Var::Int(2));
+        assert_eq!(Var::Int(1).mul(&Var::Float(R64::from(2.0))), Var::Float(R64::from(2.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).mul(&Var::Int(2)), Var::Float(R64::from(2.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).mul(&Var::Float(R64::from(2.0))), Var::Float(R64::from(2.0)));
+    }
+
+    #[test]
+    fn test_div() {
+        assert_eq!(Var::Int(1).div(&Var::Int(2)), Var::Int(0));
+        assert_eq!(Var::Int(1).div(&Var::Float(R64::from(2.0))), Var::Float(R64::from(0.5)));
+        assert_eq!(Var::Float(R64::from(1.0)).div(&Var::Int(2)), Var::Float(R64::from(0.5)));
+        assert_eq!(Var::Float(R64::from(1.0)).div(&Var::Float(R64::from(2.0))), Var::Float(R64::from(0.5)));
+    }
+
+    #[test]
+    fn test_modulus() {
+        assert_eq!(Var::Int(1).modulus(&Var::Int(2)), Var::Int(1));
+        assert_eq!(Var::Int(1).modulus(&Var::Float(R64::from(2.0))), Var::Float(R64::from(1.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).modulus(&Var::Int(2)), Var::Float(R64::from(1.0)));
+        assert_eq!(Var::Float(R64::from(1.0)).modulus(&Var::Float(R64::from(2.0))), Var::Float(R64::from(1.0)));
+    }
+
+    #[test]
+    fn test_pow() {
+        assert_eq!(Var::Int(1).pow(&Var::Int(2)), Var::Int(1));
+        assert_eq!(Var::Int(2).pow(&Var::Int(2)), Var::Int(4));
+        assert_eq!(Var::Int(2).pow(&Var::Float(R64::from(2.0))), Var::Float(R64::from(4.0)));
+        assert_eq!(Var::Float(R64::from(2.0)).pow(&Var::Int(2)), Var::Float(R64::from(4.0)));
+        assert_eq!(Var::Float(R64::from(2.0)).pow(&Var::Float(R64::from(2.0))), Var::Float(R64::from(4.0)));
+    }
+
+    #[test]
+    fn test_negative() {
+        assert_eq!(Var::Int(1).negative(), Var::Int(-1));
+        assert_eq!(Var::Float(R64::from(1.0)).negative(), Var::Float(R64::from(-1.0)));
+    }
+
+    #[test]
+    fn test_index() {
+        assert_eq!(Var::List(vec![Var::Int(1), Var::Int(2)]).index(0), Var::Int(1));
+        assert_eq!(Var::List(vec![Var::Int(1), Var::Int(2)]).index(1), Var::Int(2));
+        assert_eq!(Var::List(vec![Var::Int(1), Var::Int(2)]).index(2), Var::Err(E_RANGE));
+        assert_eq!(Var::Str(String::from("ab")).index(0), Var::Str(String::from("a")));
+        assert_eq!(Var::Str(String::from("ab")).index(1), Var::Str(String::from("b")));
+        assert_eq!(Var::Str(String::from("ab")).index(2), Var::Err(E_RANGE));
     }
 }
