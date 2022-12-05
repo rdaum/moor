@@ -115,7 +115,7 @@ impl Activation {
 
     pub fn jump(&mut self, label_id: usize) {
         let label = &self.binary.jump_labels[label_id];
-        self.pc += label.offset;
+        self.pc += label.position;
     }
 
     pub fn rewind(&mut self, amt: usize) {

@@ -6,9 +6,10 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::env::args;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, BufWriter};
 use bincode::config;
 use crate::compiler::codegen;
+use crate::compiler::codegen::compile;
 use crate::compiler::parse::parse_program;
 
 use crate::db::sqllite::SQLiteTx;
@@ -19,7 +20,7 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
 use crate::textdump::{Object, TextdumpReader, Verb};
-use crate::vm::opcode::Binary;
+use crate::vm::opcode::{Binary, Label};
 
 pub mod compiler;
 mod db;
@@ -178,31 +179,16 @@ fn main() {
                 Some(v) => {v}
             };
 
-            let ast = parse_program(verb.program.as_str()).expect("Could not parse");
-            let mut cg_state = codegen::State::new();
-            for x in ast {
-                cg_state.generate_stmt(&x).expect("Could not codegen");
-            }
+            let binary = compile(verb.program.as_str()).expect("could not compile");
 
-            // let binary = Binary {
-            //     first_lineno: 0,
-            //     ref_count: 0,
-            //     literals: cg_state.literals,
-            //     jump_labels: cg_state.jumps.iter().map(|jl| {
-            //         jl.id
-            //     }).collect(),
-            //     var_names: cg_state.vars.iter().map(|vn| vn.name.0).collect(),
-            //     main_vector: cg_state.ops,
-            // };
-            let prg = bytes::Bytes::new();
-            // bincode::serde::encode_into_writer(binary, &prg, config::standard()).expect("Could not serialize program");
+            let prg = bincode::serde::encode_to_vec(binary, config::standard()).expect("Could not serialize program");
             s.add_verb(
                 *objid,
                 names,
                 v.owner,
                 flags,
                 argspec,
-                Program(prg),
+                Program(bytes::Bytes::from(prg)),
             )
             .unwrap();
         }

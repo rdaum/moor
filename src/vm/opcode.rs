@@ -2,6 +2,7 @@ use crate::model::var::{Objid, Var};
 use crate::model::verbs::Program;
 use anyhow::anyhow;
 use serde_derive::{Deserialize, Serialize};
+use crate::compiler::codegen::JumpLabel;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub enum Op {
@@ -112,7 +113,7 @@ pub struct Binary {
     pub(crate) first_lineno: usize,
     pub(crate) ref_count: usize,
     pub(crate) literals: Vec<Var>,
-    pub(crate) jump_labels: Vec<Label>,
+    pub(crate) jump_labels: Vec<JumpLabel>,
     pub(crate) var_names: Vec<String>,
     pub(crate) main_vector: Vec<Op>,
 }

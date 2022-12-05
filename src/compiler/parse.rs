@@ -20,6 +20,7 @@ use paste::paste;
 use std::rc::Rc;
 use std::str::FromStr;
 use decorum::R64;
+use serde_derive::{Deserialize, Serialize};
 
 pub struct VerbCompileErrorListener {
     pub program: String,
@@ -49,7 +50,7 @@ struct LoopEntry {
     is_barrier: bool,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Name(pub usize);
 pub struct Names {
     pub names: Vec<String>,
@@ -718,7 +719,12 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
 }
 
-pub fn parse_program(program: &str) -> Result<Vec<Stmt>, anyhow::Error> {
+pub struct Parse {
+    pub stmts: Vec<Stmt>,
+    pub names: Names,
+}
+
+pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
     let is = InputStream::new(program);
     let lexer = mooLexer::new(is);
     let source = CommonTokenStream::new(lexer);
@@ -734,5 +740,9 @@ pub fn parse_program(program: &str) -> Result<Vec<Stmt>, anyhow::Error> {
 
     let mut astgen_visitor = ASTGenVisitor::new();
     program_context.accept(&mut astgen_visitor);
-    Ok(astgen_visitor.program)
+
+    Ok(Parse {
+        stmts: astgen_visitor.program,
+        names: astgen_visitor.names,
+    })
 }

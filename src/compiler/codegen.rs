@@ -1,11 +1,13 @@
+use itertools::Itertools;
+use serde_derive::{Deserialize, Serialize};
+
 use crate::compiler::ast::{BinaryOp, Expr, Stmt, UnaryOp};
-use crate::compiler::parse::Name;
+use crate::compiler::parse::{Name, Names, parse_program};
 use crate::model::var::Var;
 use crate::vm::opcode::{Binary, Op};
-use itertools::Itertools;
 
 // Fixup for a jump label
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct JumpLabel {
     // The unique id for the jump label, which is also its offset in the jump vector.
     pub(crate) id: usize,
@@ -14,7 +16,7 @@ pub struct JumpLabel {
     label: Option<Name>,
 
     // The temporary and then final resolved position of the label in terms of PC offsets.
-    position: usize,
+    pub(crate) position: usize,
 }
 
 // References to vars using the name idx.
@@ -31,7 +33,7 @@ pub struct Loop {
 pub struct State {
     pub (crate) ops: Vec<Op>,
     pub (crate) jumps: Vec<JumpLabel>,
-    pub (crate) vars: Vec<VarRef>,
+    pub (crate) varnames: Names,
     pub (crate) literals: Vec<Var>,
     pub (crate) loops: Vec<Loop>,
 }
@@ -39,11 +41,11 @@ pub struct State {
 impl State {}
 
 impl State {
-    pub fn new() -> Self {
+    pub fn new(varnames: Names) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
-            vars: vec![],
+            varnames,
             literals: vec![],
             loops: vec![],
         }
@@ -98,21 +100,6 @@ impl State {
         }
     }
 
-    fn add_var_ref(&mut self, n: &Name) -> usize {
-        let vr_pos = self.vars.iter().position(|vr| return vr.name.eq(n));
-        match vr_pos {
-            None => {
-                let idx = self.literals.len();
-                self.vars.push(VarRef {
-                    id: idx,
-                    name: n.clone(),
-                });
-                idx
-            }
-            Some(idx) => idx,
-        }
-    }
-
     fn emit(&mut self, op: Op) {
         self.ops.push(op);
     }
@@ -147,8 +134,7 @@ impl State {
                 }
             }
             Expr::Id(id) => {
-                let v = self.add_var_ref(id);
-                self.emit(Op::Push(v));
+                self.emit(Op::Push(id.0));
             }
             Expr::Prop { property, location } => {
                 self.generate_expr(location.as_ref())?;
@@ -170,8 +156,7 @@ impl State {
                 self.emit(Op::Imm(literal));
             }
             Expr::Id(ident) => {
-                let ident = self.add_var_ref(ident);
-                self.emit(Op::Push(ident))
+                self.emit(Op::Push(ident.0))
             }
             Expr::Binary(op, l, r) => {
                 self.generate_expr(l)?;
@@ -254,7 +239,6 @@ impl State {
                         self.emit(Op::While(loop_start_label))
                     }
                     Some(id) => {
-                        let vr = self.add_var_ref(id);
                         self.emit(Op::WhileId {id: id.0, label: loop_start_label })
                     }
                 }
@@ -292,5 +276,59 @@ impl State {
         }
 
         Ok(())
+    }
+}
+
+pub fn compile(program : &str) -> Result<Binary, anyhow::Error> {
+    let parse = parse_program(program)?;
+    let mut cg_state = State::new(parse.names);
+    for x in parse.stmts{
+        cg_state.generate_stmt(&x)?;
+    }
+
+    let binary = Binary {
+        first_lineno: 0,
+        ref_count: 0,
+        literals: cg_state.literals,
+        jump_labels: cg_state.jumps,
+        var_names: cg_state.varnames.names,
+        main_vector: cg_state.ops
+    };
+
+    Ok(binary)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::vm::opcode::Op;
+
+    use super::*;
+
+    #[test]
+    fn test_compile_simple_expr() {
+        let program = "1 + 2;";
+        let parse = compile(program).unwrap();
+        assert_eq!(parse.main_vector, vec![Op::Imm(0), Op::Imm(1), Op::Add, Op::Pop]);
+    }
+
+    #[test]
+    fn test_compile_simple_expr_with_var() {
+        let program = "a = 1 + 2;";
+        let parse = compile(program).unwrap();
+        assert_eq!(parse.main_vector, vec![Op::Imm(0), Op::Imm(1), Op::Add, Op::Pop]);
+    }
+
+    #[test]
+    fn test_compile_simple_expr_with_var_and_assign() {
+        let program = "a = 1 + 2;";
+        let parse = compile(program).unwrap();
+        assert_eq!(parse.main_vector, vec![Op::Imm(0), Op::Imm(1), Op::Add, Op::Pop]);
+    }
+
+    #[test]
+    fn test_compile_simple_expr_with_var_and_assign_and_return() {
+        let program = "a = 1 + 2; return a;";
+        let parse = compile(program).unwrap();
+        assert_eq!(parse.main_vector, vec![Op::Imm(0), Op::Imm(1), Op::Add, Op::Pop, Op::Push(0), Op::Return]);
     }
 }
