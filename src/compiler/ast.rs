@@ -47,6 +47,7 @@ pub enum UnaryOp {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Expr {
     Assign{left: Box<Expr>, right :Box<Expr>},
+
     VarExpr(Var),
     Id(Name),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),

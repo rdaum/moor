@@ -745,6 +745,8 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     binary_expr!(GtE);
     binary_expr!(Exp);
     binary_expr!(In);
+    binary_expr!(Eq);
+    binary_expr!(NEq);
 
     unary_expr!(Not);
     unary_expr!(Neg);
@@ -780,7 +782,7 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt};
+    use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, Stmt};
     use crate::compiler::parse::{parse_program, Name};
     use crate::model::var::Var;
 
@@ -803,24 +805,68 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_for_loop() {
-        let program ="for x in ({1,2,3}) b = x + 5; endfor";
+    fn test_parse_if_stmt() {
+        let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
         let parse = parse_program(program).unwrap();
         assert_eq!(parse.stmts.len(), 1);
-        assert_eq!(parse.stmts[0],
-        Stmt::ForList {
-            id: Name(0),
-            expr: Expr::List(vec![Arg::Normal(Expr::VarExpr(Var::Int(1))), Arg::Normal(Expr::VarExpr(Var::Int(2))), Arg::Normal(Expr::VarExpr(Var::Int(3)))]),
-            body: vec![
-                Stmt::Expr(Expr::Assign {
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::Cond {
+                arms: vec![CondArm {
+                    condition: Expr::Binary(
+                        BinaryOp::Eq,
+                        Box::new(Expr::VarExpr(Var::Int(1))),
+                        Box::new(Expr::VarExpr(Var::Int(2)))
+                    ),
+                    statements: vec![Stmt::Return {
+                        expr: Some(Expr::VarExpr(Var::Int(5))),
+                    }],
+                },
+                CondArm {
+                    condition: Expr::Binary(
+                        BinaryOp::Eq,
+                        Box::new(Expr::VarExpr(Var::Int(2))),
+                        Box::new(Expr::VarExpr(Var::Int(3)))
+                    ),
+                    statements: vec![
+                        Stmt::Return {
+                            expr: Some(Expr::VarExpr(Var::Int(3))),
+                        }
+                    ],
+                }],
+
+                otherwise: vec![
+                    Stmt::Return {
+                        expr: Some(Expr::VarExpr(Var::Int(6))),
+                    }
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_for_loop() {
+        let program = "for x in ({1,2,3}) b = x + 5; endfor";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::ForList {
+                id: Name(0),
+                expr: Expr::List(vec![
+                    Arg::Normal(Expr::VarExpr(Var::Int(1))),
+                    Arg::Normal(Expr::VarExpr(Var::Int(2))),
+                    Arg::Normal(Expr::VarExpr(Var::Int(3)))
+                ]),
+                body: vec![Stmt::Expr(Expr::Assign {
                     left: Box::new(Expr::Id(Name(1))),
                     right: Box::new(Expr::Binary(
                         BinaryOp::Add,
                         Box::new(Expr::Id(Name(0))),
                         Box::new(Expr::VarExpr(Var::Int(5)))
                     ))
-                })
-            ]
-        })
+                })]
+            }
+        )
     }
 }

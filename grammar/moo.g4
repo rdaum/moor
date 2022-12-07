@@ -51,7 +51,7 @@ expr:
     |   expr '&&' expr #AndExpr
     |   expr '||' expr #OrExpr
     |   expr '==' expr #EqExpr
-    |   expr '!=' expr #NeExpr
+    |   expr '!=' expr #NEqExpr
     |   expr '<' expr #LtExpr
     |   expr '<=' expr #LtEExpr
     |   expr '>' expr #GtExpr
