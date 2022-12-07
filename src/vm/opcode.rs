@@ -23,6 +23,7 @@ pub enum Op {
         label: usize,
     },
     Pop,
+    Val(Var),
     Imm(usize),
     MkEmptyList,
     ListAddTail,

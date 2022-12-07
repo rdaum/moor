@@ -375,6 +375,9 @@ impl VM {
             Op::Pop => {
                 self.pop();
             }
+            Op::Val(val) => {
+                self.push(&val);
+            }
             Op::Imm(slot) => {
                 // Peek ahead to see if the next operation is 'pop' and if so, just throw away.
                 // MOO uses this to optimize verbdoc/comments, etc.

@@ -77,7 +77,7 @@ impl State {
     fn commit_jump_fixup(&mut self, id: usize) {
         let position = self.ops.len();
         let jump = &mut self.jumps.get_mut(id).expect("Invalid jump fixup");
-        let npos = position - jump.position;
+        let npos = position;
         jump.position = npos;
     }
 
@@ -302,7 +302,19 @@ impl State {
     pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
         match stmt {
             Stmt::Cond { arms, otherwise } => {}
-            Stmt::ForList { .. } => {}
+            Stmt::ForList { id, expr, body } => {
+                self.generate_expr(expr)?;
+                self.emit(Op::Val(Var::Int(1))); /* loop list index... */
+                let loop_top = self.add_jump(None);
+                self.commit_jump_fixup(loop_top);
+                let end_label = self.add_jump(None);
+                self.emit(Op::ForList { id: id.0, label: end_label });
+                for stmt in body {
+                    self.generate_stmt(stmt)?;
+                }
+                self.emit(Op::Jump{label:loop_top});
+                self.commit_jump_fixup(end_label);
+            }
             Stmt::ForRange { .. } => {}
             Stmt::While {
                 id,
@@ -414,7 +426,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compile_simple_expr() {
+    fn test_simple_add_expr() {
         let program = "1 + 2;";
         let parse = compile(program).unwrap();
         assert_eq!(
@@ -424,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_simple_expr_with_var() {
+    fn test_var_assign_expr() {
         /*
         "=================", "[Bytes for labels = 1, literals = 1, forks = 1, variables = 1,
 stack refs = 1]", "[Maximum stack size = 2]",
@@ -436,10 +448,7 @@ stack refs = 1]", "[Maximum stack size = 2]",
     "  5: 123 NUM 0",
     "  6: 030 010 * AND 10",
          */
-
         let program = "a = 1 + 2;";
-        let parse = parse_program(program).unwrap();
-        assert_eq!(parse.stmts.len(), 1);
         let binary = compile(program).unwrap();
         assert_eq!(
             binary.var_names,
@@ -455,18 +464,9 @@ stack refs = 1]", "[Maximum stack size = 2]",
         );
     }
 
-    #[test]
-    fn test_compile_simple_expr_with_var_and_assign() {
-        let program = "a = 1 + 2;";
-        let parse = compile(program).unwrap();
-        assert_eq!(
-            parse.main_vector,
-            vec![Imm(0), Imm(1), Add, Put(0), Pop],
-        );
-    }
 
     #[test]
-    fn test_compile_simple_expr_with_var_and_assign_and_return() {
+    fn test_var_assign_retr_expr() {
         let program = "a = 1 + 2; return a;";
         let parse = compile(program).unwrap();
         assert_eq!(
@@ -478,7 +478,49 @@ stack refs = 1]", "[Maximum stack size = 2]",
     }
 
     #[test]
-    fn test_simple_builtin_func_call() {
+    fn test_for_in_list_stmt() {
+        let program ="for x in ({1,2,3}) b = x + 5; endfor";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.var_names,
+            vec!["x".to_string(), "b".to_string()]
+        );
+
+        /*
+        => {"Language version number: 4", "First line number: 1", "", "Main code vector:",
+"=================", "[Bytes for labels = 1, literals = 1, forks = 1, variables = 1,
+stack refs = 1]", "[Maximum stack size = 4]",
+"  0: 124                   NUM 1",
+"  1: 016                 * MAKE_SINGLETON_LIST",
+"  2: 125                   NUM 2",
+"  3: 102                   LIST_ADD_TAIL",
+"  4: 126                   NUM 3",
+"  5: 102                  LIST_ADD_TAIL",
+"  6: 124                   NUM 1",
+"  7: 005 019017         * FOR_LIST x 17",
+" 10: 086                   PUSH x",
+" 11: 128                    NUM 5",
+" 12: 021                 * ADD",
+" 13: 052                 * PUT a",
+" 14: 111                   POP",
+" 15: 107 007               JUMP 7",
+" 17: 123                   NUM 0",
+" 18: 030 022             * AND 22",
+         */
+        // The label for the ForList is not quite right here
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0), MakeSingletonList, Imm(1), ListAddTail, Imm(2), ListAddTail, Val(Var::Int(1)),
+                ForList { id:0, label: 1}, Push(0), Imm(3), Add, Put(1), Pop, Jump{ label: 0 }
+            ]
+        );
+        assert_eq!(binary.jump_labels[0].position, 7);
+        assert_eq!(binary.jump_labels[1].position, 14);
+    }
+
+    #[test]
+    fn test_builtin_call() {
         let program = "call_builtin(1, 2, 3);";
         let parse = compile(program).unwrap();
         assert_eq!(
@@ -501,7 +543,7 @@ stack refs = 1]", "[Maximum stack size = 2]",
     // POP", "  8: 085                   PUSH a", "  9: 124                   NUM 1", " 10: 112 001 000           LENGTH 0", " 13:
     // 015                 * RANGE",
     #[test]
-    fn test_length() {
+    fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let parse = compile(program).unwrap();
         assert_eq!(
