@@ -228,8 +228,11 @@ impl ASTGenVisitor {
 
     fn reduce_statements(&mut self, node: &Option<Rc<StatementsContextAll>>) -> Vec<Stmt> {
         self._statement_stack.push(vec![]);
-        node.iter().for_each(|stmt| stmt.accept(self));
+        node.iter().for_each(|stmt| {
+            stmt.accept(self)
+        });
         self._statement_stack.pop().unwrap()
+
     }
 
     fn get_id(id: &Option<Rc<TerminalNode<mooParserContextType>>>) -> String {
@@ -269,12 +272,12 @@ impl<'node> ParseTreeVisitor<'node, mooParserContextType> for ASTGenVisitor {}
 
 impl<'node> mooVisitor<'node> for ASTGenVisitor {
     fn visit_program(&mut self, ctx: &ProgramContext<'node>) {
+        self._statement_stack.push(vec![]);
         ctx.statements().iter().for_each(|item| item.accept(self));
         self.program = self._statement_stack.pop().unwrap();
     }
 
     fn visit_statements(&mut self, ctx: &StatementsContext<'node>) {
-        self._statement_stack.push(vec![]);
         ctx.statement_all()
             .iter()
             .for_each(|item| item.accept(self));
@@ -338,6 +341,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._statement_stack.last_mut().unwrap().push(stmt);
     }
 
+
     fn visit_While(&mut self, ctx: &WhileContext<'node>) {
         // Handle ID's while loops as well as non-ID'd
         let id = Self::get_opt_id(&ctx.ID());
@@ -346,7 +350,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
         let condition = self.reduce_expr(&ctx.condition);
         let body = self.reduce_statements(&ctx.statements());
-
         let stmt = Stmt::While {
             id,
             condition,
@@ -762,7 +765,6 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
     let lexer = mooLexer::new(is);
     let source = CommonTokenStream::new(lexer);
     let mut parser = mooParser::new(source);
-    println!("Compiled");
 
     let err_listener = Box::new(VerbCompileErrorListener {
         program: String::from(program),
@@ -812,34 +814,32 @@ mod tests {
         assert_eq!(
             parse.stmts[0],
             Stmt::Cond {
-                arms: vec![CondArm {
-                    condition: Expr::Binary(
-                        BinaryOp::Eq,
-                        Box::new(Expr::VarExpr(Var::Int(1))),
-                        Box::new(Expr::VarExpr(Var::Int(2)))
-                    ),
-                    statements: vec![Stmt::Return {
-                        expr: Some(Expr::VarExpr(Var::Int(5))),
-                    }],
-                },
-                CondArm {
-                    condition: Expr::Binary(
-                        BinaryOp::Eq,
-                        Box::new(Expr::VarExpr(Var::Int(2))),
-                        Box::new(Expr::VarExpr(Var::Int(3)))
-                    ),
-                    statements: vec![
-                        Stmt::Return {
+                arms: vec![
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(Expr::VarExpr(Var::Int(1))),
+                            Box::new(Expr::VarExpr(Var::Int(2)))
+                        ),
+                        statements: vec![Stmt::Return {
+                            expr: Some(Expr::VarExpr(Var::Int(5))),
+                        }],
+                    },
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(Expr::VarExpr(Var::Int(2))),
+                            Box::new(Expr::VarExpr(Var::Int(3)))
+                        ),
+                        statements: vec![Stmt::Return {
                             expr: Some(Expr::VarExpr(Var::Int(3))),
-                        }
-                    ],
-                }],
-
-                otherwise: vec![
-                    Stmt::Return {
-                        expr: Some(Expr::VarExpr(Var::Int(6))),
+                        }],
                     }
                 ],
+
+                otherwise: vec![Stmt::Return {
+                    expr: Some(Expr::VarExpr(Var::Int(6))),
+                }],
             }
         );
     }
@@ -867,6 +867,76 @@ mod tests {
                     ))
                 })]
             }
+        )
+    }
+
+    #[test]
+    fn test_parse_while() {
+        let program = "while (1) x = x + 1; if (x > 5) break; endif endwhile";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::While {
+                id: None,
+                condition: Expr::VarExpr(Var::Int(1)),
+                body: vec![
+                    Stmt::Expr(Expr::Assign {
+                        left: Box::new(Expr::Id(Name(0))),
+                        right: Box::new(Expr::Binary(
+                            BinaryOp::Add,
+                            Box::new(Expr::Id(Name(0))),
+                            Box::new(Expr::VarExpr(Var::Int(1)))
+                        ))
+                    }),
+                    Stmt::Cond {
+                        arms: vec![CondArm {
+                            condition: Expr::Binary(
+                                BinaryOp::Gt,
+                                Box::new(Expr::Id(Name(0))),
+                                Box::new(Expr::VarExpr(Var::Int(5)))
+                            ),
+                            statements: vec![Stmt::Break { exit: None }]
+                        }],
+                        otherwise: vec![]
+                    }
+                ]
+            }]
+        )
+    }
+
+    #[test]
+    fn test_parse_labelled_while() {
+        let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::While {
+                id: Some(Name(0)),
+                condition: Expr::VarExpr(Var::Int(1)),
+                body: vec![
+                    Stmt::Expr(Expr::Assign {
+                        left: Box::new(Expr::Id(Name(1))),
+                        right: Box::new(Expr::Binary(
+                            BinaryOp::Add,
+                            Box::new(Expr::Id(Name(1))),
+                            Box::new(Expr::VarExpr(Var::Int(1)))
+                        ))
+                    }),
+                    Stmt::Cond {
+                        arms: vec![CondArm {
+                            condition: Expr::Binary(
+                                BinaryOp::Gt,
+                                Box::new(Expr::Id(Name(1))),
+                                Box::new(Expr::VarExpr(Var::Int(5)))
+                            ),
+                            statements: vec![Stmt::Break {
+                                exit: Some(Name(0))
+                            }]
+                        }],
+                        otherwise: vec![]
+                    }
+                ]
+            }]
         )
     }
 }
