@@ -110,7 +110,11 @@ impl State {
         }
     }
 
-    fn generate_assign(&mut self, left: &Box<Expr>, right: &Box<Expr>) -> Result<(), anyhow::Error> {
+    fn generate_assign(
+        &mut self,
+        left: &Box<Expr>,
+        right: &Box<Expr>,
+    ) -> Result<(), anyhow::Error> {
         match left.as_ref() {
             // Scattering assignment on left is special.
             Expr::Scatter(sa) => {
@@ -120,17 +124,9 @@ impl State {
                 self.generate_lvalue(left, false)?;
                 self.generate_expr(right)?;
                 match left.as_ref() {
-                    Expr::Range {
-                        base, from, to
-                    } => {
-                       self.emit(Op::PutTemp)
-                    },
-                    Expr::Index(lhs, rhs) => {
-                        self.emit(Op::PutTemp)
-                    }
-                    _ => {
-
-                    }
+                    Expr::Range { base, from, to } => self.emit(Op::PutTemp),
+                    Expr::Index(lhs, rhs) => self.emit(Op::PutTemp),
+                    _ => {}
                 }
                 let mut is_indexed = false;
                 let mut e = left;
@@ -138,15 +134,13 @@ impl State {
                     // Figure out the form of assignment, handle correctly, then walk through
                     // chained assignments
                     match left.as_ref() {
-                        Expr::Range {
-                            base, from, to
-                        } => {
+                        Expr::Range { base, from, to } => {
                             self.emit(Op::RangeSet);
                             e = base;
                             is_indexed = true;
                             continue;
-                        },
-                        Expr::Index (lhs, rhs) => {
+                        }
+                        Expr::Index(lhs, rhs) => {
                             self.emit(Op::IndexSet);
                             e = lhs;
                             is_indexed = true;
@@ -156,7 +150,7 @@ impl State {
                             self.emit(Op::Put(name.0));
                             break;
                         }
-                        Expr::Prop{location, property} => {
+                        Expr::Prop { location, property } => {
                             self.emit(Op::PutProp);
                             break;
                         }
@@ -267,14 +261,18 @@ impl State {
                 self.generate_expr(to.as_ref())?;
                 self.emit(Op::RangeRef);
             }
-            Expr::Cond { .. } => {}
+            Expr::Cond {
+                alternative,
+                condition,
+                consequence,
+            } => {}
             Expr::Catch { .. } => {}
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
             }
             Expr::Scatter(_) => {}
             Expr::Length => {
-                self.emit(Op::Length );
+                self.emit(Op::Length);
             }
             Expr::And(left, right) => {
                 self.generate_expr(left.as_ref())?;
@@ -291,9 +289,7 @@ impl State {
                 self.commit_jump_fixup(label);
             }
             Expr::This => self.emit(Op::This),
-            Expr::Assign{left, right} => {
-                self.generate_assign(left, right)?
-            }
+            Expr::Assign { left, right } => self.generate_assign(left, right)?,
         }
 
         Ok(())
@@ -301,18 +297,44 @@ impl State {
 
     pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
         match stmt {
-            Stmt::Cond { arms, otherwise } => {}
+            Stmt::Cond { arms, otherwise } => {
+                let mut end_label = None;
+                for arm in arms {
+                    self.generate_expr(&arm.condition)?;
+                    let else_label = self.add_jump(None);
+                    self.emit(Op::If(else_label));
+                    for stmt in &arm.statements {
+                        self.generate_stmt(&stmt)?;
+                    }
+                    end_label = Some(self.add_jump(None));
+                    self.emit(Op::Jump {
+                        label: end_label.unwrap(),
+                    });
+                    self.commit_jump_fixup(else_label);
+                }
+                if !otherwise.is_empty() {
+                    for stmt in otherwise {
+                        self.generate_stmt(stmt)?;
+                    }
+                }
+                if end_label.is_some() {
+                    self.commit_jump_fixup(end_label.unwrap());
+                }
+            }
             Stmt::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
                 self.emit(Op::Val(Var::Int(1))); /* loop list index... */
                 let loop_top = self.add_jump(None);
                 self.commit_jump_fixup(loop_top);
                 let end_label = self.add_jump(None);
-                self.emit(Op::ForList { id: id.0, label: end_label });
+                self.emit(Op::ForList {
+                    id: id.0,
+                    label: end_label,
+                });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                self.emit(Op::Jump{label:loop_top});
+                self.emit(Op::Jump { label: loop_top });
                 self.commit_jump_fixup(end_label);
             }
             Stmt::ForRange { .. } => {}
@@ -439,32 +461,22 @@ mod tests {
     #[test]
     fn test_var_assign_expr() {
         /*
-        "=================", "[Bytes for labels = 1, literals = 1, forks = 1, variables = 1,
-stack refs = 1]", "[Maximum stack size = 2]",
-    "  0: 124 NUM 1",
-    "  1: 125 NUM 2",
-    "  2: 021 * ADD",
-    "  3: 052 * PUT a",
-    "  4: 111 POP",
-    "  5: 123 NUM 0",
-    "  6: 030 010 * AND 10",
-         */
+                "=================", "[Bytes for labels = 1, literals = 1, forks = 1, variables = 1,
+        stack refs = 1]", "[Maximum stack size = 2]",
+            "  0: 124 NUM 1",
+            "  1: 125 NUM 2",
+            "  2: 021 * ADD",
+            "  3: 052 * PUT a",
+            "  4: 111 POP",
+            "  5: 123 NUM 0",
+            "  6: 030 010 * AND 10",
+                 */
         let program = "a = 1 + 2;";
         let binary = compile(program).unwrap();
-        assert_eq!(
-            binary.var_names,
-            vec!["a".to_string()]
-        );
-        assert_eq!(
-            binary.literals,
-            vec![Var::Int(1), Var::Int(2)]
-        );
-        assert_eq!(
-            binary.main_vector,
-            vec![Imm(0), Imm(1), Add, Put(0), Pop],
-        );
+        assert_eq!(binary.var_names, vec!["a".to_string()]);
+        assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(2)]);
+        assert_eq!(binary.main_vector, vec![Imm(0), Imm(1), Add, Put(0), Pop],);
     }
-
 
     #[test]
     fn test_var_assign_retr_expr() {
@@ -472,8 +484,62 @@ stack refs = 1]", "[Maximum stack size = 2]",
         let parse = compile(program).unwrap();
         assert_eq!(
             parse.main_vector,
+            vec![Imm(0), Imm(1), Add, Put(0), Pop, Push(0), Return]
+        );
+    }
+
+    #[test]
+    fn test_if_stmt() {
+        let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.literals,
             vec![
-                Imm(0), Imm(1), Add, Put(0), Pop, Push(0), Return
+                Var::Int(1),
+                Var::Int(2),
+                Var::Int(5),
+                Var::Int(3),
+                Var::Int(6)
+            ]
+        );
+        /*
+         0: 124                   NUM 1
+         1: 125                   NUM 2
+         2: 023                 * EQ
+         3: 000 009             * IF 9
+         5: 128                   NUM 5
+         6: 108                   RETURN
+         7: 107 020               JUMP 20
+         9: 125                   NUM 2
+        10: 126                   NUM 3
+        11: 023                 * EQ
+        12: 002 018             * ELSEIF 18
+        14: 126                   NUM 3
+        15: 108                   RETURN
+        16: 107 020               JUMP 20
+        18: 129                   NUM 6
+        19: 108                   RETURN
+
+                */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Imm(1),
+                Eq,
+                If(0),
+                Imm(2),
+                Return,
+                Jump { label: 1 },
+                Imm(1),
+                Imm(3),
+                Eq,
+                If(2),
+                Imm(3),
+                Return,
+                Jump { label: 3 },
+                Imm(4),
+                Return
             ]
         );
     }
@@ -482,29 +548,30 @@ stack refs = 1]", "[Maximum stack size = 2]",
     fn test_while_stmt() {
         let program = "while (1) x = x + 1; endwhile";
         let binary = compile(program).unwrap();
-        assert_eq!(
-            binary.var_names,
-            vec!["x".to_string()]
-        );
-        assert_eq!(
-            binary.literals,
-            vec![Var::Int(1)]
-        );
+        assert_eq!(binary.var_names, vec!["x".to_string()]);
+        assert_eq!(binary.literals, vec![Var::Int(1)]);
 
         /*
-" 0: 124                   NUM 1",
-" 1: 001 010             * WHILE 10",
-"  3: 085                   PUSH x",
-"  4: 124                    NUM 1",
-"  5: 021                 * ADD",
-"  6: 052                 * PUT x",
-"  7: 111                   POP",
-"  8: 107 000               JUMP 0",
-         */
+        " 0: 124                   NUM 1",
+        " 1: 001 010             * WHILE 10",
+        "  3: 085                   PUSH x",
+        "  4: 124                    NUM 1",
+        "  5: 021                 * ADD",
+        "  6: 052                 * PUT x",
+        "  7: 111                   POP",
+        "  8: 107 000               JUMP 0",
+                 */
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0), While(1), Push(0), Imm(0), Add, Put(0), Pop, Jump { label: 0 }
+                Imm(0),
+                While(1),
+                Push(0),
+                Imm(0),
+                Add,
+                Put(0),
+                Pop,
+                Jump { label: 0 }
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 0);
@@ -512,36 +579,85 @@ stack refs = 1]", "[Maximum stack size = 2]",
     }
 
     #[test]
-    fn test_for_in_list_stmt() {
-        let program ="for x in ({1,2,3}) b = x + 5; endfor";
+    fn test_while_break_continue_stmt() {
+        let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
         let binary = compile(program).unwrap();
-        assert_eq!(
-            binary.var_names,
-            vec!["x".to_string(), "b".to_string()]
-        );
+        assert_eq!(binary.var_names, vec!["x".to_string()]);
+        assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(5)]);
 
         /*
-"  0: 124                   NUM 1",
-"  1: 016                 * MAKE_SINGLETON_LIST",
-"  2: 125                   NUM 2",
-"  3: 102                   LIST_ADD_TAIL",
-"  4: 126                   NUM 3",
-"  5: 102                  LIST_ADD_TAIL",
-"  6: 124                   NUM 1",
-"  7: 005 019017         * FOR_LIST x 17",
-" 10: 086                   PUSH x",
-" 11: 128                    NUM 5",
-" 12: 021                 * ADD",
-" 13: 052                 * PUT a",
-" 14: 111                   POP",
-" 15: 107 007               JUMP 7",
-         */
+        "  0: 124                   NUM 1",
+        "1: 001 025             * WHILE 25",
+        "  3: 085                   PUSH x",
+        "  4: 124                   NUM 1",
+        "  5: 021                 * ADD",
+        "  6: 052                 * PUT x",
+        "  7: 111                   POP",
+        "  8: 085                   PUSH x",
+        "  9: 128                   NUM 5",
+        " 10: 023                 * EQ",
+        " 11: 000 019             * IF 19",
+        " 13: 112 011 000 025     * EXIT 0 25",
+        " 17: 107 023               JUMP 23",
+        " 19: 112 011 000 000     * EXIT 0 0",
+        " 23: 107 000               JUMP 0"
+                 */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                While(1),
+                Push(0),
+                Imm(0),
+                Add,
+                Put(0),
+                Pop,
+                Jump { label: 0 }
+            ]
+        );
+        assert_eq!(binary.jump_labels[0].position, 0);
+        assert_eq!(binary.jump_labels[1].position, 8);
+    }
+    #[test]
+    fn test_for_in_list_stmt() {
+        let program = "for x in ({1,2,3}) b = x + 5; endfor";
+        let binary = compile(program).unwrap();
+        assert_eq!(binary.var_names, vec!["x".to_string(), "b".to_string()]);
+
+        /*
+        "  0: 124                   NUM 1",
+        "  1: 016                 * MAKE_SINGLETON_LIST",
+        "  2: 125                   NUM 2",
+        "  3: 102                   LIST_ADD_TAIL",
+        "  4: 126                   NUM 3",
+        "  5: 102                  LIST_ADD_TAIL",
+        "  6: 124                   NUM 1",
+        "  7: 005 019017         * FOR_LIST x 17",
+        " 10: 086                   PUSH x",
+        " 11: 128                    NUM 5",
+        " 12: 021                 * ADD",
+        " 13: 052                 * PUT a",
+        " 14: 111                   POP",
+        " 15: 107 007               JUMP 7",
+                 */
         // The label for the ForList is not quite right here
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0), MakeSingletonList, Imm(1), ListAddTail, Imm(2), ListAddTail, Val(Var::Int(1)),
-                ForList { id:0, label: 1}, Push(0), Imm(3), Add, Put(1), Pop, Jump{ label: 0 }
+                Imm(0),
+                MakeSingletonList,
+                Imm(1),
+                ListAddTail,
+                Imm(2),
+                ListAddTail,
+                Val(Var::Int(1)),
+                ForList { id: 0, label: 1 },
+                Push(0),
+                Imm(3),
+                Add,
+                Put(1),
+                Pop,
+                Jump { label: 0 }
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 7);
@@ -577,7 +693,18 @@ stack refs = 1]", "[Maximum stack size = 2]",
         let parse = compile(program).unwrap();
         assert_eq!(
             parse.main_vector,
-            [Imm(0), MakeSingletonList, Imm(1), ListAddTail, Imm(2), ListAddTail, Put(0), Pop, Length, Put(1), Pop
+            [
+                Imm(0),
+                MakeSingletonList,
+                Imm(1),
+                ListAddTail,
+                Imm(2),
+                ListAddTail,
+                Put(0),
+                Pop,
+                Length,
+                Put(1),
+                Pop
             ]
         );
     }
