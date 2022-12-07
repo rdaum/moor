@@ -1,27 +1,27 @@
 use crate::compiler::parse::Name;
 use crate::model::var::Var;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Arg {
     Normal(Expr),
     Splice(Expr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ScatterKind {
     Required,
     Optional,
     Rest,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Scatter {
     pub kind: ScatterKind,
     pub id: Name,
     pub expr: Option<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -38,14 +38,15 @@ pub enum BinaryOp {
     In,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum UnaryOp {
     Neg,
     Not,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Expr {
+    Assign{left: Box<Expr>, right :Box<Expr>},
     VarExpr(Var),
     Id(Name),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
@@ -57,7 +58,7 @@ pub enum Expr {
         property: Box<Expr>,
     },
     Call {
-        function: i64,
+        function: Name,
         args: Vec<Arg>,
     },
     Verb {
@@ -87,20 +88,20 @@ pub enum Expr {
     This,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct CondArm {
     pub condition: Expr,
     pub statements: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ExceptArm {
     pub id: Option<Name>,
     pub codes: Vec<Arg>,
     pub statements: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Stmt {
     Cond {
         arms: Vec<CondArm>,

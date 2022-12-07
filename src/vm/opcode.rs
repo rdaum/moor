@@ -73,15 +73,12 @@ pub enum Op {
     FuncCall {
         id: usize,
     },
-
-    // extended
-    Length {
-        id: usize,
-    },
+    RangeSet,
+    Length,
     Exp,
     Scatter {
         nargs: usize,
-        nreg: usize,
+        nreq: usize,
         rest: usize,
         id: usize,
         label: usize,
@@ -111,7 +108,6 @@ pub struct Label {
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Binary {
     pub(crate) first_lineno: usize,
-    pub(crate) ref_count: usize,
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
     pub(crate) var_names: Vec<String>,

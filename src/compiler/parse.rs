@@ -16,11 +16,11 @@ use antlr_rust::token_factory::TokenFactory;
 use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
 use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
+use decorum::R64;
 use paste::paste;
+use serde_derive::{Deserialize, Serialize};
 use std::rc::Rc;
 use std::str::FromStr;
-use decorum::R64;
-use serde_derive::{Deserialize, Serialize};
 
 pub struct VerbCompileErrorListener {
     pub program: String,
@@ -69,6 +69,13 @@ impl Names {
                 Name(pos)
             }
             Some(n) => Name(n),
+        }
+    }
+
+    pub fn find_name(&mut self, name: &String) -> Option<Name> {
+        match self.names.iter().position(|n| n.as_str() == name) {
+            None => None,
+            Some(n) => Some(Name(n)),
         }
     }
 }
@@ -600,10 +607,27 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         })
     }
 
+    fn visit_BuiltinCall(&mut self, ctx: &BuiltinCallContext<'node>) {
+        let builtin_id = &ctx.builtin.as_ref().unwrap();
+        let builtin_id = String::from(builtin_id.get_text());
+
+        self._args_stack.push(vec![]);
+        ctx.arglist().iter().for_each(|c| c.accept(self));
+        let args = self._args_stack.pop().unwrap();
+
+        // TODO: this is incorrect. This needs to lookup in builtin table only.
+        let builtin_id = self.names.find_name(&builtin_id).expect("unfound builtin");
+
+        self._expr_stack.push(Expr::Call {
+            function: builtin_id,
+            args,
+        });
+    }
+
     fn visit_VerbCall(&mut self, ctx: &VerbCallContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
         let verb_id = &ctx.verb.as_ref().unwrap();
-        let verb = Var::Str(String::from(verb_id.get_text()));
+        let verb = Str(String::from(verb_id.get_text()));
 
         self._args_stack.push(vec![]);
         ctx.arglist().iter().for_each(|c| c.accept(self));
@@ -702,6 +726,15 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(Expr::This);
     }
 
+    fn visit_AssignExpr(&mut self, ctx: &AssignExprContext<'node>) {
+        let left = self.reduce_expr(&ctx.expr(0));
+        let right = self.reduce_expr(&ctx.expr(1));
+        self._expr_stack.push(Expr::Assign {
+            left: Box::new(left),
+            right: Box::new(right),
+        });
+    }
+
     binary_expr!(Mul);
     binary_expr!(Div);
     binary_expr!(Add);
@@ -743,4 +776,29 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
         stmts: astgen_visitor.program,
         names: astgen_visitor.names,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::compiler::ast::{BinaryOp, Expr, Stmt};
+    use crate::compiler::parse::{parse_program, Name};
+    use crate::model::var::Var;
+
+    #[test]
+    fn test_parse_simple_var_assignment_precedence() {
+        let program = "a = 1 + 2;";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::Expr(Expr::Assign {
+                left: Box::new(Expr::Id(Name(0))),
+                right: Box::new(Expr::Binary(
+                    BinaryOp::Add,
+                    Box::new(Expr::VarExpr(Var::Int(1))),
+                    Box::new(Expr::VarExpr(Var::Int(2)))
+                ))
+            })
+        );
+    }
 }

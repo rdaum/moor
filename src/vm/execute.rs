@@ -621,8 +621,8 @@ impl VM {
                     }
                 }
             }
-            Op::Length { id } => {
-                let v = self.get_env(id);
+            Op::Length => {
+                let v = self.peek_top();
                 match v {
                     Var::Str(s) => self.push(&Var::Int(s.len() as i64)),
                     Var::List(l) => self.push(&Var::Int(l.len() as i64)),
@@ -635,7 +635,7 @@ impl VM {
             // guaranteed to not work the first ... N... times
             Op::Scatter {
                 nargs,
-                nreg: nreq,
+                nreq: nreq,
                 rest,
                 id,
                 label,

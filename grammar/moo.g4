@@ -35,18 +35,17 @@ literal:
     |   ID #Identifier
     |   'this' #This;
 
-
+// Note that order determines precedence here, and some of these might not be correct still.
 expr:
        '$' #RangeEnd
     |   '{' scatter '}' '=' expr #ScatterExpr
     |   '{' arglist  '}' #ListExpr
     |   expr '[' expr TO expr ']' #IndexRangeExpr
     |   expr '[' expr ']' #IndexExpr
-    |   <assoc=right> expr '=' expr #AssigneXpr
-    |   expr '+' expr #AddExpr
-    |   expr '-' expr #SubExpr
     |   expr '*' expr #MulExpr
     |   expr '/' expr #DivExpr
+    |   expr '+' expr #AddExpr
+    |   expr '-' expr #SubExpr
     |   expr '%' expr #ModExpr
     |   expr '^' expr #ExpExpr
     |   expr '&&' expr #AndExpr
@@ -61,6 +60,7 @@ expr:
     |   '-' expr #NegExpr
     |   '!' expr #NotExpr
     |   '(' expr ')' #ParenExpr
+    |  builtin=ID '(' arglist ')' #BuiltinCall
     |   expr '?' expr '|' expr #IfExpr
     |  '`' try_e=expr '!' codes ('=>' except_expr=expr)? '\'' #ErrorEscape
     |  literal #LiteralExpr
@@ -70,6 +70,7 @@ expr:
     |  '$'? id=ID #SysProp
     |  location=expr '.' property=ID  #PropertyReference
     |  location=expr '.' '(' property=expr ')' #PropertyExprReference
+    |   <assoc=right>  expr '=' expr #AssignExpr
     ;
 
 codes:
