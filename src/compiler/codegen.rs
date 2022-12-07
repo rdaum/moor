@@ -74,7 +74,7 @@ impl State {
         })
     }
 
-    fn commit_jump_fixup(&mut self, id: usize) {
+    fn fixup_jump(&mut self, id: usize) {
         let position = self.ops.len();
         let jump = &mut self.jumps.get_mut(id).expect("Invalid jump fixup");
         let npos = position;
@@ -279,14 +279,14 @@ impl State {
                 let label = self.add_jump(None);
                 self.emit(Op::And(label));
                 self.generate_expr(right.as_ref())?;
-                self.commit_jump_fixup(label);
+                self.fixup_jump(label);
             }
             Expr::Or(left, right) => {
                 self.generate_expr(left.as_ref())?;
                 let label = self.add_jump(None);
                 self.emit(Op::Or(label));
                 self.generate_expr(right.as_ref())?;
-                self.commit_jump_fixup(label);
+                self.fixup_jump(label);
             }
             Expr::This => self.emit(Op::This),
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
@@ -310,7 +310,7 @@ impl State {
                     self.emit(Op::Jump {
                         label: end_label.unwrap(),
                     });
-                    self.commit_jump_fixup(else_label);
+                    self.fixup_jump(else_label);
                 }
                 if !otherwise.is_empty() {
                     for stmt in otherwise {
@@ -318,14 +318,14 @@ impl State {
                     }
                 }
                 if end_label.is_some() {
-                    self.commit_jump_fixup(end_label.unwrap());
+                    self.fixup_jump(end_label.unwrap());
                 }
             }
             Stmt::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
                 self.emit(Op::Val(Var::Int(1))); /* loop list index... */
                 let loop_top = self.add_jump(None);
-                self.commit_jump_fixup(loop_top);
+                self.fixup_jump(loop_top);
                 let end_label = self.add_jump(None);
                 self.emit(Op::ForList {
                     id: id.0,
@@ -335,7 +335,7 @@ impl State {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Jump { label: loop_top });
-                self.commit_jump_fixup(end_label);
+                self.fixup_jump(end_label);
             }
             Stmt::ForRange { .. } => {}
             Stmt::While {
@@ -365,7 +365,7 @@ impl State {
                 self.emit(Op::Jump {
                     label: loop_start_label,
                 });
-                self.commit_jump_fixup(loop_end_label);
+                self.fixup_jump(loop_end_label);
             }
             Stmt::Fork { .. } => {}
             Stmt::Catch { .. } => {}
@@ -579,6 +579,41 @@ mod tests {
     }
 
     #[test]
+    fn test_while_label_stmt() {
+        let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.var_names,
+            vec!["chuckles".to_string(), "x".to_string()]
+        );
+        assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(5)]);
+
+        /*
+                 0: 124                   NUM 1
+         1: 112 010 019 024     * WHILE_ID chuckles 24
+         5: 085                   PUSH x
+         6: 124                   NUM 1
+         7: 021                 * ADD
+         8: 052                 * PUT x
+         9: 111                   POP
+        10: 085                   PUSH x
+        11: 128                   NUM 5
+        12: 027                 * GT
+        13: 000 022             * IF 22
+        15: 112 012 019 000 024 * EXIT_ID chuckles 0 24
+        20: 107 022               JUMP 22
+        22: 107 000               JUMP 0
+                        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0), WhileId { id: 0, label: 1 }, Push(1), Imm(0), Add, Put(1), Pop, Push(1), Imm(1), Gt, If(2), Break(1), Jump { label: 3 }, Jump { label: 0 }
+            ]
+        );
+        assert_eq!(binary.jump_labels[0].position, 0);
+        assert_eq!(binary.jump_labels[1].position, 14);
+    }
+    #[test]
     fn test_while_break_continue_stmt() {
         let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
         let binary = compile(program).unwrap();
@@ -612,11 +647,18 @@ mod tests {
                 Add,
                 Put(0),
                 Pop,
+                Push(0),
+                Imm(1),
+                Eq,
+                If(2),
+                Break(1),
+                Jump { label: 3 },
+                Continue(0),
                 Jump { label: 0 }
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 0);
-        assert_eq!(binary.jump_labels[1].position, 8);
+        assert_eq!(binary.jump_labels[1].position, 15);
     }
     #[test]
     fn test_for_in_list_stmt() {
