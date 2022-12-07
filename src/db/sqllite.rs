@@ -1,26 +1,25 @@
-use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo};
-use crate::model::var::{Objid, Var};
-
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use anyhow::Error;
 use bincode::config;
 use bincode::config::Configuration;
 use bytes::Bytes;
 use enumset::EnumSet;
 use itertools::Itertools;
-use rusqlite::{Connection, MappedRows, Row, Transaction};
-use sea_query::QueryStatement::Insert;
+use rusqlite::{Connection, Row, Transaction};
 use sea_query::{
-    all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
+    Alias, all, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
     ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict,
     Query, QueryStatementWriter, SelectStatement, SimpleExpr, SqliteQueryBuilder, Table, UnionType,
-    Value, WithClause,
+    WithClause,
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
+
 use crate::model::ObjDB;
+use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
 use crate::model::permissions::Permissions;
+use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag};
+use crate::model::r#match::VerbArgsSpec;
+use crate::model::var::{Objid, Var};
+use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 
 #[derive(Iden)]
 enum Object {
@@ -1103,14 +1102,15 @@ impl<'a> ObjDB for SQLiteTx<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::sqllite::SQLiteTx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-    use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
-    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{Objid, Var};
-    use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, Verbs};
     use rusqlite::Connection;
+
+    use crate::db::sqllite::SQLiteTx;
     use crate::model::ObjDB;
+    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+    use crate::model::props::{PropAttr, PropDefs, Properties, PropFlag};
+    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+    use crate::model::var::Var;
+    use crate::model::verbs::{Program, VerbAttr, VerbFlag, Verbs};
 
     #[test]
     fn object_create_check_delete() {

@@ -1,7 +1,8 @@
+use enumset::EnumSet;
+
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::var::Objid;
-use enumset::EnumSet;
 
 pub trait Permissions {
     fn property_allows(&self,

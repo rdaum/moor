@@ -1,26 +1,23 @@
 extern crate core;
 
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
+
+use bincode::config;
 use enumset::EnumSet;
 use int_enum::IntEnum;
 use rusqlite::Connection;
-use std::collections::HashMap;
-use std::env::args;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
-use bincode::config;
-use crate::compiler::codegen;
-use crate::compiler::codegen::compile;
-use crate::compiler::parse::parse_program;
 
+use crate::compiler::codegen::compile;
 use crate::db::sqllite::SQLiteTx;
 use crate::model::ObjDB;
-use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{PropDefs, PropFlag, Propdef, Properties};
+use crate::model::objects::{ObjAttrs, Objects, ObjFlag};
+use crate::model::props::{PropDefs, Properties, PropFlag};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
-use crate::textdump::{Object, TextdumpReader, Verb};
-use crate::vm::opcode::{Binary, Label};
+use crate::textdump::{Object, TextdumpReader};
 
 pub mod compiler;
 mod db;

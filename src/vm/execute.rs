@@ -1,20 +1,18 @@
+use anyhow::anyhow;
+use bincode::config;
+use bincode::error::DecodeError;
+use enumset::EnumSet;
+
+use crate::model::ObjDB;
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
-use crate::model::props::{PropAttr, PropAttrs, PropFlag};
+use crate::model::props::{PropAttr, PropFlag};
+use crate::model::var::{Error, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::Var::Obj;
-use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::{Program, VerbAttr};
-use crate::model::ObjDB;
 use crate::vm::opcode::{Binary, Op};
-use anyhow::anyhow;
-use bincode::config;
-use bincode::config::Configuration;
-use bincode::error::DecodeError;
-use enumset::EnumSet;
-use itertools::Itertools;
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
 const FINALLY_FALLTHROUGH: i64 = 0x00;

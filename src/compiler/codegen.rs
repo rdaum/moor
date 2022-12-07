@@ -1,9 +1,8 @@
 use itertools::Itertools;
-use paste::expr;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterKind, Stmt, UnaryOp};
-use crate::compiler::parse::{parse_program, Name, Names};
+use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
+use crate::compiler::parse::{Name, Names, parse_program};
 use crate::model::var::Var;
 use crate::vm::opcode::{Binary, Op};
 

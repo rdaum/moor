@@ -1,8 +1,7 @@
-use crate::model::var::{Objid, Var};
-use crate::model::verbs::Program;
-use anyhow::anyhow;
 use serde_derive::{Deserialize, Serialize};
+
 use crate::compiler::codegen::JumpLabel;
+use crate::model::var::Var;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub enum Op {

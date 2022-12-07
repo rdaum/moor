@@ -1,6 +1,7 @@
-use crate::model::var::{Objid, Var};
 use enumset::EnumSet;
 use enumset_derive::EnumSetType;
+
+use crate::model::var::{Objid, Var};
 
 #[derive(EnumSetType, Debug)]
 #[enumset(serialize_repr = "u8")]

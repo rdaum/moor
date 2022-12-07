@@ -1,12 +1,14 @@
-use crate::model::var::{Error, Objid, Var, VarType};
-use anyhow::anyhow;
-use int_enum::IntEnum;
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db
 /// file.
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
+
+use anyhow::anyhow;
 use decorum::R64;
+use int_enum::IntEnum;
 use text_io::scan;
+
+use crate::model::var::{Error, Objid, Var, VarType};
 
 #[derive(Clone)]
 pub struct Verbdef {

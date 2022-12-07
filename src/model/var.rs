@@ -1,9 +1,11 @@
-use crate::model::var::Error::{E_RANGE, E_TYPE};
-use decorum::{Real, R64};
+use std::ops::{Add, Div, Mul, Neg, Sub};
+
+use decorum::{R64, Real};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
 use serde_derive::{Deserialize, Serialize};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+
+use crate::model::var::Error::{E_RANGE, E_TYPE};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Objid(pub i64);
@@ -172,8 +174,9 @@ impl Var {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::cmp::Ordering;
+
+    use super::*;
 
     #[test]
     fn test_add() {
