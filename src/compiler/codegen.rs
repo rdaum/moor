@@ -322,17 +322,17 @@ impl State {
                 body,
             } => {
                 let loop_start_label = self.add_jump(*id);
+                let loop_end_label = self.add_jump(None);
                 self.generate_expr(condition)
                     .as_ref()
                     .expect("compile expr");
                 match id {
-                    None => self.emit(Op::While(loop_start_label)),
+                    None => self.emit(Op::While(loop_end_label)),
                     Some(id) => self.emit(Op::WhileId {
                         id: id.0,
-                        label: loop_start_label,
+                        label: loop_end_label,
                     }),
                 }
-                let loop_end_label = self.add_jump(None);
                 self.loops.push(Loop {
                     start_label: loop_start_label,
                     end_label: loop_end_label,
@@ -343,6 +343,7 @@ impl State {
                 self.emit(Op::Jump {
                     label: loop_start_label,
                 });
+                self.commit_jump_fixup(loop_end_label);
             }
             Stmt::Fork { .. } => {}
             Stmt::Catch { .. } => {}
@@ -478,6 +479,39 @@ stack refs = 1]", "[Maximum stack size = 2]",
     }
 
     #[test]
+    fn test_while_stmt() {
+        let program = "while (1) x = x + 1; endwhile";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.var_names,
+            vec!["x".to_string()]
+        );
+        assert_eq!(
+            binary.literals,
+            vec![Var::Int(1)]
+        );
+
+        /*
+" 0: 124                   NUM 1",
+" 1: 001 010             * WHILE 10",
+"  3: 085                   PUSH x",
+"  4: 124                    NUM 1",
+"  5: 021                 * ADD",
+"  6: 052                 * PUT x",
+"  7: 111                   POP",
+"  8: 107 000               JUMP 0",
+         */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0), While(1), Push(0), Imm(0), Add, Put(0), Pop, Jump { label: 0 }
+            ]
+        );
+        assert_eq!(binary.jump_labels[0].position, 0);
+        assert_eq!(binary.jump_labels[1].position, 8);
+    }
+
+    #[test]
     fn test_for_in_list_stmt() {
         let program ="for x in ({1,2,3}) b = x + 5; endfor";
         let binary = compile(program).unwrap();
@@ -487,9 +521,6 @@ stack refs = 1]", "[Maximum stack size = 2]",
         );
 
         /*
-        => {"Language version number: 4", "First line number: 1", "", "Main code vector:",
-"=================", "[Bytes for labels = 1, literals = 1, forks = 1, variables = 1,
-stack refs = 1]", "[Maximum stack size = 4]",
 "  0: 124                   NUM 1",
 "  1: 016                 * MAKE_SINGLETON_LIST",
 "  2: 125                   NUM 2",
@@ -504,8 +535,6 @@ stack refs = 1]", "[Maximum stack size = 4]",
 " 13: 052                 * PUT a",
 " 14: 111                   POP",
 " 15: 107 007               JUMP 7",
-" 17: 123                   NUM 0",
-" 18: 030 022             * AND 22",
          */
         // The label for the ForList is not quite right here
         assert_eq!(
