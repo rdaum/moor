@@ -8,6 +8,7 @@ use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
 use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
 use crate::vm::opcode::{Binary, Op};
+use crate::vm::opcode::Op::Jump;
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -354,7 +355,7 @@ impl State {
                 self.generate_expr(verb.as_ref())?;
                 self.generate_arg_list(args)?;
                 self.emit(Op::CallVerb);
-                self.pop_stack(1);
+                self.pop_stack(2);
             }
             Expr::Cond {
                 alternative,
@@ -419,6 +420,7 @@ impl State {
                 let loop_top = self.add_jump(None);
                 self.fixup_jump(loop_top);
                 let end_label = self.add_jump(None);
+                // TODO self.enter_loop/exit_loop needed?
                 self.emit(Op::ForList {
                     id: id.0,
                     label: end_label,
@@ -430,7 +432,20 @@ impl State {
                 self.fixup_jump(end_label);
                 self.pop_stack(2);
             }
-            Stmt::ForRange { .. } => {}
+            Stmt::ForRange { from, to, id, body } => {
+                self.generate_expr(from)?;
+                self.generate_expr(to)?;
+                let  loop_top = self.add_jump(None);
+                let end_label = self.add_jump(None);
+                self.emit(Op::ForRange {id: id.0, label: end_label});
+                // TODO self.enter_loop/exit_loop needed?
+                for stmt in body {
+                    self.generate_stmt(stmt)?;
+                }
+                self.emit(Jump { label: loop_top });
+                self.fixup_jump(end_label);
+                self.pop_stack(2);
+            }
             Stmt::While {
                 id,
                 condition,
@@ -485,7 +500,6 @@ impl State {
                 self.emit(Op::Pop);
                 self.pop_stack(1);
             }
-            Stmt::Exit(_) => {}
         }
 
         Ok(())
@@ -830,6 +844,38 @@ mod tests {
         );
         assert_eq!(binary.jump_labels[0].position, 7);
         assert_eq!(binary.jump_labels[1].position, 14);
+    }
+
+    #[test]
+    fn test_for_range() {
+        let program = "for n in [1..5] player:tell(a); endfor";
+        let binary = compile(program, HashMap::new()).unwrap();
+        /*
+          0: 124                   NUM 1
+          1: 128                   NUM 5
+          2: 006 019 014         * FOR_RANGE n 14
+          5: 072                   PUSH player
+          6: 100 000               PUSH_LITERAL "tell"
+          8: 085                   PUSH a
+          9: 016                 * MAKE_SINGLETON_LIST
+         10: 010                 * CALL_VERB
+         11: 111                   POP
+         12: 107 002               JUMP 2
+         */
+        assert_eq!(binary.main_vector,
+        vec![
+            Imm(0),
+            Imm(1),
+            ForRange { id: 0, label: 1 },
+            Push(1),
+            Imm(2),
+            Push(2),
+            MakeSingletonList,
+            CallVerb,
+            Pop,
+            Jump { label: 0 },
+            Done
+        ]);
     }
 
     #[test]

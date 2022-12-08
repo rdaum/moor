@@ -147,5 +147,4 @@ pub enum Stmt {
         expr: Option<Expr>,
     },
     Expr(Expr),
-    Exit(i64),
 }
