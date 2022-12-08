@@ -50,6 +50,7 @@ pub struct State {
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) builtins: HashMap<String, usize>,
+    pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
 impl State {}
@@ -66,6 +67,7 @@ impl State {
             cur_stack: 0,
             max_stack: 0,
             builtins,
+            fork_vectors: vec![],
         }
     }
 
@@ -150,6 +152,12 @@ impl State {
 
     fn restore_stack_top(&mut self, old: Option<usize>) {
         self.saved_stack = old
+    }
+
+    fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> usize {
+        let fv = self.fork_vectors.len();
+        self.fork_vectors.push(opcodes);
+        fv
     }
 
     fn generate_assign(
@@ -474,7 +482,19 @@ impl State {
                 });
                 self.fixup_jump(loop_end_label);
             }
-            Stmt::Fork { .. } => {}
+            Stmt::Fork { id, body, time } => {
+                self.generate_expr(time)?;
+                let mut fork_compile = State::new(self.varnames.clone(), self.builtins.clone());
+                for stmt in body {
+                    fork_compile.generate_stmt(stmt)?;
+                }
+                let fv_id = self.add_fork_vector(fork_compile.ops);
+                self.emit(Op::Fork {
+                    id: id.map(|i| i.0),
+                    f_index: fv_id
+                });
+                self.pop_stack(1);
+            }
             Stmt::Catch { .. } => {}
             Stmt::Finally { .. } => {}
             Stmt::Break { exit } => {
@@ -557,6 +577,7 @@ pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary
         jump_labels: cg_state.jumps,
         var_names: cg_state.varnames.names,
         main_vector: cg_state.ops,
+        fork_vectors: cg_state.fork_vectors
     };
 
     Ok(binary)
@@ -564,9 +585,7 @@ pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::opcode::Op;
     use crate::vm::opcode::Op::*;
-    use sea_query::ColumnSpec::Default;
 
     use super::*;
 
@@ -875,6 +894,40 @@ mod tests {
             Pop,
             Jump { label: 0 },
             Done
+        ]);
+    }
+
+    #[test]
+    fn test_fork() {
+        let program = "fork (5) player:tell(\"a\"); endfork";
+        let binary = compile(program, HashMap::new()).unwrap();
+        assert_eq!(binary.main_vector, vec![
+            Imm(0), Fork { f_index: 0, id: None }, Done
+        ]);
+        assert_eq!(binary.fork_vectors[0], vec![
+            Push(0), // player
+            Imm(0), // tell
+            Imm(1), // 'a'
+            MakeSingletonList,
+            CallVerb,
+            Pop
+        ]);
+    }
+
+    #[test]
+    fn test_fork_id() {
+        let program = "fork fid (5) player:tell(fid); endfork";
+        let binary = compile(program, HashMap::new()).unwrap();
+        assert_eq!(binary.main_vector, vec![
+            Imm(0), Fork { f_index: 0, id: Some(0) }, Done
+        ]);
+        assert_eq!(binary.fork_vectors[0], vec![
+            Push(1), // player
+            Imm(0), // tell
+            Push(0), // fid
+            MakeSingletonList,
+            CallVerb,
+            Pop
         ]);
     }
 

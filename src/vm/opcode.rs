@@ -112,4 +112,5 @@ pub struct Binary {
     pub(crate) jump_labels: Vec<JumpLabel>,
     pub(crate) var_names: Vec<String>,
     pub(crate) main_vector: Vec<Op>,
+    pub(crate) fork_vectors: Vec<Vec<Op>>
 }

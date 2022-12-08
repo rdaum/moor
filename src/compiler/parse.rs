@@ -55,6 +55,8 @@ struct LoopEntry {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Name(pub usize);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Names {
     pub names: Vec<String>,
 }
