@@ -822,6 +822,35 @@ mod tests {
     }
 
     #[test]
+    fn test_and_or() {
+        let program = "a = (1 && 2 || 3);";
+        let binary = compile(program).unwrap();
+        /*
+          0: 124                   NUM 1
+          1: 030 004             * AND 4
+          3: 125                   NUM 2
+          4: 031 007             * OR 7
+          6: 126                   NUM 3
+          7: 052                 * PUT a
+          8: 111                   POP
+
+         */
+        assert_eq!(binary.main_vector,
+                   vec![
+                       Imm(0),
+                       And(0),
+                       Imm(1),
+                       Or(1),
+                       Imm(2),
+                       Put(0),
+                       Pop,
+                       Done
+                   ]);
+        assert_eq!(binary.jump_labels[0].position, 3);
+        assert_eq!(binary.jump_labels[1].position, 5);
+    }
+
+    #[test]
     fn test_unknown_builtin_call() {
         let program = "call_builtin(1, 2, 3);";
         let parse = compile(program);
