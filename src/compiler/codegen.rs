@@ -1,8 +1,9 @@
+use anyhow::anyhow;
 use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
-use crate::compiler::parse::{Name, Names, parse_program};
+use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
 use crate::vm::opcode::{Binary, Op};
 
@@ -36,6 +37,9 @@ pub struct State {
     pub(crate) varnames: Names,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
+    pub(crate) saved_stack: Option<usize>,
+    pub(crate) cur_stack: usize,
+    pub(crate) max_stack: usize,
 }
 
 impl State {}
@@ -48,6 +52,9 @@ impl State {
             varnames,
             literals: vec![],
             loops: vec![],
+            saved_stack: None,
+            cur_stack: 0,
+            max_stack: 0,
         }
     }
 
@@ -109,6 +116,33 @@ impl State {
         }
     }
 
+    fn push_stack(&mut self, n: usize) {
+        println!("Push stack");
+        self.cur_stack += n;
+        if self.cur_stack > self.max_stack {
+            self.max_stack = self.cur_stack;
+        }
+    }
+
+    fn pop_stack(&mut self, n: usize) {
+        println!("Pop stack");
+        self.cur_stack -= n;
+    }
+
+    fn save_stack_top(&mut self) -> Option<usize> {
+        let old = self.saved_stack;
+        self.saved_stack = Some(self.cur_stack - 1);
+        old
+    }
+
+    fn saved_stack_top(&self) -> Option<usize> {
+        self.saved_stack
+    }
+
+    fn restore_stack_top(&mut self, old: Option<usize>) {
+        self.saved_stack = old
+    }
+
     fn generate_assign(
         &mut self,
         left: &Box<Expr>,
@@ -120,7 +154,7 @@ impl State {
                 todo!("Scatter assignment");
             }
             _ => {
-                self.generate_lvalue(left, false)?;
+                self.push_lvalue(left, false)?;
                 self.generate_expr(right)?;
                 match left.as_ref() {
                     Expr::Range { base, from, to } => self.emit(Op::PutTemp),
@@ -135,12 +169,14 @@ impl State {
                     match left.as_ref() {
                         Expr::Range { base, from, to } => {
                             self.emit(Op::RangeSet);
+                            self.pop_stack(3);
                             e = base;
                             is_indexed = true;
                             continue;
                         }
                         Expr::Index(lhs, rhs) => {
                             self.emit(Op::IndexSet);
+                            self.pop_stack(2);
                             e = lhs;
                             is_indexed = true;
                             continue;
@@ -151,6 +187,7 @@ impl State {
                         }
                         Expr::Prop { location, property } => {
                             self.emit(Op::PutProp);
+                            self.pop_stack(2);
                             break;
                         }
                         _ => {
@@ -168,23 +205,29 @@ impl State {
         Ok(())
     }
 
-    fn generate_lvalue(&mut self, expr: &Expr, indexed_above: bool) -> Result<(), anyhow::Error> {
+    fn push_lvalue(&mut self, expr: &Expr, indexed_above: bool) -> Result<(), anyhow::Error> {
         match expr {
             Expr::Range { from, base, to } => {
-                self.generate_lvalue(base.as_ref(), true)?;
+                self.push_lvalue(base.as_ref(), true)?;
+                let old = self.save_stack_top();
                 self.generate_expr(from.as_ref())?;
                 self.generate_expr(to.as_ref())?;
+                self.restore_stack_top(old);
             }
             Expr::Index(lhs, rhs) => {
-                self.generate_lvalue(lhs.as_ref(), true)?;
+                self.push_lvalue(lhs.as_ref(), true)?;
+                let old = self.save_stack_top();
                 self.generate_expr(rhs.as_ref())?;
+                self.restore_stack_top(old);
                 if indexed_above {
                     self.emit(Op::PushRef);
+                    self.push_stack(1);
                 }
             }
             Expr::Id(id) => {
                 if indexed_above {
                     self.emit(Op::Push(id.0));
+                    self.push_stack(1);
                 }
             }
             Expr::Prop { property, location } => {
@@ -192,6 +235,7 @@ impl State {
                 self.generate_expr(property.as_ref())?;
                 if indexed_above {
                     self.emit(Op::PushGetProp);
+                    self.push_stack(1);
                 }
             }
             _ => {
@@ -205,8 +249,28 @@ impl State {
             Expr::VarExpr(v) => {
                 let literal = self.add_literal(v);
                 self.emit(Op::Imm(literal));
+                self.push_stack(1);
             }
-            Expr::Id(ident) => self.emit(Op::Push(ident.0)),
+            Expr::Id(ident) => {
+                self.emit(Op::Push(ident.0));
+                self.push_stack(1);
+            }
+            Expr::And(left, right) => {
+                self.generate_expr(left.as_ref())?;
+                let end_label = self.add_jump(None);
+                self.emit(Op::And(end_label));
+                self.pop_stack(1);
+                self.generate_expr(right.as_ref())?;
+                self.fixup_jump(end_label);
+            }
+            Expr::Or(left, right) => {
+                self.generate_expr(left.as_ref())?;
+                let end_label = self.add_jump(None);
+                self.emit(Op::Or(end_label));
+                self.pop_stack(1);
+                self.generate_expr(right.as_ref())?;
+                self.fixup_jump(end_label);
+            }
             Expr::Binary(op, l, r) => {
                 self.generate_expr(l)?;
                 self.generate_expr(r)?;
@@ -226,8 +290,32 @@ impl State {
                     BinaryOp::In => Op::In,
                 };
                 self.emit(binop);
+                self.pop_stack(1);
             }
-            Expr::Index(lhs, rhs) => {}
+            Expr::Index(lhs, rhs) => {
+                self.generate_expr(lhs.as_ref())?;
+                let old = self.save_stack_top();
+                self.generate_expr(rhs.as_ref())?;
+                self.restore_stack_top(old);
+                self.emit(Op::Ref);
+                self.pop_stack(1);
+            }
+            Expr::Range { base, from, to } => {
+                let mut old;
+                self.generate_expr(base.as_ref())?;
+                old = self.save_stack_top();
+                self.generate_expr(from.as_ref())?;
+                self.generate_expr(to.as_ref())?;
+                self.restore_stack_top(old);
+                self.emit(Op::RangeRef);
+                self.pop_stack(2);
+            }
+            Expr::Length => {
+                let saved = self.save_stack_top();
+                self.emit(Op::Length(saved.expect("Missing saved stack for '$'")));
+                self.push_stack(1);
+            }
+
             Expr::Unary(op, expr) => {
                 self.generate_expr(expr.as_ref())?;
                 self.emit(match op {
@@ -253,12 +341,7 @@ impl State {
                 self.generate_expr(verb.as_ref())?;
                 self.generate_arg_list(args)?;
                 self.emit(Op::CallVerb);
-            }
-            Expr::Range { base, from, to } => {
-                self.generate_expr(base.as_ref())?;
-                self.generate_expr(from.as_ref())?;
-                self.generate_expr(to.as_ref())?;
-                self.emit(Op::RangeRef);
+                self.pop_stack(1);
             }
             Expr::Cond {
                 alternative,
@@ -270,23 +353,6 @@ impl State {
                 self.generate_arg_list(l)?;
             }
             Expr::Scatter(_) => {}
-            Expr::Length => {
-                self.emit(Op::Length);
-            }
-            Expr::And(left, right) => {
-                self.generate_expr(left.as_ref())?;
-                let label = self.add_jump(None);
-                self.emit(Op::And(label));
-                self.generate_expr(right.as_ref())?;
-                self.fixup_jump(label);
-            }
-            Expr::Or(left, right) => {
-                self.generate_expr(left.as_ref())?;
-                let label = self.add_jump(None);
-                self.emit(Op::Or(label));
-                self.generate_expr(right.as_ref())?;
-                self.fixup_jump(label);
-            }
             Expr::This => self.emit(Op::This),
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
         }
@@ -302,6 +368,7 @@ impl State {
                     self.generate_expr(&arm.condition)?;
                     let else_label = self.add_jump(None);
                     self.emit(Op::If(else_label));
+                    self.pop_stack(1);
                     for stmt in &arm.statements {
                         self.generate_stmt(&stmt)?;
                     }
@@ -323,6 +390,7 @@ impl State {
             Stmt::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
                 self.emit(Op::Val(Var::Int(1))); /* loop list index... */
+                self.push_stack(1);
                 let loop_top = self.add_jump(None);
                 self.fixup_jump(loop_top);
                 let end_label = self.add_jump(None);
@@ -335,6 +403,7 @@ impl State {
                 }
                 self.emit(Op::Jump { label: loop_top });
                 self.fixup_jump(end_label);
+                self.pop_stack(2);
             }
             Stmt::ForRange { .. } => {}
             Stmt::While {
@@ -354,6 +423,7 @@ impl State {
                         label: loop_end_label,
                     }),
                 }
+                self.pop_stack(1);
                 self.loops.push(Loop {
                     start_label: loop_start_label,
                     end_label: loop_end_label,
@@ -381,6 +451,7 @@ impl State {
                 Some(expr) => {
                     self.generate_expr(expr)?;
                     self.emit(Op::Return);
+                    self.pop_stack(1);
                 }
                 None => {
                     self.emit(Op::Return);
@@ -389,6 +460,7 @@ impl State {
             Stmt::Expr(e) => {
                 self.generate_expr(e)?;
                 self.emit(Op::Pop);
+                self.pop_stack(1);
             }
             Stmt::Exit(_) => {}
         }
@@ -399,9 +471,11 @@ impl State {
     fn generate_arg_list(&mut self, args: &Vec<Arg>) -> Result<(), anyhow::Error> {
         if args.is_empty() {
             self.emit(Op::MkEmptyList);
+            self.push_stack(1);
         } else {
             let mut normal_op = Op::MakeSingletonList;
             let mut splice_op = Op::CheckListForSplice;
+            let mut pop = 0;
             for a in args {
                 match a {
                     Arg::Normal(a) => {
@@ -413,6 +487,8 @@ impl State {
                         self.emit(splice_op.clone());
                     }
                 }
+                self.pop_stack(pop);
+                pop = 1;
                 normal_op = Op::ListAddTail;
                 splice_op = Op::ListAppend;
             }
@@ -427,6 +503,15 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
     let mut cg_state = State::new(parse.names);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
+    }
+
+    cg_state.emit(Op::Done);
+
+    if cg_state.cur_stack != 0 {
+        return Err(anyhow!("stack not entirely popped after code generation"));
+    }
+    if cg_state.saved_stack.is_some() {
+        return Err(anyhow!("saved stack still present after code generation"));
     }
 
     let binary = Binary {
@@ -451,10 +536,7 @@ mod tests {
     fn test_simple_add_expr() {
         let program = "1 + 2;";
         let parse = compile(program).unwrap();
-        assert_eq!(
-            parse.main_vector,
-            vec![Op::Imm(0), Op::Imm(1), Op::Add, Op::Pop]
-        );
+        assert_eq!(parse.main_vector, vec![Imm(0), Imm(1), Add, Pop, Done]);
     }
 
     #[test]
@@ -474,7 +556,10 @@ mod tests {
         let binary = compile(program).unwrap();
         assert_eq!(binary.var_names, vec!["a".to_string()]);
         assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(2)]);
-        assert_eq!(binary.main_vector, vec![Imm(0), Imm(1), Add, Put(0), Pop],);
+        assert_eq!(
+            binary.main_vector,
+            vec![Imm(0), Imm(1), Add, Put(0), Pop, Done],
+        );
     }
 
     #[test]
@@ -483,7 +568,7 @@ mod tests {
         let parse = compile(program).unwrap();
         assert_eq!(
             parse.main_vector,
-            vec![Imm(0), Imm(1), Add, Put(0), Pop, Push(0), Return]
+            vec![Imm(0), Imm(1), Add, Put(0), Pop, Push(0), Return, Done]
         );
     }
 
@@ -538,7 +623,8 @@ mod tests {
                 Return,
                 Jump { label: 3 },
                 Imm(4),
-                Return
+                Return,
+                Done
             ]
         );
     }
@@ -570,7 +656,8 @@ mod tests {
                 Add,
                 Put(0),
                 Pop,
-                Jump { label: 0 }
+                Jump { label: 0 },
+                Done
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 0);
@@ -606,7 +693,21 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0), WhileId { id: 0, label: 1 }, Push(1), Imm(0), Add, Put(1), Pop, Push(1), Imm(1), Gt, If(2), Break(1), Jump { label: 3 }, Jump { label: 0 }
+                Imm(0),
+                WhileId { id: 0, label: 1 },
+                Push(1),
+                Imm(0),
+                Add,
+                Put(1),
+                Pop,
+                Push(1),
+                Imm(1),
+                Gt,
+                If(2),
+                Break(1),
+                Jump { label: 3 },
+                Jump { label: 0 },
+                Done
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 0);
@@ -653,7 +754,8 @@ mod tests {
                 Break(1),
                 Jump { label: 3 },
                 Continue(0),
-                Jump { label: 0 }
+                Jump { label: 0 },
+                Done
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 0);
@@ -698,7 +800,8 @@ mod tests {
                 Add,
                 Put(1),
                 Pop,
-                Jump { label: 0 }
+                Jump { label: 0 },
+                Done
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 7);
@@ -719,19 +822,35 @@ mod tests {
                 Op::Imm(2),
                 Op::ListAddTail,
                 Op::FuncCall { id: 0 },
-                Op::Pop
+                Op::Pop,
+                Done
             ]
         );
     }
 
     // TODO: this is incorrect.
-    // look at moo disassembly for the same code.
-    // POP", "  8: 085                   PUSH a", "  9: 124                   NUM 1", " 10: 112 001 000           LENGTH 0", " 13:
-    // 015                 * RANGE",
     #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let parse = compile(program).unwrap();
+        /*
+               0: 124                   NUM 1
+         1: 016                 * MAKE_SINGLETON_LIST
+         2: 125                   NUM 2
+         3: 102                   LIST_ADD_TAIL
+         4: 126                   NUM 3
+         5: 102                   LIST_ADD_TAIL
+         6: 052                 * PUT a
+         7: 111                   POP
+         8: 085                   PUSH a
+         9: 125                   NUM 2
+        10: 112 001 000           LENGTH 0
+        13: 015                 * RANGE
+        14: 053                 * PUT b
+        15: 111                   POP
+        16: 123                   NUM 0
+        17: 030 021             * AND 21
+                */
         assert_eq!(
             parse.main_vector,
             [
@@ -743,9 +862,13 @@ mod tests {
                 ListAddTail,
                 Put(0),
                 Pop,
-                Length,
+                Push(0),
+                Imm(1),
+                Length(0),
+                RangeRef,
                 Put(1),
-                Pop
+                Pop,
+                Done
             ]
         );
     }

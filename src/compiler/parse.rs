@@ -526,6 +526,17 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         })
     }
 
+    fn visit_IndexRangeExpr(&mut self, ctx: &IndexRangeExprContext<'node>) {
+        let expr = self.reduce_expr(&ctx.expr(0));
+        let start = self.reduce_expr(&ctx.expr(1));
+        let end = self.reduce_expr(&ctx.expr(2));
+        self._expr_stack.push(Expr::Range {
+            base: Box::new(expr),
+            from: Box::new(start),
+            to: Box::new(end),
+        })
+    }
+
     fn visit_RangeEnd(&mut self, _ctx: &RangeEndContext<'node>) {
         self._expr_stack.push(Expr::Length);
     }
@@ -755,6 +766,8 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     unary_expr!(Not);
     unary_expr!(Neg);
+
+
 }
 
 pub struct Parse {
@@ -870,6 +883,30 @@ mod tests {
                 })]
             }
         )
+    }
+
+    #[test]
+    fn test_indexed_range_len() {
+        let program = "a = {1, 2, 3}; b = a[2..$];";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts, vec![
+           Stmt::Expr(Expr::Assign {
+               left: Box::new(Expr::Id(Name(0))),
+               right: Box::new(Expr::List(vec![
+                   Arg::Normal(Expr::VarExpr(Var::Int(1))),
+                   Arg::Normal(Expr::VarExpr(Var::Int(2))),
+                   Arg::Normal(Expr::VarExpr(Var::Int(3)))
+               ]))
+           }),
+              Stmt::Expr(Expr::Assign {
+                left: Box::new(Expr::Id(Name(1))),
+                right: Box::new(Expr::Range {
+                    base: Box::new(Expr::Id(Name(0))),
+                    from: Box::new(Expr::VarExpr(Var::Int(2))),
+                    to: Box::new(Expr::Length),
+                })
+              })
+        ]);
     }
 
     #[test]

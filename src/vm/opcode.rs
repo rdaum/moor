@@ -74,7 +74,7 @@ pub enum Op {
         id: usize,
     },
     RangeSet,
-    Length,
+    Length(usize),
     Exp,
     Scatter {
         nargs: usize,

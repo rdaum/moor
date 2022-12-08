@@ -3,15 +3,15 @@ use bincode::config;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
 
-use crate::model::ObjDB;
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropFlag};
-use crate::model::var::{Error, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
+use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::{Program, VerbAttr};
+use crate::model::ObjDB;
 use crate::vm::opcode::{Binary, Op};
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
@@ -101,6 +101,13 @@ impl Activation {
         self.valstack.push(v)
     }
 
+    pub fn peek_at(&self, i: usize) -> Option<Var> {
+        if !i < self.valstack.len() {
+            return None;
+        }
+        Some(self.valstack[i].clone())
+    }
+
     pub fn peek(&self, width: usize) -> Vec<Var> {
         let l = self.valstack.len();
         Vec::from(&self.valstack[l - width..])
@@ -185,6 +192,9 @@ impl VM {
 
     fn peek(&self, amt: usize) -> Vec<Var> {
         self.top().peek(amt)
+    }
+    pub fn peek_at(&self, i: usize) -> Option<Var> {
+        self.top().peek_at(i)
     }
 
     fn peek_top(&self) -> Var {
@@ -622,8 +632,8 @@ impl VM {
                     }
                 }
             }
-            Op::Length => {
-                let v = self.peek_top();
+            Op::Length(offset) => {
+                let v = self.peek_at(offset).unwrap();
                 match v {
                     Var::Str(s) => self.push(&Var::Int(s.len() as i64)),
                     Var::List(l) => self.push(&Var::Int(l.len() as i64)),
@@ -743,7 +753,7 @@ impl VM {
                 }
             }
             Op::This => {
-                self.push(&Var::Obj(self.top().this) );
+                self.push(&Var::Obj(self.top().this));
             }
 
             Op::Fork { id, f_index } => {}
