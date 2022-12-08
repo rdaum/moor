@@ -61,7 +61,7 @@ expr:
     |   '!' expr #NotExpr
     |   '(' expr ')' #ParenExpr
     |  builtin=ID '(' arglist ')' #BuiltinCall
-    |   expr '?' expr '|' expr #IfExpr
+    |   expr '?' expr '|' expr #CondExpr
     |  '`' try_e=expr '!' codes ('=>' except_expr=expr)? '\'' #ErrorEscape
     |  literal #LiteralExpr
     |  '$'? id=ID '(' arglist ')' #SysVerb

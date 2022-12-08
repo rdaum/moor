@@ -638,6 +638,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         });
     }
 
+
     fn visit_VerbCall(&mut self, ctx: &VerbCallContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
         let verb_id = &ctx.verb.as_ref().unwrap();
@@ -749,6 +750,8 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         });
     }
 
+
+
     binary_expr!(Mul);
     binary_expr!(Div);
     binary_expr!(Add);
@@ -765,7 +768,16 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     unary_expr!(Not);
     unary_expr!(Neg);
 
-
+    fn visit_CondExpr(&mut self, ctx: &CondExprContext<'node>) {
+        let cond = self.reduce_expr(&ctx.expr(0));
+        let left = self.reduce_expr(&ctx.expr(1));
+        let right = self.reduce_expr(&ctx.expr(2));
+        self._expr_stack.push(Expr::Cond {
+            condition: Box::new(cond),
+            consequence: Box::new(left),
+            alternative: Box::new(right),
+        });
+    }
 }
 
 pub struct Parse {

@@ -360,7 +360,19 @@ impl State {
                 alternative,
                 condition,
                 consequence,
-            } => {}
+            } => {
+                self.generate_expr(condition.as_ref())?;
+                let else_label = self.add_jump(None);
+                self.emit(Op::IfQues(else_label));
+                self.pop_stack(1);
+                self.generate_expr(consequence.as_ref())?;
+                let end_label = self.add_jump(None);
+                self.emit(Op::Jump { label: end_label });
+                self.pop_stack(1);
+                self.fixup_jump(else_label);
+                self.generate_expr(alternative.as_ref())?;
+                self.fixup_jump(end_label);
+            }
             Expr::Catch { .. } => {}
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
@@ -886,30 +898,62 @@ mod tests {
     }
 
     #[test]
+    fn test_cond_expr() {
+        let program = "a = (1 == 2 ? 3 | 4);";
+        let binary = compile(program, HashMap::new()).unwrap();
+        /*
+         0: 124                   NUM 1
+         1: 125                   NUM 2
+         2: 023                 * EQ
+         3: 013 008             * IF_EXPR 8
+         5: 126                   NUM 3
+         6: 107 009               JUMP 9
+         8: 127                   NUM 4
+         9: 052                 * PUT a
+        10: 111                   POP
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Imm(1),
+                Eq,
+                IfQues(0),
+                Imm(2),
+                Jump { label: 1 },
+                Imm(3),
+                Put(0),
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
     fn test_verb_call() {
         let program = "player:tell(\"test\");";
         let binary = compile(program, HashMap::new()).unwrap();
 
-            /*
-                  0: 072                   PUSH player
-                  1: 100 000               PUSH_LITERAL "tell"
-                  3: 100 001               PUSH_LITERAL "test"
-                  5: 016                 * MAKE_SINGLETON_LIST
-                  6: 010                 * CALL_VERB
-                  7: 111                   POP
-            */
-            assert_eq!(
-                binary.main_vector,
-                vec![
-                    Push(0), // Player
-                    Imm(0),
-                    Imm(1),
-                    MakeSingletonList,
-                    CallVerb,
-                    Pop,
-                    Done,
-                ]
-            );
+        /*
+              0: 072                   PUSH player
+              1: 100 000               PUSH_LITERAL "tell"
+              3: 100 001               PUSH_LITERAL "test"
+              5: 016                 * MAKE_SINGLETON_LIST
+              6: 010                 * CALL_VERB
+              7: 111                   POP
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(0), // Player
+                Imm(0),
+                Imm(1),
+                MakeSingletonList,
+                CallVerb,
+                Pop,
+                Done,
+            ]
+        );
     }
 
     #[test]
