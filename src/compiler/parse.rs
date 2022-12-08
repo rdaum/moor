@@ -411,7 +411,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._excepts_stack.push(vec![]);
         ctx.excepts().as_ref().iter().for_each(|e| e.accept(self));
         let excepts = self._excepts_stack.pop().unwrap();
-        let stmt = Stmt::Catch { body, excepts };
+        let stmt = Stmt::TryExcept { body, excepts };
         self._statement_stack.last_mut().unwrap().push(stmt);
     }
 
@@ -421,7 +421,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._statement_stack
             .last_mut()
             .unwrap()
-            .push(Stmt::Finally { body, handler })
+            .push(Stmt::TryFinally { body, handler })
     }
 
     fn visit_ExprStmt(&mut self, ctx: &ExprStmtContext<'node>) {

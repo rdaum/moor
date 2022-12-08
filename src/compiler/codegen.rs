@@ -7,8 +7,8 @@ use thiserror::Error;
 use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
 use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
-use crate::vm::opcode::{Binary, Op};
 use crate::vm::opcode::Op::Jump;
+use crate::vm::opcode::{Binary, Op};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -443,9 +443,12 @@ impl State {
             Stmt::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let  loop_top = self.add_jump(None);
+                let loop_top = self.add_jump(None);
                 let end_label = self.add_jump(None);
-                self.emit(Op::ForRange {id: id.0, label: end_label});
+                self.emit(Op::ForRange {
+                    id: id.0,
+                    label: end_label,
+                });
                 // TODO self.enter_loop/exit_loop needed?
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -491,19 +494,35 @@ impl State {
                 let fv_id = self.add_fork_vector(fork_compile.ops);
                 self.emit(Op::Fork {
                     id: id.map(|i| i.0),
-                    f_index: fv_id
+                    f_index: fv_id,
                 });
                 self.pop_stack(1);
             }
-            Stmt::Catch { .. } => {}
-            Stmt::Finally { .. } => {}
+            Stmt::TryExcept { body, excepts } => {}
+            Stmt::TryFinally { body, handler } => {
+                let handler_label = self.add_jump(None);
+                self.emit(Op::TryFinally(handler_label));
+                self.push_stack(1);
+                for stmt in body {
+                    self.generate_stmt(stmt)?;
+                }
+                self.emit(Op::EndFinally);
+                self.pop_stack(1);
+                self.fixup_jump(handler_label);
+                self.push_stack(2); /* continuation value, reason */
+                for stmt in handler {
+                    self.generate_stmt(stmt)?;
+                }
+                self.emit(Op::Continue);
+                self.pop_stack(2);
+            }
             Stmt::Break { exit } => {
                 let lp = self.find_loop(exit);
-                self.emit(Op::Break(lp.end_label));
+                self.emit(Op::Exit(Some(lp.end_label)));
             }
             Stmt::Continue { exit } => {
                 let lp = self.find_loop(exit);
-                self.emit(Op::Continue(lp.start_label));
+                self.emit(Op::Exit(Some(lp.start_label)));
             }
             Stmt::Return { expr } => match expr {
                 Some(expr) => {
@@ -577,7 +596,7 @@ pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary
         jump_labels: cg_state.jumps,
         var_names: cg_state.varnames.names,
         main_vector: cg_state.ops,
-        fork_vectors: cg_state.fork_vectors
+        fork_vectors: cg_state.fork_vectors,
     };
 
     Ok(binary)
@@ -761,7 +780,7 @@ mod tests {
                 Imm(1),
                 Gt,
                 If(2),
-                Break(1),
+                Exit(Some(1)),
                 Jump { label: 3 },
                 Jump { label: 0 },
                 Done
@@ -808,9 +827,9 @@ mod tests {
                 Imm(1),
                 Eq,
                 If(2),
-                Break(1),
+                Exit(Some(1)),
                 Jump { label: 3 },
-                Continue(0),
+                Exit(Some(0)),
                 Jump { label: 0 },
                 Done
             ]
@@ -870,65 +889,89 @@ mod tests {
         let program = "for n in [1..5] player:tell(a); endfor";
         let binary = compile(program, HashMap::new()).unwrap();
         /*
-          0: 124                   NUM 1
-          1: 128                   NUM 5
-          2: 006 019 014         * FOR_RANGE n 14
-          5: 072                   PUSH player
-          6: 100 000               PUSH_LITERAL "tell"
-          8: 085                   PUSH a
-          9: 016                 * MAKE_SINGLETON_LIST
-         10: 010                 * CALL_VERB
-         11: 111                   POP
-         12: 107 002               JUMP 2
-         */
-        assert_eq!(binary.main_vector,
-        vec![
-            Imm(0),
-            Imm(1),
-            ForRange { id: 0, label: 1 },
-            Push(1),
-            Imm(2),
-            Push(2),
-            MakeSingletonList,
-            CallVerb,
-            Pop,
-            Jump { label: 0 },
-            Done
-        ]);
+         0: 124                   NUM 1
+         1: 128                   NUM 5
+         2: 006 019 014         * FOR_RANGE n 14
+         5: 072                   PUSH player
+         6: 100 000               PUSH_LITERAL "tell"
+         8: 085                   PUSH a
+         9: 016                 * MAKE_SINGLETON_LIST
+        10: 010                 * CALL_VERB
+        11: 111                   POP
+        12: 107 002               JUMP 2
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Imm(1),
+                ForRange { id: 0, label: 1 },
+                Push(1),
+                Imm(2),
+                Push(2),
+                MakeSingletonList,
+                CallVerb,
+                Pop,
+                Jump { label: 0 },
+                Done
+            ]
+        );
     }
 
     #[test]
     fn test_fork() {
         let program = "fork (5) player:tell(\"a\"); endfork";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(binary.main_vector, vec![
-            Imm(0), Fork { f_index: 0, id: None }, Done
-        ]);
-        assert_eq!(binary.fork_vectors[0], vec![
-            Push(0), // player
-            Imm(0), // tell
-            Imm(1), // 'a'
-            MakeSingletonList,
-            CallVerb,
-            Pop
-        ]);
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Fork {
+                    f_index: 0,
+                    id: None
+                },
+                Done
+            ]
+        );
+        assert_eq!(
+            binary.fork_vectors[0],
+            vec![
+                Push(0), // player
+                Imm(0),  // tell
+                Imm(1),  // 'a'
+                MakeSingletonList,
+                CallVerb,
+                Pop
+            ]
+        );
     }
 
     #[test]
     fn test_fork_id() {
         let program = "fork fid (5) player:tell(fid); endfork";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(binary.main_vector, vec![
-            Imm(0), Fork { f_index: 0, id: Some(0) }, Done
-        ]);
-        assert_eq!(binary.fork_vectors[0], vec![
-            Push(1), // player
-            Imm(0), // tell
-            Push(0), // fid
-            MakeSingletonList,
-            CallVerb,
-            Pop
-        ]);
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Fork {
+                    f_index: 0,
+                    id: Some(0)
+                },
+                Done
+            ]
+        );
+        assert_eq!(
+            binary.fork_vectors[0],
+            vec![
+                Push(1), // player
+                Imm(0),  // tell
+                Push(0), // fid
+                MakeSingletonList,
+                CallVerb,
+                Pop
+            ]
+        );
     }
 
     #[test]
@@ -1058,7 +1101,7 @@ mod tests {
     #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
-        let parse = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         /*
          0: 124                   NUM 1
          1: 016                 * MAKE_SINGLETON_LIST
@@ -1078,7 +1121,7 @@ mod tests {
         17: 030 021             * AND 21
                 */
         assert_eq!(
-            parse.main_vector,
+            binary.main_vector,
             [
                 Imm(0),
                 MakeSingletonList,
@@ -1094,6 +1137,38 @@ mod tests {
                 RangeRef,
                 Put(1),
                 Pop,
+                Done
+            ]
+        );
+    }
+
+    #[test]
+    fn test_try_finally() {
+        let program = "try a=1; finally a=2; endtry";
+        let binary = compile(program, HashMap::new()).unwrap();
+        /*
+         0: 112 009 008         * TRY_FINALLY 8
+         3: 124                   NUM 1
+         4: 052                 * PUT a
+         5: 111                   POP
+         6: 112 005               END_FINALLY
+         8: 125                   NUM 2
+         9: 052                 * PUT a
+        10: 111                   POP
+        11: 112 006               CONTINUE
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                TryFinally(0),
+                Imm(0),
+                Put(0),
+                Pop,
+                EndFinally,
+                Imm(1),
+                Put(0),
+                Pop,
+                Continue,
                 Done
             ]
         );

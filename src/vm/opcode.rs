@@ -95,8 +95,8 @@ pub enum Op {
         id: usize,
         label: usize,
     },
-    Continue(usize),
-    Break(usize),
+    Continue,
+    Exit(Option<usize>),
     This,
 }
 

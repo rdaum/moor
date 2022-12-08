@@ -816,10 +816,10 @@ impl VM {
                 self.push(&Var::Int(FINALLY_FALLTHROUGH));
                 self.push(&Var::Int(0));
             }
-            Op::Continue(end_label) => {
+            Op::Continue=> {
                 unimplemented!("continue")
             }
-            Op::Break(end_label) => {
+            Op::Exit(label) => {
                 unimplemented!("break")
             }
             _ => {

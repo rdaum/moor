@@ -129,11 +129,11 @@ pub enum Stmt {
         time: Expr,
         body: Vec<Stmt>,
     },
-    Catch {
+    TryExcept {
         body: Vec<Stmt>,
         excepts: Vec<ExceptArm>,
     },
-    Finally {
+    TryFinally {
         body: Vec<Stmt>,
         handler: Vec<Stmt>,
     },
