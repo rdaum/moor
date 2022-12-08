@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use anyhow::anyhow;
 use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
@@ -54,7 +54,7 @@ pub struct State {
 impl State {}
 
 impl State {
-    pub fn new(varnames: Names) -> Self {
+    pub fn new(varnames: Names, builtins: HashMap<String, usize>) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
@@ -64,7 +64,7 @@ impl State {
             saved_stack: None,
             cur_stack: 0,
             max_stack: 0,
-            builtins: Default::default(),
+            builtins,
         }
     }
 
@@ -511,9 +511,9 @@ impl State {
     }
 }
 
-pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
+pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary, anyhow::Error> {
     let parse = parse_program(program)?;
-    let mut cg_state = State::new(parse.names);
+    let mut cg_state = State::new(parse.names, builtins);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }
@@ -542,13 +542,14 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 mod tests {
     use crate::vm::opcode::Op;
     use crate::vm::opcode::Op::*;
+    use sea_query::ColumnSpec::Default;
 
     use super::*;
 
     #[test]
     fn test_simple_add_expr() {
         let program = "1 + 2;";
-        let parse = compile(program).unwrap();
+        let parse = compile(program, HashMap::new()).unwrap();
         assert_eq!(parse.main_vector, vec![Imm(0), Imm(1), Add, Pop, Done]);
     }
 
@@ -566,7 +567,7 @@ mod tests {
             "  6: 030 010 * AND 10",
                  */
         let program = "a = 1 + 2;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(binary.var_names, vec!["a".to_string()]);
         assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(2)]);
         assert_eq!(
@@ -578,7 +579,7 @@ mod tests {
     #[test]
     fn test_var_assign_retr_expr() {
         let program = "a = 1 + 2; return a;";
-        let parse = compile(program).unwrap();
+        let parse = compile(program, HashMap::new()).unwrap();
         assert_eq!(
             parse.main_vector,
             vec![Imm(0), Imm(1), Add, Put(0), Pop, Push(0), Return, Done]
@@ -588,7 +589,7 @@ mod tests {
     #[test]
     fn test_if_stmt() {
         let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(
             binary.literals,
             vec![
@@ -645,7 +646,7 @@ mod tests {
     #[test]
     fn test_while_stmt() {
         let program = "while (1) x = x + 1; endwhile";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(binary.var_names, vec!["x".to_string()]);
         assert_eq!(binary.literals, vec![Var::Int(1)]);
 
@@ -680,7 +681,7 @@ mod tests {
     #[test]
     fn test_while_label_stmt() {
         let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(
             binary.var_names,
             vec!["chuckles".to_string(), "x".to_string()]
@@ -729,7 +730,7 @@ mod tests {
     #[test]
     fn test_while_break_continue_stmt() {
         let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(binary.var_names, vec!["x".to_string()]);
         assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(5)]);
 
@@ -777,7 +778,7 @@ mod tests {
     #[test]
     fn test_for_in_list_stmt() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(binary.var_names, vec!["x".to_string(), "b".to_string()]);
 
         /*
@@ -824,28 +825,21 @@ mod tests {
     #[test]
     fn test_and_or() {
         let program = "a = (1 && 2 || 3);";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
         /*
-          0: 124                   NUM 1
-          1: 030 004             * AND 4
-          3: 125                   NUM 2
-          4: 031 007             * OR 7
-          6: 126                   NUM 3
-          7: 052                 * PUT a
-          8: 111                   POP
+         0: 124                   NUM 1
+         1: 030 004             * AND 4
+         3: 125                   NUM 2
+         4: 031 007             * OR 7
+         6: 126                   NUM 3
+         7: 052                 * PUT a
+         8: 111                   POP
 
-         */
-        assert_eq!(binary.main_vector,
-                   vec![
-                       Imm(0),
-                       And(0),
-                       Imm(1),
-                       Or(1),
-                       Imm(2),
-                       Put(0),
-                       Pop,
-                       Done
-                   ]);
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![Imm(0), And(0), Imm(1), Or(1), Imm(2), Put(0), Pop, Done]
+        );
         assert_eq!(binary.jump_labels[0].position, 3);
         assert_eq!(binary.jump_labels[1].position, 5);
     }
@@ -853,7 +847,7 @@ mod tests {
     #[test]
     fn test_unknown_builtin_call() {
         let program = "call_builtin(1, 2, 3);";
-        let parse = compile(program);
+        let parse = compile(program, HashMap::new());
         assert!(parse.is_err());
         match parse.err().unwrap().downcast_ref::<CompileError>() {
             None => {
@@ -866,9 +860,37 @@ mod tests {
     }
 
     #[test]
+    fn test_known_builtin() {
+        let program = "disassemble(player, \"test\");";
+        let mut builtins = HashMap::new();
+        builtins.insert(String::from("disassemble"), 0);
+        let binary = compile(program, builtins).unwrap();
+        /*
+         0: 072                   PUSH player
+         1: 016                 * MAKE_SINGLETON_LIST
+         2: 100 000               PUSH_LITERAL "test"
+         4: 102                   LIST_ADD_TAIL
+         5: 012 000             * CALL_FUNC disassemble
+         7: 111                   POP
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(0), // Player
+                MakeSingletonList,
+                Imm(0),
+                ListAddTail,
+                FuncCall { id: 0 },
+                Pop,
+                Done
+            ]
+        );
+    }
+
+    #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
-        let parse = compile(program).unwrap();
+        let parse = compile(program, HashMap::new()).unwrap();
         /*
          0: 124                   NUM 1
          1: 016                 * MAKE_SINGLETON_LIST
