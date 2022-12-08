@@ -373,6 +373,7 @@ dependencies = [
  "serde_derive",
  "symbol_table",
  "text_io",
+ "thiserror",
 ]
 
 [[package]]

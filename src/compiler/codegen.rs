@@ -1,11 +1,19 @@
+use std::collections::HashMap;
 use anyhow::anyhow;
 use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
 use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
 use crate::vm::opcode::{Binary, Op};
+
+#[derive(Error, Debug)]
+pub enum CompileError {
+    #[error("Unknown built-in function: {0}")]
+    UnknownBuiltinFunction(String),
+}
 
 // Fixup for a jump label
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
@@ -40,6 +48,7 @@ pub struct State {
     pub(crate) saved_stack: Option<usize>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
+    pub(crate) builtins: HashMap<String, usize>,
 }
 
 impl State {}
@@ -55,6 +64,7 @@ impl State {
             saved_stack: None,
             cur_stack: 0,
             max_stack: 0,
+            builtins: Default::default(),
         }
     }
 
@@ -117,7 +127,6 @@ impl State {
     }
 
     fn push_stack(&mut self, n: usize) {
-        println!("Push stack");
         self.cur_stack += n;
         if self.cur_stack > self.max_stack {
             self.max_stack = self.cur_stack;
@@ -125,7 +134,6 @@ impl State {
     }
 
     fn pop_stack(&mut self, n: usize) {
-        println!("Pop stack");
         self.cur_stack -= n;
     }
 
@@ -329,8 +337,13 @@ impl State {
                 self.emit(Op::GetProp);
             }
             Expr::Call { function, args } => {
+                // Lookup builtin.
+                let Some(builtin) = self.builtins.get(function) else {
+                    return Err(CompileError::UnknownBuiltinFunction(function.clone()).into());
+                };
+                let builtin = *builtin;
                 self.generate_arg_list(args)?;
-                self.emit(Op::FuncCall { id: function.0 });
+                self.emit(Op::FuncCall { id: builtin });
             }
             Expr::Verb {
                 args,
@@ -809,32 +822,26 @@ mod tests {
     }
 
     #[test]
-    fn test_builtin_call() {
+    fn test_unknown_builtin_call() {
         let program = "call_builtin(1, 2, 3);";
-        let parse = compile(program).unwrap();
-        assert_eq!(
-            parse.main_vector,
-            vec![
-                Op::Imm(0),
-                Op::MakeSingletonList,
-                Op::Imm(1),
-                Op::ListAddTail,
-                Op::Imm(2),
-                Op::ListAddTail,
-                Op::FuncCall { id: 0 },
-                Op::Pop,
-                Done
-            ]
-        );
+        let parse = compile(program);
+        assert!(parse.is_err());
+        match parse.err().unwrap().downcast_ref::<CompileError>() {
+            None => {
+                panic!("Wrong error type")
+            }
+            Some(CompileError::UnknownBuiltinFunction(name)) => {
+                assert_eq!(name, "call_builtin");
+            }
+        }
     }
 
-    // TODO: this is incorrect.
     #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let parse = compile(program).unwrap();
         /*
-               0: 124                   NUM 1
+         0: 124                   NUM 1
          1: 016                 * MAKE_SINGLETON_LIST
          2: 125                   NUM 2
          3: 102                   LIST_ADD_TAIL

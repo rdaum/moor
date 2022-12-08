@@ -59,7 +59,7 @@ pub enum Expr {
         property: Box<Expr>,
     },
     Call {
-        function: Name,
+        function: String,
         args: Vec<Arg>,
     },
     Verb {

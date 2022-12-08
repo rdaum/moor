@@ -5,6 +5,7 @@ use antlr_rust::{InputStream, Parser};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
 use antlr_rust::errors::ANTLRError;
+use antlr_rust::parser_rule_context::ParserRuleContext;
 use antlr_rust::recognizer::Recognizer;
 use antlr_rust::token::Token;
 use antlr_rust::token_factory::TokenFactory;
@@ -630,9 +631,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._args_stack.push(vec![]);
         ctx.arglist().iter().for_each(|c| c.accept(self));
         let args = self._args_stack.pop().unwrap();
-
-        // TODO: this is incorrect. This needs to lookup in builtin table only.
-        let builtin_id = self.names.find_name(&builtin_id).expect("unfound builtin");
 
         self._expr_stack.push(Expr::Call {
             function: builtin_id,
