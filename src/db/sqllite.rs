@@ -684,7 +684,7 @@ impl<'a> Properties for SQLiteTx<'a> {
                 JoinType::Join,
                 Property::Table,
                 all![Expr::tbl(Property::Table, Property::Location)
-                    .equals(parents_of.clone(), Alias::new("oid"))],
+                    .equals(parents_of, Alias::new("oid"))],
             )
             .join(
                 JoinType::Join,
@@ -695,7 +695,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             .cond_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Name)).eq(name))
             .to_owned();
 
-        let query = query.with(with).to_owned();
+        let query = query.with(with);
 
         let (query, values) = query.build(SqliteQueryBuilder);
         let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
@@ -741,7 +741,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             })
             .unwrap();
 
-        match results.nth(0) {
+        match results.next() {
             None => Ok(None),
             Some(r) => Ok(Some(r?)),
         }
@@ -764,7 +764,7 @@ impl<'a> Properties for SQLiteTx<'a> {
                 JoinType::Join,
                 Property::Table,
                 all![Expr::tbl(Property::Table, Property::Location)
-                    .equals(parents_of.clone(), Alias::new("oid"))],
+                    .equals(parents_of, Alias::new("oid"))],
             )
             .join(
                 JoinType::Join,
@@ -775,7 +775,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             .cond_where(Expr::col((Property::Table, Property::Pid)).eq(handle.0))
             .to_owned();
 
-        let query = query.with(with).to_owned();
+        let query = query.with(with);
 
         let (query, values) = query.build(SqliteQueryBuilder);
         let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
@@ -816,7 +816,7 @@ impl<'a> Properties for SQLiteTx<'a> {
             })
             .unwrap();
 
-        match results.nth(0) {
+        match results.next() {
             None => Ok(None),
             Some(r) => Ok(Some(r?)),
         }
@@ -917,7 +917,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
 
         Ok(VerbInfo {
             vid: Vid(vid),
-            names: names.into_iter().map(|s| String::from(s)).collect(),
+            names: names.into_iter().map(String::from).collect(),
             attrs: VerbAttrs {
                 definer: Some(oid),
                 owner: Some(owner),
@@ -991,7 +991,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
         }
     }
 
-    fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
+    fn update_verb(&self, _vid: Vid, _attrs: VerbAttrs) -> Result<(), Error> {
         // Ho-boy this is going to be fun for multiple name support. Easiest will be just to
         // delete them all and re-add.
         todo!()
@@ -999,10 +999,10 @@ impl<'a> Verbs for SQLiteTx<'a> {
 
     fn find_command_verb(
         &self,
-        oid: Objid,
-        verb: &str,
-        argspec: VerbArgsSpec,
-        attrs: EnumSet<crate::model::verbs::VerbAttr>,
+        _oid: Objid,
+        _verb: &str,
+        _argspec: VerbArgsSpec,
+        _attrs: EnumSet<crate::model::verbs::VerbAttr>,
     ) -> Result<Option<crate::model::verbs::VerbInfo>, Error> {
         todo!()
     }
@@ -1026,7 +1026,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
                 JoinType::Join,
                 Verb::Table,
                 all![Expr::tbl(Verb::Table, Verb::Definer)
-                    .equals(parents_of.clone(), Alias::new("oid"))],
+                    .equals(parents_of, Alias::new("oid"))],
             )
             .join(
                 JoinType::Join,
@@ -1038,9 +1038,9 @@ impl<'a> Verbs for SQLiteTx<'a> {
 
         let (query, values) = query
             .with(with)
-            .to_owned()
+            
             .build(SqliteQueryBuilder)
-            .to_owned();
+            ;
 
         let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
@@ -1060,9 +1060,9 @@ impl<'a> Verbs for SQLiteTx<'a> {
 
     fn find_indexed_verb(
         &self,
-        oid: Objid,
-        index: usize,
-        attrs: EnumSet<crate::model::verbs::VerbAttr>,
+        _oid: Objid,
+        _index: usize,
+        _attrs: EnumSet<crate::model::verbs::VerbAttr>,
     ) -> Result<Option<crate::model::verbs::VerbInfo>, Error> {
         todo!()
     }
@@ -1088,13 +1088,13 @@ impl<'a> ObjDB for SQLiteTx<'a> {
     }
 
     fn commit(&mut self) -> Result<(), Error> {
-        let mut tx = std::mem::take(&mut self.tx);
+        let tx = std::mem::take(&mut self.tx);
         tx.unwrap().commit()?;
         Ok(())
     }
 
     fn rollback(&mut self) -> Result<(), Error> {
-        let mut tx = std::mem::take(&mut self.tx);
+        let tx = std::mem::take(&mut self.tx);
         tx.unwrap().rollback()?;
         Ok(())
     }
@@ -1167,7 +1167,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(attrs.name.unwrap(), "test");
-        assert!(attrs.flags.unwrap().contains(ObjFlag::Write.into()));
+        assert!(attrs.flags.unwrap().contains(ObjFlag::Write));
 
         s.commit().unwrap();
     }
@@ -1232,7 +1232,7 @@ mod tests {
             .unwrap();
 
         let other_root = s.create_object(None, &ObjAttrs::new()).unwrap();
-        let other_root_child = s
+        let _other_root_child = s
             .create_object(None, ObjAttrs::new().parent(other_root))
             .unwrap();
 
@@ -1322,7 +1322,7 @@ mod tests {
             .unwrap();
 
         let other_root = s.create_object(None, &ObjAttrs::new()).unwrap();
-        let other_root_child = s
+        let _other_root_child = s
             .create_object(None, ObjAttrs::new().parent(other_root))
             .unwrap();
 
@@ -1331,7 +1331,7 @@ mod tests {
             prep: PrepSpec::None,
             iobj: ArgSpec::This,
         };
-        let vinfo = s
+        let _vinfo = s
             .add_verb(
                 parent,
                 vec!["look_down", "look_up"],
@@ -1366,7 +1366,7 @@ mod tests {
         assert_eq!(v.unwrap().attrs.definer.unwrap(), parent);
 
         // Set it on the intermediate child...
-        let vinfo = s
+        let _vinfo = s
             .add_verb(
                 child1,
                 vec!["look_down", "look_up"],
@@ -1389,7 +1389,7 @@ mod tests {
         assert_eq!(v.unwrap().attrs.definer.unwrap(), child1);
 
         // Finally set it on the last child...
-        let vinfo = s
+        let _vinfo = s
             .add_verb(
                 child2,
                 vec!["look_down", "look_up"],

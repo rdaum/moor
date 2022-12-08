@@ -3,7 +3,7 @@ use serde_derive::{Deserialize, Serialize};
 use crate::compiler::codegen::JumpLabel;
 use crate::model::var::Var;
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub enum Op {
     Label(usize),
     If(usize),
@@ -100,7 +100,7 @@ pub enum Op {
     This,
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct Label {
     pub (crate) offset : usize,
 }

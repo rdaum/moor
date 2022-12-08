@@ -3,15 +3,15 @@ use bincode::config;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
 
+use crate::model::ObjDB;
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropFlag};
+use crate::model::var::{Error, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::{Program, VerbAttr};
-use crate::model::ObjDB;
 use crate::vm::opcode::{Binary, Op};
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
@@ -52,7 +52,7 @@ impl Activation {
         let slc = &program.0[..];
         let result: Result<(Binary, usize), DecodeError> =
             bincode::serde::decode_from_slice(slc, config::standard());
-        let Ok((binary, size)) = result else {
+        let Ok((binary, _size)) = result else {
             return Err(anyhow!("Invalid opcodes in binary program stream"));
         };
 
@@ -152,7 +152,7 @@ macro_rules! binary_var_op {
 }
 
 impl VM {
-    pub fn raise_error(&mut self, err: Error) {}
+    pub fn raise_error(&mut self, _err: Error) {}
 
     fn top_mut(&mut self) -> &mut Activation {
         self.stack.last_mut().expect("activation stack underflow")
@@ -248,15 +248,15 @@ impl VM {
                 }
             }
         };
-        return prop_val;
+        prop_val
     }
 
     pub fn call_verb(
         &mut self,
         db: &mut impl ObjDB,
         vname: &str,
-        args: Var,
-        do_pass: bool,
+        _args: Var,
+        _do_pass: bool,
     ) -> Result<Var, anyhow::Error> {
         // TODO do_pass get parent and delegate there instead.
         // Requires adding db.object_parent.
@@ -289,7 +289,7 @@ impl VM {
     pub fn exec(
         &mut self,
         db: &mut impl ObjDB,
-        player: Objid,
+        _player: Objid,
         player_flags: EnumSet<ObjFlag>,
     ) -> Result<(), anyhow::Error> {
         let op = self.next_op();
@@ -376,7 +376,7 @@ impl VM {
                     }
                 };
 
-                self.set_env(id, &from);
+                self.set_env(id, from);
                 self.poke(1, &next_val);
                 self.rewind(3);
             }
@@ -411,7 +411,7 @@ impl VM {
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
 
-                let mut new_list = list.clone();
+                let mut new_list = list;
                 new_list.push(tail);
                 self.push(&Var::List(new_list))
             }
@@ -445,7 +445,7 @@ impl VM {
                             return Ok(());
                         }
 
-                        let mut nval = l.clone();
+                        let mut nval = l;
                         nval[i as usize] = value;
                         Var::List(nval)
                     }
@@ -646,7 +646,7 @@ impl VM {
             // guaranteed to not work the first ... N... times
             Op::Scatter {
                 nargs,
-                nreq: nreq,
+                nreq,
                 rest,
                 id,
                 label,
@@ -756,10 +756,10 @@ impl VM {
                 self.push(&Var::Obj(self.top().this));
             }
 
-            Op::Fork { id, f_index } => {}
+            Op::Fork { id: _, f_index: _ } => {}
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
-                let (args, verb, obj) = match (args, verb, obj) {
+                let (_args, _verb, _obj) = match (args, verb, obj) {
                     (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
                     (_, _, _) => {
                         self.push(&Var::Err(E_TYPE));
@@ -773,7 +773,7 @@ impl VM {
             Op::Return => {}
             Op::Return0 => {}
             Op::Done => {}
-            Op::FuncCall { id } => {}
+            Op::FuncCall { id: _ } => {}
             Op::PushLabel(label) => {
                 self.push(&Var::Int(label as i64));
             }
@@ -792,7 +792,7 @@ impl VM {
                 let Var::_Catch(marker) = marker else {
                   panic!("Stack marker is not type Catch");
                 };
-                for i in 0..marker {
+                for _i in 0..marker {
                     self.pop();
                 }
                 self.push(&v);
@@ -803,14 +803,14 @@ impl VM {
                 let Var::_Catch(marker) = marker else {
                     panic!("Stack marker is not type Catch");
                 };
-                for i in 0..marker {
+                for _i in 0..marker {
                     self.pop();
                 }
                 self.jump(label);
             }
             Op::EndFinally => {
                 let v = self.pop();
-                let Var::_Finally(marker) = v else {
+                let Var::_Finally(_marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
                 self.push(&Var::Int(FINALLY_FALLTHROUGH));
@@ -819,7 +819,7 @@ impl VM {
             Op::Continue=> {
                 unimplemented!("continue")
             }
-            Op::Exit(label) => {
+            Op::Exit(_label) => {
                 unimplemented!("break")
             }
             _ => {

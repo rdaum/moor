@@ -84,7 +84,7 @@ macro_rules! binary_numeric_coercion_op {
 impl Var {
     pub fn is_true(&self) -> bool {
         match self {
-            Var::Str(s) => s != "",
+            Var::Str(s) => !s.is_empty(),
             Var::Int(i) => *i != 0,
             Var::Float(f) => !f.is_zero(),
             Var::List(l) => !l.is_empty(),

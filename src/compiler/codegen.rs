@@ -1,14 +1,14 @@
-use anyhow::anyhow;
-use itertools::Itertools;
-use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use anyhow::anyhow;
+use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
-use crate::compiler::parse::{parse_program, Name, Names};
+use crate::compiler::parse::{Name, Names, parse_program};
 use crate::model::var::Var;
-use crate::vm::opcode::Op::Jump;
 use crate::vm::opcode::{Binary, Op};
+use crate::vm::opcode::Op::Jump;
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -101,7 +101,7 @@ impl State {
     }
 
     fn add_literal(&mut self, v: &Var) -> usize {
-        let lv_pos = self.literals.iter().position(|lv| return lv.eq(v));
+        let lv_pos = self.literals.iter().position(|lv| lv.eq(v));
         match lv_pos {
             None => {
                 let idx = self.literals.len();
@@ -167,15 +167,15 @@ impl State {
     ) -> Result<(), anyhow::Error> {
         match left.as_ref() {
             // Scattering assignment on left is special.
-            Expr::Scatter(sa) => {
+            Expr::Scatter(_sa) => {
                 todo!("Scatter assignment");
             }
             _ => {
                 self.push_lvalue(left, false)?;
                 self.generate_expr(right)?;
                 match left.as_ref() {
-                    Expr::Range { base, from, to } => self.emit(Op::PutTemp),
-                    Expr::Index(lhs, rhs) => self.emit(Op::PutTemp),
+                    Expr::Range { base: _, from: _, to: _ } => self.emit(Op::PutTemp),
+                    Expr::Index(_lhs, _rhs) => self.emit(Op::PutTemp),
                     _ => {}
                 }
                 let mut is_indexed = false;
@@ -184,14 +184,14 @@ impl State {
                     // Figure out the form of assignment, handle correctly, then walk through
                     // chained assignments
                     match left.as_ref() {
-                        Expr::Range { base, from, to } => {
+                        Expr::Range { base, from: _, to: _ } => {
                             self.emit(Op::RangeSet);
                             self.pop_stack(3);
                             e = base;
                             is_indexed = true;
                             continue;
                         }
-                        Expr::Index(lhs, rhs) => {
+                        Expr::Index(lhs, _rhs) => {
                             self.emit(Op::IndexSet);
                             self.pop_stack(2);
                             e = lhs;
@@ -202,7 +202,7 @@ impl State {
                             self.emit(Op::Put(name.0));
                             break;
                         }
-                        Expr::Prop { location, property } => {
+                        Expr::Prop { location: _, property: _ } => {
                             self.emit(Op::PutProp);
                             self.pop_stack(2);
                             break;
@@ -261,6 +261,17 @@ impl State {
         }
         Ok(())
     }
+
+    fn generate_codes(&mut self, arg_list: &Vec<Arg>) -> Result<(), anyhow::Error> {
+        if !arg_list.is_empty() {
+            self.generate_arg_list(arg_list)?;
+        } else {
+            self.emit(Op::Push(0));
+            self.push_stack(0);
+        }
+        Ok(())
+    }
+
     fn generate_expr(&mut self, expr: &Expr) -> Result<(), anyhow::Error> {
         match expr {
             Expr::VarExpr(v) => {
@@ -318,7 +329,7 @@ impl State {
                 self.pop_stack(1);
             }
             Expr::Range { base, from, to } => {
-                let mut old;
+                let old;
                 self.generate_expr(base.as_ref())?;
                 old = self.save_stack_top();
                 self.generate_expr(from.as_ref())?;
@@ -404,7 +415,7 @@ impl State {
                     self.emit(Op::If(else_label));
                     self.pop_stack(1);
                     for stmt in &arm.statements {
-                        self.generate_stmt(&stmt)?;
+                        self.generate_stmt(stmt)?;
                     }
                     end_label = Some(self.add_jump(None));
                     self.emit(Op::Jump {
@@ -498,7 +509,43 @@ impl State {
                 });
                 self.pop_stack(1);
             }
-            Stmt::TryExcept { body, excepts } => {}
+            Stmt::TryExcept { body, excepts } => {
+                for ex in excepts {
+                    self.generate_codes(&ex.codes)?;
+                    let push_label = self.add_jump(None);
+                    self.emit(Op::PushLabel(push_label));
+                    self.push_stack(1);
+                }
+                let arm_count = excepts.len();
+                self.emit(Op::TryExcept(arm_count));
+                self.push_stack(1);
+                for stmt in body {
+                    self.generate_stmt(stmt)?;
+                }
+                let end_label = self.add_jump(None);
+                self.emit(Op::EndExcept(end_label));
+                self.pop_stack(2 * arm_count + 1);
+                for (i, ex) in excepts.iter().enumerate() {
+                    // let label = self.add_jump(ex.id);  TODO hmm
+                    self.push_stack(1);
+                    if ex.id.is_some() {
+                        self.emit(Op::Put(ex.id.unwrap().0));
+                    }
+                    self.emit(Op::Pop);
+                    self.pop_stack(1);
+                    for stmt in &ex.statements {
+                        self.generate_stmt(stmt)?;
+                    }
+                    if i + 1 < excepts.len() {
+                        let arm_end_label = self.add_jump(None);
+                        self.emit(Op::Jump {
+                            label: arm_end_label,
+                        });
+                        self.fixup_jump(arm_end_label);
+                    }
+                }
+                self.fixup_jump(end_label);
+            }
             Stmt::TryFinally { body, handler } => {
                 let handler_label = self.add_jump(None);
                 self.emit(Op::TryFinally(handler_label));
@@ -1169,6 +1216,65 @@ mod tests {
                 Put(0),
                 Pop,
                 Continue,
+                Done
+            ]
+        );
+    }
+
+    #[test]
+    fn test_try_excepts() {
+        let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
+        let binary = compile(program, HashMap::new()).unwrap();
+        /*
+          0: 100 000               PUSH_LITERAL E_INVARG
+          2: 016                 * MAKE_SINGLETON_LIST
+          3: 112 002 021           PUSH_LABEL 21
+          6: 100 001               PUSH_LITERAL E_PROPNF
+          8: 016                 * MAKE_SINGLETON_LIST
+          9: 112 002 028           PUSH_LABEL 28
+         12: 112 008 002         * TRY_EXCEPT 2
+         15: 124                   NUM 1
+         16: 052                 * PUT a
+         17: 111                   POP
+         18: 112 004 033           END_EXCEPT 33
+         21: 052                 * PUT a
+         22: 111                   POP
+         23: 125                   NUM 2
+         24: 052                 * PUT a
+         25: 111                   POP
+         26: 107 033               JUMP 33
+         28: 053                 * PUT b
+         29: 111                   POP
+         30: 126                   NUM 3
+         31: 052                 * PUT a
+         32: 111                   POP
+
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(1),
+                MakeSingletonList,
+                PushLabel(0),
+                Push(3),
+                MakeSingletonList,
+                PushLabel(1),
+                TryExcept(2),
+                Imm(0),
+                Put(0),
+                Pop,
+                EndExcept(2),
+                Put(0),
+                Pop,
+                Imm(1),
+                Put(0),
+                Pop,
+                Jump { label: 3 },
+                Put(2),
+                Pop,
+                Imm(2),
+                Put(0),
+                Pop,
                 Done
             ]
         );
