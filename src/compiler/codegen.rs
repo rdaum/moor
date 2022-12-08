@@ -426,9 +426,7 @@ impl State {
             } => {
                 let loop_start_label = self.add_jump(*id);
                 let loop_end_label = self.add_jump(None);
-                self.generate_expr(condition)
-                    .as_ref()
-                    .expect("compile expr");
+                self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While(loop_end_label)),
                     Some(id) => self.emit(Op::WhileId {
@@ -885,6 +883,33 @@ mod tests {
                 Done
             ]
         );
+    }
+
+    #[test]
+    fn test_verb_call() {
+        let program = "player:tell(\"test\");";
+        let binary = compile(program, HashMap::new()).unwrap();
+
+            /*
+                  0: 072                   PUSH player
+                  1: 100 000               PUSH_LITERAL "tell"
+                  3: 100 001               PUSH_LITERAL "test"
+                  5: 016                 * MAKE_SINGLETON_LIST
+                  6: 010                 * CALL_VERB
+                  7: 111                   POP
+            */
+            assert_eq!(
+                binary.main_vector,
+                vec![
+                    Push(0), // Player
+                    Imm(0),
+                    Imm(1),
+                    MakeSingletonList,
+                    CallVerb,
+                    Pop,
+                    Done,
+                ]
+            );
     }
 
     #[test]
