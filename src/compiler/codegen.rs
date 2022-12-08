@@ -5,10 +5,10 @@ use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
-use crate::compiler::parse::{Name, Names, parse_program};
+use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
-use crate::vm::opcode::{Binary, Op};
 use crate::vm::opcode::Op::Jump;
+use crate::vm::opcode::{Binary, Op};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -174,7 +174,11 @@ impl State {
                 self.push_lvalue(left, false)?;
                 self.generate_expr(right)?;
                 match left.as_ref() {
-                    Expr::Range { base: _, from: _, to: _ } => self.emit(Op::PutTemp),
+                    Expr::Range {
+                        base: _,
+                        from: _,
+                        to: _,
+                    } => self.emit(Op::PutTemp),
                     Expr::Index(_lhs, _rhs) => self.emit(Op::PutTemp),
                     _ => {}
                 }
@@ -184,7 +188,11 @@ impl State {
                     // Figure out the form of assignment, handle correctly, then walk through
                     // chained assignments
                     match left.as_ref() {
-                        Expr::Range { base, from: _, to: _ } => {
+                        Expr::Range {
+                            base,
+                            from: _,
+                            to: _,
+                        } => {
                             self.emit(Op::RangeSet);
                             self.pop_stack(3);
                             e = base;
@@ -202,7 +210,10 @@ impl State {
                             self.emit(Op::Put(name.0));
                             break;
                         }
-                        Expr::Prop { location: _, property: _ } => {
+                        Expr::Prop {
+                            location: _,
+                            property: _,
+                        } => {
                             self.emit(Op::PutProp);
                             self.pop_stack(2);
                             break;
@@ -393,7 +404,39 @@ impl State {
                 self.generate_expr(alternative.as_ref())?;
                 self.fixup_jump(end_label);
             }
-            Expr::Catch { .. } => {}
+            Expr::Catch {
+                codes,
+                except,
+                trye,
+            } => {
+                self.generate_codes(codes)?;
+                let handler_label = self.add_jump(None);
+                self.emit(Op::PushLabel(handler_label));
+                self.push_stack(1);
+                self.emit(Op::Catch);
+                self.push_stack(1);
+                self.generate_expr(trye.as_ref())?;
+                let end_label = self.add_jump(None);
+                self.emit(Op::EndCatch(end_label));
+                self.pop_stack(3)   /* codes, label, catch */;
+
+                /* After this label, we still have a value on the stack, but now,
+                 * instead of it being the value of the main expression, we have
+                 * the exception tuple pushed before entering the handler.
+                 */
+                match except {
+                    Some(except) => {
+                        self.emit(Op::Pop);
+                        self.pop_stack(1);
+                        self.generate_expr(except.as_ref())?;
+                    }
+                    None => {
+                        self.emit(Op::Val(Var::Int(1)));
+                        self.emit(Op::Ref);
+                    }
+                }
+                self.fixup_jump(end_label);
+            }
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
             }
@@ -665,16 +708,14 @@ mod tests {
     #[test]
     fn test_var_assign_expr() {
         /*
-                "=================", "[Bytes for labels = 1, literals = 1, forks = 1, variables = 1,
-        stack refs = 1]", "[Maximum stack size = 2]",
-            "  0: 124 NUM 1",
-            "  1: 125 NUM 2",
-            "  2: 021 * ADD",
-            "  3: 052 * PUT a",
-            "  4: 111 POP",
-            "  5: 123 NUM 0",
-            "  6: 030 010 * AND 10",
-                 */
+        "  0: 124 NUM 1",
+        "  1: 125 NUM 2",
+        "  2: 021 * ADD",
+        "  3: 052 * PUT a",
+        "  4: 111 POP",
+        "  5: 123 NUM 0",
+        "  6: 030 010 * AND 10",
+             */
         let program = "a = 1 + 2;";
         let binary = compile(program, HashMap::new()).unwrap();
         assert_eq!(binary.var_names, vec!["a".to_string()]);
@@ -1278,5 +1319,48 @@ mod tests {
                 Done
             ]
         );
+    }
+
+    #[test]
+    fn test_catch_expr() {
+        let program = "x = `x + 1 ! E_PROPNF, E_PERM => 17';";
+        let binary = compile(program, HashMap::new()).unwrap();
+        /**
+          0: 100 000               PUSH_LITERAL E_PROPNF
+         2: 016                 * MAKE_SINGLETON_LIST
+         3: 100 001               PUSH_LITERAL E_PERM
+         5: 102                   LIST_ADD_TAIL
+         6: 112 002 017           PUSH_LABEL 17
+         9: 112 007             * CATCH
+        11: 085                   PUSH x
+        12: 124                   NUM 1
+        13: 021                 * ADD
+        14: 112 003 019           END_CATCH 19
+        17: 111                   POP
+        18: 140                   NUM 17
+        19: 052                 * PUT x
+        20: 111                   POP
+
+         */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(1),
+                MakeSingletonList,
+                Push(2),
+                ListAddTail,
+                PushLabel(0),
+                Catch,
+                Push(0),
+                Imm(0),
+                Add,
+                EndCatch(1),
+                Pop,
+                Imm(1),
+                Put(0),
+                Pop,
+                Done
+            ]
+        )
     }
 }
