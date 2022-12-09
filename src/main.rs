@@ -176,7 +176,7 @@ fn main() {
                 Some(v) => {v}
             };
 
-            let binary = compile(verb.program.as_str(), HashMap::new()).expect("could not compile");
+            let binary = compile(verb.program.as_str()).expect("could not compile");
 
             let prg = bincode::serde::encode_to_vec(binary, config::standard()).expect("Could not serialize program");
             s.add_verb(

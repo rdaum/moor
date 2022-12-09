@@ -676,7 +676,170 @@ impl CodegenState {
     }
 }
 
-pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary, anyhow::Error> {
+fn register_builtins() -> HashMap<String, usize> {
+    let builtins = vec![
+        // disassemble
+        "disassemble",
+
+        // functions
+        "function_info",
+        "load_server_options",
+
+        // values
+        "value_bytes",
+        "value_hash",
+        "string_hash",
+        "binary_hash",
+        "decode_binary",
+        "encode_binary",
+
+        // list
+        "length",
+        "setadd",
+        "setremove",
+        "listappend",
+        "listinsert",
+        "listdelete",
+        "listset",
+        "equal",
+        "is_member",
+
+        // string
+        "tostr",
+        "toliteral",
+        "match",
+        "rmatch",
+        "substitute",
+        "crypt",
+        "index",
+        "rindex",
+        "strcmp",
+        "strsub",
+
+        // numbers
+        "toint",
+        "tonum",
+        "tofloat",
+        "min",
+        "max",
+        "abs",
+        "random",
+        "time",
+        "ctime",
+        "floatstr",
+        "sqrt",
+        "sin",
+        "cos",
+        "tan",
+        "asin",
+        "acos",
+        "atan",
+        "sinh",
+        "cosh",
+        "tanh",
+        "exp",
+        "log",
+        "log10",
+        "ceil",
+        "floor",
+        "trunc",
+
+        // objects
+        "toobj",
+        "typeof",
+        "create",
+        "recycle",
+        "object_bytes",
+        "valid",
+        "parent",
+        "children",
+        "chparent",
+        "max_object",
+        "players",
+        "is_player",
+        "set_player_flag",
+        "move",
+
+        // property
+        "properties",
+        "property_info",
+        "set_property_info",
+        "add_property",
+        "delete_property",
+        "clear_property",
+        "is_clear_property",
+
+        // verbs
+        "verbs",
+        "verb_info",
+        "set_verb_info",
+        "verb_args",
+        "set_verb_args",
+        "add_verb",
+        "delete_verb",
+        "verb_code",
+        "set_verb_code",
+        "eval",
+
+        // server
+        "server_version",
+        "renumber",
+        "reset_max_object",
+        "memory_usage",
+        "shutdown",
+        "dump_database",
+        "db_disk_size",
+        "open_network_connection",
+        "connected_players",
+        "connected_seconds",
+        "idle_seconds",
+        "connection_name",
+        "notify",
+        "boot_player",
+        "set_connection_option",
+        "connection_option",
+        "connection_options",
+        "listen",
+        "unlisten",
+        "listeners",
+        "buffered_output_length",
+
+        // tasks
+        "task_id",
+        "queued_tasks",
+        "kill_task",
+        "output_delimiters",
+        "queue_info",
+        "resume",
+        "force_input",
+        "flush_input",
+
+        // log
+        "server_log",
+
+        // execute
+        "raise",
+        "suspend",
+        "read",
+        "seconds_left",
+        "ticks_left",
+        "pass",
+        "set_task_perms",
+        "caller_perms",
+        "callers",
+        "task_stack"
+    ];
+
+    let mut b = HashMap::new();
+    for (i, builtin) in builtins.iter().enumerate() {
+        b.insert(builtin.to_string(), i);
+    }
+
+    b
+}
+
+pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
+    let builtins = register_builtins();
     let parse = parse_program(program)?;
     let mut cg_state = CodegenState::new(parse.names, builtins);
     for x in parse.stmts {
@@ -713,7 +876,7 @@ mod tests {
     #[test]
     fn test_simple_add_expr() {
         let program = "1 + 2;";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
         let one = binary.find_literal(1.into());
         let two = binary.find_literal(2.into());
         assert_eq!(binary.main_vector, vec![Imm(one), Imm(two), Add, Pop, Done]);
@@ -723,7 +886,7 @@ mod tests {
     fn test_var_assign_expr() {
 
         let program = "a = 1 + 2;";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let one = binary.find_literal(1.into());
@@ -746,7 +909,7 @@ mod tests {
     #[test]
     fn test_var_assign_retr_expr() {
         let program = "a = 1 + 2; return a;";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let one = binary.find_literal(1.into());
@@ -761,7 +924,7 @@ mod tests {
     #[test]
     fn test_if_stmt() {
         let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let one = binary.find_literal(1.into());
         let two = binary.find_literal(2.into());
@@ -815,7 +978,7 @@ mod tests {
     #[test]
     fn test_while_stmt() {
         let program = "while (1) x = x + 1; endwhile";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let x = binary.find_var("x");
         let one = binary.find_literal(1.into());
@@ -851,7 +1014,7 @@ mod tests {
     #[test]
     fn test_while_label_stmt() {
         let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let x = binary.find_var("x");
         let chuckles = binary.find_var("chuckles");
@@ -900,7 +1063,7 @@ mod tests {
     #[test]
     fn test_while_break_continue_stmt() {
         let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let x = binary.find_var("x");
         let one = binary.find_literal(1.into());
@@ -951,7 +1114,7 @@ mod tests {
     #[test]
     fn test_for_in_list_stmt() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let b = binary.find_var("b");
         let x = binary.find_var("x");
@@ -1004,7 +1167,7 @@ mod tests {
     #[test]
     fn test_for_range() {
         let program = "for n in [1..5] player:tell(a); endfor";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let player = binary.find_var("player");
         let a = binary.find_var("a".into());
@@ -1046,7 +1209,7 @@ mod tests {
     #[test]
     fn test_fork() {
         let program = "fork (5) player:tell(\"a\"); endfork";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let player = binary.find_var("player");
         let a = binary.find_literal("a".into());
@@ -1079,7 +1242,7 @@ mod tests {
     #[test]
     fn test_fork_id() {
         let program = "fork fid (5) player:tell(fid); endfork";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let player = binary.find_var("player");
         let fid = binary.find_var("fid");
@@ -1113,7 +1276,7 @@ mod tests {
     #[test]
     fn test_and_or() {
         let program = "a = (1 && 2 || 3);";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let one = binary.find_literal(1.into());
@@ -1139,12 +1302,12 @@ mod tests {
 
     #[test]
     fn test_unknown_builtin_call() {
-        let program = "call_builtin(1, 2, 3);";
-        let parse = compile(program, HashMap::new());
+        let program = "bad_builtin(1, 2, 3);";
+        let parse = compile(program);
         assert!(parse.is_err());
         match parse.err().unwrap().downcast_ref::<CompileError>() {
             Some(CompileError::UnknownBuiltinFunction(name)) => {
-                assert_eq!(name, "call_builtin");
+                assert_eq!(name, "bad_builtin");
             }
             None => {
                 panic!("Missing error");
@@ -1158,9 +1321,7 @@ mod tests {
     #[test]
     fn test_known_builtin() {
         let program = "disassemble(player, \"test\");";
-        let mut builtins = HashMap::new();
-        builtins.insert(String::from("disassemble"), 0);
-        let binary = compile(program, builtins).unwrap();
+        let binary = compile(program).unwrap();
 
         let player = binary.find_var("player");
         let test = binary.find_literal("test".into());
@@ -1189,7 +1350,7 @@ mod tests {
     #[test]
     fn test_cond_expr() {
         let program = "a = (1 == 2 ? 3 | 4);";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let one = binary.find_literal(1.into());
@@ -1228,7 +1389,7 @@ mod tests {
     #[test]
     fn test_verb_call() {
         let program = "player:tell(\"test\");";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let player = binary.find_var("player");
         let tell = binary.find_literal("tell".into());
@@ -1259,7 +1420,7 @@ mod tests {
     #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let b = binary.find_var("b");
@@ -1310,7 +1471,7 @@ mod tests {
     #[test]
     fn test_try_finally() {
         let program = "try a=1; finally a=2; endtry";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let one = binary.find_literal(1.into());
@@ -1346,7 +1507,7 @@ mod tests {
     #[test]
     fn test_try_excepts() {
         let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
         let b = binary.find_var("b");
@@ -1414,7 +1575,7 @@ mod tests {
     #[test]
     fn test_catch_expr() {
         let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
-        let binary = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program).unwrap();
         /**
           0: 100 000               PUSH_LITERAL E_PROPNF
          2: 016                 * MAKE_SINGLETON_LIST
