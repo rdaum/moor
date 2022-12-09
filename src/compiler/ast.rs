@@ -15,7 +15,7 @@ pub enum ScatterKind {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Scatter {
+pub struct ScatterItem {
     pub kind: ScatterKind,
     pub id: Name,
     pub expr: Option<Expr>,
@@ -84,7 +84,7 @@ pub enum Expr {
     },
     Index(Box<Expr>, Box<Expr>),
     List(Vec<Arg>),
-    Scatter(Vec<Scatter>),
+    Scatter(Vec<ScatterItem>, Box<Expr>),
     Length,
 }
 

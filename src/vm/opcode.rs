@@ -4,6 +4,12 @@ use crate::compiler::codegen::JumpLabel;
 use crate::model::var::Var;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+pub struct ScatterLabel {
+    pub id: usize,
+    pub label: usize,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub enum Op {
     Label(usize),
     If(usize),
@@ -80,8 +86,7 @@ pub enum Op {
         nargs: usize,
         nreq: usize,
         rest: usize,
-        id: usize,
-        label: usize,
+        labels: Vec<ScatterLabel>,
         done : usize
     },
     PushLabel(usize),

@@ -642,65 +642,13 @@ impl VM {
                     }
                 }
             }
-            // TODO This is all very frobby and copied 1:1 from the MOO C source and is pretty much
-            // guaranteed to not work the first ... N... times
+
             Op::Scatter {
                 nargs,
                 nreq,
-                rest,
-                id,
-                label,
-                done,
+                rest, ..
             } => {
-                let have_rest = rest > nargs;
-                let list = self.peek_top();
-                let Var::List(list) = list else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(());
-                };
-
-                let len = list.len();
-                if len < nreq || (!have_rest && len > nargs) {
-                    self.push(&Var::Err(E_ARGS));
-                    return Ok(());
-                }
-
-                let mut nopt_avail = len - nreq;
-                let nrest = if have_rest && len > nargs {
-                    len - nargs + 1
-                } else {
-                    0
-                };
-                let mut offset = 0;
-                let mut whr = 0;
-                for i in 1..nargs {
-                    if i == rest {
-                        // rest
-                        let sublist = &list[i..i + nrest - 1];
-                        let sublist = Var::List(Vec::from(sublist));
-                        self.set_env(id, &sublist);
-                    } else if label == 0 {
-                        // required
-                        self.set_env(id, &list[i + offset].clone());
-                    } else {
-                        // optional
-                        if nopt_avail > 0 {
-                            nopt_avail -= 1;
-
-                            self.set_env(id, &list[i + offset]);
-                        } else {
-                            offset -= 1;
-                            if whr == 0 && label != 1 {
-                                whr = label;
-                            }
-                        }
-                    }
-                }
-                if whr == 0 {
-                    self.jump(done);
-                } else {
-                    self.jump(whr);
-                }
+                unimplemented!("scatter assignement");
             }
 
             Op::GetProp => {

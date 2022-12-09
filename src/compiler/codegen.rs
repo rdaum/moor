@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::compiler::ast::{Arg, BinaryOp, Expr, Stmt, UnaryOp};
+use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
 use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
 use crate::vm::opcode::Op::Jump;
-use crate::vm::opcode::{Binary, Op};
+use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -170,71 +171,119 @@ impl CodegenState {
         left: &Box<Expr>,
         right: &Box<Expr>,
     ) -> Result<(), anyhow::Error> {
+        self.push_lvalue(left, false)?;
+        self.generate_expr(right)?;
         match left.as_ref() {
-            // Scattering assignment on left is special.
-            Expr::Scatter(_sa) => {
-                todo!("Scatter assignment");
-            }
-            _ => {
-                self.push_lvalue(left, false)?;
-                self.generate_expr(right)?;
-                match left.as_ref() {
-                    Expr::Range {
-                        base: _,
-                        from: _,
-                        to: _,
-                    } => self.emit(Op::PutTemp),
-                    Expr::Index(_lhs, _rhs) => self.emit(Op::PutTemp),
-                    _ => {}
+            Expr::Range {
+                base: _,
+                from: _,
+                to: _,
+            } => self.emit(Op::PutTemp),
+            Expr::Index(_lhs, _rhs) => self.emit(Op::PutTemp),
+            _ => {}
+        }
+        let mut is_indexed = false;
+        let mut e = left;
+        loop {
+            // Figure out the form of assignment, handle correctly, then walk through
+            // chained assignments
+            match left.as_ref() {
+                Expr::Range {
+                    base,
+                    from: _,
+                    to: _,
+                } => {
+                    self.emit(Op::RangeSet);
+                    self.pop_stack(3);
+                    e = base;
+                    is_indexed = true;
+                    continue;
                 }
-                let mut is_indexed = false;
-                let mut e = left;
-                loop {
-                    // Figure out the form of assignment, handle correctly, then walk through
-                    // chained assignments
-                    match left.as_ref() {
-                        Expr::Range {
-                            base,
-                            from: _,
-                            to: _,
-                        } => {
-                            self.emit(Op::RangeSet);
-                            self.pop_stack(3);
-                            e = base;
-                            is_indexed = true;
-                            continue;
-                        }
-                        Expr::Index(lhs, _rhs) => {
-                            self.emit(Op::IndexSet);
-                            self.pop_stack(2);
-                            e = lhs;
-                            is_indexed = true;
-                            continue;
-                        }
-                        Expr::Id(name) => {
-                            self.emit(Op::Put(name.0));
-                            break;
-                        }
-                        Expr::Prop {
-                            location: _,
-                            property: _,
-                        } => {
-                            self.emit(Op::PutProp);
-                            self.pop_stack(2);
-                            break;
-                        }
-                        _ => {
-                            panic!("Bad lvalue in generate_assign")
-                        }
-                    }
+                Expr::Index(lhs, _rhs) => {
+                    self.emit(Op::IndexSet);
+                    self.pop_stack(2);
+                    e = lhs;
+                    is_indexed = true;
+                    continue;
                 }
-                if is_indexed {
-                    self.emit(Op::Pop);
-                    self.emit(Op::PushTemp);
+                Expr::Id(name) => {
+                    self.emit(Op::Put(name.0));
+                    break;
+                }
+                Expr::Prop {
+                    location: _,
+                    property: _,
+                } => {
+                    self.emit(Op::PutProp);
+                    self.pop_stack(2);
+                    break;
+                }
+                _ => {
+                    panic!("Bad lvalue in generate_assign")
                 }
             }
         }
+        if is_indexed {
+            self.emit(Op::Pop);
+            self.emit(Op::PushTemp);
+        }
 
+        Ok(())
+    }
+
+    fn generate_scatter_assign(
+        &mut self,
+        scatter: &Vec<ScatterItem>,
+        right: &Box<Expr>,
+    ) -> Result<(), anyhow::Error> {
+        self.generate_expr(right.as_ref())?;
+        let nargs = scatter.len();
+        let nreq = scatter.iter().filter(|s| s.kind == ScatterKind::Required).count();
+        let rest = match scatter.iter().positions(|s| s.kind == ScatterKind::Rest).last() {
+            None => {
+                nargs + 1
+            }
+            Some(rest) => rest + 1
+        };
+
+        let labels : Vec<_> = scatter.iter().map(|s| {
+            if s.kind == ScatterKind::Optional {
+                // TODO "pseudo label" 0
+                (s, ScatterLabel {
+                    id: s.id.0,
+                    label: self.add_label(None),
+                })
+
+            } else if (s.expr.is_none()) {
+                (s,ScatterLabel {
+                    id: s.id.0,
+                    label: self.add_label(None),
+                })
+            } else {
+                (s,ScatterLabel {
+                    id: s.id.0,
+                    label: self.add_label(None),
+                })
+            }
+        }).collect();
+        let done = self.add_label(None);
+        self.emit(Op::Scatter{
+            nargs,
+            nreq,
+            rest,
+            labels: labels.iter().map(|(_,l)| l.clone()).collect(),
+            done,
+        });
+        for (s, label) in labels {
+            if s.kind == ScatterKind::Optional && s.expr.is_some() {
+                self.define_label(label.label);
+                self.generate_expr(s.expr.as_ref().unwrap())?;
+                self.emit(Op::Put(s.id.0));
+                self.emit(Op::Pop);
+                self.pop_stack(1);
+            }
+        }
+        self.define_label(done);
         Ok(())
     }
 
@@ -446,7 +495,7 @@ impl CodegenState {
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
             }
-            Expr::Scatter(_) => {}
+            Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
         }
 
@@ -803,6 +852,7 @@ fn register_builtins() -> HashMap<String, usize> {
         // log
         "server_log",
         // execute
+        "call_function",
         "raise",
         "suspend",
         "read",
@@ -857,6 +907,7 @@ mod tests {
     use crate::model::var::Objid;
     use crate::model::var::Var::Obj;
     use crate::vm::opcode::Op::*;
+    use crate::vm::opcode::ScatterLabel;
 
     use super::*;
 
@@ -1646,6 +1697,201 @@ mod tests {
                 Push(test_string),
                 MakeSingletonList,
                 CallVerb,
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_basic_scatter_assign() {
+        let program = "{connection} = args;";
+        let binary = compile(program).unwrap();
+        /*
+         0: 076                   PUSH args
+         1: 112 013 001 001 002
+            018 000 009         * SCATTER 1/1/2: connection/0 9
+         9: 111                   POP
+        */
+
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(binary.find_var("args")),
+                Scatter {
+                    nargs: 1,
+                    nreq: 1,
+                    rest: 2,
+                    labels: vec![
+                        ScatterLabel {
+                            id: binary.find_var("connection"),
+                            label: 0,
+                        }
+                    ],
+                    done: 1,
+                },
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_more_scatter_assign() {
+        let program = "{first, second, ?third = 0} = args;";
+        let binary = compile(program).unwrap();
+        /*
+          0: 076                   PUSH args
+          1: 112 013 003 002 004
+             018 000 019 000 020
+             013 016             * SCATTER 3/2/4: first/0 second/0 third/13 16
+         13: 123                   NUM 0
+         14: 054                 * PUT third
+         15: 111                   POP
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(binary.find_var("args")),
+                Scatter {
+                    nargs: 3,
+                    nreq: 2,
+                    rest: 4,
+                    labels: vec![
+                        ScatterLabel {
+                            id: binary.find_var("first"),
+                            label: 0,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("second"),
+                            label: 1,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("third"),
+                            label: 2,
+                        }
+                    ],
+                    done: 3,
+                },
+                Imm(binary.find_literal(0.into())),
+                Put(binary.find_var("third")),
+                Pop,
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_some_more_scatter_assign() {
+        let program = "{a, b, ?c = 8, @d} = args;";
+        let binary = compile(program).unwrap();
+        /*
+  0: 076                   PUSH args
+  1: 112 013 004 002 004
+     018 000 019 000 020
+     015 021 000 018     * SCATTER 4/2/4: a/0 b/0 c/15 d/0 18
+ 15: 131                   NUM 8
+ 16: 054                 * PUT c
+ 17: 111                   POP
+ 18: 111                   POP
+
+         */
+        assert_eq!(binary.main_vector,
+        vec![
+            Push(binary.find_var("args")),
+            Scatter {
+                nargs: 4,
+                nreq: 2,
+                rest: 4,
+                labels: vec![
+                    ScatterLabel {
+                        id: binary.find_var("a"),
+                        label: 0,
+                    },
+                    ScatterLabel {
+                        id: binary.find_var("b"),
+                        label: 1,
+                    },
+                    ScatterLabel {
+                        id: binary.find_var("c"),
+                        label: 2,
+                    },
+                    ScatterLabel {
+                        id: binary.find_var("d"),
+                        label: 3,
+                    }
+                ],
+                done: 4,
+            },
+            Imm(binary.find_literal(8.into())),
+            Put(binary.find_var("c")),
+            Pop,
+            Pop,
+            Done
+        ]);
+    }
+
+    #[test]
+    fn test_even_more_scatter_assign() {
+        let program = "{a, ?b, ?c = 8, @d, ?e = 9, f} = args;";
+        let binary = compile(program).unwrap();
+        /*
+          0: 076                   PUSH args
+          1: 112 013 006 002 004
+             018 000 019 001 020
+             019 021 000 022 022
+             023 000 025         * SCATTER 6/2/4: a/0 b/1 c/19 d/0 e/22 f/0 25
+         19: 131                   NUM 8
+         20: 054                 * PUT c
+         21: 111                   POP
+         22: 132                   NUM 9
+         23: 056                 * PUT e
+         24: 111                   POP
+         25: 111                   POP
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(binary.find_var("args")),
+                Scatter {
+                    nargs: 6,
+                    nreq: 2,
+                    rest: 4,
+                    labels: vec![
+                        ScatterLabel {
+                            id: binary.find_var("a"),
+                            label: 0,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("b"),
+                            label: 1,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("c"),
+                            label: 2,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("d"),
+                            label: 3,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("e"),
+                            label: 4,
+                        },
+                        ScatterLabel {
+                            id: binary.find_var("f"),
+                            label: 5,
+                        }
+                    ],
+                    done: 6,
+                },
+                Imm(binary.find_literal(8.into())),
+                Put(binary.find_var("c")),
+                Pop,
+                Imm(binary.find_literal(9.into())),
+                Put(binary.find_var("e")),
+                Pop,
                 Pop,
                 Done
             ]

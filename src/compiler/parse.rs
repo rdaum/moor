@@ -17,7 +17,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
-    Arg, BinaryOp, CondArm, ExceptArm, Expr, Scatter, ScatterKind, Stmt, UnaryOp,
+    Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
@@ -122,7 +122,7 @@ pub struct ASTGenVisitor {
     _loop_stack: Vec<LoopEntry>,
     _excepts_stack: Vec<Vec<ExceptArm>>,
     _args_stack: Vec<Vec<Arg>>,
-    _scatter_stack: Vec<Vec<Scatter>>,
+    _scatter_stack: Vec<Vec<ScatterItem>>,
 }
 
 impl ASTGenVisitor {
@@ -596,13 +596,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         });
     }
 
-    fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
-        self._scatter_stack.push(vec![]);
-        ctx.scatter().iter().for_each(|s| s.accept(self));
-        let scatters = self._scatter_stack.pop().unwrap();
-        self._expr_stack.push(Expr::Scatter(scatters));
-    }
-
     fn visit_SysProp(&mut self, ctx: &SysPropContext<'node>) {
         let prop_id = ctx.id.as_ref().unwrap();
         let property = String::from(prop_id.get_text());
@@ -705,17 +698,23 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._args_stack.last_mut().unwrap().push(Arg::Splice(expr));
     }
 
+    fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
+        self._scatter_stack.push(vec![]);
+        ctx.scatter().iter().for_each(|s| s.accept(self));
+        let scatters = self._scatter_stack.pop().unwrap();
+        let rhs = self.reduce_expr(&ctx.expr());
+        self._expr_stack
+            .push(Expr::Scatter(scatters, Box::new(rhs)));
+    }
+
     fn visit_scatter(&mut self, ctx: &ScatterContext<'node>) {
         ctx.scatter_item_all().iter().for_each(|si| si.accept(self));
-        ctx.scatter_rest_item()
-            .iter()
-            .for_each(|si| si.accept(self))
     }
 
     fn visit_ScatterOptionalTarget(&mut self, ctx: &ScatterOptionalTargetContext<'node>) {
         let expr = self.reduce_opt_expr(&ctx.expr());
         let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = Scatter {
+        let sd = ScatterItem {
             kind: ScatterKind::Optional,
             id,
             expr,
@@ -725,7 +724,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     fn visit_ScatterTarget(&mut self, ctx: &ScatterTargetContext<'node>) {
         let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = Scatter {
+        let sd = ScatterItem {
             kind: ScatterKind::Required,
             id,
             expr: None,
@@ -735,7 +734,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     fn visit_ScatterRestTarget(&mut self, ctx: &ScatterRestTargetContext<'node>) {
         let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = Scatter {
+        let sd = ScatterItem {
             kind: ScatterKind::Rest,
             id,
             expr: None,
@@ -831,11 +830,11 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
-    use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, Stmt};
+    use crate::compiler::ast::Expr::{Id, Prop, Scatter, VarExpr};
+    use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt};
     use crate::compiler::parse::{parse_program, Name};
-    use crate::model::var::{Objid, Var};
     use crate::model::var::Var::{Obj, Str};
+    use crate::model::var::{Objid, Var};
 
     #[test]
     fn test_parse_simple_var_assignment_precedence() {
@@ -1040,22 +1039,42 @@ mod tests {
 
     #[test]
     fn test_sysobjref() {
-        let program =  "$string_utils:from_list(test_string);";
+        let program = "$string_utils:from_list(test_string);";
         let parse = parse_program(program).unwrap();
-        let test_string = parse.names.find_name(&"test_string".to_string()).unwrap().clone();
-        assert_eq!(parse.stmts, vec![
-            Stmt::Expr(
-                Expr::Verb {
-                    location: Box::new(Prop {
-                        location: Box::new(VarExpr(Var::Obj(Objid(0)))),
-                        property: Box::new(VarExpr(Str("string_utils".to_string()))),
-                    }),
-                    verb: Box::new(VarExpr(Var::Str("from_list".to_string()))),
-                    args: vec![
-                        Arg::Normal(Id(test_string))
-                    ]
-                }
-            )
-        ]);
+        let test_string = parse
+            .names
+            .find_name(&"test_string".to_string())
+            .unwrap()
+            .clone();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Verb {
+                location: Box::new(Prop {
+                    location: Box::new(VarExpr(Var::Obj(Objid(0)))),
+                    property: Box::new(VarExpr(Str("string_utils".to_string()))),
+                }),
+                verb: Box::new(VarExpr(Var::Str("from_list".to_string()))),
+                args: vec![Arg::Normal(Id(test_string))]
+            })]
+        );
+    }
+
+    #[test]
+    fn test_scatter_assign() {
+        let program = "{connection} = args;";
+        let parse = parse_program(program).unwrap();
+        let connection = parse.names.find_name(&"connection".to_string()).unwrap().clone();
+        let args = parse.names.find_name(&"args".to_string()).unwrap().clone();
+
+        let scatter_items = vec![ScatterItem {
+            kind: ScatterKind::Required,
+            id: connection,
+            expr: None,
+        }];
+        let scatter_right = Box::new(Expr::Id(args));
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Scatter(scatter_items, scatter_right))]
+        );
     }
 }
