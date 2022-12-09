@@ -43,7 +43,7 @@ pub struct Loop {
 }
 
 // Compiler code generation state.
-pub struct State {
+pub struct CodegenState {
     pub(crate) ops: Vec<Op>,
     pub(crate) jumps: Vec<JumpLabel>,
     pub(crate) var_names: Names,
@@ -56,7 +56,7 @@ pub struct State {
     pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
-impl State {
+impl CodegenState {
     pub fn new(var_names: Names, builtins: HashMap<String, usize>) -> Self {
         Self {
             ops: vec![],
@@ -549,11 +549,15 @@ impl State {
             }
             Stmt::Fork { id, body, time } => {
                 self.generate_expr(time)?;
-                let mut fork_compile = State::new(self.var_names.clone(), self.builtins.clone());
+                // Stash all of main vector in a temporary buffer, then begin compilation of the forked code.
+                // Once compiled, we can create a fork vector from the new buffer, and then restore the main vector.
+                let stashed_ops = std::mem::take(&mut self.ops);
                 for stmt in body {
-                    fork_compile.generate_stmt(stmt)?;
+                    self.generate_stmt(stmt)?;
                 }
-                let fv_id = self.add_fork_vector(fork_compile.ops);
+                let forked_ops = std::mem::take(&mut self.ops);
+                let fv_id = self.add_fork_vector(forked_ops);
+                self.ops = stashed_ops;
                 self.emit(Op::Fork {
                     id: id.map(|i| i.0),
                     f_index: fv_id,
@@ -674,7 +678,7 @@ impl State {
 
 pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary, anyhow::Error> {
     let parse = parse_program(program)?;
-    let mut cg_state = State::new(parse.names, builtins);
+    let mut cg_state = CodegenState::new(parse.names, builtins);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }
@@ -1041,10 +1045,6 @@ mod tests {
 
     #[test]
     fn test_fork() {
-        // TODO: fix resolution of  literals and var names that end up defined *inside* the fork
-        // vector; the fork vector should inherit the parent's var_names and literals
-        // in the meantime this test is broken.
-
         let program = "fork (5) player:tell(\"a\"); endfork";
         let binary = compile(program, HashMap::new()).unwrap();
 
@@ -1078,14 +1078,11 @@ mod tests {
 
     #[test]
     fn test_fork_id() {
-        // TODO: fix resolution of  literals and var names that end up defined *inside* the fork
-        // vector; the fork vector should inherit the parent's var_names and literals
-        // in the meantime this test is broken.
-
         let program = "fork fid (5) player:tell(fid); endfork";
         let binary = compile(program, HashMap::new()).unwrap();
 
         let player = binary.find_var("player");
+        let fid = binary.find_var("fid");
         let five = binary.find_literal(5.into());
         let tell = binary.find_literal("tell".into());
 
@@ -1095,7 +1092,7 @@ mod tests {
                 Imm(0),
                 Fork {
                     f_index: 0,
-                    id: Some(0)
+                    id: Some(fid)
                 },
                 Done
             ]
@@ -1105,7 +1102,7 @@ mod tests {
             vec![
                 Push(player), // player
                 Imm(tell),  // tell
-                Push(0), // fid
+                Push(fid), // fid
                 MakeSingletonList,
                 CallVerb,
                 Pop
