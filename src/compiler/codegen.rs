@@ -118,23 +118,19 @@ impl CodegenState {
         self.ops.push(op);
     }
 
-    fn find_loop(&self, loop_label: &Option<Name>) -> Result<&Loop, anyhow::Error>  {
+    fn find_loop(&self, loop_label: &Option<Name>) -> Result<&Loop, anyhow::Error> {
         match loop_label {
             None => {
                 let l = self.loops.last().expect("No loop to exit in codegen");
                 Ok(l)
             }
-            Some(eid) => {
-                match self.find_label(eid) {
-                    None => {
-                        let loop_name = self.var_names.names[eid.0].clone();
-                        return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
-                    }
-                    Some(label) => {
-                        Ok(&self.loops[label.id])
-                    }
+            Some(eid) => match self.find_label(eid) {
+                None => {
+                    let loop_name = self.var_names.names[eid.0].clone();
+                    return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
                 }
-            }
+                Some(label) => Ok(&self.loops[label.id]),
+            },
         }
     }
 
@@ -375,6 +371,7 @@ impl CodegenState {
                 self.generate_expr(location.as_ref())?;
                 self.generate_expr(property.as_ref())?;
                 self.emit(Op::GetProp);
+                self.pop_stack(1);
             }
             Expr::Call { function, args } => {
                 // Lookup builtin.
@@ -680,11 +677,9 @@ fn register_builtins() -> HashMap<String, usize> {
     let builtins = vec![
         // disassemble
         "disassemble",
-
         // functions
         "function_info",
         "load_server_options",
-
         // values
         "value_bytes",
         "value_hash",
@@ -692,7 +687,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "binary_hash",
         "decode_binary",
         "encode_binary",
-
         // list
         "length",
         "setadd",
@@ -703,7 +697,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "listset",
         "equal",
         "is_member",
-
         // string
         "tostr",
         "toliteral",
@@ -715,7 +708,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "rindex",
         "strcmp",
         "strsub",
-
         // numbers
         "toint",
         "tonum",
@@ -743,7 +735,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "ceil",
         "floor",
         "trunc",
-
         // objects
         "toobj",
         "typeof",
@@ -759,7 +750,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "is_player",
         "set_player_flag",
         "move",
-
         // property
         "properties",
         "property_info",
@@ -768,7 +758,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "delete_property",
         "clear_property",
         "is_clear_property",
-
         // verbs
         "verbs",
         "verb_info",
@@ -780,7 +769,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "verb_code",
         "set_verb_code",
         "eval",
-
         // server
         "server_version",
         "renumber",
@@ -803,7 +791,6 @@ fn register_builtins() -> HashMap<String, usize> {
         "unlisten",
         "listeners",
         "buffered_output_length",
-
         // tasks
         "task_id",
         "queued_tasks",
@@ -813,10 +800,8 @@ fn register_builtins() -> HashMap<String, usize> {
         "resume",
         "force_input",
         "flush_input",
-
         // log
         "server_log",
-
         // execute
         "raise",
         "suspend",
@@ -827,7 +812,7 @@ fn register_builtins() -> HashMap<String, usize> {
         "set_task_perms",
         "caller_perms",
         "callers",
-        "task_stack"
+        "task_stack",
     ];
 
     let mut b = HashMap::new();
@@ -869,6 +854,8 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use crate::model::var::Error::{E_INVARG, E_PERM, E_PROPNF};
+    use crate::model::var::Objid;
+    use crate::model::var::Var::Obj;
     use crate::vm::opcode::Op::*;
 
     use super::*;
@@ -884,7 +871,6 @@ mod tests {
 
     #[test]
     fn test_var_assign_expr() {
-
         let program = "a = 1 + 2;";
         let binary = compile(program).unwrap();
 
@@ -892,14 +878,14 @@ mod tests {
         let one = binary.find_literal(1.into());
         let two = binary.find_literal(2.into());
         /*
-        "  0: 124 NUM 1",
-        "  1: 125 NUM 2",
-        "  2: 021 * ADD",
-        "  3: 052 * PUT a",
-        "  4: 111 POP",
-        "  5: 123 NUM 0",
-        "  6: 030 010 * AND 10",
-     */
+           "  0: 124 NUM 1",
+           "  1: 125 NUM 2",
+           "  2: 021 * ADD",
+           "  3: 052 * PUT a",
+           "  4: 111 POP",
+           "  5: 123 NUM 0",
+           "  6: 030 010 * AND 10",
+        */
         assert_eq!(
             binary.main_vector,
             vec![Imm(one), Imm(two), Add, Put(a), Pop, Done],
@@ -1041,7 +1027,10 @@ mod tests {
             binary.main_vector,
             vec![
                 Imm(one),
-                WhileId { id: chuckles, label: 1 },
+                WhileId {
+                    id: chuckles,
+                    label: 1
+                },
                 Push(x),
                 Imm(one),
                 Add,
@@ -1068,7 +1057,6 @@ mod tests {
         let x = binary.find_var("x");
         let one = binary.find_literal(1.into());
         let five = binary.find_literal(5.into());
-
 
         /*
         "  0: 124                   NUM 1",
@@ -1230,8 +1218,8 @@ mod tests {
             binary.fork_vectors[0],
             vec![
                 Push(player), // player
-                Imm(tell),  // tell
-                Imm(a),  // 'a'
+                Imm(tell),    // tell
+                Imm(a),       // 'a'
                 MakeSingletonList,
                 CallVerb,
                 Pop
@@ -1264,8 +1252,8 @@ mod tests {
             binary.fork_vectors[0],
             vec![
                 Push(player), // player
-                Imm(tell),  // tell
-                Push(fid), // fid
+                Imm(tell),    // tell
+                Push(fid),    // fid
                 MakeSingletonList,
                 CallVerb,
                 Pop
@@ -1294,7 +1282,16 @@ mod tests {
         */
         assert_eq!(
             binary.main_vector,
-            vec![Imm(one), And(0), Imm(two), Or(1), Imm(three), Put(a), Pop, Done]
+            vec![
+                Imm(one),
+                And(0),
+                Imm(two),
+                Or(1),
+                Imm(three),
+                Put(a),
+                Pop,
+                Done
+            ]
         );
         assert_eq!(binary.jump_labels[0].position, 3);
         assert_eq!(binary.jump_labels[1].position, 5);
@@ -1576,7 +1573,7 @@ mod tests {
     fn test_catch_expr() {
         let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
         let binary = compile(program).unwrap();
-        /**
+        /*
           0: 100 000               PUSH_LITERAL E_PROPNF
          2: 016                 * MAKE_SINGLETON_LIST
          3: 100 001               PUSH_LITERAL E_PERM
@@ -1615,6 +1612,40 @@ mod tests {
                 Pop,
                 Imm(svntn),
                 Put(x),
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_sysobjref() {
+        let program = "$string_utils:from_list(test_string);";
+        let binary = compile(program).unwrap();
+
+        let string_utils = binary.find_literal("string_utils".into());
+        let from_list = binary.find_literal("from_list".into());
+        let test_string = binary.find_var("test_string".into());
+        let sysobj = binary.find_literal(Objid(0).into());
+        /*
+         0: 100 000               PUSH_LITERAL #0
+         2: 100 001               PUSH_LITERAL "string_utils"
+         4: 009                 * GET_PROP
+         5: 100 002               PUSH_LITERAL "from_list"
+         7: 085                   PUSH test_string
+         8: 016                 * MAKE_SINGLETON_LIST
+         9: 010                 * CALL_VERB
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(sysobj),
+                Imm(string_utils),
+                GetProp,
+                Imm(from_list),
+                Push(test_string),
+                MakeSingletonList,
+                CallVerb,
                 Pop,
                 Done
             ]

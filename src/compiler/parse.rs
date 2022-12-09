@@ -105,7 +105,7 @@ impl Names {
         }
     }
 
-    pub fn find_name(&mut self, name: &String) -> Option<Name> {
+    pub fn find_name(&self, name: &String) -> Option<Name> {
         match self.names.iter().position(|n| n.as_str() == name) {
             None => None,
             Some(n) => Some(Name(n)),
@@ -831,10 +831,11 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::Expr::VarExpr;
+    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
     use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, Stmt};
     use crate::compiler::parse::{parse_program, Name};
-    use crate::model::var::Var;
+    use crate::model::var::{Objid, Var};
+    use crate::model::var::Var::{Obj, Str};
 
     #[test]
     fn test_parse_simple_var_assignment_precedence() {
@@ -1035,5 +1036,26 @@ mod tests {
                 ]
             }]
         )
+    }
+
+    #[test]
+    fn test_sysobjref() {
+        let program =  "$string_utils:from_list(test_string);";
+        let parse = parse_program(program).unwrap();
+        let test_string = parse.names.find_name(&"test_string".to_string()).unwrap().clone();
+        assert_eq!(parse.stmts, vec![
+            Stmt::Expr(
+                Expr::Verb {
+                    location: Box::new(Prop {
+                        location: Box::new(VarExpr(Var::Obj(Objid(0)))),
+                        property: Box::new(VarExpr(Str("string_utils".to_string()))),
+                    }),
+                    verb: Box::new(VarExpr(Var::Str("from_list".to_string()))),
+                    args: vec![
+                        Arg::Normal(Id(test_string))
+                    ]
+                }
+            )
+        ]);
     }
 }

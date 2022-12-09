@@ -3,6 +3,7 @@ extern crate core;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
+use anyhow::Error;
 
 use bincode::config;
 use enumset::EnumSet;
@@ -18,6 +19,7 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
 use crate::textdump::{Object, TextdumpReader};
+use crate::vm::opcode::Binary;
 
 pub mod compiler;
 mod db;
@@ -86,9 +88,9 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 fn main() {
-    println!("Hello, world!");
+    eprintln!("Moor; loading textdump...");
 
-    let mut conn = Connection::open("test.db").unwrap();
+    let mut conn = Connection::open_in_memory().unwrap();
     let mut s : &mut dyn ObjDB   = &mut SQLiteTx::new(&mut conn).unwrap();
     s.initialize().unwrap();
 
@@ -98,7 +100,7 @@ fn main() {
     let td = tdr.read_textdump().unwrap();
 
     // Pass 1 Create objects
-    println!("Instantiating objects...");
+    eprintln!("Instantiating objects...");
     for (objid, o) in &td.objects {
         let flags: EnumSet<ObjFlag> = EnumSet::from_u8(o.flags);
 
@@ -113,7 +115,7 @@ fn main() {
         )
         .unwrap();
     }
-    println!("Instantiated objects\nDefining props...");
+    eprintln!("Instantiated objects\nDefining props...");
 
     // Pass 2 define props
     for (objid, o) in &td.objects {
@@ -128,7 +130,7 @@ fn main() {
         }
     }
 
-    println!("Defined props\nSetting props...");
+    eprintln!("Defined props\nSetting props...");
     // Pass 3 set props
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
@@ -142,7 +144,7 @@ fn main() {
         }
     }
 
-    println!("Set props\nDefining verbs...");
+    eprintln!("Set props\nDefining verbs...");
     // Pass 4 define verbs
     for (objid, o) in &td.objects {
         for (vn, v) in o.verbdefs.iter().enumerate() {
@@ -166,7 +168,7 @@ fn main() {
                 iobj: cv_aspec_flag(iobjflags),
             };
 
-            let names = v.name.split(" ").collect();
+            let names: Vec<&str> = v.name.split(" ").collect();
 
             let verb = match td.verbs.get(&(*objid, vn)) {
                 None => {
@@ -176,7 +178,14 @@ fn main() {
                 Some(v) => {v}
             };
 
-            let binary = compile(verb.program.as_str()).expect("could not compile");
+            eprintln!("Compiling #{}/{} (#{}:{})...", objid.0, names[0], objid.0, vn);
+
+            let binary = match compile(verb.program.as_str()) {
+                Ok(b) => b,
+                Err(e) => {
+                    panic!("Compile error in #{}/{}: {:?}", objid.0, names[0], e);
+                }
+            };
 
             let prg = bincode::serde::encode_to_vec(binary, config::standard()).expect("Could not serialize program");
             s.add_verb(
@@ -190,7 +199,7 @@ fn main() {
             .unwrap();
         }
     }
-    println!("Verbs defined.\nImport complete.");
+    eprintln!("Verbs defined.\nImport complete.");
 
     s.commit().unwrap();
 
