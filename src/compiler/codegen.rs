@@ -130,7 +130,16 @@ impl CodegenState {
                     let loop_name = self.var_names.names[eid.0].clone();
                     return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
                 }
-                Some(label) => Ok(&self.loops[label.id]),
+                Some(label) => {
+                    let l = self
+                        .loops
+                        .iter()
+                        .find(|l| l.start_label == label.id);
+                    let Some(l) = l else {
+                      return Err(anyhow!(CompileError::UnknownLoopLabel(eid.0.to_string())));
+                    };
+                    Ok(l)
+                }
             },
         }
     }
@@ -174,7 +183,7 @@ impl CodegenState {
         self.push_lvalue(left, false)?;
         self.generate_expr(right)?;
         match left.as_ref() {
-            Expr::Range {..} => self.emit(Op::PutTemp),
+            Expr::Range { .. } => self.emit(Op::PutTemp),
             Expr::Index(..) => self.emit(Op::PutTemp),
             _ => {}
         }
@@ -545,13 +554,17 @@ impl CodegenState {
                 self.generate_expr(expr)?;
                 self.emit(Op::Val(Var::Int(1))); /* loop list index... */
                 self.push_stack(1);
-                let loop_top = self.add_label(None);
+                let loop_top = self.add_label(Some(id.clone()));
                 self.define_label(loop_top);
                 let end_label = self.add_label(None);
                 // TODO self.enter_loop/exit_loop needed?
                 self.emit(Op::ForList {
                     id: id.0,
                     label: end_label,
+                });
+                self.loops.push(Loop {
+                    start_label: loop_top,
+                    end_label,
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -563,13 +576,16 @@ impl CodegenState {
             Stmt::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.add_label(None);
+                let loop_top = self.add_label(Some(id.clone()));
                 let end_label = self.add_label(None);
                 self.emit(Op::ForRange {
                     id: id.0,
                     label: end_label,
                 });
-                // TODO self.enter_loop/exit_loop needed?
+                self.loops.push(Loop {
+                    start_label: loop_top,
+                    end_label,
+                });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
