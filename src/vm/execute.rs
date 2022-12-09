@@ -752,10 +752,6 @@ impl VM {
                     return Ok(());
                 }
             }
-            Op::This => {
-                self.push(&Var::Obj(self.top().this));
-            }
-
             Op::Fork { id: _, f_index: _ } => {}
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());

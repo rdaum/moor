@@ -86,7 +86,6 @@ pub enum Expr {
     List(Vec<Arg>),
     Scatter(Vec<Scatter>),
     Length,
-    This,
 }
 
 #[derive(Debug, Eq, PartialEq)]

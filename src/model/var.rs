@@ -172,6 +172,48 @@ impl Var {
     }
 }
 
+impl<'a> From<&'a str> for Var {
+    fn from(s: &'a str) -> Self {
+        Self::Str(s.to_string())
+    }
+}
+
+impl From<String> for Var {
+    fn from(s: String) -> Self {
+        Self::Str(s)
+    }
+}
+
+impl From<i64> for Var {
+    fn from(i: i64) -> Self {
+        Self::Int(i)
+    }
+}
+
+impl From<f64> for Var {
+    fn from(f: f64) -> Self {
+        Self::Float(R64::from(f))
+    }
+}
+
+impl From<Objid> for Var {
+    fn from(o: Objid) -> Self {
+        Self::Obj(o)
+    }
+}
+
+impl From<Vec<Var>> for Var {
+    fn from(l: Vec<Var>) -> Self {
+        Self::List(l)
+    }
+}
+
+impl From<Error> for Var {
+    fn from(e: Error) -> Self {
+        Self::Err(e)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;

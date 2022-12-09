@@ -1,7 +1,6 @@
 use std::rc::Rc;
 use std::str::FromStr;
 
-use antlr_rust::{InputStream, Parser};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
 use antlr_rust::errors::ANTLRError;
@@ -10,20 +9,21 @@ use antlr_rust::recognizer::Recognizer;
 use antlr_rust::token::Token;
 use antlr_rust::token_factory::TokenFactory;
 use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
+use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
 use decorum::R64;
 use paste::paste;
 use serde_derive::{Deserialize, Serialize};
 
+use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
     Arg, BinaryOp, CondArm, ExceptArm, Expr, Scatter, ScatterKind, Stmt, UnaryOp,
 };
-use crate::compiler::ast::Expr::VarExpr;
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
-use crate::model::var::{Error, Objid, Var};
 use crate::model::var::Var::{Obj, Str};
+use crate::model::var::{Error, Objid, Var};
 
 pub struct VerbCompileErrorListener {
     pub program: String,
@@ -66,8 +66,36 @@ impl Default for Names {
     }
 }
 impl Names {
+    pub fn new() -> Self {
+        let mut names = Self { names: vec![] };
+
+        names.find_or_add_name(&String::from("NUM"));
+        names.find_or_add_name(&String::from("OBJ"));
+        names.find_or_add_name(&String::from("STR"));
+        names.find_or_add_name(&String::from("LIST"));
+        names.find_or_add_name(&String::from("ERR"));
+        names.find_or_add_name(&String::from("INT"));
+        names.find_or_add_name(&String::from("FLOAT"));
+        names.find_or_add_name(&String::from("player"));
+        names.find_or_add_name(&String::from("this"));
+        names.find_or_add_name(&String::from("caller"));
+        names.find_or_add_name(&String::from("verb"));
+        names.find_or_add_name(&String::from("args"));
+        names.find_or_add_name(&String::from("argstr"));
+        names.find_or_add_name(&String::from("dobj"));
+        names.find_or_add_name(&String::from("dobjstr"));
+        names.find_or_add_name(&String::from("prepstr"));
+        names.find_or_add_name(&String::from("iobj"));
+        names.find_or_add_name(&String::from("iobjstr"));
+        names
+    }
+
     pub fn find_or_add_name(&mut self, name: &String) -> Name {
-        match self.names.iter().position(|n| n.as_str() == name) {
+        match self
+            .names
+            .iter()
+            .position(|n| n.to_lowercase().as_str() == name.to_lowercase())
+        {
             None => {
                 let pos = self.names.len();
                 self.names.push(String::from(name));
@@ -98,10 +126,10 @@ pub struct ASTGenVisitor {
 }
 
 impl ASTGenVisitor {
-    pub fn new() -> Self {
+    pub fn new(names: Names) -> Self {
         Self {
             program: Default::default(),
-            names: Default::default(),
+            names,
             _statement_stack: Default::default(),
             _expr_stack: Default::default(),
             _cond_arm_stack: Default::default(),
@@ -233,11 +261,8 @@ impl ASTGenVisitor {
 
     fn reduce_statements(&mut self, node: &Option<Rc<StatementsContextAll>>) -> Vec<Stmt> {
         self._statement_stack.push(vec![]);
-        node.iter().for_each(|stmt| {
-            stmt.accept(self)
-        });
+        node.iter().for_each(|stmt| stmt.accept(self));
         self._statement_stack.pop().unwrap()
-
     }
 
     fn get_id(id: &Option<Rc<TerminalNode<mooParserContextType>>>) -> String {
@@ -345,7 +370,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self.pop_loop_name();
         self._statement_stack.last_mut().unwrap().push(stmt);
     }
-
 
     fn visit_While(&mut self, ctx: &WhileContext<'node>) {
         // Handle ID's while loops as well as non-ID'd
@@ -480,6 +504,8 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
     fn visit_String(&mut self, ctx: &StringContext<'node>) {
         let string = ctx.get_text();
         let string = string.as_str().clone();
+        // TODO error handling.
+        let string = snailquote::unescape(string).unwrap();
         self._expr_stack
             .push(VarExpr(Var::Str(String::from(string))));
     }
@@ -544,7 +570,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         self._expr_stack.push(Expr::Length);
     }
 
-    fn visit_LiteralExpr(&mut self, ctx: &LiteralExprContext<'node>) {
+    fn visit_AtomExpr(&mut self, ctx: &AtomExprContext<'node>) {
         ctx.get_children().for_each(|c| c.accept(self))
     }
 
@@ -639,7 +665,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             args,
         });
     }
-
 
     fn visit_VerbCall(&mut self, ctx: &VerbCallContext<'node>) {
         let expr = self.reduce_expr(&ctx.location);
@@ -739,10 +764,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             .push(Expr::Index(Box::new(left), Box::new(right)));
     }
 
-    fn visit_This(&mut self, ctx: &ThisContext<'node>) {
-        self._expr_stack.push(Expr::This);
-    }
-
     fn visit_AssignExpr(&mut self, ctx: &AssignExprContext<'node>) {
         let left = self.reduce_expr(&ctx.expr(0));
         let right = self.reduce_expr(&ctx.expr(1));
@@ -751,8 +772,6 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
             right: Box::new(right),
         });
     }
-
-
 
     binary_expr!(Mul);
     binary_expr!(Div);
@@ -800,7 +819,8 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
     parser.add_error_listener(err_listener);
     let program_context = parser.program().unwrap();
 
-    let mut astgen_visitor = ASTGenVisitor::new();
+    let mut names = Names::new();
+    let mut astgen_visitor = ASTGenVisitor::new(names);
     program_context.accept(&mut astgen_visitor);
 
     Ok(Parse {
@@ -811,9 +831,9 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, Stmt};
     use crate::compiler::ast::Expr::VarExpr;
-    use crate::compiler::parse::{Name, parse_program};
+    use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, Stmt};
+    use crate::compiler::parse::{parse_program, Name};
     use crate::model::var::Var;
 
     #[test]
@@ -924,24 +944,27 @@ mod tests {
     fn test_indexed_range_len() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let parse = parse_program(program).unwrap();
-        assert_eq!(parse.stmts, vec![
-           Stmt::Expr(Expr::Assign {
-               left: Box::new(Expr::Id(Name(0))),
-               right: Box::new(Expr::List(vec![
-                   Arg::Normal(Expr::VarExpr(Var::Int(1))),
-                   Arg::Normal(Expr::VarExpr(Var::Int(2))),
-                   Arg::Normal(Expr::VarExpr(Var::Int(3)))
-               ]))
-           }),
-              Stmt::Expr(Expr::Assign {
-                left: Box::new(Expr::Id(Name(1))),
-                right: Box::new(Expr::Range {
-                    base: Box::new(Expr::Id(Name(0))),
-                    from: Box::new(Expr::VarExpr(Var::Int(2))),
-                    to: Box::new(Expr::Length),
+        assert_eq!(
+            parse.stmts,
+            vec![
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Expr::Id(Name(0))),
+                    right: Box::new(Expr::List(vec![
+                        Arg::Normal(Expr::VarExpr(Var::Int(1))),
+                        Arg::Normal(Expr::VarExpr(Var::Int(2))),
+                        Arg::Normal(Expr::VarExpr(Var::Int(3)))
+                    ]))
+                }),
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Expr::Id(Name(1))),
+                    right: Box::new(Expr::Range {
+                        base: Box::new(Expr::Id(Name(0))),
+                        from: Box::new(Expr::VarExpr(Var::Int(2))),
+                        to: Box::new(Expr::Length),
+                    })
                 })
-              })
-        ]);
+            ]
+        );
     }
 
     #[test]

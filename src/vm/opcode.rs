@@ -97,20 +97,24 @@ pub enum Op {
     },
     Continue,
     Exit(Option<usize>),
-    This,
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
-pub struct Label {
-    pub (crate) offset : usize,
-}
-
+/// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Binary {
-    pub(crate) first_lineno: usize,
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
     pub(crate) var_names: Vec<String>,
     pub(crate) main_vector: Vec<Op>,
     pub(crate) fork_vectors: Vec<Vec<Op>>
+}
+
+impl Binary {
+    pub fn find_var(&self, v: &str) -> usize {
+        self.var_names.iter().position(|x| x.to_lowercase() == v.to_lowercase()).expect("variable not found")
+    }
+
+    pub fn find_literal(&self, l: Var) -> usize {
+        self.literals.iter().position(|x| *x == l).expect("literal not found")
+    }
 }

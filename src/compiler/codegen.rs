@@ -40,10 +40,11 @@ pub struct Loop {
     end_label: usize,
 }
 
+// Compiler code generation state.
 pub struct State {
     pub(crate) ops: Vec<Op>,
     pub(crate) jumps: Vec<JumpLabel>,
-    pub(crate) varnames: Names,
+    pub(crate) var_names: Names,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
     pub(crate) saved_stack: Option<usize>,
@@ -53,14 +54,12 @@ pub struct State {
     pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
-impl State {}
-
 impl State {
-    pub fn new(varnames: Names, builtins: HashMap<String, usize>) -> Self {
+    pub fn new(var_names: Names, builtins: HashMap<String, usize>) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
-            varnames,
+            var_names,
             literals: vec![],
             loops: vec![],
             saved_stack: None,
@@ -71,8 +70,8 @@ impl State {
         }
     }
 
-    // Create an anonymous jump label and return its unique ID.
-    fn add_jump(&mut self, name: Option<Name>) -> usize {
+    // Create an anonymous jump label at the current position and return its unique ID.
+    fn add_label(&mut self, name: Option<Name>) -> usize {
         let id = self.jumps.len();
         let position = self.ops.len();
         self.jumps.push(JumpLabel {
@@ -83,7 +82,7 @@ impl State {
         id
     }
 
-    fn find_named_jump(&self, name: &Name) -> Option<&JumpLabel> {
+    fn find_label(&self, name: &Name) -> Option<&JumpLabel> {
         self.jumps.iter().find(|j| {
             if let Some(label) = j.label {
                 label.eq(name)
@@ -93,7 +92,8 @@ impl State {
         })
     }
 
-    fn fixup_jump(&mut self, id: usize) {
+    // Adjust the position of a jump label to the current position.
+    fn define_label(&mut self, id: usize) {
         let position = self.ops.len();
         let jump = &mut self.jumps.get_mut(id).expect("Invalid jump fixup");
         let npos = position;
@@ -296,19 +296,19 @@ impl State {
             }
             Expr::And(left, right) => {
                 self.generate_expr(left.as_ref())?;
-                let end_label = self.add_jump(None);
+                let end_label = self.add_label(None);
                 self.emit(Op::And(end_label));
                 self.pop_stack(1);
                 self.generate_expr(right.as_ref())?;
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
             }
             Expr::Or(left, right) => {
                 self.generate_expr(left.as_ref())?;
-                let end_label = self.add_jump(None);
+                let end_label = self.add_label(None);
                 self.emit(Op::Or(end_label));
                 self.pop_stack(1);
                 self.generate_expr(right.as_ref())?;
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
             }
             Expr::Binary(op, l, r) => {
                 self.generate_expr(l)?;
@@ -393,16 +393,16 @@ impl State {
                 consequence,
             } => {
                 self.generate_expr(condition.as_ref())?;
-                let else_label = self.add_jump(None);
+                let else_label = self.add_label(None);
                 self.emit(Op::IfQues(else_label));
                 self.pop_stack(1);
                 self.generate_expr(consequence.as_ref())?;
-                let end_label = self.add_jump(None);
+                let end_label = self.add_label(None);
                 self.emit(Op::Jump { label: end_label });
                 self.pop_stack(1);
-                self.fixup_jump(else_label);
+                self.define_label(else_label);
                 self.generate_expr(alternative.as_ref())?;
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
             }
             Expr::Catch {
                 codes,
@@ -410,13 +410,13 @@ impl State {
                 trye,
             } => {
                 self.generate_codes(codes)?;
-                let handler_label = self.add_jump(None);
+                let handler_label = self.add_label(None);
                 self.emit(Op::PushLabel(handler_label));
                 self.push_stack(1);
                 self.emit(Op::Catch);
                 self.push_stack(1);
                 self.generate_expr(trye.as_ref())?;
-                let end_label = self.add_jump(None);
+                let end_label = self.add_label(None);
                 self.emit(Op::EndCatch(end_label));
                 self.pop_stack(3)   /* codes, label, catch */;
 
@@ -435,13 +435,12 @@ impl State {
                         self.emit(Op::Ref);
                     }
                 }
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
             }
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
             }
             Expr::Scatter(_) => {}
-            Expr::This => self.emit(Op::This),
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
         }
 
@@ -454,17 +453,17 @@ impl State {
                 let mut end_label = None;
                 for arm in arms {
                     self.generate_expr(&arm.condition)?;
-                    let else_label = self.add_jump(None);
+                    let else_label = self.add_label(None);
                     self.emit(Op::If(else_label));
                     self.pop_stack(1);
                     for stmt in &arm.statements {
                         self.generate_stmt(stmt)?;
                     }
-                    end_label = Some(self.add_jump(None));
+                    end_label = Some(self.add_label(None));
                     self.emit(Op::Jump {
                         label: end_label.unwrap(),
                     });
-                    self.fixup_jump(else_label);
+                    self.define_label(else_label);
                 }
                 if !otherwise.is_empty() {
                     for stmt in otherwise {
@@ -472,16 +471,16 @@ impl State {
                     }
                 }
                 if end_label.is_some() {
-                    self.fixup_jump(end_label.unwrap());
+                    self.define_label(end_label.unwrap());
                 }
             }
             Stmt::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
                 self.emit(Op::Val(Var::Int(1))); /* loop list index... */
                 self.push_stack(1);
-                let loop_top = self.add_jump(None);
-                self.fixup_jump(loop_top);
-                let end_label = self.add_jump(None);
+                let loop_top = self.add_label(None);
+                self.define_label(loop_top);
+                let end_label = self.add_label(None);
                 // TODO self.enter_loop/exit_loop needed?
                 self.emit(Op::ForList {
                     id: id.0,
@@ -491,14 +490,14 @@ impl State {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Jump { label: loop_top });
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
                 self.pop_stack(2);
             }
             Stmt::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.add_jump(None);
-                let end_label = self.add_jump(None);
+                let loop_top = self.add_label(None);
+                let end_label = self.add_label(None);
                 self.emit(Op::ForRange {
                     id: id.0,
                     label: end_label,
@@ -508,7 +507,7 @@ impl State {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Jump { label: loop_top });
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
                 self.pop_stack(2);
             }
             Stmt::While {
@@ -516,8 +515,8 @@ impl State {
                 condition,
                 body,
             } => {
-                let loop_start_label = self.add_jump(*id);
-                let loop_end_label = self.add_jump(None);
+                let loop_start_label = self.add_label(*id);
+                let loop_end_label = self.add_label(None);
                 self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While(loop_end_label)),
@@ -537,11 +536,11 @@ impl State {
                 self.emit(Op::Jump {
                     label: loop_start_label,
                 });
-                self.fixup_jump(loop_end_label);
+                self.define_label(loop_end_label);
             }
             Stmt::Fork { id, body, time } => {
                 self.generate_expr(time)?;
-                let mut fork_compile = State::new(self.varnames.clone(), self.builtins.clone());
+                let mut fork_compile = State::new(self.var_names.clone(), self.builtins.clone());
                 for stmt in body {
                     fork_compile.generate_stmt(stmt)?;
                 }
@@ -555,7 +554,7 @@ impl State {
             Stmt::TryExcept { body, excepts } => {
                 for ex in excepts {
                     self.generate_codes(&ex.codes)?;
-                    let push_label = self.add_jump(None);
+                    let push_label = self.add_label(None);
                     self.emit(Op::PushLabel(push_label));
                     self.push_stack(1);
                 }
@@ -565,7 +564,7 @@ impl State {
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                let end_label = self.add_jump(None);
+                let end_label = self.add_label(None);
                 self.emit(Op::EndExcept(end_label));
                 self.pop_stack(2 * arm_count + 1);
                 for (i, ex) in excepts.iter().enumerate() {
@@ -580,17 +579,17 @@ impl State {
                         self.generate_stmt(stmt)?;
                     }
                     if i + 1 < excepts.len() {
-                        let arm_end_label = self.add_jump(None);
+                        let arm_end_label = self.add_label(None);
                         self.emit(Op::Jump {
                             label: arm_end_label,
                         });
-                        self.fixup_jump(arm_end_label);
+                        self.define_label(arm_end_label);
                     }
                 }
-                self.fixup_jump(end_label);
+                self.define_label(end_label);
             }
             Stmt::TryFinally { body, handler } => {
-                let handler_label = self.add_jump(None);
+                let handler_label = self.add_label(None);
                 self.emit(Op::TryFinally(handler_label));
                 self.push_stack(1);
                 for stmt in body {
@@ -598,7 +597,7 @@ impl State {
                 }
                 self.emit(Op::EndFinally);
                 self.pop_stack(1);
-                self.fixup_jump(handler_label);
+                self.define_label(handler_label);
                 self.push_stack(2); /* continuation value, reason */
                 for stmt in handler {
                     self.generate_stmt(stmt)?;
@@ -681,10 +680,9 @@ pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary
     }
 
     let binary = Binary {
-        first_lineno: 0,
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
-        var_names: cg_state.varnames.names,
+        var_names: cg_state.var_names.names,
         main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
     };
@@ -694,6 +692,7 @@ pub fn compile(program: &str, builtins: HashMap<String, usize>) -> Result<Binary
 
 #[cfg(test)]
 mod tests {
+    use crate::model::var::Error::{E_INVARG, E_PERM, E_PROPNF};
     use crate::vm::opcode::Op::*;
 
     use super::*;
@@ -701,12 +700,21 @@ mod tests {
     #[test]
     fn test_simple_add_expr() {
         let program = "1 + 2;";
-        let parse = compile(program, HashMap::new()).unwrap();
-        assert_eq!(parse.main_vector, vec![Imm(0), Imm(1), Add, Pop, Done]);
+        let binary = compile(program, HashMap::new()).unwrap();
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        assert_eq!(binary.main_vector, vec![Imm(one), Imm(two), Add, Pop, Done]);
     }
 
     #[test]
     fn test_var_assign_expr() {
+
+        let program = "a = 1 + 2;";
+        let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
         /*
         "  0: 124 NUM 1",
         "  1: 125 NUM 2",
@@ -715,24 +723,25 @@ mod tests {
         "  4: 111 POP",
         "  5: 123 NUM 0",
         "  6: 030 010 * AND 10",
-             */
-        let program = "a = 1 + 2;";
-        let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(binary.var_names, vec!["a".to_string()]);
-        assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(2)]);
+     */
         assert_eq!(
             binary.main_vector,
-            vec![Imm(0), Imm(1), Add, Put(0), Pop, Done],
+            vec![Imm(one), Imm(two), Add, Put(a), Pop, Done],
         );
     }
 
     #[test]
     fn test_var_assign_retr_expr() {
         let program = "a = 1 + 2; return a;";
-        let parse = compile(program, HashMap::new()).unwrap();
+        let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+
         assert_eq!(
-            parse.main_vector,
-            vec![Imm(0), Imm(1), Add, Put(0), Pop, Push(0), Return, Done]
+            binary.main_vector,
+            vec![Imm(one), Imm(two), Add, Put(a), Pop, Push(a), Return, Done]
         );
     }
 
@@ -740,16 +749,13 @@ mod tests {
     fn test_if_stmt() {
         let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(
-            binary.literals,
-            vec![
-                Var::Int(1),
-                Var::Int(2),
-                Var::Int(5),
-                Var::Int(3),
-                Var::Int(6)
-            ]
-        );
+
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        let three = binary.find_literal(3.into());
+        let five = binary.find_literal(5.into());
+        let six = binary.find_literal(6.into());
+
         /*
          0: 124                   NUM 1
          1: 125                   NUM 2
@@ -772,21 +778,21 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
-                Imm(1),
+                Imm(one),
+                Imm(two),
                 Eq,
                 If(0),
-                Imm(2),
+                Imm(five),
                 Return,
                 Jump { label: 1 },
-                Imm(1),
-                Imm(3),
+                Imm(two),
+                Imm(three),
                 Eq,
                 If(2),
-                Imm(3),
+                Imm(three),
                 Return,
                 Jump { label: 3 },
-                Imm(4),
+                Imm(six),
                 Return,
                 Done
             ]
@@ -797,8 +803,9 @@ mod tests {
     fn test_while_stmt() {
         let program = "while (1) x = x + 1; endwhile";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(binary.var_names, vec!["x".to_string()]);
-        assert_eq!(binary.literals, vec![Var::Int(1)]);
+
+        let x = binary.find_var("x");
+        let one = binary.find_literal(1.into());
 
         /*
         " 0: 124                   NUM 1",
@@ -813,12 +820,12 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(one),
                 While(1),
-                Push(0),
-                Imm(0),
+                Push(x),
+                Imm(one),
                 Add,
-                Put(0),
+                Put(x),
                 Pop,
                 Jump { label: 0 },
                 Done
@@ -832,11 +839,10 @@ mod tests {
     fn test_while_label_stmt() {
         let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(
-            binary.var_names,
-            vec!["chuckles".to_string(), "x".to_string()]
-        );
-        assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(5)]);
+
+        let x = binary.find_var("x");
+        let one = binary.find_literal(1.into());
+        let five = binary.find_literal(5.into());
 
         /*
                  0: 124                   NUM 1
@@ -857,21 +863,21 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(one),
                 WhileId { id: 0, label: 1 },
-                Push(1),
-                Imm(0),
+                Push(x),
+                Imm(one),
                 Add,
-                Put(1),
+                Put(x),
                 Pop,
-                Push(1),
-                Imm(1),
+                Push(x),
+                Imm(five),
                 Gt,
                 If(2),
                 Exit(Some(1)),
                 Jump { label: 3 },
                 Jump { label: 0 },
-                Done
+                Done,
             ]
         );
         assert_eq!(binary.jump_labels[0].position, 0);
@@ -881,8 +887,11 @@ mod tests {
     fn test_while_break_continue_stmt() {
         let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(binary.var_names, vec!["x".to_string()]);
-        assert_eq!(binary.literals, vec![Var::Int(1), Var::Int(5)]);
+
+        let x = binary.find_var("x");
+        let one = binary.find_literal(1.into());
+        let five = binary.find_literal(5.into());
+
 
         /*
         "  0: 124                   NUM 1",
@@ -904,15 +913,15 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(one),
                 While(1),
-                Push(0),
-                Imm(0),
+                Push(x),
+                Imm(one),
                 Add,
-                Put(0),
+                Put(x),
                 Pop,
-                Push(0),
-                Imm(1),
+                Push(x),
+                Imm(five),
                 Eq,
                 If(2),
                 Exit(Some(1)),
@@ -929,7 +938,13 @@ mod tests {
     fn test_for_in_list_stmt() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
         let binary = compile(program, HashMap::new()).unwrap();
-        assert_eq!(binary.var_names, vec!["x".to_string(), "b".to_string()]);
+
+        let b = binary.find_var("b");
+        let x = binary.find_var("x");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        let three = binary.find_literal(3.into());
+        let five = binary.find_literal(5.into());
 
         /*
         "  0: 124                   NUM 1",
@@ -943,7 +958,7 @@ mod tests {
         " 10: 086                   PUSH x",
         " 11: 128                    NUM 5",
         " 12: 021                 * ADD",
-        " 13: 052                 * PUT a",
+        " 13: 052                 * PUT b",
         " 14: 111                   POP",
         " 15: 107 007               JUMP 7",
                  */
@@ -951,18 +966,18 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(one),
                 MakeSingletonList,
-                Imm(1),
+                Imm(two),
                 ListAddTail,
-                Imm(2),
+                Imm(three),
                 ListAddTail,
                 Val(Var::Int(1)),
-                ForList { id: 0, label: 1 },
-                Push(0),
-                Imm(3),
+                ForList { id: x, label: 1 },
+                Push(x),
+                Imm(five),
                 Add,
-                Put(1),
+                Put(b),
                 Pop,
                 Jump { label: 0 },
                 Done
@@ -976,6 +991,14 @@ mod tests {
     fn test_for_range() {
         let program = "for n in [1..5] player:tell(a); endfor";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let player = binary.find_var("player");
+        let a = binary.find_var("a".into());
+        let n = binary.find_var("n".into());
+        let tell = binary.find_literal("tell".into());
+        let one = binary.find_literal(1.into());
+        let five = binary.find_literal(5.into());
+
         /*
          0: 124                   NUM 1
          1: 128                   NUM 5
@@ -991,12 +1014,12 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
-                Imm(1),
-                ForRange { id: 0, label: 1 },
-                Push(1),
-                Imm(2),
-                Push(2),
+                Imm(one),
+                Imm(five),
+                ForRange { id: n, label: 1 },
+                Push(player),
+                Imm(tell),
+                Push(a),
                 MakeSingletonList,
                 CallVerb,
                 Pop,
@@ -1008,8 +1031,17 @@ mod tests {
 
     #[test]
     fn test_fork() {
+        // TODO: fix resolution of  literals and var names that end up defined *inside* the fork
+        // vector; the fork vector should inherit the parent's var_names and literals
+        // in the meantime this test is broken.
+
         let program = "fork (5) player:tell(\"a\"); endfork";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let player = binary.find_var("player");
+        let a = binary.find_literal("a".into());
+        let tell = binary.find_literal("tell".into());
+
         assert_eq!(
             binary.main_vector,
             vec![
@@ -1024,9 +1056,9 @@ mod tests {
         assert_eq!(
             binary.fork_vectors[0],
             vec![
-                Push(0), // player
-                Imm(0),  // tell
-                Imm(1),  // 'a'
+                Push(player), // player
+                Imm(tell),  // tell
+                Imm(a),  // 'a'
                 MakeSingletonList,
                 CallVerb,
                 Pop
@@ -1036,8 +1068,17 @@ mod tests {
 
     #[test]
     fn test_fork_id() {
+        // TODO: fix resolution of  literals and var names that end up defined *inside* the fork
+        // vector; the fork vector should inherit the parent's var_names and literals
+        // in the meantime this test is broken.
+
         let program = "fork fid (5) player:tell(fid); endfork";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let player = binary.find_var("player");
+        let five = binary.find_literal(5.into());
+        let tell = binary.find_literal("tell".into());
+
         assert_eq!(
             binary.main_vector,
             vec![
@@ -1052,8 +1093,8 @@ mod tests {
         assert_eq!(
             binary.fork_vectors[0],
             vec![
-                Push(1), // player
-                Imm(0),  // tell
+                Push(player), // player
+                Imm(tell),  // tell
                 Push(0), // fid
                 MakeSingletonList,
                 CallVerb,
@@ -1066,6 +1107,12 @@ mod tests {
     fn test_and_or() {
         let program = "a = (1 && 2 || 3);";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        let three = binary.find_literal(3.into());
+
         /*
          0: 124                   NUM 1
          1: 030 004             * AND 4
@@ -1074,11 +1121,10 @@ mod tests {
          6: 126                   NUM 3
          7: 052                 * PUT a
          8: 111                   POP
-
         */
         assert_eq!(
             binary.main_vector,
-            vec![Imm(0), And(0), Imm(1), Or(1), Imm(2), Put(0), Pop, Done]
+            vec![Imm(one), And(0), Imm(two), Or(1), Imm(three), Put(a), Pop, Done]
         );
         assert_eq!(binary.jump_labels[0].position, 3);
         assert_eq!(binary.jump_labels[1].position, 5);
@@ -1105,6 +1151,9 @@ mod tests {
         let mut builtins = HashMap::new();
         builtins.insert(String::from("disassemble"), 0);
         let binary = compile(program, builtins).unwrap();
+
+        let player = binary.find_var("player");
+        let test = binary.find_literal("test".into());
         /*
          0: 072                   PUSH player
          1: 016                 * MAKE_SINGLETON_LIST
@@ -1116,9 +1165,9 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Push(0), // Player
+                Push(player), // Player
                 MakeSingletonList,
-                Imm(0),
+                Imm(test),
                 ListAddTail,
                 FuncCall { id: 0 },
                 Pop,
@@ -1131,6 +1180,13 @@ mod tests {
     fn test_cond_expr() {
         let program = "a = (1 == 2 ? 3 | 4);";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        let three = binary.find_literal(3.into());
+        let four = binary.find_literal(4.into());
+
         /*
          0: 124                   NUM 1
          1: 125                   NUM 2
@@ -1145,14 +1201,14 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
-                Imm(1),
+                Imm(one),
+                Imm(two),
                 Eq,
                 IfQues(0),
-                Imm(2),
+                Imm(three),
                 Jump { label: 1 },
-                Imm(3),
-                Put(0),
+                Imm(four),
+                Put(a),
                 Pop,
                 Done
             ]
@@ -1163,6 +1219,10 @@ mod tests {
     fn test_verb_call() {
         let program = "player:tell(\"test\");";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let player = binary.find_var("player");
+        let tell = binary.find_literal("tell".into());
+        let test = binary.find_literal("test".into());
 
         /*
               0: 072                   PUSH player
@@ -1175,9 +1235,9 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Push(0), // Player
-                Imm(0),
-                Imm(1),
+                Push(player), // Player
+                Imm(tell),
+                Imm(test),
                 MakeSingletonList,
                 CallVerb,
                 Pop,
@@ -1190,6 +1250,13 @@ mod tests {
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let b = binary.find_var("b");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        let three = binary.find_literal(3.into());
+
         /*
          0: 124                   NUM 1
          1: 016                 * MAKE_SINGLETON_LIST
@@ -1211,19 +1278,19 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             [
-                Imm(0),
+                Imm(one),
                 MakeSingletonList,
-                Imm(1),
+                Imm(two),
                 ListAddTail,
-                Imm(2),
+                Imm(three),
                 ListAddTail,
-                Put(0),
+                Put(a),
                 Pop,
-                Push(0),
-                Imm(1),
+                Push(a),
+                Imm(two),
                 Length(0),
                 RangeRef,
-                Put(1),
+                Put(b),
                 Pop,
                 Done
             ]
@@ -1234,6 +1301,10 @@ mod tests {
     fn test_try_finally() {
         let program = "try a=1; finally a=2; endtry";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
         /*
          0: 112 009 008         * TRY_FINALLY 8
          3: 124                   NUM 1
@@ -1249,12 +1320,12 @@ mod tests {
             binary.main_vector,
             vec![
                 TryFinally(0),
-                Imm(0),
-                Put(0),
+                Imm(one),
+                Put(a),
                 Pop,
                 EndFinally,
-                Imm(1),
-                Put(0),
+                Imm(two),
+                Put(a),
                 Pop,
                 Continue,
                 Done
@@ -1266,6 +1337,15 @@ mod tests {
     fn test_try_excepts() {
         let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
         let binary = compile(program, HashMap::new()).unwrap();
+
+        let a = binary.find_var("a");
+        let b = binary.find_var("b");
+        let e_invarg = binary.find_literal(E_INVARG.into());
+        let e_propnf = binary.find_literal(E_PROPNF.into());
+        let one = binary.find_literal(1.into());
+        let two = binary.find_literal(2.into());
+        let three = binary.find_literal(3.into());
+
         /*
           0: 100 000               PUSH_LITERAL E_INVARG
           2: 016                 * MAKE_SINGLETON_LIST
@@ -1294,27 +1374,27 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Push(1),
+                Imm(e_invarg),
                 MakeSingletonList,
                 PushLabel(0),
-                Push(3),
+                Imm(e_propnf),
                 MakeSingletonList,
                 PushLabel(1),
                 TryExcept(2),
-                Imm(0),
-                Put(0),
+                Imm(one),
+                Put(a),
                 Pop,
                 EndExcept(2),
-                Put(0),
+                Put(a),
                 Pop,
-                Imm(1),
-                Put(0),
+                Imm(two),
+                Put(a),
                 Pop,
                 Jump { label: 3 },
-                Put(2),
+                Put(b),
                 Pop,
-                Imm(2),
-                Put(0),
+                Imm(three),
+                Put(a),
                 Pop,
                 Done
             ]
@@ -1323,7 +1403,7 @@ mod tests {
 
     #[test]
     fn test_catch_expr() {
-        let program = "x = `x + 1 ! E_PROPNF, E_PERM => 17';";
+        let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
         let binary = compile(program, HashMap::new()).unwrap();
         /**
           0: 100 000               PUSH_LITERAL E_PROPNF
@@ -1342,22 +1422,28 @@ mod tests {
         20: 111                   POP
 
          */
+        let x = binary.find_var("x");
+        let e_propnf = binary.find_literal(E_PROPNF.into());
+        let e_perm = binary.find_literal(E_PERM.into());
+        let one = binary.find_literal(1.into());
+        let svntn = binary.find_literal(17.into());
+
         assert_eq!(
             binary.main_vector,
             vec![
-                Push(1),
+                Imm(e_propnf),
                 MakeSingletonList,
-                Push(2),
+                Imm(e_perm),
                 ListAddTail,
                 PushLabel(0),
                 Catch,
-                Push(0),
-                Imm(0),
+                Push(x),
+                Imm(one),
                 Add,
                 EndCatch(1),
                 Pop,
-                Imm(1),
-                Put(0),
+                Imm(svntn),
+                Put(x),
                 Pop,
                 Done
             ]

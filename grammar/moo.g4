@@ -26,14 +26,13 @@ elseif:
 excepts: except+;
 except: 'except' (id=ID?) '(' codes ')' statements;
 
-literal:
+atom:
         INTEGER #Int
     |   FLOAT #Float
     |   STRING #String
     |   OBJECT #Object
     |   ERROR #Error
-    |   ID #Identifier
-    |   'this' #This;
+    |   ID #Identifier;
 
 // Note that order determines precedence here, and some of these might not be correct still.
 expr:
@@ -63,7 +62,7 @@ expr:
     |  builtin=ID '(' arglist ')' #BuiltinCall
     |   expr '?' expr '|' expr #CondExpr
     |  '`' try_e=expr '!' codes ('=>' except_expr=expr)? '\'' #ErrorEscape
-    |  literal #LiteralExpr
+    |  atom #AtomExpr
     |  '$'? id=ID '(' arglist ')' #SysVerb
     |  location=expr ':' '(' verb=expr ')' '(' arglist ')' # VerbExprCall
     |  location=expr ':' verb=ID '(' arglist ')' #VerbCall
@@ -105,6 +104,12 @@ Newline
         )
         -> skip
     ;
+
+
+ERROR: 'e_type' | 'e_div' | 'e_perm' | 'e_propnf' | 'e_verbnf' | 'e_varnf' | 'e_invind' | 'e_recmove' |
+       'e_maxrec' | 'e_range' | 'e_args' | 'e_nacc' | 'e_invarg' | 'e_quota' | 'e_float' |
+       'E_TYPE' | 'E_DIV' | 'E_PERM' | 'E_PROPNF' | 'E_VERBNF' | 'E_VARNF' | 'E_INVIND' | 'E_RECMOVE' |
+       'E_MAXREC' | 'E_RANGE' | 'E_ARGS' | 'E_NACC' | 'E_INVARG' | 'E_QUOTA' | 'E_FLOAT' ;
 
 ID: [a-zA-Z_][a-zA-Z_0-9]*;
 STRING:  '"' ( EscapeSequence | ~('\\'|'"') )* '"' ;
@@ -172,6 +177,3 @@ HexDigit
     : [0-9a-fA-F]
     ;
 
-
-ERROR: 'e_type' | 'e_div' | 'e_perm' | 'e_propnf' | 'e_verbnf' | 'e_varnf' | 'e_invind' | 'e_recmove' |
-       'e_maxrec' | 'e_range' | 'e_args' | 'e_nacc' | 'e_invarg' | 'e_quota' | 'e_float';
