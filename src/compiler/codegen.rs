@@ -14,6 +14,8 @@ use crate::vm::opcode::{Binary, Op};
 pub enum CompileError {
     #[error("Unknown built-in function: {0}")]
     UnknownBuiltinFunction(String),
+    #[error("Could not find loop with id: {0}")]
+    UnknownLoopLabel(String),
 }
 
 // Fixup for a jump label
@@ -116,15 +118,22 @@ impl State {
         self.ops.push(op);
     }
 
-    fn find_loop(&self, loop_label: &Option<Name>) -> &Loop {
+    fn find_loop(&self, loop_label: &Option<Name>) -> Result<&Loop, anyhow::Error>  {
         match loop_label {
             None => {
                 let l = self.loops.last().expect("No loop to exit in codegen");
-                l
+                Ok(l)
             }
             Some(eid) => {
-                let l = self.loops.iter().find(|l| l.start_label == eid.0);
-                l.expect("Can't find loop in continue / break")
+                match self.find_label(eid) {
+                    None => {
+                        let loop_name = self.var_names.names[eid.0].clone();
+                        return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
+                    }
+                    Some(label) => {
+                        Ok(&self.loops[label.id])
+                    }
+                }
             }
         }
     }
@@ -606,11 +615,11 @@ impl State {
                 self.pop_stack(2);
             }
             Stmt::Break { exit } => {
-                let lp = self.find_loop(exit);
+                let lp = self.find_loop(exit)?;
                 self.emit(Op::Exit(Some(lp.end_label)));
             }
             Stmt::Continue { exit } => {
-                let lp = self.find_loop(exit);
+                let lp = self.find_loop(exit)?;
                 self.emit(Op::Exit(Some(lp.start_label)));
             }
             Stmt::Return { expr } => match expr {
@@ -841,6 +850,7 @@ mod tests {
         let binary = compile(program, HashMap::new()).unwrap();
 
         let x = binary.find_var("x");
+        let chuckles = binary.find_var("chuckles");
         let one = binary.find_literal(1.into());
         let five = binary.find_literal(5.into());
 
@@ -864,7 +874,7 @@ mod tests {
             binary.main_vector,
             vec![
                 Imm(one),
-                WhileId { id: 0, label: 1 },
+                WhileId { id: chuckles, label: 1 },
                 Push(x),
                 Imm(one),
                 Add,
@@ -1136,11 +1146,14 @@ mod tests {
         let parse = compile(program, HashMap::new());
         assert!(parse.is_err());
         match parse.err().unwrap().downcast_ref::<CompileError>() {
-            None => {
-                panic!("Wrong error type")
-            }
             Some(CompileError::UnknownBuiltinFunction(name)) => {
                 assert_eq!(name, "call_builtin");
+            }
+            None => {
+                panic!("Missing error");
+            }
+            Some(_) => {
+                panic!("Wrong error type")
             }
         }
     }
