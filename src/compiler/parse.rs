@@ -1063,7 +1063,11 @@ mod tests {
     fn test_scatter_assign() {
         let program = "{connection} = args;";
         let parse = parse_program(program).unwrap();
-        let connection = parse.names.find_name(&"connection".to_string()).unwrap().clone();
+        let connection = parse
+            .names
+            .find_name(&"connection".to_string())
+            .unwrap()
+            .clone();
         let args = parse.names.find_name(&"args".to_string()).unwrap().clone();
 
         let scatter_items = vec![ScatterItem {
@@ -1071,10 +1075,30 @@ mod tests {
             id: connection,
             expr: None,
         }];
-        let scatter_right = Box::new(Expr::Id(args));
+        let scatter_right = Box::new(Id(args));
         assert_eq!(
             parse.stmts,
             vec![Stmt::Expr(Expr::Scatter(scatter_items, scatter_right))]
+        );
+    }
+
+    #[test]
+    fn test_indexed_assign() {
+        let program = "this.stack[5] = 5;";
+        let parse = parse_program(program).unwrap();
+        let this = parse.names.find_name(&"this".to_string()).unwrap().clone();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Assign {
+                left: Box::new(Expr::Index(
+                    Box::new(Prop {
+                        location: Box::new(Id(this)),
+                        property: Box::new(VarExpr(Str("stack".to_string()))),
+                    }),
+                    Box::new(VarExpr(Var::Int(5)))
+                )),
+                right: Box::new(VarExpr(Var::Int(5)))
+            })]
         );
     }
 }
