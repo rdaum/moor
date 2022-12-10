@@ -1,26 +1,31 @@
-use anyhow::anyhow;
-use bincode::config;
-use bincode::error::DecodeError;
 use enumset::EnumSet;
+use int_enum::IntEnum;
 
-use crate::model::ObjDB;
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropFlag};
-use crate::model::var::{Error, Objid, Var};
 use crate::model::var::Error::{
     E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
+use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::{Program, VerbAttr};
+use crate::model::ObjDB;
+use crate::vm::execute::FinallyReason::Fallthrough;
 use crate::vm::opcode::{Binary, Op};
+use crate::vm::state::{PersistentState, StateError};
+
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
-const FINALLY_FALLTHROUGH: i64 = 0x00;
-const FINALLY_RAISE: i64 = 0x01;
-const FINALLY_UNCAUGHT: i64 = 0x02;
-const FINALLY_RETURN: i64 = 0x03;
-const FINALLY_ABORT: i64 = 0x04; /* This doesn't actually get you into a FINALLY... */
-const FINALLY_EXIT: i64 = 0x65;
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
+pub enum FinallyReason {
+    Fallthrough = 0x00,
+    Raise = 0x01,
+    Uncatch = 0x02,
+    Return = 0x03,
+    Abort = 0x04, /* This doesn't actually get you into a FINALLY... */
+    Exit = 0x065,
+}
 
 struct Activation {
     binary: Binary,
@@ -33,14 +38,13 @@ struct Activation {
     player: Objid,
     verb_owner: Objid,
     definer: Objid,
-
     verb: String,
     verb_names: Vec<String>,
 }
 
 impl Activation {
     pub fn new(
-        program: &Program,
+        binary: Binary,
         caller: Objid,
         this: Objid,
         player: Objid,
@@ -50,14 +54,6 @@ impl Activation {
         verb_names: Vec<String>,
         args: Vec<Var>,
     ) -> Result<Self, anyhow::Error> {
-        // TODO: move deserialization out into whatever does the actual verb retrieval?
-        let slc = &program.0[..];
-        let result: Result<(Binary, usize), DecodeError> =
-            bincode::serde::decode_from_slice(slc, config::standard());
-        let Ok((binary, _size)) = result else {
-            return Err(anyhow!("Invalid opcodes in binary program stream"));
-        };
-
         let environment = vec![Var::None; binary.var_names.len()];
 
         let mut a = Activation {
@@ -261,7 +257,7 @@ impl VM {
 
     fn get_prop(
         &mut self,
-        db: &dyn ObjDB,
+        state: &dyn PersistentState,
         player_flags: EnumSet<ObjFlag>,
         propname: Var,
         obj: Var,
@@ -274,40 +270,21 @@ impl VM {
             return Var::Err(E_INVIND);
         };
 
-        // TODO builtin properties!
-
-        let find = db
-            .find_property(
-                obj,
-                propname.as_str(),
-                PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value,
-            )
-            .expect("db fail");
-        let prop_val = match find {
-            None => Var::Err(E_PROPNF),
-            Some(p) => {
-                if !db.property_allows(
-                    PropFlag::Read.into(),
-                    obj,
-                    player_flags,
-                    p.attrs.flags.unwrap(),
-                    p.attrs.owner.unwrap(),
-                ) {
-                    Var::Err(E_PERM)
-                } else {
-                    match p.attrs.value {
-                        None => Var::Err(E_PROPNF),
-                        Some(p) => p,
-                    }
+        match state.retrieve_property(obj, propname.as_str(), player_flags) {
+            Ok(v) => v,
+            Err(e) =>  match e.downcast_ref::<StateError>() {
+                Some(StateError::PropertyPermissionDenied(_, _)) => Var::Err(E_PERM),
+                Some(StateError::PropertyNotFound(_, _)) => Var::Err(E_PROPNF),
+                _ => {
+                    panic!("Unexpected error in property retrieval: {:?}", e);
                 }
             }
-        };
-        prop_val
+        }
     }
 
-    pub fn call_verb(
+    pub fn prepare_call_verb(
         &mut self,
-        db: &mut impl ObjDB,
+        state: &mut impl PersistentState,
         obj: Objid,
         vname: &str,
         do_pass: bool,
@@ -316,26 +293,30 @@ impl VM {
         caller: Objid,
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
-        // TODO do_pass get parent and delegate there instead.
-        // Requires adding db.object_parent.
-        let h = db.find_callable_verb(
-            obj,
-            vname,
-            VerbAttr::Program | VerbAttr::Flags | VerbAttr::Owner | VerbAttr::Definer,
-        )?;
-        let Some(h) = h else {
-            return Ok(Var::Err(E_VERBNF));
+        let (binary, vi) = match state.retrieve_verb(obj, vname, do_pass, this, player, caller, &args) {
+            Ok(binary) => binary,
+            Err(e) => return match e.downcast_ref::<StateError>() {
+                Some(StateError::VerbNotFound(_, _)) => {
+                    Ok(Var::Err(E_VERBNF))
+                }
+                Some(StateError::VerbPermissionDenied(_, _)) => {
+                    Ok(Var::Err(E_PERM))
+                }
+                _ => {
+                    Err(e)
+                }
+            },
         };
 
         let a = Activation::new(
-            &h.attrs.program.unwrap(),
+            binary,
             caller,
             this,
             player,
-            h.attrs.owner.unwrap(),
-            h.attrs.definer.unwrap(),
+            vi.attrs.owner.unwrap(),
+            vi.attrs.definer.unwrap(),
             String::from(vname),
-            h.names,
+            vi.names,
             args,
         )?;
 
@@ -346,13 +327,14 @@ impl VM {
 
     pub fn exec(
         &mut self,
-        db: &mut impl ObjDB,
+        state: &mut impl PersistentState,
         player_flags: EnumSet<ObjFlag>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self.next_op();
         let Some(op) = op else {
             return Ok(ExecutionResult::Complete);
         };
+        eprint!("{:?} ", op);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -412,7 +394,7 @@ impl VM {
                             self.pop();
                             self.pop();
                             self.jump(label);
-                            return Ok(ExecutionResult::More)
+                            return Ok(ExecutionResult::More);
                         }
                         Var::Int(from_i + 1)
                     }
@@ -421,13 +403,13 @@ impl VM {
                             self.pop();
                             self.pop();
                             self.jump(label);
-                            return Ok(ExecutionResult::More)
+                            return Ok(ExecutionResult::More);
                         }
                         Var::Obj(Objid(from_o.0 + 1))
                     }
                     (_, _) => {
                         self.raise_error(E_TYPE);
-                        return Ok(ExecutionResult::More)
+                        return Ok(ExecutionResult::More);
                     }
                 };
 
@@ -448,7 +430,7 @@ impl VM {
                     Some(Op::Pop) => {
                         // skip
                         self.top_mut().skip();
-                        return Ok(ExecutionResult::More)
+                        return Ok(ExecutionResult::More);
                     }
                     _ => {}
                 }
@@ -497,7 +479,7 @@ impl VM {
                     (Var::List(l), Var::Int(i)) => {
                         if i < 0 || !i < l.len() as i64 {
                             self.push(&Var::Err(E_RANGE));
-                            return Ok(ExecutionResult::More)
+                            return Ok(ExecutionResult::More);
                         }
 
                         let mut nval = l;
@@ -507,7 +489,7 @@ impl VM {
                     (Var::Str(s), Var::Int(i)) => {
                         if i < 0 || !i < s.len() as i64 {
                             self.push(&Var::Err(E_RANGE));
-                            return Ok(ExecutionResult::More)
+                            return Ok(ExecutionResult::More);
                         }
 
                         let Var::Str(value) = value else {
@@ -517,7 +499,7 @@ impl VM {
 
                         if value.len() != 1 {
                             self.push(&Var::Err(E_INVARG));
-                            return Ok(ExecutionResult::More)
+                            return Ok(ExecutionResult::More);
                         }
 
                         let i = i as usize;
@@ -528,7 +510,7 @@ impl VM {
                     }
                     (_, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More)
+                        return Ok(ExecutionResult::More);
                     }
                 };
                 self.push(&nval);
@@ -706,13 +688,13 @@ impl VM {
 
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                let prop = self.get_prop(db, player_flags, propname, obj);
+                let prop = self.get_prop(state, player_flags, propname, obj);
                 self.push(&prop);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                let pop = self.get_prop(db, player_flags, propname, obj);
+                let pop = self.get_prop(state, player_flags, propname, obj);
                 self.push(&pop);
             }
             Op::PutProp => {
@@ -721,56 +703,60 @@ impl VM {
                     (Var::Str(propname), Var::Obj(obj)) => (propname, obj),
                     (_, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More)
+                        return Ok(ExecutionResult::More);
                     }
                 };
-                let h = db
-                    .find_property(obj, propname.as_str(), PropAttr::Owner | PropAttr::Flags)
-                    .expect("Unable to perform property lookup");
-
-                // TODO handle built-in properties
-                let Some(p) = h else {
-                    self.push(&Var::Err(E_PROPNF));
-                   return Ok(ExecutionResult::More)
-                };
-
-                if !db.property_allows(
-                    PropFlag::Write.into(),
-                    obj,
-                    player_flags,
-                    p.attrs.flags.unwrap(),
-                    p.attrs.owner.unwrap(),
-                ) {
-                    db.set_property(
-                        p.pid,
-                        obj,
-                        rhs,
-                        p.attrs.owner.unwrap(),
-                        p.attrs.flags.unwrap(),
-                    )
-                    .expect("could not set property");
-                    self.push(&Var::None);
-                    return Ok(ExecutionResult::More)
+                match state.update_property(obj, &propname, player_flags, &rhs) {
+                    Ok(()) => {
+                        self.push(&Var::None);
+                    },
+                    Err(e) =>  match e.downcast_ref::<StateError>() {
+                        _ => {
+                            panic!("Unexpected error in property update: {:?}", e);
+                        }
+                        Some(StateError::PropertyNotFound(_, _)) => {
+                            self.push(&Var::Err(E_PROPNF));
+                        }
+                        Some(StateError::PropertyPermissionDenied(_, _)) => {
+                            self.push(&Var::Err(E_PERM));
+                        }
+                    }
                 }
+                return Ok(ExecutionResult::More);
             }
-            Op::Fork { id: _, f_index: _ } => {}
+            Op::Fork { id: _, f_index: _ } => {
+                unimplemented!("fork")
+            }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
                 let (_args, _verb, _obj) = match (args, verb, obj) {
                     (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
                     (_, _, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More)
+                        return Ok(ExecutionResult::More);
                     }
                 };
                 // store state variables
                 // call verb
+                unimplemented!("call verb");
                 // load state variables
             }
-            Op::Return => {}
-            Op::Return0 => {}
-            Op::Done => {}
-            Op::FuncCall { id: _ } => {}
+            Op::Return => {
+                let ret_val = self.pop();
+                return self.perform_return(ret_val, false);
+            }
+            Op::Return0 => {
+                let ret_val = Var::Int(0);
+                return self.perform_return(ret_val, false);
+            }
+            Op::Done => {
+                let ret_val = Var::Int(0);
+                return self.perform_return(ret_val, true);
+            }
+            Op::FuncCall { id } => {
+                // TODO Actually perform call. For now we just fake a return value.
+                self.push(&Var::Err(E_PERM));
+            }
             Op::PushLabel(label) => {
                 self.push(&Var::Int(label as i64));
             }
@@ -810,7 +796,7 @@ impl VM {
                 let Var::_Finally(_marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
-                self.push(&Var::Int(FINALLY_FALLTHROUGH));
+                self.push(&Var::Int(Fallthrough.int_value() as i64));
                 self.push(&Var::Int(0));
             }
             Op::Continue => {
@@ -823,6 +809,55 @@ impl VM {
                 panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut().pc)
             }
         }
-        return Ok(ExecutionResult::More)
+        return Ok(ExecutionResult::More);
+    }
+
+    fn unwind_stack(&mut self, reason: FinallyReason) -> Result<ExecutionResult, anyhow::Error> {
+        // TODO actually unwind the stack and continue
+        return Ok(ExecutionResult::Complete);
+    }
+
+    fn perform_return(
+        &mut self,
+        ret_val: Var,
+        is_done: bool,
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        return self.unwind_stack(FinallyReason::Return);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Error;
+    use enumset::EnumSet;
+    use crate::model::objects::ObjFlag;
+    use crate::model::var::{Objid, Var};
+    use crate::model::verbs::VerbInfo;
+    use crate::vm::execute::VM;
+    use crate::vm::opcode::Binary;
+    use crate::vm::state::PersistentState;
+
+    struct MockState {}
+    impl PersistentState for MockState {
+        fn retrieve_verb(&self, obj: Objid, vname: &str, do_pass: bool, this: Objid, player: Objid, caller: Objid, args: &Vec<Var>) -> Result<(Binary, VerbInfo), Error> {
+            todo!()
+        }
+
+        fn retrieve_property(&self, obj: Objid, pname: &str, player_flags: EnumSet<ObjFlag>) -> Result<Var, Error> {
+            todo!()
+        }
+
+        fn update_property(&self, obj: Objid, pname: &str, player_flags: EnumSet<ObjFlag>, value: &Var) -> Result<(), Error> {
+            todo!()
+        }
+    }
+
+    #[test]
+    fn simple_vm_execute() {
+        let mut vm = VM::new();
+        let mut state = MockState {};
+        let o = Objid(0);
+        vm.prepare_call_verb(&mut state, o, "test", false, o, o, o, vec![]).unwrap();
+        vm.exec(&mut state, ObjFlag::Wizard | ObjFlag::Programmer).unwrap();
     }
 }

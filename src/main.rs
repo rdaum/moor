@@ -14,14 +14,15 @@ use rusqlite::Connection;
 
 use crate::compiler::codegen::compile;
 use crate::db::sqllite::SQLiteTx;
-use crate::model::ObjDB;
-use crate::model::objects::{ObjAttrs, Objects, ObjFlag};
-use crate::model::props::{PropDefs, Properties, PropFlag};
+use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
+use crate::model::props::{PropDefs, PropFlag, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
+use crate::model::ObjDB;
 use crate::textdump::{Object, TextdumpReader};
 use crate::vm::execute::{ExecutionResult, VM};
+use crate::vm::state::ObjDBState;
 
 pub mod compiler;
 mod db;
@@ -204,7 +205,6 @@ fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error>
     Ok(())
 }
 
-
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
     #[arg(value_name = "DB", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
@@ -226,10 +226,12 @@ fn main() {
     }
 
     let mut tx = SQLiteTx::new(&mut conn).unwrap();
+    let mut odb_state = ObjDBState { db: &tx };
+
     let mut vm = VM::new();
     eprintln!("Calling #0:do_login_command...");
-    vm.call_verb(
-        &mut tx,
+    vm.prepare_call_verb(
+        &mut odb_state,
         Objid(0),
         "do_login_command",
         false,
@@ -240,10 +242,13 @@ fn main() {
     )
     .unwrap();
     loop {
-        let result = vm.exec(&mut tx, ObjFlag::Programmer | ObjFlag::Wizard).unwrap();
+        let result = vm
+            .exec(&mut odb_state, ObjFlag::Programmer | ObjFlag::Wizard)
+            .unwrap();
         match result {
             ExecutionResult::Complete => {
-                eprintln!("Done.")
+                eprintln!("Done.");
+                break;
             }
             ExecutionResult::More => {}
         }
