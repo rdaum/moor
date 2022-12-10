@@ -43,7 +43,7 @@ pub trait PersistentState {
         player_flags: EnumSet<ObjFlag>,
     ) -> Result<Var, anyhow::Error>;
     fn update_property(
-        &self,
+        &mut self,
         obj: Objid,
         pname: &str,
         player_flags: EnumSet<ObjFlag>,
@@ -129,7 +129,7 @@ impl<'a> PersistentState for ObjDBState<'a> {
     }
 
     fn update_property(
-        &self,
+        &mut self,
         obj: Objid,
         property_name: &str,
         player_flags: EnumSet<ObjFlag>,

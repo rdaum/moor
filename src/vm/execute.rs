@@ -14,7 +14,6 @@ use crate::vm::execute::FinallyReason::Fallthrough;
 use crate::vm::opcode::{Binary, Op};
 use crate::vm::state::{PersistentState, StateError};
 
-
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
@@ -272,13 +271,13 @@ impl VM {
 
         match state.retrieve_property(obj, propname.as_str(), player_flags) {
             Ok(v) => v,
-            Err(e) =>  match e.downcast_ref::<StateError>() {
+            Err(e) => match e.downcast_ref::<StateError>() {
                 Some(StateError::PropertyPermissionDenied(_, _)) => Var::Err(E_PERM),
                 Some(StateError::PropertyNotFound(_, _)) => Var::Err(E_PROPNF),
                 _ => {
                     panic!("Unexpected error in property retrieval: {:?}", e);
                 }
-            }
+            },
         }
     }
 
@@ -293,20 +292,17 @@ impl VM {
         caller: Objid,
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
-        let (binary, vi) = match state.retrieve_verb(obj, vname, do_pass, this, player, caller, &args) {
-            Ok(binary) => binary,
-            Err(e) => return match e.downcast_ref::<StateError>() {
-                Some(StateError::VerbNotFound(_, _)) => {
-                    Ok(Var::Err(E_VERBNF))
+        let (binary, vi) =
+            match state.retrieve_verb(obj, vname, do_pass, this, player, caller, &args) {
+                Ok(binary) => binary,
+                Err(e) => {
+                    return match e.downcast_ref::<StateError>() {
+                        Some(StateError::VerbNotFound(_, _)) => Ok(Var::Err(E_VERBNF)),
+                        Some(StateError::VerbPermissionDenied(_, _)) => Ok(Var::Err(E_PERM)),
+                        _ => Err(e),
+                    }
                 }
-                Some(StateError::VerbPermissionDenied(_, _)) => {
-                    Ok(Var::Err(E_PERM))
-                }
-                _ => {
-                    Err(e)
-                }
-            },
-        };
+            };
 
         let a = Activation::new(
             binary,
@@ -709,8 +705,8 @@ impl VM {
                 match state.update_property(obj, &propname, player_flags, &rhs) {
                     Ok(()) => {
                         self.push(&Var::None);
-                    },
-                    Err(e) =>  match e.downcast_ref::<StateError>() {
+                    }
+                    Err(e) => match e.downcast_ref::<StateError>() {
                         _ => {
                             panic!("Unexpected error in property update: {:?}", e);
                         }
@@ -720,7 +716,7 @@ impl VM {
                         Some(StateError::PropertyPermissionDenied(_, _)) => {
                             self.push(&Var::Err(E_PERM));
                         }
-                    }
+                    },
                 }
                 return Ok(ExecutionResult::More);
             }
@@ -828,36 +824,120 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Error;
-    use enumset::EnumSet;
     use crate::model::objects::ObjFlag;
     use crate::model::var::{Objid, Var};
-    use crate::model::verbs::VerbInfo;
+    use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::vm::execute::VM;
     use crate::vm::opcode::Binary;
-    use crate::vm::state::PersistentState;
+    use crate::vm::state::{PersistentState, StateError};
+    use anyhow::Error;
+    use enumset::EnumSet;
+    use std::collections::HashMap;
+    use crate::compiler::codegen::compile;
+    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+    use crate::model::var::Error::{E_NONE, E_VERBNF};
 
-    struct MockState {}
+    struct MockState {
+        verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
+        properties: HashMap<(Objid, String), Var>,
+    }
+
+    impl MockState {
+        fn new() -> Self {
+            Self {
+                verbs: Default::default(),
+                properties: Default::default(),
+            }
+        }
+        fn compile_verb(&mut self, o: Objid, name: &str, code: &str) {
+            let binary = compile(code).unwrap();
+            self.verbs.insert((o, name.to_string()), (binary, VerbInfo {
+                vid: Vid(0),
+                names: vec![name.to_string()],
+                attrs: VerbAttrs {
+                    definer: Some(o),
+                    owner: Some(o),
+                    flags: Some(VerbFlag::Exec | VerbFlag::Read),
+                    args_spec: Some(VerbArgsSpec {
+                        dobj: ArgSpec::This,
+                        prep: PrepSpec::None,
+                        iobj: ArgSpec::This,
+                    }),
+                    program: None,
+                },
+            }));
+        }
+    }
+
     impl PersistentState for MockState {
-        fn retrieve_verb(&self, obj: Objid, vname: &str, do_pass: bool, this: Objid, player: Objid, caller: Objid, args: &Vec<Var>) -> Result<(Binary, VerbInfo), Error> {
-            todo!()
+        fn retrieve_verb(
+            &self,
+            obj: Objid,
+            vname: &str,
+            do_pass: bool,
+            this: Objid,
+            player: Objid,
+            caller: Objid,
+            args: &Vec<Var>,
+        ) -> Result<(Binary, VerbInfo), Error> {
+            let v = self.verbs.get(&(obj, vname.to_string()));
+            match v {
+                None => Err(StateError::VerbNotFound(obj, vname.to_string()).into()),
+                Some(v) => Ok(v.clone()),
+            }
         }
 
-        fn retrieve_property(&self, obj: Objid, pname: &str, player_flags: EnumSet<ObjFlag>) -> Result<Var, Error> {
-            todo!()
+        fn retrieve_property(
+            &self,
+            obj: Objid,
+            pname: &str,
+            player_flags: EnumSet<ObjFlag>,
+        ) -> Result<Var, Error> {
+            let p = self.properties.get(&(obj, pname.to_string()));
+            match p {
+                None => Err(StateError::PropertyNotFound(obj, pname.to_string()).into()),
+                Some(p) => Ok(p.clone()),
+            }
         }
 
-        fn update_property(&self, obj: Objid, pname: &str, player_flags: EnumSet<ObjFlag>, value: &Var) -> Result<(), Error> {
-            todo!()
+        fn update_property(
+            &mut self,
+            obj: Objid,
+            pname: &str,
+            player_flags: EnumSet<ObjFlag>,
+            value: &Var,
+        ) -> Result<(), Error> {
+            self.properties
+                .insert((obj, pname.to_string()), value.clone());
+            Ok(())
         }
     }
 
     #[test]
-    fn simple_vm_execute() {
+    fn test_verbnf() {
         let mut vm = VM::new();
-        let mut state = MockState {};
+        let mut state = MockState::new();
         let o = Objid(0);
-        vm.prepare_call_verb(&mut state, o, "test", false, o, o, o, vec![]).unwrap();
-        vm.exec(&mut state, ObjFlag::Wizard | ObjFlag::Programmer).unwrap();
+        assert_eq!(
+            vm.prepare_call_verb(&mut state, o, "test", false, o, o, o, vec![])
+                .unwrap(),
+            Var::Err(E_VERBNF)
+        );
+    }
+
+    #[test]
+    fn test_simple_vm_execute() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let o = Objid(0);
+        state.compile_verb(o, "test", "1;");
+        assert_eq!(
+            vm.prepare_call_verb(&mut state, o, "test", false, o, o, o, vec![])
+                .unwrap(),
+            Var::Err(E_NONE),
+        );
+        vm.exec(&mut state, ObjFlag::Wizard | ObjFlag::Programmer)
+            .unwrap();
+        assert_eq!(vm.top_mut().pop().unwrap(), Var::Int(1));
     }
 }

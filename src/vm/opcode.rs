@@ -105,7 +105,7 @@ pub enum Op {
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
-#[derive(Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub struct Binary {
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
