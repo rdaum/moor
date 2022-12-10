@@ -35,6 +35,7 @@ struct Activation {
     temp: Var,
     this: Objid,
     player: Objid,
+    player_flags: EnumSet<ObjFlag>,
     verb_owner: Objid,
     definer: Objid,
     verb: String,
@@ -47,6 +48,7 @@ impl Activation {
         caller: Objid,
         this: Objid,
         player: Objid,
+        player_flags: EnumSet<ObjFlag>,
         verb_owner: Objid,
         definer: Objid,
         verb: String,
@@ -64,6 +66,7 @@ impl Activation {
             temp: Var::None,
             this,
             player,
+            player_flags,
             verb_owner,
             definer,
             verb: verb.clone(),
@@ -159,6 +162,10 @@ impl Activation {
         self.valstack[l - p] = v.clone()
     }
 
+    pub fn stack_size(&self) -> usize {
+        self.valstack.len()
+    }
+
     pub fn jump(&mut self, label_id: usize) {
         let label = &self.binary.jump_labels[label_id];
         self.pc += label.position;
@@ -192,6 +199,7 @@ macro_rules! binary_var_op {
     };
 }
 
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ExecutionResult {
     Complete,
     More,
@@ -289,6 +297,7 @@ impl VM {
         do_pass: bool,
         this: Objid,
         player: Objid,
+        player_flags: EnumSet<ObjFlag>,
         caller: Objid,
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
@@ -309,6 +318,7 @@ impl VM {
             caller,
             this,
             player,
+            player_flags,
             vi.attrs.owner.unwrap(),
             vi.attrs.definer.unwrap(),
             String::from(vname),
@@ -324,7 +334,6 @@ impl VM {
     pub fn exec(
         &mut self,
         state: &mut impl PersistentState,
-        player_flags: EnumSet<ObjFlag>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self.next_op();
         let Some(op) = op else {
@@ -684,13 +693,13 @@ impl VM {
 
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                let prop = self.get_prop(state, player_flags, propname, obj);
+                let prop = self.get_prop(state, self.top().player_flags, propname, obj);
                 self.push(&prop);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                let pop = self.get_prop(state, player_flags, propname, obj);
+                let pop = self.get_prop(state, self.top().player_flags, propname, obj);
                 self.push(&pop);
             }
             Op::PutProp => {
@@ -702,7 +711,7 @@ impl VM {
                         return Ok(ExecutionResult::More);
                     }
                 };
-                match state.update_property(obj, &propname, player_flags, &rhs) {
+                match state.update_property(obj, &propname, self.top().player_flags, &rhs) {
                     Ok(()) => {
                         self.push(&Var::None);
                     }
@@ -824,18 +833,19 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::codegen::compile;
     use crate::model::objects::ObjFlag;
+    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
-    use crate::vm::execute::VM;
-    use crate::vm::opcode::Binary;
+    use crate::vm::execute::{ExecutionResult, VM};
+    use crate::vm::opcode::Op::*;
+    use crate::vm::opcode::{Binary, Op};
     use crate::vm::state::{PersistentState, StateError};
     use anyhow::Error;
     use enumset::EnumSet;
     use std::collections::HashMap;
-    use crate::compiler::codegen::compile;
-    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VERBNF};
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -849,23 +859,68 @@ mod tests {
                 properties: Default::default(),
             }
         }
-        fn compile_verb(&mut self, o: Objid, name: &str, code: &str) {
+        fn set_verb(&mut self, o: Objid, name: &str, binary: Binary) {
+            self.verbs.insert(
+                (o, name.to_string()),
+                (
+                    binary.clone(),
+                    VerbInfo {
+                        vid: Vid(0),
+                        names: vec![name.to_string()],
+                        attrs: VerbAttrs {
+                            definer: Some(o),
+                            owner: Some(o),
+                            flags: Some(VerbFlag::Exec | VerbFlag::Read),
+                            args_spec: Some(VerbArgsSpec {
+                                dobj: ArgSpec::This,
+                                prep: PrepSpec::None,
+                                iobj: ArgSpec::This,
+                            }),
+                            program: None,
+                        },
+                    },
+                ),
+            );
+        }
+
+        fn compile_verb(&mut self, o: Objid, name: &str, code: &str) -> Binary {
             let binary = compile(code).unwrap();
-            self.verbs.insert((o, name.to_string()), (binary, VerbInfo {
-                vid: Vid(0),
-                names: vec![name.to_string()],
-                attrs: VerbAttrs {
-                    definer: Some(o),
-                    owner: Some(o),
-                    flags: Some(VerbFlag::Exec | VerbFlag::Read),
-                    args_spec: Some(VerbArgsSpec {
-                        dobj: ArgSpec::This,
-                        prep: PrepSpec::None,
-                        iobj: ArgSpec::This,
-                    }),
-                    program: None,
-                },
-            }));
+            self.verbs.insert(
+                (o, name.to_string()),
+                (
+                    binary.clone(),
+                    VerbInfo {
+                        vid: Vid(0),
+                        names: vec![name.to_string()],
+                        attrs: VerbAttrs {
+                            definer: Some(o),
+                            owner: Some(o),
+                            flags: Some(VerbFlag::Exec | VerbFlag::Read),
+                            args_spec: Some(VerbArgsSpec {
+                                dobj: ArgSpec::This,
+                                prep: PrepSpec::None,
+                                iobj: ArgSpec::This,
+                            }),
+                            program: None,
+                        },
+                    },
+                ),
+            );
+            binary
+        }
+    }
+    fn mk_binary(main_vector: Vec<Op>, literals: Vec<Var>) -> Binary {
+        let vars = vec![
+            "NUM", "OBJ", "STR", "LIST", "ERR", "INT", "FLOAT", "player", "this", "caller", "verb",
+            "args", "argstr", "dobj", "dobjstr", "prepstr", "iobj", "iobjstr",
+        ];
+
+        Binary {
+            literals,
+            jump_labels: vec![],
+            var_names: vars.into_iter().map(|s| s.to_string()).collect(),
+            main_vector,
+            fork_vectors: vec![],
         }
     }
 
@@ -919,8 +974,18 @@ mod tests {
         let mut state = MockState::new();
         let o = Objid(0);
         assert_eq!(
-            vm.prepare_call_verb(&mut state, o, "test", false, o, o, o, vec![])
-                .unwrap(),
+            vm.prepare_call_verb(
+                &mut state,
+                o,
+                "test",
+                false,
+                o,
+                o,
+                ObjFlag::Wizard | ObjFlag::Programmer,
+                o,
+                vec![]
+            )
+            .unwrap(),
             Var::Err(E_VERBNF)
         );
     }
@@ -930,14 +995,30 @@ mod tests {
         let mut vm = VM::new();
         let mut state = MockState::new();
         let o = Objid(0);
-        state.compile_verb(o, "test", "1;");
+        state.set_verb(
+            o,
+            "test",
+            mk_binary(vec![Imm(0), Pop, Done], vec![1.into()]),
+        );
         assert_eq!(
-            vm.prepare_call_verb(&mut state, o, "test", false, o, o, o, vec![])
-                .unwrap(),
+            vm.prepare_call_verb(
+                &mut state,
+                o,
+                "test",
+                false,
+                o,
+                o,
+                ObjFlag::Wizard | ObjFlag::Programmer,
+                o,
+                vec![]
+            )
+            .unwrap(),
             Var::Err(E_NONE),
         );
-        vm.exec(&mut state, ObjFlag::Wizard | ObjFlag::Programmer)
-            .unwrap();
-        assert_eq!(vm.top_mut().pop().unwrap(), Var::Int(1));
+        assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
+        assert_eq!(vm.top().peek_at(0).unwrap(), Var::Int(1));
+        assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
+        assert_eq!(vm.top().stack_size(), 0);
+        assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::Complete);
     }
 }

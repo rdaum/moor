@@ -237,14 +237,13 @@ fn main() {
         false,
         Objid(0),
         Objid(0),
+        ObjFlag::Wizard | ObjFlag::Programmer,
         Objid(0),
         vec![],
     )
     .unwrap();
     loop {
-        let result = vm
-            .exec(&mut odb_state, ObjFlag::Programmer | ObjFlag::Wizard)
-            .unwrap();
+        let result = vm.exec(&mut odb_state).unwrap();
         match result {
             ExecutionResult::Complete => {
                 eprintln!("Done.");
