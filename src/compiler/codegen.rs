@@ -6,10 +6,10 @@ use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
-use crate::compiler::parse::{parse_program, Name, Names};
+use crate::compiler::parse::{Name, Names, parse_program};
 use crate::model::var::Var;
-use crate::vm::opcode::Op::Jump;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
+use crate::vm::opcode::Op::Jump;
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -933,7 +933,6 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 mod tests {
     use crate::model::var::Error::{E_INVARG, E_PERM, E_PROPNF};
     use crate::model::var::Objid;
-    use crate::model::var::Var::Obj;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::ScatterLabel;
 

@@ -9,7 +9,7 @@ use crate::model::permissions::Permissions;
 use crate::model::props::{PropAttr, PropFlag};
 use crate::model::var::{Error, Objid, Var};
 use crate::model::var::Error::{
-    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
+    E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::verbs::{Program, VerbAttr};
 use crate::vm::opcode::{Binary, Op};
@@ -41,12 +41,14 @@ struct Activation {
 impl Activation {
     pub fn new(
         program: &Program,
+        caller: Objid,
         this: Objid,
         player: Objid,
         verb_owner: Objid,
         definer: Objid,
         verb: String,
         verb_names: Vec<String>,
+        args: Vec<Var>,
     ) -> Result<Self, anyhow::Error> {
         // TODO: move deserialization out into whatever does the actual verb retrieval?
         let slc = &program.0[..];
@@ -57,7 +59,8 @@ impl Activation {
         };
 
         let environment = vec![Var::None; binary.var_names.len()];
-        Ok(Activation {
+
+        let mut a = Activation {
             binary,
             environment,
             valstack: vec![],
@@ -68,9 +71,52 @@ impl Activation {
             player,
             verb_owner,
             definer,
-            verb,
+            verb: verb.clone(),
             verb_names,
-        })
+        };
+        /*
+               names.find_or_add_name(&String::from("NUM"));
+               names.find_or_add_name(&String::from("OBJ"));
+               names.find_or_add_name(&String::from("STR"));
+               names.find_or_add_name(&String::from("LIST"));
+               names.find_or_add_name(&String::from("ERR"));
+               names.find_or_add_name(&String::from("INT"));
+               names.find_or_add_name(&String::from("FLOAT"));
+               names.find_or_add_name(&String::from("player"));
+               names.find_or_add_name(&String::from("this"));
+               names.find_or_add_name(&String::from("caller"));
+               names.find_or_add_name(&String::from("verb"));
+               names.find_or_add_name(&String::from("args"));
+               names.find_or_add_name(&String::from("argstr"));
+               names.find_or_add_name(&String::from("dobj"));
+               names.find_or_add_name(&String::from("dobjstr"));
+               names.find_or_add_name(&String::from("prepstr"));
+               names.find_or_add_name(&String::from("iobj"));
+               names.find_or_add_name(&String::from("iobjstr"));
+        */
+        a.set_var("this", Var::Obj(this)).unwrap();
+        a.set_var("player", Var::Obj(player)).unwrap();
+        a.set_var("caller", Var::Obj(caller)).unwrap();
+        a.set_var("verb", Var::Str(verb)).unwrap();
+        a.set_var("args", Var::List(args.into())).unwrap();
+
+        // TODO NUM/OBJ/STR/LIST/ERR/INT constants
+        // TODO argstr, dobj, etc.
+        Ok(a)
+    }
+
+    fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
+        let idx = self
+            .binary
+            .var_names
+            .iter()
+            .position(|x| x.to_lowercase() == name.to_lowercase());
+        if let Some(idx) = idx {
+            self.environment[idx] = value;
+            Ok(())
+        } else {
+            Err(E_VARNF)
+        }
     }
 
     pub fn next_op(&mut self) -> Option<Op> {
@@ -128,7 +174,7 @@ impl Activation {
     }
 }
 
-struct VM {
+pub struct VM {
     // Activation stack.
     stack: Vec<Activation>,
 }
@@ -151,7 +197,15 @@ macro_rules! binary_var_op {
     };
 }
 
+pub enum ExecutionResult {
+    Complete,
+    More,
+}
+
 impl VM {
+    pub fn new() -> Self {
+        Self { stack: vec![] }
+    }
     pub fn raise_error(&mut self, _err: Error) {}
 
     fn top_mut(&mut self) -> &mut Activation {
@@ -254,14 +308,18 @@ impl VM {
     pub fn call_verb(
         &mut self,
         db: &mut impl ObjDB,
+        obj: Objid,
         vname: &str,
-        _args: Var,
-        _do_pass: bool,
+        do_pass: bool,
+        this: Objid,
+        player: Objid,
+        caller: Objid,
+        args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
         // TODO do_pass get parent and delegate there instead.
         // Requires adding db.object_parent.
         let h = db.find_callable_verb(
-            self.top().this,
+            obj,
             vname,
             VerbAttr::Program | VerbAttr::Flags | VerbAttr::Owner | VerbAttr::Definer,
         )?;
@@ -271,16 +329,16 @@ impl VM {
 
         let a = Activation::new(
             &h.attrs.program.unwrap(),
-            self.top().this,
-            self.top().player,
+            caller,
+            this,
+            player,
             h.attrs.owner.unwrap(),
             h.attrs.definer.unwrap(),
             String::from(vname),
             h.names,
+            args,
         )?;
 
-        // TODO copy this, caller,player argstr,dobj,dobjstr, etc. into correct slots.
-        // and set verb & args slots
         self.stack.push(a);
 
         Ok(Var::Err(Error::E_NONE))
@@ -289,14 +347,11 @@ impl VM {
     pub fn exec(
         &mut self,
         db: &mut impl ObjDB,
-        _player: Objid,
         player_flags: EnumSet<ObjFlag>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self.next_op();
         let Some(op) = op else {
-            // Execution complete.
-            // TODO is this an error?
-            return Ok(())
+            return Ok(ExecutionResult::Complete);
         };
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
@@ -323,14 +378,14 @@ impl VM {
                     self.pop();
                     self.pop();
                     self.jump(label);
-                    return Ok(())
+                    return Ok(ExecutionResult::More)
                 };
                 let Var::List(l) = list else {
                     self.raise_error(Error::E_TYPE);
                     self.pop();
                     self.pop();
                     self.jump(label);
-                    return Ok(())
+                    return Ok(ExecutionResult::More)
                 };
 
                 if *count as usize > l.len() {
@@ -357,7 +412,7 @@ impl VM {
                             self.pop();
                             self.pop();
                             self.jump(label);
-                            return Ok(());
+                            return Ok(ExecutionResult::More)
                         }
                         Var::Int(from_i + 1)
                     }
@@ -366,13 +421,13 @@ impl VM {
                             self.pop();
                             self.pop();
                             self.jump(label);
-                            return Ok(());
+                            return Ok(ExecutionResult::More)
                         }
                         Var::Obj(Objid(from_o.0 + 1))
                     }
                     (_, _) => {
                         self.raise_error(E_TYPE);
-                        return Ok(());
+                        return Ok(ExecutionResult::More)
                     }
                 };
 
@@ -393,7 +448,7 @@ impl VM {
                     Some(Op::Pop) => {
                         // skip
                         self.top_mut().skip();
-                        return Ok(());
+                        return Ok(ExecutionResult::More)
                     }
                     _ => {}
                 }
@@ -406,7 +461,7 @@ impl VM {
                 let list = self.pop();
                 let Var::List(list) = list else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(());
+                    return Ok(ExecutionResult::More)
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
@@ -420,12 +475,12 @@ impl VM {
                 let list = self.pop();
                 let Var::List(list) = list else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(());
+                    return Ok(ExecutionResult::More)
                 };
 
                 let Var::List(tail) = tail else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(());
+                    return Ok(ExecutionResult::More)
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
@@ -442,7 +497,7 @@ impl VM {
                     (Var::List(l), Var::Int(i)) => {
                         if i < 0 || !i < l.len() as i64 {
                             self.push(&Var::Err(E_RANGE));
-                            return Ok(());
+                            return Ok(ExecutionResult::More)
                         }
 
                         let mut nval = l;
@@ -452,17 +507,17 @@ impl VM {
                     (Var::Str(s), Var::Int(i)) => {
                         if i < 0 || !i < s.len() as i64 {
                             self.push(&Var::Err(E_RANGE));
-                            return Ok(());
+                            return Ok(ExecutionResult::More)
                         }
 
                         let Var::Str(value) = value else {
                             self.push(&Var::Err(E_INVARG));
-                            return Ok(())
+                            return Ok(ExecutionResult::More)
                         };
 
                         if value.len() != 1 {
                             self.push(&Var::Err(E_INVARG));
-                            return Ok(());
+                            return Ok(ExecutionResult::More)
                         }
 
                         let i = i as usize;
@@ -473,7 +528,7 @@ impl VM {
                     }
                     (_, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(());
+                        return Ok(ExecutionResult::More)
                     }
                 };
                 self.push(&nval);
@@ -557,7 +612,7 @@ impl VM {
                 let l = self.pop();
                 let Var::Int(index) = index else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(())
+                   return Ok(ExecutionResult::More)
                 };
                 self.push(&l.index(index as usize));
             }
@@ -644,9 +699,7 @@ impl VM {
             }
 
             Op::Scatter {
-                nargs,
-                nreq,
-                rest, ..
+                nargs, nreq, rest, ..
             } => {
                 unimplemented!("scatter assignement");
             }
@@ -668,7 +721,7 @@ impl VM {
                     (Var::Str(propname), Var::Obj(obj)) => (propname, obj),
                     (_, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(());
+                        return Ok(ExecutionResult::More)
                     }
                 };
                 let h = db
@@ -678,7 +731,7 @@ impl VM {
                 // TODO handle built-in properties
                 let Some(p) = h else {
                     self.push(&Var::Err(E_PROPNF));
-                    return Ok(())
+                   return Ok(ExecutionResult::More)
                 };
 
                 if !db.property_allows(
@@ -697,7 +750,7 @@ impl VM {
                     )
                     .expect("could not set property");
                     self.push(&Var::None);
-                    return Ok(());
+                    return Ok(ExecutionResult::More)
                 }
             }
             Op::Fork { id: _, f_index: _ } => {}
@@ -707,7 +760,7 @@ impl VM {
                     (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
                     (_, _, _) => {
                         self.push(&Var::Err(E_TYPE));
-                        return Ok(());
+                        return Ok(ExecutionResult::More)
                     }
                 };
                 // store state variables
@@ -760,7 +813,7 @@ impl VM {
                 self.push(&Var::Int(FINALLY_FALLTHROUGH));
                 self.push(&Var::Int(0));
             }
-            Op::Continue=> {
+            Op::Continue => {
                 unimplemented!("continue")
             }
             Op::Exit(_label) => {
@@ -770,6 +823,6 @@ impl VM {
                 panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut().pc)
             }
         }
-        Ok(())
+        return Ok(ExecutionResult::More)
     }
 }

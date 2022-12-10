@@ -3,9 +3,11 @@ extern crate core;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
-use anyhow::Error;
 
 use bincode::config;
+use clap::builder::ValueHint;
+use clap::Parser;
+use clap_derive::Parser;
 use enumset::EnumSet;
 use int_enum::IntEnum;
 use rusqlite::Connection;
@@ -19,7 +21,7 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
 use crate::textdump::{Object, TextdumpReader};
-use crate::vm::opcode::Binary;
+use crate::vm::execute::{ExecutionResult, VM};
 
 pub mod compiler;
 mod db;
@@ -51,7 +53,7 @@ fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Opt
 
     let offset = offset - local_len;
 
-    let parent = omap.get(&o.parent).unwrap();
+    let parent = omap.get(&o.parent)?;
     resolve_prop(omap, offset, parent)
 }
 
@@ -59,14 +61,14 @@ const VF_READ: u16 = 01;
 const VF_WRITE: u16 = 02;
 const VF_EXEC: u16 = 04;
 const VF_DEBUG: u16 = 010;
-const VF_PERMMASK : u16 = 0xf;
-const VF_DOBJSHIFT : u16 = 4;
-const VF_IOBJSHIFT : u16 = 4;
-const VF_OBJMASK :u16 = 0x3;
+const VF_PERMMASK: u16 = 0xf;
+const VF_DOBJSHIFT: u16 = 4;
+const VF_IOBJSHIFT: u16 = 4;
+const VF_OBJMASK: u16 = 0x3;
 
-const VF_ASPEC_NONE : u16 = 0;
-const VF_ASPEC_ANY : u16 = 1;
-const VF_ASPEC_THIS : u16 = 2;
+const VF_ASPEC_NONE: u16 = 0;
+const VF_ASPEC_ANY: u16 = 1;
+const VF_ASPEC_THIS: u16 = 2;
 
 const PREP_ANY: i16 = -2;
 const PREP_NONE: i16 = -1;
@@ -84,20 +86,18 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
         VF_ASPEC_NONE => ArgSpec::None,
         VF_ASPEC_ANY => ArgSpec::Any,
         VF_ASPEC_THIS => ArgSpec::This,
-        _ => panic!("Unsupported argpsec")
+        _ => panic!("Unsupported argpsec"),
     }
 }
-fn main() {
-    eprintln!("Moor; loading textdump...");
 
-    let mut conn = Connection::open_in_memory().unwrap();
-    let mut s : &mut dyn ObjDB   = &mut SQLiteTx::new(&mut conn).unwrap();
-    s.initialize().unwrap();
+fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error> {
+    let mut s: &mut dyn ObjDB = &mut SQLiteTx::new(conn)?;
+    s.initialize()?;
 
-    let jhcore = File::open("JHCore-DEV-2.db").unwrap();
+    let jhcore = File::open(path)?;
     let br = BufReader::new(jhcore);
     let mut tdr = TextdumpReader::new(br);
-    let td = tdr.read_textdump().unwrap();
+    let td = tdr.read_textdump()?;
 
     // Pass 1 Create objects
     eprintln!("Instantiating objects...");
@@ -112,8 +112,7 @@ fn main() {
                 .name(o.name.as_str())
                 .parent(o.parent)
                 .flags(flags),
-        )
-        .unwrap();
+        )?;
     }
     eprintln!("Instantiated objects\nDefining props...");
 
@@ -123,9 +122,8 @@ fn main() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                let pid = s
-                    .add_propdef(*objid, resolved.name.as_str(), resolved.owner, flags, None)
-                    .unwrap();
+                let pid =
+                    s.add_propdef(*objid, resolved.name.as_str(), resolved.owner, flags, None)?;
             }
         }
     }
@@ -136,11 +134,8 @@ fn main() {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
-            let pdf = s
-                .get_propdef(resolved.definer, resolved.name.as_str())
-                .unwrap();
-            s.set_property(pdf.pid, *objid, p.value.clone(), resolved.owner, flags)
-                .unwrap();
+            let pdf = s.get_propdef(resolved.definer, resolved.name.as_str())?;
+            s.set_property(pdf.pid, *objid, p.value.clone(), resolved.owner, flags)?;
         }
     }
 
@@ -175,10 +170,13 @@ fn main() {
                     println!("Could not find verb #{}/{} ({:?}", objid.0, vn, names);
                     continue;
                 }
-                Some(v) => {v}
+                Some(v) => v,
             };
 
-            eprintln!("Compiling #{}/{} (#{}:{})...", objid.0, names[0], objid.0, vn);
+            eprintln!(
+                "Compiling #{}/{} (#{}:{})...",
+                objid.0, names[0], objid.0, vn
+            );
 
             let binary = match compile(verb.program.as_str()) {
                 Ok(b) => b,
@@ -187,7 +185,8 @@ fn main() {
                 }
             };
 
-            let prg = bincode::serde::encode_to_vec(binary, config::standard()).expect("Could not serialize program");
+            let prg = bincode::serde::encode_to_vec(binary, config::standard())
+                .expect("Could not serialize program");
             s.add_verb(
                 *objid,
                 names,
@@ -195,13 +194,58 @@ fn main() {
                 flags,
                 argspec,
                 Program(bytes::Bytes::from(prg)),
-            )
-            .unwrap();
+            )?;
         }
     }
     eprintln!("Verbs defined.\nImport complete.");
 
-    s.commit().unwrap();
+    s.commit()?;
+
+    Ok(())
+}
 
 
+#[derive(Parser, Debug)] // requires `derive` feature
+struct Args {
+    #[arg(value_name = "DB", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
+    db: std::path::PathBuf,
+
+    #[arg(value_name = "Textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
+    textdump: Option<std::path::PathBuf>,
+}
+
+fn main() {
+    let args: Args = Args::parse();
+
+    eprintln!("Moor");
+
+    let mut conn = Connection::open(args.db).unwrap();
+    if let Some(textdump) = args.textdump {
+        eprintln!("Loading textdump...");
+        textdump_load(&mut conn, textdump.to_str().unwrap()).unwrap();
+    }
+
+    let mut tx = SQLiteTx::new(&mut conn).unwrap();
+    let mut vm = VM::new();
+    eprintln!("Calling #0:do_login_command...");
+    vm.call_verb(
+        &mut tx,
+        Objid(0),
+        "do_login_command",
+        false,
+        Objid(0),
+        Objid(0),
+        Objid(0),
+        vec![],
+    )
+    .unwrap();
+    loop {
+        let result = vm.exec(&mut tx, ObjFlag::Programmer | ObjFlag::Wizard).unwrap();
+        match result {
+            ExecutionResult::Complete => {
+                eprintln!("Done.")
+            }
+            ExecutionResult::More => {}
+        }
+    }
 }

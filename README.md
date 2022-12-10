@@ -45,7 +45,7 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
    * Implementation of SQLite backed storage for the MOO object model. (The first of potentially many implementations of
      the object DB backend.) Supports verb properties, verbs, etc.
    * Capability of full import of an existing textdump into said DB.
-   * Complete compilation from Antlr parse tree to abstract syntax tree complete.
+   * Complete compilation from Antlr parse tree to abstract syntax tree.
    * Completed compilation of the AST into bytecode, mostly mimicking the original LambdaMOO VM's opcode set.
    * Most of the work on the execution of the bytecode in a VM, with a few missing opcodes, and basically no testing.
 
