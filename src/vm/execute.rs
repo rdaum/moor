@@ -293,7 +293,7 @@ impl VM {
         &mut self,
         state: &mut impl PersistentState,
         obj: Objid,
-        vname: &str,
+        verb_name: &str,
         do_pass: bool,
         this: Objid,
         player: Objid,
@@ -302,7 +302,7 @@ impl VM {
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
         let (binary, vi) =
-            match state.retrieve_verb(obj, vname, do_pass, this, player, caller, &args) {
+            match state.retrieve_verb(obj, verb_name, do_pass, this, player, caller, &args) {
                 Ok(binary) => binary,
                 Err(e) => {
                     return match e.downcast_ref::<StateError>() {
@@ -321,7 +321,7 @@ impl VM {
             player_flags,
             vi.attrs.owner.unwrap(),
             vi.attrs.definer.unwrap(),
-            String::from(vname),
+            String::from(verb_name),
             vi.names,
             args,
         )?;
@@ -390,7 +390,7 @@ impl VM {
                 let (to, from) = (&peek[1], &peek[0]);
 
                 // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
-                // Given we're 64-bit this is exceedling unlikely to ever be a concern for us, but
+                // Given we're 64-bit this is highly unlikely to ever be a concern for us, but
                 // we also don't want to *crash* on obscene values, so impl that here.
 
                 let next_val = match (to, from) {
@@ -909,6 +909,7 @@ mod tests {
             binary
         }
     }
+
     fn mk_binary(main_vector: Vec<Op>, literals: Vec<Var>) -> Binary {
         let vars = vec![
             "NUM", "OBJ", "STR", "LIST", "ERR", "INT", "FLOAT", "player", "this", "caller", "verb",
@@ -922,6 +923,30 @@ mod tests {
             main_vector,
             fork_vectors: vec![],
         }
+    }
+
+    fn prepare_test_verb(vm : &mut VM, state : &mut MockState, opcodes : Vec<Op>, literals : Vec<Var>) {
+        let o = Objid(0);
+        state.set_verb(
+            o,
+            "test",
+            mk_binary(opcodes, literals),
+        );
+        assert_eq!(
+            vm.prepare_call_verb(
+                state,
+                o,
+                "test",
+                false,
+                o,
+                o,
+                ObjFlag::Wizard | ObjFlag::Programmer,
+                o,
+                vec![]
+            )
+                .unwrap(),
+            Var::Err(E_NONE),
+        );
     }
 
     impl PersistentState for MockState {
@@ -994,27 +1019,7 @@ mod tests {
     fn test_simple_vm_execute() {
         let mut vm = VM::new();
         let mut state = MockState::new();
-        let o = Objid(0);
-        state.set_verb(
-            o,
-            "test",
-            mk_binary(vec![Imm(0), Pop, Done], vec![1.into()]),
-        );
-        assert_eq!(
-            vm.prepare_call_verb(
-                &mut state,
-                o,
-                "test",
-                false,
-                o,
-                o,
-                ObjFlag::Wizard | ObjFlag::Programmer,
-                o,
-                vec![]
-            )
-            .unwrap(),
-            Var::Err(E_NONE),
-        );
+        prepare_test_verb(&mut vm, &mut state, vec![Imm(0), Pop, Done], vec![1.into()]);
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
         assert_eq!(vm.top().peek_at(0).unwrap(), Var::Int(1));
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
