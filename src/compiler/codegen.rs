@@ -921,7 +921,7 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
     let binary = Binary {
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
-        var_names: cg_state.var_names.names,
+        var_names: cg_state.var_names,
         main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
     };

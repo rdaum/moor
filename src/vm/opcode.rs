@@ -1,6 +1,7 @@
 use serde_derive::{Deserialize, Serialize};
 
 use crate::compiler::codegen::JumpLabel;
+use crate::compiler::parse::Names;
 use crate::model::var::Var;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
@@ -109,14 +110,14 @@ pub enum Op {
 pub struct Binary {
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
-    pub(crate) var_names: Vec<String>,
+    pub(crate) var_names: Names,
     pub(crate) main_vector: Vec<Op>,
     pub(crate) fork_vectors: Vec<Vec<Op>>
 }
 
 impl Binary {
     pub fn find_var(&self, v: &str) -> usize {
-        self.var_names.iter().position(|x| x.to_lowercase() == v.to_lowercase()).expect("variable not found")
+        self.var_names.find_name(v).expect("variable not found").0
     }
 
     pub fn find_literal(&self, l: Var) -> usize {

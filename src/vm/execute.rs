@@ -22,7 +22,8 @@ pub enum FinallyReason {
     Raise = 0x01,
     Uncatch = 0x02,
     Return = 0x03,
-    Abort = 0x04, /* This doesn't actually get you into a FINALLY... */
+    Abort = 0x04,
+    /* This doesn't actually get you into a FINALLY... */
     Exit = 0x065,
 }
 
@@ -55,7 +56,7 @@ impl Activation {
         verb_names: Vec<String>,
         args: Vec<Var>,
     ) -> Result<Self, anyhow::Error> {
-        let environment = vec![Var::None; binary.var_names.len()];
+        let environment = vec![Var::None; binary.var_names.width()];
 
         let mut a = Activation {
             binary,
@@ -104,13 +105,12 @@ impl Activation {
     }
 
     fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
-        let idx = self
+        let n = self
             .binary
             .var_names
-            .iter()
-            .position(|x| x.to_lowercase() == name.to_lowercase());
-        if let Some(idx) = idx {
-            self.environment[idx] = value;
+            .find_name_offset(name);
+        if let Some(n) = n {
+            self.environment[n] = value;
             Ok(())
         } else {
             Err(E_VARNF)
@@ -309,7 +309,7 @@ impl VM {
                         Some(StateError::VerbNotFound(_, _)) => Ok(Var::Err(E_VERBNF)),
                         Some(StateError::VerbPermissionDenied(_, _)) => Ok(Var::Err(E_PERM)),
                         _ => Err(e),
-                    }
+                    };
                 }
             };
 
@@ -365,14 +365,14 @@ impl VM {
                     self.pop();
                     self.pop();
                     self.jump(label);
-                    return Ok(ExecutionResult::More)
+                    return Ok(ExecutionResult::More);
                 };
                 let Var::List(l) = list else {
                     self.raise_error(Error::E_TYPE);
                     self.pop();
                     self.pop();
                     self.jump(label);
-                    return Ok(ExecutionResult::More)
+                    return Ok(ExecutionResult::More);
                 };
 
                 if *count as usize > l.len() {
@@ -448,7 +448,7 @@ impl VM {
                 let list = self.pop();
                 let Var::List(list) = list else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More)
+                    return Ok(ExecutionResult::More);
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
@@ -462,12 +462,12 @@ impl VM {
                 let list = self.pop();
                 let Var::List(list) = list else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More)
+                    return Ok(ExecutionResult::More);
                 };
 
                 let Var::List(tail) = tail else {
                     self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More)
+                    return Ok(ExecutionResult::More);
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
@@ -499,7 +499,7 @@ impl VM {
 
                         let Var::Str(value) = value else {
                             self.push(&Var::Err(E_INVARG));
-                            return Ok(ExecutionResult::More)
+                            return Ok(ExecutionResult::More);
                         };
 
                         if value.len() != 1 {
@@ -599,7 +599,7 @@ impl VM {
                 let l = self.pop();
                 let Var::Int(index) = index else {
                     self.push(&Var::Err(E_TYPE));
-                   return Ok(ExecutionResult::More)
+                    return Ok(ExecutionResult::More);
                 };
                 self.push(&l.index(index as usize));
             }
@@ -778,7 +778,7 @@ impl VM {
                 let v = self.pop();
                 let marker = self.pop();
                 let Var::_Catch(marker) = marker else {
-                  panic!("Stack marker is not type Catch");
+                    panic!("Stack marker is not type Catch");
                 };
                 for _i in 0..marker {
                     self.pop();
@@ -846,6 +846,7 @@ mod tests {
     use anyhow::Error;
     use enumset::EnumSet;
     use std::collections::HashMap;
+    use crate::compiler::parse::Names;
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -911,27 +912,20 @@ mod tests {
     }
 
     fn mk_binary(main_vector: Vec<Op>, literals: Vec<Var>) -> Binary {
-        let vars = vec![
-            "NUM", "OBJ", "STR", "LIST", "ERR", "INT", "FLOAT", "player", "this", "caller", "verb",
-            "args", "argstr", "dobj", "dobjstr", "prepstr", "iobj", "iobjstr",
-        ];
+        let var_names = Names::new();
 
         Binary {
             literals,
             jump_labels: vec![],
-            var_names: vars.into_iter().map(|s| s.to_string()).collect(),
+            var_names,
             main_vector,
             fork_vectors: vec![],
         }
     }
 
-    fn prepare_test_verb(vm : &mut VM, state : &mut MockState, opcodes : Vec<Op>, literals : Vec<Var>) {
+    fn prepare_test_verb(vm: &mut VM, state: &mut MockState, opcodes: Vec<Op>, literals: Vec<Var>) {
         let o = Objid(0);
-        state.set_verb(
-            o,
-            "test",
-            mk_binary(opcodes, literals),
-        );
+        state.set_verb(o, "test", mk_binary(opcodes, literals));
         assert_eq!(
             vm.prepare_call_verb(
                 state,
@@ -942,9 +936,9 @@ mod tests {
                 o,
                 ObjFlag::Wizard | ObjFlag::Programmer,
                 o,
-                vec![]
+                vec![],
             )
-                .unwrap(),
+            .unwrap(),
             Var::Err(E_NONE),
         );
     }
@@ -1008,7 +1002,7 @@ mod tests {
                 o,
                 ObjFlag::Wizard | ObjFlag::Programmer,
                 o,
-                vec![]
+                vec![],
             )
             .unwrap(),
             Var::Err(E_VERBNF)
@@ -1026,4 +1020,10 @@ mod tests {
         assert_eq!(vm.top().stack_size(), 0);
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::Complete);
     }
+
+
+
+
+
+
 }
