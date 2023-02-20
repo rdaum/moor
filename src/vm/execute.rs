@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use enumset::EnumSet;
 use int_enum::IntEnum;
 
@@ -10,6 +11,7 @@ use crate::model::var::Error::{
 use crate::model::var::{Error, Objid, Var};
 use crate::model::verbs::{Program, VerbAttr};
 use crate::model::ObjDB;
+use crate::parsecmd::ParsedCommand;
 use crate::vm::execute::FinallyReason::Fallthrough;
 use crate::vm::opcode::{Binary, Op};
 use crate::vm::state::{PersistentState, StateError};
@@ -40,11 +42,10 @@ struct Activation {
     verb_owner: Objid,
     definer: Objid,
     verb: String,
-    verb_names: Vec<String>,
 }
 
 impl Activation {
-    pub fn new(
+    pub fn new_for_method(
         binary: Binary,
         caller: Objid,
         this: Objid,
@@ -53,8 +54,8 @@ impl Activation {
         verb_owner: Objid,
         definer: Objid,
         verb: String,
-        verb_names: Vec<String>,
         args: Vec<Var>,
+        argstr: String,
     ) -> Result<Self, anyhow::Error> {
         let environment = vec![Var::None; binary.var_names.width()];
 
@@ -71,44 +72,89 @@ impl Activation {
             verb_owner,
             definer,
             verb: verb.clone(),
-            verb_names,
         };
-        /*
-               names.find_or_add_name(&String::from("NUM"));
-               names.find_or_add_name(&String::from("OBJ"));
-               names.find_or_add_name(&String::from("STR"));
-               names.find_or_add_name(&String::from("LIST"));
-               names.find_or_add_name(&String::from("ERR"));
-               names.find_or_add_name(&String::from("INT"));
-               names.find_or_add_name(&String::from("FLOAT"));
-               names.find_or_add_name(&String::from("player"));
-               names.find_or_add_name(&String::from("this"));
-               names.find_or_add_name(&String::from("caller"));
-               names.find_or_add_name(&String::from("verb"));
-               names.find_or_add_name(&String::from("args"));
-               names.find_or_add_name(&String::from("argstr"));
-               names.find_or_add_name(&String::from("dobj"));
-               names.find_or_add_name(&String::from("dobjstr"));
-               names.find_or_add_name(&String::from("prepstr"));
-               names.find_or_add_name(&String::from("iobj"));
-               names.find_or_add_name(&String::from("iobjstr"));
-        */
+
         a.set_var("this", Var::Obj(this)).unwrap();
         a.set_var("player", Var::Obj(player)).unwrap();
         a.set_var("caller", Var::Obj(caller)).unwrap();
-        a.set_var("verb", Var::Str(verb)).unwrap();
-        a.set_var("args", Var::List(args.into())).unwrap();
+        a.set_var("NUM", Var::Int(0)).unwrap();
+        a.set_var("OBJ", Var::Int(1)).unwrap();
+        a.set_var("STR", Var::Int(2)).unwrap();
+        a.set_var("ERR", Var::Int(3)).unwrap();
+        a.set_var("LIST", Var::Int(4)).unwrap();
+        a.set_var("INT", Var::Int(0)).unwrap();
+        a.set_var("FLOAT", Var::Int(9)).unwrap();
 
-        // TODO NUM/OBJ/STR/LIST/ERR/INT constants
-        // TODO argstr, dobj, etc.
+        a.set_var("verb", Var::Str(verb.clone())).unwrap();
+        a.set_var("argstr", Var::Str(argstr.clone())).unwrap();
+        a.set_var("args", Var::List(args.clone())).unwrap();
+        a.set_var("iobjstr", Var::Str(String::from(""))).unwrap();
+        a.set_var("iobj", Var::Obj(Objid(-1))).unwrap();
+        a.set_var("dobjstr", Var::Str(String::from(""))).unwrap();
+        a.set_var("dobj", Var::Obj(Objid(-1))).unwrap();
+        a.set_var("prepstr", Var::Str(String::from(""))).unwrap();
+
+        Ok(a)
+    }
+
+    pub fn new_for_command(
+        binary: Binary,
+        caller: Objid,
+        this: Objid,
+        player: Objid,
+        player_flags: EnumSet<ObjFlag>,
+        verb_owner: Objid,
+        definer: Objid,
+        parsed_cmd: &ParsedCommand,
+    ) -> Result<Self, anyhow::Error> {
+        let environment = vec![Var::None; binary.var_names.width()];
+
+        let mut a = Activation {
+            binary,
+            environment,
+            valstack: vec![],
+            pc: 0,
+            error_pc: 0,
+            temp: Var::None,
+            this,
+            player,
+            player_flags,
+            verb_owner,
+            definer,
+            verb: parsed_cmd.verb.clone(),
+        };
+
+        a.set_var("this", Var::Obj(this)).unwrap();
+        a.set_var("player", Var::Obj(player)).unwrap();
+        a.set_var("caller", Var::Obj(caller)).unwrap();
+        a.set_var("NUM", Var::Int(0)).unwrap();
+        a.set_var("OBJ", Var::Int(1)).unwrap();
+        a.set_var("STR", Var::Int(2)).unwrap();
+        a.set_var("ERR", Var::Int(3)).unwrap();
+        a.set_var("LIST", Var::Int(4)).unwrap();
+        a.set_var("INT", Var::Int(0)).unwrap();
+        a.set_var("FLOAT", Var::Int(9)).unwrap();
+
+        a.set_var("verb", Var::Str(parsed_cmd.verb.clone()))
+            .unwrap();
+        a.set_var("argstr", Var::Str(parsed_cmd.argstr.clone()))
+            .unwrap();
+        a.set_var("args", Var::List(parsed_cmd.args.clone()))
+            .unwrap();
+        a.set_var("iobjstr", Var::Str(parsed_cmd.iobjstr.clone()))
+            .unwrap();
+        a.set_var("iobj", Var::Obj(parsed_cmd.iobj)).unwrap();
+        a.set_var("dobjstr", Var::Str(parsed_cmd.dobjstr.clone()))
+            .unwrap();
+        a.set_var("dobj", Var::Obj(parsed_cmd.dobj)).unwrap();
+        a.set_var("prepstr", Var::Str(parsed_cmd.prepstr.clone()))
+            .unwrap();
+
         Ok(a)
     }
 
     fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
-        let n = self
-            .binary
-            .var_names
-            .find_name_offset(name);
+        let n = self.binary.var_names.find_name_offset(name);
         if let Some(n) = n {
             self.environment[n] = value;
             Ok(())
@@ -183,8 +229,8 @@ pub struct VM {
 
 macro_rules! binary_bool_op {
     ( $act:ident, $op:tt ) => {
-        let rhs = $act.pop();
-        let lhs = $act.pop();
+        let rhs = $act.pop()?;
+        let lhs = $act.pop()?;
         let result = if lhs $op rhs { 1 } else { 0 };
         $act.push(&Var::Int(result))
     };
@@ -192,8 +238,8 @@ macro_rules! binary_bool_op {
 
 macro_rules! binary_var_op {
     ( $act:ident, $op:tt ) => {
-        let rhs = $act.pop();
-        let lhs = $act.pop();
+        let rhs = $act.pop()?;
+        let lhs = $act.pop()?;
         let result = lhs.$op(&rhs);
         $act.push(&result)
     };
@@ -211,55 +257,76 @@ impl VM {
     }
     pub fn raise_error(&mut self, _err: Error) {}
 
-    fn top_mut(&mut self) -> &mut Activation {
-        self.stack.last_mut().expect("activation stack underflow")
+    fn top_mut(&mut self) -> Result<&mut Activation, anyhow::Error> {
+        self.stack
+            .last_mut()
+            .ok_or(anyhow!("activation stack underflow"))
     }
 
-    fn top(&self) -> &Activation {
-        self.stack.last().expect("activation stack underflow")
+    fn top(&self) -> Result<&Activation, anyhow::Error> {
+        self.stack
+            .last()
+            .ok_or(anyhow!("activation stack underflow"))
     }
 
-    fn pop(&mut self) -> Var {
-        self.top_mut().pop().expect("value stack underflow")
+    fn pop(&mut self) -> Result<Var, anyhow::Error> {
+        self.top_mut()?.pop().ok_or(anyhow!("stack underflow"))
     }
 
     fn push(&mut self, v: &Var) {
-        self.top_mut().push(v.clone())
+        self.top_mut()
+            .expect("unable to retrieve activation")
+            .push(v.clone())
     }
 
     fn next_op(&mut self) -> Option<Op> {
-        self.top_mut().next_op()
+        self.top_mut()
+            .expect("unable to retrieve activation")
+            .next_op()
     }
 
     fn jump(&mut self, label: usize) {
-        self.top_mut().jump(label)
+        self.top_mut()
+            .expect("unable to retrieve activation")
+            .jump(label)
     }
 
     fn get_env(&mut self, id: usize) -> Var {
-        self.top().environment[id].clone()
+        self.top()
+            .expect("unable to retrieve activation")
+            .environment[id]
+            .clone()
     }
 
     fn set_env(&mut self, id: usize, v: &Var) {
-        self.top_mut().environment[id] = v.clone();
+        self.top_mut()
+            .expect("unable to retrieve activation")
+            .environment[id] = v.clone();
     }
 
     fn rewind(&mut self, amt: usize) {
-        self.top_mut().rewind(amt);
+        self.top_mut()
+            .expect("unable to retrieve activation")
+            .rewind(amt);
     }
 
     fn peek(&self, amt: usize) -> Vec<Var> {
-        self.top().peek(amt)
+        self.top().expect("unable to retrieve activation").peek(amt)
     }
     pub fn peek_at(&self, i: usize) -> Option<Var> {
-        self.top().peek_at(i)
+        self.top()
+            .expect("unable to retrieve activation")
+            .peek_at(i)
     }
 
     fn peek_top(&self) -> Var {
-        self.top().peek(0)[0].clone()
+        self.top().expect("unable to retrieve activation").peek(0)[0].clone()
     }
 
     fn poke(&mut self, pos: usize, v: &Var) {
-        self.top_mut().poke(pos, v);
+        self.top_mut()
+            .expect("unable to retrieve activation")
+            .poke(pos, v);
     }
 
     fn get_prop(
@@ -289,7 +356,20 @@ impl VM {
         }
     }
 
-    pub fn prepare_call_verb(
+    pub fn call_verb(&mut self, state: &mut impl PersistentState, obj: Objid, verb: String, arg: Vec<Var>, do_pass: bool)->Result<ExecutionResult, anyhow::Error>{
+        let obj = if do_pass {
+            state.parent_of(obj)?
+        } else {
+            obj
+        };
+
+        // find callable verb
+
+
+        Ok(ExecutionResult::More)
+    }
+
+    pub fn do_method_verb(
         &mut self,
         state: &mut impl PersistentState,
         obj: Objid,
@@ -313,7 +393,7 @@ impl VM {
                 }
             };
 
-        let a = Activation::new(
+        let a = Activation::new_for_method(
             binary,
             caller,
             this,
@@ -322,8 +402,8 @@ impl VM {
             vi.attrs.owner.unwrap(),
             vi.attrs.definer.unwrap(),
             String::from(verb_name),
-            vi.names,
             args,
+            String::from(""),
         )?;
 
         self.stack.push(a);
@@ -339,10 +419,9 @@ impl VM {
         let Some(op) = op else {
             return Ok(ExecutionResult::Complete);
         };
-        eprint!("{:?} ", op);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
-                let cond = self.pop();
+                let cond = self.pop()?;
                 if cond.is_true() {
                     self.jump(label);
                 }
@@ -352,7 +431,7 @@ impl VM {
             }
             Op::WhileId { id, label } => {
                 self.set_env(id, &self.peek_top());
-                let cond = self.pop();
+                let cond = self.pop()?;
                 if cond.is_true() {
                     self.jump(label);
                 }
@@ -362,22 +441,22 @@ impl VM {
                 let (count, list) = (&peek[1], &peek[0]);
                 let Var::Int(count) = count else {
                     self.raise_error(Error::E_TYPE);
-                    self.pop();
-                    self.pop();
+                    self.pop()?;
+                    self.pop()?;
                     self.jump(label);
                     return Ok(ExecutionResult::More);
                 };
                 let Var::List(l) = list else {
                     self.raise_error(Error::E_TYPE);
-                    self.pop();
-                    self.pop();
+                    self.pop()?;
+                    self.pop()?;
                     self.jump(label);
                     return Ok(ExecutionResult::More);
                 };
 
                 if *count as usize > l.len() {
-                    self.pop();
-                    self.pop();
+                    self.pop()?;
+                    self.pop()?;
                     self.jump(label);
                 } else {
                     self.set_env(id, &l[*count as usize]);
@@ -396,8 +475,8 @@ impl VM {
                 let next_val = match (to, from) {
                     (Var::Int(to_i), Var::Int(from_i)) => {
                         if to_i > from_i {
-                            self.pop();
-                            self.pop();
+                            self.pop()?;
+                            self.pop()?;
                             self.jump(label);
                             return Ok(ExecutionResult::More);
                         }
@@ -405,8 +484,8 @@ impl VM {
                     }
                     (Var::Obj(to_o), Var::Obj(from_o)) => {
                         if to_o.0 > from_o.0 {
-                            self.pop();
-                            self.pop();
+                            self.pop()?;
+                            self.pop()?;
                             self.jump(label);
                             return Ok(ExecutionResult::More);
                         }
@@ -423,7 +502,7 @@ impl VM {
                 self.rewind(3);
             }
             Op::Pop => {
-                self.pop();
+                self.pop()?;
             }
             Op::Val(val) => {
                 self.push(&val);
@@ -431,21 +510,21 @@ impl VM {
             Op::Imm(slot) => {
                 // Peek ahead to see if the next operation is 'pop' and if so, just throw away.
                 // MOO uses this to optimize verbdoc/comments, etc.
-                match self.top().lookahead() {
+                match self.top()?.lookahead() {
                     Some(Op::Pop) => {
                         // skip
-                        self.top_mut().skip();
+                        self.top_mut()?.skip();
                         return Ok(ExecutionResult::More);
                     }
                     _ => {}
                 }
-                let value = self.top().binary.literals[slot].clone();
+                let value = self.top()?.binary.literals[slot].clone();
                 self.push(&value);
             }
             Op::MkEmptyList => self.push(&Var::List(vec![])),
             Op::ListAddTail => {
-                let tail = self.pop();
-                let list = self.pop();
+                let tail = self.pop()?;
+                let list = self.pop()?;
                 let Var::List(list) = list else {
                     self.push(&Var::Err(E_TYPE));
                     return Ok(ExecutionResult::More);
@@ -458,8 +537,8 @@ impl VM {
                 self.push(&Var::List(new_list))
             }
             Op::ListAppend => {
-                let tail = self.pop();
-                let list = self.pop();
+                let tail = self.pop()?;
+                let list = self.pop()?;
                 let Var::List(list) = list else {
                     self.push(&Var::Err(E_TYPE));
                     return Ok(ExecutionResult::More);
@@ -476,9 +555,9 @@ impl VM {
             }
             Op::IndexSet => {
                 // collection[index] = value
-                let value = self.pop(); /* rhs value */
-                let index = self.pop(); /* index, must be int */
-                let list = self.pop(); /* lhs except last index, should be list or str */
+                let value = self.pop()?; /* rhs value */
+                let index = self.pop()?; /* index, must be int */
+                let list = self.pop()?; /* lhs except last index, should be list or str */
 
                 let nval = match (list, index) {
                     (Var::List(l), Var::Int(i)) => {
@@ -521,17 +600,17 @@ impl VM {
                 self.push(&nval);
             }
             Op::MakeSingletonList => {
-                let v = self.pop();
+                let v = self.pop()?;
                 self.push(&Var::List(vec![v]))
             }
             Op::CheckListForSplice => {}
             Op::PutTemp => {
-                self.top_mut().temp = self.peek_top();
+                self.top_mut()?.temp = self.peek_top();
             }
             Op::PushTemp => {
-                let tmp = self.top().temp.clone();
+                let tmp = self.top()?.temp.clone();
                 self.push(&tmp);
-                self.top_mut().temp = Var::None;
+                self.top_mut()?.temp = Var::None;
             }
             Op::Eq => {
                 binary_bool_op!(self, ==);
@@ -552,8 +631,8 @@ impl VM {
                 binary_bool_op!(self, <=);
             }
             Op::In => {
-                let lhs = self.pop();
-                let rhs = self.pop();
+                let lhs = self.pop()?;
+                let rhs = self.pop()?;
                 self.push(&lhs.has_member(&rhs));
             }
             Op::Mul => {
@@ -575,28 +654,28 @@ impl VM {
                 binary_var_op!(self, modulus);
             }
             Op::And(label) => {
-                let v = self.pop().is_true();
+                let v = self.pop()?.is_true();
                 if !v {
                     self.jump(label)
                 }
             }
             Op::Or(label) => {
-                let v = self.pop().is_true();
+                let v = self.pop()?.is_true();
                 if v {
                     self.jump(label)
                 }
             }
             Op::Not => {
-                let v = !self.pop().is_true();
+                let v = !self.pop()?.is_true();
                 self.push(&Var::Int(if v { 1 } else { 0 }));
             }
             Op::UnaryMinus => {
-                let v = self.pop();
+                let v = self.pop()?;
                 self.push(&v.negative())
             }
             Op::Ref => {
-                let index = self.pop();
-                let l = self.pop();
+                let index = self.pop()?;
+                let l = self.pop()?;
                 let Var::Int(index) = index else {
                     self.push(&Var::Err(E_TYPE));
                     return Ok(ExecutionResult::More);
@@ -611,7 +690,7 @@ impl VM {
                 }
             }
             Op::Put(ident) => {
-                let v = self.pop();
+                let v = self.pop()?;
                 self.set_env(ident, &v);
             }
             Op::PushRef => {
@@ -630,7 +709,7 @@ impl VM {
                 self.push(&v);
             }
             Op::RangeRef => {
-                let (to, from, base) = (self.pop(), self.pop(), self.pop());
+                let (to, from, base) = (self.pop()?, self.pop()?, self.pop()?);
                 let result = match (to, from, base) {
                     (Var::Int(to), Var::Int(from), Var::Str(base)) => {
                         if to < 0
@@ -692,18 +771,18 @@ impl VM {
             }
 
             Op::GetProp => {
-                let (propname, obj) = (self.pop(), self.pop());
-                let prop = self.get_prop(state, self.top().player_flags, propname, obj);
+                let (propname, obj) = (self.pop()?, self.pop()?);
+                let prop = self.get_prop(state, self.top()?.player_flags, propname, obj);
                 self.push(&prop);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                let pop = self.get_prop(state, self.top().player_flags, propname, obj);
+                let pop = self.get_prop(state, self.top()?.player_flags, propname, obj);
                 self.push(&pop);
             }
             Op::PutProp => {
-                let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
+                let (rhs, propname, obj) = (self.pop()?, self.pop()?, self.pop()?);
                 let (propname, obj) = match (propname, obj) {
                     (Var::Str(propname), Var::Obj(obj)) => (propname, obj),
                     (_, _) => {
@@ -711,7 +790,7 @@ impl VM {
                         return Ok(ExecutionResult::More);
                     }
                 };
-                match state.update_property(obj, &propname, self.top().player_flags, &rhs) {
+                match state.update_property(obj, &propname, self.top()?.player_flags, &rhs) {
                     Ok(()) => {
                         self.push(&Var::None);
                     }
@@ -733,21 +812,20 @@ impl VM {
                 unimplemented!("fork")
             }
             Op::CallVerb => {
-                let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
-                let (_args, _verb, _obj) = match (args, verb, obj) {
+                let (args, verb, obj) = (self.pop()?, self.pop()?, self.pop()?);
+                let (args, verb, obj) = match (args, verb, obj) {
                     (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
                     (_, _, _) => {
                         self.push(&Var::Err(E_TYPE));
                         return Ok(ExecutionResult::More);
                     }
                 };
-                // store state variables
-                // call verb
-                unimplemented!("call verb");
-                // load state variables
+                // TODO: check obj for validity, return E_INVIND if not
+
+                return self.call_verb(state, obj, verb, args, false);
             }
             Op::Return => {
-                let ret_val = self.pop();
+                let ret_val = self.pop()?;
                 return self.perform_return(ret_val, false);
             }
             Op::Return0 => {
@@ -775,29 +853,29 @@ impl VM {
                 self.push(&Var::_Catch(label));
             }
             Op::EndCatch(label) => {
-                let v = self.pop();
-                let marker = self.pop();
+                let v = self.pop()?;
+                let marker = self.pop()?;
                 let Var::_Catch(marker) = marker else {
                     panic!("Stack marker is not type Catch");
                 };
                 for _i in 0..marker {
-                    self.pop();
+                    self.pop()?;
                 }
                 self.push(&v);
                 self.jump(label);
             }
             Op::EndExcept(label) => {
-                let marker = self.pop();
+                let marker = self.pop()?;
                 let Var::_Catch(marker) = marker else {
                     panic!("Stack marker is not type Catch");
                 };
                 for _i in 0..marker {
-                    self.pop();
+                    self.pop()?;
                 }
                 self.jump(label);
             }
             Op::EndFinally => {
-                let v = self.pop();
+                let v = self.pop()?;
                 let Var::_Finally(_marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
@@ -811,7 +889,7 @@ impl VM {
                 unimplemented!("break")
             }
             _ => {
-                panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut().pc)
+                panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut()?.pc)
             }
         }
         return Ok(ExecutionResult::More);
@@ -834,6 +912,7 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use crate::compiler::codegen::compile;
+    use crate::compiler::parse::Names;
     use crate::model::objects::ObjFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::Error::{E_NONE, E_VERBNF};
@@ -846,7 +925,7 @@ mod tests {
     use anyhow::Error;
     use enumset::EnumSet;
     use std::collections::HashMap;
-    use crate::compiler::parse::Names;
+    use crate::model::var::Var::Obj;
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -860,7 +939,7 @@ mod tests {
                 properties: Default::default(),
             }
         }
-        fn set_verb(&mut self, o: Objid, name: &str, binary: Binary) {
+        fn set_verb(&mut self, o: Objid, name: &str, binary: &Binary) {
             self.verbs.insert(
                 (o, name.to_string()),
                 (
@@ -886,27 +965,7 @@ mod tests {
 
         fn compile_verb(&mut self, o: Objid, name: &str, code: &str) -> Binary {
             let binary = compile(code).unwrap();
-            self.verbs.insert(
-                (o, name.to_string()),
-                (
-                    binary.clone(),
-                    VerbInfo {
-                        vid: Vid(0),
-                        names: vec![name.to_string()],
-                        attrs: VerbAttrs {
-                            definer: Some(o),
-                            owner: Some(o),
-                            flags: Some(VerbFlag::Exec | VerbFlag::Read),
-                            args_spec: Some(VerbArgsSpec {
-                                dobj: ArgSpec::This,
-                                prep: PrepSpec::None,
-                                iobj: ArgSpec::This,
-                            }),
-                            program: None,
-                        },
-                    },
-                ),
-            );
+            self.set_verb(o, name, &binary);
             binary
         }
     }
@@ -925,9 +984,9 @@ mod tests {
 
     fn prepare_test_verb(vm: &mut VM, state: &mut MockState, opcodes: Vec<Op>, literals: Vec<Var>) {
         let o = Objid(0);
-        state.set_verb(o, "test", mk_binary(opcodes, literals));
+        state.set_verb(o, "test", &mk_binary(opcodes, literals));
         assert_eq!(
-            vm.prepare_call_verb(
+            vm.do_method_verb(
                 state,
                 o,
                 "test",
@@ -985,6 +1044,14 @@ mod tests {
                 .insert((obj, pname.to_string()), value.clone());
             Ok(())
         }
+
+        fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+            Ok(Objid(-1))
+        }
+
+        fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
+            Ok(true)
+        }
     }
 
     #[test]
@@ -993,7 +1060,7 @@ mod tests {
         let mut state = MockState::new();
         let o = Objid(0);
         assert_eq!(
-            vm.prepare_call_verb(
+            vm.do_method_verb(
                 &mut state,
                 o,
                 "test",
@@ -1015,15 +1082,28 @@ mod tests {
         let mut state = MockState::new();
         prepare_test_verb(&mut vm, &mut state, vec![Imm(0), Pop, Done], vec![1.into()]);
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
-        assert_eq!(vm.top().peek_at(0).unwrap(), Var::Int(1));
+        assert_eq!(
+            vm.top()
+                .expect("unable to retrieve activation")
+                .peek_at(0)
+                .unwrap(),
+            Var::Int(1)
+        );
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
-        assert_eq!(vm.top().stack_size(), 0);
+        assert_eq!(
+            vm.top()
+                .expect("unable to retrieve activation")
+                .stack_size(),
+            0
+        );
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::Complete);
     }
 
-
-
-
-
-
+    #[test]
+    fn test_pop_empty_stack() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        prepare_test_verb(&mut vm, &mut state, vec![Pop], vec![]);
+        assert!(vm.exec(&mut state).is_err());
+    }
 }

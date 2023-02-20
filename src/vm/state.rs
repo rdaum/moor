@@ -1,4 +1,4 @@
-use crate::model::objects::ObjFlag;
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
 use crate::model::props::{PropAttr, PropFlag};
 use crate::model::var::Error::E_VERBNF;
 use crate::model::var::{Objid, Var};
@@ -23,6 +23,8 @@ pub enum StateError {
     PropertyNotFound(Objid, String),
     #[error("Property permission denied: #{0:?}:{1}")]
     PropertyPermissionDenied(Objid, String),
+    #[error("Object not found: #{0:?}")]
+    ObjectNotFoundError(Objid),
 }
 
 pub trait PersistentState {
@@ -49,10 +51,16 @@ pub trait PersistentState {
         player_flags: EnumSet<ObjFlag>,
         value: &Var,
     ) -> Result<(), anyhow::Error>;
+    fn parent_of(
+        &mut self,
+        obj: Objid) -> Result<Objid, anyhow::Error>;
+    fn valid(
+        &mut self,
+        obj: Objid) -> Result<bool, anyhow::Error>;
 }
 
 pub struct ObjDBState<'a> {
-    pub db: &'a dyn ObjDB,
+    pub db: &'a mut dyn ObjDB,
 }
 
 impl<'a> PersistentState for ObjDBState<'a> {
@@ -169,5 +177,16 @@ impl<'a> PersistentState for ObjDBState<'a> {
             )
             .expect("could not set property");
         Ok(())
+    }
+
+    fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+        let attrs = self.db.object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)?;
+        // TODO: this masks other (internal?) errors..
+        attrs.parent.ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
+    }
+
+    fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
+        // TODO: this masks other (internal?) errors..
+        Ok(self.db.object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner).is_ok())
     }
 }

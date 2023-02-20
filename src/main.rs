@@ -30,6 +30,7 @@ pub mod grammar;
 pub mod model;
 pub mod textdump;
 pub mod vm;
+pub mod parsecmd;
 
 struct RProp {
     definer: Objid,
@@ -226,11 +227,11 @@ fn main() {
     }
 
     let mut tx = SQLiteTx::new(&mut conn).unwrap();
-    let mut odb_state = ObjDBState { db: &tx };
+    let mut odb_state = ObjDBState { db: &mut tx };
 
     let mut vm = VM::new();
     eprintln!("Calling #0:do_login_command...");
-    vm.prepare_call_verb(
+    vm.do_method_verb(
         &mut odb_state,
         Objid(0),
         "do_login_command",
