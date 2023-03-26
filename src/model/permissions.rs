@@ -5,7 +5,8 @@ use crate::model::props::PropFlag;
 use crate::model::var::Objid;
 
 pub trait Permissions {
-    fn property_allows(&self,
+    fn property_allows(
+        &self,
         check_flags: EnumSet<PropFlag>,
         player: Objid,
         player_flags: EnumSet<ObjFlag>,

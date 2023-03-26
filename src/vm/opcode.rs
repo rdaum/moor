@@ -88,7 +88,7 @@ pub enum Op {
         nreq: usize,
         rest: usize,
         labels: Vec<ScatterLabel>,
-        done : usize
+        done: usize,
     },
     PushLabel(usize),
     TryFinally(usize),
@@ -112,7 +112,7 @@ pub struct Binary {
     pub(crate) jump_labels: Vec<JumpLabel>,
     pub(crate) var_names: Names,
     pub(crate) main_vector: Vec<Op>,
-    pub(crate) fork_vectors: Vec<Vec<Op>>
+    pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
 impl Binary {
@@ -121,6 +121,9 @@ impl Binary {
     }
 
     pub fn find_literal(&self, l: Var) -> usize {
-        self.literals.iter().position(|x| *x == l).expect("literal not found")
+        self.literals
+            .iter()
+            .position(|x| *x == l)
+            .expect("literal not found")
     }
 }

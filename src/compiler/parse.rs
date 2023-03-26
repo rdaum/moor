@@ -15,10 +15,10 @@ use decorum::R64;
 use paste::paste;
 use serde_derive::{Deserialize, Serialize};
 
+use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
     Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
-use crate::compiler::ast::Expr::VarExpr;
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;

@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use decorum::{R64, Real};
+use decorum::{Real, R64};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
 use serde_derive::{Deserialize, Serialize};

@@ -28,16 +28,7 @@ pub enum StateError {
 }
 
 pub trait PersistentState {
-    fn retrieve_verb(
-        &self,
-        obj: Objid,
-        vname: &str,
-        do_pass: bool,
-        this: Objid,
-        player: Objid,
-        caller: Objid,
-        args: &Vec<Var>,
-    ) -> Result<(Binary, VerbInfo), anyhow::Error>;
+    fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), anyhow::Error>;
     fn retrieve_property(
         &self,
         obj: Objid,
@@ -51,12 +42,8 @@ pub trait PersistentState {
         player_flags: EnumSet<ObjFlag>,
         value: &Var,
     ) -> Result<(), anyhow::Error>;
-    fn parent_of(
-        &mut self,
-        obj: Objid) -> Result<Objid, anyhow::Error>;
-    fn valid(
-        &mut self,
-        obj: Objid) -> Result<bool, anyhow::Error>;
+    fn parent_of(&mut self, obj: Objid) -> Result<Objid, anyhow::Error>;
+    fn valid(&mut self, obj: Objid) -> Result<bool, anyhow::Error>;
 }
 
 pub struct ObjDBState<'a> {
@@ -64,18 +51,7 @@ pub struct ObjDBState<'a> {
 }
 
 impl<'a> PersistentState for ObjDBState<'a> {
-    fn retrieve_verb(
-        &self,
-        obj: Objid,
-        vname: &str,
-        do_pass: bool,
-        _this: Objid,
-        _player: Objid,
-        _caller: Objid,
-        _args: &Vec<Var>,
-    ) -> Result<(Binary, VerbInfo), Error> {
-        // TODO do_pass get parent and delegate there instead.
-        // Requires adding db.object_parent.
+    fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
         let h = self.db.find_callable_verb(
             obj,
             vname,
@@ -113,7 +89,10 @@ impl<'a> PersistentState for ObjDBState<'a> {
             )
             .expect("db fail");
         match find {
-            None => Err(anyhow!(StateError::PropertyNotFound(obj, property_name.to_string()))),
+            None => Err(anyhow!(StateError::PropertyNotFound(
+                obj,
+                property_name.to_string()
+            ))),
             Some(p) => {
                 if !self.db.property_allows(
                     PropFlag::Read.into(),
@@ -128,7 +107,10 @@ impl<'a> PersistentState for ObjDBState<'a> {
                     )))
                 } else {
                     match p.attrs.value {
-                        None => Err(anyhow!(StateError::PropertyNotFound(obj, property_name.to_string()))),
+                        None => Err(anyhow!(StateError::PropertyNotFound(
+                            obj,
+                            property_name.to_string()
+                        ))),
                         Some(p) => Ok(p),
                     }
                 }
@@ -180,13 +162,20 @@ impl<'a> PersistentState for ObjDBState<'a> {
     }
 
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        let attrs = self.db.object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)?;
+        let attrs = self
+            .db
+            .object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)?;
         // TODO: this masks other (internal?) errors..
-        attrs.parent.ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
+        attrs
+            .parent
+            .ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
     }
 
     fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
         // TODO: this masks other (internal?) errors..
-        Ok(self.db.object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner).is_ok())
+        Ok(self
+            .db
+            .object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)
+            .is_ok())
     }
 }

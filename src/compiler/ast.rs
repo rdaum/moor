@@ -46,7 +46,10 @@ pub enum UnaryOp {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Expr {
-    Assign{left: Box<Expr>, right :Box<Expr>},
+    Assign {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
 
     VarExpr(Var),
     Id(Name),

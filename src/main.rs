@@ -28,9 +28,9 @@ pub mod compiler;
 mod db;
 pub mod grammar;
 pub mod model;
+pub mod parsecmd;
 pub mod textdump;
 pub mod vm;
-pub mod parsecmd;
 
 struct RProp {
     definer: Objid,
@@ -246,8 +246,8 @@ fn main() {
     loop {
         let result = vm.exec(&mut odb_state).unwrap();
         match result {
-            ExecutionResult::Complete => {
-                eprintln!("Done.");
+            ExecutionResult::Complete(a) => {
+                eprintln!("Done: {:?}", a);
                 break;
             }
             ExecutionResult::More => {}

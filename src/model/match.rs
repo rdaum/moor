@@ -15,7 +15,7 @@ pub enum ArgSpec {
 pub enum PrepSpec {
     Any,
     None,
-    Other(u16)
+    Other(u16),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode)]

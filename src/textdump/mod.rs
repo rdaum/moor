@@ -54,9 +54,7 @@ pub struct TextdumpReader<R: Read> {
 
 impl<R: Read> TextdumpReader<R> {
     pub fn new(reader: BufReader<R>) -> Self {
-        Self {
-            reader,
-        }
+        Self { reader }
     }
 }
 

@@ -6,20 +6,22 @@ use enumset::EnumSet;
 use itertools::Itertools;
 use rusqlite::{Connection, Row, Transaction};
 use sea_query::{
-    Alias, all, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
+    all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
     ForeignKeyAction, Func, Iden, Index, IndexType, IntoCondition, IntoIden, JoinType, OnConflict,
     Query, QueryStatementWriter, SelectStatement, SimpleExpr, SqliteQueryBuilder, Table, UnionType,
     WithClause,
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
 
-use crate::model::ObjDB;
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::permissions::Permissions;
-use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag};
+use crate::model::props::{
+    Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
+};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
+use crate::model::ObjDB;
 
 #[derive(Iden)]
 enum Object {
@@ -84,7 +86,7 @@ fn object_attr_to_column<'a>(attr: ObjAttr) -> DynIden {
     }
 }
 
-fn property_attr_to_column<'a>(attr: PropAttr) -> (DynIden, DynIden)  {
+fn property_attr_to_column<'a>(attr: PropAttr) -> (DynIden, DynIden) {
     match attr {
         PropAttr::Value => (Property::Table.into_iden(), Property::Value.into_iden()),
         PropAttr::Location => (Property::Table.into_iden(), Property::Location.into_iden()),
@@ -425,7 +427,11 @@ impl<'a> Objects for SQLiteTx<'a> {
             .values_panic(values)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let result = self.tx.as_mut().unwrap().execute(&insert_sql, &*values.as_params())?;
+        let result = self
+            .tx
+            .as_mut()
+            .unwrap()
+            .execute(&insert_sql, &*values.as_params())?;
         // TODO replace with proper error handling
         assert_eq!(result, 1);
         let oid = self.tx.as_mut().unwrap().last_insert_rowid();
@@ -437,7 +443,11 @@ impl<'a> Objects for SQLiteTx<'a> {
             .from_table(Object::Table)
             .cond_where(Expr::col(Object::Oid).eq(oid.0))
             .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.as_mut().unwrap().execute(&delete_sql, &*values.as_params())?;
+        let result = self
+            .tx
+            .as_mut()
+            .unwrap()
+            .execute(&delete_sql, &*values.as_params())?;
         // TODO replace with proper error handling
         assert_eq!(result, 1);
         Ok(())
@@ -522,7 +532,11 @@ impl<'a> Objects for SQLiteTx<'a> {
             .values(params)
             .build_rusqlite(SqliteQueryBuilder);
 
-        let count = self.tx.as_mut().unwrap().execute(&query, &*values.as_params())?;
+        let count = self
+            .tx
+            .as_mut()
+            .unwrap()
+            .execute(&query, &*values.as_params())?;
         assert_eq!(count, 1);
         Ok(())
     }
@@ -565,13 +579,17 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
             .build_rusqlite(SqliteQueryBuilder);
 
-        let result = self.tx.as_mut().unwrap().query_row(&query, &*values.as_params(), |r| {
-            Ok(Propdef {
-                pid: Pid(r.get(0)?),
-                definer: target,
-                pname: String::from(pname),
-            })
-        })?;
+        let result = self
+            .tx
+            .as_mut()
+            .unwrap()
+            .query_row(&query, &*values.as_params(), |r| {
+                Ok(Propdef {
+                    pid: Pid(r.get(0)?),
+                    definer: target,
+                    pname: String::from(pname),
+                })
+            })?;
 
         Ok(result)
     }
@@ -589,7 +607,10 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .columns([PropertyDefinition::Definer, PropertyDefinition::Name])
             .values_panic([oid.0.into(), pname.into()])
             .build_rusqlite(SqliteQueryBuilder);
-        self.tx.as_mut().unwrap().execute(&insert_sql, &*values.as_params())?;
+        self.tx
+            .as_mut()
+            .unwrap()
+            .execute(&insert_sql, &*values.as_params())?;
 
         let pid = Pid(self.tx.as_mut().unwrap().last_insert_rowid());
         if let Some(val) = val {
@@ -604,7 +625,11 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .value(PropertyDefinition::Name, new)
             .and_where(Expr::col(PropertyDefinition::Name).eq(old))
             .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.as_mut().unwrap().execute(&update_query, &*values.as_params())?;
+        let result = self
+            .tx
+            .as_mut()
+            .unwrap()
+            .execute(&update_query, &*values.as_params())?;
         // TODO proper meaningful error codes
         assert_eq!(result, 1);
         Ok(())
@@ -616,7 +641,11 @@ impl<'a> PropDefs for SQLiteTx<'a> {
             .cond_where(Expr::col(PropertyDefinition::Definer).eq(oid.0))
             .and_where(Expr::col(PropertyDefinition::Name).eq(pname))
             .build_rusqlite(SqliteQueryBuilder);
-        let result = self.tx.as_mut().unwrap().execute(&delete_sql, &*values.as_params())?;
+        let result = self
+            .tx
+            .as_mut()
+            .unwrap()
+            .execute(&delete_sql, &*values.as_params())?;
         // TODO proper meaningful error codes
         assert_eq!(result, 1);
         Ok(())
@@ -722,7 +751,8 @@ impl<'a> Properties for SQLiteTx<'a> {
                             let val_encoded: Vec<u8> = r.get(c_num)?;
 
                             let (decoded_val, _) =
-                                bincode::serde::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
+                                bincode::serde::decode_from_slice(&val_encoded, self.bincode_cfg)
+                                    .unwrap();
 
                             ret_attrs.value = Some(decoded_val);
                         }
@@ -733,11 +763,10 @@ impl<'a> Properties for SQLiteTx<'a> {
                         }
                     }
                 }
-                Ok(
-                    PropertyInfo{
-                        pid,
-                        attrs: ret_attrs
-                    })
+                Ok(PropertyInfo {
+                    pid,
+                    attrs: ret_attrs,
+                })
             })
             .unwrap();
 
@@ -801,7 +830,8 @@ impl<'a> Properties for SQLiteTx<'a> {
                             let val_encoded: Vec<u8> = r.get(c_num)?;
 
                             let (decoded_val, _) =
-                                bincode::serde::decode_from_slice(&val_encoded, self.bincode_cfg).unwrap();
+                                bincode::serde::decode_from_slice(&val_encoded, self.bincode_cfg)
+                                    .unwrap();
 
                             ret_attrs.value = Some(decoded_val);
                         }
@@ -866,7 +896,11 @@ impl<'a> Properties for SQLiteTx<'a> {
             )
             .build_rusqlite(SqliteQueryBuilder);
 
-        self.tx.as_ref().unwrap().execute(&query, &*values.as_params()).unwrap();
+        self.tx
+            .as_ref()
+            .unwrap()
+            .execute(&query, &*values.as_params())
+            .unwrap();
         Ok(())
     }
 }
@@ -901,7 +935,10 @@ impl<'a> Verbs for SQLiteTx<'a> {
             ])
             .build_rusqlite(SqliteQueryBuilder);
 
-        self.tx.as_mut().unwrap().execute(&insert, &*values.as_params())?;
+        self.tx
+            .as_mut()
+            .unwrap()
+            .execute(&insert, &*values.as_params())?;
         let vid = self.tx.as_mut().unwrap().last_insert_rowid();
         let mut insert = Query::insert()
             .into_table(VerbName::Table)
@@ -913,7 +950,10 @@ impl<'a> Verbs for SQLiteTx<'a> {
             insert.values_panic([vid.into(), name.into()]);
         }
         let (insert, values) = insert.build_rusqlite(SqliteQueryBuilder);
-        self.tx.as_mut().unwrap().execute(&insert, &*values.as_params())?;
+        self.tx
+            .as_mut()
+            .unwrap()
+            .execute(&insert, &*values.as_params())?;
 
         Ok(VerbInfo {
             vid: Vid(vid),
@@ -1025,8 +1065,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .join(
                 JoinType::Join,
                 Verb::Table,
-                all![Expr::tbl(Verb::Table, Verb::Definer)
-                    .equals(parents_of, Alias::new("oid"))],
+                all![Expr::tbl(Verb::Table, Verb::Definer).equals(parents_of, Alias::new("oid"))],
             )
             .join(
                 JoinType::Join,
@@ -1036,11 +1075,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .cond_where(Expr::col((VerbName::Table, VerbName::Name)).eq(verb))
             .to_owned();
 
-        let (query, values) = query
-            .with(with)
-            
-            .build(SqliteQueryBuilder)
-            ;
+        let (query, values) = query.with(with).build(SqliteQueryBuilder);
 
         let mut query = self.tx.as_ref().unwrap().prepare(&query)?;
         let values = RusqliteValues(values.into_iter().map(RusqliteValue).collect());
@@ -1050,10 +1085,11 @@ impl<'a> Verbs for SQLiteTx<'a> {
         })?;
         let results = results.map(|v| v.unwrap());
 
-
         let mapped = self.map_verbs(results)?;
 
-        if mapped.is_empty() { return Ok(None) }
+        if mapped.is_empty() {
+            return Ok(None);
+        }
 
         Ok(Some(mapped[0].clone()))
     }
@@ -1077,8 +1113,9 @@ impl<'a> Permissions for SQLiteTx<'a> {
         prop_flags: EnumSet<PropFlag>,
         prop_owner: Objid,
     ) -> bool {
-        player == prop_owner ||
-            prop_flags.intersection(check_flags) == check_flags || player_flags.contains(ObjFlag::Wizard)
+        player == prop_owner
+            || prop_flags.intersection(check_flags) == check_flags
+            || player_flags.contains(ObjFlag::Wizard)
     }
 }
 
@@ -1105,12 +1142,12 @@ mod tests {
     use rusqlite::Connection;
 
     use crate::db::sqllite::SQLiteTx;
-    use crate::model::ObjDB;
-    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
-    use crate::model::props::{PropAttr, PropDefs, Properties, PropFlag};
+    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+    use crate::model::props::{PropAttr, PropDefs, PropFlag, Properties};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::Var;
     use crate::model::verbs::{Program, VerbAttr, VerbFlag, Verbs};
+    use crate::model::ObjDB;
 
     #[test]
     fn object_create_check_delete() {

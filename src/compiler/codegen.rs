@@ -6,10 +6,10 @@ use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
-use crate::compiler::parse::{Name, Names, parse_program};
+use crate::compiler::parse::{parse_program, Name, Names};
 use crate::model::var::Var;
-use crate::vm::opcode::{Binary, Op, ScatterLabel};
 use crate::vm::opcode::Op::Jump;
+use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -131,10 +131,7 @@ impl CodegenState {
                     return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
                 }
                 Some(label) => {
-                    let l = self
-                        .loops
-                        .iter()
-                        .find(|l| l.start_label == label.id);
+                    let l = self.loops.iter().find(|l| l.start_label == label.id);
                     let Some(l) = l else {
                       return Err(anyhow!(CompileError::UnknownLoopLabel(eid.0.to_string())));
                     };
@@ -1955,6 +1952,23 @@ mod tests {
                 PutProp,
                 Pop,
                 PushTemp,
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_call_verb() {
+        let program = r#"#0:test_verb();"#;
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(binary.find_literal(Var::Obj(Objid(0)))),
+                Imm(binary.find_literal("test_verb".into())),
+                MkEmptyList,
+                CallVerb,
                 Pop,
                 Done
             ]

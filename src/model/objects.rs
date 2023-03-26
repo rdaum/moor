@@ -33,7 +33,7 @@ impl ObjAttrs {
             name: None,
             parent: None,
             location: None,
-            flags: None
+            flags: None,
         }
     }
     pub fn owner(&mut self, o: Objid) -> &mut ObjAttrs {
@@ -68,7 +68,11 @@ pub struct ObjAttrs {
 }
 
 pub trait Objects {
-    fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, anyhow::Error>;
+    fn create_object(
+        &mut self,
+        oid: Option<Objid>,
+        attrs: &ObjAttrs,
+    ) -> Result<Objid, anyhow::Error>;
     fn destroy_object(&mut self, oid: Objid) -> Result<(), anyhow::Error>;
     fn object_valid(&self, oid: Objid) -> Result<bool, anyhow::Error>;
 
