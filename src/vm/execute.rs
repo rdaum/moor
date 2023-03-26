@@ -1129,6 +1129,47 @@ mod tests {
     }
 
     #[test]
+    fn test_string_value_simple_indexing() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        prepare_test_verb(
+            "test",
+            &mut vm,
+            &mut state,
+            vec![Imm(0), Imm(1), Ref, Return, Done],
+            vec![
+                Var::Str("hello".to_string()),
+                2.into(),
+            ],
+        );
+
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Str("e".to_string()));
+    }
+
+    #[test]
+    fn test_string_value_range_indexing() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        prepare_test_verb(
+            "test",
+            &mut vm,
+            &mut state,
+            vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
+            vec![
+                Var::Str("hello".to_string()),
+                2.into(),
+                4.into(),
+            ],
+        );
+
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Str("ell".to_string()));
+    }
+
+    #[test]
     fn test_list_value_simple_indexing() {
         let mut vm = VM::new();
         let mut state = MockState::new();

@@ -1490,6 +1490,39 @@ mod tests {
     }
 
     #[test]
+    fn test_string_get() {
+        let program = "return \"test\"[1];";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Imm(1),
+                Ref,
+                Return,
+                Done
+            ]
+        );
+    }
+
+    #[test]
+    fn test_string_get_range() {
+        let program = "return \"test\"[1..2];";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Imm(1),
+                Imm(2),
+                RangeRef,
+                Return,
+                Done
+            ]
+        );
+    }
+
+    #[test]
     fn test_list_get() {
         let program = "return {1,2,3}[1];";
         let binary = compile(program).unwrap();
