@@ -1490,6 +1490,49 @@ mod tests {
     }
 
     #[test]
+    fn test_list_get() {
+        let program = "return {1,2,3}[1];";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                MakeSingletonList,
+                Imm(1),
+                ListAddTail,
+                Imm(2),
+                ListAddTail,
+                Imm(0),
+                Ref,
+                Return,
+                Done
+            ]
+        );
+    }
+
+    #[test]
+    fn test_list_get_range() {
+        let program = "return {1,2,3}[1..2];";
+        let binary = compile(program).unwrap();
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                MakeSingletonList,
+                Imm(1),
+                ListAddTail,
+                Imm(2),
+                ListAddTail,
+                Imm(0),
+                Imm(1),
+                RangeRef,
+                Return,
+                Done
+            ]
+        );
+    }
+
+    #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let binary = compile(program).unwrap();

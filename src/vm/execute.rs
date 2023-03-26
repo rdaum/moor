@@ -30,7 +30,7 @@ pub enum FinallyReason {
 }
 
 pub enum ExecutionOutcome {
-  Done, // Task ran successfully to completion
+    Done,    // Task ran successfully to completion
     Aborted, // Task aborted, either by kill_task() or by an uncaught error.
     Blocked, // Task called a blocking built-in function.
 }
@@ -425,7 +425,9 @@ impl VM {
         &mut self,
         state: &mut impl PersistentState,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let op = self.next_op().expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
+        let op = self
+            .next_op()
+            .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -680,15 +682,6 @@ impl VM {
                 let v = self.pop();
                 self.push(&v.negative())
             }
-            Op::Ref => {
-                let index = self.pop();
-                let l = self.pop();
-                let Var::Int(index) = index else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More);
-                };
-                self.push(&l.index(index as usize));
-            }
             Op::Push(ident) => {
                 let v = self.get_env(ident);
                 match v {
@@ -715,33 +708,41 @@ impl VM {
                 };
                 self.push(&v);
             }
+            Op::Ref => {
+                let index = self.pop();
+                let l = self.pop();
+                let Var::Int(index) = index else {
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(ExecutionResult::More);
+                };
+                // MOO is 1-indexed.
+                let index = (index - 1) as usize;
+                self.push(&l.index(index));
+            }
             Op::RangeRef => {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
                 let result = match (to, from, base) {
-                    (Var::Int(to), Var::Int(from), Var::Str(base)) => {
-                        if to < 0
-                            || !to < base.len() as i64
-                            || from < 0
-                            || !from < base.len() as i64
-                        {
-                            Var::Err(E_RANGE)
-                        } else {
-                            let (from, to) = (from as usize, to as usize);
-                            let substr = &base[from..to];
-                            Var::Str(String::from(substr))
-                        }
-                    }
-                    (Var::Int(to), Var::Int(from), Var::List(base)) => {
-                        if to < 0
-                            || !to < base.len() as i64
-                            || from < 0
-                            || !from < base.len() as i64
-                        {
-                            Var::Err(E_RANGE)
-                        } else {
-                            let (from, to) = (from as usize, to as usize);
-                            let sublist = &base[from..to];
-                            Var::List(Vec::from(sublist))
+                    (Var::Int(to), Var::Int(from), a) => {
+                        // MOO is 1-indexed.
+                        let (to, from) = ((to - 1) as usize, (from - 1) as usize);
+                        match a {
+                            Var::Str(base) => {
+                                if !to < base.len() || !from < base.len() {
+                                    Var::Err(E_RANGE)
+                                } else {
+                                    let substr = &base[from..=to];
+                                    Var::Str(String::from(substr))
+                                }
+                            }
+                            Var::List(base) => {
+                                if !to < base.len() || !from < base.len() {
+                                    Var::Err(E_RANGE)
+                                } else {
+                                    let sublist = &base[from..=to];
+                                    Var::List(Vec::from(sublist))
+                                }
+                            }
+                            _ => Var::Err(E_TYPE),
                         }
                     }
                     (_, _, _) => Var::Err(E_TYPE),
@@ -894,14 +895,21 @@ impl VM {
             Op::Exit(_label) => {
                 unimplemented!("break")
             }
-            _ => {
-                panic!("Unexpected op: {:?} at PC: {}", op, self.top_mut().pc)
+            Op::Label(_) => {
+                unimplemented!("label")
+            }
+            Op::RangeSet => {
+                unimplemented!("range set")
             }
         }
         return Ok(ExecutionResult::More);
     }
 
-    fn unwind_stack(&mut self, value : Var, reason: FinallyReason) -> Result<ExecutionResult, anyhow::Error> {
+    fn unwind_stack(
+        &mut self,
+        value: Var,
+        reason: FinallyReason,
+    ) -> Result<ExecutionResult, anyhow::Error> {
         // TODO if errors raised, handle that all here. Unwind until we hit a finally block, etc.
 
         // Otherwise, there's two other paths: FinallyReason::Exit and FinallyReason::Return.
@@ -915,7 +923,6 @@ impl VM {
         self.push(&value);
         return Ok(ExecutionResult::More);
     }
-
 }
 
 #[cfg(test)]
@@ -1065,7 +1072,7 @@ mod tests {
         }
     }
 
-    fn exec_vm(vm: &mut VM, state: &mut MockState) -> Var{
+    fn exec_vm(vm: &mut VM, state: &mut MockState) -> Var {
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
             match vm.exec(state) {
@@ -1073,7 +1080,7 @@ mod tests {
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),
             }
-        };
+        }
     }
 
     #[test]
@@ -1122,6 +1129,47 @@ mod tests {
     }
 
     #[test]
+    fn test_list_value_simple_indexing() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        prepare_test_verb(
+            "test",
+            &mut vm,
+            &mut state,
+            vec![Imm(0), Imm(1), Ref, Return, Done],
+            vec![
+                Var::List(vec![111.into(), 222.into(), 333.into()]),
+                2.into(),
+            ],
+        );
+
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(222));
+    }
+
+    #[test]
+    fn test_list_value_range_indexing() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        prepare_test_verb(
+            "test",
+            &mut vm,
+            &mut state,
+            vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
+            vec![
+                Var::List(vec![111.into(), 222.into(), 333.into()]),
+                2.into(),
+                3.into(),
+            ],
+        );
+
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::List(vec![222.into(), 333.into()]));
+    }
+
+    #[test]
     fn test_property_retrieval() {
         let mut vm = VM::new();
         let mut state = MockState::new();
@@ -1132,7 +1180,9 @@ mod tests {
             vec![Imm(0), Imm(1), GetProp, Return, Done],
             vec![Var::Obj(Objid(0)), Var::Str(String::from("test_prop"))],
         );
-        state.properties.insert((Objid(0), String::from("test_prop")), Var::Int(666));
+        state
+            .properties
+            .insert((Objid(0), String::from("test_prop")), Var::Int(666));
         call_verb("test", &mut vm, &mut state);
         let result = exec_vm(&mut vm, &mut state);
         assert_eq!(result, Var::Int(666));
@@ -1159,8 +1209,19 @@ mod tests {
             "test_call_verb",
             &mut vm,
             &mut state,
-            vec![Imm(0) /* obj */, Imm(1) /* verb */, Imm(2) /* args */, CallVerb, Return, Done],
-            vec![Var::Obj(Objid(0)), Var::Str(String::from("test_return_verb")), Var::List(vec![])]
+            vec![
+                Imm(0), /* obj */
+                Imm(1), /* verb */
+                Imm(2), /* args */
+                CallVerb,
+                Return,
+                Done,
+            ],
+            vec![
+                Var::Obj(Objid(0)),
+                Var::Str(String::from("test_return_verb")),
+                Var::List(vec![]),
+            ],
         );
 
         // Invoke the second verb
