@@ -1959,6 +1959,23 @@ mod tests {
     }
 
     #[test]
+    fn test_get_property() {
+        let program = r#"return this.stack;"#;
+        let binary = compile(program).unwrap();
+
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(binary.find_var("this")),
+                Imm(binary.find_literal("stack".into())),
+                GetProp,
+                Return,
+                Done
+            ]
+        )
+    }
+
+    #[test]
     fn test_call_verb() {
         let program = r#"#0:test_verb();"#;
         let binary = compile(program).unwrap();

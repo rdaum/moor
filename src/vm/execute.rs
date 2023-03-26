@@ -1065,6 +1065,17 @@ mod tests {
         }
     }
 
+    fn exec_vm(vm: &mut VM, state: &mut MockState) -> Var{
+        // Call repeatedly into exec until we ge either an error or Complete.
+        loop {
+            match vm.exec(state) {
+                Ok(ExecutionResult::More) => continue,
+                Ok(ExecutionResult::Complete(a)) => return a,
+                Err(e) => panic!("error during execution: {:?}", e),
+            }
+        };
+    }
+
     #[test]
     fn test_verbnf() {
         let mut vm = VM::new();
@@ -1111,6 +1122,23 @@ mod tests {
     }
 
     #[test]
+    fn test_property_retrieval() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        prepare_test_verb(
+            "test",
+            &mut vm,
+            &mut state,
+            vec![Imm(0), Imm(1), GetProp, Return, Done],
+            vec![Var::Obj(Objid(0)), Var::Str(String::from("test_prop"))],
+        );
+        state.properties.insert((Objid(0), String::from("test_prop")), Var::Int(666));
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(666));
+    }
+
+    #[test]
     fn test_call_verb() {
         let mut vm = VM::new();
         let mut state = MockState::new();
@@ -1138,14 +1166,7 @@ mod tests {
         // Invoke the second verb
         call_verb("test_call_verb", &mut vm, &mut state);
 
-        // Call repeatedly into exec until we ge either an error or Complete.
-        let result = loop {
-            match vm.exec(&mut state) {
-                Ok(ExecutionResult::More) => continue,
-                Ok(ExecutionResult::Complete(a)) => break a,
-                Err(e) => panic!("error during execution: {:?}", e),
-            }
-        };
+        let result = exec_vm(&mut vm, &mut state);
 
         assert_eq!(result, Var::Int(666));
     }
