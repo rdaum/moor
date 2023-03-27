@@ -72,28 +72,28 @@ impl Names {
     pub fn new() -> Self {
         let mut names = Self { names: vec![] };
 
-        names.find_or_add_name(&String::from("NUM"));
-        names.find_or_add_name(&String::from("OBJ"));
-        names.find_or_add_name(&String::from("STR"));
-        names.find_or_add_name(&String::from("LIST"));
-        names.find_or_add_name(&String::from("ERR"));
-        names.find_or_add_name(&String::from("INT"));
-        names.find_or_add_name(&String::from("FLOAT"));
-        names.find_or_add_name(&String::from("player"));
-        names.find_or_add_name(&String::from("this"));
-        names.find_or_add_name(&String::from("caller"));
-        names.find_or_add_name(&String::from("verb"));
-        names.find_or_add_name(&String::from("args"));
-        names.find_or_add_name(&String::from("argstr"));
-        names.find_or_add_name(&String::from("dobj"));
-        names.find_or_add_name(&String::from("dobjstr"));
-        names.find_or_add_name(&String::from("prepstr"));
-        names.find_or_add_name(&String::from("iobj"));
-        names.find_or_add_name(&String::from("iobjstr"));
+        names.find_or_add_name("NUM");
+        names.find_or_add_name("OBJ");
+        names.find_or_add_name("STR");
+        names.find_or_add_name("LIST");
+        names.find_or_add_name("ERR");
+        names.find_or_add_name("INT");
+        names.find_or_add_name("FLOAT");
+        names.find_or_add_name("player");
+        names.find_or_add_name("this");
+        names.find_or_add_name("caller");
+        names.find_or_add_name("verb");
+        names.find_or_add_name("args");
+        names.find_or_add_name("argstr");
+        names.find_or_add_name("dobj");
+        names.find_or_add_name("dobjstr");
+        names.find_or_add_name("prepstr");
+        names.find_or_add_name("iobj");
+        names.find_or_add_name("iobjstr");
         names
     }
 
-    pub fn find_or_add_name(&mut self, name: &String) -> Name {
+    pub fn find_or_add_name(&mut self, name: &str) -> Name {
         match self
             .names
             .iter()

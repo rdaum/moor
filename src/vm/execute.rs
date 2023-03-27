@@ -298,12 +298,13 @@ impl VM {
     fn peek(&self, amt: usize) -> Vec<Var> {
         self.top().peek(amt)
     }
+
     pub fn peek_at(&self, i: usize) -> Option<Var> {
         self.top().peek_at(i)
     }
 
     fn peek_top(&self) -> Var {
-        self.top().peek(0)[0].clone()
+        self.top().peek_at(0).expect("stack underflow")
     }
 
     fn poke(&mut self, pos: usize, v: &Var) {
@@ -519,14 +520,14 @@ impl VM {
             Op::Imm(slot) => {
                 // Peek ahead to see if the next operation is 'pop' and if so, just throw away.
                 // MOO uses this to optimize verbdoc/comments, etc.
-                match self.top().lookahead() {
-                    Some(Op::Pop) => {
-                        // skip
-                        self.top_mut().skip();
-                        return Ok(ExecutionResult::More);
-                    }
-                    _ => {}
-                }
+                // match self.top().lookahead() {
+                //     Some(Op::Pop) => {
+                //         // skip
+                //         self.top_mut().skip();
+                //         return Ok(ExecutionResult::More);
+                //     }
+                //     _ => {}
+                // }
                 let value = self.top().binary.literals[slot].clone();
                 self.push(&value);
             }
@@ -690,7 +691,7 @@ impl VM {
                 }
             }
             Op::Put(ident) => {
-                let v = self.pop();
+                let v = self.peek_top();
                 self.set_env(ident, &v);
             }
             Op::PushRef => {
@@ -721,11 +722,11 @@ impl VM {
             }
             Op::RangeRef => {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
-                let result = match (to, from, base) {
-                    (Var::Int(to), Var::Int(from), a) => {
+                let result = match (to, from) {
+                    (Var::Int(to), Var::Int(from)) => {
                         // MOO is 1-indexed.
                         let (to, from) = ((to - 1) as usize, (from - 1) as usize);
-                        match a {
+                        match base {
                             Var::Str(base) => {
                                 if !to < base.len() || !from < base.len() {
                                     Var::Err(E_RANGE)
@@ -745,9 +746,52 @@ impl VM {
                             _ => Var::Err(E_TYPE),
                         }
                     }
-                    (_, _, _) => Var::Err(E_TYPE),
+                    (_, _) => Var::Err(E_TYPE),
                 };
                 self.push(&result);
+            }
+            // TODO MOO has odd semantics where it can clear a range of a string by assigning in
+            // a value than the stated from..to range, or expand by inserting a larger value, etc.
+            Op::RangeSet => {
+                let (value, to, from, base) = (self.pop(), self.pop(), self.pop(), self.pop());
+                match (to, from) {
+                    (Var::Int(to), Var::Int(from)) => {
+                        let (to, from) = ((to - 1) as usize, (from - 1) as usize);
+                        let result = match (value, base) {
+                            (Var::Str(value), Var::Str(base)) => {
+                                if !to < base.len() || !from < base.len() {
+                                    Var::Err(E_RANGE)
+                                } else if to - from + 1 != value.len() {
+                                    Var::Err(E_RANGE)
+                                } else {
+                                    let mut chars = base.chars().collect::<Vec<char>>();
+                                    chars.splice(from..=to, value.chars());
+                                    Var::Str(chars.into_iter().collect())
+                                }
+                            }
+                            (Var::List(value), Var::List(base)) => {
+                                if !to < base.len() || !from < base.len() {
+                                    Var::Err(E_RANGE)
+                                } else if to - from + 1 != value.len() {
+                                    Var::Err(E_RANGE)
+                                } else {
+                                    let mut list = base.clone();
+                                    list.splice(from..=to, value);
+                                    Var::List(list)
+                                }
+                            }
+                            _ => {
+                                self.push(&Var::Err(E_TYPE));
+                                return Ok(ExecutionResult::More);
+                            }
+                        };
+                        self.push(&result);
+                    }
+                    _ => {
+                        self.push(&Var::Err(E_TYPE));
+                        return Ok(ExecutionResult::More);
+                    }
+                }
             }
             Op::GPut { id } => {
                 self.set_env(id, &self.peek_top());
@@ -898,9 +942,6 @@ impl VM {
             Op::Label(_) => {
                 unimplemented!("label")
             }
-            Op::RangeSet => {
-                unimplemented!("range set")
-            }
         }
         return Ok(ExecutionResult::More);
     }
@@ -941,7 +982,9 @@ mod tests {
     use crate::vm::state::{PersistentState, StateError};
     use anyhow::Error;
     use enumset::EnumSet;
+    use rusqlite::named_params;
     use std::collections::HashMap;
+    use std::env::var;
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -986,9 +1029,7 @@ mod tests {
         }
     }
 
-    fn mk_binary(main_vector: Vec<Op>, literals: Vec<Var>) -> Binary {
-        let var_names = Names::new();
-
+    fn mk_binary(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Binary {
         Binary {
             literals,
             jump_labels: vec![],
@@ -998,15 +1039,29 @@ mod tests {
         }
     }
 
+    fn prepare_test_verb_with_names(
+        verb_name: &str,
+        state: &mut MockState,
+        opcodes: Vec<Op>,
+        literals: Vec<Var>,
+        var_names: Names,
+    ) {
+        set_test_verb(verb_name, state, mk_binary(opcodes, literals, var_names));
+    }
+
     fn prepare_test_verb(
         verb_name: &str,
-        vm: &mut VM,
         state: &mut MockState,
         opcodes: Vec<Op>,
         literals: Vec<Var>,
     ) {
+        let var_names = Names::new();
+        set_test_verb(verb_name, state, mk_binary(opcodes, literals, var_names));
+    }
+
+    fn set_test_verb(verb_name: &str, state: &mut MockState, binary: Binary) {
         let o = Objid(0);
-        state.set_verb(o, verb_name, &mk_binary(opcodes, literals));
+        state.set_verb(o, verb_name, &binary)
     }
 
     fn call_verb(verb_name: &str, vm: &mut VM, state: &mut MockState) {
@@ -1109,13 +1164,7 @@ mod tests {
     fn test_simple_vm_execute() {
         let mut vm = VM::new();
         let mut state = MockState::new();
-        prepare_test_verb(
-            "test",
-            &mut vm,
-            &mut state,
-            vec![Imm(0), Pop, Done],
-            vec![1.into()],
-        );
+        prepare_test_verb("test", &mut state, vec![Imm(0), Pop, Done], vec![1.into()]);
         call_verb("test", &mut vm, &mut state);
         assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
         assert_eq!(vm.top().peek_at(0).unwrap(), Var::Int(1));
@@ -1134,13 +1183,9 @@ mod tests {
         let mut state = MockState::new();
         prepare_test_verb(
             "test",
-            &mut vm,
             &mut state,
             vec![Imm(0), Imm(1), Ref, Return, Done],
-            vec![
-                Var::Str("hello".to_string()),
-                2.into(),
-            ],
+            vec![Var::Str("hello".to_string()), 2.into()],
         );
 
         call_verb("test", &mut vm, &mut state);
@@ -1154,14 +1199,9 @@ mod tests {
         let mut state = MockState::new();
         prepare_test_verb(
             "test",
-            &mut vm,
             &mut state,
             vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
-            vec![
-                Var::Str("hello".to_string()),
-                2.into(),
-                4.into(),
-            ],
+            vec![Var::Str("hello".to_string()), 2.into(), 4.into()],
         );
 
         call_verb("test", &mut vm, &mut state);
@@ -1175,7 +1215,6 @@ mod tests {
         let mut state = MockState::new();
         prepare_test_verb(
             "test",
-            &mut vm,
             &mut state,
             vec![Imm(0), Imm(1), Ref, Return, Done],
             vec![
@@ -1195,7 +1234,6 @@ mod tests {
         let mut state = MockState::new();
         prepare_test_verb(
             "test",
-            &mut vm,
             &mut state,
             vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
             vec![
@@ -1211,12 +1249,95 @@ mod tests {
     }
 
     #[test]
+    fn test_list_set_range() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let mut var_names = Names::new();
+        let a = var_names.find_or_add_name("a");
+
+        prepare_test_verb_with_names(
+            "test",
+            &mut state,
+            vec![
+                Imm(0),
+                Put(a.0),
+                Pop,
+                Push(a.0),
+                Imm(1),
+                Imm(2),
+                Imm(3),
+                PutTemp,
+                RangeSet,
+                Put(a.0),
+                Pop,
+                PushTemp,
+                Pop,
+                Push(a.0),
+                Return,
+                Done,
+            ],
+            vec![
+                Var::List(vec![111.into(), 222.into(), 333.into()]),
+                2.into(),
+                3.into(),
+                Var::List(vec![321.into(), 123.into()]),
+            ],
+            var_names,
+        );
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::List(vec![111.into(), 321.into(), 123.into()]));
+    }
+
+    #[test]
+    fn test_string_set_range() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let mut var_names = Names::new();
+        let a = var_names.find_or_add_name("a");
+
+        prepare_test_verb_with_names(
+            "test",
+            &mut state,
+            vec![
+                Imm(0),
+                Put(a.0),
+                Pop,
+                Push(a.0),
+                Imm(1),
+                Imm(2),
+                Imm(3),
+                PutTemp,
+                RangeSet,
+                Put(a.0),
+                Pop,
+                PushTemp,
+                Pop,
+                Push(a.0),
+                Return,
+                Done,
+            ],
+            vec![
+                Var::Str("mandalorian".to_string()),
+                4.into(),
+                7.into(),
+                Var::Str("bozo".to_string()),
+            ],
+            var_names,
+        );
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Str("manbozorian".to_string()));
+    }
+
+    #[test]
     fn test_property_retrieval() {
         let mut vm = VM::new();
         let mut state = MockState::new();
         prepare_test_verb(
             "test",
-            &mut vm,
             &mut state,
             vec![Imm(0), Imm(1), GetProp, Return, Done],
             vec![Var::Obj(Objid(0)), Var::Str(String::from("test_prop"))],
@@ -1239,7 +1360,6 @@ mod tests {
         // The first merely returns the value "666" immediately.
         prepare_test_verb(
             "test_return_verb",
-            &mut vm,
             &mut state,
             vec![Imm(0), Return],
             vec![666.into()],
@@ -1248,7 +1368,6 @@ mod tests {
         // The second actually calls the first verb, and returns the result.
         prepare_test_verb(
             "test_call_verb",
-            &mut vm,
             &mut state,
             vec![
                 Imm(0), /* obj */

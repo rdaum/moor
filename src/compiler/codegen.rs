@@ -1523,6 +1523,53 @@ mod tests {
     }
 
     #[test]
+    fn test_index_set() {
+        let program = "a[2] = \"3\";";
+        let binary = compile(program).unwrap();
+        let a = binary.find_var("a");
+
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(a),
+                Imm(0),
+                Imm(1),
+                PutTemp,
+                IndexSet,
+                Put(a),
+                Pop,
+                PushTemp,
+                Pop,
+                Done
+            ]
+        );
+    }
+
+    #[test]
+    fn test_range_set() {
+        let program = "a[2..4] = \"345\";";
+        let binary = compile(program).unwrap();
+        let a = binary.find_var("a");
+
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(a),
+                Imm(0),
+                Imm(1),
+                Imm(2),
+                PutTemp,
+                RangeSet,
+                Put(a),
+                Pop,
+                PushTemp,
+                Pop,
+                Done
+            ]
+        );
+    }
+
+    #[test]
     fn test_list_get() {
         let program = "return {1,2,3}[1];";
         let binary = compile(program).unwrap();
