@@ -4,17 +4,15 @@ use int_enum::IntEnum;
 
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
-use crate::model::props::{PropAttr, PropFlag};
 use crate::model::var::Error::{
     E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, Objid, Var};
-use crate::model::verbs::{Program, VerbAttr};
 use crate::model::ObjDB;
-use crate::parsecmd::ParsedCommand;
 use crate::vm::execute::FinallyReason::Fallthrough;
-use crate::vm::opcode::{Binary, Op};
+use crate::vm::opcode::Op;
 use crate::vm::state::{PersistentState, StateError};
+use crate::vm::activation::Activation;
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
 #[repr(u8)]
@@ -35,198 +33,15 @@ pub enum ExecutionOutcome {
     Blocked, // Task called a blocking built-in function.
 }
 
-struct Activation {
-    binary: Binary,
-    environment: Vec<Var>,
-    valstack: Vec<Var>,
-    pc: usize,
-    error_pc: usize,
-    temp: Var,
-    this: Objid,
-    player: Objid,
-    player_flags: EnumSet<ObjFlag>,
-    verb_owner: Objid,
-    definer: Objid,
-    verb: String,
-}
-
-impl Activation {
-    pub fn new_for_method(
-        binary: Binary,
-        caller: Objid,
-        this: Objid,
-        player: Objid,
-        player_flags: EnumSet<ObjFlag>,
-        verb_owner: Objid,
-        definer: Objid,
-        verb: String,
-        args: Vec<Var>,
-    ) -> Result<Self, anyhow::Error> {
-        let environment = vec![Var::None; binary.var_names.width()];
-
-        let mut a = Activation {
-            binary,
-            environment,
-            valstack: vec![],
-            pc: 0,
-            error_pc: 0,
-            temp: Var::None,
-            this,
-            player,
-            player_flags,
-            verb_owner,
-            definer,
-            verb: verb.clone(),
-        };
-
-        a.set_var("this", Var::Obj(this)).unwrap();
-        a.set_var("player", Var::Obj(player)).unwrap();
-        a.set_var("caller", Var::Obj(caller)).unwrap();
-        a.set_var("NUM", Var::Int(0)).unwrap();
-        a.set_var("OBJ", Var::Int(1)).unwrap();
-        a.set_var("STR", Var::Int(2)).unwrap();
-        a.set_var("ERR", Var::Int(3)).unwrap();
-        a.set_var("LIST", Var::Int(4)).unwrap();
-        a.set_var("INT", Var::Int(0)).unwrap();
-        a.set_var("FLOAT", Var::Int(9)).unwrap();
-
-        a.set_var("verb", Var::Str(verb.clone())).unwrap();
-        a.set_var("argstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("args", Var::List(args.clone())).unwrap();
-        a.set_var("iobjstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("iobj", Var::Obj(Objid(-1))).unwrap();
-        a.set_var("dobjstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("dobj", Var::Obj(Objid(-1))).unwrap();
-        a.set_var("prepstr", Var::Str(String::from(""))).unwrap();
-
-        Ok(a)
-    }
-
-    pub fn new_for_command(
-        binary: Binary,
-        caller: Objid,
-        this: Objid,
-        player: Objid,
-        player_flags: EnumSet<ObjFlag>,
-        verb_owner: Objid,
-        definer: Objid,
-        parsed_cmd: &ParsedCommand,
-    ) -> Result<Self, anyhow::Error> {
-        let environment = vec![Var::None; binary.var_names.width()];
-
-        let mut a = Activation {
-            binary,
-            environment,
-            valstack: vec![],
-            pc: 0,
-            error_pc: 0,
-            temp: Var::None,
-            this,
-            player,
-            player_flags,
-            verb_owner,
-            definer,
-            verb: parsed_cmd.verb.clone(),
-        };
-
-        a.set_var("this", Var::Obj(this)).unwrap();
-        a.set_var("player", Var::Obj(player)).unwrap();
-        a.set_var("caller", Var::Obj(caller)).unwrap();
-        a.set_var("NUM", Var::Int(0)).unwrap();
-        a.set_var("OBJ", Var::Int(1)).unwrap();
-        a.set_var("STR", Var::Int(2)).unwrap();
-        a.set_var("ERR", Var::Int(3)).unwrap();
-        a.set_var("LIST", Var::Int(4)).unwrap();
-        a.set_var("INT", Var::Int(0)).unwrap();
-        a.set_var("FLOAT", Var::Int(9)).unwrap();
-
-        a.set_var("verb", Var::Str(parsed_cmd.verb.clone()))
-            .unwrap();
-        a.set_var("argstr", Var::Str(parsed_cmd.argstr.clone()))
-            .unwrap();
-        a.set_var("args", Var::List(parsed_cmd.args.clone()))
-            .unwrap();
-        a.set_var("iobjstr", Var::Str(parsed_cmd.iobjstr.clone()))
-            .unwrap();
-        a.set_var("iobj", Var::Obj(parsed_cmd.iobj)).unwrap();
-        a.set_var("dobjstr", Var::Str(parsed_cmd.dobjstr.clone()))
-            .unwrap();
-        a.set_var("dobj", Var::Obj(parsed_cmd.dobj)).unwrap();
-        a.set_var("prepstr", Var::Str(parsed_cmd.prepstr.clone()))
-            .unwrap();
-
-        Ok(a)
-    }
-
-    fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
-        let n = self.binary.var_names.find_name_offset(name);
-        if let Some(n) = n {
-            self.environment[n] = value;
-            Ok(())
-        } else {
-            Err(E_VARNF)
-        }
-    }
-
-    pub fn next_op(&mut self) -> Option<Op> {
-        if !self.pc < self.binary.main_vector.len() {
-            return None;
-        }
-        let op = self.binary.main_vector[self.pc].clone();
-        self.pc += 1;
-        Some(op)
-    }
-
-    pub fn lookahead(&self) -> Option<Op> {
-        self.binary.main_vector.get(self.pc + 1).cloned()
-    }
-
-    pub fn skip(&mut self) {
-        self.pc += 1;
-    }
-
-    pub fn pop(&mut self) -> Option<Var> {
-        self.valstack.pop()
-    }
-
-    pub fn push(&mut self, v: Var) {
-        self.valstack.push(v)
-    }
-
-    pub fn peek_at(&self, i: usize) -> Option<Var> {
-        if !i < self.valstack.len() {
-            return None;
-        }
-        Some(self.valstack[i].clone())
-    }
-
-    pub fn peek(&self, width: usize) -> Vec<Var> {
-        let l = self.valstack.len();
-        Vec::from(&self.valstack[l - width..])
-    }
-
-    pub fn poke(&mut self, p: usize, v: &Var) {
-        let l = self.valstack.len();
-        self.valstack[l - p] = v.clone()
-    }
-
-    pub fn stack_size(&self) -> usize {
-        self.valstack.len()
-    }
-
-    pub fn jump(&mut self, label_id: usize) {
-        let label = &self.binary.jump_labels[label_id];
-        self.pc += label.position;
-    }
-
-    pub fn rewind(&mut self, amt: usize) {
-        self.pc -= amt;
-    }
-}
-
 pub struct VM {
     // Activation stack.
     stack: Vec<Activation>,
+}
+
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub enum ExecutionResult {
+    Complete(Var),
+    More,
 }
 
 macro_rules! binary_bool_op {
@@ -245,12 +60,6 @@ macro_rules! binary_var_op {
         let result = lhs.$op(&rhs);
         $act.push(&result)
     };
-}
-
-#[derive(Eq, PartialEq, Debug, Clone)]
-pub enum ExecutionResult {
-    Complete(Var),
-    More,
 }
 
 impl VM {
@@ -518,7 +327,7 @@ impl VM {
                 self.push(&val);
             }
             Op::Imm(slot) => {
-                // Peek ahead to see if the next operation is 'pop' and if so, just throw away.
+                // TODO Peek ahead to see if the next operation is 'pop' and if so, just throw away.
                 // MOO uses this to optimize verbdoc/comments, etc.
                 // match self.top().lookahead() {
                 //     Some(Op::Pop) => {
@@ -751,7 +560,8 @@ impl VM {
                 self.push(&result);
             }
             // TODO MOO has odd semantics where it can clear a range of a string by assigning in
-            // a value than the stated from..to range, or expand by inserting a larger value, etc.
+            // a value smaller than the stated from..to range, or expand by inserting a larger
+            // value, etc.
             Op::RangeSet => {
                 let (value, to, from, base) = (self.pop(), self.pop(), self.pop(), self.pop());
                 match (to, from) {
