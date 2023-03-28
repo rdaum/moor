@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Div, Mul, Neg, Sub};
 
 use decorum::{Real, R64};
 use int_enum::IntEnum;
@@ -32,6 +32,72 @@ pub enum Error {
     E_FLOAT = 15,
 }
 
+pub struct ErrorPack {
+    pub code: Error,
+    pub msg: String,
+    pub value: Var,
+}
+
+impl Error {
+    pub fn message(&self) -> &str {
+        match self {
+            Error::E_NONE => "No error",
+            Error::E_TYPE => "Type mismatch",
+            Error::E_DIV => "Division by zero",
+            Error::E_PERM => "Permission denied",
+            Error::E_PROPNF => "Property not found",
+            Error::E_VERBNF => "Verb not found",
+            Error::E_VARNF => "Variable not found",
+            Error::E_INVIND => "Invalid indirection",
+            Error::E_RECMOVE => "Recursive move",
+            Error::E_MAXREC => "Too many verb calls",
+            Error::E_RANGE => "Range error",
+            Error::E_ARGS => "Incorrect number of arguments",
+            Error::E_NACC => "Move refused by destination",
+            Error::E_INVARG => "Invalid argument",
+            Error::E_QUOTA => "Resource limit exceeded",
+            Error::E_FLOAT => "Floating-point arithmetic error",
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Error::E_NONE => "E_NONE",
+            Error::E_TYPE => "E_TYPE",
+            Error::E_DIV => "E_DIV",
+            Error::E_PERM => "E_PERM",
+            Error::E_PROPNF => "E_PROPNF",
+            Error::E_VERBNF => "E_VERBNF",
+            Error::E_VARNF => "E_VARNF",
+            Error::E_INVIND => "E_INVIND",
+            Error::E_RECMOVE => "E_RECMOVE",
+            Error::E_MAXREC => "E_MAXREC",
+            Error::E_RANGE => "E_RANGE",
+            Error::E_ARGS => "E_ARGS",
+            Error::E_NACC => "E_NACC",
+            Error::E_INVARG => "E_INVARG",
+            Error::E_QUOTA => "E_QUOTA",
+            Error::E_FLOAT => "E_FLOAT",
+        }
+    }
+
+    pub fn make_raise_pack(&self, msg: String, value: Var) -> ErrorPack {
+        ErrorPack {
+            code: *self,
+            msg,
+            value,
+        }
+    }
+
+    pub fn make_error_pack(&self) -> ErrorPack {
+        ErrorPack {
+            code: *self,
+            msg: self.message().to_string(),
+            value: Var::None,
+        }
+    }
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
@@ -59,9 +125,10 @@ pub enum Var {
     Err(Error),
     List(Vec<Var>),
 
-    // Special for parse
+    // Special for exception handling
     _Catch(usize),
     _Finally(usize),
+    _Label(usize),
 }
 
 macro_rules! binary_numeric_coercion_op {

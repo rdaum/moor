@@ -1,14 +1,10 @@
 use enumset::EnumSet;
-use int_enum::IntEnum;
-use itertools::Itertools;
 
 use crate::model::objects::ObjFlag;
-use crate::model::permissions::Permissions;
+use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, Objid, Var};
-use crate::model::ObjDB;
 use crate::vm::activation::Activation;
 use crate::vm::execute::FinallyReason::Fallthrough;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -17,11 +13,25 @@ use crate::vm::state::{PersistentState, StateError};
 #[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
     Fallthrough,
-    Raise{code: Error, msg: String, value: Var, stack: Vec<Var>},
-    Uncatch,
+    Raise {
+        code: Error,
+        msg: String,
+        value: Var,
+        stack: Vec<Var>,
+    },
+    Uncaught {
+        code: Error,
+        msg: String,
+        value: Var,
+        stack: Vec<Var>,
+        backtrace: Vec<Var>,
+    },
     Return(Var),
     Abort,
-    Exit{stack: usize, label: usize}
+    Exit {
+        stack: usize,
+        label: usize,
+    },
 }
 
 pub enum ExecutionOutcome {
@@ -42,20 +52,23 @@ pub enum ExecutionResult {
 }
 
 macro_rules! binary_bool_op {
-    ( $act:ident, $op:tt ) => {
-        let rhs = $act.pop();
-        let lhs = $act.pop();
+    ( $self:ident, $op:tt ) => {
+        let rhs = $self.pop();
+        let lhs = $self.pop();
         let result = if lhs $op rhs { 1 } else { 0 };
-        $act.push(&Var::Int(result))
+        $self.push(&Var::Int(result))
     };
 }
 
 macro_rules! binary_var_op {
-    ( $act:ident, $op:tt ) => {
-        let rhs = $act.pop();
-        let lhs = $act.pop();
+    ( $self:ident, $op:tt ) => {
+        let rhs = $self.pop();
+        let lhs = $self.pop();
         let result = lhs.$op(&rhs);
-        $act.push(&result)
+        if let Var::Err(result) = result {
+            return $self.push_error(result);
+        }
+        $self.push(&result)
     };
 }
 
@@ -69,7 +82,198 @@ impl VM {
     pub fn new() -> Self {
         Self { stack: vec![] }
     }
-    pub fn raise_error(&mut self, _err: Error) {}
+
+    fn find_handler_active(&mut self, raise_code: Error) -> Option<(usize, &Activation)> {
+        // Scan activation frames and their stacks, looking for the first _Catch we can find.
+        for a in self.stack.iter().rev() {
+            let mut i = a.valstack.len();
+            while i > 0 {
+                if let Var::_Catch(cnt) = a.valstack[i-1] {
+                    // Found one, now scan forwards from 'cnt' backwards looking for either the first
+                    // non-list value, or a list containing the error code.
+                    // TODO check for 'cnt' being too large. not sure how to handle, tho
+                    // TODO this actually i think is wrong, it needs to pull two values off the stack
+                    for j in (i - cnt)..i {
+                        if let Var::List(codes) = &a.valstack[j] {
+                            if codes.contains(&Var::Err(raise_code)) {
+                                return Some((i, a));
+                            }
+                        } else {
+                            return Some((i, a));
+                        }
+                    }
+                }
+                i = i - 1;
+            }
+        }
+        None
+    }
+
+    fn make_stack_list(&self, frames: &Vec<Activation>, start_frame_num: usize) -> Vec<Var> {
+        // TODO LambdaMOO had logic in here about 'root_vector' and 'line_numbers_too' that I haven't included yet.
+
+        let mut stack_list = vec![];
+        for (i, a) in frames.iter().rev().enumerate() {
+            if i < start_frame_num {
+                continue;
+            }
+            // Produce traceback line for each activation frame and append to stack_list
+            // Should include line numbers (if possible), the name of the currently running verb,
+            // its definer, its location, and the current player, and 'this'.
+            let traceback_entry = vec![
+                Var::Obj(a.this),
+                Var::Str(a.verb.clone()),
+                Var::Obj(a.definer),
+                Var::Obj(a.verb_owner),
+                Var::Obj(a.player),
+                // TODO: find_line_number and add here.
+            ];
+
+            stack_list.push(Var::List(traceback_entry));
+        }
+        stack_list
+    }
+
+    fn error_backtrace_list(&self, raise_msg: &str) -> Vec<Var> {
+        // Walk live activation frames and produce a written representation of a traceback for each
+        // frame.
+        let mut backtrace_list = vec![];
+        for (i, a) in self.stack.iter().rev().enumerate() {
+            let mut pieces = vec![];
+            if i != 0 {
+                pieces.push(format!("... called from "));
+            }
+            pieces.push(format!("#{}:{}", a.definer.0, a.verb));
+            if a.definer != a.this {
+                pieces.push(format!(" (this == #{})", a.this.0));
+            }
+            // TODO line number
+            if i == self.stack.len() - 1 {
+                pieces.push(format!(": {}", raise_msg));
+            }
+            // TODO builtin-function name if a builtin
+
+            let piece = pieces.join("");
+            backtrace_list.push(Var::Str(piece))
+        }
+        backtrace_list.push(Var::Str(String::from("(End of traceback)")));
+        backtrace_list
+    }
+
+    fn raise_error_pack(&mut self, p: ErrorPack) -> Result<ExecutionResult, anyhow::Error> {
+        // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
+        let handler_activ = self.find_handler_active(p.code);
+
+        let why = if let Some((handler_active_num, _)) = handler_activ {
+            FinallyReason::Raise {
+                code: p.code,
+                msg: p.msg,
+                value: p.value,
+                stack: self.make_stack_list(&self.stack, handler_active_num),
+            }
+        } else {
+            FinallyReason::Uncaught {
+                code: p.code,
+                msg: p.msg.clone(),
+                value: p.value,
+                stack: self.make_stack_list(&self.stack, 0),
+                backtrace: self.error_backtrace_list(p.msg.as_str()),
+            }
+        };
+
+        return self.unwind_stack(why);
+    }
+
+    fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+        self.push(&Var::Err(code));
+        return self.raise_error_pack(code.make_error_pack());
+    }
+
+    fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+        return self.raise_error_pack(code.make_error_pack());
+    }
+
+    fn unwind_stack(&mut self, why: FinallyReason) -> Result<ExecutionResult, anyhow::Error> {
+        // Walk activation stack from bottom to top, tossing frames as we go.
+        while let Some(a) = self.stack.last_mut() {
+            // Pop the value stack seeking finally/catch handler values.
+            while let Some(v) = a.valstack.pop() {
+                match v {
+                    Var::_Finally(label) => {
+                        /* FINALLY handler */
+                        let why_num = match why {
+                            Fallthrough => 0x00,
+                            FinallyReason::Raise { .. } => 0x01,
+                            FinallyReason::Uncaught { .. } => 0x02,
+                            FinallyReason::Return(_) => 0x03,
+                            FinallyReason::Abort => continue,
+                            FinallyReason::Exit { .. } => 0x05,
+                        };
+                        a.jump(label);
+                        a.push(Var::Int(why_num));
+                        return Ok(ExecutionResult::More);
+                    }
+                    Var::_Catch(_label) => {
+                        /* TRY-EXCEPT or `expr ! ...' handler */
+                        let FinallyReason::Raise{code, value, ..} = &why else {
+                            continue
+                        };
+                        // Jump further back the value stack looking for an list of errors + labels
+                        // we will match on.
+                        let mut found = false;
+                        if a.valstack.len() >= 2 {
+                            match (a.valstack.pop(), a.valstack.pop()) {
+                                (Some(Var::_Label(pushed_label)), Some(Var::List(error_codes))) => {
+                                    if error_codes.contains(&Var::Err(*code)) {
+                                        a.jump(pushed_label);
+                                        found = true;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        if found {
+                            a.push(value.clone());
+                            return Ok(ExecutionResult::More);
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+            if let FinallyReason::Exit {  label, .. } = why {
+                a.jump(label);
+                return Ok(ExecutionResult::More);
+            }
+
+            // If we're doing a return, and this is the last activation, we're done and just pass
+            // the returned value up out of the interpreter loop.
+            // Otherwise pop off this activation, and continue unwinding.
+            if let FinallyReason::Return(value) = &why {
+                if self.stack.len() == 1 {
+                    return Ok(ExecutionResult::Complete(value.clone()));
+                }
+            }
+
+            self.stack.pop().expect("Stack underflow");
+
+            if self.stack.is_empty() {
+                return Ok(ExecutionResult::Complete(Var::None));
+            }
+            // TODO builtin function unwinding stuff
+
+            // If it was a return that brought us here, stick it onto the end of the next
+            // activation's value stack.
+            // (Unless we're the final activation, in which case that should have been handled
+            // above)
+            if let FinallyReason::Return(value) = why {
+                self.push(&value);
+                return Ok(ExecutionResult::More);
+            }
+        }
+
+        // We realistically should not get here...
+        panic!("Unwound stack to empty, but no exit condition was hit");
+    }
 
     fn top_mut(&mut self) -> &mut Activation {
         self.stack.last_mut().expect("activation stack underflow")
@@ -103,10 +307,6 @@ impl VM {
         self.top_mut().environment[id] = v.clone();
     }
 
-    fn rewind(&mut self, amt: usize) {
-        self.top_mut().rewind(amt);
-    }
-
     fn peek(&self, amt: usize) -> Vec<Var> {
         self.top().peek(amt)
     }
@@ -119,38 +319,36 @@ impl VM {
         self.top().peek_at(0).expect("stack underflow")
     }
 
-    fn poke(&mut self, pos: usize, v: &Var) {
-        self.top_mut().poke(pos, v);
-    }
-
     fn get_prop(
         &mut self,
         state: &dyn PersistentState,
         player_flags: EnumSet<ObjFlag>,
         propname: Var,
         obj: Var,
-    ) -> Var {
+    ) -> Result<ExecutionResult, anyhow::Error> {
         let Var::Str(propname) = propname else {
-            return Var::Err(E_TYPE);
+            return self.push_error(E_TYPE);
         };
 
         let Var::Obj(obj) = obj else {
-            return Var::Err(E_INVIND);
+            return self.push_error(E_INVIND);
         };
 
-        match state.retrieve_property(obj, propname.as_str(), player_flags) {
+        let v = match state.retrieve_property(obj, propname.as_str(), player_flags) {
             Ok(v) => v,
             Err(e) => match e.downcast_ref::<StateError>() {
-                Some(StateError::PropertyPermissionDenied(_, _)) => Var::Err(E_PERM),
-                Some(StateError::PropertyNotFound(_, _)) => Var::Err(E_PROPNF),
+                Some(StateError::PropertyPermissionDenied(_, _)) => return self.push_error(E_PERM),
+                Some(StateError::PropertyNotFound(_, _)) => return self.push_error(E_PROPNF),
                 _ => {
                     panic!("Unexpected error in property retrieval: {:?}", e);
                 }
             },
-        }
+        };
+        self.push(&v);
+        Ok(ExecutionResult::More)
     }
 
-    pub fn call_verb(
+    fn call_verb(
         &mut self,
         state: &mut impl PersistentState,
         this: Objid,
@@ -160,8 +358,7 @@ impl VM {
     ) -> Result<ExecutionResult, anyhow::Error> {
         let this = if do_pass {
             if !state.valid(self.top().definer)? {
-                self.push(&Var::Err(E_INVIND));
-                return Ok(ExecutionResult::More);
+                return self.push_error(E_INVIND);
             }
             state.parent_of(this)?
         } else {
@@ -169,13 +366,11 @@ impl VM {
         };
 
         if !state.valid(this)? {
-            self.push(&Var::Err(E_INVIND));
-            return Ok(ExecutionResult::More);
+            return self.push_error(E_INVIND);
         }
         // find callable verb
         let Ok((binary, verbinfo)) = state.retrieve_verb(this, verb.as_str()) else {
-            self.push(&Var::Err(E_VERBNF));
-            return Ok(ExecutionResult::More);
+            return self.push_error(E_VERBNF);
         };
         let top = self.top();
         let a = Activation::new_for_method(
@@ -199,13 +394,16 @@ impl VM {
         state: &mut impl PersistentState,
         obj: Objid,
         verb_name: &str,
-        do_pass: bool,
+        _do_pass: bool,
         this: Objid,
         player: Objid,
         player_flags: EnumSet<ObjFlag>,
         caller: Objid,
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
+        // TODO do_pass
+        // TODO stack traces, error catch etc?
+
         let (binary, vi) = match state.retrieve_verb(obj, verb_name) {
             Ok(binary) => binary,
             Err(e) => {
@@ -241,7 +439,6 @@ impl VM {
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
-        println!("trace: {:?}", op);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -266,15 +463,16 @@ impl VM {
                 // for now and revisit later.
                 let (count, list) = (&self.pop(), &self.pop());
                 let Var::Int(count) = count else {
-                    self.raise_error(Error::E_TYPE);
-                    self.jump(label);
-                    return Ok(ExecutionResult::More);
+                    return self.raise_error(E_TYPE);
+
+                    // LambdaMOO had a raise followed by jump. Not clear how that would work.
+                    // Watch out for bugs here. Same below
+                    // self.jump(label);
                 };
                 let count = *count as usize;
                 let Var::List(l) = list else {
-                    self.raise_error(Error::E_TYPE);
-                    self.jump(label);
-                    return Ok(ExecutionResult::More);
+                    return self.raise_error(E_TYPE);
+                    // self.jump(label);
                 };
 
                 // If we've exhausted the list, pop the count and list and jump out.
@@ -317,8 +515,7 @@ impl VM {
                         Var::Obj(Objid(from_o.0 + 1))
                     }
                     (_, _) => {
-                        self.raise_error(E_TYPE);
-                        return Ok(ExecutionResult::More);
+                        return self.raise_error(E_TYPE);
                     }
                 };
 
@@ -335,24 +532,24 @@ impl VM {
             Op::Imm(slot) => {
                 // TODO Peek ahead to see if the next operation is 'pop' and if so, just throw away.
                 // MOO uses this to optimize verbdoc/comments, etc.
-                // match self.top().lookahead() {
-                //     Some(Op::Pop) => {
-                //         // skip
-                //         self.top_mut().skip();
-                //         return Ok(ExecutionResult::More);
-                //     }
-                //     _ => {}
-                // }
-                let value = self.top().binary.literals[slot].clone();
-                self.push(&value);
+                match self.top().lookahead() {
+                    Some(Op::Pop) => {
+                        // skip
+                        self.top_mut().skip();
+                        return Ok(ExecutionResult::More);
+                    }
+                    _ => {
+                        let value = self.top().binary.literals[slot].clone();
+                        self.push(&value);
+                    }
+                }
             }
             Op::MkEmptyList => self.push(&Var::List(vec![])),
             Op::ListAddTail => {
                 let tail = self.pop();
                 let list = self.pop();
                 let Var::List(list) = list else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More);
+                    return self.push_error(E_TYPE);
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
@@ -365,13 +562,11 @@ impl VM {
                 let tail = self.pop();
                 let list = self.pop();
                 let Var::List(list) = list else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More);
+                    return self.push_error(E_TYPE);
                 };
 
                 let Var::List(tail) = tail else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More);
+                    return self.push_error(E_TYPE);
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
@@ -387,8 +582,7 @@ impl VM {
                 let nval = match (list, index) {
                     (Var::List(l), Var::Int(i)) => {
                         if i < 0 || !i < l.len() as i64 {
-                            self.push(&Var::Err(E_RANGE));
-                            return Ok(ExecutionResult::More);
+                            return self.push_error(E_RANGE);
                         }
 
                         let mut nval = l;
@@ -397,18 +591,15 @@ impl VM {
                     }
                     (Var::Str(s), Var::Int(i)) => {
                         if i < 0 || !i < s.len() as i64 {
-                            self.push(&Var::Err(E_RANGE));
-                            return Ok(ExecutionResult::More);
+                            return self.push_error(E_RANGE);
                         }
 
                         let Var::Str(value) = value else {
-                            self.push(&Var::Err(E_INVARG));
-                            return Ok(ExecutionResult::More);
+                            return self.push_error(E_INVARG);
                         };
 
                         if value.len() != 1 {
-                            self.push(&Var::Err(E_INVARG));
-                            return Ok(ExecutionResult::More);
+                            return self.push_error(E_INVARG);
                         }
 
                         let i = i as usize;
@@ -418,8 +609,7 @@ impl VM {
                         Var::Str(head)
                     }
                     (_, _) => {
-                        self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More);
+                        return self.push_error(E_TYPE);
                     }
                 };
                 self.push(&nval);
@@ -457,7 +647,11 @@ impl VM {
             Op::In => {
                 let lhs = self.pop();
                 let rhs = self.pop();
-                self.push(&lhs.has_member(&rhs));
+                let r = lhs.has_member(&rhs);
+                if let Var::Err(e) = r {
+                    return self.push_error(e);
+                }
+                self.push(&r);
             }
             Op::Mul => {
                 binary_var_op!(self, mul);
@@ -500,7 +694,7 @@ impl VM {
             Op::Push(ident) => {
                 let v = self.get_env(ident);
                 match v {
-                    Var::None => self.push(&Var::Err(E_VARNF)),
+                    Var::None => return self.push_error(E_VARNF),
                     _ => self.push(&v),
                 }
             }
@@ -514,12 +708,14 @@ impl VM {
                 let v = match (index, list) {
                     (Var::Int(index), Var::List(list)) => {
                         if index <= 0 || !index < list.len() as i64 {
-                            Var::Err(E_RANGE)
+                            return self.push_error(E_RANGE)
                         } else {
                             list[index as usize].clone()
                         }
                     }
-                    (_, _) => Var::Err(E_TYPE),
+                    (_, _) => {
+                        return self.push_error(E_TYPE)
+                    },
                 };
                 self.push(&v);
             }
@@ -527,8 +723,7 @@ impl VM {
                 let index = self.pop();
                 let l = self.pop();
                 let Var::Int(index) = index else {
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More);
+                    return self.push_error(E_TYPE);
                 };
                 // MOO is 1-indexed.
                 let index = (index - 1) as usize;
@@ -543,7 +738,7 @@ impl VM {
                         match base {
                             Var::Str(base) => {
                                 if !to < base.len() || !from < base.len() {
-                                    Var::Err(E_RANGE)
+                                    return self.push_error(E_RANGE)
                                 } else {
                                     let substr = &base[from..=to];
                                     Var::Str(String::from(substr))
@@ -551,16 +746,16 @@ impl VM {
                             }
                             Var::List(base) => {
                                 if !to < base.len() || !from < base.len() {
-                                    Var::Err(E_RANGE)
+                                    return self.push_error(E_RANGE)
                                 } else {
                                     let sublist = &base[from..=to];
                                     Var::List(Vec::from(sublist))
                                 }
                             }
-                            _ => Var::Err(E_TYPE),
+                            _ => return self.push_error(E_TYPE),
                         }
                     }
-                    (_, _) => Var::Err(E_TYPE),
+                    (_, _) => return self.push_error(E_TYPE),
                 };
                 self.push(&result);
             }
@@ -578,7 +773,7 @@ impl VM {
                                     || !from < base.len()
                                     || to - from + 1 != value.len()
                                 {
-                                    Var::Err(E_RANGE)
+                                    return self.push_error(E_RANGE);
                                 } else {
                                     let mut chars = base.chars().collect::<Vec<char>>();
                                     chars.splice(from..=to, value.chars());
@@ -590,7 +785,7 @@ impl VM {
                                     || !from < base.len()
                                     || to - from + 1 != value.len()
                                 {
-                                    Var::Err(E_RANGE)
+                                    return self.push_error(E_RANGE);
                                 } else {
                                     let mut list = base;
                                     list.splice(from..=to, value);
@@ -598,15 +793,13 @@ impl VM {
                                 }
                             }
                             _ => {
-                                self.push(&Var::Err(E_TYPE));
-                                return Ok(ExecutionResult::More);
+                                return self.push_error(E_TYPE);
                             }
                         };
                         self.push(&result);
                     }
                     _ => {
-                        self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More);
+                        return self.push_error(E_TYPE);
                     }
                 }
             }
@@ -616,7 +809,7 @@ impl VM {
             Op::GPush { id } => {
                 let v = self.get_env(id);
                 match v {
-                    Var::None => self.push(&Var::Err(E_VARNF)),
+                    Var::None => return self.push_error(E_VARNF),
                     _ => {
                         self.push(&v);
                     }
@@ -628,28 +821,25 @@ impl VM {
                     Var::Str(s) => self.push(&Var::Int(s.len() as i64)),
                     Var::List(l) => self.push(&Var::Int(l.len() as i64)),
                     _ => {
-                        self.push(&Var::Err(E_TYPE));
+                        return self.push_error(E_TYPE);
                     }
                 }
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                let prop = self.get_prop(state, self.top().player_flags, propname, obj);
-                self.push(&prop);
+                return self.get_prop(state, self.top().player_flags, propname, obj);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                let pop = self.get_prop(state, self.top().player_flags, propname, obj);
-                self.push(&pop);
+                return self.get_prop(state, self.top().player_flags, propname, obj);
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
                 let (propname, obj) = match (propname, obj) {
                     (Var::Str(propname), Var::Obj(obj)) => (propname, obj),
                     (_, _) => {
-                        self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More);
+                        return self.push_error(E_TYPE);
                     }
                 };
                 match state.update_property(obj, &propname, self.top().player_flags, &rhs) {
@@ -657,14 +847,14 @@ impl VM {
                         self.push(&Var::None);
                     }
                     Err(e) => match e.downcast_ref::<StateError>() {
-                        _ => {
-                            panic!("Unexpected error in property update: {:?}", e);
-                        }
                         Some(StateError::PropertyNotFound(_, _)) => {
-                            self.push(&Var::Err(E_PROPNF));
+                            return self.push_error(E_PROPNF);
                         }
                         Some(StateError::PropertyPermissionDenied(_, _)) => {
-                            self.push(&Var::Err(E_PERM));
+                            return self.push_error(E_PERM);
+                        }
+                        _ => {
+                            panic!("Unexpected error in property update: {:?}", e);
                         }
                     },
                 }
@@ -678,8 +868,7 @@ impl VM {
                 let (args, verb, obj) = match (args, verb, obj) {
                     (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
                     _ => {
-                        self.push(&Var::Err(E_TYPE));
-                        return Ok(ExecutionResult::More);
+                        return self.push_error(E_TYPE);
                     }
                 };
                 // TODO: check obj for validity, return E_INVIND if not
@@ -696,12 +885,12 @@ impl VM {
             Op::Done => {
                 return self.unwind_stack(FinallyReason::Return(Var::None));
             }
-            Op::FuncCall { id } => {
-                // TODO Actually perform call. For now we just fake a return value.
-                self.push(&Var::Err(E_PERM));
+            Op::FuncCall { .. } => {
+                // TODO Actually perform call. For now we just raise permissions.
+                return self.push_error(E_PERM);
             }
             Op::PushLabel(label) => {
-                self.push(&Var::Int(label as i64));
+                self.push(&Var::_Label(label));
             }
             Op::TryFinally(label) => {
                 self.push(&Var::_Finally(label));
@@ -712,13 +901,9 @@ impl VM {
             Op::TryExcept(label) => {
                 self.push(&Var::_Catch(label));
             }
-            Op::EndCatch(label)  | Op::EndExcept(label) => {
+            Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = op == Op::EndCatch(label);
-                let v = if is_catch {
-                    self.pop()
-                } else {
-                    Var::None
-                };
+                let v = if is_catch { self.pop() } else { Var::None };
                 let marker = self.pop();
                 let Var::_Catch(marker) = marker else {
                     panic!("Stack marker is not type Catch");
@@ -747,28 +932,26 @@ impl VM {
                 self.jump(label);
                 return Ok(ExecutionResult::More);
             }
-            Op::Exit{stack, label} => {
-                return self.unwind_stack(FinallyReason::Exit{stack, label});
+            Op::Exit { stack, label } => {
+                return self.unwind_stack(FinallyReason::Exit { stack, label });
             }
             Op::Scatter {
                 nargs,
                 nreq,
-                nrest,
                 labels,
                 done,
+                ..
             } => {
                 let list = self.peek_top();
                 let Var::List(list) = list else {
                     self.pop();
-                    self.push(&Var::Err(E_TYPE));
-                    return Ok(ExecutionResult::More);
+                    return self.push_error(E_TYPE);
                 };
 
                 let len = list.len();
                 if len < nreq {
                     self.pop();
-                    self.push(&Var::Err(E_ARGS));
-                    return Ok(ExecutionResult::More);
+                    return self.push_error(E_ARGS);
                 }
 
                 assert_eq!(nargs, labels.len());
@@ -779,8 +962,7 @@ impl VM {
                     match label {
                         ScatterLabel::Required(id) => {
                             let Some(arg) = args_iter.next() else {
-                                self.push(&Var::Err(E_ARGS));
-                                return Ok(ExecutionResult::More);
+                                return self.push_error(E_ARGS);
                             };
 
                             self.set_env(*id, &arg);
@@ -817,95 +999,26 @@ impl VM {
         }
         Ok(ExecutionResult::More)
     }
-
-    fn unwind_stack(
-        &mut self,
-        why: FinallyReason,
-    ) -> Result<ExecutionResult, anyhow::Error> {
-        // Walk activation stack from bottom to top, tossing frames as we go.
-        while let Some(a) = self.stack.last_mut() {
-            // Pop the value stack seeking finally/catch handler values.
-            for v in a.valstack.pop() {
-                match v {
-                    Var::_Finally(label) => {
-                        /* FINALLY handler */
-                        let why_num = match why {
-                            Fallthrough => 0x00,
-                            FinallyReason::Raise { .. } => 0x01,
-                            FinallyReason::Uncatch => 0x02,
-                            FinallyReason::Return(_) => 0x03,
-                            FinallyReason::Abort => continue,
-                            FinallyReason::Exit { .. } => 0x05
-                        };
-                        a.jump(label);
-                        a.push(Var::Int(why_num));
-                        return Ok(ExecutionResult::More)
-                    },
-                    Var::_Catch(label) => {
-                        /* TRY-EXCEPT or `expr ! ...' handler */
-                        let FinallyReason::Raise{code, msg, value, stack} = why else {
-                            continue
-                        };
-                        unimplemented!("unwind_stack: try-except")
-                    },
-                    _ => continue
-                }
-            }
-            if let FinallyReason::Exit{stack, label} = why {
-                a.jump(label);
-                return Ok(ExecutionResult::More);
-            }
-
-            // If we're doing a return, and this is the last activation, we're done and just pass
-            // the returned value up out of the interpreter loop.
-            // Otherwise pop off this activation, and continue unwinding.
-            if let FinallyReason::Return(value) = &why {
-                if self.stack.len() == 1 {
-                    return Ok(ExecutionResult::Complete(value.clone()));
-                }
-            }
-
-            self.stack.pop().expect("Stack underflow");
-
-            if self.stack.is_empty() {
-                return Ok(ExecutionResult::Complete(Var::None))
-            }
-            // TODO builtin function unwinding stuff
-
-            // If it was a return that brought us here, stick it onto the end of the next
-            // activation's value stack.
-            // (Unless we're the final activation, in which case that should have been handled
-            // above)
-            if let FinallyReason::Return(value) = why {
-                self.push(&value);
-                return Ok(ExecutionResult::More);
-            }
-        }
-
-        // We realistically should not get here...
-        panic!("Unwound stack to empty, but no exit condition was hit");
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use anyhow::Error;
+    use enumset::EnumSet;
+
     use crate::compiler::codegen::compile;
     use crate::compiler::parse::Names;
     use crate::model::objects::ObjFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VARNF, E_VERBNF};
-    use crate::model::var::Var::Obj;
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
+    use crate::vm::opcode::Op::*;
     use crate::vm::state::{PersistentState, StateError};
-    use anyhow::Error;
-    use enumset::EnumSet;
-    use rusqlite::named_params;
-    use std::collections::HashMap;
-    use std::env::var;
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -941,12 +1054,6 @@ mod tests {
                     },
                 ),
             );
-        }
-
-        fn compile_verb(&mut self, o: Objid, name: &str, code: &str) -> Binary {
-            let binary = compile(code).unwrap();
-            self.set_verb(o, name, &binary);
-            binary
         }
     }
 
@@ -1018,7 +1125,7 @@ mod tests {
             &self,
             obj: Objid,
             pname: &str,
-            player_flags: EnumSet<ObjFlag>,
+            _player_flags: EnumSet<ObjFlag>,
         ) -> Result<Var, Error> {
             let p = self.properties.get(&(obj, pname.to_string()));
             match p {
@@ -1031,7 +1138,7 @@ mod tests {
             &mut self,
             obj: Objid,
             pname: &str,
-            player_flags: EnumSet<ObjFlag>,
+            _player_flags: EnumSet<ObjFlag>,
             value: &Var,
         ) -> Result<(), Error> {
             self.properties
@@ -1039,11 +1146,11 @@ mod tests {
             Ok(())
         }
 
-        fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+        fn parent_of(&mut self, _obj: Objid) -> Result<Objid, Error> {
             Ok(Objid(-1))
         }
 
-        fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
+        fn valid(&mut self, _obj: Objid) -> Result<bool, Error> {
             Ok(true)
         }
     }
@@ -1087,14 +1194,7 @@ mod tests {
         let mut state = MockState::new();
         prepare_test_verb("test", &mut state, vec![Imm(0), Pop, Done], vec![1.into()]);
         call_verb("test", &mut vm, &mut state);
-        assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
-        assert_eq!(vm.top().peek_at(0).unwrap(), Var::Int(1));
-        assert_eq!(vm.exec(&mut state).unwrap(), ExecutionResult::More);
-        assert_eq!(vm.top().stack_size(), 0);
-
-        let ExecutionResult::Complete(result) = vm.exec(&mut state).unwrap() else {
-            panic!("Expected Complete result");
-        };
+        let result = exec_vm(&mut vm, &mut state);
         assert_eq!(result, Var::None);
     }
 
@@ -1445,12 +1545,12 @@ mod tests {
     fn test_catch_expr() {
         let mut vm = VM::new();
         let mut state = MockState::new();
-        let program = "return {`x ! e_varnf => 666', `1 ! e_verbnf => 123'};";
+        let program = "return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};";
         let binary = compile(program).unwrap();
         set_test_verb("test", &mut state, binary);
         call_verb("test", &mut vm, &mut state);
         let result = exec_vm(&mut vm, &mut state);
-        assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(1)]));
+        assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(321)]));
     }
 
     #[test]

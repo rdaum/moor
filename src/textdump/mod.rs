@@ -205,7 +205,7 @@ impl<R: Read> TextdumpReader<R> {
 
     fn read_verb(&mut self) -> Result<Verb, anyhow::Error> {
         let header = self.read_string()?;
-        let (mut oid, mut verbnum): (i64, usize) = (0, 0);
+        let (oid, verbnum): (i64, usize);
         scan!(header.bytes() => "#{}:{}", oid, verbnum);
         let mut program = String::new();
         loop {

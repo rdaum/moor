@@ -154,7 +154,7 @@ struct VerbPivot {
 
 impl<'a> SQLiteTx<'a> {
     pub fn new(connection: &'a mut Connection) -> Result<Self, anyhow::Error> {
-        let mut tx = connection.transaction()?;
+        let tx = connection.transaction()?;
         let s = Self {
             tx: Some(tx),
             bincode_cfg: config::standard(),

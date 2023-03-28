@@ -76,7 +76,7 @@ impl CodegenState {
     }
 
     // Create an anonymous jump label at the current position and return its unique ID.
-    fn add_label(&mut self, name: Option<Name>) -> usize {
+    fn make_label(&mut self, name: Option<Name>) -> usize {
         let id = self.jumps.len();
         let position = self.ops.len();
         self.jumps.push(JumpLabel {
@@ -98,7 +98,7 @@ impl CodegenState {
     }
 
     // Adjust the position of a jump label to the current position.
-    fn define_label(&mut self, id: usize) {
+    fn commit_label(&mut self, id: usize) {
         let position = self.ops.len();
         let jump = &mut self.jumps.get_mut(id).expect("Invalid jump fixup");
         let npos = position;
@@ -257,7 +257,7 @@ impl CodegenState {
                         ScatterKind::Required => ScatterLabel::Required(s.id.0),
                         ScatterKind::Optional => {
                             if s.expr.is_some() {
-                                ScatterLabel::Optional(s.id.0, Some(self.add_label(None)))
+                                ScatterLabel::Optional(s.id.0, Some(self.make_label(None)))
                             } else {
                                 ScatterLabel::Optional(s.id.0, None)
                             }
@@ -267,7 +267,7 @@ impl CodegenState {
                 )
             })
             .collect();
-        let done = self.add_label(None);
+        let done = self.make_label(None);
         self.emit(Op::Scatter {
             nargs,
             nreq,
@@ -280,14 +280,14 @@ impl CodegenState {
                 if !s.expr.is_some() {
                     continue;
                 }
-                self.define_label(label);
+                self.commit_label(label);
                 self.generate_expr(&s.expr.as_ref().unwrap())?;
                 self.emit(Op::Put(s.id.0));
                 self.emit(Op::Pop);
                 self.pop_stack(1);
             }
         }
-        self.define_label(done);
+        self.commit_label(done);
         Ok(())
     }
 
@@ -354,19 +354,19 @@ impl CodegenState {
             }
             Expr::And(left, right) => {
                 self.generate_expr(left.as_ref())?;
-                let end_label = self.add_label(None);
+                let end_label = self.make_label(None);
                 self.emit(Op::And(end_label));
                 self.pop_stack(1);
                 self.generate_expr(right.as_ref())?;
-                self.define_label(end_label);
+                self.commit_label(end_label);
             }
             Expr::Or(left, right) => {
                 self.generate_expr(left.as_ref())?;
-                let end_label = self.add_label(None);
+                let end_label = self.make_label(None);
                 self.emit(Op::Or(end_label));
                 self.pop_stack(1);
                 self.generate_expr(right.as_ref())?;
-                self.define_label(end_label);
+                self.commit_label(end_label);
             }
             Expr::Binary(op, l, r) => {
                 self.generate_expr(l)?;
@@ -452,16 +452,16 @@ impl CodegenState {
                 consequence,
             } => {
                 self.generate_expr(condition.as_ref())?;
-                let else_label = self.add_label(None);
+                let else_label = self.make_label(None);
                 self.emit(Op::IfQues(else_label));
                 self.pop_stack(1);
                 self.generate_expr(consequence.as_ref())?;
-                let end_label = self.add_label(None);
+                let end_label = self.make_label(None);
                 self.emit(Op::Jump { label: end_label });
                 self.pop_stack(1);
-                self.define_label(else_label);
+                self.commit_label(else_label);
                 self.generate_expr(alternative.as_ref())?;
-                self.define_label(end_label);
+                self.commit_label(end_label);
             }
             Expr::Catch {
                 codes,
@@ -469,16 +469,17 @@ impl CodegenState {
                 trye,
             } => {
                 self.generate_codes(codes)?;
-                let handler_label = self.add_label(None);
+                // Is this push-label necessary, if the Catch op could just be modified to hold it?
+                let handler_label = self.make_label(None);
                 self.emit(Op::PushLabel(handler_label));
                 self.push_stack(1);
                 self.emit(Op::Catch);
                 self.push_stack(1);
                 self.generate_expr(trye.as_ref())?;
-                let end_label = self.add_label(None);
-                self.emit(Op::EndCatch(handler_label));
+                let end_label = self.make_label(None);
+                self.emit(Op::EndCatch(end_label));
                 self.pop_stack(3)   /* codes, label, catch */;
-                self.define_label(handler_label);
+                self.commit_label(handler_label);
 
                 /* After this label, we still have a value on the stack, but now,
                  * instead of it being the value of the main expression, we have
@@ -495,7 +496,7 @@ impl CodegenState {
                         self.emit(Op::Ref);
                     }
                 }
-                self.define_label(end_label);
+                self.commit_label(end_label);
             }
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
@@ -513,17 +514,17 @@ impl CodegenState {
                 let mut end_label = None;
                 for arm in arms {
                     self.generate_expr(&arm.condition)?;
-                    let else_label = self.add_label(None);
+                    let else_label = self.make_label(None);
                     self.emit(Op::If(else_label));
                     self.pop_stack(1);
                     for stmt in &arm.statements {
                         self.generate_stmt(stmt)?;
                     }
-                    end_label = Some(self.add_label(None));
+                    end_label = Some(self.make_label(None));
                     self.emit(Op::Jump {
                         label: end_label.unwrap(),
                     });
-                    self.define_label(else_label);
+                    self.commit_label(else_label);
                 }
                 if !otherwise.is_empty() {
                     for stmt in otherwise {
@@ -531,7 +532,7 @@ impl CodegenState {
                     }
                 }
                 if end_label.is_some() {
-                    self.define_label(end_label.unwrap());
+                    self.commit_label(end_label.unwrap());
                 }
             }
             Stmt::ForList { id, expr, body } => {
@@ -541,9 +542,9 @@ impl CodegenState {
                 // we use 0 here to make it easier to implement the ForList instruction.
                 self.emit(Op::Val(Var::Int(0))); /* loop list index... */
                 self.push_stack(1);
-                let loop_top = self.add_label(Some(id.clone()));
-                self.define_label(loop_top);
-                let end_label = self.add_label(None);
+                let loop_top = self.make_label(Some(id.clone()));
+                self.commit_label(loop_top);
+                let end_label = self.make_label(None);
                 // TODO self.enter_loop/exit_loop needed?
                 self.emit(Op::ForList {
                     id: id.0,
@@ -559,14 +560,14 @@ impl CodegenState {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Jump { label: loop_top });
-                self.define_label(end_label);
+                self.commit_label(end_label);
                 self.pop_stack(2);
             }
             Stmt::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.add_label(Some(id.clone()));
-                let end_label = self.add_label(None);
+                let loop_top = self.make_label(Some(id.clone()));
+                let end_label = self.make_label(None);
                 self.emit(Op::ForRange {
                     id: id.0,
                     label: end_label,
@@ -581,7 +582,7 @@ impl CodegenState {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Jump { label: loop_top });
-                self.define_label(end_label);
+                self.commit_label(end_label);
                 self.pop_stack(2);
             }
             Stmt::While {
@@ -589,8 +590,8 @@ impl CodegenState {
                 condition,
                 body,
             } => {
-                let loop_start_label = self.add_label(*id);
-                let loop_end_label = self.add_label(None);
+                let loop_start_label = self.make_label(*id);
+                let loop_end_label = self.make_label(None);
                 self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While(loop_end_label)),
@@ -612,7 +613,7 @@ impl CodegenState {
                 self.emit(Op::Jump {
                     label: loop_start_label,
                 });
-                self.define_label(loop_end_label);
+                self.commit_label(loop_end_label);
             }
             Stmt::Fork { id, body, time } => {
                 self.generate_expr(time)?;
@@ -635,7 +636,7 @@ impl CodegenState {
                 let mut labels = vec![];
                 for ex in excepts {
                     self.generate_codes(&ex.codes)?;
-                    let push_label = self.add_label(None);
+                    let push_label = self.make_label(None);
                     self.emit(Op::PushLabel(push_label));
                     labels.push(push_label);
                     self.push_stack(1);
@@ -646,11 +647,11 @@ impl CodegenState {
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                let end_label = self.add_label(None);
+                let end_label = self.make_label(None);
                 self.emit(Op::EndExcept(end_label));
                 self.pop_stack(2 * arm_count + 1);
                 for (i, ex) in excepts.iter().enumerate() {
-                    self.define_label(labels[i]);
+                    self.commit_label(labels[i]);
                     self.push_stack(1);
                     if ex.id.is_some() {
                         self.emit(Op::Put(ex.id.unwrap().0));
@@ -661,17 +662,17 @@ impl CodegenState {
                         self.generate_stmt(stmt)?;
                     }
                     if i + 1 < excepts.len() {
-                        let arm_end_label = self.add_label(None);
+                        let arm_end_label = self.make_label(None);
                         self.emit(Op::Jump {
                             label: arm_end_label,
                         });
-                        self.define_label(arm_end_label);
+                        self.commit_label(arm_end_label);
                     }
                 }
-                self.define_label(end_label);
+                self.commit_label(end_label);
             }
             Stmt::TryFinally { body, handler } => {
-                let handler_label = self.add_label(None);
+                let handler_label = self.make_label(None);
                 self.emit(Op::TryFinally(handler_label));
                 self.push_stack(1);
                 for stmt in body {
@@ -679,7 +680,7 @@ impl CodegenState {
                 }
                 self.emit(Op::EndFinally);
                 self.pop_stack(1);
-                self.define_label(handler_label);
+                self.commit_label(handler_label);
                 self.push_stack(2); /* continuation value, reason */
                 for stmt in handler {
                     self.generate_stmt(stmt)?;
@@ -687,17 +688,27 @@ impl CodegenState {
                 self.emit(Op::Continue);
                 self.pop_stack(2);
             }
-            Stmt::Break { exit } | Stmt::Continue{exit}=> {
+            Stmt::Break { exit } | Stmt::Continue { exit } => {
+                let l = match exit {
+                    None => self.loops.last().expect("No loop to break/continue from"),
+                    Some(ln) => self.find_loop(ln).expect("invalid loop for break/continue")
+                };
                 if let Some(exit) = exit {
-                    let jump_label = self.find_label(exit).expect("invalid label for break/continue");
+                    let jump_label = self
+                        .find_label(exit)
+                        .expect("invalid label for break/continue");
                     self.emit(Op::ExitId(jump_label.id));
                 } else {
-                    let l = self.loops.last().expect("No loop to break/continue from");
-
-                    if let Stmt::Continue {exit} = stmt {
-                        self.emit(Op::Exit{ stack: l.top_stack, label: l.bottom_label })
+                    if let Stmt::Continue { .. } = stmt {
+                        self.emit(Op::Exit {
+                            stack: l.top_stack,
+                            label: l.bottom_label,
+                        })
                     } else {
-                        self.emit(Op::Exit{ stack: l.bottom_stack, label: l.bottom_label })
+                        self.emit(Op::Exit {
+                            stack: l.bottom_stack,
+                            label: l.bottom_label,
+                        })
                     }
                 }
             }
@@ -1119,7 +1130,7 @@ mod tests {
                 Imm(five),
                 Gt,
                 If(2),
-                ExitId(1),
+                ExitId(0),
                 Jump { label: 3 },
                 Jump { label: 0 },
                 Done,
@@ -1794,7 +1805,7 @@ mod tests {
                 Push(x),
                 Imm(one),
                 Add,
-                EndCatch(0),
+                EndCatch(1),
                 Pop,
                 Imm(svntn),
                 Put(x),

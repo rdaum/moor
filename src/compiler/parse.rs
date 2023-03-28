@@ -1,29 +1,28 @@
 use std::rc::Rc;
 use std::str::FromStr;
 
+use antlr_rust::{InputStream, Parser};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
 use antlr_rust::errors::ANTLRError;
-use antlr_rust::parser_rule_context::ParserRuleContext;
 use antlr_rust::recognizer::Recognizer;
 use antlr_rust::token::Token;
 use antlr_rust::token_factory::TokenFactory;
 use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
-use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
 use decorum::R64;
 use paste::paste;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
     Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
+use crate::compiler::ast::Expr::VarExpr;
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
-use crate::model::var::Var::{Obj, Str};
 use crate::model::var::{Error, Objid, Var};
+use crate::model::var::Var::{Obj, Str};
 
 pub struct VerbCompileErrorListener {
     pub program: String,
@@ -827,7 +826,7 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
     parser.add_error_listener(err_listener);
     let program_context = parser.program().unwrap();
 
-    let mut names = Names::new();
+    let names = Names::new();
     let mut astgen_visitor = ASTGenVisitor::new(names);
     program_context.accept(&mut astgen_visitor);
 
@@ -839,11 +838,11 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
     use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt};
-    use crate::compiler::parse::{parse_program, Name};
-    use crate::model::var::Var::Str;
+    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
+    use crate::compiler::parse::parse_program;
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Var::Str;
 
     #[test]
     fn test_parse_simple_var_assignment_precedence() {

@@ -9,17 +9,16 @@ use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
 use enumset::EnumSet;
-use int_enum::IntEnum;
 use rusqlite::Connection;
 
 use crate::compiler::codegen::compile;
 use crate::db::sqllite::SQLiteTx;
-use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{PropDefs, PropFlag, Properties};
+use crate::model::ObjDB;
+use crate::model::objects::{ObjAttrs, ObjFlag};
+use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
-use crate::model::verbs::{Program, VerbFlag, Verbs};
-use crate::model::ObjDB;
+use crate::model::verbs::{Program, VerbFlag};
 use crate::textdump::{Object, TextdumpReader};
 use crate::vm::execute::{ExecutionResult, VM};
 use crate::vm::state::ObjDBState;
@@ -93,7 +92,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error> {
-    let mut s: &mut dyn ObjDB = &mut SQLiteTx::new(conn)?;
+    let s: &mut dyn ObjDB = &mut SQLiteTx::new(conn)?;
     s.initialize()?;
 
     let jhcore = File::open(path)?;
@@ -120,12 +119,11 @@ fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error>
 
     // Pass 2 define props
     for (objid, o) in &td.objects {
-        for (pnum, p) in o.propvals.iter().enumerate() {
+        for (pnum, _) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                let pid =
-                    s.add_propdef(*objid, resolved.name.as_str(), resolved.owner, flags, None)?;
+                s.add_propdef(*objid, resolved.name.as_str(), resolved.owner, flags, None)?;
             }
         }
     }
@@ -159,7 +157,7 @@ fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error>
             let dobjflags = (v.flags >> VF_DOBJSHIFT) & VF_OBJMASK;
             let iobjflags = (v.flags >> VF_DOBJSHIFT) & VF_OBJMASK;
 
-            let mut argspec = VerbArgsSpec {
+            let argspec = VerbArgsSpec {
                 dobj: cv_aspec_flag(dobjflags),
                 prep: cv_prep_flag(v.prep),
                 iobj: cv_aspec_flag(iobjflags),

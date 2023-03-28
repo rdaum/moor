@@ -1,15 +1,15 @@
-use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
-use crate::model::props::{PropAttr, PropFlag};
-use crate::model::var::Error::E_VERBNF;
-use crate::model::var::{Objid, Var};
-use crate::model::verbs::{VerbAttr, VerbAttrs, VerbInfo};
-use crate::model::ObjDB;
-use crate::vm::opcode::Binary;
 use anyhow::{anyhow, Error};
 use bincode::config;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
 use thiserror::Error;
+
+use crate::model::ObjDB;
+use crate::model::objects::{ObjAttr, ObjFlag};
+use crate::model::props::{PropAttr, PropFlag};
+use crate::model::var::{Objid, Var};
+use crate::model::verbs::{VerbAttr, VerbInfo};
+use crate::vm::opcode::Binary;
 
 #[derive(Error, Debug)]
 pub enum StateError {

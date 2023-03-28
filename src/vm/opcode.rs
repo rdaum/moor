@@ -103,7 +103,10 @@ pub enum Op {
     },
     Continue,
     ExitId(usize),
-    Exit{stack: usize, label: usize}
+    Exit {
+        stack: usize,
+        label: usize,
+    },
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
