@@ -19,4 +19,6 @@ fn main() {
         .arg("src")
         .output()
         .expect("antlr tool failed to start");
+
+    println!("cargo:rerun-if-changed=grammar/moo.g4");
 }
