@@ -244,7 +244,7 @@ impl CodegenState {
             .iter()
             .filter(|s| s.kind == ScatterKind::Required)
             .count();
-        let rest = match scatter
+        let nrest = match scatter
             .iter()
             .positions(|s| s.kind == ScatterKind::Rest)
             .last()
@@ -252,50 +252,40 @@ impl CodegenState {
             None => nargs + 1,
             Some(rest) => rest + 1,
         };
-
-        let labels: Vec<_> = scatter
+        let labels: Vec<(&ScatterItem, ScatterLabel)> = scatter
             .iter()
             .map(|s| {
-                if s.kind == ScatterKind::Optional {
-                    // TODO "pseudo label" 0
-                    (
-                        s,
-                        ScatterLabel {
-                            id: s.id.0,
-                            label: self.add_label(None),
-                        },
-                    )
-                } else if (s.expr.is_none()) {
-                    (
-                        s,
-                        ScatterLabel {
-                            id: s.id.0,
-                            label: self.add_label(None),
-                        },
-                    )
-                } else {
-                    (
-                        s,
-                        ScatterLabel {
-                            id: s.id.0,
-                            label: self.add_label(None),
-                        },
-                    )
-                }
+                (
+                    s,
+                    match s.kind {
+                        ScatterKind::Required => ScatterLabel::Required(s.id.0),
+                        ScatterKind::Optional => {
+                            if s.expr.is_some() {
+                                ScatterLabel::Optional(s.id.0, Some(self.add_label(None)))
+                            } else {
+                                ScatterLabel::Optional(s.id.0, None)
+                            }
+                        }
+                        ScatterKind::Rest => ScatterLabel::Rest(s.id.0),
+                    },
+                )
             })
             .collect();
         let done = self.add_label(None);
         self.emit(Op::Scatter {
             nargs,
             nreq,
-            rest,
+            nrest,
             labels: labels.iter().map(|(_, l)| l.clone()).collect(),
             done,
         });
         for (s, label) in labels {
-            if s.kind == ScatterKind::Optional && s.expr.is_some() {
-                self.define_label(label.label);
-                self.generate_expr(s.expr.as_ref().unwrap())?;
+            if let ScatterLabel::Optional(_, Some(label)) = label {
+                if !s.expr.is_some() {
+                    continue;
+                }
+                self.define_label(label);
+                self.generate_expr(&s.expr.as_ref().unwrap())?;
                 self.emit(Op::Put(s.id.0));
                 self.emit(Op::Pop);
                 self.pop_stack(1);
@@ -549,7 +539,10 @@ impl CodegenState {
             }
             Stmt::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
-                self.emit(Op::Val(Var::Int(1))); /* loop list index... */
+
+                // Note that MOO is 1-indexed, so this is counter value is 1 in LambdaMOO;
+                // we use 0 here to make it easier to implement the ForList instruction.
+                self.emit(Op::Val(Var::Int(0))); /* loop list index... */
                 self.push_stack(1);
                 let loop_top = self.add_label(Some(id.clone()));
                 self.define_label(loop_top);
@@ -1212,7 +1205,7 @@ mod tests {
                 ListAddTail,
                 Imm(three),
                 ListAddTail,
-                Val(Var::Int(1)),
+                Val(Var::Int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
                 ForList { id: x, label: 1 },
                 Push(x),
                 Imm(five),
@@ -1233,8 +1226,8 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let player = binary.find_var("player");
-        let a = binary.find_var("a".into());
-        let n = binary.find_var("n".into());
+        let a = binary.find_var("a");
+        let n = binary.find_var("n");
         let tell = binary.find_literal("tell".into());
         let one = binary.find_literal(1.into());
         let five = binary.find_literal(5.into());
@@ -1315,7 +1308,7 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(five),
                 Fork {
                     f_index: 0,
                     id: Some(fid)
@@ -1493,16 +1486,7 @@ mod tests {
     fn test_string_get() {
         let program = "return \"test\"[1];";
         let binary = compile(program).unwrap();
-        assert_eq!(
-            binary.main_vector,
-            vec![
-                Imm(0),
-                Imm(1),
-                Ref,
-                Return,
-                Done
-            ]
-        );
+        assert_eq!(binary.main_vector, vec![Imm(0), Imm(1), Ref, Return, Done]);
     }
 
     #[test]
@@ -1511,14 +1495,7 @@ mod tests {
         let binary = compile(program).unwrap();
         assert_eq!(
             binary.main_vector,
-            vec![
-                Imm(0),
-                Imm(1),
-                Imm(2),
-                RangeRef,
-                Return,
-                Done
-            ]
+            vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done]
         );
     }
 
@@ -1823,7 +1800,7 @@ mod tests {
 
         let string_utils = binary.find_literal("string_utils".into());
         let from_list = binary.find_literal("from_list".into());
-        let test_string = binary.find_var("test_string".into());
+        let test_string = binary.find_var("test_string");
         let sysobj = binary.find_literal(Objid(0).into());
         /*
          0: 100 000               PUSH_LITERAL #0
@@ -1852,12 +1829,13 @@ mod tests {
 
     #[test]
     fn test_basic_scatter_assign() {
-        let program = "{connection} = args;";
+        let program = "{a, b, c} = args;";
         let binary = compile(program).unwrap();
+        let (a,b,c) = (binary.find_var("a"), binary.find_var("b"), binary.find_var("c"));
         /*
          0: 076                   PUSH args
          1: 112 013 001 001 002
-            018 000 009         * SCATTER 1/1/2: connection/0 9
+            018 000 009         * SCATTER 3/3/4: args/0 9
          9: 111                   POP
         */
 
@@ -1866,14 +1844,15 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 1,
-                    nreq: 1,
-                    rest: 2,
-                    labels: vec![ScatterLabel {
-                        id: binary.find_var("connection"),
-                        label: 0,
-                    }],
-                    done: 1,
+                    nargs: 3,
+                    nreq: 3,
+                    nrest: 4,
+                    labels: vec![
+                        ScatterLabel::Required(a),
+                        ScatterLabel::Required(b),
+                        ScatterLabel::Required(c),
+                    ],
+                    done: 0,
                 },
                 Pop,
                 Done
@@ -1885,6 +1864,11 @@ mod tests {
     fn test_more_scatter_assign() {
         let program = "{first, second, ?third = 0} = args;";
         let binary = compile(program).unwrap();
+        let (first, second, third) = (
+            binary.find_var("first"),
+            binary.find_var("second"),
+            binary.find_var("third"),
+        );
         /*
           0: 076                   PUSH args
           1: 112 013 003 002 004
@@ -1901,22 +1885,13 @@ mod tests {
                 Scatter {
                     nargs: 3,
                     nreq: 2,
-                    rest: 4,
+                    nrest: 4,
                     labels: vec![
-                        ScatterLabel {
-                            id: binary.find_var("first"),
-                            label: 0,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("second"),
-                            label: 1,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("third"),
-                            label: 2,
-                        }
+                        ScatterLabel::Required(first),
+                        ScatterLabel::Required(second),
+                        ScatterLabel::Optional(third, Some(0)),
                     ],
-                    done: 3,
+                    done: 1,
                 },
                 Imm(binary.find_literal(0.into())),
                 Put(binary.find_var("third")),
@@ -1942,6 +1917,12 @@ mod tests {
         18: 111                   POP
 
                 */
+        let (a, b, c, d) = (
+            binary.find_var("a"),
+            binary.find_var("b"),
+            binary.find_var("c"),
+            binary.find_var("d"),
+        );
         assert_eq!(
             binary.main_vector,
             vec![
@@ -1949,26 +1930,14 @@ mod tests {
                 Scatter {
                     nargs: 4,
                     nreq: 2,
-                    rest: 4,
+                    nrest: 4,
                     labels: vec![
-                        ScatterLabel {
-                            id: binary.find_var("a"),
-                            label: 0,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("b"),
-                            label: 1,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("c"),
-                            label: 2,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("d"),
-                            label: 3,
-                        }
+                        ScatterLabel::Required(a),
+                        ScatterLabel::Required(b),
+                        ScatterLabel::Optional(c, Some(0)),
+                        ScatterLabel::Rest(d),
                     ],
-                    done: 4,
+                    done: 1,
                 },
                 Imm(binary.find_literal(8.into())),
                 Put(binary.find_var("c")),
@@ -1983,6 +1952,14 @@ mod tests {
     fn test_even_more_scatter_assign() {
         let program = "{a, ?b, ?c = 8, @d, ?e = 9, f} = args;";
         let binary = compile(program).unwrap();
+        let (a,b,c,d,e,f) = (
+            binary.find_var("a"),
+            binary.find_var("b"),
+            binary.find_var("c"),
+            binary.find_var("d"),
+            binary.find_var("e"),
+            binary.find_var("f"),
+        );
         /*
           0: 076                   PUSH args
           1: 112 013 006 002 004
@@ -2004,34 +1981,16 @@ mod tests {
                 Scatter {
                     nargs: 6,
                     nreq: 2,
-                    rest: 4,
+                    nrest: 4,
                     labels: vec![
-                        ScatterLabel {
-                            id: binary.find_var("a"),
-                            label: 0,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("b"),
-                            label: 1,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("c"),
-                            label: 2,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("d"),
-                            label: 3,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("e"),
-                            label: 4,
-                        },
-                        ScatterLabel {
-                            id: binary.find_var("f"),
-                            label: 5,
-                        }
+                        ScatterLabel::Required(a),
+                        ScatterLabel::Optional(b, None),
+                        ScatterLabel::Optional(c, Some(0)),
+                        ScatterLabel::Rest(d),
+                        ScatterLabel::Optional(e, Some(1)),
+                        ScatterLabel::Required(f),
                     ],
-                    done: 6,
+                    done: 2,
                 },
                 Imm(binary.find_literal(8.into())),
                 Put(binary.find_var("c")),
@@ -2075,6 +2034,62 @@ mod tests {
                 PutProp,
                 Pop,
                 PushTemp,
+                Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_assignment_from_range() {
+        let program = r#"x = 1; y = {1,2,3}; x = x + y[2];"#;
+        let binary = compile(program).unwrap();
+
+        let x = binary.find_var("x");
+        let y = binary.find_var("y");
+
+        /*
+         0: 124                   NUM 1
+         1: 052                 * PUT x
+         2: 111                   POP
+         3: 124                   NUM 1
+         4: 016                 * MAKE_SINGLETON_LIST
+         5: 125                   NUM 2
+         6: 102                   LIST_ADD_TAIL
+         7: 126                   NUM 3
+         8: 102                   LIST_ADD_TAIL
+         9: 053                 * PUT y
+        10: 111                   POP
+        11: 085                   PUSH x
+        12: 086                   PUSH y
+        13: 125                   NUM 2
+        14: 014                 * INDEX
+        15: 021                 * ADD
+        16: 052                 * PUT x
+        17: 111                   POP
+        30: 110                   DONE
+        */
+
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0),
+                Put(x),
+                Pop,
+                Imm(0),
+                MakeSingletonList,
+                Imm(1),
+                ListAddTail,
+                Imm(2),
+                ListAddTail,
+                Put(y),
+                Pop,
+                Push(x),
+                Push(y),
+                Imm(1),
+                Ref,
+                Add,
+                Put(x),
                 Pop,
                 Done
             ]

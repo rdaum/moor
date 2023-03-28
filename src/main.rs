@@ -59,10 +59,10 @@ fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Opt
     resolve_prop(omap, offset, parent)
 }
 
-const VF_READ: u16 = 01;
-const VF_WRITE: u16 = 02;
-const VF_EXEC: u16 = 04;
-const VF_DEBUG: u16 = 010;
+const VF_READ: u16 = 1;
+const VF_WRITE: u16 = 2;
+const VF_EXEC: u16 = 4;
+const VF_DEBUG: u16 = 10;
 const VF_PERMMASK: u16 = 0xf;
 const VF_DOBJSHIFT: u16 = 4;
 const VF_IOBJSHIFT: u16 = 4;
@@ -165,7 +165,7 @@ fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error>
                 iobj: cv_aspec_flag(iobjflags),
             };
 
-            let names: Vec<&str> = v.name.split(" ").collect();
+            let names: Vec<&str> = v.name.split(' ').collect();
 
             let verb = match td.verbs.get(&(*objid, vn)) {
                 None => {

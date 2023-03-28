@@ -5,14 +5,14 @@ use crate::compiler::parse::Names;
 use crate::model::var::Var;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
-pub struct ScatterLabel {
-    pub id: usize,
-    pub label: usize,
+pub enum ScatterLabel {
+    Required(usize),
+    Rest(usize),
+    Optional(usize, Option<usize>),
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub enum Op {
-    Label(usize),
     If(usize),
     Eif(usize),
     IfQues(usize),
@@ -86,7 +86,7 @@ pub enum Op {
     Scatter {
         nargs: usize,
         nreq: usize,
-        rest: usize,
+        nrest: usize,
         labels: Vec<ScatterLabel>,
         done: usize,
     },

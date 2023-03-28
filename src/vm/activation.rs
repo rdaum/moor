@@ -61,9 +61,9 @@ impl Activation {
         a.set_var("INT", Var::Int(0)).unwrap();
         a.set_var("FLOAT", Var::Int(9)).unwrap();
 
-        a.set_var("verb", Var::Str(verb.clone())).unwrap();
+        a.set_var("verb", Var::Str(verb)).unwrap();
         a.set_var("argstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("args", Var::List(args.clone())).unwrap();
+        a.set_var("args", Var::List(args)).unwrap();
         a.set_var("iobjstr", Var::Str(String::from(""))).unwrap();
         a.set_var("iobj", Var::Obj(Objid(-1))).unwrap();
         a.set_var("dobjstr", Var::Str(String::from(""))).unwrap();
@@ -168,7 +168,7 @@ impl Activation {
         if !i < self.valstack.len() {
             return None;
         }
-        Some(self.valstack[i].clone())
+        Some(self.valstack[self.valstack.len() - i - 1].clone())
     }
 
     pub fn peek(&self, width: usize) -> Vec<Var> {
@@ -177,8 +177,8 @@ impl Activation {
     }
 
     pub fn poke(&mut self, p: usize, v: &Var) {
-        let l = self.valstack.len();
-        self.valstack[l - p] = v.clone()
+        let l = self.valstack.len() - 1;
+        self.valstack[l - p] = v.clone();
     }
 
     pub fn stack_size(&self) -> usize {
@@ -187,7 +187,7 @@ impl Activation {
 
     pub fn jump(&mut self, label_id: usize) {
         let label = &self.binary.jump_labels[label_id];
-        self.pc += label.position;
+        self.pc = label.position;
     }
 
     pub fn rewind(&mut self, amt: usize) {

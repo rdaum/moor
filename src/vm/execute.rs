@@ -1,18 +1,18 @@
-use anyhow::anyhow;
 use enumset::EnumSet;
 use int_enum::IntEnum;
+use itertools::Itertools;
 
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::Permissions;
 use crate::model::var::Error::{
-    E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, Objid, Var};
 use crate::model::ObjDB;
-use crate::vm::execute::FinallyReason::Fallthrough;
-use crate::vm::opcode::Op;
-use crate::vm::state::{PersistentState, StateError};
 use crate::vm::activation::Activation;
+use crate::vm::execute::FinallyReason::Fallthrough;
+use crate::vm::opcode::{Op, ScatterLabel};
+use crate::vm::state::{PersistentState, StateError};
 
 /* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
 #[repr(u8)]
@@ -60,6 +60,12 @@ macro_rules! binary_var_op {
         let result = lhs.$op(&rhs);
         $act.push(&result)
     };
+}
+
+impl Default for VM {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VM {
@@ -241,7 +247,7 @@ impl VM {
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
-                if cond.is_true() {
+                if !cond.is_true() {
                     self.jump(label);
                 }
             }
@@ -251,41 +257,47 @@ impl VM {
             Op::WhileId { id, label } => {
                 self.set_env(id, &self.peek_top());
                 let cond = self.pop();
-                if cond.is_true() {
+                if !cond.is_true() {
                     self.jump(label);
                 }
             }
             Op::ForList { label, id } => {
-                let peek = self.peek(2);
-                let (count, list) = (&peek[1], &peek[0]);
+                // Pop the count and list off the stack. We push back later when we re-enter.
+                // TODO LambdaMOO had optimization here where it would only peek and update.
+                // But I had some difficulty getting stack values right, so will do this simpler
+                // for now and revisit later.
+                let (count, list) = (&self.pop(), &self.pop());
                 let Var::Int(count) = count else {
                     self.raise_error(Error::E_TYPE);
-                    self.pop();
-                    self.pop();
                     self.jump(label);
                     return Ok(ExecutionResult::More);
                 };
+                let count = *count as usize;
                 let Var::List(l) = list else {
                     self.raise_error(Error::E_TYPE);
-                    self.pop();
-                    self.pop();
                     self.jump(label);
                     return Ok(ExecutionResult::More);
                 };
 
-                if *count as usize > l.len() {
-                    self.pop();
-                    self.pop();
+                // If we've exhausted the list, pop the count and list and jump out.
+                if count >= l.len() {
                     self.jump(label);
-                } else {
-                    self.set_env(id, &l[*count as usize]);
-                    self.poke(0, &Var::Int(*count + 1));
-                    self.rewind(3);
+                    return Ok(ExecutionResult::More);
                 }
+
+                // Track iteration count for range; set id to current list element for the count,
+                // then increment the count, rewind the program counter to the top of the loop, and
+                // continue.
+                self.set_env(id, &l[count]);
+                self.push(list);
+                self.push(&Var::Int((count + 1) as i64));
             }
             Op::ForRange { label, id } => {
-                let peek = self.peek(2);
-                let (to, from) = (&peek[1], &peek[0]);
+                // Pull the range ends off the stack.
+                // TODO LambdaMOO had optimization here where it would only peek and update.
+                // But I had some difficulty getting stack values right, so will do this simpler
+                // for now and revisit later.
+                let (to, from) = (&self.pop(), &self.pop());
 
                 // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
                 // Given we're 64-bit this is highly unlikely to ever be a concern for us, but
@@ -293,18 +305,14 @@ impl VM {
 
                 let next_val = match (to, from) {
                     (Var::Int(to_i), Var::Int(from_i)) => {
-                        if to_i > from_i {
-                            self.pop();
-                            self.pop();
+                        if from_i > to_i {
                             self.jump(label);
                             return Ok(ExecutionResult::More);
                         }
                         Var::Int(from_i + 1)
                     }
                     (Var::Obj(to_o), Var::Obj(from_o)) => {
-                        if to_o.0 > from_o.0 {
-                            self.pop();
-                            self.pop();
+                        if from_o.0 > to_o.0 {
                             self.jump(label);
                             return Ok(ExecutionResult::More);
                         }
@@ -317,8 +325,8 @@ impl VM {
                 };
 
                 self.set_env(id, from);
-                self.poke(1, &next_val);
-                self.rewind(3);
+                self.push(&next_val);
+                self.push(to);
             }
             Op::Pop => {
                 self.pop();
@@ -422,7 +430,6 @@ impl VM {
                 let v = self.pop();
                 self.push(&Var::List(vec![v]))
             }
-            Op::CheckListForSplice => {}
             Op::PutTemp => {
                 self.top_mut().temp = self.peek_top();
             }
@@ -569,9 +576,10 @@ impl VM {
                         let (to, from) = ((to - 1) as usize, (from - 1) as usize);
                         let result = match (value, base) {
                             (Var::Str(value), Var::Str(base)) => {
-                                if !to < base.len() || !from < base.len() {
-                                    Var::Err(E_RANGE)
-                                } else if to - from + 1 != value.len() {
+                                if !to < base.len()
+                                    || !from < base.len()
+                                    || to - from + 1 != value.len()
+                                {
                                     Var::Err(E_RANGE)
                                 } else {
                                     let mut chars = base.chars().collect::<Vec<char>>();
@@ -580,12 +588,13 @@ impl VM {
                                 }
                             }
                             (Var::List(value), Var::List(base)) => {
-                                if !to < base.len() || !from < base.len() {
-                                    Var::Err(E_RANGE)
-                                } else if to - from + 1 != value.len() {
+                                if !to < base.len()
+                                    || !from < base.len()
+                                    || to - from + 1 != value.len()
+                                {
                                     Var::Err(E_RANGE)
                                 } else {
-                                    let mut list = base.clone();
+                                    let mut list = base;
                                     list.splice(from..=to, value);
                                     Var::List(list)
                                 }
@@ -625,13 +634,6 @@ impl VM {
                     }
                 }
             }
-
-            Op::Scatter {
-                nargs, nreq, rest, ..
-            } => {
-                unimplemented!("scatter assignement");
-            }
-
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
                 let prop = self.get_prop(state, self.top().player_flags, propname, obj);
@@ -677,7 +679,7 @@ impl VM {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
                 let (args, verb, obj) = match (args, verb, obj) {
                     (Var::List(l), Var::Str(s), Var::Obj(o)) => (l, s, o),
-                    (args, verb, obj) => {
+                    _ => {
                         self.push(&Var::Err(E_TYPE));
                         return Ok(ExecutionResult::More);
                     }
@@ -746,14 +748,85 @@ impl VM {
             Op::Continue => {
                 unimplemented!("continue")
             }
-            Op::Exit(_label) => {
-                unimplemented!("break")
+            Op::Exit(label) => {
+                if let Some(label) = label {
+                    self.jump(label);
+                    return Ok(ExecutionResult::More);
+                }
+
+                // No label given, so we just unwind the stack.
+                // TODO not clear what compilation produces this still.
+                unimplemented!("unlabelled exit")
             }
-            Op::Label(_) => {
-                unimplemented!("label")
+            Op::Scatter {
+                nargs,
+                nreq,
+                nrest,
+                labels,
+                done,
+            } => {
+                let list = self.peek_top();
+                let Var::List(list) = list else {
+                    self.pop();
+                    self.push(&Var::Err(E_TYPE));
+                    return Ok(ExecutionResult::More);
+                };
+
+                let len = list.len();
+                if len < nreq {
+                    self.pop();
+                    self.push(&Var::Err(E_ARGS));
+                    return Ok(ExecutionResult::More);
+                }
+
+                assert_eq!(nargs, labels.len());
+
+
+                let mut jump_where = None;
+                let mut args_iter = list.into_iter();
+                for  label in labels.iter() {
+                    match label {
+                        ScatterLabel::Required(id) => {
+                            let Some(arg) = args_iter.next() else {
+                                self.push(&Var::Err(E_ARGS));
+                                return Ok(ExecutionResult::More);
+                            };
+
+                            self.set_env(*id, &arg);
+                        }
+                        ScatterLabel::Rest(id) => {
+                            let mut v = vec![];
+                            for _ in 1..nargs {
+                                v.push(args_iter.next().unwrap());
+                            }
+                            let rest = Var::List(v.into());
+                            self.set_env(*id, &rest);
+                        }
+                        ScatterLabel::Optional(id, jump_to) => {
+                            match args_iter.next() {
+                                None => {
+                                    if jump_where.is_none() && jump_to.is_some() {
+                                        jump_where = *jump_to;
+                                    }
+                                    break;
+                                }
+                                Some(v) => {
+                                    self.set_env(*id, &v);
+                                }
+                            }
+                        }
+                    }
+                }
+                match jump_where {
+                    None => self.jump(done),
+                    Some(jump_where) => self.jump(jump_where),
+                }
+            }
+            Op::CheckListForSplice => {
+                unimplemented!("CheckListForSplice")
             }
         }
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 
     fn unwind_stack(
@@ -768,11 +841,11 @@ impl VM {
         // of the new activation... unless it's the last, in which case execution
         // is complete.
         self.stack.pop().expect("Stack underflow");
-        if self.stack.len() == 0 {
+        if self.stack.is_empty() {
             return Ok(ExecutionResult::Complete(value));
         }
         self.push(&value);
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 }
 
@@ -1200,5 +1273,122 @@ mod tests {
         let result = exec_vm(&mut vm, &mut state);
 
         assert_eq!(result, Var::Int(666));
+    }
+
+    #[test]
+    fn test_assignment_from_range() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(3));
+    }
+
+    #[test]
+    fn test_while_loop() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program =
+            "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(75));
+    }
+
+    #[test]
+    fn test_while_labelled_loop() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "x = 0; while broken (x<100) x = x + 1; if (x == 50) break broken; endif endwhile return x;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(50));
+    }
+
+    #[test]
+    fn test_while_breaks() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(50));
+    }
+
+    #[test]
+    fn test_for_list_loop() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::List(vec![Var::Int(4), Var::Int(10)]));
+    }
+
+    #[test]
+    fn test_for_range_loop() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "z = 0; for i in [1..4] z = z + i; endfor return {i,z};";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::List(vec![Var::Int(4), Var::Int(10)]));
+    }
+
+    #[test]
+    fn test_basic_scatter_assign() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(
+            result,
+            Var::List(vec![Var::Int(4), Var::Int(3), Var::Int(2), Var::Int(1)])
+        );
+    }
+
+    #[test]
+    fn test_more_scatter_assign() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let program =
+            "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(
+            result,
+            Var::List(vec![
+                Var::Int(1),
+                Var::Int(2),
+                Var::List(vec![Var::Int(3), Var::Int(4)]),
+                Var::Int(5),
+                Var::List(vec![Var::Int(6), Var::Int(7)]),
+                Var::Int(8),
+            ])
+        );
     }
 }

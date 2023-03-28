@@ -517,7 +517,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         // TODO error handling.
         let string = snailquote::unescape(string).unwrap();
         self._expr_stack
-            .push(VarExpr(Var::Str(String::from(string))));
+            .push(VarExpr(Var::Str(string)));
     }
 
     fn visit_Object(&mut self, ctx: &ObjectContext<'node>) {
@@ -1069,9 +1069,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         let test_string = parse
             .names
-            .find_name(&"test_string".to_string())
-            .unwrap()
-            .clone();
+            .find_name("test_string")
+            .unwrap();
         assert_eq!(
             parse.stmts,
             vec![Stmt::Expr(Expr::Verb {
@@ -1091,10 +1090,9 @@ mod tests {
         let parse = parse_program(program).unwrap();
         let connection = parse
             .names
-            .find_name(&"connection".to_string())
-            .unwrap()
-            .clone();
-        let args = parse.names.find_name(&"args".to_string()).unwrap().clone();
+            .find_name("connection")
+            .unwrap();
+        let args = parse.names.find_name("args").unwrap();
 
         let scatter_items = vec![ScatterItem {
             kind: ScatterKind::Required,
@@ -1112,7 +1110,7 @@ mod tests {
     fn test_indexed_assign() {
         let program = "this.stack[5] = 5;";
         let parse = parse_program(program).unwrap();
-        let this = parse.names.find_name(&"this".to_string()).unwrap().clone();
+        let this = parse.names.find_name("this").unwrap();
         assert_eq!(
             parse.stmts,
             vec![Stmt::Expr(Expr::Assign {
@@ -1126,5 +1124,28 @@ mod tests {
                 right: Box::new(VarExpr(Var::Int(5))),
             })]
         );
+    }
+
+    #[test]
+    fn test_for_list() {
+        let program = "for i in ({1,2,3}) endfor return i;";
+        let parse = parse_program(program).unwrap();
+        let i = parse.names.find_name("i").unwrap();
+        // Verify the structure of the syntax tree for a for-list loop.
+        assert_eq!(
+            parse.stmts,
+            vec![
+                Stmt::ForList {
+                    id: i,
+                    expr: Expr::List(vec![
+                        Arg::Normal(VarExpr(Var::Int(1))),
+                        Arg::Normal(VarExpr(Var::Int(2))),
+                        Arg::Normal(VarExpr(Var::Int(3))),
+                    ]),
+                    body: vec![],
+                },
+                Stmt::Return { expr: Some(Id(i)) },
+            ]
+        )
     }
 }
