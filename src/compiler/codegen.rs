@@ -480,8 +480,9 @@ impl CodegenState {
                 self.push_stack(1);
                 self.generate_expr(trye.as_ref())?;
                 let end_label = self.add_label(None);
-                self.emit(Op::EndCatch(end_label));
+                self.emit(Op::EndCatch(handler_label));
                 self.pop_stack(3)   /* codes, label, catch */;
+                self.define_label(handler_label);
 
                 /* After this label, we still have a value on the stack, but now,
                  * instead of it being the value of the main expression, we have
@@ -1783,7 +1784,7 @@ mod tests {
                 Push(x),
                 Imm(one),
                 Add,
-                EndCatch(1),
+                EndCatch(0),
                 Pop,
                 Imm(svntn),
                 Put(x),

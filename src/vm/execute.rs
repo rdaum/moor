@@ -244,6 +244,7 @@ impl VM {
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
+        println!("trace: {:?}", op);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -712,9 +713,6 @@ impl VM {
             Op::Catch => {
                 self.push(&Var::_Catch(1));
             }
-            Op::TryExcept(label) => {
-                self.push(&Var::_Catch(label));
-            }
             Op::EndCatch(label) => {
                 let v = self.pop();
                 let marker = self.pop();
@@ -722,10 +720,14 @@ impl VM {
                     panic!("Stack marker is not type Catch");
                 };
                 for _i in 0..marker {
-                    self.pop();
+                    self.pop(); /* handler PC */
+                    self.pop(); /* code list */
                 }
                 self.push(&v);
                 self.jump(label);
+            }
+            Op::TryExcept(label) => {
+                self.push(&Var::_Catch(label));
             }
             Op::EndExcept(label) => {
                 let marker = self.pop();
@@ -1390,5 +1392,29 @@ mod tests {
                 Var::Int(8),
             ])
         );
+    }
+
+    #[test]
+    fn test_conditional_expr() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let program = "return 1 ? 2 | 3;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(2));
+    }
+
+    #[test]
+    fn test_catch_expr() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let program = "return {`x ! e_varnf => 666', `1 ! e_vernf => 123'};";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(123)]));
     }
 }
