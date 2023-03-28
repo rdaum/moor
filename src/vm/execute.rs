@@ -14,17 +14,14 @@ use crate::vm::execute::FinallyReason::Fallthrough;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::state::{PersistentState, StateError};
 
-/* Reasons for executing a FINALLY handler; constants are stored in DB, don't change order */
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
-    Fallthrough = 0x00,
-    Raise = 0x01,
-    Uncatch = 0x02,
-    Return = 0x03,
-    Abort = 0x04,
-    /* This doesn't actually get you into a FINALLY... */
-    Exit = 0x065,
+    Fallthrough,
+    Raise{code: Error, msg: String, value: Var, stack: Vec<Var>},
+    Uncatch,
+    Return(Var),
+    Abort,
+    Exit{stack: usize, label: usize}
 }
 
 pub enum ExecutionOutcome {
@@ -691,14 +688,13 @@ impl VM {
             }
             Op::Return => {
                 let ret_val = self.pop();
-                return self.unwind_stack(ret_val, FinallyReason::Return);
+                return self.unwind_stack(FinallyReason::Return(ret_val));
             }
             Op::Return0 => {
-                return self.unwind_stack(Var::Int(0), FinallyReason::Return);
+                return self.unwind_stack(FinallyReason::Return(Var::Int(0)));
             }
             Op::Done => {
-                let ret_val = Var::None;
-                return self.unwind_stack(ret_val, FinallyReason::Return);
+                return self.unwind_stack(FinallyReason::Return(Var::None));
             }
             Op::FuncCall { id } => {
                 // TODO Actually perform call. For now we just fake a return value.
@@ -713,8 +709,16 @@ impl VM {
             Op::Catch => {
                 self.push(&Var::_Catch(1));
             }
-            Op::EndCatch(label) => {
-                let v = self.pop();
+            Op::TryExcept(label) => {
+                self.push(&Var::_Catch(label));
+            }
+            Op::EndCatch(label)  | Op::EndExcept(label) => {
+                let is_catch = op == Op::EndCatch(label);
+                let v = if is_catch {
+                    self.pop()
+                } else {
+                    Var::None
+                };
                 let marker = self.pop();
                 let Var::_Catch(marker) = marker else {
                     panic!("Stack marker is not type Catch");
@@ -723,19 +727,8 @@ impl VM {
                     self.pop(); /* handler PC */
                     self.pop(); /* code list */
                 }
-                self.push(&v);
-                self.jump(label);
-            }
-            Op::TryExcept(label) => {
-                self.push(&Var::_Catch(label));
-            }
-            Op::EndExcept(label) => {
-                let marker = self.pop();
-                let Var::_Catch(marker) = marker else {
-                    panic!("Stack marker is not type Catch");
-                };
-                for _i in 0..marker {
-                    self.pop();
+                if is_catch {
+                    self.push(&v);
                 }
                 self.jump(label);
             }
@@ -744,21 +737,18 @@ impl VM {
                 let Var::_Finally(_marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
-                self.push(&Var::Int(Fallthrough.int_value() as i64));
+                self.push(&Var::Int(0) /* fallthrough */);
                 self.push(&Var::Int(0));
             }
             Op::Continue => {
                 unimplemented!("continue")
             }
-            Op::Exit(label) => {
-                if let Some(label) = label {
-                    self.jump(label);
-                    return Ok(ExecutionResult::More);
-                }
-
-                // No label given, so we just unwind the stack.
-                // TODO not clear what compilation produces this still.
-                unimplemented!("unlabelled exit")
+            Op::ExitId(label) => {
+                self.jump(label);
+                return Ok(ExecutionResult::More);
+            }
+            Op::Exit{stack, label} => {
+                return self.unwind_stack(FinallyReason::Exit{stack, label});
             }
             Op::Scatter {
                 nargs,
@@ -830,21 +820,70 @@ impl VM {
 
     fn unwind_stack(
         &mut self,
-        value: Var,
-        reason: FinallyReason,
+        why: FinallyReason,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        // TODO if errors raised, handle that all here. Unwind until we hit a finally block, etc.
+        // Walk activation stack from bottom to top, tossing frames as we go.
+        while let Some(a) = self.stack.last_mut() {
+            // Pop the value stack seeking finally/catch handler values.
+            for v in a.valstack.pop() {
+                match v {
+                    Var::_Finally(label) => {
+                        /* FINALLY handler */
+                        let why_num = match why {
+                            Fallthrough => 0x00,
+                            FinallyReason::Raise { .. } => 0x01,
+                            FinallyReason::Uncatch => 0x02,
+                            FinallyReason::Return(_) => 0x03,
+                            FinallyReason::Abort => continue,
+                            FinallyReason::Exit { .. } => 0x05
+                        };
+                        a.jump(label);
+                        a.push(Var::Int(why_num));
+                        return Ok(ExecutionResult::More)
+                    },
+                    Var::_Catch(label) => {
+                        /* TRY-EXCEPT or `expr ! ...' handler */
+                        let FinallyReason::Raise{code, msg, value, stack} = why else {
+                            continue
+                        };
+                        unimplemented!("unwind_stack: try-except")
+                    },
+                    _ => continue
+                }
+            }
+            if let FinallyReason::Exit{stack, label} = why {
+                a.jump(label);
+                return Ok(ExecutionResult::More);
+            }
 
-        // Otherwise, there's two other paths: FinallyReason::Exit and FinallyReason::Return.
-        // In the case of the latter, we pop the activation but immediately push 'val to the stack
-        // of the new activation... unless it's the last, in which case execution
-        // is complete.
-        self.stack.pop().expect("Stack underflow");
-        if self.stack.is_empty() {
-            return Ok(ExecutionResult::Complete(value));
+            // If we're doing a return, and this is the last activation, we're done and just pass
+            // the returned value up out of the interpreter loop.
+            // Otherwise pop off this activation, and continue unwinding.
+            if let FinallyReason::Return(value) = &why {
+                if self.stack.len() == 1 {
+                    return Ok(ExecutionResult::Complete(value.clone()));
+                }
+            }
+
+            self.stack.pop().expect("Stack underflow");
+
+            if self.stack.is_empty() {
+                return Ok(ExecutionResult::Complete(Var::None))
+            }
+            // TODO builtin function unwinding stuff
+
+            // If it was a return that brought us here, stick it onto the end of the next
+            // activation's value stack.
+            // (Unless we're the final activation, in which case that should have been handled
+            // above)
+            if let FinallyReason::Return(value) = why {
+                self.push(&value);
+                return Ok(ExecutionResult::More);
+            }
         }
-        self.push(&value);
-        Ok(ExecutionResult::More)
+
+        // We realistically should not get here...
+        panic!("Unwound stack to empty, but no exit condition was hit");
     }
 }
 
@@ -854,7 +893,7 @@ mod tests {
     use crate::compiler::parse::Names;
     use crate::model::objects::ObjFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VERBNF};
+    use crate::model::var::Error::{E_NONE, E_VARNF, E_VERBNF};
     use crate::model::var::Var::Obj;
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
@@ -1306,7 +1345,7 @@ mod tests {
         let mut vm = VM::new();
         let mut state = MockState::new();
 
-        let program = "x = 0; while broken (x<100) x = x + 1; if (x == 50) break broken; endif endwhile return x;";
+        let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
         let binary = compile(program).unwrap();
         set_test_verb("test", &mut state, binary);
         call_verb("test", &mut vm, &mut state);
@@ -1406,11 +1445,23 @@ mod tests {
     fn test_catch_expr() {
         let mut vm = VM::new();
         let mut state = MockState::new();
-        let program = "return {`x ! e_varnf => 666', `1 ! e_vernf => 123'};";
+        let program = "return {`x ! e_varnf => 666', `1 ! e_verbnf => 123'};";
         let binary = compile(program).unwrap();
         set_test_verb("test", &mut state, binary);
         call_verb("test", &mut vm, &mut state);
         let result = exec_vm(&mut vm, &mut state);
-        assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(123)]));
+        assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(1)]));
+    }
+
+    #[test]
+    fn test_try_except_stmt() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(666));
     }
 }

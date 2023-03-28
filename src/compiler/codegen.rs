@@ -39,8 +39,10 @@ pub struct VarRef {
 }
 
 pub struct Loop {
-    start_label: usize,
-    end_label: usize,
+    top_label: usize,
+    top_stack: usize,
+    bottom_label: usize,
+    bottom_stack: usize,
 }
 
 // Compiler code generation state.
@@ -119,25 +121,19 @@ impl CodegenState {
         self.ops.push(op);
     }
 
-    fn find_loop(&self, loop_label: &Option<Name>) -> Result<&Loop, anyhow::Error> {
-        match loop_label {
+    fn find_loop(&self, loop_label: &Name) -> Result<&Loop, anyhow::Error> {
+        match self.find_label(loop_label) {
             None => {
-                let l = self.loops.last().expect("No loop to exit in codegen");
+                let loop_name = self.var_names.names[loop_label.0].clone();
+                return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
+            }
+            Some(label) => {
+                let l = self.loops.iter().find(|l| l.top_label == label.id);
+                let Some(l) = l else {
+                      return Err(anyhow!(CompileError::UnknownLoopLabel(loop_label.0.to_string())));
+                    };
                 Ok(l)
             }
-            Some(eid) => match self.find_label(eid) {
-                None => {
-                    let loop_name = self.var_names.names[eid.0].clone();
-                    return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
-                }
-                Some(label) => {
-                    let l = self.loops.iter().find(|l| l.start_label == label.id);
-                    let Some(l) = l else {
-                      return Err(anyhow!(CompileError::UnknownLoopLabel(eid.0.to_string())));
-                    };
-                    Ok(l)
-                }
-            },
         }
     }
 
@@ -554,8 +550,10 @@ impl CodegenState {
                     label: end_label,
                 });
                 self.loops.push(Loop {
-                    start_label: loop_top,
-                    end_label,
+                    top_label: loop_top,
+                    top_stack: self.cur_stack,
+                    bottom_label: end_label,
+                    bottom_stack: self.cur_stack - 2,
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -574,8 +572,10 @@ impl CodegenState {
                     label: end_label,
                 });
                 self.loops.push(Loop {
-                    start_label: loop_top,
-                    end_label,
+                    top_label: loop_top,
+                    top_stack: self.cur_stack,
+                    bottom_label: end_label,
+                    bottom_stack: self.cur_stack - 2,
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -601,8 +601,10 @@ impl CodegenState {
                 }
                 self.pop_stack(1);
                 self.loops.push(Loop {
-                    start_label: loop_start_label,
-                    end_label: loop_end_label,
+                    top_label: loop_start_label,
+                    top_stack: self.cur_stack,
+                    bottom_label: loop_end_label,
+                    bottom_stack: self.cur_stack,
                 });
                 for s in body {
                     self.generate_stmt(s)?;
@@ -630,10 +632,12 @@ impl CodegenState {
                 self.pop_stack(1);
             }
             Stmt::TryExcept { body, excepts } => {
+                let mut labels = vec![];
                 for ex in excepts {
                     self.generate_codes(&ex.codes)?;
                     let push_label = self.add_label(None);
                     self.emit(Op::PushLabel(push_label));
+                    labels.push(push_label);
                     self.push_stack(1);
                 }
                 let arm_count = excepts.len();
@@ -646,7 +650,7 @@ impl CodegenState {
                 self.emit(Op::EndExcept(end_label));
                 self.pop_stack(2 * arm_count + 1);
                 for (i, ex) in excepts.iter().enumerate() {
-                    // let label = self.add_jump(ex.id);  TODO hmm
+                    self.define_label(labels[i]);
                     self.push_stack(1);
                     if ex.id.is_some() {
                         self.emit(Op::Put(ex.id.unwrap().0));
@@ -683,13 +687,19 @@ impl CodegenState {
                 self.emit(Op::Continue);
                 self.pop_stack(2);
             }
-            Stmt::Break { exit } => {
-                let lp = self.find_loop(exit)?;
-                self.emit(Op::Exit(Some(lp.end_label)));
-            }
-            Stmt::Continue { exit } => {
-                let lp = self.find_loop(exit)?;
-                self.emit(Op::Exit(Some(lp.start_label)));
+            Stmt::Break { exit } | Stmt::Continue{exit}=> {
+                if let Some(exit) = exit {
+                    let jump_label = self.find_label(exit).expect("invalid label for break/continue");
+                    self.emit(Op::ExitId(jump_label.id));
+                } else {
+                    let l = self.loops.last().expect("No loop to break/continue from");
+
+                    if let Stmt::Continue {exit} = stmt {
+                        self.emit(Op::Exit{ stack: l.top_stack, label: l.bottom_label })
+                    } else {
+                        self.emit(Op::Exit{ stack: l.bottom_stack, label: l.bottom_label })
+                    }
+                }
             }
             Stmt::Return { expr } => match expr {
                 Some(expr) => {
@@ -1109,7 +1119,7 @@ mod tests {
                 Imm(five),
                 Gt,
                 If(2),
-                Exit(Some(1)),
+                ExitId(1),
                 Jump { label: 3 },
                 Jump { label: 0 },
                 Done,
@@ -1158,9 +1168,9 @@ mod tests {
                 Imm(five),
                 Eq,
                 If(2),
-                Exit(Some(1)),
+                ExitId(1),
                 Jump { label: 3 },
-                Exit(Some(0)),
+                ExitId(0),
                 Jump { label: 0 },
                 Done
             ]

@@ -193,4 +193,22 @@ impl Activation {
     pub fn rewind(&mut self, amt: usize) {
         self.pc -= amt;
     }
+
+    pub fn seek_finally(&self) -> Option<usize> {
+        for i in (0..self.valstack.len()).rev() {
+            if let Var::_Finally(label) = self.valstack[i] {
+                return Some(label);
+            }
+        }
+        return None;
+    }
+
+    pub fn seek_catch(&self) -> Option<usize> {
+        for i in (0..self.valstack.len()).rev() {
+            if let Var::_Catch(label) = self.valstack[i] {
+                return Some(label);
+            }
+        }
+        return None;
+    }
 }
