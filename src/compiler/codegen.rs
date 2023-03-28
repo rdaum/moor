@@ -1832,7 +1832,11 @@ mod tests {
     fn test_basic_scatter_assign() {
         let program = "{a, b, c} = args;";
         let binary = compile(program).unwrap();
-        let (a,b,c) = (binary.find_var("a"), binary.find_var("b"), binary.find_var("c"));
+        let (a, b, c) = (
+            binary.find_var("a"),
+            binary.find_var("b"),
+            binary.find_var("c"),
+        );
         /*
          0: 076                   PUSH args
          1: 112 013 001 001 002
@@ -1953,7 +1957,7 @@ mod tests {
     fn test_even_more_scatter_assign() {
         let program = "{a, ?b, ?c = 8, @d, ?e = 9, f} = args;";
         let binary = compile(program).unwrap();
-        let (a,b,c,d,e,f) = (
+        let (a, b, c, d, e, f) = (
             binary.find_var("a"),
             binary.find_var("b"),
             binary.find_var("c"),

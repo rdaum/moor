@@ -783,10 +783,9 @@ impl VM {
 
                 assert_eq!(nargs, labels.len());
 
-
                 let mut jump_where = None;
                 let mut args_iter = list.into_iter();
-                for  label in labels.iter() {
+                for label in labels.iter() {
                     match label {
                         ScatterLabel::Required(id) => {
                             let Some(arg) = args_iter.next() else {
@@ -804,19 +803,17 @@ impl VM {
                             let rest = Var::List(v.into());
                             self.set_env(*id, &rest);
                         }
-                        ScatterLabel::Optional(id, jump_to) => {
-                            match args_iter.next() {
-                                None => {
-                                    if jump_where.is_none() && jump_to.is_some() {
-                                        jump_where = *jump_to;
-                                    }
-                                    break;
+                        ScatterLabel::Optional(id, jump_to) => match args_iter.next() {
+                            None => {
+                                if jump_where.is_none() && jump_to.is_some() {
+                                    jump_where = *jump_to;
                                 }
-                                Some(v) => {
-                                    self.set_env(*id, &v);
-                                }
+                                break;
                             }
-                        }
+                            Some(v) => {
+                                self.set_env(*id, &v);
+                            }
+                        },
                     }
                 }
                 match jump_where {
@@ -1375,8 +1372,7 @@ mod tests {
     fn test_more_scatter_assign() {
         let mut vm = VM::new();
         let mut state = MockState::new();
-        let program =
-            "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
+        let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
         let binary = compile(program).unwrap();
         set_test_verb("test", &mut state, binary);
         call_verb("test", &mut vm, &mut state);

@@ -1,10 +1,10 @@
-use enumset::EnumSet;
 use crate::model::objects::ObjFlag;
+use crate::model::var::Error;
+use crate::model::var::Error::E_VARNF;
 use crate::model::var::{Objid, Var};
 use crate::parsecmd::ParsedCommand;
 use crate::vm::opcode::{Binary, Op};
-use crate::model::var::Error;
-use crate::model::var::Error::E_VARNF;
+use enumset::EnumSet;
 
 pub(crate) struct Activation {
     pub(crate) binary: Binary,

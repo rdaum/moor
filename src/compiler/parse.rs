@@ -516,8 +516,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
         let string = string.as_str().clone();
         // TODO error handling.
         let string = snailquote::unescape(string).unwrap();
-        self._expr_stack
-            .push(VarExpr(Var::Str(string)));
+        self._expr_stack.push(VarExpr(Var::Str(string)));
     }
 
     fn visit_Object(&mut self, ctx: &ObjectContext<'node>) {
@@ -1067,10 +1066,7 @@ mod tests {
     fn test_sysobjref() {
         let program = "$string_utils:from_list(test_string);";
         let parse = parse_program(program).unwrap();
-        let test_string = parse
-            .names
-            .find_name("test_string")
-            .unwrap();
+        let test_string = parse.names.find_name("test_string").unwrap();
         assert_eq!(
             parse.stmts,
             vec![Stmt::Expr(Expr::Verb {
@@ -1088,10 +1084,7 @@ mod tests {
     fn test_scatter_assign() {
         let program = "{connection} = args;";
         let parse = parse_program(program).unwrap();
-        let connection = parse
-            .names
-            .find_name("connection")
-            .unwrap();
+        let connection = parse.names.find_name("connection").unwrap();
         let args = parse.names.find_name("args").unwrap();
 
         let scatter_items = vec![ScatterItem {
