@@ -251,20 +251,15 @@ impl CodegenState {
         let labels: Vec<(&ScatterItem, ScatterLabel)> = scatter
             .iter()
             .map(|s| {
-                (
-                    s,
-                    match s.kind {
-                        ScatterKind::Required => ScatterLabel::Required(s.id.0),
-                        ScatterKind::Optional => {
-                            if s.expr.is_some() {
-                                ScatterLabel::Optional(s.id.0, Some(self.make_label(None)))
-                            } else {
-                                ScatterLabel::Optional(s.id.0, None)
-                            }
-                        }
-                        ScatterKind::Rest => ScatterLabel::Rest(s.id.0),
-                    },
-                )
+                let kind_label = match s.kind {
+                    ScatterKind::Required => ScatterLabel::Required(s.id.0),
+                    ScatterKind::Optional if s.expr.is_some() => {
+                        ScatterLabel::Optional(s.id.0, Some(self.make_label(None)))
+                    }
+                    ScatterKind::Optional => ScatterLabel::Optional(s.id.0, None),
+                    ScatterKind::Rest => ScatterLabel::Rest(s.id.0),
+                };
+                (s, kind_label)
             })
             .collect();
         let done = self.make_label(None);
@@ -412,7 +407,6 @@ impl CodegenState {
                 self.emit(Op::Length(saved.expect("Missing saved stack for '$'")));
                 self.push_stack(1);
             }
-
             Expr::Unary(op, expr) => {
                 self.generate_expr(expr.as_ref())?;
                 self.emit(match op {
@@ -691,7 +685,7 @@ impl CodegenState {
             Stmt::Break { exit } | Stmt::Continue { exit } => {
                 let l = match exit {
                     None => self.loops.last().expect("No loop to break/continue from"),
-                    Some(ln) => self.find_loop(ln).expect("invalid loop for break/continue")
+                    Some(ln) => self.find_loop(ln).expect("invalid loop for break/continue"),
                 };
                 if let Some(exit) = exit {
                     let jump_label = self
@@ -736,26 +730,27 @@ impl CodegenState {
         if args.is_empty() {
             self.emit(Op::MkEmptyList);
             self.push_stack(1);
-        } else {
-            let mut normal_op = Op::MakeSingletonList;
-            let mut splice_op = Op::CheckListForSplice;
-            let mut pop = 0;
-            for a in args {
-                match a {
-                    Arg::Normal(a) => {
-                        self.generate_expr(a)?;
-                        self.emit(normal_op.clone());
-                    }
-                    Arg::Splice(s) => {
-                        self.generate_expr(s)?;
-                        self.emit(splice_op.clone());
-                    }
+            return Ok(());
+        }
+
+        let mut normal_op = Op::MakeSingletonList;
+        let mut splice_op = Op::CheckListForSplice;
+        let mut pop = 0;
+        for a in args {
+            match a {
+                Arg::Normal(a) => {
+                    self.generate_expr(a)?;
+                    self.emit(normal_op.clone());
                 }
-                self.pop_stack(pop);
-                pop = 1;
-                normal_op = Op::ListAddTail;
-                splice_op = Op::ListAppend;
+                Arg::Splice(s) => {
+                    self.generate_expr(s)?;
+                    self.emit(splice_op.clone());
+                }
             }
+            self.pop_stack(pop);
+            pop = 1;
+            normal_op = Op::ListAddTail;
+            splice_op = Op::ListAppend;
         }
 
         Ok(())
@@ -1179,9 +1174,9 @@ mod tests {
                 Imm(five),
                 Eq,
                 If(2),
-                ExitId(1),
+                Exit { stack: 0, label: 1 },
                 Jump { label: 3 },
-                ExitId(0),
+                Exit { stack: 0, label: 1 },
                 Jump { label: 0 },
                 Done
             ]
@@ -1657,6 +1652,35 @@ mod tests {
                 RangeRef,
                 Put(b),
                 Pop,
+                Done
+            ]
+        );
+    }
+
+    #[test]
+    fn test_list_splice() {
+        let program = "return {@args[1..2]};";
+        let binary = compile(program).unwrap();
+
+        /**
+          0: 076                   PUSH args
+          1: 124                   NUM 1
+          2: 125                   NUM 2
+          3: 015                 * RANGE
+          4: 017                 * CHECK_LIST_FOR_SPLICE
+          5: 108                   RETURN
+         12: 110                   DONE
+        */
+        let args = binary.find_var("args");
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(args),
+                Imm(0),
+                Imm(1),
+                RangeRef,
+                CheckListForSplice,
+                Return,
                 Done
             ]
         );

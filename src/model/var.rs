@@ -133,16 +133,16 @@ pub enum Var {
 
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
-        pub fn $op(&self, v: &Var) -> Var {
+        pub fn $op(&self, v: &Var) -> Result<Var, Error> {
             match (self, v) {
-                (Var::Float(l), Var::Float(r)) => Var::Float(l.$op(*r)),
-                (Var::Int(l), Var::Int(r)) => Var::Int(l.$op(r)),
-                (Var::Float(l), Var::Int(r)) => Var::Float(l.$op(*r as f64)),
+                (Var::Float(l), Var::Float(r)) => Ok(Var::Float(l.$op(*r))),
+                (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.$op(*r))),
+                (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.$op(*r as f64))),
                 (Var::Int(l), Var::Float(r)) => {
                     let l = R64::from(*l as f64);
-                    Var::Float(l.$op(*r))
+                    Ok(Var::Float(l.$op(*r)))
                 }
-                (_, _) => Var::Err(E_TYPE),
+                (_, _) => Err(E_TYPE),
             }
         }
     };
@@ -171,71 +171,138 @@ impl Var {
     binary_numeric_coercion_op!(div);
     binary_numeric_coercion_op!(sub);
 
-    pub fn add(&self, v: &Var) -> Var {
+    pub fn add(&self, v: &Var) -> Result<Var, Error> {
         match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Var::Float(*l + *r),
-            (Var::Int(l), Var::Int(r)) => Var::Int(l + r),
-            (Var::Float(l), Var::Int(r)) => Var::Float(*l + (*r as f64)),
+            (Var::Float(l), Var::Float(r)) => Ok(Var::Float(*l + *r)),
+            (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l + r)),
+            (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l + (*r as f64))),
             (Var::Int(l), Var::Float(r)) => {
                 let l = R64::from(*l as f64);
-                Var::Float(l + (*r))
+                Ok(Var::Float(l + (*r)))
             }
             (Var::Str(s), Var::Str(r)) => {
                 let mut c = s.clone();
                 c.push_str(r);
-                Var::Str(c)
+                Ok(Var::Str(c))
             }
-            (_, _) => Var::Err(E_TYPE),
+            (_, _) => Err(E_TYPE),
         }
     }
 
-    pub fn modulus(&self, v: &Var) -> Var {
-        match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Var::Float(*l % *r),
-            (Var::Int(l), Var::Int(r)) => Var::Int(l % r),
-            (Var::Float(l), Var::Int(r)) => Var::Float(*l % (*r as f64)),
-            (Var::Int(l), Var::Float(r)) => {
-                let l = R64::from(*l as f64);
-                Var::Float(l % (*r))
-            }
-            (_, _) => Var::Err(E_TYPE),
-        }
-    }
-
-    // TODO this likely does not match MOO's impl, which is ... custom. but may not matter.
-    pub fn pow(&self, v: &Var) -> Var {
-        match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Var::Float(l.powf(*r)),
-            (Var::Int(l), Var::Int(r)) => Var::Int(l.pow(*r as u32)),
-            (Var::Float(l), Var::Int(r)) => Var::Float(l.powi(*r as i32)),
-            (Var::Int(l), Var::Float(r)) => {
-                let l = R64::from(*l as f64);
-                Var::Float(l.powf(*r))
-            }
-            (_, _) => Var::Err(E_TYPE),
-        }
-    }
-
-    pub fn negative(&self) -> Var {
+    pub fn negative(&self) -> Result<Var, Error> {
         match self {
-            Var::Int(l) => Var::Int(-*l),
-            Var::Float(f) => Var::Float(f.neg()),
-            _ => Var::Err(E_TYPE),
+            Var::Int(l) => Ok(Var::Int(-*l)),
+            Var::Float(f) => Ok(Var::Float(f.neg())),
+            _ => Err(E_TYPE),
         }
     }
 
-    pub fn index(&self, idx: usize) -> Var {
+    pub fn modulus(&self, v: &Var) -> Result<Var, Error> {
+        match (self, v) {
+            (Var::Float(l), Var::Float(r)) => Ok(Var::Float(*l % *r)),
+            (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l % r)),
+            (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l % (*r as f64))),
+            (Var::Int(l), Var::Float(r)) => {
+                let l = R64::from(*l as f64);
+                Ok(Var::Float(l % (*r)))
+            }
+            (_, _) => Err(E_TYPE),
+        }
+    }
+
+    pub fn pow(&self, v: &Var) -> Result<Var, Error> {
+        match (self, v) {
+            (Var::Float(l), Var::Float(r)) => Ok(Var::Float(l.powf(*r))),
+            (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.pow(*r as u32))),
+            (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.powi(*r as i32))),
+            (Var::Int(l), Var::Float(r)) => {
+                let l = R64::from(*l as f64);
+                Ok(Var::Float(l.powf(*r)))
+            }
+            (_, _) => Err(E_TYPE),
+        }
+    }
+
+    pub fn index(&self, idx: usize) -> Result<Var, Error> {
         match self {
             Var::List(l) => match l.get(idx) {
-                None => Var::Err(E_RANGE),
-                Some(v) => v.clone(),
+                None => Err(E_RANGE),
+                Some(v) => Ok(v.clone()),
             },
             Var::Str(s) => match s.get(idx..idx + 1) {
-                None => Var::Err(E_RANGE),
-                Some(v) => Var::Str(String::from(v)),
+                None => Err(E_RANGE),
+                Some(v) => Ok(Var::Str(String::from(v))),
             },
-            _ => Var::Err(E_TYPE),
+            _ => Err(E_TYPE),
         }
+    }
+
+    pub fn range(&self, from: i64, to: i64) -> Result<Var, Error> {
+        match self {
+            Var::Str(s) => {
+                let len = s.len() as i64;
+                if from <= 0 || from > len + 1 || to < 1 || to > len {
+                    return Err(Error::E_RANGE);
+                }
+                let (from, to) = (from as usize, to as usize);
+                Ok(Var::Str(s[from - 1..to].to_string()))
+            }
+            Var::List(l) => {
+                let len = l.len() as i64;
+                if from <= 0 || from > len + 1 || to < 1 || to > len {
+                    return Err(Error::E_RANGE);
+                }
+                let (from, to) = (from as usize, to as usize);
+                let mut res = Vec::with_capacity(to - from + 1);
+                for i in from..=to {
+                    res.push(l[i - 1].clone());
+                }
+                Ok(Var::List(res))
+            }
+            _ => Err(Error::E_TYPE),
+        }
+    }
+
+    pub fn rangeset(&self, value: Var, from: i64, to: i64) -> Result<Var, Error> {
+        let (base_len, val_len) = match (self, &value) {
+            (Var::Str(base_str), Var::Str(val_str)) => {
+                (base_str.len() as i64, val_str.len() as i64)
+            }
+            (Var::List(base_list), Var::List(val_list)) => {
+                (base_list.len() as i64, val_list.len() as i64)
+            }
+            _ => return Err(Error::E_TYPE),
+        };
+
+        if from <= 0 || from > base_len + 1 || to < 1 || to > base_len {
+            return Err(Error::E_RANGE);
+        }
+
+        let lenleft = if from > 1 { from - 1 } else { 0 };
+        let lenmiddle = val_len;
+        let lenright = if base_len > to { base_len - to } else { 0 };
+        let newsize = lenleft + lenmiddle + lenright;
+
+        let (from, to) = (from as usize, to as usize);
+        let mut ans = match (self, &value) {
+            (Var::Str(base_str), Var::Str(value_str)) => {
+                let mut ans = String::with_capacity(newsize as usize);
+                ans.push_str(&base_str[..from - 1]);
+                ans.push_str(&value_str);
+                ans.push_str(&base_str[to..]);
+                Var::Str(ans)
+            }
+            (Var::List(base_list), Var::List(value_list)) => {
+                let mut ans: Vec<Var> = Vec::with_capacity(newsize as usize);
+                ans.extend_from_slice(&base_list[..from - 1]);
+                ans.extend(value_list.iter().cloned());
+                ans.extend_from_slice(&base_list[to..]);
+                Var::List(ans)
+            }
+            _ => unreachable!(),
+        };
+
+        Ok(ans)
     }
 }
 
@@ -281,6 +348,69 @@ impl From<Error> for Var {
     }
 }
 
+fn rangeset_check(base: &Var, inst: &Var, from: i64, to: i64) -> Result<(), Error> {
+    let blen = match base {
+        Var::Str(s) => s.len() as i64,
+        Var::List(l) => l.len() as i64,
+        _ => return Err(Error::E_TYPE),
+    };
+
+    if from <= 0 || from > blen + 1 || to < 1 || to > blen {
+        return Err(Error::E_RANGE);
+    }
+
+    Ok(())
+}
+
+fn listrangeset(base: Var, from: i64, to: i64, value: Var) -> Result<Var, Error> {
+    rangeset_check(&base, &value, from, to)?;
+
+    let (base_list, val_list) = match (base, value) {
+        (Var::List(bl), Var::List(vl)) => (bl, vl),
+        _ => return Err(Error::E_TYPE),
+    };
+
+    let val_len = val_list.len() as i64;
+    let base_len = base_list.len() as i64;
+    let lenleft = if from > 1 { from - 1 } else { 0 };
+    let lenmiddle = val_len;
+    let lenright = if base_len > to { base_len - to } else { 0 };
+    let newsize = lenleft + lenmiddle + lenright;
+
+    let mut ans = Vec::with_capacity(newsize as usize);
+
+    let (from, to) = (from as usize, to as usize);
+    ans.extend_from_slice(&base_list[..from - 1]);
+    ans.extend_from_slice(&val_list);
+    ans.extend_from_slice(&base_list[to..]);
+
+    Ok(Var::List(ans))
+}
+
+fn strrangeset(base: Var, from: i64, to: i64, value: Var) -> Result<Var, Error> {
+    rangeset_check(&base, &value, from, to)?;
+
+    let (base_str, val_str) = match (base, value) {
+        (Var::Str(base), Var::Str(val)) => (base, val),
+        _ => return Err(Error::E_TYPE),
+    };
+
+    let base_len = base_str.len() as i64;
+    let val_len = val_str.len() as i64;
+    let lenleft = if from > 1 { from - 1 } else { 0 };
+    let lenmiddle = val_len;
+    let lenright = if base_len > to { base_len - to } else { 0 };
+    let newsize = lenleft + lenmiddle + lenright;
+
+    let (from, to) = (from as usize, to as usize);
+    let mut s = String::with_capacity(newsize as usize);
+    s.push_str(&base_str[..(from - 1)]);
+    s.push_str(&val_str);
+    s.push_str(&base_str[to..]);
+
+    Ok(Var::Str(s))
+}
+
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
@@ -289,117 +419,124 @@ mod tests {
 
     #[test]
     fn test_add() {
-        assert_eq!(Var::Int(1).add(&Var::Int(2)), Var::Int(3));
+        assert_eq!(Var::Int(1).add(&Var::Int(2)), Ok(Var::Int(3)));
         assert_eq!(
             Var::Int(1).add(&Var::Float(R64::from(2.0))),
-            Var::Float(R64::from(3.0))
+            Ok(Var::Float(R64::from(3.0)))
         );
         assert_eq!(
             Var::Float(R64::from(1.0)).add(&Var::Int(2)),
-            Var::Float(R64::from(3.0))
+            Ok(Var::Float(R64::from(3.0)))
         );
         assert_eq!(
             Var::Float(R64::from(1.0)).add(&Var::Float(R64::from(2.0))),
-            Var::Float(R64::from(3.0))
+            Ok(Var::Float(R64::from(3.0)))
         );
         assert_eq!(
             Var::Str(String::from("a")).add(&Var::Str(String::from("b"))),
-            Var::Str(String::from("ab"))
+            Ok(Var::Str(String::from("ab")))
         );
     }
 
     #[test]
-    fn test_sub() {
-        assert_eq!(Var::Int(1).sub(&Var::Int(2)), Var::Int(-1));
+    fn test_sub() -> Result<(), Error> {
+        assert_eq!(Var::Int(1).sub(&Var::Int(2))?, Var::Int(-1));
         assert_eq!(
-            Var::Int(1).sub(&Var::Float(R64::from(2.0))),
+            Var::Int(1).sub(&Var::Float(R64::from(2.0)))?,
             Var::Float(R64::from(-1.0))
         );
         assert_eq!(
-            Var::Float(R64::from(1.0)).sub(&Var::Int(2)),
+            Var::Float(R64::from(1.0)).sub(&Var::Int(2))?,
             Var::Float(R64::from(-1.0))
         );
         assert_eq!(
-            Var::Float(R64::from(1.0)).sub(&Var::Float(R64::from(2.0))),
+            Var::Float(R64::from(1.0)).sub(&Var::Float(R64::from(2.0)))?,
             Var::Float(R64::from(-1.0))
         );
+        Ok(())
     }
 
     #[test]
-    fn test_mul() {
-        assert_eq!(Var::Int(1).mul(&Var::Int(2)), Var::Int(2));
+    fn test_mul() -> Result<(), Error> {
+        assert_eq!(Var::Int(1).mul(&Var::Int(2))?, Var::Int(2));
         assert_eq!(
-            Var::Int(1).mul(&Var::Float(R64::from(2.0))),
+            Var::Int(1).mul(&Var::Float(R64::from(2.0)))?,
             Var::Float(R64::from(2.0))
         );
         assert_eq!(
-            Var::Float(R64::from(1.0)).mul(&Var::Int(2)),
+            Var::Float(R64::from(1.0)).mul(&Var::Int(2))?,
             Var::Float(R64::from(2.0))
         );
         assert_eq!(
-            Var::Float(R64::from(1.0)).mul(&Var::Float(R64::from(2.0))),
+            Var::Float(R64::from(1.0)).mul(&Var::Float(R64::from(2.0)))?,
             Var::Float(R64::from(2.0))
         );
+        Ok(())
     }
 
     #[test]
-    fn test_div() {
-        assert_eq!(Var::Int(1).div(&Var::Int(2)), Var::Int(0));
+    fn test_div() -> Result<(), Error> {
+        assert_eq!(Var::Int(1).div(&Var::Int(2))?, Var::Int(0));
         assert_eq!(
-            Var::Int(1).div(&Var::Float(R64::from(2.0))),
+            Var::Int(1).div(&Var::Float(R64::from(2.0)))?,
             Var::Float(R64::from(0.5))
         );
         assert_eq!(
-            Var::Float(R64::from(1.0)).div(&Var::Int(2)),
+            Var::Float(R64::from(1.0)).div(&Var::Int(2))?,
             Var::Float(R64::from(0.5))
         );
         assert_eq!(
-            Var::Float(R64::from(1.0)).div(&Var::Float(R64::from(2.0))),
+            Var::Float(R64::from(1.0)).div(&Var::Float(R64::from(2.0)))?,
             Var::Float(R64::from(0.5))
         );
+        Ok(())
     }
 
     #[test]
     fn test_modulus() {
-        assert_eq!(Var::Int(1).modulus(&Var::Int(2)), Var::Int(1));
+        assert_eq!(Var::Int(1).modulus(&Var::Int(2)), Ok(Var::Int(1)));
         assert_eq!(
             Var::Int(1).modulus(&Var::Float(R64::from(2.0))),
-            Var::Float(R64::from(1.0))
+            Ok(Var::Float(R64::from(1.0)))
         );
         assert_eq!(
             Var::Float(R64::from(1.0)).modulus(&Var::Int(2)),
-            Var::Float(R64::from(1.0))
+            Ok(Var::Float(R64::from(1.0)))
         );
         assert_eq!(
             Var::Float(R64::from(1.0)).modulus(&Var::Float(R64::from(2.0))),
-            Var::Float(R64::from(1.0))
+            Ok(Var::Float(R64::from(1.0)))
+        );
+        assert_eq!(
+            Var::Str("moop".into()).modulus(&Var::Int(2)),
+            Err(Error::E_TYPE)
         );
     }
 
     #[test]
     fn test_pow() {
-        assert_eq!(Var::Int(1).pow(&Var::Int(2)), Var::Int(1));
-        assert_eq!(Var::Int(2).pow(&Var::Int(2)), Var::Int(4));
+        assert_eq!(Var::Int(1).pow(&Var::Int(2)), Ok(Var::Int(1)));
+        assert_eq!(Var::Int(2).pow(&Var::Int(2)), Ok(Var::Int(4)));
         assert_eq!(
             Var::Int(2).pow(&Var::Float(R64::from(2.0))),
-            Var::Float(R64::from(4.0))
+            Ok(Var::Float(R64::from(4.0)))
         );
         assert_eq!(
             Var::Float(R64::from(2.0)).pow(&Var::Int(2)),
-            Var::Float(R64::from(4.0))
+            Ok(Var::Float(R64::from(4.0)))
         );
         assert_eq!(
             Var::Float(R64::from(2.0)).pow(&Var::Float(R64::from(2.0))),
-            Var::Float(R64::from(4.0))
+            Ok(Var::Float(R64::from(4.0)))
         );
     }
 
     #[test]
     fn test_negative() {
-        assert_eq!(Var::Int(1).negative(), Var::Int(-1));
+        assert_eq!(Var::Int(1).negative(), Ok(Var::Int(-1)));
         assert_eq!(
             Var::Float(R64::from(1.0)).negative(),
-            Var::Float(R64::from(-1.0))
+            Ok(Var::Float(R64::from(-1.0)))
         );
     }
 
@@ -407,25 +544,25 @@ mod tests {
     fn test_index() {
         assert_eq!(
             Var::List(vec![Var::Int(1), Var::Int(2)]).index(0),
-            Var::Int(1)
+            Ok(Var::Int(1))
         );
         assert_eq!(
             Var::List(vec![Var::Int(1), Var::Int(2)]).index(1),
-            Var::Int(2)
+            Ok(Var::Int(2))
         );
         assert_eq!(
             Var::List(vec![Var::Int(1), Var::Int(2)]).index(2),
-            Var::Err(E_RANGE)
+            Err(Error::E_RANGE)
         );
         assert_eq!(
             Var::Str(String::from("ab")).index(0),
-            Var::Str(String::from("a"))
+            Ok(Var::Str(String::from("a")))
         );
         assert_eq!(
             Var::Str(String::from("ab")).index(1),
-            Var::Str(String::from("b"))
+            Ok(Var::Str(String::from("b")))
         );
-        assert_eq!(Var::Str(String::from("ab")).index(2), Var::Err(E_RANGE));
+        assert_eq!(Var::Str(String::from("ab")).index(2), Err(Error::E_RANGE));
     }
 
     #[test]
@@ -795,5 +932,123 @@ mod tests {
         assert!(Var::List(vec![Var::Int(1), Var::Int(2)]).is_true());
         assert!(!Var::Obj(Objid(1)).is_true());
         assert!(!Var::Err(E_TYPE).is_true());
+    }
+
+    #[test]
+    fn test_listrangeset() {
+        let base = Var::List(vec![Var::Int(1), Var::Int(2), Var::Int(3), Var::Int(4)]);
+
+        // {1,2,3,4}[1..2] = {"a", "b", "c"} => {1, "a", "b", "c", 4}
+        let value = Var::List(vec![
+            Var::Str("a".to_string()),
+            Var::Str("b".to_string()),
+            Var::Str("c".to_string()),
+        ]);
+        let expected = Var::List(vec![
+            Var::Int(1),
+            Var::Str("a".to_string()),
+            Var::Str("b".to_string()),
+            Var::Str("c".to_string()),
+            Var::Int(4),
+        ]);
+        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+
+        // {1,2,3,4}[1..2] = {"a"} => {1, "a", 4}
+        let value = Var::List(vec![Var::Str("a".to_string())]);
+        let expected = Var::List(vec![Var::Int(1), Var::Str("a".to_string()), Var::Int(4)]);
+        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+
+        // {1,2,3,4}[1..2] = {} => {1,4}
+        let value = Var::List(vec![]);
+        let expected = Var::List(vec![Var::Int(1), Var::Int(4)]);
+        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+
+        // {1,2,3,4}[1..2] = {"a", "b"} => {1, "a", "b", 4}
+        let value = Var::List(vec![Var::Str("a".to_string()), Var::Str("b".to_string())]);
+        let expected = Var::List(vec![
+            Var::Int(1),
+            Var::Str("a".to_string()),
+            Var::Str("b".to_string()),
+            Var::Int(4),
+        ]);
+        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_strrangeset() {
+        // Test interior insertion
+        let base = Var::Str("12345".to_string());
+        let value = Var::Str("abc".to_string());
+        let expected = Var::Str("1abc45".to_string());
+        let result = base.rangeset(value.clone(), 2, 3);
+        assert_eq!(result, Ok(expected.clone()));
+
+        // Test interior replacement
+        let base = Var::Str("12345".to_string());
+        let value = Var::Str("ab".to_string());
+        let expected = Var::Str("1ab45".to_string());
+        let result = base.rangeset(value.clone(), 2, 3);
+        assert_eq!(result, Ok(expected.clone()));
+
+        // Test interior deletion
+        let base = Var::Str("12345".to_string());
+        let value = Var::Str("".to_string());
+        let expected = Var::Str("145".to_string());
+        let result = base.rangeset(value.clone(), 2, 3);
+        assert_eq!(result, Ok(expected.clone()));
+
+        // Test interior subtraction
+        let base = Var::Str("12345".to_string());
+        let value = Var::Str("z".to_string());
+        let expected = Var::Str("1z45".to_string());
+        let result = base.rangeset(value.clone(), 2, 3);
+        assert_eq!(result, Ok(expected.clone()));
+    }
+
+    #[test]
+    fn test_rangeset_check_negative() {
+        // Test negative cases for strings
+        let base = Var::Str("abcdef".to_string());
+        let instr = Var::Str("ghi".to_string());
+        assert_eq!(base.rangeset(instr.clone(), 1, 0), Err(Error::E_RANGE));
+        assert_eq!(base.rangeset(instr.clone(), 0, 3), Err(Error::E_RANGE));
+        assert_eq!(base.rangeset(instr.clone(), 2, 7), Err(Error::E_RANGE));
+        assert_eq!(base.rangeset(instr, 1, 100), Err(Error::E_RANGE));
+
+        // Test negative cases for lists
+        let base = Var::List(vec![Var::Int(1), Var::Int(2), Var::Int(3), Var::Int(4)]);
+        let instr = Var::List(vec![Var::Int(5), Var::Int(6), Var::Int(7)]);
+        assert_eq!(base.rangeset(instr.clone(), 0, 2), Err(Error::E_RANGE));
+        assert_eq!(base.rangeset(instr.clone(), 1, 5), Err(Error::E_RANGE));
+        assert_eq!(base.rangeset(instr.clone(), 2, 7), Err(Error::E_RANGE));
+        assert_eq!(base.rangeset(instr, 1, 100), Err(Error::E_RANGE));
+    }
+
+    #[test]
+    fn test_range() -> Result<(), Error> {
+        // test on integer list
+        let int_list = Var::List(vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
+        assert_eq!(
+            int_list.range(2, 4)?,
+            Var::List(vec![2.into(), 3.into(), 4.into()])
+        );
+
+        // test on string
+        let string = Var::Str("hello world".to_string());
+        assert_eq!(string.range(2, 7)?, Var::Str("ello w".to_string()));
+
+        // test on empty list
+        let empty_list = Var::List(vec![]);
+        assert_eq!(empty_list.range(1, 0), Err(Error::E_RANGE));
+
+        // test on out of range
+        let int_list = Var::List(vec![1.into(), 2.into(), 3.into()]);
+        assert_eq!(int_list.range(2, 4), Err(Error::E_RANGE));
+
+        // test on type mismatch
+        let var_int = Var::Int(10);
+        assert_eq!(var_int.range(1, 5), Err(Error::E_TYPE));
+
+        Ok(())
     }
 }

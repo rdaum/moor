@@ -168,7 +168,11 @@ impl Activation {
         if !i < self.valstack.len() {
             return None;
         }
-        Some(self.valstack[self.valstack.len() - i - 1].clone())
+        Some(self.valstack[self.valstack.len() - i].clone())
+    }
+
+    pub fn peek_top(&self) -> Option<Var> {
+        self.valstack.last().cloned()
     }
 
     pub fn peek(&self, width: usize) -> Vec<Var> {
@@ -196,6 +200,6 @@ impl Activation {
                 return Some(label);
             }
         }
-        return None;
+        None
     }
 }

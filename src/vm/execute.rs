@@ -1,14 +1,13 @@
+use crate::db::state::{StateError, WorldState};
 use enumset::EnumSet;
 
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
+use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::vm::activation::Activation;
-use crate::vm::execute::FinallyReason::Fallthrough;
 use crate::vm::opcode::{Op, ScatterLabel};
-use crate::vm::state::{PersistentState, StateError};
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
@@ -32,6 +31,36 @@ pub enum FinallyReason {
         stack: usize,
         label: usize,
     },
+}
+const FINALLY_REASON_RAISE: usize = 0x00;
+const FINALLY_REASON_UNCAUGHT: usize = 0x01;
+const FINALLY_REASON_RETURN: usize = 0x02;
+const FINALLY_REASON_ABORT: usize = 0x03;
+const FINALLY_REASON_EXIT: usize = 0x04;
+const FINALLY_REASON_FALLTHROUGH: usize = 0x05;
+
+impl FinallyReason {
+    pub fn code(&self) -> usize {
+        match *self {
+            FinallyReason::Fallthrough => FINALLY_REASON_RAISE,
+            FinallyReason::Raise { .. } => FINALLY_REASON_RAISE,
+            FinallyReason::Uncaught { .. } => FINALLY_REASON_UNCAUGHT,
+            FinallyReason::Return(_) => FINALLY_REASON_RETURN,
+            FinallyReason::Abort => FINALLY_REASON_ABORT,
+            FinallyReason::Exit { .. } => FINALLY_REASON_EXIT,
+        }
+    }
+    pub fn from_code(code: usize) -> FinallyReason {
+        match code {
+            FINALLY_REASON_RAISE => FinallyReason::Fallthrough,
+            FINALLY_REASON_UNCAUGHT => FinallyReason::Fallthrough,
+            FINALLY_REASON_RETURN => FinallyReason::Fallthrough,
+            FINALLY_REASON_ABORT => FinallyReason::Fallthrough,
+            FINALLY_REASON_EXIT => FinallyReason::Fallthrough,
+            FINALLY_REASON_FALLTHROUGH => FinallyReason::Fallthrough,
+            _ => panic!("Invalid FinallyReason code"),
+        }
+    }
 }
 
 pub enum ExecutionOutcome {
@@ -65,10 +94,10 @@ macro_rules! binary_var_op {
         let rhs = $self.pop();
         let lhs = $self.pop();
         let result = lhs.$op(&rhs);
-        if let Var::Err(result) = result {
-            return $self.push_error(result);
+        match result {
+            Ok(result) => $self.push(&result),
+            Err(err_code) => return $self.push_error(err_code),
         }
-        $self.push(&result)
     };
 }
 
@@ -88,7 +117,7 @@ impl VM {
         for a in self.stack.iter().rev() {
             let mut i = a.valstack.len();
             while i > 0 {
-                if let Var::_Catch(cnt) = a.valstack[i-1] {
+                if let Var::_Catch(cnt) = a.valstack[i - 1] {
                     // Found one, now scan forwards from 'cnt' backwards looking for either the first
                     // non-list value, or a list containing the error code.
                     // TODO check for 'cnt' being too large. not sure how to handle, tho
@@ -103,13 +132,13 @@ impl VM {
                         }
                     }
                 }
-                i = i - 1;
+                i -= 1;
             }
         }
         None
     }
 
-    fn make_stack_list(&self, frames: &Vec<Activation>, start_frame_num: usize) -> Vec<Var> {
+    fn make_stack_list(&self, frames: &[Activation], start_frame_num: usize) -> Vec<Var> {
         // TODO LambdaMOO had logic in here about 'root_vector' and 'line_numbers_too' that I haven't included yet.
 
         let mut stack_list = vec![];
@@ -141,7 +170,7 @@ impl VM {
         for (i, a) in self.stack.iter().rev().enumerate() {
             let mut pieces = vec![];
             if i != 0 {
-                pieces.push(format!("... called from "));
+                pieces.push("... called from ".to_string());
             }
             pieces.push(format!("#{}:{}", a.definer.0, a.verb));
             if a.definer != a.this {
@@ -181,16 +210,16 @@ impl VM {
             }
         };
 
-        return self.unwind_stack(why);
+        self.unwind_stack(why)
     }
 
     fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
         self.push(&Var::Err(code));
-        return self.raise_error_pack(code.make_error_pack());
+        self.raise_error_pack(code.make_error_pack())
     }
 
     fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
-        return self.raise_error_pack(code.make_error_pack());
+        self.raise_error_pack(code.make_error_pack())
     }
 
     fn unwind_stack(&mut self, why: FinallyReason) -> Result<ExecutionResult, anyhow::Error> {
@@ -201,16 +230,12 @@ impl VM {
                 match v {
                     Var::_Finally(label) => {
                         /* FINALLY handler */
-                        let why_num = match why {
-                            Fallthrough => 0x00,
-                            FinallyReason::Raise { .. } => 0x01,
-                            FinallyReason::Uncaught { .. } => 0x02,
-                            FinallyReason::Return(_) => 0x03,
-                            FinallyReason::Abort => continue,
-                            FinallyReason::Exit { .. } => 0x05,
-                        };
+                        let why_num = why.code();
+                        if why_num == FinallyReason::Abort.code() {
+                            continue;
+                        }
                         a.jump(label);
-                        a.push(Var::Int(why_num));
+                        a.push(Var::Int(why_num as i64));
                         return Ok(ExecutionResult::More);
                     }
                     Var::_Catch(_label) => {
@@ -222,14 +247,13 @@ impl VM {
                         // we will match on.
                         let mut found = false;
                         if a.valstack.len() >= 2 {
-                            match (a.valstack.pop(), a.valstack.pop()) {
-                                (Some(Var::_Label(pushed_label)), Some(Var::List(error_codes))) => {
-                                    if error_codes.contains(&Var::Err(*code)) {
-                                        a.jump(pushed_label);
-                                        found = true;
-                                    }
+                            if let (Some(Var::_Label(pushed_label)), Some(Var::List(error_codes))) =
+                                (a.valstack.pop(), a.valstack.pop())
+                            {
+                                if error_codes.contains(&Var::Err(*code)) {
+                                    a.jump(pushed_label);
+                                    found = true;
                                 }
-                                _ => {}
                             }
                         }
                         if found {
@@ -240,7 +264,7 @@ impl VM {
                     _ => continue,
                 }
             }
-            if let FinallyReason::Exit {  label, .. } = why {
+            if let FinallyReason::Exit { label, .. } = why {
                 a.jump(label);
                 return Ok(ExecutionResult::More);
             }
@@ -316,12 +340,12 @@ impl VM {
     }
 
     fn peek_top(&self) -> Var {
-        self.top().peek_at(0).expect("stack underflow")
+        self.top().peek_top().expect("stack underflow")
     }
 
     fn get_prop(
         &mut self,
-        state: &dyn PersistentState,
+        state: &dyn WorldState,
         player_flags: EnumSet<ObjFlag>,
         propname: Var,
         obj: Var,
@@ -350,7 +374,7 @@ impl VM {
 
     fn call_verb(
         &mut self,
-        state: &mut impl PersistentState,
+        state: &mut impl WorldState,
         this: Objid,
         verb: String,
         args: Vec<Var>,
@@ -391,7 +415,7 @@ impl VM {
 
     pub fn do_method_verb(
         &mut self,
-        state: &mut impl PersistentState,
+        state: &mut impl WorldState,
         obj: Objid,
         verb_name: &str,
         _do_pass: bool,
@@ -432,10 +456,7 @@ impl VM {
         Ok(Var::Err(Error::E_NONE))
     }
 
-    pub fn exec(
-        &mut self,
-        state: &mut impl PersistentState,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    pub fn exec(&mut self, state: &mut impl WorldState) -> Result<ExecutionResult, anyhow::Error> {
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
@@ -689,7 +710,10 @@ impl VM {
             }
             Op::UnaryMinus => {
                 let v = self.pop();
-                self.push(&v.negative())
+                match v.negative() {
+                    Err(e) => return self.push_error(e),
+                    Ok(v) => self.push(&v),
+                }
             }
             Op::Push(ident) => {
                 let v = self.get_env(ident);
@@ -708,14 +732,12 @@ impl VM {
                 let v = match (index, list) {
                     (Var::Int(index), Var::List(list)) => {
                         if index <= 0 || !index < list.len() as i64 {
-                            return self.push_error(E_RANGE)
+                            return self.push_error(E_RANGE);
                         } else {
                             list[index as usize].clone()
                         }
                     }
-                    (_, _) => {
-                        return self.push_error(E_TYPE)
-                    },
+                    (_, _) => return self.push_error(E_TYPE),
                 };
                 self.push(&v);
             }
@@ -727,77 +749,30 @@ impl VM {
                 };
                 // MOO is 1-indexed.
                 let index = (index - 1) as usize;
-                self.push(&l.index(index));
+                match l.index(index) {
+                    Err(e) => return self.push_error(e),
+                    Ok(v) => self.push(&v),
+                }
             }
             Op::RangeRef => {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
-                let result = match (to, from) {
+                match (to, from) {
                     (Var::Int(to), Var::Int(from)) => {
-                        // MOO is 1-indexed.
-                        let (to, from) = ((to - 1) as usize, (from - 1) as usize);
-                        match base {
-                            Var::Str(base) => {
-                                if !to < base.len() || !from < base.len() {
-                                    return self.push_error(E_RANGE)
-                                } else {
-                                    let substr = &base[from..=to];
-                                    Var::Str(String::from(substr))
-                                }
-                            }
-                            Var::List(base) => {
-                                if !to < base.len() || !from < base.len() {
-                                    return self.push_error(E_RANGE)
-                                } else {
-                                    let sublist = &base[from..=to];
-                                    Var::List(Vec::from(sublist))
-                                }
-                            }
-                            _ => return self.push_error(E_TYPE),
+                        match base.range(from, to) {
+                            Err(e) => return self.push_error(e),
+                            Ok(v) => self.push(&v),
                         }
                     }
                     (_, _) => return self.push_error(E_TYPE),
                 };
-                self.push(&result);
             }
-            // TODO MOO has odd semantics where it can clear a range of a string by assigning in
-            // a value smaller than the stated from..to range, or expand by inserting a larger
-            // value, etc.
             Op::RangeSet => {
                 let (value, to, from, base) = (self.pop(), self.pop(), self.pop(), self.pop());
                 match (to, from) {
-                    (Var::Int(to), Var::Int(from)) => {
-                        let (to, from) = ((to - 1) as usize, (from - 1) as usize);
-                        let result = match (value, base) {
-                            (Var::Str(value), Var::Str(base)) => {
-                                if !to < base.len()
-                                    || !from < base.len()
-                                    || to - from + 1 != value.len()
-                                {
-                                    return self.push_error(E_RANGE);
-                                } else {
-                                    let mut chars = base.chars().collect::<Vec<char>>();
-                                    chars.splice(from..=to, value.chars());
-                                    Var::Str(chars.into_iter().collect())
-                                }
-                            }
-                            (Var::List(value), Var::List(base)) => {
-                                if !to < base.len()
-                                    || !from < base.len()
-                                    || to - from + 1 != value.len()
-                                {
-                                    return self.push_error(E_RANGE);
-                                } else {
-                                    let mut list = base;
-                                    list.splice(from..=to, value);
-                                    Var::List(list)
-                                }
-                            }
-                            _ => {
-                                return self.push_error(E_TYPE);
-                            }
-                        };
-                        self.push(&result);
-                    }
+                    (Var::Int(to), Var::Int(from)) => match base.rangeset(value, from, to) {
+                        Err(e) => return self.push_error(e),
+                        Ok(v) => self.push(&v),
+                    },
                     _ => {
                         return self.push_error(E_TYPE);
                     }
@@ -816,7 +791,7 @@ impl VM {
                 }
             }
             Op::Length(offset) => {
-                let v = self.peek_at(offset).unwrap();
+                let v = self.top().valstack[offset].clone();
                 match v {
                     Var::Str(s) => self.push(&Var::Int(s.len() as i64)),
                     Var::List(l) => self.push(&Var::Int(l.len() as i64)),
@@ -926,7 +901,26 @@ impl VM {
                 self.push(&Var::Int(0));
             }
             Op::Continue => {
-                unimplemented!("continue")
+                let why = self.pop();
+                let Var::Int(why) = why else {
+                    panic!("'why' is not an integer representing a FinallyReason");
+                };
+                let why = FinallyReason::from_code(why as usize);
+                match why {
+                    FinallyReason::Fallthrough => {
+                        // Do nothing, normal case.
+                        return Ok(ExecutionResult::More);
+                    }
+                    FinallyReason::Raise { .. }
+                    | FinallyReason::Uncaught { .. }
+                    | FinallyReason::Return(_)
+                    | FinallyReason::Exit { .. } => {
+                        return self.unwind_stack(why);
+                    }
+                    FinallyReason::Abort => {
+                        panic!("Unexpected FINALLY_ABORT in Continue")
+                    }
+                }
             }
             Op::ExitId(label) => {
                 self.jump(label);
@@ -972,7 +966,7 @@ impl VM {
                             for _ in 1..nargs {
                                 v.push(args_iter.next().unwrap());
                             }
-                            let rest = Var::List(v.into());
+                            let rest = Var::List(v);
                             self.set_env(*id, &rest);
                         }
                         ScatterLabel::Optional(id, jump_to) => match args_iter.next() {
@@ -994,7 +988,10 @@ impl VM {
                 }
             }
             Op::CheckListForSplice => {
-                unimplemented!("CheckListForSplice")
+                let Var::List(_) = self.peek_top() else {
+                    self.pop();
+                    return self.push_error(E_TYPE);
+                };
             }
         }
         Ok(ExecutionResult::More)
@@ -1010,15 +1007,15 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::parse::Names;
+    use crate::db::state::{StateError, WorldState};
     use crate::model::objects::ObjFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{Objid, Var};
     use crate::model::var::Error::{E_NONE, E_VERBNF};
+    use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::{Binary, Op};
     use crate::vm::opcode::Op::*;
-    use crate::vm::state::{PersistentState, StateError};
+    use crate::vm::opcode::{Binary, Op};
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -1112,7 +1109,7 @@ mod tests {
         );
     }
 
-    impl PersistentState for MockState {
+    impl WorldState for MockState {
         fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
             let v = self.verbs.get(&(obj, vname.to_string()));
             match v {
@@ -1309,6 +1306,38 @@ mod tests {
         call_verb("test", &mut vm, &mut state);
         let result = exec_vm(&mut vm, &mut state);
         assert_eq!(result, Var::List(vec![111.into(), 321.into(), 123.into()]));
+    }
+
+    #[test]
+    fn test_list_splice() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
+        let binary = compile(program).unwrap();
+        let args = binary.find_var("args");
+
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::List(vec![2.into(), 3.into(), 4.into()]));
+    }
+
+    #[test]
+    fn test_list_range_length() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+
+        let program = "return {{1,2,3}[2..$], {1}[$]};";
+        let binary = compile(program).unwrap();
+
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(
+            result,
+            Var::List(vec![Var::List(vec![2.into(), 3.into()]), Var::Int(1)])
+        );
     }
 
     #[test]
@@ -1558,6 +1587,18 @@ mod tests {
         let mut vm = VM::new();
         let mut state = MockState::new();
         let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
+        let binary = compile(program).unwrap();
+        set_test_verb("test", &mut state, binary);
+        call_verb("test", &mut vm, &mut state);
+        let result = exec_vm(&mut vm, &mut state);
+        assert_eq!(result, Var::Int(666));
+    }
+
+    #[test]
+    fn test_try_finally_stmt() {
+        let mut vm = VM::new();
+        let mut state = MockState::new();
+        let program = "try a; finally return 666; endtry return 333;";
         let binary = compile(program).unwrap();
         set_test_verb("test", &mut state, binary);
         call_verb("test", &mut vm, &mut state);

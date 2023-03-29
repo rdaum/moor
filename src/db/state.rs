@@ -4,11 +4,11 @@ use bincode::error::DecodeError;
 use enumset::EnumSet;
 use thiserror::Error;
 
-use crate::model::ObjDB;
 use crate::model::objects::{ObjAttr, ObjFlag};
 use crate::model::props::{PropAttr, PropFlag};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{VerbAttr, VerbInfo};
+use crate::model::ObjDB;
 use crate::vm::opcode::Binary;
 
 #[derive(Error, Debug)]
@@ -27,7 +27,7 @@ pub enum StateError {
     ObjectNotFoundError(Objid),
 }
 
-pub trait PersistentState {
+pub trait WorldState {
     fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), anyhow::Error>;
     fn retrieve_property(
         &self,
@@ -50,7 +50,7 @@ pub struct ObjDBState<'a> {
     pub db: &'a mut dyn ObjDB,
 }
 
-impl<'a> PersistentState for ObjDBState<'a> {
+impl<'a> WorldState for ObjDBState<'a> {
     fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
         let h = self.db.find_callable_verb(
             obj,

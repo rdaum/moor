@@ -26,6 +26,13 @@ pub enum ObjAttr {
     Location,
     Flags,
 }
+
+impl Default for ObjAttrs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ObjAttrs {
     pub fn new() -> Self {
         Self {

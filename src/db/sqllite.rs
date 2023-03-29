@@ -1158,7 +1158,7 @@ mod tests {
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
         assert!(s.object_valid(o).unwrap());
         s.destroy_object(o).unwrap();
-        assert_eq!(s.object_valid(o).unwrap(), false);
+        assert!(!s.object_valid(o).unwrap());
         s.commit().unwrap();
     }
 

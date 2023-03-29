@@ -13,15 +13,15 @@ use rusqlite::Connection;
 
 use crate::compiler::codegen::compile;
 use crate::db::sqllite::SQLiteTx;
-use crate::model::ObjDB;
+use crate::db::state::ObjDBState;
 use crate::model::objects::{ObjAttrs, ObjFlag};
 use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag};
+use crate::model::ObjDB;
 use crate::textdump::{Object, TextdumpReader};
 use crate::vm::execute::{ExecutionResult, VM};
-use crate::vm::state::ObjDBState;
 
 pub mod compiler;
 mod db;
