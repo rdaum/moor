@@ -48,13 +48,13 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
    * Complete compilation from Antlr parse tree to abstract syntax tree.
    * Completed compilation of the AST into bytecode, mostly mimicking the original LambdaMOO VM's opcode set.
    * Completed 99% of the virtual machine 'bytecode' execution, including a bunch of tests. 
+   * Implemented the LambdaMOO command parser, complete with environment (contents, location, etc.) matching.
 
 ### Next steps
 
    * Implementation of the task scheduler, tying it to database transaction, to forked tasks, and to the websocket
      listener loop.
    * `Fork` opcode for above. The only remaining unimplemented opcode.
-   * Command parser.
    * Implementation of websocket listener loop.
    * Implementation of all (or most) built-ins.
    * Decompilation
