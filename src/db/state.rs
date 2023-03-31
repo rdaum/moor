@@ -1,8 +1,10 @@
+use std::marker::PhantomData;
 use crate::db::matching::MatchEnvironment;
 use anyhow::{anyhow, Error};
 use bincode::config;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
+use rusqlite::Transaction;
 use thiserror::Error;
 
 use crate::model::objects::{ObjAttr, ObjFlag};
@@ -67,13 +69,49 @@ pub trait WorldState {
 
     // Get the name & aliases of an object.
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), anyhow::Error>;
+
+    // Commit all modifications made to the state of this world since the start of its transaction.
+    // The world state becomes inoperable after this
+    fn commit(&mut self) -> Result<(), anyhow::Error>;
+
+    // Rollback all modifications made to the state of this world since the start of its transaction.
+    // The world state becomes inoperable after this
+    fn rollback(&mut self) -> Result<(), anyhow::Error>;
 }
 
-pub struct ObjDBState<'a> {
-    pub db: &'a mut dyn ObjDB,
+pub trait WorldStateSource {
+    fn new_transaction(&mut self) -> Result<Box<dyn WorldState + '_>, Error>;
 }
 
-impl<'a> WorldState for ObjDBState<'a> {
+
+pub struct ObjDBState<T>
+    where T: ObjDB
+{
+    pub db: T,
+}
+
+impl<T: ObjDB> ObjDBState<T>
+
+{
+    pub fn new(db: T) -> Self
+    {
+        Self {
+            db
+        }
+    }
+}
+
+impl <T: ObjDB> WorldState for ObjDBState<T> {
+    fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+        self.db
+            .object_get_attrs(obj, EnumSet::from(ObjAttr::Location))
+            .map(|attrs| attrs.location.unwrap())
+    }
+
+    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
+        self.db.object_contents(obj)
+    }
+
     fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
         let h = self.db.find_callable_verb(
             obj,
@@ -202,16 +240,6 @@ impl<'a> WorldState for ObjDBState<'a> {
             .is_ok())
     }
 
-    fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        self.db
-            .object_get_attrs(obj, EnumSet::from(ObjAttr::Location))
-            .map(|attrs| attrs.location.unwrap())
-    }
-
-    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
-        self.db.object_contents(obj)
-    }
-
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
         // TODO implement support for aliases.
         let name = self
@@ -220,6 +248,14 @@ impl<'a> WorldState for ObjDBState<'a> {
             .name
             .unwrap();
         return Ok((name, vec![]));
+    }
+
+    fn commit(&mut self)  -> Result<(), anyhow::Error> {
+        self.db.commit()
+    }
+
+    fn rollback(&mut self)  -> Result<(), anyhow::Error> {
+        self.db.rollback()
     }
 }
 

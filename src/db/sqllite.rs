@@ -1,9 +1,11 @@
-use anyhow::Error;
+use std::f32::consts::E;
+use std::marker::PhantomData;
+use anyhow::{anyhow, Error};
 use bincode::config;
 use bincode::config::Configuration;
 use bytes::Bytes;
 use enumset::EnumSet;
-use itertools::Itertools;
+use itertools::{equal, Itertools};
 use rusqlite::{Connection, Row, Transaction};
 use sea_query::{
     all, Alias, BlobSize, ColumnDef, CommonTableExpression, DynIden, Expr, ForeignKey,
@@ -12,6 +14,7 @@ use sea_query::{
     WithClause,
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
+use crate::db::state::{ObjDBState, WorldState, WorldStateSource};
 
 use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::permissions::Permissions;
@@ -71,11 +74,6 @@ enum VerbName {
     Name,
 }
 
-pub struct SQLiteTx<'a> {
-    tx: Option<Transaction<'a>>,
-    bincode_cfg: Configuration,
-}
-
 fn object_attr_to_column<'a>(attr: ObjAttr) -> DynIden {
     match attr {
         ObjAttr::Owner => Object::Owner.into_iden(),
@@ -123,8 +121,9 @@ fn transitive_inheritance_clause(oid: Objid) -> WithClause {
         .join(
             JoinType::InnerJoin,
             parents_of.clone(),
-            Expr::tbl(parents_of.clone(), Alias::new("oid"))
-                .equals(Object::Table, Object::Oid)
+// Expr::col((Char::Table, Char::FontId)).equals((Font::Table, Font::Id)),
+            Expr::col((parents_of.clone(), Alias::new("oid")))
+                .equals((Object::Table, Object::Oid))
                 .into_condition(),
         )
         .to_owned();
@@ -152,14 +151,39 @@ struct VerbPivot {
     attrs: VerbAttrs,
 }
 
-impl<'a> SQLiteTx<'a> {
-    pub fn new(connection: &'a mut Connection) -> Result<Self, anyhow::Error> {
-        let tx = connection.transaction()?;
-        let s = Self {
-            tx: Some(tx),
+pub struct SQLiteSource
+{
+    conn: Connection,
+}
+
+impl SQLiteSource {
+
+    pub fn new(conn: Connection) -> Self {
+        Self { conn }
+    }
+}
+
+impl WorldStateSource for SQLiteSource {
+    fn new_transaction(&mut self) -> Result<Box<dyn WorldState + '_>, Error>
+    {
+        let tx = SQLiteTx::new(&mut self.conn);
+        let ws = ObjDBState::new(tx);
+        Ok(Box::new(ws))
+    }
+}
+
+pub struct SQLiteTx<'conn>
+{
+    tx: Option<Transaction<'conn>>,
+    bincode_cfg: Configuration,
+}
+
+impl<'conn> SQLiteTx<'conn> {
+    pub fn new(conn: &'conn mut Connection) -> Self {
+        Self {
+            tx: Some(conn.transaction().unwrap()),
             bincode_cfg: config::standard(),
-        };
-        Ok(s)
+        }
     }
 
     pub fn initialize_schema(&mut self) -> Result<(), anyhow::Error> {
@@ -384,7 +408,7 @@ impl<'a> SQLiteTx<'a> {
 }
 
 // TODO translate -1 to and from null
-impl<'a> Objects for SQLiteTx<'a> {
+impl Objects for SQLiteTx<'_> {
     fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, Error> {
         let owner = match attrs.owner {
             None => None::<i64>.into(),
@@ -570,7 +594,7 @@ impl<'a> Objects for SQLiteTx<'a> {
     }
 }
 
-impl<'a> PropDefs for SQLiteTx<'a> {
+impl PropDefs for SQLiteTx<'_> {
     fn get_propdef(&mut self, target: Objid, pname: &str) -> Result<Propdef, Error> {
         let (query, values) = Query::select()
             .from(PropertyDefinition::Table)
@@ -693,7 +717,7 @@ impl<'a> PropDefs for SQLiteTx<'a> {
     }
 }
 
-impl<'a> Properties for SQLiteTx<'a> {
+impl Properties for SQLiteTx<'_> {
     fn find_property(
         &self,
         oid: Objid,
@@ -713,13 +737,13 @@ impl<'a> Properties for SQLiteTx<'a> {
                 JoinType::Join,
                 Property::Table,
                 all![Expr::tbl(Property::Table, Property::Location)
-                    .equals(parents_of, Alias::new("oid"))],
+                    .equals((parents_of, Alias::new("oid")))],
             )
             .join(
                 JoinType::Join,
                 PropertyDefinition::Table,
                 all![Expr::tbl(Property::Table, Property::Pid)
-                    .equals(PropertyDefinition::Table, PropertyDefinition::Pid),],
+                    .equals((PropertyDefinition::Table, PropertyDefinition::Pid)),],
             )
             .cond_where(Expr::col((PropertyDefinition::Table, PropertyDefinition::Name)).eq(name))
             .to_owned();
@@ -793,13 +817,13 @@ impl<'a> Properties for SQLiteTx<'a> {
                 JoinType::Join,
                 Property::Table,
                 all![Expr::tbl(Property::Table, Property::Location)
-                    .equals(parents_of, Alias::new("oid"))],
+                    .equals((parents_of, Alias::new("oid")))],
             )
             .join(
                 JoinType::Join,
                 PropertyDefinition::Table,
                 all![Expr::tbl(Property::Table, Property::Pid)
-                    .equals(PropertyDefinition::Table, PropertyDefinition::Pid),],
+                    .equals((PropertyDefinition::Table, PropertyDefinition::Pid)),],
             )
             .cond_where(Expr::col((Property::Table, Property::Pid)).eq(handle.0))
             .to_owned();
@@ -905,7 +929,7 @@ impl<'a> Properties for SQLiteTx<'a> {
     }
 }
 
-impl<'a> Verbs for SQLiteTx<'a> {
+impl Verbs for SQLiteTx<'_> {
     fn add_verb(
         &mut self,
         oid: Objid,
@@ -984,7 +1008,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
                 JoinType::Join,
                 VerbName::Table,
                 Expr::tbl(Verb::Table, Verb::Vid)
-                    .equals(VerbName::Table, VerbName::Vid)
+                    .equals((VerbName::Table, VerbName::Vid))
                     .into_condition(),
             )
             .cond_where(Expr::col(Verb::Definer).eq(oid.0))
@@ -1014,7 +1038,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
                 JoinType::Join,
                 VerbName::Name,
                 Expr::tbl(Verb::Table, Verb::Vid)
-                    .equals(VerbName::Table, VerbName::Vid)
+                    .equals((VerbName::Table, VerbName::Vid))
                     .into_condition(),
             )
             .cond_where(Expr::col(Verb::Vid).eq(vid.0))
@@ -1065,12 +1089,12 @@ impl<'a> Verbs for SQLiteTx<'a> {
             .join(
                 JoinType::Join,
                 Verb::Table,
-                all![Expr::tbl(Verb::Table, Verb::Definer).equals(parents_of, Alias::new("oid"))],
+                all![Expr::col((Verb::Table, Verb::Definer)).equals((parents_of, Alias::new("oid")))],
             )
             .join(
                 JoinType::Join,
                 VerbName::Table,
-                all![Expr::tbl(VerbName::Table, VerbName::Vid).equals(Verb::Table, Verb::Vid),],
+                all![Expr::col((VerbName::Table, VerbName::Vid)).equals((Verb::Table, Verb::Vid)),],
             )
             .cond_where(Expr::col((VerbName::Table, VerbName::Name)).eq(verb))
             .to_owned();
@@ -1104,7 +1128,7 @@ impl<'a> Verbs for SQLiteTx<'a> {
     }
 }
 
-impl<'a> Permissions for SQLiteTx<'a> {
+impl Permissions for SQLiteTx<'_> {
     fn property_allows(
         &self,
         check_flags: EnumSet<PropFlag>,
@@ -1119,7 +1143,7 @@ impl<'a> Permissions for SQLiteTx<'a> {
     }
 }
 
-impl<'a> ObjDB for SQLiteTx<'a> {
+impl ObjDB for SQLiteTx<'_> {
     fn initialize(&mut self) -> Result<(), Error> {
         self.initialize_schema()
     }
@@ -1137,6 +1161,7 @@ impl<'a> ObjDB for SQLiteTx<'a> {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
@@ -1152,20 +1177,20 @@ mod tests {
     #[test]
     fn object_create_check_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn).unwrap();
+        let mut s = SQLiteTx::new(&mut conn);
         s.initialize_schema().unwrap();
 
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
         assert!(s.object_valid(o).unwrap());
         s.destroy_object(o).unwrap();
         assert!(!s.object_valid(o).unwrap());
-        s.commit().unwrap();
+        s.tx.unwrap().commit().unwrap();
     }
 
     #[test]
     fn object_check_children_contents() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn).unwrap();
+        let mut s = SQLiteTx::new(&mut conn);
         s.initialize_schema().unwrap();
 
         let o1 = s.create_object(None, ObjAttrs::new().name("test")).unwrap();
@@ -1187,7 +1212,7 @@ mod tests {
     #[test]
     fn object_create_set_get_attrs() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn).unwrap();
+        let mut s = SQLiteTx::new(&mut conn);
         s.initialize_schema().unwrap();
 
         let o = s
@@ -1212,7 +1237,7 @@ mod tests {
     #[test]
     fn propdef_create_get_update_count_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn).unwrap();
+        let mut s = SQLiteTx::new(&mut conn);
         s.initialize_schema().unwrap();
 
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1257,7 +1282,7 @@ mod tests {
     #[test]
     fn property_inheritance() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn).unwrap();
+        let mut s = SQLiteTx::new(&mut conn);
         s.initialize_schema().unwrap();
 
         let parent = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1347,7 +1372,7 @@ mod tests {
     #[test]
     fn verb_inheritance() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn).unwrap();
+        let mut s = SQLiteTx::new(&mut conn);
         s.initialize_schema().unwrap();
 
         let parent = s.create_object(None, &ObjAttrs::new()).unwrap();

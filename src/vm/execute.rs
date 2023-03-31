@@ -374,7 +374,7 @@ impl VM {
 
     fn call_verb(
         &mut self,
-        state: &mut impl WorldState,
+        state: &mut dyn WorldState,
         this: Objid,
         verb: String,
         args: Vec<Var>,
@@ -415,7 +415,7 @@ impl VM {
 
     pub fn do_method_verb(
         &mut self,
-        state: &mut impl WorldState,
+        state: &mut dyn WorldState,
         obj: Objid,
         verb_name: &str,
         _do_pass: bool,
@@ -456,7 +456,7 @@ impl VM {
         Ok(Var::Err(Error::E_NONE))
     }
 
-    pub fn exec(&mut self, state: &mut impl WorldState) -> Result<ExecutionResult, anyhow::Error> {
+    pub fn exec(&mut self, state: &mut dyn WorldState) -> Result<ExecutionResult, anyhow::Error> {
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
@@ -1158,6 +1158,14 @@ mod tests {
 
         fn valid(&mut self, _obj: Objid) -> Result<bool, Error> {
             Ok(true)
+        }
+
+        fn commit(&mut self)  -> Result<(), anyhow::Error> {
+            Ok(())
+        }
+
+        fn rollback(&mut self) -> Result<(), anyhow::Error> {
+            Ok(())
         }
     }
 

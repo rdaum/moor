@@ -1,8 +1,10 @@
 extern crate core;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
+use std::ops::DerefMut;
 
 use bincode::config;
 use clap::builder::ValueHint;
@@ -12,13 +14,13 @@ use enumset::EnumSet;
 use rusqlite::Connection;
 
 use crate::compiler::codegen::compile;
-use crate::db::sqllite::SQLiteTx;
-use crate::db::state::ObjDBState;
-use crate::model::objects::{ObjAttrs, ObjFlag};
-use crate::model::props::PropFlag;
+use crate::db::sqllite::{SQLiteSource, SQLiteTx};
+use crate::db::state::{ObjDBState, WorldState, WorldStateSource};
+use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
+use crate::model::props::{PropDefs, PropFlag, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
-use crate::model::verbs::{Program, VerbFlag};
+use crate::model::verbs::{Program, VerbFlag, Verbs};
 use crate::model::ObjDB;
 use crate::textdump::{Object, TextdumpReader};
 use crate::vm::execute::{ExecutionResult, VM};
@@ -38,6 +40,7 @@ struct RProp {
     flags: u8,
     val: Var,
 }
+
 fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Option<RProp> {
     let local_len = o.propdefs.len();
     if offset < local_len {
@@ -92,7 +95,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error> {
-    let s: &mut dyn ObjDB = &mut SQLiteTx::new(conn)?;
+    let mut s = SQLiteTx::new(conn);
     s.initialize()?;
 
     let jhcore = File::open(path)?;
@@ -223,32 +226,46 @@ fn main() {
         eprintln!("Loading textdump...");
         textdump_load(&mut conn, textdump.to_str().unwrap()).unwrap();
     }
+    let mut src = SQLiteSource::new(conn);
 
-    let mut tx = SQLiteTx::new(&mut conn).unwrap();
-    let mut odb_state = ObjDBState { db: &mut tx };
+    {
+        let mut ws = src.new_transaction();
+        let mut ws = ws.unwrap();
 
-    let mut vm = VM::new();
-    eprintln!("Calling #0:do_login_command...");
-    vm.do_method_verb(
-        &mut odb_state,
-        Objid(0),
-        "do_login_command",
-        false,
-        Objid(0),
-        Objid(0),
-        ObjFlag::Wizard | ObjFlag::Programmer,
-        Objid(0),
-        vec![],
-    )
-    .unwrap();
-    loop {
-        let result = vm.exec(&mut odb_state).unwrap();
-        match result {
-            ExecutionResult::Complete(a) => {
-                eprintln!("Done: {:?}", a);
-                break;
-            }
-            ExecutionResult::More => {}
+        let mut vm = VM::new();
+        eprintln!("Calling #0:do_login_command...");
+
+        {
+            vm.do_method_verb(
+                ws.deref_mut(),
+                Objid(0),
+                "do_login_command",
+                false,
+                Objid(0),
+                Objid(0),
+                ObjFlag::Wizard | ObjFlag::Programmer,
+                Objid(0),
+                vec![],
+            )
+                .unwrap();
         }
+        {
+            loop {
+                let result = {
+                    vm.exec(ws.deref_mut()).unwrap()
+                };
+                match result {
+                    ExecutionResult::Complete(a) => {
+                        eprintln!("Done: {:?}", a);
+                        break;
+                    }
+                    ExecutionResult::More => {}
+                }
+            }
+
+        }
+        ws.commit();
     }
+
+    eprintln!("Done.");
 }
