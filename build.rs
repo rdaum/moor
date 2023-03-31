@@ -16,7 +16,7 @@ fn main() {
         .arg("-visitor")
         .arg("grammar/moo.g4")
         .arg("-o")
-        .arg("src")
+        .arg("src/grammar")
         .output()
         .expect("antlr tool failed to start");
 

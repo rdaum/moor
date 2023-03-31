@@ -10,6 +10,11 @@ use crate::model::var::Error::{E_RANGE, E_TYPE};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Objid(pub i64);
 
+pub const SYSTEM_OBJECT: Objid = Objid(0);
+pub const NOTHING: Objid = Objid(-1);
+pub const AMBIGUOUS: Objid = Objid(-2);
+pub const FAILED_MATCH: Objid = Objid(-3);
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]

@@ -24,10 +24,10 @@ use crate::textdump::{Object, TextdumpReader};
 use crate::vm::execute::{ExecutionResult, VM};
 
 pub mod compiler;
-mod db;
+pub mod db;
 pub mod grammar;
 pub mod model;
-pub mod parsecmd;
+pub mod server;
 pub mod textdump;
 pub mod vm;
 

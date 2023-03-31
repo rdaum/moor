@@ -1,3 +1,4 @@
+use crate::db::matching::MatchEnvironment;
 use anyhow::{anyhow, Error};
 use bincode::config;
 use bincode::error::DecodeError;
@@ -6,7 +7,7 @@ use thiserror::Error;
 
 use crate::model::objects::{ObjAttr, ObjFlag};
 use crate::model::props::{PropAttr, PropFlag};
-use crate::model::var::{Objid, Var};
+use crate::model::var::{Objid, Var, AMBIGUOUS, FAILED_MATCH, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbInfo};
 use crate::model::ObjDB;
 use crate::vm::opcode::Binary;
@@ -25,16 +26,31 @@ pub enum StateError {
     PropertyPermissionDenied(Objid, String),
     #[error("Object not found: #{0:?}")]
     ObjectNotFoundError(Objid),
+    #[error("Failed object match: {0}")]
+    FailedMatch(String),
+    #[error("Ambiguous object match: {0}")]
+    AmbiguousMatch(String),
 }
 
 pub trait WorldState {
+    // Get the location of the given object.
+    fn location_of(&mut self, obj: Objid) -> Result<Objid, anyhow::Error>;
+
+    // Get the contents of a given object.
+    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, anyhow::Error>;
+
+    // Retrieve a verb/method from the given object.
     fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), anyhow::Error>;
+
+    // Retrieve a property from the given object, walking transitively up its inheritance chain.
     fn retrieve_property(
         &self,
         obj: Objid,
         pname: &str,
         player_flags: EnumSet<ObjFlag>,
     ) -> Result<Var, anyhow::Error>;
+
+    // Update a property on the given object.
     fn update_property(
         &mut self,
         obj: Objid,
@@ -42,8 +58,15 @@ pub trait WorldState {
         player_flags: EnumSet<ObjFlag>,
         value: &Var,
     ) -> Result<(), anyhow::Error>;
+
+    // Get the object that is the parent of the given object.
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, anyhow::Error>;
+
+    // Check the validity of an object.
     fn valid(&mut self, obj: Objid) -> Result<bool, anyhow::Error>;
+
+    // Get the name & aliases of an object.
+    fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), anyhow::Error>;
 }
 
 pub struct ObjDBState<'a> {
@@ -177,5 +200,51 @@ impl<'a> WorldState for ObjDBState<'a> {
             .db
             .object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)
             .is_ok())
+    }
+
+    fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+        self.db
+            .object_get_attrs(obj, EnumSet::from(ObjAttr::Location))
+            .map(|attrs| attrs.location.unwrap())
+    }
+
+    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
+        self.db.object_contents(obj)
+    }
+
+    fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
+        // TODO implement support for aliases.
+        let name = self
+            .db
+            .object_get_attrs(obj, EnumSet::from(ObjAttr::Name))?
+            .name
+            .unwrap();
+        return Ok((name, vec![]));
+    }
+}
+
+impl MatchEnvironment for dyn WorldState {
+    fn is_valid(&mut self, oid: Objid) -> Result<bool, Error> {
+        self.valid(oid)
+    }
+
+    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, Error> {
+        let mut names = self.names_of(oid)?;
+        let mut object_names = vec![names.0];
+        object_names.append(&mut names.1);
+        Ok(object_names)
+    }
+
+    fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, Error> {
+        let location = self.location_of(player)?;
+        let mut surroundings = self.contents_of(location)?;
+        surroundings.push(location);
+        surroundings.push(player);
+
+        Ok(surroundings)
+    }
+
+    fn location_of(&mut self, player: Objid) -> Result<Objid, Error> {
+        self.location_of(player)
     }
 }

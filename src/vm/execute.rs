@@ -757,12 +757,10 @@ impl VM {
             Op::RangeRef => {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
                 match (to, from) {
-                    (Var::Int(to), Var::Int(from)) => {
-                        match base.range(from, to) {
-                            Err(e) => return self.push_error(e),
-                            Ok(v) => self.push(&v),
-                        }
-                    }
+                    (Var::Int(to), Var::Int(from)) => match base.range(from, to) {
+                        Err(e) => return self.push_error(e),
+                        Ok(v) => self.push(&v),
+                    },
                     (_, _) => return self.push_error(E_TYPE),
                 };
             }
@@ -1143,6 +1141,17 @@ mod tests {
             Ok(())
         }
 
+        fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+            unimplemented!()
+        }
+
+        fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
+            unimplemented!()
+        }
+
+        fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
+            unimplemented!()
+        }
         fn parent_of(&mut self, _obj: Objid) -> Result<Objid, Error> {
             Ok(Objid(-1))
         }

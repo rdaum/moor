@@ -15,7 +15,9 @@ pub enum ArgSpec {
 pub enum PrepSpec {
     Any,
     None,
-    Other(u16),
+    Other(
+        u16, /* matches Prep 'id' as returned from match_preposition */
+    ),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode)]
