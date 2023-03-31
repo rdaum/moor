@@ -44,6 +44,22 @@ const PREP_LIST: [&str; 15] = [
     "off/off of",
 ];
 
+pub const PREPOSITION_WITH_USING: u16 = 0;
+pub const PREPOSITION_AT_TO: u16 = 1;
+pub const PREPOSITION_IN_FRONT_OF: u16 = 2;
+pub const PREPOSITION_INTO_IN: u16 = 3;
+pub const PREPOSITION_ON_TOP_OF_ON: u16 = 4;
+pub const PREPOSITION_OUT_OF: u16 = 5;
+pub const PREPOSITION_OVER: u16 = 6;
+pub const PREPOSITION_THROUGH: u16 = 7;
+pub const PREPOSITION_UNDER: u16 = 8;
+pub const PREPOSITION_BEHIND: u16 = 9;
+pub const PREPOSITION_BESIDE: u16 = 10;
+pub const PREPOSITION_FOR_ABOUT: u16 = 11;
+pub const PREPOSITION_IS: u16 = 12;
+pub const PREPOSITION_AS: u16 = 13;
+pub const PREPOSITION_OFF_OF: u16 = 14;
+
 static mut PREPOSITIONS: Vec<Prep> = vec![];
 static INIT: Once = Once::new();
 
@@ -303,6 +319,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "obj");
         assert_eq!(parsed.dobj, Objid(1));
         assert_eq!(parsed.prepstr, "to");
+        assert_eq!(parsed.prep, PrepSpec::Other(PREPOSITION_AT_TO));
         assert_eq!(parsed.iobjstr, "player");
         assert_eq!(parsed.iobj, Objid(2));
         assert_eq!(
@@ -469,7 +486,7 @@ mod tests {
         assert_eq!(result.dobjstr, "thing1".to_string());
         assert_eq!(result.dobj, MOCK_THING1);
         assert_eq!(result.prepstr, "in".to_string());
-        assert_eq!(result.prep, PrepSpec::Other(3));
+        assert_eq!(result.prep, PrepSpec::Other(PREPOSITION_INTO_IN));
         assert_eq!(result.iobjstr, "t2".to_string());
         assert_eq!(result.iobj, MOCK_THING2);
     }
@@ -490,7 +507,7 @@ mod tests {
         assert_eq!(result.dobjstr, "".to_string());
         assert_eq!(result.dobj, NOTHING);
         assert_eq!(result.prepstr, "at".to_string());
-        assert_eq!(result.prep, PrepSpec::Other(1));
+        assert_eq!(result.prep, PrepSpec::Other(PREPOSITION_AT_TO));
         assert_eq!(result.iobjstr, "here".to_string());
         assert_eq!(result.iobj, MOCK_ROOM1);
     }
