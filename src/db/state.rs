@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 use crate::db::matching::MatchEnvironment;
 use anyhow::{anyhow, Error};
 use bincode::config;
@@ -6,6 +7,7 @@ use bincode::error::DecodeError;
 use enumset::EnumSet;
 use rusqlite::Transaction;
 use thiserror::Error;
+use std::sync::Mutex;
 
 use crate::model::objects::{ObjAttr, ObjFlag};
 use crate::model::props::{PropAttr, PropFlag};
@@ -61,6 +63,16 @@ pub trait WorldState {
         value: &Var,
     ) -> Result<(), anyhow::Error>;
 
+    // Add a property for the given object.
+    fn add_property(
+        &mut self,
+        obj: Objid,
+        pname: &str,
+        owner: Objid,
+        prop_flags: EnumSet<PropFlag>,
+        initial_value: Option<Var>,
+    ) -> Result<(), anyhow::Error>;
+
     // Get the object that is the parent of the given object.
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, anyhow::Error>;
 
@@ -80,9 +92,8 @@ pub trait WorldState {
 }
 
 pub trait WorldStateSource {
-    fn new_transaction(&mut self) -> Result<Box<dyn WorldState + '_>, Error>;
+    fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error>;
 }
-
 
 pub struct ObjDBState<T>
     where T: ObjDB
@@ -177,6 +188,18 @@ impl <T: ObjDB> WorldState for ObjDBState<T> {
                 }
             }
         }
+    }
+
+    fn add_property(
+        &mut self,
+        obj: Objid,
+        pname: &str,
+        owner: Objid,
+        prop_flags: EnumSet<PropFlag>,
+        initial_value: Option<Var>,
+    ) -> Result<(), anyhow::Error> {
+        self.db.add_propdef(obj, pname, obj, prop_flags, initial_value)?;
+        Ok(())
     }
 
     fn update_property(

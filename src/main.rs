@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::ops::DerefMut;
+use std::sync::{Arc, Mutex};
 
 use bincode::config;
 use clap::builder::ValueHint;
@@ -22,6 +23,7 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
 use crate::model::ObjDB;
+use crate::server::scheduler::Scheduler;
 use crate::textdump::{Object, TextdumpReader};
 use crate::vm::execute::{ExecutionResult, VM};
 
@@ -94,7 +96,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 
-fn textdump_load(conn: &mut Connection, path: &str) -> Result<(), anyhow::Error> {
+fn textdump_load(conn: Connection, path: &str) -> Result<(), anyhow::Error> {
     let mut s = SQLiteTx::new(conn);
     s.initialize()?;
 
@@ -221,51 +223,16 @@ fn main() {
 
     eprintln!("Moor");
 
-    let mut conn = Connection::open(args.db).unwrap();
+    let mut conn = Connection::open(args.db.clone()).unwrap();
     if let Some(textdump) = args.textdump {
         eprintln!("Loading textdump...");
-        textdump_load(&mut conn, textdump.to_str().unwrap()).unwrap();
+        textdump_load(conn, textdump.to_str().unwrap()).unwrap();
     }
-    let mut src = SQLiteSource::new(conn);
 
-    {
-        let mut ws = src.new_transaction();
-        let mut ws = ws.unwrap();
 
-        let mut vm = VM::new();
-        eprintln!("Calling #0:do_login_command...");
+    let mut src = SQLiteSource::new(args.db);
 
-        {
-            vm.do_method_verb(
-                ws.deref_mut(),
-                Objid(0),
-                "do_login_command",
-                false,
-                Objid(0),
-                Objid(0),
-                ObjFlag::Wizard | ObjFlag::Programmer,
-                Objid(0),
-                vec![],
-            )
-                .unwrap();
-        }
-        {
-            loop {
-                let result = {
-                    vm.exec(ws.deref_mut()).unwrap()
-                };
-                match result {
-                    ExecutionResult::Complete(a) => {
-                        eprintln!("Done: {:?}", a);
-                        break;
-                    }
-                    ExecutionResult::More => {}
-                }
-            }
-
-        }
-        ws.commit();
-    }
+    let mut scheduler = Scheduler::new(Arc::new(Mutex::new(src)));
 
     eprintln!("Done.");
 }

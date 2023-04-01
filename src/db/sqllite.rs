@@ -1,5 +1,4 @@
-use std::f32::consts::E;
-use std::marker::PhantomData;
+use crate::db::state::{ObjDBState, WorldState, WorldStateSource};
 use anyhow::{anyhow, Error};
 use bincode::config;
 use bincode::config::Configuration;
@@ -14,7 +13,11 @@ use sea_query::{
     WithClause,
 };
 use sea_query_rusqlite::{RusqliteBinder, RusqliteValue, RusqliteValues};
-use crate::db::state::{ObjDBState, WorldState, WorldStateSource};
+use std::cell::RefCell;
+use std::f32::consts::E;
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::sync::{Arc, LockResult, Mutex, MutexGuard};
 
 use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::permissions::Permissions;
@@ -121,7 +124,7 @@ fn transitive_inheritance_clause(oid: Objid) -> WithClause {
         .join(
             JoinType::InnerJoin,
             parents_of.clone(),
-// Expr::col((Char::Table, Char::FontId)).equals((Font::Table, Font::Id)),
+            // Expr::col((Char::Table, Char::FontId)).equals((Font::Table, Font::Id)),
             Expr::col((parents_of.clone(), Alias::new("oid")))
                 .equals((Object::Table, Object::Oid))
                 .into_condition(),
@@ -151,39 +154,42 @@ struct VerbPivot {
     attrs: VerbAttrs,
 }
 
-pub struct SQLiteSource
-{
-    conn: Connection,
+pub struct SQLiteSource {
+    db_path: PathBuf,
 }
 
 impl SQLiteSource {
-
-    pub fn new(conn: Connection) -> Self {
-        Self { conn }
+    pub fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
     }
 }
 
 impl WorldStateSource for SQLiteSource {
-    fn new_transaction(&mut self) -> Result<Box<dyn WorldState + '_>, Error>
-    {
-        let tx = SQLiteTx::new(&mut self.conn);
+    fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error> {
+        let connection = Connection::open(&self.db_path)?;
+        let tx = SQLiteTx::new(connection);
         let ws = ObjDBState::new(tx);
-        Ok(Box::new(ws))
+        Ok(Arc::new(Mutex::new(ws)))
     }
 }
 
-pub struct SQLiteTx<'conn>
-{
+pub struct SQLiteTx<'conn> {
     tx: Option<Transaction<'conn>>,
+    connection: Connection,
     bincode_cfg: Configuration,
 }
 
 impl<'conn> SQLiteTx<'conn> {
-    pub fn new(conn: &'conn mut Connection) -> Self {
+    pub fn new(connection: Connection) -> Self {
         Self {
-            tx: Some(conn.transaction().unwrap()),
+            connection,
+            tx: None,
             bincode_cfg: config::standard(),
         }
+    }
+
+    pub fn begin(&'conn mut self) {
+        self.tx = Some(self.connection.unchecked_transaction().unwrap());
     }
 
     pub fn initialize_schema(&mut self) -> Result<(), anyhow::Error> {
@@ -1089,7 +1095,9 @@ impl Verbs for SQLiteTx<'_> {
             .join(
                 JoinType::Join,
                 Verb::Table,
-                all![Expr::col((Verb::Table, Verb::Definer)).equals((parents_of, Alias::new("oid")))],
+                all![
+                    Expr::col((Verb::Table, Verb::Definer)).equals((parents_of, Alias::new("oid")))
+                ],
             )
             .join(
                 JoinType::Join,
@@ -1148,19 +1156,16 @@ impl ObjDB for SQLiteTx<'_> {
         self.initialize_schema()
     }
 
-    fn commit(&mut self) -> Result<(), Error> {
-        let tx = std::mem::take(&mut self.tx);
-        tx.unwrap().commit()?;
+    fn commit(self) -> Result<(), Error> {
+        self.tx.unwrap().commit()?;
         Ok(())
     }
 
-    fn rollback(&mut self) -> Result<(), Error> {
-        let tx = std::mem::take(&mut self.tx);
-        tx.unwrap().rollback()?;
+    fn rollback(self) -> Result<(), Error> {
+        self.tx.unwrap().rollback()?;
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1177,7 +1182,7 @@ mod tests {
     #[test]
     fn object_create_check_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn);
+        let mut s = SQLiteTx::new(conn);
         s.initialize_schema().unwrap();
 
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1190,7 +1195,9 @@ mod tests {
     #[test]
     fn object_check_children_contents() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn);
+        let mut s = SQLiteTx::new(conn);
+        s.begin();
+
         s.initialize_schema().unwrap();
 
         let o1 = s.create_object(None, ObjAttrs::new().name("test")).unwrap();
@@ -1212,7 +1219,7 @@ mod tests {
     #[test]
     fn object_create_set_get_attrs() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn);
+        let mut s = SQLiteTx::new(conn);
         s.initialize_schema().unwrap();
 
         let o = s
@@ -1237,7 +1244,7 @@ mod tests {
     #[test]
     fn propdef_create_get_update_count_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn);
+        let mut s = SQLiteTx::new(conn);
         s.initialize_schema().unwrap();
 
         let o = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1282,7 +1289,7 @@ mod tests {
     #[test]
     fn property_inheritance() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn);
+        let mut s = SQLiteTx::new(conn);
         s.initialize_schema().unwrap();
 
         let parent = s.create_object(None, &ObjAttrs::new()).unwrap();
@@ -1372,7 +1379,7 @@ mod tests {
     #[test]
     fn verb_inheritance() {
         let mut conn = Connection::open_in_memory().unwrap();
-        let mut s = SQLiteTx::new(&mut conn);
+        let mut s = SQLiteTx::new(conn);
         s.initialize_schema().unwrap();
 
         let parent = s.create_object(None, &ObjAttrs::new()).unwrap();
