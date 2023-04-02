@@ -1,7 +1,7 @@
 use crate::db::matching::MatchEnvironment;
-use crate::model::r#match::PrepSpec;
+
 use crate::model::var::{Objid, NOTHING};
-use crate::server::parse_cmd::{parse_command, ParsedCommand};
+
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 
@@ -18,6 +18,7 @@ pub struct MockObject {
     pub names: Vec<String>,
 }
 
+#[derive(Default)]
 pub struct MockMatchEnvironment {
     objects: HashMap<Objid, MockObject>,
 }
@@ -28,13 +29,7 @@ impl MockMatchEnvironment {
     }
 }
 
-impl Default for MockMatchEnvironment {
-    fn default() -> Self {
-        MockMatchEnvironment {
-            objects: HashMap::new(),
-        }
-    }
-}
+
 
 impl MatchEnvironment for MockMatchEnvironment {
     fn is_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error> {
@@ -45,7 +40,7 @@ impl MatchEnvironment for MockMatchEnvironment {
         Ok(self
             .objects
             .get(&oid)
-            .map_or_else(|| Vec::new(), |o| o.names.clone()))
+            .map_or_else(Vec::new, |o| o.names.clone()))
     }
 
     fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, anyhow::Error> {

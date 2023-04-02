@@ -1,6 +1,6 @@
 use crate::model::r#match::PrepSpec;
 use crate::model::var::{Objid, Var};
-use std::convert::Into;
+
 use std::string::ToString;
 use std::sync::Once;
 
@@ -80,8 +80,7 @@ pub fn match_preposition(prep: &str) -> Option<Prep> {
     unsafe {
         PREPOSITIONS
             .iter()
-            .find(|p| p.phrases.iter().any(|t| t == &prep))
-            .map(|p| p.clone())
+            .find(|p| p.phrases.iter().any(|t| t == &prep)).cloned()
     }
 }
 
@@ -150,7 +149,7 @@ where
     let words = parse_into_words(&command);
 
     // Check for built-in commands
-    let mut i = 0;
+    let i = 0;
     let verb = words[i].to_string();
     let mut dobjstr = String::new();
     let mut dobj = None;

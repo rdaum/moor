@@ -57,15 +57,12 @@ struct LoopEntry {
 pub struct Name(pub usize);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Names {
     pub names: Vec<String>,
 }
 
-impl Default for Names {
-    fn default() -> Self {
-        Self { names: vec![] }
-    }
-}
+
 
 impl Names {
     pub fn new() -> Self {
@@ -108,7 +105,7 @@ impl Names {
     }
 
     pub fn find_name(&self, name: &str) -> Option<Name> {
-        self.find_name_offset(name).map(|n| Name(n))
+        self.find_name_offset(name).map(Name)
     }
 
     pub fn find_name_offset(&self, name: &str) -> Option<usize> {
@@ -117,7 +114,7 @@ impl Names {
             .position(|x| x.to_lowercase() == name.to_lowercase())
     }
     pub fn width(&self) -> usize {
-        return self.names.len();
+        self.names.len()
     }
 }
 

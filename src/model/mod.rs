@@ -12,6 +12,6 @@ pub mod verbs;
 
 pub trait ObjDB: Objects + Properties + PropDefs + Verbs + Permissions {
     fn initialize(&mut self) -> Result<(), anyhow::Error>;
-    fn commit(self) -> Result<(), anyhow::Error>;
-    fn rollback(self) -> Result<(), anyhow::Error>;
+    fn commit(&mut self) -> Result<(), anyhow::Error>;
+    fn rollback(&mut self) -> Result<(), anyhow::Error>;
 }

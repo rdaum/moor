@@ -1,18 +1,17 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
 use crate::db::matching::MatchEnvironment;
-use anyhow::{anyhow, Error};
-use bincode::config;
-use bincode::error::DecodeError;
-use enumset::EnumSet;
-use thiserror::Error;
-use std::sync::Mutex;
+use anyhow::{Error};
 
-use crate::model::objects::{ObjAttr, ObjFlag};
-use crate::model::props::{PropAttr, PropFlag};
-use crate::model::var::{Objid, Var, AMBIGUOUS, FAILED_MATCH, NOTHING};
-use crate::model::verbs::{VerbAttr, VerbInfo};
-use crate::model::ObjDB;
+
+use enumset::EnumSet;
+use std::sync::Arc;
+use std::sync::Mutex;
+use thiserror::Error;
+
+use crate::model::objects::{ObjFlag};
+use crate::model::props::{PropFlag};
+use crate::model::var::{Objid, Var};
+use crate::model::verbs::{VerbInfo};
+
 use crate::vm::opcode::Binary;
 
 #[derive(Error, Debug)]
@@ -94,192 +93,6 @@ pub trait WorldStateSource {
     fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error>;
 }
 
-pub struct ObjDBState<T>
-    where T: ObjDB
-{
-    pub db: T,
-}
-
-impl<T: ObjDB> ObjDBState<T>
-
-{
-    pub fn new(db: T) -> Self
-    {
-        Self {
-            db
-        }
-    }
-}
-
-impl <T: ObjDB> WorldState for ObjDBState<T> {
-    fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        self.db
-            .object_get_attrs(obj, EnumSet::from(ObjAttr::Location))
-            .map(|attrs| attrs.location.unwrap())
-    }
-
-    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
-        self.db.object_contents(obj)
-    }
-
-    fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
-        let h = self.db.find_callable_verb(
-            obj,
-            vname,
-            VerbAttr::Program | VerbAttr::Flags | VerbAttr::Owner | VerbAttr::Definer,
-        )?;
-        let Some(vi) = h else {
-            return Err(anyhow!(StateError::VerbNotFound(obj, vname.to_string())));
-        };
-
-        let program = vi.clone().attrs.program.unwrap();
-        let slc = &program.0[..];
-        let result: Result<(Binary, usize), DecodeError> =
-            bincode::serde::decode_from_slice(slc, config::standard());
-        let Ok((binary, _size)) = result else {
-            return Err(anyhow!(StateError::VerbDecodeError(obj, vname.to_string())));
-        };
-
-        Ok((binary, vi))
-    }
-
-    fn retrieve_property(
-        &self,
-        obj: Objid,
-        property_name: &str,
-        player_flags: EnumSet<ObjFlag>,
-    ) -> Result<Var, Error> {
-        // TODO builtin properties!
-
-        let find = self
-            .db
-            .find_property(
-                obj,
-                property_name,
-                PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value,
-            )
-            .expect("db fail");
-        match find {
-            None => Err(anyhow!(StateError::PropertyNotFound(
-                obj,
-                property_name.to_string()
-            ))),
-            Some(p) => {
-                if !self.db.property_allows(
-                    PropFlag::Read.into(),
-                    obj,
-                    player_flags,
-                    p.attrs.flags.unwrap(),
-                    p.attrs.owner.unwrap(),
-                ) {
-                    Err(anyhow!(StateError::PropertyPermissionDenied(
-                        obj,
-                        property_name.to_string()
-                    )))
-                } else {
-                    match p.attrs.value {
-                        None => Err(anyhow!(StateError::PropertyNotFound(
-                            obj,
-                            property_name.to_string()
-                        ))),
-                        Some(p) => Ok(p),
-                    }
-                }
-            }
-        }
-    }
-
-    fn add_property(
-        &mut self,
-        obj: Objid,
-        pname: &str,
-        owner: Objid,
-        prop_flags: EnumSet<PropFlag>,
-        initial_value: Option<Var>,
-    ) -> Result<(), anyhow::Error> {
-        self.db.add_propdef(obj, pname, obj, prop_flags, initial_value)?;
-        Ok(())
-    }
-
-    fn update_property(
-        &mut self,
-        obj: Objid,
-        property_name: &str,
-        player_flags: EnumSet<ObjFlag>,
-        value: &Var,
-    ) -> Result<(), Error> {
-        let h = self
-            .db
-            .find_property(obj, property_name, PropAttr::Owner | PropAttr::Flags)
-            .expect("Unable to perform property lookup");
-
-        // TODO handle built-in properties
-        let Some(p) = h else {
-            return Err(anyhow!(StateError::PropertyNotFound(obj, property_name.to_string())));
-        };
-
-        if self.db.property_allows(
-            PropFlag::Write.into(),
-            obj,
-            player_flags,
-            p.attrs.flags.unwrap(),
-            p.attrs.owner.unwrap(),
-        ) {
-            return Err(anyhow!(StateError::PropertyPermissionDenied(
-                obj,
-                property_name.to_string()
-            )));
-        }
-
-        // Failure on this is a panic.
-        self.db
-            .set_property(
-                p.pid,
-                obj,
-                value.clone(),
-                p.attrs.owner.unwrap(),
-                p.attrs.flags.unwrap(),
-            )
-            .expect("could not set property");
-        Ok(())
-    }
-
-    fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        let attrs = self
-            .db
-            .object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)?;
-        // TODO: this masks other (internal?) errors..
-        attrs
-            .parent
-            .ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
-    }
-
-    fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
-        // TODO: this masks other (internal?) errors..
-        Ok(self
-            .db
-            .object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)
-            .is_ok())
-    }
-
-    fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
-        // TODO implement support for aliases.
-        let name = self
-            .db
-            .object_get_attrs(obj, EnumSet::from(ObjAttr::Name))?
-            .name
-            .unwrap();
-        return Ok((name, vec![]));
-    }
-
-    fn commit(self)  -> Result<(), anyhow::Error> {
-        self.db.commit()
-    }
-
-    fn rollback(self)  -> Result<(), anyhow::Error> {
-        self.db.rollback()
-    }
-}
 
 impl MatchEnvironment for dyn WorldState {
     fn is_valid(&mut self, oid: Objid) -> Result<bool, Error> {

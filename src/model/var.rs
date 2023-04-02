@@ -289,11 +289,11 @@ impl Var {
         let newsize = lenleft + lenmiddle + lenright;
 
         let (from, to) = (from as usize, to as usize);
-        let mut ans = match (self, &value) {
+        let ans = match (self, &value) {
             (Var::Str(base_str), Var::Str(value_str)) => {
                 let mut ans = String::with_capacity(newsize as usize);
                 ans.push_str(&base_str[..from - 1]);
-                ans.push_str(&value_str);
+                ans.push_str(value_str);
                 ans.push_str(&base_str[to..]);
                 Var::Str(ans)
             }
@@ -353,7 +353,7 @@ impl From<Error> for Var {
     }
 }
 
-fn rangeset_check(base: &Var, inst: &Var, from: i64, to: i64) -> Result<(), Error> {
+fn rangeset_check(base: &Var, _inst: &Var, from: i64, to: i64) -> Result<(), Error> {
     let blen = match base {
         Var::Str(s) => s.len() as i64,
         Var::List(l) => l.len() as i64,
@@ -956,17 +956,17 @@ mod tests {
             Var::Str("c".to_string()),
             Var::Int(4),
         ]);
-        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a"} => {1, "a", 4}
         let value = Var::List(vec![Var::Str("a".to_string())]);
         let expected = Var::List(vec![Var::Int(1), Var::Str("a".to_string()), Var::Int(4)]);
-        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {} => {1,4}
         let value = Var::List(vec![]);
         let expected = Var::List(vec![Var::Int(1), Var::Int(4)]);
-        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a", "b"} => {1, "a", "b", 4}
         let value = Var::List(vec![Var::Str("a".to_string()), Var::Str("b".to_string())]);
@@ -976,7 +976,7 @@ mod tests {
             Var::Str("b".to_string()),
             Var::Int(4),
         ]);
-        assert_eq!(base.rangeset(value.clone(), 2, 3).unwrap(), expected);
+        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
     }
 
     #[test]
@@ -985,29 +985,29 @@ mod tests {
         let base = Var::Str("12345".to_string());
         let value = Var::Str("abc".to_string());
         let expected = Var::Str("1abc45".to_string());
-        let result = base.rangeset(value.clone(), 2, 3);
-        assert_eq!(result, Ok(expected.clone()));
+        let result = base.rangeset(value, 2, 3);
+        assert_eq!(result, Ok(expected));
 
         // Test interior replacement
         let base = Var::Str("12345".to_string());
         let value = Var::Str("ab".to_string());
         let expected = Var::Str("1ab45".to_string());
-        let result = base.rangeset(value.clone(), 2, 3);
-        assert_eq!(result, Ok(expected.clone()));
+        let result = base.rangeset(value, 2, 3);
+        assert_eq!(result, Ok(expected));
 
         // Test interior deletion
         let base = Var::Str("12345".to_string());
         let value = Var::Str("".to_string());
         let expected = Var::Str("145".to_string());
-        let result = base.rangeset(value.clone(), 2, 3);
-        assert_eq!(result, Ok(expected.clone()));
+        let result = base.rangeset(value, 2, 3);
+        assert_eq!(result, Ok(expected));
 
         // Test interior subtraction
         let base = Var::Str("12345".to_string());
         let value = Var::Str("z".to_string());
         let expected = Var::Str("1z45".to_string());
-        let result = base.rangeset(value.clone(), 2, 3);
-        assert_eq!(result, Ok(expected.clone()));
+        let result = base.rangeset(value, 2, 3);
+        assert_eq!(result, Ok(expected));
     }
 
     #[test]

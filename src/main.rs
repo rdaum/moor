@@ -1,11 +1,11 @@
 extern crate core;
 
-use std::cell::RefCell;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
+
 
 use bincode::config;
 use clap::builder::ValueHint;
@@ -14,17 +14,19 @@ use clap_derive::Parser;
 use enumset::EnumSet;
 
 use crate::compiler::codegen::compile;
-use crate::db::inmem::ImDB;
-use crate::db::state::{ObjDBState, WorldState, WorldStateSource};
+use crate::db::inmem_db::ImDB;
+use crate::db::inmem_db_tx::ImDbTxSource;
+
 use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
 use crate::model::props::{PropDefs, PropFlag, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
-use crate::model::ObjDB;
 use crate::server::scheduler::Scheduler;
+
+
 use crate::textdump::{Object, TextdumpReader};
-use crate::vm::execute::{ExecutionResult, VM};
+
 
 pub mod compiler;
 pub mod db;
@@ -225,10 +227,10 @@ fn main() {
         textdump_load(&mut s, textdump.to_str().unwrap()).unwrap();
     }
 
+    let src = ImDB::new();
+    let state_src = ImDbTxSource::new(src);
 
-    // let mut src = SQLiteSource::new(args.db);
-    //
-    // let mut scheduler = Scheduler::new(Arc::new(Mutex::new(src)));
-    //
+    let _scheduler = Scheduler::new(Arc::new(Mutex::new(state_src)));
+
     eprintln!("Done.");
 }

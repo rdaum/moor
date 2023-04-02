@@ -434,7 +434,7 @@ impl VM {
     ) -> Result<Var, anyhow::Error> {
         // TODO do_pass
         // TODO stack traces, error catch etc?
-        let mut state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap();
 
         let (binary, vi) = match state.retrieve_verb(obj, verb_name) {
             Ok(binary) => binary,
@@ -1164,8 +1164,8 @@ mod tests {
             &mut self,
             obj: Objid,
             pname: &str,
-            owner: Objid,
-            prop_flags: EnumSet<PropFlag>,
+            _owner: Objid,
+            _prop_flags: EnumSet<PropFlag>,
             initial_value: Option<Var>,
         ) -> Result<(), Error> {
             self.properties
@@ -1173,15 +1173,15 @@ mod tests {
             Ok(())
         }
 
-        fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+        fn location_of(&mut self, _obj: Objid) -> Result<Objid, Error> {
             unimplemented!()
         }
 
-        fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
+        fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, Error> {
             unimplemented!()
         }
 
-        fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
+        fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), Error> {
             unimplemented!()
         }
         fn parent_of(&mut self, _obj: Objid) -> Result<Objid, Error> {
@@ -1216,7 +1216,7 @@ mod tests {
 
     #[test]
     fn test_verbnf() {
-        let mut state = MockState::new();
+        let state = MockState::new();
         let mut vm = VM::new(state);
         let o = Objid(0);
         assert_eq!(
@@ -1238,7 +1238,7 @@ mod tests {
     #[test]
     fn test_simple_vm_execute() {
         let binary = mk_binary(vec![Imm(0), Pop, Done], vec![1.into()], Names::new());
-        let mut state = MockState::new_with_verb("test", &binary);
+        let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
         
         call_verb("test", &mut vm);
@@ -1248,7 +1248,7 @@ mod tests {
 
     #[test]
     fn test_string_value_simple_indexing() {
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0), Imm(1), Ref, Return, Done],
@@ -1265,7 +1265,7 @@ mod tests {
 
     #[test]
     fn test_string_value_range_indexing() {
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
@@ -1281,7 +1281,7 @@ mod tests {
 
     #[test]
     fn test_list_value_simple_indexing() {
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0), Imm(1), Ref, Return, Done],
@@ -1301,7 +1301,7 @@ mod tests {
 
     #[test]
     fn test_list_value_range_indexing() {
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
@@ -1326,7 +1326,7 @@ mod tests {
         let a = var_names.find_or_add_name("a");
 
 
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0), Put(a.0), Pop, Push(a.0), Return, Done],
@@ -1346,9 +1346,9 @@ mod tests {
     fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
-        let args = binary.find_var("args");
+        let _args = binary.find_var("args");
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
         assert_eq!(result, Var::List(vec![2.into(), 3.into(), 4.into()]));
@@ -1357,7 +1357,7 @@ mod tests {
     #[test]
     fn test_list_range_length() {
         let program = "return {{1,2,3}[2..$], {1}[$]};";
-        let mut state = MockState::new_with_verb("test", &compile(program).unwrap());
+        let state = MockState::new_with_verb("test", &compile(program).unwrap());
         let mut vm = VM::new(state);
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
@@ -1372,7 +1372,7 @@ mod tests {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
 
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1411,7 +1411,7 @@ mod tests {
 
     #[test]
     fn test_property_retrieval() {
-        let mut state = MockState::new_with_verb(
+        let state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0), Imm(1), GetProp, Return, Done],
@@ -1466,7 +1466,7 @@ mod tests {
             ],
             Names::new(),
         );
-        let mut state = MockState::new_with_verbs(vec![
+        let state = MockState::new_with_verbs(vec![
             ("test_return_verb", &return_verb_binary),
             ("test_call_verb", &call_verb_binary),
         ]);
@@ -1484,7 +1484,7 @@ mod tests {
     fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
         let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
@@ -1508,7 +1508,7 @@ mod tests {
     fn test_while_labelled_loop() {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
         let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
 
         call_verb("test", &mut vm);
@@ -1556,7 +1556,7 @@ mod tests {
     fn test_basic_scatter_assign() {
         let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
         let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
 
         call_verb("test", &mut vm);
@@ -1571,7 +1571,7 @@ mod tests {
     fn test_more_scatter_assign() {
         let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
         let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
 
         call_verb("test", &mut vm);

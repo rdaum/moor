@@ -8,7 +8,7 @@ use enumset::EnumSet;
 use slotmap::{new_key_type, SlotMap};
 use std::sync::Arc;
 use std::sync::Mutex;
-use tokio::task;
+
 use tokio::task::spawn_local;
 
 new_key_type! { pub struct TaskId; }
@@ -48,7 +48,7 @@ impl Scheduler {
         let task_id = ts.new_task(player, self.state_source.clone())?;
 
         let task_ref = ts.get_task(task_id).unwrap();
-        let mut task_ref = task_ref.lock().unwrap();
+        let task_ref = task_ref.lock().unwrap();
         let player = task_ref.player;
         let mut vm = task_ref.vm.lock().unwrap();
         vm.do_method_verb(
@@ -68,11 +68,11 @@ impl Scheduler {
 
     pub async fn start_task(&mut self, task_id: TaskId) -> Result<(), anyhow::Error> {
         let (vm, ts) = {
-            let mut ts = self.task_state.lock().unwrap();
+            let ts = self.task_state.lock().unwrap();
             let task_ref_guard = ts.get_task(task_id).unwrap();
 
-            let task_ref_ref = task_ref_guard.clone();
-            let mut task_ref = task_ref_ref.lock().unwrap();
+            let task_ref_ref = task_ref_guard;
+            let task_ref = task_ref_ref.lock().unwrap();
             let vm = task_ref.vm.clone();
             (vm, self.task_state.clone())
         };
@@ -144,7 +144,7 @@ impl TaskState {
         let mut state_source = state_source.lock().unwrap();
         let state = state_source.new_transaction()?;
         let vm = Arc::new(Mutex::new(VM::new(state.clone())));
-        let mut tasks = self.tasks.clone();
+        let tasks = self.tasks.clone();
         let mut tasks = tasks.lock().unwrap();
         let id = tasks.insert(Arc::new(Mutex::new(Task {
             player,

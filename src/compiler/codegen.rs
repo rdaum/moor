@@ -125,7 +125,7 @@ impl CodegenState {
         match self.find_label(loop_label) {
             None => {
                 let loop_name = self.var_names.names[loop_label.0].clone();
-                return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
+                Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)))
             }
             Some(label) => {
                 let l = self.loops.iter().find(|l| l.top_label == label.id);
@@ -272,11 +272,11 @@ impl CodegenState {
         });
         for (s, label) in labels {
             if let ScatterLabel::Optional(_, Some(label)) = label {
-                if !s.expr.is_some() {
+                if s.expr.is_none() {
                     continue;
                 }
                 self.commit_label(label);
-                self.generate_expr(&s.expr.as_ref().unwrap())?;
+                self.generate_expr(s.expr.as_ref().unwrap())?;
                 self.emit(Op::Put(s.id.0));
                 self.emit(Op::Pop);
                 self.pop_stack(1);
@@ -393,9 +393,9 @@ impl CodegenState {
                 self.pop_stack(1);
             }
             Expr::Range { base, from, to } => {
-                let old;
+                
                 self.generate_expr(base.as_ref())?;
-                old = self.save_stack_top();
+                let old = self.save_stack_top();
                 self.generate_expr(from.as_ref())?;
                 self.generate_expr(to.as_ref())?;
                 self.restore_stack_top(old);
@@ -536,7 +536,7 @@ impl CodegenState {
                 // we use 0 here to make it easier to implement the ForList instruction.
                 self.emit(Op::Val(Var::Int(0))); /* loop list index... */
                 self.push_stack(1);
-                let loop_top = self.make_label(Some(id.clone()));
+                let loop_top = self.make_label(Some(*id));
                 self.commit_label(loop_top);
                 let end_label = self.make_label(None);
                 // TODO self.enter_loop/exit_loop needed?
@@ -560,7 +560,7 @@ impl CodegenState {
             Stmt::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.make_label(Some(id.clone()));
+                let loop_top = self.make_label(Some(*id));
                 let end_label = self.make_label(None);
                 self.emit(Op::ForRange {
                     id: id.0,
@@ -692,18 +692,16 @@ impl CodegenState {
                         .find_label(exit)
                         .expect("invalid label for break/continue");
                     self.emit(Op::ExitId(jump_label.id));
+                } else if let Stmt::Continue { .. } = stmt {
+                    self.emit(Op::Exit {
+                        stack: l.top_stack,
+                        label: l.bottom_label,
+                    })
                 } else {
-                    if let Stmt::Continue { .. } = stmt {
-                        self.emit(Op::Exit {
-                            stack: l.top_stack,
-                            label: l.bottom_label,
-                        })
-                    } else {
-                        self.emit(Op::Exit {
-                            stack: l.bottom_stack,
-                            label: l.bottom_label,
-                        })
-                    }
+                    self.emit(Op::Exit {
+                        stack: l.bottom_stack,
+                        label: l.bottom_label,
+                    })
                 }
             }
             Stmt::Return { expr } => match expr {

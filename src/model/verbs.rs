@@ -13,7 +13,7 @@ pub enum VerbFlag {
     Debug,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Vid(pub i64);
 
 #[derive(Clone)]

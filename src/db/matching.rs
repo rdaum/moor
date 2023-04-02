@@ -1,6 +1,6 @@
-use crate::db::state::{ObjDBState, StateError};
+use crate::db::state::{StateError};
 use crate::model::var::{Objid, AMBIGUOUS, FAILED_MATCH, NOTHING};
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow};
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
@@ -129,12 +129,12 @@ pub fn world_environment_match_object(
 #[cfg(test)]
 mod tests {
     use crate::db::matching::{
-        do_match_object_names, world_environment_match_object, MatchData, MatchEnvironment,
+        do_match_object_names, world_environment_match_object, MatchData,
     };
     use crate::db::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
-    use crate::model::var::{Objid, Var, AMBIGUOUS, FAILED_MATCH, NOTHING};
+    use crate::model::var::{Objid, FAILED_MATCH, NOTHING};
 
     #[test]
     fn test_match_object_names_fail() {
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn test_match_object_invalid_player() {
         let mut env = setup_mock_environment();
-        let player = Objid(0);
+        let _player = Objid(0);
         let result = world_environment_match_object(&mut env, NOTHING, "thing1");
         assert!(result.is_err());
     }

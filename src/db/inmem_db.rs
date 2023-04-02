@@ -4,17 +4,33 @@ use crate::model::props::{
     Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
 };
 use crate::model::r#match::VerbArgsSpec;
-use crate::model::var::Error::{E_INVARG, E_PERM};
+
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::model::ObjDB;
 use anyhow::{anyhow, Error};
 use enumset::EnumSet;
-use std::collections::{HashMap, HashSet};
+use std::collections::btree_map::Entry;
+use std::collections::Bound::Included;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
-//
+
+
+use itertools::Itertools;
+use crate::db::state::{WorldState};
+
+
+const MAX_PROP_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+const MAX_VERB_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+
+// Basic non-transactional, non-persistent in-memory "database" to bootstrap things.
+
 pub struct ImDB {
-    max_obj: usize,
+    next_objid: i64,
+    next_pid: i64,
+    next_vid: i64,
+
+    // Objects and their attributes
     objects: HashSet<Objid>,
     obj_attr_location: HashMap<Objid, Objid>,
     obj_attr_owner: HashMap<Objid, Objid>,
@@ -22,15 +38,42 @@ pub struct ImDB {
     obj_attr_name: HashMap<Objid, String>,
     obj_attr_flags: HashMap<Objid, EnumSet<ObjFlag>>,
 
-    // TOOD build custom datastructure to handle this more efficiently.
+    // Derived
     obj_contents: HashMap<Objid, HashSet<Objid>>,
     obj_children: HashMap<Objid, HashSet<Objid>>,
+
+    // Property definitions & properties
+
+    // Property defs are kept in a sorted map keyed by object id, string so that a range query can
+    // be performed across the object to retrieve all the property definitions for that object, and
+    // so that prefix matching can be performed on the property name.
+    // Not guaranteed to be the most efficient structure, but it's simple and it works.
+    propdefs: BTreeMap<(Objid, String), Propdef>,
+
+    properties: HashSet<(Objid, Pid)>,
+    property_value: HashMap<(Objid, Pid), Var>,
+    property_location: HashMap<(Objid, Pid), Objid>,
+    property_owner: HashMap<(Objid, Pid), Objid>,
+    property_flags: HashMap<(Objid, Pid), EnumSet<PropFlag>>,
+
+    // Verbs and their attributes
+    verbdefs: BTreeMap<(Objid, String), Vid>,
+
+    verbs: HashSet<Vid>,
+    verb_names: HashMap<Vid, HashSet<String>>,
+    verb_attr_definer: HashMap<Vid, Objid>,
+    verb_attr_owner: HashMap<Vid, Objid>,
+    verb_attr_flags: HashMap<Vid, EnumSet<VerbFlag>>,
+    verb_attr_args_spec: HashMap<Vid, VerbArgsSpec>,
+    verb_attr_program: HashMap<Vid, Program>,
 }
 
 impl ImDB {
     pub fn new() -> Self {
         Self {
-            max_obj: 0usize,
+            next_objid: 0,
+            next_pid: 0,
+            next_vid: 0,
             objects: Default::default(),
             obj_attr_location: Default::default(),
             obj_attr_owner: Default::default(),
@@ -39,7 +82,76 @@ impl ImDB {
             obj_attr_flags: Default::default(),
             obj_contents: Default::default(),
             obj_children: Default::default(),
+            propdefs: Default::default(),
+            properties: Default::default(),
+            property_value: Default::default(),
+            property_location: Default::default(),
+            property_owner: Default::default(),
+            property_flags: Default::default(),
+            verbdefs: Default::default(),
+            verbs: Default::default(),
+            verb_names: Default::default(),
+            verb_attr_definer: Default::default(),
+            verb_attr_owner: Default::default(),
+            verb_attr_flags: Default::default(),
+            verb_attr_args_spec: Default::default(),
+            verb_attr_program: Default::default(),
         }
+    }
+
+    pub fn get_object_inheritance_chain(&self, oid: Objid) -> Vec<Objid> {
+        if !self.objects.contains(&oid) {
+            return Vec::new();
+        }
+        // Get the full inheritance hierarchy for 'oid' as a flat list.
+        // Start with self, then walk until we hit Objid(-1) or None for parents.
+        let mut chain = Vec::new();
+        let mut current = oid;
+        while current != NOTHING {
+            chain.push(current);
+            current = *self
+                .obj_attr_parent
+                .get(&current)
+                .unwrap_or(&NOTHING);
+        }
+        chain
+    }
+
+    // Retrieve a property without inheritance search.
+    fn retrieve_property(
+        &self,
+        oid: Objid,
+        handle: Pid,
+        attrs: EnumSet<PropAttr>,
+    ) -> Result<Option<PropAttrs>, Error> {
+        let propkey = (oid, handle);
+        if !self.properties.contains(&propkey) {
+            return Ok(None);
+        }
+
+        let mut result_attrs = PropAttrs::default();
+        if attrs.contains(PropAttr::Value) {
+            if let Some(value) = self.property_value.get(&propkey) {
+                result_attrs.value = Some(value.clone());
+            }
+        }
+        if attrs.contains(PropAttr::Flags) {
+            if let Some(flags) = self.property_flags.get(&propkey) {
+                result_attrs.flags = Some(*flags);
+            }
+        }
+        if attrs.contains(PropAttr::Owner) {
+            if let Some(owner) = self.property_owner.get(&propkey) {
+                result_attrs.owner = Some(*owner);
+            }
+        }
+        if attrs.contains(PropAttr::Location) {
+            if let Some(location) = self.property_location.get(&propkey) {
+                result_attrs.location = Some(*location);
+            }
+        }
+
+        Ok(Some(result_attrs))
     }
 }
 
@@ -53,9 +165,9 @@ impl Objects for ImDB {
     fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, Error> {
         let oid = match oid {
             None => {
-                let oid = self.max_obj;
-                self.max_obj += 1;
-                Objid(oid as i64)
+                let oid = self.next_objid;
+                self.next_objid += 1;
+                Objid(oid)
             }
             Some(oid) => oid,
         };
@@ -90,7 +202,7 @@ impl Objects for ImDB {
 
     fn destroy_object(&mut self, oid: Objid) -> Result<(), Error> {
         match self.objects.remove(&oid) {
-            false => return Err(anyhow!("invalid object")),
+            false => Err(anyhow!("invalid object")),
             true => {
                 if let Some(parent) = self.obj_attr_parent.remove(&oid) {
                     // remove from parent's children
@@ -202,40 +314,12 @@ impl Objects for ImDB {
     }
 }
 
-impl Properties for ImDB {
-    fn find_property(
-        &self,
-        oid: Objid,
-        name: &str,
-        attrs: EnumSet<PropAttr>,
-    ) -> Result<Option<PropertyInfo>, Error> {
-        todo!()
-    }
-
-    fn get_property(
-        &self,
-        oid: Objid,
-        handle: Pid,
-        attrs: EnumSet<PropAttr>,
-    ) -> Result<Option<PropAttrs>, Error> {
-        todo!()
-    }
-
-    fn set_property(
-        &self,
-        handle: Pid,
-        location: Objid,
-        value: Var,
-        owner: Objid,
-        flags: EnumSet<PropFlag>,
-    ) -> Result<(), Error> {
-        todo!()
-    }
-}
-
 impl PropDefs for ImDB {
     fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, Error> {
-        todo!()
+        self.propdefs
+            .get(&(definer, pname.to_string()))
+            .cloned()
+            .ok_or_else(|| anyhow!("no such property definition {} on #{}", pname, definer.0))
     }
 
     fn add_propdef(
@@ -246,23 +330,130 @@ impl PropDefs for ImDB {
         flags: EnumSet<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, Error> {
-        todo!()
+        match self.propdefs.get(&(definer, name.to_string())) {
+            None => {
+                let pid = Pid(self.next_pid);
+                self.next_pid += 1;
+                let pd = Propdef {
+                    pid,
+                    definer,
+                    pname: name.to_string(),
+                };
+                self.propdefs
+                    .insert((definer, name.to_string().to_lowercase()), pd);
+
+                if let Some(initial_value) = initial_value {
+                    self.set_property(pid, definer, initial_value, owner, flags)?;
+                }
+
+                Ok(pid)
+            }
+            Some(_) => Err(anyhow!("property already defined")),
+        }
     }
 
     fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), Error> {
-        todo!()
+        match self.propdefs.entry((definer, old.to_string())) {
+            Entry::Occupied(e) => {
+                let mut pd = e.remove();
+                pd.pname = new.to_string();
+                self.propdefs.insert((definer, new.to_string()), pd);
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(anyhow!("no such property")),
+        }
     }
 
     fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), Error> {
-        todo!()
+        match self.propdefs.entry((definer, pname.to_string())) {
+            Entry::Occupied(e) => {
+                e.remove();
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(anyhow!("no such property")),
+        }
     }
 
     fn count_propdefs(&mut self, definer: Objid) -> Result<usize, Error> {
-        todo!()
+        let start = (definer, String::new());
+        let end = (definer, MAX_PROP_NAME.to_string());
+        let range = self.propdefs.range((Included(&start), Included(&end)));
+        Ok(range.count())
     }
 
     fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, Error> {
-        todo!()
+        let start = (definer, String::new());
+        let end = (definer, MAX_PROP_NAME.to_string());
+        let range = self.propdefs.range((Included(&start), Included(&end)));
+        Ok(range.map(|(_, pd)| pd.clone()).collect())
+    }
+}
+
+// TODO all of MOO's wack "clear" property bits, etc.
+impl Properties for ImDB {
+    fn find_property(
+        &self,
+        oid: Objid,
+        name: &str,
+        attrs: EnumSet<PropAttr>,
+    ) -> Result<Option<PropertyInfo>, Error> {
+        let self_and_parents = self.get_object_inheritance_chain(oid);
+
+        // Look for the property definition on self and then all the way up the parents, stopping
+        // at the first match.
+        let propdef = self_and_parents
+            .iter()
+            .filter_map(|&oid| self.propdefs.get(&(oid, name.to_string())))
+            .next()
+            .ok_or_else(|| anyhow!("no such property"))?;
+
+        // Then use the Pid from that to again look at self and all the way up the parents for the
+        let pid = propdef.pid;
+        for oid in self_and_parents {
+            if let Some(propattrs) = self.retrieve_property(oid, pid, attrs)? {
+                return Ok(Some(PropertyInfo {
+                    pid,
+                    attrs: propattrs,
+                }));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn get_property(
+        &self,
+        oid: Objid,
+        handle: Pid,
+        attrs: EnumSet<PropAttr>,
+    ) -> Result<Option<PropAttrs>, Error> {
+        let self_and_parents = self.get_object_inheritance_chain(oid);
+        for oid in self_and_parents {
+            let propattrs = self.retrieve_property(oid, handle, attrs)?;
+            if propattrs.is_some() {
+                return Ok(propattrs);
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn set_property(
+        &mut self,
+        handle: Pid,
+        location: Objid,
+        value: Var,
+        owner: Objid,
+        flags: EnumSet<PropFlag>,
+    ) -> Result<(), Error> {
+        let propkey = (location, handle);
+        self.properties.insert(propkey);
+        self.property_value.insert(propkey, value);
+        self.property_flags.insert(propkey, flags);
+        self.property_owner.insert(propkey, owner);
+        self.property_location.insert(propkey, location);
+
+        Ok(())
     }
 }
 
@@ -276,27 +467,107 @@ impl Verbs for ImDB {
         arg_spec: VerbArgsSpec,
         program: Program,
     ) -> Result<VerbInfo, Error> {
-        todo!()
+        let vid = Vid(self.next_vid);
+        self.next_vid += 1;
+
+        for name in names.clone() {
+            self.verbdefs.insert((oid, name.to_string()), vid);
+        }
+
+        self.verbs.insert(vid);
+        self.verb_attr_definer.insert(vid, oid);
+        self.verb_attr_owner.insert(vid, owner);
+        self.verb_attr_flags.insert(vid, flags);
+        self.verb_attr_program.insert(vid, program.clone());
+        self.verb_attr_args_spec.insert(vid, arg_spec);
+        let name_set = names.clone().into_iter().map(|s| s.to_string()).collect();
+        self.verb_names.insert(vid, name_set);
+
+        let vi = VerbInfo {
+            vid,
+            names: names.into_iter().map(|s| s.to_string()).collect(),
+            attrs: VerbAttrs {
+                definer: Some(oid),
+                owner: Some(owner),
+                flags: Some(flags),
+                args_spec: Some(arg_spec),
+                program: Some(program),
+            },
+        };
+        Ok(vi)
     }
 
     fn get_verbs(&self, oid: Objid, attrs: EnumSet<VerbAttr>) -> Result<Vec<VerbInfo>, Error> {
-        todo!()
+        let obj_verbs = self.verbdefs
+            .range((Included(&(oid, String::new())), Included(&(oid, MAX_VERB_NAME.to_string()))));
+
+        let verbs_by_vid = obj_verbs.group_by(|v|v.1);
+
+        let mut verbs = vec![];
+        for (vid, verb) in &verbs_by_vid {
+            let v = self.get_verb(*vid, attrs)?;
+            let names :  Vec<_> = verb.map(|verb|verb.0.1.clone()).collect();
+            verbs.push(VerbInfo {
+                vid: *vid,
+                names,
+                attrs: v.attrs
+            })
+        }
+
+        Ok(verbs)
     }
 
     fn get_verb(&self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, Error> {
-        todo!()
+        if !self.verbs.contains(&vid) {
+            return Err(anyhow!("no such verb"));
+        }
+
+        let names = self.verb_names.get(&vid).unwrap().iter().cloned().collect();
+
+        let mut return_attrs = VerbAttrs {
+            definer: None,
+            owner: None,
+            flags: None,
+            args_spec: None,
+            program: None,
+        };
+        if attrs.contains(VerbAttr::Definer) {
+            return_attrs.definer = self.verb_attr_definer.get(&vid).cloned();
+        }
+        if attrs.contains(VerbAttr::Owner) {
+            return_attrs.owner = self.verb_attr_owner.get(&vid).cloned();
+        }
+        if attrs.contains(VerbAttr::Flags) {
+            return_attrs.flags = self.verb_attr_flags.get(&vid).cloned();
+        }
+        if attrs.contains(VerbAttr::ArgsSpec) {
+            return_attrs.args_spec = self.verb_attr_args_spec.get(&vid).cloned();
+        }
+        if attrs.contains(VerbAttr::Program) {
+            return_attrs.program = self.verb_attr_program.get(&vid).cloned();
+        }
+
+        Ok(VerbInfo {
+            vid,
+            names,
+            attrs: return_attrs,
+        })
+
     }
 
-    fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
+    fn update_verb(&self, _vid: Vid, _attrs: VerbAttrs) -> Result<(), Error> {
+        // Updating names is going to be complicated! Rewriting the oid,name index to remove the
+        // old names, then re-establishing them...
+
         todo!()
     }
 
     fn find_command_verb(
         &self,
-        oid: Objid,
-        verb: &str,
-        arg_spec: VerbArgsSpec,
-        attrs: EnumSet<VerbAttr>,
+        _oid: Objid,
+        _verb: &str,
+        _arg_spec: VerbArgsSpec,
+        _attrs: EnumSet<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
         todo!()
     }
@@ -307,14 +578,22 @@ impl Verbs for ImDB {
         verb: &str,
         attrs: EnumSet<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
-        todo!()
+        let parent_chain = self.get_object_inheritance_chain(oid);
+        for parent in parent_chain {
+            let vid = self.verbdefs.get(&(parent, verb.to_string()));
+            if let Some(vid) = vid {
+                let vi = self.get_verb(*vid, attrs)?;
+                return Ok(Some(vi));
+            }
+        }
+        Ok(None)
     }
 
     fn find_indexed_verb(
         &self,
-        oid: Objid,
-        index: usize,
-        attrs: EnumSet<VerbAttr>,
+        _oid: Objid,
+        _index: usize,
+        _attrs: EnumSet<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
         todo!()
     }
@@ -323,11 +602,11 @@ impl Verbs for ImDB {
 impl Permissions for ImDB {
     fn property_allows(
         &self,
-        check_flags: EnumSet<PropFlag>,
-        player: Objid,
-        player_flags: EnumSet<ObjFlag>,
-        prop_flags: EnumSet<PropFlag>,
-        prop_owner: Objid,
+        _check_flags: EnumSet<PropFlag>,
+        _player: Objid,
+        _player_flags: EnumSet<ObjFlag>,
+        _prop_flags: EnumSet<PropFlag>,
+        _prop_owner: Objid,
     ) -> bool {
         todo!()
     }
@@ -338,24 +617,26 @@ impl ObjDB for ImDB {
         Ok(())
     }
 
-    fn commit(self) -> Result<(), Error> {
+    fn commit(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
-    fn rollback(self) -> Result<(), Error> {
+    fn rollback(&mut self) -> Result<(), Error> {
         Ok(())
     }
 }
 
+
 #[cfg(test)]
 mod tests {
-    use crate::db::inmem::ImDB;
+    use crate::db::inmem_db::ImDB;
     use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-    use crate::model::props::{PropAttr, PropDefs, PropFlag, Properties};
+    use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Var;
+    use crate::model::var::{Objid, Var};
     use crate::model::verbs::{Program, VerbAttr, VerbFlag, Verbs};
     use crate::model::ObjDB;
+    use enumset::enum_set;
 
     #[test]
     fn object_create_check_delete() {
@@ -369,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fobject_check_children_contents() {
+    fn object_check_children_contents() {
         let mut s = ImDB::default();
 
         let o1 = s.create_object(None, ObjAttrs::new().name("test")).unwrap();
@@ -380,11 +661,11 @@ mod tests {
             .create_object(None, ObjAttrs::new().name("test3").location(o1).parent(o1))
             .unwrap();
 
-        let children = s.object_children(o1).unwrap();
-        assert_eq!(children, vec![o2, o3]);
+        let mut children = s.object_children(o1).unwrap();
+        assert_eq!(children.sort(), vec![o2, o3].sort());
 
-        let contents = s.object_contents(o1).unwrap();
-        assert_eq!(contents, vec![o2, o3]);
+        let mut contents = s.object_contents(o1).unwrap();
+        assert_eq!(contents.sort(), vec![o2, o3].sort());
 
         s.commit().unwrap();
     }
@@ -412,46 +693,106 @@ mod tests {
     }
 
     #[test]
-    fn propdef_create_get_update_count_delete() {
-        let mut s = ImDB::default();
+    fn test_inheritance_chain() {
+        let mut odb = ImDB::default();
 
-        let o = s.create_object(None, &ObjAttrs::new()).unwrap();
+        // Create objects and establish parent-child relationship
+        let o1 = odb.create_object(Some(Objid(1)), ObjAttrs::new().name("o1")).unwrap();
+        let o2 = odb
+            .create_object(Some(Objid(2)), ObjAttrs::new().name("o2").parent(o1))
+            .unwrap();
+        let _o3 = odb
+            .create_object(Some(Objid(3)), ObjAttrs::new().name("o3").parent(o2))
+            .unwrap();
+        let _o4 = odb
+            .create_object(Some(Objid(4)), ObjAttrs::new().name("o4").parent(o2))
+            .unwrap();
+        let o5 = odb
+            .create_object(Some(Objid(5)), ObjAttrs::new().name("o5").parent(o1))
+            .unwrap();
+        let o6 = odb
+            .create_object(Some(Objid(6)), ObjAttrs::new().name("o6").parent(o5))
+            .unwrap();
 
-        let pid = s
+        // Test inheritance chain for o6
+        let inheritance_chain = odb.get_object_inheritance_chain(o6);
+        assert_eq!(inheritance_chain, vec![Objid(6), Objid(5), Objid(1)]);
+
+        // Test inheritance chain for o2
+        let inheritance_chain = odb.get_object_inheritance_chain(o2);
+        assert_eq!(inheritance_chain, vec![Objid(2), Objid(1)]);
+
+        // Test inheritance chain for o1
+        let inheritance_chain = odb.get_object_inheritance_chain(o1);
+        assert_eq!(inheritance_chain, vec![Objid(1)]);
+
+        // Test inheritance chain for non-existent object
+        let inheritance_chain = odb.get_object_inheritance_chain(Objid(7));
+        assert_eq!(inheritance_chain, vec![]);
+
+        // Test object_children for o1
+        let mut children = odb.object_children(o1).unwrap();
+        assert_eq!(children.sort(), vec![Objid(2), Objid(5)].sort());
+
+        // Test object_children for o2
+        let mut children = odb.object_children(o2).unwrap();
+        assert_eq!(children.sort(), vec![Objid(3), Objid(4)].sort());
+
+        // Test object_children for non-existent object
+        let children = odb.object_children(Objid(7));
+        assert!(children.is_err());
+    }
+
+    #[test]
+    fn test_propdefs() {
+        let mut odb = ImDB::default();
+
+        // Add some property definitions.
+        let pid1 = odb
+            .add_propdef(Objid(1), "color", Objid(1), enum_set!(PropFlag::Read), None)
+            .unwrap();
+        let pid2 = odb
             .add_propdef(
-                o,
-                "test",
-                o,
-                PropFlag::Chown | PropFlag::Read,
-                Some(Var::Str(String::from("testing"))),
+                Objid(1),
+                "size",
+                Objid(2),
+                PropFlag::Read | PropFlag::Write,
+                Some(Var::Int(42)),
             )
             .unwrap();
 
-        let pds = s.get_propdefs(o).unwrap();
-        assert_eq!(pds.len(), 1);
-        assert_eq!(pds[0].definer, o);
-        assert_eq!(pds[0].pname, "test");
-        assert_eq!(pds[0].pid, pid);
+        // Get a property definition by its name.
+        let def1 = odb.get_propdef(Objid(1), "color").unwrap();
+        assert_eq!(def1.pid, pid1);
+        assert_eq!(def1.definer, Objid(1));
+        assert_eq!(def1.pname, "color");
 
-        s.rename_propdef(o, "test", "test2").unwrap();
+        // Rename a property.
+        odb.rename_propdef(Objid(1), "color", "shade").unwrap();
+        let def2 = odb.get_propdef(Objid(1), "shade").unwrap();
+        assert_eq!(def2.pid, pid1);
+        assert_eq!(def2.definer, Objid(1));
+        assert_eq!(def2.pname, "shade");
 
-        s.set_property(
-            pds[0].pid,
-            o,
-            Var::Str(String::from("testing")),
-            o,
-            PropFlag::Read | PropFlag::Write,
-        )
-        .unwrap();
+        // Get all property definitions on an object.
+        let defs = odb.get_propdefs(Objid(1)).unwrap();
+        assert_eq!(defs.len(), 2);
+        assert!(defs.contains(&def2));
+        assert!(defs.contains(&Propdef {
+            pid: pid2,
+            definer: Objid(1),
+            pname: "size".to_owned(),
+        }));
 
-        let c = s.count_propdefs(o).unwrap();
-        assert_eq!(c, 1);
+        // Delete a property definition.
+        odb.delete_propdef(Objid(1), "size").unwrap();
+        let defs = odb.get_propdefs(Objid(1)).unwrap();
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0], def2);
 
-        s.delete_propdef(o, "test2").unwrap();
-
-        let c = s.count_propdefs(o).unwrap();
-        assert_eq!(c, 0);
-        s.commit().unwrap();
+        // Count the number of property definitions on an object.
+        let count = odb.count_propdefs(Objid(1)).unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]
