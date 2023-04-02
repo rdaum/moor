@@ -12,10 +12,9 @@ use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
 use enumset::EnumSet;
-use rusqlite::Connection;
 
 use crate::compiler::codegen::compile;
-use crate::db::sqllite::{SQLiteSource, SQLiteTx};
+use crate::db::inmem::ImDB;
 use crate::db::state::{ObjDBState, WorldState, WorldStateSource};
 use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
 use crate::model::props::{PropDefs, PropFlag, Properties};
@@ -96,10 +95,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 
-fn textdump_load(conn: Connection, path: &str) -> Result<(), anyhow::Error> {
-    let mut s = SQLiteTx::new(conn);
-    s.initialize()?;
-
+fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     let jhcore = File::open(path)?;
     let br = BufReader::new(jhcore);
     let mut tdr = TextdumpReader::new(br);
@@ -204,7 +200,7 @@ fn textdump_load(conn: Connection, path: &str) -> Result<(), anyhow::Error> {
     }
     eprintln!("Verbs defined.\nImport complete.");
 
-    s.commit()?;
+    // s.commit()?;
 
     Ok(())
 }
@@ -223,16 +219,16 @@ fn main() {
 
     eprintln!("Moor");
 
-    let mut conn = Connection::open(args.db.clone()).unwrap();
+    let mut s = ImDB::new();
     if let Some(textdump) = args.textdump {
         eprintln!("Loading textdump...");
-        textdump_load(conn, textdump.to_str().unwrap()).unwrap();
+        textdump_load(&mut s, textdump.to_str().unwrap()).unwrap();
     }
 
 
-    let mut src = SQLiteSource::new(args.db);
-
-    let mut scheduler = Scheduler::new(Arc::new(Mutex::new(src)));
-
+    // let mut src = SQLiteSource::new(args.db);
+    //
+    // let mut scheduler = Scheduler::new(Arc::new(Mutex::new(src)));
+    //
     eprintln!("Done.");
 }

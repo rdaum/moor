@@ -5,7 +5,6 @@ use anyhow::{anyhow, Error};
 use bincode::config;
 use bincode::error::DecodeError;
 use enumset::EnumSet;
-use rusqlite::Transaction;
 use thiserror::Error;
 use std::sync::Mutex;
 
@@ -83,12 +82,12 @@ pub trait WorldState {
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), anyhow::Error>;
 
     // Commit all modifications made to the state of this world since the start of its transaction.
-    // The world state becomes inoperable after this
-    fn commit(&mut self) -> Result<(), anyhow::Error>;
+    // Consumes self.
+    fn commit(self) -> Result<(), anyhow::Error>;
 
     // Rollback all modifications made to the state of this world since the start of its transaction.
-    // The world state becomes inoperable after this
-    fn rollback(&mut self) -> Result<(), anyhow::Error>;
+    // Consumes self.
+    fn rollback(self) -> Result<(), anyhow::Error>;
 }
 
 pub trait WorldStateSource {
@@ -273,11 +272,11 @@ impl <T: ObjDB> WorldState for ObjDBState<T> {
         return Ok((name, vec![]));
     }
 
-    fn commit(&mut self)  -> Result<(), anyhow::Error> {
+    fn commit(self)  -> Result<(), anyhow::Error> {
         self.db.commit()
     }
 
-    fn rollback(&mut self)  -> Result<(), anyhow::Error> {
+    fn rollback(self)  -> Result<(), anyhow::Error> {
         self.db.rollback()
     }
 }

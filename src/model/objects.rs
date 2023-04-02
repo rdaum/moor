@@ -17,7 +17,7 @@ pub enum ObjFlag {
 }
 
 // The set of built-in object attributes
-#[derive(EnumSetType, Debug)]
+#[derive(EnumSetType, Debug, Hash)]
 #[enumset(serialize_repr = "u8")]
 pub enum ObjAttr {
     Owner,
@@ -65,7 +65,7 @@ impl ObjAttrs {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ObjAttrs {
     pub owner: Option<Objid>,
     pub name: Option<String>,
