@@ -1,4 +1,4 @@
-use crate::db::tx::{EntryValue, MvccTuple, Tx, WAL, WALEntry};
+use crate::db::tx::{EntryValue, MvccTuple, Tx, WAL};
 use crate::db::CommitResult;
 use slotmap::{new_key_type, SlotMap};
 use std::collections::{BTreeMap, Bound, HashMap, HashSet};
@@ -86,7 +86,7 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
 
             self.k_index.insert(l.clone(), tuple_id);
 
-            let mut wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             wal.set(tuple_id, EntryValue::Value((l.clone(), r.clone())), tx.tx_start_ts);
 
             if let Some(t_index) = &mut self.t_index {
@@ -114,7 +114,7 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
 
             self.k_index.insert(l.clone(), tuple_id);
 
-            let mut wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             wal.set(tuple_id, EntryValue::Value((l.clone(), r.clone())), tx.tx_start_ts);
 
             if let Some(t_index) = &mut self.t_index {
@@ -267,7 +267,7 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, HashSet};
+    
 
     use super::*;
 

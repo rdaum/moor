@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::str::FromStr;
+use rkyv::{Archive, Deserialize, Serialize};
 
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
@@ -12,12 +13,12 @@ use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
 use decorum::R64;
 use paste::paste;
-use serde_derive::{Deserialize, Serialize};
 
 use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
     Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
+use crate::compiler::codegen::Label;
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
@@ -53,16 +54,15 @@ struct LoopEntry {
     is_barrier: bool,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Name(pub usize);
+#[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
+#[archive(compare(PartialEq),check_bytes)]
+pub struct Name(pub Label);
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
+#[archive(compare(PartialEq),check_bytes)]
 pub struct Names {
     pub names: Vec<String>,
 }
-
-
 
 impl Names {
     pub fn new() -> Self {
@@ -98,14 +98,14 @@ impl Names {
             None => {
                 let pos = self.names.len();
                 self.names.push(String::from(name));
-                Name(pos)
+                Name(pos.into())
             }
-            Some(n) => Name(n),
+            Some(n) => Name(n.into()),
         }
     }
 
     pub fn find_name(&self, name: &str) -> Option<Name> {
-        self.find_name_offset(name).map(Name)
+        self.find_name_offset(name).map(|x| Name(x.into()))
     }
 
     pub fn find_name_offset(&self, name: &str) -> Option<usize> {

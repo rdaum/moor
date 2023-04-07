@@ -6,6 +6,7 @@ use crate::server::parse_cmd::ParsedCommand;
 
 use crate::vm::opcode::{Binary, Op};
 use enumset::EnumSet;
+use crate::compiler::codegen::Label;
 
 pub(crate) struct Activation {
     pub(crate) binary: Binary,
@@ -190,12 +191,12 @@ impl Activation {
         self.valstack.len()
     }
 
-    pub fn jump(&mut self, label_id: usize) {
-        let label = &self.binary.jump_labels[label_id];
-        self.pc = label.position;
+    pub fn jump(&mut self, label_id: Label) {
+        let label = &self.binary.jump_labels[label_id.0 as usize];
+        self.pc = label.position.0 as usize;
     }
 
-    pub fn seek_finally(&self) -> Option<usize> {
+    pub fn seek_finally(&self) -> Option<Label> {
         for i in (0..self.valstack.len()).rev() {
             if let Var::_Finally(label) = self.valstack[i] {
                 return Some(label);

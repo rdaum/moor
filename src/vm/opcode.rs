@@ -1,36 +1,44 @@
-use serde_derive::{Deserialize, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::compiler::codegen::JumpLabel;
+use crate::compiler::codegen::{JumpLabel, Label};
 use crate::compiler::parse::Names;
-use crate::model::var::Var;
+use crate::model::var::{Var, Offset};
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Archive, Ord, PartialOrd)]
+#[archive(
+    compare(PartialEq),
+    check_bytes,
+)]
 pub enum ScatterLabel {
-    Required(usize),
-    Rest(usize),
-    Optional(usize, Option<usize>),
+    Required(Label),
+    Rest(Label),
+    Optional(Label, Option<Label>),
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Archive, Ord, PartialOrd)]
+#[archive(
+    compare(PartialEq),
+    check_bytes,
+)]
 pub enum Op {
-    If(usize),
-    Eif(usize),
-    IfQues(usize),
-    While(usize),
+    If(Label),
+    Eif(Label),
+    IfQues(Label),
+    While(Label),
     Jump {
-        label: usize,
+        label: Label,
     },
     ForList {
-        id: usize,
-        label: usize,
+        id: Label,
+        label: Label,
     },
     ForRange {
-        id: usize,
-        label: usize,
+        id: Label,
+        label: Label,
     },
     Pop,
     Val(Var),
-    Imm(usize),
+    Imm(Label),
     MkEmptyList,
     ListAddTail,
     ListAppend,
@@ -51,66 +59,70 @@ pub enum Op {
     Div,
     Mod,
     Add,
-    And(usize),
-    Or(usize),
+    And(Label),
+    Or(Label),
     Not,
     UnaryMinus,
     Ref,
-    Push(usize),
+    Push(Label),
     PushRef,
-    Put(usize),
+    Put(Label),
     RangeRef,
     GPut {
-        id: usize,
+        id: Label,
     },
     GPush {
-        id: usize,
+        id: Label,
     },
     GetProp,
     PushGetProp,
     PutProp,
     Fork {
-        f_index: usize,
-        id: Option<usize>,
+        f_index: Label,
+        id: Option<Label>,
     },
     CallVerb,
     Return,
     Return0,
     Done,
     FuncCall {
-        id: usize,
+        id: Label,
     },
     RangeSet,
-    Length(usize),
+    Length(Offset),
     Exp,
     Scatter {
-        nargs: usize,
-        nreq: usize,
-        nrest: usize,
+        nargs: Offset,
+        nreq: Offset,
+        nrest: Offset,
         labels: Vec<ScatterLabel>,
-        done: usize,
+        done: Label,
     },
-    PushLabel(usize),
-    TryFinally(usize),
+    PushLabel(Label),
+    TryFinally(Label),
     Catch,
-    TryExcept(usize),
-    EndCatch(usize),
-    EndExcept(usize),
+    TryExcept(Label),
+    EndCatch(Label),
+    EndExcept(Label),
     EndFinally,
     WhileId {
-        id: usize,
-        label: usize,
+        id: Label,
+        label: Label,
     },
     Continue,
-    ExitId(usize),
+    ExitId(Label),
     Exit {
-        stack: usize,
-        label: usize,
+        stack: Offset,
+        label: Label,
     },
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
+#[archive(
+    compare(PartialEq),
+    check_bytes,
+)]
 pub struct Binary {
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
@@ -120,14 +132,30 @@ pub struct Binary {
 }
 
 impl Binary {
-    pub fn find_var(&self, v: &str) -> usize {
+    pub fn new() -> Self {
+        Binary {
+            literals: Vec::new(),
+            jump_labels: Vec::new(),
+            var_names: Names::new(),
+            main_vector: Vec::new(),
+            fork_vectors: Vec::new(),
+        }
+    }
+
+    pub fn find_var(&self, v: &str) -> Label {
         self.var_names.find_name(v).expect("variable not found").0
     }
 
-    pub fn find_literal(&self, l: Var) -> usize {
-        self.literals
+    pub fn find_literal(&self, l: Var) -> Label {
+        Label(self.literals
             .iter()
             .position(|x| *x == l)
-            .expect("literal not found")
+            .expect("literal not found") as u32)
+    }
+}
+
+impl Default for Binary {
+    fn default() -> Self {
+        Self::new()
     }
 }

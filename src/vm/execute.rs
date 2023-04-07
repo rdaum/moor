@@ -2,12 +2,13 @@ use crate::db::state::{StateError, WorldState};
 use enumset::EnumSet;
 use std::sync::Arc;
 use std::sync::Mutex;
+use crate::compiler::codegen::Label;
 
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, ErrorPack, Objid, Var};
+use crate::model::var::{Error, ErrorPack, Objid, Offset, Var};
 use crate::vm::activation::Activation;
 use crate::vm::opcode::{Op, ScatterLabel};
 
@@ -30,8 +31,8 @@ pub enum FinallyReason {
     Return(Var),
     Abort,
     Exit {
-        stack: usize,
-        label: usize,
+        stack: Offset,
+        label: Label,
     },
 }
 const FINALLY_REASON_RAISE: usize = 0x00;
@@ -119,7 +120,7 @@ impl VM {
                     // non-list value, or a list containing the error code.
                     // TODO check for 'cnt' being too large. not sure how to handle, tho
                     // TODO this actually i think is wrong, it needs to pull two values off the stack
-                    for j in (i - cnt)..i {
+                    for j in (i - cnt.0 as usize)..i {
                         if let Var::List(codes) = &a.valstack[j] {
                             if codes.contains(&Var::Err(raise_code)) {
                                 return Some((i, a));
@@ -316,16 +317,16 @@ impl VM {
         self.top_mut().next_op()
     }
 
-    fn jump(&mut self, label: usize) {
+    fn jump(&mut self, label: Label) {
         self.top_mut().jump(label)
     }
 
-    fn get_env(&mut self, id: usize) -> Var {
-        self.top().environment[id].clone()
+    fn get_env(&mut self, id: Label) -> Var {
+        self.top().environment[id.0 as usize].clone()
     }
 
-    fn set_env(&mut self, id: usize, v: &Var) {
-        self.top_mut().environment[id] = v.clone();
+    fn set_env(&mut self, id: Label, v: &Var) {
+        self.top_mut().environment[id.0 as usize] = v.clone();
     }
 
     fn peek(&self, amt: usize) -> Vec<Var> {
@@ -568,7 +569,7 @@ impl VM {
                         return Ok(ExecutionResult::More);
                     }
                     _ => {
-                        let value = self.top().binary.literals[slot].clone();
+                        let value = self.top().binary.literals[slot.0 as usize].clone();
                         self.push(&value);
                     }
                 }
@@ -797,7 +798,7 @@ impl VM {
                 }
             }
             Op::Length(offset) => {
-                let v = self.top().valstack[offset].clone();
+                let v = self.top().valstack[offset.0 as usize].clone();
                 match v {
                     Var::Str(s) => self.push(&Var::Int(s.len() as i64)),
                     Var::List(l) => self.push(&Var::Int(l.len() as i64)),
@@ -880,7 +881,7 @@ impl VM {
                 self.push(&Var::_Finally(label));
             }
             Op::Catch => {
-                self.push(&Var::_Catch(1));
+                self.push(&Var::_Catch(1.into()));
             }
             Op::TryExcept(label) => {
                 self.push(&Var::_Catch(label));
@@ -892,7 +893,7 @@ impl VM {
                 let Var::_Catch(marker) = marker else {
                     panic!("Stack marker is not type Catch");
                 };
-                for _i in 0..marker {
+                for _i in 0..marker.0 {
                     self.pop(); /* handler PC */
                     self.pop(); /* code list */
                 }
@@ -952,12 +953,12 @@ impl VM {
                 };
 
                 let len = list.len();
-                if len < nreq {
+                if len < nreq.0 as usize {
                     self.pop();
                     return self.push_error(E_ARGS);
                 }
 
-                assert_eq!(nargs, labels.len());
+                assert_eq!(nargs.0 as usize, labels.len());
 
                 let mut jump_where = None;
                 let mut args_iter = list.into_iter();
@@ -972,7 +973,7 @@ impl VM {
                         }
                         ScatterLabel::Rest(id) => {
                             let mut v = vec![];
-                            for _ in 1..nargs {
+                            for _ in 1..nargs.0 {
                                 v.push(args_iter.next().unwrap());
                             }
                             let rest = Var::List(v);
@@ -1238,7 +1239,7 @@ mod tests {
 
     #[test]
     fn test_simple_vm_execute() {
-        let binary = mk_binary(vec![Imm(0), Pop, Done], vec![1.into()], Names::new());
+        let binary = mk_binary(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
         let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
         
@@ -1252,7 +1253,7 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0), Imm(1), Ref, Return, Done],
+                vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![Var::Str("hello".to_string()), 2.into()],
                 Names::new(),
             ),
@@ -1269,7 +1270,7 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
+                vec![Imm(0.into()), Imm(1.into()), Imm(2.into()), RangeRef, Return, Done],
                 vec![Var::Str("hello".to_string()), 2.into(), 4.into()],
                 Names::new(),
             ),
@@ -1285,7 +1286,7 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0), Imm(1), Ref, Return, Done],
+                vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![
                     Var::List(vec![111.into(), 222.into(), 333.into()]),
                     2.into(),
@@ -1305,7 +1306,7 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done],
+                vec![Imm(0.into()), Imm(1.into()), Imm(2.into()), RangeRef, Return, Done],
                 vec![
                     Var::List(vec![111.into(), 222.into(), 333.into()]),
                     2.into(),
@@ -1325,18 +1326,37 @@ mod tests {
     fn test_list_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
-
-
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0), Put(a.0), Pop, Push(a.0), Return, Done],
-                vec![Var::List(vec![111.into(), 222.into(), 333.into()])],
+                vec![
+                    Imm(0.into()),
+                    Put(a.0),
+                    Pop,
+                    Push(a.0),
+                    Imm(1.into()),
+                    Imm(2.into()),
+                    Imm(3.into()),
+                    PutTemp,
+                    RangeSet,
+                    Put(a.0),
+                    Pop,
+                    PushTemp,
+                    Pop,
+                    Push(a.0),
+                    Return,
+                    Done,
+                ],
+                vec![
+                    Var::List(vec![111.into(), 222.into(), 333.into()]),
+                    2.into(),
+                    3.into(),
+                    Var::List(vec![321.into(), 123.into()]),
+                ],
                 var_names,
             ),
         );
         let mut vm = VM::new(state);
-        
 
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
@@ -1377,13 +1397,13 @@ mod tests {
             "test",
             &mk_binary(
                 vec![
-                    Imm(0),
+                    Imm(0.into()),
                     Put(a.0),
                     Pop,
                     Push(a.0),
-                    Imm(1),
-                    Imm(2),
-                    Imm(3),
+                    Imm(1.into()),
+                    Imm(2.into()),
+                    Imm(3.into()),
                     PutTemp,
                     RangeSet,
                     Put(a.0),
@@ -1415,7 +1435,7 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0), Imm(1), GetProp, Return, Done],
+                vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
                 vec![Var::Obj(Objid(0)), Var::Str(String::from("test_prop"))],
                 Names::new(),
             ),
@@ -1445,7 +1465,7 @@ mod tests {
 
         // The first merely returns the value "666" immediately.
         let return_verb_binary = mk_binary(
-            vec![Imm(0), Return, Done],
+            vec![Imm(0.into()), Return, Done],
             vec![Var::Int(666)],
             Names::new(),
         );
@@ -1453,9 +1473,9 @@ mod tests {
         // The second actually calls the first verb, and returns the result.
         let call_verb_binary = mk_binary(
             vec![
-                Imm(0), /* obj */
-                Imm(1), /* verb */
-                Imm(2), /* args */
+                Imm(0.into()), /* obj */
+                Imm(1.into()), /* verb */
+                Imm(2.into()), /* args */
                 CallVerb,
                 Return,
                 Done,

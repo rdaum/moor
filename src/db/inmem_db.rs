@@ -6,7 +6,7 @@ use crate::model::props::{
 use crate::model::r#match::VerbArgsSpec;
 
 use crate::model::var::{Objid, Var, NOTHING};
-use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
+use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use anyhow::{anyhow, Error};
 use enumset::EnumSet;
 use itertools::Itertools;
@@ -16,6 +16,7 @@ use crate::db::relations::Relation;
 use crate::db::state::WorldState;
 use crate::db::tx::Tx;
 use crate::db::{relations};
+use crate::vm::opcode::Binary;
 
 const MAX_PROP_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
 const MAX_VERB_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
@@ -55,7 +56,7 @@ pub struct ImDB {
     verb_attr_owner: Relation<Vid, Objid>,
     verb_attr_flags: Relation<Vid, EnumSet<VerbFlag>>,
     verb_attr_args_spec: Relation<Vid, VerbArgsSpec>,
-    verb_attr_program: Relation<Vid, Program>,
+    verb_attr_program: Relation<Vid, Binary>,
 }
 
 impl Default for ImDB {
@@ -456,7 +457,7 @@ impl ImDB {
         owner: Objid,
         flags: EnumSet<VerbFlag>,
         arg_spec: VerbArgsSpec,
-        program: Program,
+        program: Binary,
     ) -> Result<VerbInfo, Error> {
         let vid = Vid(self.next_vid);
         self.next_vid += 1;
@@ -627,10 +628,11 @@ mod tests {
     use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
-    use crate::model::verbs::{Program, VerbAttr, VerbFlag, Verbs};
+    use crate::model::verbs::{VerbAttr, VerbFlag, Verbs};
 
     use crate::db::tx::Tx;
     use enumset::enum_set;
+    use crate::vm::opcode::Binary;
 
     #[test]
     fn object_create_check_delete() {
@@ -761,7 +763,7 @@ mod tests {
 
         // Test inheritance chain for non-existent object
         let inheritance_chain = odb.get_object_inheritance_chain(&mut tx, Objid(7));
-        assert_eq!(inheritance_chain, vec![]);
+        assert_eq!(inheritance_chain, Vec::<Objid>::new());
 
         // Test object_children for o1
         let mut children = odb.object_children(&mut tx, o1).unwrap();
@@ -975,7 +977,7 @@ mod tests {
                 parent,
                 VerbFlag::Exec | VerbFlag::Read,
                 thisnonethis,
-                Program(bytes::Bytes::new()),
+                Binary::default(),
             )
             .unwrap();
 
@@ -1013,7 +1015,7 @@ mod tests {
                 parent,
                 VerbFlag::Exec | VerbFlag::Read,
                 thisnonethis,
-                Program(bytes::Bytes::new()),
+                Binary::default(),
             )
             .unwrap();
 
@@ -1038,7 +1040,7 @@ mod tests {
                 parent,
                 VerbFlag::Exec | VerbFlag::Read,
                 thisnonethis,
-                Program(bytes::Bytes::new()),
+                Binary::default(),
             )
             .unwrap();
 

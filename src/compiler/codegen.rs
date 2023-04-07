@@ -2,14 +2,14 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
 use crate::compiler::parse::{parse_program, Name, Names};
-use crate::model::var::Var;
+use crate::model::var::{Offset, Var};
 use crate::vm::opcode::Op::Jump;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
+use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -20,29 +20,48 @@ pub enum CompileError {
 }
 
 // Fixup for a jump label
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
+#[archive(compare(PartialEq), check_bytes)]
 pub struct JumpLabel {
     // The unique id for the jump label, which is also its offset in the jump vector.
-    pub(crate) id: usize,
+    pub(crate) id: Label,
 
     // If there's a unique identifier assigned to this label, it goes here.
     label: Option<Name>,
 
     // The temporary and then final resolved position of the label in terms of PC offsets.
-    pub(crate) position: usize,
+    pub(crate) position: Offset,
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord, Hash)]
+#[archive(compare(PartialEq), check_bytes)]
+pub struct Label(pub u32);
+
+impl From<usize> for Label {
+    fn from(value: usize) -> Self {
+        Label(value as u32)
+    }
+}
+
+impl From<i32> for Label {
+    fn from(value: i32) -> Self {
+        Label(value as u32)
+    }
 }
 
 // References to vars using the name idx.
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
+#[archive(compare(PartialEq), check_bytes)]
 pub struct VarRef {
-    pub(crate) id: usize,
+    pub(crate) id: Label,
     pub(crate) name: Name,
 }
 
 pub struct Loop {
-    top_label: usize,
-    top_stack: usize,
-    bottom_label: usize,
-    bottom_stack: usize,
+    top_label: Label,
+    top_stack: Offset,
+    bottom_label: Label,
+    bottom_stack: Offset,
 }
 
 // Compiler code generation state.
@@ -52,15 +71,15 @@ pub struct CodegenState {
     pub(crate) var_names: Names,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
-    pub(crate) saved_stack: Option<usize>,
+    pub(crate) saved_stack: Option<Offset>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
-    pub(crate) builtins: HashMap<String, usize>,
+    pub(crate) builtins: HashMap<String, Label>,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
 impl CodegenState {
-    pub fn new(var_names: Names, builtins: HashMap<String, usize>) -> Self {
+    pub fn new(var_names: Names, builtins: HashMap<String, Label>) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
@@ -76,9 +95,9 @@ impl CodegenState {
     }
 
     // Create an anonymous jump label at the current position and return its unique ID.
-    fn make_label(&mut self, name: Option<Name>) -> usize {
-        let id = self.jumps.len();
-        let position = self.ops.len();
+    fn make_label(&mut self, name: Option<Name>) -> Label {
+        let id = Label(self.jumps.len() as u32);
+        let position = (self.ops.len()).into();
         self.jumps.push(JumpLabel {
             id,
             label: name,
@@ -89,7 +108,7 @@ impl CodegenState {
 
     fn find_label(&self, name: &Name) -> Option<&JumpLabel> {
         self.jumps.iter().find(|j| {
-            if let Some(label) = j.label {
+            if let Some(label) = &j.label {
                 label.eq(name)
             } else {
                 false
@@ -98,23 +117,27 @@ impl CodegenState {
     }
 
     // Adjust the position of a jump label to the current position.
-    fn commit_label(&mut self, id: usize) {
+    fn commit_label(&mut self, id: Label) {
         let position = self.ops.len();
-        let jump = &mut self.jumps.get_mut(id).expect("Invalid jump fixup");
+        let jump = &mut self
+            .jumps
+            .get_mut(id.0 as usize)
+            .expect("Invalid jump fixup");
         let npos = position;
-        jump.position = npos;
+        jump.position = npos.into();
     }
 
-    fn add_literal(&mut self, v: &Var) -> usize {
+    fn add_literal(&mut self, v: &Var) -> Label {
         let lv_pos = self.literals.iter().position(|lv| lv.eq(v));
-        match lv_pos {
+        let pos = match lv_pos {
             None => {
                 let idx = self.literals.len();
                 self.literals.push(v.clone());
                 idx
             }
             Some(idx) => idx,
-        }
+        };
+        Label(pos as u32)
     }
 
     fn emit(&mut self, op: Op) {
@@ -124,13 +147,13 @@ impl CodegenState {
     fn find_loop(&self, loop_label: &Name) -> Result<&Loop, anyhow::Error> {
         match self.find_label(loop_label) {
             None => {
-                let loop_name = self.var_names.names[loop_label.0].clone();
+                let loop_name = self.var_names.names[loop_label.0 .0 as usize].clone();
                 Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)))
             }
             Some(label) => {
                 let l = self.loops.iter().find(|l| l.top_label == label.id);
                 let Some(l) = l else {
-                      return Err(anyhow!(CompileError::UnknownLoopLabel(loop_label.0.to_string())));
+                      return Err(anyhow!(CompileError::UnknownLoopLabel(loop_label.0.0.to_string())));
                     };
                 Ok(l)
             }
@@ -148,24 +171,24 @@ impl CodegenState {
         self.cur_stack -= n;
     }
 
-    fn save_stack_top(&mut self) -> Option<usize> {
+    fn save_stack_top(&mut self) -> Option<Offset> {
         let old = self.saved_stack;
-        self.saved_stack = Some(self.cur_stack - 1);
+        self.saved_stack = Some((self.cur_stack - 1).into());
         old
     }
 
-    fn saved_stack_top(&self) -> Option<usize> {
+    fn saved_stack_top(&self) -> Option<Offset> {
         self.saved_stack
     }
 
-    fn restore_stack_top(&mut self, old: Option<usize>) {
+    fn restore_stack_top(&mut self, old: Option<Offset>) {
         self.saved_stack = old
     }
 
-    fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> usize {
+    fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> Label {
         let fv = self.fork_vectors.len();
         self.fork_vectors.push(opcodes);
-        fv
+        Label(fv as u32)
     }
 
     fn generate_assign(
@@ -264,9 +287,9 @@ impl CodegenState {
             .collect();
         let done = self.make_label(None);
         self.emit(Op::Scatter {
-            nargs,
-            nreq,
-            nrest,
+            nargs: nargs.into(),
+            nreq: nreq.into(),
+            nrest: nrest.into(),
             labels: labels.iter().map(|(_, l)| l.clone()).collect(),
             done,
         });
@@ -330,7 +353,7 @@ impl CodegenState {
         if !arg_list.is_empty() {
             self.generate_arg_list(arg_list)?;
         } else {
-            self.emit(Op::Push(0));
+            self.emit(Op::Push(Label(0)));
             self.push_stack(0);
         }
         Ok(())
@@ -393,7 +416,6 @@ impl CodegenState {
                 self.pop_stack(1);
             }
             Expr::Range { base, from, to } => {
-                
                 self.generate_expr(base.as_ref())?;
                 let old = self.save_stack_top();
                 self.generate_expr(from.as_ref())?;
@@ -546,9 +568,9 @@ impl CodegenState {
                 });
                 self.loops.push(Loop {
                     top_label: loop_top,
-                    top_stack: self.cur_stack,
+                    top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
-                    bottom_stack: self.cur_stack - 2,
+                    bottom_stack: (self.cur_stack - 2).into(),
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -568,9 +590,9 @@ impl CodegenState {
                 });
                 self.loops.push(Loop {
                     top_label: loop_top,
-                    top_stack: self.cur_stack,
+                    top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
-                    bottom_stack: self.cur_stack - 2,
+                    bottom_stack: (self.cur_stack - 2).into(),
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -597,9 +619,9 @@ impl CodegenState {
                 self.pop_stack(1);
                 self.loops.push(Loop {
                     top_label: loop_start_label,
-                    top_stack: self.cur_stack,
+                    top_stack: self.cur_stack.into(),
                     bottom_label: loop_end_label,
-                    bottom_stack: self.cur_stack,
+                    bottom_stack: self.cur_stack.into(),
                 });
                 for s in body {
                     self.generate_stmt(s)?;
@@ -621,7 +643,7 @@ impl CodegenState {
                 let fv_id = self.add_fork_vector(forked_ops);
                 self.ops = stashed_ops;
                 self.emit(Op::Fork {
-                    id: id.map(|i| i.0),
+                    id: id.as_ref().map(|i| i.0),
                     f_index: fv_id,
                 });
                 self.pop_stack(1);
@@ -636,7 +658,7 @@ impl CodegenState {
                     self.push_stack(1);
                 }
                 let arm_count = excepts.len();
-                self.emit(Op::TryExcept(arm_count));
+                self.emit(Op::TryExcept(Label(arm_count as u32)));
                 self.push_stack(1);
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -648,7 +670,7 @@ impl CodegenState {
                     self.commit_label(labels[i]);
                     self.push_stack(1);
                     if ex.id.is_some() {
-                        self.emit(Op::Put(ex.id.unwrap().0));
+                        self.emit(Op::Put(ex.id.as_ref().unwrap().0));
                     }
                     self.emit(Op::Pop);
                     self.pop_stack(1);
@@ -755,7 +777,7 @@ impl CodegenState {
     }
 }
 
-fn register_builtins() -> HashMap<String, usize> {
+fn register_builtins() -> HashMap<String, Label> {
     let builtins = vec![
         // disassemble
         "disassemble",
@@ -900,7 +922,7 @@ fn register_builtins() -> HashMap<String, usize> {
 
     let mut b = HashMap::new();
     for (i, builtin) in builtins.iter().enumerate() {
-        b.insert(builtin.to_string(), i);
+        b.insert(builtin.to_string(), Label(i as u32));
     }
 
     b
@@ -1026,17 +1048,17 @@ mod tests {
                 Imm(one),
                 Imm(two),
                 Eq,
-                If(0),
+                If(0.into()),
                 Imm(five),
                 Return,
-                Jump { label: 1 },
+                Jump { label: 1.into() },
                 Imm(two),
                 Imm(three),
                 Eq,
-                If(2),
+                If(2.into()),
                 Imm(three),
                 Return,
-                Jump { label: 3 },
+                Jump { label: 3.into() },
                 Imm(six),
                 Return,
                 Done
@@ -1066,18 +1088,18 @@ mod tests {
             binary.main_vector,
             vec![
                 Imm(one),
-                While(1),
+                While(1.into()),
                 Push(x),
                 Imm(one),
                 Add,
                 Put(x),
                 Pop,
-                Jump { label: 0 },
+                Jump { label: 0.into() },
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position, 0);
-        assert_eq!(binary.jump_labels[1].position, 8);
+        assert_eq!(binary.jump_labels[0].position.0, 0);
+        assert_eq!(binary.jump_labels[1].position.0, 8);
     }
 
     #[test]
@@ -1112,7 +1134,7 @@ mod tests {
                 Imm(one),
                 WhileId {
                     id: chuckles,
-                    label: 1
+                    label: 1.into()
                 },
                 Push(x),
                 Imm(one),
@@ -1122,15 +1144,15 @@ mod tests {
                 Push(x),
                 Imm(five),
                 Gt,
-                If(2),
-                ExitId(0),
-                Jump { label: 3 },
-                Jump { label: 0 },
+                If(2.into()),
+                ExitId(0.into()),
+                Jump { label: 3.into() },
+                Jump { label: 0.into() },
                 Done,
             ]
         );
-        assert_eq!(binary.jump_labels[0].position, 0);
-        assert_eq!(binary.jump_labels[1].position, 14);
+        assert_eq!(binary.jump_labels[0].position.0, 0);
+        assert_eq!(binary.jump_labels[1].position.0, 14);
     }
     #[test]
     fn test_while_break_continue_stmt() {
@@ -1162,7 +1184,7 @@ mod tests {
             binary.main_vector,
             vec![
                 Imm(one),
-                While(1),
+                While(1.into()),
                 Push(x),
                 Imm(one),
                 Add,
@@ -1171,16 +1193,22 @@ mod tests {
                 Push(x),
                 Imm(five),
                 Eq,
-                If(2),
-                Exit { stack: 0, label: 1 },
-                Jump { label: 3 },
-                Exit { stack: 0, label: 1 },
-                Jump { label: 0 },
+                If(2.into()),
+                Exit {
+                    stack: 0.into(),
+                    label: 1.into()
+                },
+                Jump { label: 3.into() },
+                Exit {
+                    stack: 0.into(),
+                    label: 1.into()
+                },
+                Jump { label: 0.into() },
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position, 0);
-        assert_eq!(binary.jump_labels[1].position, 15);
+        assert_eq!(binary.jump_labels[0].position.0, 0);
+        assert_eq!(binary.jump_labels[1].position.0, 15);
     }
     #[test]
     fn test_for_in_list_stmt() {
@@ -1221,18 +1249,21 @@ mod tests {
                 Imm(three),
                 ListAddTail,
                 Val(Var::Int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
-                ForList { id: x, label: 1 },
+                ForList {
+                    id: x,
+                    label: 1.into()
+                },
                 Push(x),
                 Imm(five),
                 Add,
                 Put(b),
                 Pop,
-                Jump { label: 0 },
+                Jump { label: 0.into() },
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position, 7);
-        assert_eq!(binary.jump_labels[1].position, 14);
+        assert_eq!(binary.jump_labels[0].position.0, 7);
+        assert_eq!(binary.jump_labels[1].position.0, 14);
     }
 
     #[test]
@@ -1264,14 +1295,17 @@ mod tests {
             vec![
                 Imm(one),
                 Imm(five),
-                ForRange { id: n, label: 1 },
+                ForRange {
+                    id: n,
+                    label: 1.into()
+                },
                 Push(player),
                 Imm(tell),
                 Push(a),
                 MakeSingletonList,
                 CallVerb,
                 Pop,
-                Jump { label: 0 },
+                Jump { label: 0.into() },
                 Done
             ]
         );
@@ -1289,9 +1323,9 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(0.into()),
                 Fork {
-                    f_index: 0,
+                    f_index: 0.into(),
                     id: None
                 },
                 Done
@@ -1325,7 +1359,7 @@ mod tests {
             vec![
                 Imm(five),
                 Fork {
-                    f_index: 0,
+                    f_index: 0.into(),
                     id: Some(fid)
                 },
                 Done
@@ -1367,17 +1401,17 @@ mod tests {
             binary.main_vector,
             vec![
                 Imm(one),
-                And(0),
+                And(0.into()),
                 Imm(two),
-                Or(1),
+                Or(1.into()),
                 Imm(three),
                 Put(a),
                 Pop,
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position, 3);
-        assert_eq!(binary.jump_labels[1].position, 5);
+        assert_eq!(binary.jump_labels[0].position.0, 3);
+        assert_eq!(binary.jump_labels[1].position.0, 5);
     }
 
     #[test]
@@ -1420,7 +1454,7 @@ mod tests {
                 MakeSingletonList,
                 Imm(test),
                 ListAddTail,
-                FuncCall { id: 0 },
+                FuncCall { id: 0.into() },
                 Pop,
                 Done
             ]
@@ -1455,9 +1489,9 @@ mod tests {
                 Imm(one),
                 Imm(two),
                 Eq,
-                IfQues(0),
+                IfQues(0.into()),
                 Imm(three),
-                Jump { label: 1 },
+                Jump { label: 1.into() },
                 Imm(four),
                 Put(a),
                 Pop,
@@ -1501,7 +1535,7 @@ mod tests {
     fn test_string_get() {
         let program = "return \"test\"[1];";
         let binary = compile(program).unwrap();
-        assert_eq!(binary.main_vector, vec![Imm(0), Imm(1), Ref, Return, Done]);
+        assert_eq!(binary.main_vector, vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done]);
     }
 
     #[test]
@@ -1510,7 +1544,7 @@ mod tests {
         let binary = compile(program).unwrap();
         assert_eq!(
             binary.main_vector,
-            vec![Imm(0), Imm(1), Imm(2), RangeRef, Return, Done]
+            vec![Imm(0.into()), Imm(1.into()), Imm(2.into()), RangeRef, Return, Done]
         );
     }
 
@@ -1524,8 +1558,8 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(a),
-                Imm(0),
-                Imm(1),
+                Imm(0.into()),
+                Imm(1.into()),
                 PutTemp,
                 IndexSet,
                 Put(a),
@@ -1547,9 +1581,9 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(a),
-                Imm(0),
-                Imm(1),
-                Imm(2),
+                Imm(0.into()),
+                Imm(1.into()),
+                Imm(2.into()),
                 PutTemp,
                 RangeSet,
                 Put(a),
@@ -1568,13 +1602,13 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(0.into()),
                 MakeSingletonList,
-                Imm(1),
+                Imm(1.into()),
                 ListAddTail,
-                Imm(2),
+                Imm(2.into()),
                 ListAddTail,
-                Imm(0),
+                Imm(0.into()),
                 Ref,
                 Return,
                 Done
@@ -1589,14 +1623,14 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(0.into()),
                 MakeSingletonList,
-                Imm(1),
+                Imm(1.into()),
                 ListAddTail,
-                Imm(2),
+                Imm(2.into()),
                 ListAddTail,
-                Imm(0),
-                Imm(1),
+                Imm(0.into()),
+                Imm(1.into()),
                 RangeRef,
                 Return,
                 Done
@@ -1646,7 +1680,7 @@ mod tests {
                 Pop,
                 Push(a),
                 Imm(two),
-                Length(0),
+                Length(0.into()),
                 RangeRef,
                 Put(b),
                 Pop,
@@ -1674,8 +1708,8 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(args),
-                Imm(0),
-                Imm(1),
+                Imm(0.into()),
+                Imm(1.into()),
                 RangeRef,
                 CheckListForSplice,
                 Return,
@@ -1706,7 +1740,7 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                TryFinally(0),
+                TryFinally(0.into()),
                 Imm(one),
                 Put(a),
                 Pop,
@@ -1763,21 +1797,21 @@ mod tests {
             vec![
                 Imm(e_invarg),
                 MakeSingletonList,
-                PushLabel(0),
+                PushLabel(0.into()),
                 Imm(e_propnf),
                 MakeSingletonList,
-                PushLabel(1),
-                TryExcept(2),
+                PushLabel(1.into()),
+                TryExcept(2.into()),
                 Imm(one),
                 Put(a),
                 Pop,
-                EndExcept(2),
+                EndExcept(2.into()),
                 Put(a),
                 Pop,
                 Imm(two),
                 Put(a),
                 Pop,
-                Jump { label: 3 },
+                Jump { label: 3.into() },
                 Put(b),
                 Pop,
                 Imm(three),
@@ -1822,12 +1856,12 @@ mod tests {
                 MakeSingletonList,
                 Imm(e_perm),
                 ListAddTail,
-                PushLabel(0),
+                PushLabel(0.into()),
                 Catch,
                 Push(x),
                 Imm(one),
                 Add,
-                EndCatch(1),
+                EndCatch(1.into()),
                 Pop,
                 Imm(svntn),
                 Put(x),
@@ -1892,15 +1926,15 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 3,
-                    nreq: 3,
-                    nrest: 4,
+                    nargs: 3.into(),
+                    nreq: 3.into(),
+                    nrest: 4.into(),
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
                         ScatterLabel::Required(c),
                     ],
-                    done: 0,
+                    done: 0.into(),
                 },
                 Pop,
                 Done
@@ -1931,15 +1965,15 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 3,
-                    nreq: 2,
-                    nrest: 4,
+                    nargs: 3.into(),
+                    nreq: 2.into(),
+                    nrest: 4.into(),
                     labels: vec![
                         ScatterLabel::Required(first),
                         ScatterLabel::Required(second),
-                        ScatterLabel::Optional(third, Some(0)),
+                        ScatterLabel::Optional(third, Some(0.into())),
                     ],
-                    done: 1,
+                    done: 1.into(),
                 },
                 Imm(binary.find_literal(0.into())),
                 Put(binary.find_var("third")),
@@ -1976,16 +2010,16 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 4,
-                    nreq: 2,
-                    nrest: 4,
+                    nargs: 4.into(),
+                    nreq: 2.into(),
+                    nrest: 4.into(),
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
-                        ScatterLabel::Optional(c, Some(0)),
+                        ScatterLabel::Optional(c, Some(0.into())),
                         ScatterLabel::Rest(d),
                     ],
-                    done: 1,
+                    done: 1.into(),
                 },
                 Imm(binary.find_literal(8.into())),
                 Put(binary.find_var("c")),
@@ -2027,18 +2061,18 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 6,
-                    nreq: 2,
-                    nrest: 4,
+                    nargs: 6.into(),
+                    nreq: 2.into(),
+                    nrest: 4.into(),
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Optional(b, None),
-                        ScatterLabel::Optional(c, Some(0)),
+                        ScatterLabel::Optional(c, Some(0.into())),
                         ScatterLabel::Rest(d),
-                        ScatterLabel::Optional(e, Some(1)),
+                        ScatterLabel::Optional(e, Some(1.into())),
                         ScatterLabel::Required(f),
                     ],
-                    done: 2,
+                    done: 2.into(),
                 },
                 Imm(binary.find_literal(8.into())),
                 Put(binary.find_var("c")),
@@ -2121,20 +2155,20 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0),
+                Imm(0.into()),
                 Put(x),
                 Pop,
-                Imm(0),
+                Imm(0.into()),
                 MakeSingletonList,
-                Imm(1),
+                Imm(1.into()),
                 ListAddTail,
-                Imm(2),
+                Imm(2.into()),
                 ListAddTail,
                 Put(y),
                 Pop,
                 Push(x),
                 Push(y),
-                Imm(1),
+                Imm(1.into()),
                 Ref,
                 Add,
                 Put(x),

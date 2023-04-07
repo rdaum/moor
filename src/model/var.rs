@@ -1,13 +1,30 @@
+
+use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
+use crate::compiler::codegen::Label;
+use crate::model::var::Error::{E_RANGE, E_TYPE};
 use decorum::{Real, R64};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
-use serde_derive::{Deserialize, Serialize};
-
-use crate::model::var::Error::{E_RANGE, E_TYPE};
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+use num_traits::ToPrimitive;
+use rkyv::{
+    ser::{
+        Serializer,
+    },
+    with::{
+        ArchiveWith,
+    },
+    Archive,
+    Archived,
+    Deserialize,
+    Resolver,
+    Serialize,
+};
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Archive,
+)]
+#[archive(compare(PartialEq), check_bytes)]
 pub struct Objid(pub i64);
 
 pub const SYSTEM_OBJECT: Objid = Objid(0);
@@ -16,7 +33,21 @@ pub const AMBIGUOUS: Objid = Objid(-2);
 pub const FAILED_MATCH: Objid = Objid(-3);
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Serialize, Deserialize, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    PartialEq,
+    IntEnum,
+    Ord,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    Hash,
+    Archive,
+)]
+#[archive(compare(PartialEq), check_bytes)]
 #[allow(non_camel_case_types)]
 pub enum Error {
     E_NONE = 0,
@@ -103,9 +134,61 @@ impl Error {
     }
 }
 
+pub struct EncodeR64;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub struct F64Wrap(f64);
+impl PartialEq<R64> for ArchivedF64Wrap {
+    fn eq(&self, other: &R64) -> bool {
+        self.0 == other.to_f64().unwrap()
+    }
+}
+
+impl ArchiveWith<R64> for EncodeR64 {
+    type Archived = Archived<F64Wrap>;
+    type Resolver = Resolver<F64Wrap>;
+
+    unsafe fn resolve_with(field: &R64, pos: usize, r: F64WrapResolver, out: *mut Self::Archived) {
+        let f = F64Wrap(field.to_f64().unwrap());
+        f.resolve(pos, r, out);
+    }
+}
+
+
+pub struct ArchivedUsize(Archived<usize>);
+
+impl PartialEq<usize> for ArchivedUsize {
+    fn eq(&self, other: &usize) -> bool {
+        self.0 as u64 == *other as u64
+    }
+}
+
+impl PartialEq<ArchivedUsize> for usize {
+    fn eq(&self, other: &ArchivedUsize) -> bool {
+        *self as u64 == other.0 as u64
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
+#[archive(compare(PartialEq), check_bytes)]
+pub struct Offset(pub u32);
+
+impl From<i32> for Offset {
+    fn from(value: i32) -> Self {
+        Offset(value as u32)
+    }
+}
+
+impl From<usize> for Offset {
+    fn from(value: usize) -> Self {
+        Offset(value as u32)
+    }
+}
+
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Serialize, Deserialize, Archive)]
 #[allow(non_camel_case_types)]
+#[archive(compare(PartialEq), check_bytes)]
 pub enum VarType {
     TYPE_INT = 0,
     TYPE_OBJ = 1,
@@ -119,21 +202,25 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash, Archive)]
+#[archive(compare(PartialEq), check_bytes)]
+#[archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))]
+#[archive_attr(check_bytes(
+    bound = "__C: rkyv::validation::ArchiveContext, <__C as rkyv::Fallible>::Error: rkyv::bytecheck::Error"
+))]
 pub enum Var {
     Clear,
     None,
     Str(String),
     Obj(Objid),
     Int(i64),
-    Float(R64),
+    Float(#[with(EncodeR64)] R64),
     Err(Error),
-    List(Vec<Var>),
-
+    List(#[omit_bounds] #[archive_attr(omit_bounds)] Vec<Var>),
     // Special for exception handling
-    _Catch(usize),
-    _Finally(usize),
-    _Label(usize),
+    _Catch(Label),
+    _Finally(Label),
+    _Label(Label),
 }
 
 macro_rules! binary_numeric_coercion_op {

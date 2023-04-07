@@ -1,8 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicU64;
 use anyhow::{anyhow, Error};
-use bincode::config;
-use bincode::error::DecodeError;
 use enumset::EnumSet;
 use crate::db::{CommitResult, relations};
 use crate::db::inmem_db::ImDB;
@@ -14,8 +12,8 @@ use crate::model::permissions::Permissions;
 use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::{Objid, Var};
-use crate::model::verbs::{Program, VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
-use crate::vm::opcode::Binary;
+use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
+use crate::vm::opcode::{Binary};
 
 pub struct ImDbTxSource {
     db: Arc<Mutex<ImDB>>,
@@ -97,7 +95,7 @@ impl Properties for ImDBTx {
 }
 
 impl Verbs for ImDBTx {
-    fn add_verb(&mut self, oid: Objid, names: Vec<&str>, owner: Objid, flags: EnumSet<VerbFlag>, arg_spec: VerbArgsSpec, program: Program) -> Result<VerbInfo, Error> {
+    fn add_verb(&mut self, oid: Objid, names: Vec<&str>, owner: Objid, flags: EnumSet<VerbFlag>, arg_spec: VerbArgsSpec, program: Binary) -> Result<VerbInfo, Error> {
         self.db.lock().unwrap().add_verb(&mut self.tx, oid, names, owner, flags, arg_spec, program)
     }
 
@@ -178,15 +176,11 @@ impl WorldState for ImDBTx {
             return Err(anyhow!(StateError::VerbNotFound(obj, vname.to_string())));
         };
 
-        let program = vi.clone().attrs.program.unwrap();
-        let slc = &program.0[..];
-        let result: Result<(Binary, usize), DecodeError> =
-            bincode::serde::decode_from_slice(slc, config::standard());
-        let Ok((binary, _size)) = result else {
+        let Some(binary) = &vi.attrs.program else {
             return Err(anyhow!(StateError::VerbDecodeError(obj, vname.to_string())));
         };
 
-        Ok((binary, vi))
+        Ok((binary.clone(), vi))
     }
 
     fn retrieve_property(

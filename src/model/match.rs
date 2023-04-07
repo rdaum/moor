@@ -1,9 +1,13 @@
-use bincode::{Decode, Encode};
+use rkyv::{Archive, Deserialize, Serialize};
 use int_enum::IntEnum;
 
 /// TODO verb-matching
 ///
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Hash, Ord, PartialOrd, Archive, Serialize, Deserialize)]
+#[archive(
+    compare(PartialEq),
+    check_bytes,
+)]
 #[repr(u8)]
 pub enum ArgSpec {
     None = 0,
@@ -11,7 +15,11 @@ pub enum ArgSpec {
     This = 2,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Archive, Serialize, Deserialize)]
+#[archive(
+    compare(PartialEq),
+    check_bytes,
+)]
 pub enum PrepSpec {
     Any,
     None,
@@ -20,7 +28,11 @@ pub enum PrepSpec {
     ),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Archive, Serialize, Deserialize)]
+#[archive(
+    compare(PartialEq),
+    check_bytes,
+)]
 pub struct VerbArgsSpec {
     pub dobj: ArgSpec,
     pub prep: PrepSpec,

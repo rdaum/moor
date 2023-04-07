@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 
-use bincode::config;
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
@@ -19,7 +18,7 @@ use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
 use crate::model::props::{PropDefs, PropFlag, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
-use crate::model::verbs::{Program, VerbFlag, Verbs};
+use crate::model::verbs::{VerbFlag, Verbs};
 use crate::server::scheduler::Scheduler;
 
 use crate::textdump::{Object, TextdumpReader};
@@ -201,8 +200,6 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 }
             };
 
-            let prg = bincode::serde::encode_to_vec(binary, config::standard())
-                .expect("Could not serialize program");
             s.add_verb(
                 &mut tx,
                 *objid,
@@ -210,7 +207,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 v.owner,
                 flags,
                 argspec,
-                Program(bytes::Bytes::from(prg)),
+                binary,
             )?;
         }
     }

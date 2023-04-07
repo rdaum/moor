@@ -3,6 +3,7 @@ use enumset_derive::EnumSetType;
 
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::Objid;
+use crate::vm::opcode::Binary;
 
 #[derive(EnumSetType, Debug)]
 #[enumset(serialize_repr = "u16")]
@@ -15,9 +16,6 @@ pub enum VerbFlag {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Vid(pub i64);
-
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct Program(pub bytes::Bytes);
 
 #[derive(EnumSetType, Debug)]
 pub enum VerbAttr {
@@ -34,7 +32,7 @@ pub struct VerbAttrs {
     pub owner: Option<Objid>,
     pub flags: Option<EnumSet<VerbFlag>>,
     pub args_spec: Option<VerbArgsSpec>,
-    pub program: Option<Program>,
+    pub program: Option<Binary>,
 }
 
 #[derive(Clone)]
@@ -53,7 +51,7 @@ pub trait Verbs {
         owner: Objid,
         flags: EnumSet<VerbFlag>,
         arg_spec: VerbArgsSpec,
-        program: Program,
+        program: Binary,
     ) -> Result<VerbInfo, anyhow::Error>;
 
     /// Get all verbs attached to the given object.

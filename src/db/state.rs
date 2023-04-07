@@ -13,7 +13,7 @@ use crate::model::props::{PropFlag};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{VerbInfo};
 
-use crate::vm::opcode::Binary;
+use crate::vm::opcode::{Binary};
 
 #[derive(Error, Debug)]
 pub enum StateError {

@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use decorum::R64;
 use int_enum::IntEnum;
 use text_io::scan;
+use crate::compiler::codegen::Label;
 
 use crate::model::var::{Error, Objid, Var, VarType};
 
@@ -121,8 +122,8 @@ impl<R: Read> TextdumpReader<R> {
             }
             VarType::TYPE_CLEAR => Var::Clear,
             VarType::TYPE_NONE => Var::None,
-            VarType::TYPE_CATCH => Var::_Catch(self.read_num()? as usize),
-            VarType::TYPE_FINALLY => Var::_Finally(self.read_num()? as usize),
+            VarType::TYPE_CATCH => Var::_Catch(Label(self.read_num()? as u32)),
+            VarType::TYPE_FINALLY => Var::_Finally(Label(self.read_num()? as u32)),
             VarType::TYPE_FLOAT => Var::Float(R64::from(self.read_float()?)),
         };
         Ok(v)
