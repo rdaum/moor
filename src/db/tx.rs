@@ -39,6 +39,16 @@ pub struct WAL<K, V: OrderedKeyTraits> {
     pub entries: BTreeMap<K, WALEntry<V>>
 }
 
+impl <K: OrderedKeyTraits, V: OrderedKeyTraits> WAL<K,V> {
+    pub fn set(&mut self, key: K, value: EntryValue<V>, ts_i: u64) {
+        self.entries.insert(key, WALEntry {
+            value,
+            wts: ts_i,
+            rts: ts_i,
+        });
+    }
+}
+
 impl <K: OrderedKeyTraits, V: OrderedKeyTraits> Default for WAL<K, V> {
     fn default() -> Self {
         WAL {
@@ -94,7 +104,7 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V>{
         // If ts_t == wts_x, then we can overwrite.
         let mut versions = self.versions.write();
         for x in versions.iter_mut().rev() {
-            let rts_x = value.rts;
+            let rts_x = x.read_timestamp;
             let wts_x = x.write_timestmap;
             if ts_t < rts_x {
                 return ConflictRetry;

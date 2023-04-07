@@ -136,7 +136,7 @@ impl ImDB {
 
 
     pub fn get_object_inheritance_chain(&mut self, tx: &mut Tx, oid: Objid) -> Vec<Objid> {
-        if self.obj_attr_flags.find_t(tx, &oid).is_none() {
+        if self.obj_attr_flags.seek_for_l_eq(tx, &oid).is_none() {
             return Vec::new();
         }
 
@@ -146,7 +146,7 @@ impl ImDB {
         let mut current = oid;
         while current != NOTHING {
             chain.push(current);
-            current = self.obj_attr_parent.find_t(tx, &current).unwrap_or(NOTHING);
+            current = self.obj_attr_parent.seek_for_l_eq(tx, &current).unwrap_or(NOTHING);
         }
         chain
     }
@@ -160,13 +160,13 @@ impl ImDB {
         attrs: EnumSet<PropAttr>,
     ) -> Result<Option<PropAttrs>, Error> {
         let propkey = (oid, handle);
-        let Some(flags) = self.property_flags.find_t(tx, &propkey) else {
+        let Some(flags) = self.property_flags.seek_for_l_eq(tx, &propkey) else {
             return Ok(None);
         };
 
         let mut result_attrs = PropAttrs::default();
         if attrs.contains(PropAttr::Value) {
-            if let Some(value) = self.property_value.find_t(tx, &propkey) {
+            if let Some(value) = self.property_value.seek_for_l_eq(tx, &propkey) {
                 result_attrs.value = Some(value);
             }
         }
@@ -174,12 +174,12 @@ impl ImDB {
             result_attrs.flags = Some(flags);
         }
         if attrs.contains(PropAttr::Owner) {
-            if let Some(owner) = self.property_owner.find_t(tx, &propkey) {
+            if let Some(owner) = self.property_owner.seek_for_l_eq(tx, &propkey) {
                 result_attrs.owner = Some(owner);
             }
         }
         if attrs.contains(PropAttr::Location) {
-            if let Some(location) = self.property_location.find_t(tx, &propkey) {
+            if let Some(location) = self.property_location.seek_for_l_eq(tx, &propkey) {
                 result_attrs.location = Some(location);
             }
         }
@@ -218,16 +218,16 @@ impl ImDB {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        self.obj_attr_parent.remove(tx, &oid)?;
-        self.obj_attr_location.remove(tx, &oid)?;
-        self.obj_attr_flags.remove(tx, &oid)?;
-        self.obj_attr_name.remove(tx, &oid)?;
-        self.obj_attr_owner.remove(tx, &oid)?;
+        self.obj_attr_parent.remove_for_l(tx, &oid)?;
+        self.obj_attr_location.remove_for_l(tx, &oid)?;
+        self.obj_attr_flags.remove_for_l(tx, &oid)?;
+        self.obj_attr_name.remove_for_l(tx, &oid)?;
+        self.obj_attr_owner.remove_for_l(tx, &oid)?;
         Ok(())
     }
 
     pub fn object_valid(&mut self, tx: &mut Tx, oid: Objid) -> Result<bool, Error> {
-        Ok(self.obj_attr_flags.find_t(tx, &oid).is_some())
+        Ok(self.obj_attr_flags.seek_for_l_eq(tx, &oid).is_some())
     }
 
     pub fn object_get_attrs(
@@ -242,13 +242,13 @@ impl ImDB {
         let mut return_attrs = ObjAttrs::default();
         for a in attributes {
             match a {
-                ObjAttr::Owner => return_attrs.owner = self.obj_attr_owner.find_t(tx, &oid),
-                ObjAttr::Name => return_attrs.name = self.obj_attr_name.find_t(tx, &oid),
-                ObjAttr::Parent => return_attrs.parent = self.obj_attr_parent.find_t(tx, &oid),
+                ObjAttr::Owner => return_attrs.owner = self.obj_attr_owner.seek_for_l_eq(tx, &oid),
+                ObjAttr::Name => return_attrs.name = self.obj_attr_name.seek_for_l_eq(tx, &oid),
+                ObjAttr::Parent => return_attrs.parent = self.obj_attr_parent.seek_for_l_eq(tx, &oid),
                 ObjAttr::Location => {
-                    return_attrs.location = self.obj_attr_location.find_t(tx, &oid)
+                    return_attrs.location = self.obj_attr_location.seek_for_l_eq(tx, &oid)
                 }
-                ObjAttr::Flags => return_attrs.flags = self.obj_attr_flags.find_t(tx, &oid),
+                ObjAttr::Flags => return_attrs.flags = self.obj_attr_flags.seek_for_l_eq(tx, &oid),
             }
         }
         Ok(return_attrs)
@@ -264,19 +264,19 @@ impl ImDB {
             return Err(anyhow!("invalid object"));
         }
         if let Some(parent) = attributes.parent {
-            self.obj_attr_parent.update_t(tx, &oid, &parent)?;
+            self.obj_attr_parent.update_r(tx, &oid, &parent)?;
         }
         if let Some(owner) = attributes.owner {
-            self.obj_attr_owner.update_t(tx, &oid, &owner)?;
+            self.obj_attr_owner.update_r(tx, &oid, &owner)?;
         }
         if let Some(location) = attributes.location {
-            self.obj_attr_location.update_t(tx, &oid, &location)?;
+            self.obj_attr_location.update_r(tx, &oid, &location)?;
         }
         if let Some(flags) = attributes.flags {
-            self.obj_attr_flags.update_t(tx, &oid, &flags)?;
+            self.obj_attr_flags.update_r(tx, &oid, &flags)?;
         }
         if let Some(name) = attributes.name {
-            self.obj_attr_name.update_t(tx, &oid, &name)?;
+            self.obj_attr_name.update_r(tx, &oid, &name)?;
         }
         Ok(())
     }
@@ -285,14 +285,14 @@ impl ImDB {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        Ok(self.obj_attr_parent.find_k(tx, &oid))
+        Ok(self.obj_attr_parent.seek_for_r_eq(tx, &oid))
     }
 
     pub fn object_contents(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, Error> {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        Ok(self.obj_attr_location.find_k(tx, &oid))
+        Ok(self.obj_attr_location.seek_for_r_eq(tx, &oid))
     }
 
     pub fn get_propdef(
@@ -302,7 +302,7 @@ impl ImDB {
         pname: &str,
     ) -> Result<Propdef, Error> {
         self.propdefs
-            .find_t(tx, &(definer, pname.to_string()))
+            .seek_for_l_eq(tx, &(definer, pname.to_string()))
             .ok_or_else(|| anyhow!("no such property definition {} on #{}", pname, definer.0))
     }
 
@@ -340,10 +340,10 @@ impl ImDB {
         old: &str,
         new: &str,
     ) -> Result<(), Error> {
-        match self.propdefs.find_t(tx, &(definer, old.to_string())) {
+        match self.propdefs.seek_for_l_eq(tx, &(definer, old.to_string())) {
             None => return Err(anyhow!("property does not exist")),
             Some(pd) => {
-                self.propdefs.remove(tx, &(definer, old.to_string()))?;
+                self.propdefs.remove_for_l(tx, &(definer, old.to_string()))?;
                 let mut new_pd = pd;
                 new_pd.pname = new.to_string();
                 self.propdefs
@@ -359,7 +359,7 @@ impl ImDB {
         definer: Objid,
         pname: &str,
     ) -> Result<(), Error> {
-        self.propdefs.remove(tx, &(definer, pname.to_string()))?;
+        self.propdefs.remove_for_l(tx, &(definer, pname.to_string()))?;
         Ok(())
     }
 
@@ -368,7 +368,7 @@ impl ImDB {
         let end = (definer, MAX_PROP_NAME.to_string());
         let range = self
             .propdefs
-            .range_t(tx, (Included(&start), Included(&end)));
+            .range_r(tx, (Included(&start), Included(&end)));
         Ok(range.len())
     }
 
@@ -377,7 +377,7 @@ impl ImDB {
         let end = (definer, MAX_PROP_NAME.to_string());
         let range = self
             .propdefs
-            .range_t(tx, (Included(&start), Included(&end)));
+            .range_r(tx, (Included(&start), Included(&end)));
         Ok(range.iter().map(|(_, pd)| pd.clone()).collect())
     }
 
@@ -394,7 +394,7 @@ impl ImDB {
         // at the first match.
         let propdef = self_and_parents
             .iter()
-            .filter_map(|&oid| self.propdefs.find_t(tx, &(oid, name.to_string())))
+            .filter_map(|&oid| self.propdefs.seek_for_l_eq(tx, &(oid, name.to_string())))
             .next()
             .ok_or_else(|| anyhow!("no such property"))?;
 
@@ -493,7 +493,7 @@ impl ImDB {
         oid: Objid,
         attrs: EnumSet<VerbAttr>,
     ) -> Result<Vec<VerbInfo>, Error> {
-        let obj_verbs = self.verbdefs.range_t(
+        let obj_verbs = self.verbdefs.range_r(
             tx,
             (
                 Included(&(oid, String::new())),
@@ -523,11 +523,11 @@ impl ImDB {
         vid: Vid,
         attrs: EnumSet<VerbAttr>,
     ) -> Result<VerbInfo, Error> {
-        if self.verb_attr_args_spec.find_t(tx, &vid).is_none() {
+        if self.verb_attr_args_spec.seek_for_l_eq(tx, &vid).is_none() {
             return Err(anyhow!("no such verb"));
         }
 
-        let names = self.verb_names.find_t(tx, &vid).unwrap();
+        let names = self.verb_names.seek_for_l_eq(tx, &vid).unwrap();
 
         let mut return_attrs = VerbAttrs {
             definer: None,
@@ -537,19 +537,19 @@ impl ImDB {
             program: None,
         };
         if attrs.contains(VerbAttr::Definer) {
-            return_attrs.definer = self.verb_attr_definer.find_t(tx, &vid);
+            return_attrs.definer = self.verb_attr_definer.seek_for_l_eq(tx, &vid);
         }
         if attrs.contains(VerbAttr::Owner) {
-            return_attrs.owner = self.verb_attr_owner.find_t(tx, &vid);
+            return_attrs.owner = self.verb_attr_owner.seek_for_l_eq(tx, &vid);
         }
         if attrs.contains(VerbAttr::Flags) {
-            return_attrs.flags = self.verb_attr_flags.find_t(tx, &vid);
+            return_attrs.flags = self.verb_attr_flags.seek_for_l_eq(tx, &vid);
         }
         if attrs.contains(VerbAttr::ArgsSpec) {
-            return_attrs.args_spec = self.verb_attr_args_spec.find_t(tx, &vid);
+            return_attrs.args_spec = self.verb_attr_args_spec.seek_for_l_eq(tx, &vid);
         }
         if attrs.contains(VerbAttr::Program) {
-            return_attrs.program = self.verb_attr_program.find_t(tx, &vid);
+            return_attrs.program = self.verb_attr_program.seek_for_l_eq(tx, &vid);
         }
 
         Ok(VerbInfo {
@@ -587,7 +587,7 @@ impl ImDB {
     ) -> Result<Option<VerbInfo>, Error> {
         let parent_chain = self.get_object_inheritance_chain(tx, oid);
         for parent in parent_chain {
-            let vid = self.verbdefs.find_t(tx, &(parent, verb.to_string()));
+            let vid = self.verbdefs.seek_for_l_eq(tx, &(parent, verb.to_string()));
             if let Some(vid) = vid {
                 let vi = self.get_verb(tx, vid, attrs)?;
                 return Ok(Some(vi));

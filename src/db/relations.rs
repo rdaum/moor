@@ -1,10 +1,10 @@
-use crate::db::tx::{EntryValue, MvccTuple, Tx, WAL};
+use crate::db::tx::{EntryValue, MvccTuple, Tx, WAL, WALEntry};
+use crate::db::CommitResult;
 use slotmap::{new_key_type, SlotMap};
 use std::collections::{BTreeMap, Bound, HashMap, HashSet};
 use thiserror::Error;
-use crate::db::CommitResult;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, PartialEq)]
 pub enum Error {
     #[error("tuple not found for key")]
     NotFound,
@@ -16,27 +16,26 @@ pub enum Error {
 
 pub trait OrderedKeyTraits: Clone + Eq + PartialEq + Ord {}
 impl<T: Clone + Eq + PartialEq + Ord> OrderedKeyTraits for T {}
+new_key_type! {struct TupleId;}
 
-// Describes a sort of specialized 2-ary relation, where K and T are the types of the two 'columns'.
+// Describes a sort of specialized 2-ary relation, where L and R are the types of the two 'columns'.
 // Indexes can exist for both K and T columns, but must always exist for K.
 // The tuple values are stored in the indexes.
 
-new_key_type! {struct TupleId;}
-
-pub struct Relation<K: OrderedKeyTraits, T: OrderedKeyTraits> {
-    values: SlotMap<TupleId, MvccTuple<TupleId, (K, T)>>,
-    k_index: BTreeMap<K, TupleId>,
-    t_index: Option<BTreeMap<T, HashSet<TupleId>>>,
-    wals: HashMap<u64, WAL<TupleId, (K, T)>>,
+pub struct Relation<L: OrderedKeyTraits, R: OrderedKeyTraits> {
+    values: SlotMap<TupleId, MvccTuple<TupleId, (L, R)>>,
+    k_index: BTreeMap<L, TupleId>,
+    t_index: Option<BTreeMap<R, HashSet<TupleId>>>,
+    wals: HashMap<u64, WAL<TupleId, (L, R)>>,
 }
 
-impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Default for Relation<K, T> {
+impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Default for Relation<L, R> {
     fn default() -> Self {
         Relation::new()
     }
 }
 
-impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
+impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     pub fn new() -> Self {
         Relation {
             values: Default::default(),
@@ -55,7 +54,7 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         }
     }
 
-    fn has_k(&mut self, tx: &mut Tx, k: &K, wal: &mut WAL<TupleId, (K, T)>) -> bool {
+    fn has_with_l(&mut self, tx: &mut Tx, k: &L, wal: &mut WAL<TupleId, (L, R)>) -> bool {
         if let Some(tuple_id) = self.k_index.get(k) {
             let value = self
                 .values
@@ -67,14 +66,11 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         false
     }
 
-    pub fn insert(&mut self, tx: &mut Tx, k: &K, t: &T) -> Result<(), Error> {
+    pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
         // If there's already a tuple for this row, then we need to check if it's visible to us.
-        if let Some(tuple_id) = self.k_index.get(k) {
+        if let Some(tuple_id) = self.k_index.get(l) {
             let tuple = self.values.get_mut(*tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // There's a value visible to us that's not deleted.
@@ -83,19 +79,19 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
             }
 
             // The value for the tuple at this index is either tombstoned for us, or invisible, so we can add a new version.
-            tuple.set(tx.tx_start_ts, tuple_id, &(k.clone(), t.clone()), wal);
+            tuple.set(tx.tx_start_ts, tuple_id, &(l.clone(), r.clone()), wal);
         } else {
-            // Didn't exist for any transaction, so create a new version.
-            let tuple_id = self.values.insert(MvccTuple::new(
-                tx.tx_start_ts,
-                EntryValue::Value((k.clone(), t.clone())),
-            ));
+            // Didn't exist for any transaction, so create a new version, stick in our WAL.
+            let tuple_id = self.values.insert(Default::default());
 
-            self.k_index.insert(k.clone(), tuple_id);
+            self.k_index.insert(l.clone(), tuple_id);
+
+            let mut wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
+            wal.set(tuple_id, EntryValue::Value((l.clone(), r.clone())), tx.tx_start_ts);
 
             if let Some(t_index) = &mut self.t_index {
                 t_index
-                    .entry(t.clone())
+                    .entry(r.clone())
                     .or_insert_with(Default::default)
                     .insert(tuple_id);
             }
@@ -104,29 +100,26 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         Ok(())
     }
 
-    pub fn upsert(&mut self, tx: &mut Tx, k: &K, t: &T) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(k) {
+    pub fn upsert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
+        if let Some(tuple_id) = self.k_index.get(l) {
             let tuple = self.values.get_mut(*tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
 
             // There's a tuple there, either invisible to us or not. But we'll set it on our
             // WAL regardless.
-            tuple.set(tx.tx_start_ts, tuple_id, &((k.clone(), t.clone())), wal);
+            tuple.set(tx.tx_start_ts, tuple_id, &((l.clone(), r.clone())), wal);
         } else {
-            // Didn't exist for any transaction, so create a new version.
-            let tuple_id = self.values.insert(MvccTuple::new(
-                tx.tx_start_ts,
-                EntryValue::Value((k.clone(), t.clone())),
-            ));
+            // Didn't exist for any transaction, so create a new version, stick in our WAL.
+            let tuple_id = self.values.insert(Default::default());
 
-            self.k_index.insert(k.clone(), tuple_id);
+            self.k_index.insert(l.clone(), tuple_id);
+
+            let mut wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
+            wal.set(tuple_id, EntryValue::Value((l.clone(), r.clone())), tx.tx_start_ts);
 
             if let Some(t_index) = &mut self.t_index {
                 t_index
-                    .entry(t.clone())
+                    .entry(r.clone())
                     .or_insert_with(Default::default)
                     .insert(tuple_id);
             }
@@ -136,13 +129,10 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         Ok(())
     }
 
-    pub fn remove(&mut self, tx: &mut Tx, k: &K) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(k) {
+    pub fn remove_for_l(&mut self, tx: &mut Tx, l: &L) -> Result<(), Error> {
+        if let Some(tuple_id) = self.k_index.get(l) {
             let tuple = self.values.get_mut(*tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // If we already deleted it or it's not visible to us, we can't delete it.
@@ -161,13 +151,10 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         // TODO secondary index
     }
 
-    pub fn update_k(&mut self, tx: &mut Tx, k: &K, new_k: &K) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(k) {
+    pub fn update_l(&mut self, tx: &mut Tx, l: &L, new_l: &L) -> Result<(), Error> {
+        if let Some(tuple_id) = self.k_index.get(l) {
             let tuple = self.values.get_mut(*tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // If it's deleted by us or invisible to us, we can't update it, can we.
@@ -176,12 +163,7 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
             };
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.set(
-                tx.tx_start_ts,
-                tuple_id,
-                &(new_k.clone(), value.1),
-                wal,
-            );
+            tuple.set(tx.tx_start_ts, tuple_id, &(new_l.clone(), value.1), wal);
 
             return Ok(());
         }
@@ -191,13 +173,10 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         // TODO secondary index
     }
 
-    pub fn update_t(&mut self, tx: &mut Tx, k: &K, new_t: &T) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(k) {
+    pub fn update_r(&mut self, tx: &mut Tx, l: &L, new_r: &R) -> Result<(), Error> {
+        if let Some(tuple_id) = self.k_index.get(l) {
             let tuple = self.values.get_mut(*tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(Default::default);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // If it's deleted by us or invisible to us, we can't update it, can we.
@@ -206,12 +185,7 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
             };
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.set(
-                tx.tx_start_ts,
-                tuple_id,
-                &(value.0, new_t.clone()),
-                wal,
-            );
+            tuple.set(tx.tx_start_ts, tuple_id, &(value.0, new_r.clone()), wal);
 
             return Ok(());
         }
@@ -219,25 +193,17 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         Err(Error::NotFound)
     }
 
-    pub fn find_t(&mut self, tx: &mut Tx, k: &K) -> Option<T> {
+    pub fn seek_for_l_eq(&mut self, tx: &mut Tx, k: &L) -> Option<R> {
         if let Some(tuple_id) = self.k_index.get(k) {
             let tuple = self.values.get_mut(*tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(Default::default);
-            return tuple
-                .get(tx.tx_start_ts, tuple_id, wal)
-                .map(|v| v.1);
+            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
+            return tuple.get(tx.tx_start_ts, tuple_id, wal).map(|v| v.1);
         }
         None
     }
 
-    pub fn range_t(&mut self, tx: &mut Tx, range: (Bound<&K>, Bound<&K>)) -> Vec<(K, T)> {
-        let wal = self
-            .wals
-            .entry(tx.tx_id)
-            .or_insert_with(Default::default);
+    pub fn range_r(&mut self, tx: &mut Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
+        let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
         let tuple_range = self.k_index.range(range);
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
             let tuple = self.values.get(*tuple_id);
@@ -252,15 +218,12 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         visible_tuples.collect()
     }
 
-    pub fn find_k(&mut self, tx: &mut Tx, t: &T) -> Vec<K> {
+    pub fn seek_for_r_eq(&mut self, tx: &mut Tx, t: &R) -> Vec<L> {
         let Some(t_index) = &self.t_index else {
             panic!("secondary index query without index");
         };
 
-        let wal = self
-            .wals
-            .entry(tx.tx_id)
-            .or_insert_with(Default::default);
+        let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
         match t_index.get(t) {
             None => vec![],
             Some(tuples) => {
@@ -300,4 +263,213 @@ impl<K: OrderedKeyTraits, T: OrderedKeyTraits> Relation<K, T> {
         self.wals.remove(&tx.tx_id);
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, HashSet};
+
+    use super::*;
+
+    #[test]
+    fn insert_new_tuple() {
+        let mut relation = Relation::<String, i32>::new();
+
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(relation.insert(&mut tx1, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(relation.insert(&mut tx1, &"world".to_string(), &2), Ok(()));
+    }
+
+    #[test]
+    fn insert_existing_tuple() {
+        let mut relation = Relation::<String, i32>::new();
+
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(relation.insert(&mut tx1, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(
+            relation.insert(&mut tx1, &"hello".to_string(), &2),
+            Err(Error::Duplicate)
+        );
+    }
+
+    #[test]
+    fn upsert_new_tuple() {
+        let mut relation = Relation::<String, i32>::new();
+
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(relation.upsert(&mut tx1, &"hello".to_string(), &1), Ok(()));
+    }
+
+    #[test]
+    fn upsert_existing_tuple() {
+        let mut relation = Relation::<String, i32>::new();
+
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(relation.insert(&mut tx1, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(relation.upsert(&mut tx1, &"hello".to_string(), &2), Ok(()));
+    }
+
+    #[test]
+    fn remove_existing_tuple() {
+        let mut relation = Relation::<String, i32>::new();
+
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(relation.insert(&mut tx1, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(
+            relation.remove_for_l(&mut tx1, &"hello".to_string()),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn remove_nonexistent_tuple() {
+        let mut relation = Relation::<String, i32>::new();
+
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(
+            relation.remove_for_l(&mut tx1, &"hello".to_string()),
+            Err(Error::NotFound)
+        );
+    }
+
+    #[test]
+    fn insert_transactional() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut s = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut s, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(a.commit(&mut s), Ok(()));
+
+        let mut t1 = Tx::new(2, 2);
+        assert_eq!(
+            a.update_r(&mut t1, &"hello".to_string(), &2),
+            Ok(())
+        );
+        let mut t2 = Tx::new(3, 3);
+        assert_eq!(
+            a.update_r(&mut t2, &"hello".to_string(), &3),
+            Ok(())
+        );
+        assert_eq!(a.commit(&mut t2), Ok(()));
+        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+    }
+
+    #[test]
+    fn delete_transactional() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut s = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut s, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(a.commit(&mut s), Ok(()));
+
+        let mut t1 = Tx::new(2, 2);
+        assert_eq!(a.remove_for_l(&mut t1, &"hello".to_string()), Ok(()));
+
+        let mut t2 = Tx::new(3, 3);
+        assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Ok(()));
+
+        assert_eq!(a.commit(&mut t2), Ok(()));
+        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+    }
+
+    #[test]
+    fn insert_delete_transactional() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut s = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut s, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(a.commit(&mut s), Ok(()));
+
+        let mut t1 = Tx::new(2, 2);
+        assert_eq!(a.remove_for_l(&mut t1, &"hello".to_string()), Ok(()));
+
+        // the delete done by t1 hasn't been committed yet, so this is a duplicate and can't
+        // be inserted.
+        let mut t2 = Tx::new(3, 3);
+        assert_eq!(
+            a.insert(&mut t2, &"hello".to_string(), &3),
+            Err(Error::Duplicate)
+        );
+        assert!(a.rollback(&mut t2).is_ok());
+        assert_eq!(a.commit(&mut t1), Ok(()));
+
+        // now that t1 has been committed, this insert should succeed.
+        let mut t3 = Tx::new(4, 4);
+        assert_eq!(
+            a.insert(&mut t3, &"hello".to_string(), &3),
+            Ok(())
+        );
+        assert_eq!(a.commit(&mut t3), Ok(()));
+    }
+
+    #[test]
+    fn update_delete_transactional() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut s = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut s, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(a.commit(&mut s), Ok(()));
+
+        let mut t1 = Tx::new(2, 2);
+        assert_eq!(
+            a.update_r(&mut t1, &"hello".to_string(), &2),
+            Ok(())
+        );
+
+        let mut t2 = Tx::new(3, 3);
+        assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Ok(()));
+
+        assert_eq!(a.commit(&mut t2), Ok(()));
+        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+    }
+
+    #[test]
+    fn insert_parallel() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut t1 = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut t1, &"hello".to_string(), &1), Ok(()));
+
+        let mut t2 = Tx::new(2, 2);
+        assert_eq!(a.insert(&mut t2, &"world".to_string(), &2), Ok(()));
+
+        assert_eq!(a.commit(&mut t1), Ok(()));
+        assert_eq!(a.commit(&mut t2), Ok(()));
+    }
+
+    #[test]
+    fn delete_insert_parallel() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut t1 = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut t1, &"hello".to_string(), &1), Ok(()));
+
+        let mut t2 = Tx::new(2, 2);
+        assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Err(Error::NotFound));
+
+        let mut t3 = Tx::new(3, 3);
+        assert_eq!(a.insert(&mut t3, &"hello".to_string(), &3), Ok(()));
+
+        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t2), Ok(()));
+        assert_eq!(a.commit(&mut t3), Ok(()));
+    }
+
+    #[test]
+    fn update_delete_parallel() {
+        let mut a = Relation::<String, i32>::new();
+
+        let mut t1 = Tx::new(1, 1);
+        assert_eq!(a.insert(&mut t1, &"hello".to_string(), &1), Ok(()));
+
+        let mut t2 = Tx::new(2, 2);
+        assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Err(Error::NotFound));
+
+        assert_eq!(a.commit(&mut t1), Ok(()));
+        let mut t3 = Tx::new(3, 3);
+        assert_eq!(a.update_r(&mut t3, &"hello".to_string(), &3), Ok(()));
+        assert_eq!(a.commit(&mut t2), Ok(()));
+        assert_eq!(a.commit(&mut t3), Ok(()));
+    }
+
 }
