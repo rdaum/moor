@@ -42,8 +42,7 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
 
    * I've converted the full LambdaMOO 1.8.x grammar into an ANTLR V4 grammar. And it works to compile existing MOO
      source. 
-   * Implementation of SQLite backed storage for the MOO object model. (The first of potentially many implementations of
-     the object DB backend.) Supports verb properties, verbs, etc.
+   * Implementation of custom transactional in-memory DB for the MOO object model. 
    * Capability of full import of an existing textdump into said DB.
    * Complete compilation from Antlr parse tree to abstract syntax tree.
    * Completed compilation of the AST into bytecode, mostly mimicking the original LambdaMOO VM's opcode set.
