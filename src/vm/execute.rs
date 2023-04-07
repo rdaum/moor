@@ -354,7 +354,7 @@ impl VM {
             return self.push_error(E_INVIND);
         };
 
-        let state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
 
         let result = state.retrieve_property(obj, propname.as_str(), player_flags);
         drop(state);
@@ -434,7 +434,7 @@ impl VM {
     ) -> Result<Var, anyhow::Error> {
         // TODO do_pass
         // TODO stack traces, error catch etc?
-        let state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
 
         let (binary, vi) = match state.retrieve_verb(obj, verb_name) {
             Ok(binary) => binary,
@@ -1027,6 +1027,7 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::parse::Names;
+    use crate::db::CommitResult;
     use crate::db::state::{StateError, WorldState};
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
@@ -1127,7 +1128,7 @@ mod tests {
     }
 
     impl WorldState for MockState {
-        fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
+        fn retrieve_verb(&mut self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
             let v = self.verbs.get(&(obj, vname.to_string()));
             match v {
                 None => Err(StateError::VerbNotFound(obj, vname.to_string()).into()),
@@ -1136,7 +1137,7 @@ mod tests {
         }
 
         fn retrieve_property(
-            &self,
+            &mut self,
             obj: Objid,
             pname: &str,
             _player_flags: EnumSet<ObjFlag>,
@@ -1192,8 +1193,8 @@ mod tests {
             Ok(true)
         }
 
-        fn commit(self) -> Result<(), anyhow::Error> {
-            Ok(())
+        fn commit(self) -> Result<CommitResult, anyhow::Error> {
+            Ok(CommitResult::Success)
         }
 
         fn rollback(self) -> Result<(), anyhow::Error> {

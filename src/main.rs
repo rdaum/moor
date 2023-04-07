@@ -1,11 +1,9 @@
 extern crate core;
 
-
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
-
 
 use bincode::config;
 use clap::builder::ValueHint;
@@ -16,7 +14,7 @@ use enumset::EnumSet;
 use crate::compiler::codegen::compile;
 use crate::db::inmem_db::ImDB;
 use crate::db::inmem_db_tx::ImDbTxSource;
-
+use crate::db::tx::Tx;
 use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
 use crate::model::props::{PropDefs, PropFlag, Properties};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
@@ -24,9 +22,7 @@ use crate::model::var::{Objid, Var};
 use crate::model::verbs::{Program, VerbFlag, Verbs};
 use crate::server::scheduler::Scheduler;
 
-
 use crate::textdump::{Object, TextdumpReader};
-
 
 pub mod compiler;
 pub mod db;
@@ -103,12 +99,15 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     let mut tdr = TextdumpReader::new(br);
     let td = tdr.read_textdump()?;
 
+    let mut tx = Tx::new(0, 0);
+
     // Pass 1 Create objects
     eprintln!("Instantiating objects...");
     for (objid, o) in &td.objects {
         let flags: EnumSet<ObjFlag> = EnumSet::from_u8(o.flags);
 
         s.create_object(
+            &mut tx,
             Some(*objid),
             ObjAttrs::new()
                 .owner(o.owner)
@@ -126,7 +125,14 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                s.add_propdef(*objid, resolved.name.as_str(), resolved.owner, flags, None)?;
+                s.add_propdef(
+                    &mut tx,
+                    *objid,
+                    resolved.name.as_str(),
+                    resolved.owner,
+                    flags,
+                    None,
+                )?;
             }
         }
     }
@@ -137,8 +143,15 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
-            let pdf = s.get_propdef(resolved.definer, resolved.name.as_str())?;
-            s.set_property(pdf.pid, *objid, p.value.clone(), resolved.owner, flags)?;
+            let pdf = s.get_propdef(&mut tx, resolved.definer, resolved.name.as_str())?;
+            s.set_property(
+                &mut tx,
+                pdf.pid,
+                *objid,
+                p.value.clone(),
+                resolved.owner,
+                flags,
+            )?;
         }
     }
 
@@ -191,6 +204,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
             let prg = bincode::serde::encode_to_vec(binary, config::standard())
                 .expect("Could not serialize program");
             s.add_verb(
+                &mut tx,
                 *objid,
                 names,
                 v.owner,

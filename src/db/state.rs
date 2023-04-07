@@ -6,6 +6,7 @@ use enumset::EnumSet;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
+use crate::db::CommitResult;
 
 use crate::model::objects::{ObjFlag};
 use crate::model::props::{PropFlag};
@@ -42,11 +43,11 @@ pub trait WorldState {
     fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, anyhow::Error>;
 
     // Retrieve a verb/method from the given object.
-    fn retrieve_verb(&self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), anyhow::Error>;
+    fn retrieve_verb(&mut self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), anyhow::Error>;
 
     // Retrieve a property from the given object, walking transitively up its inheritance chain.
     fn retrieve_property(
-        &self,
+        &mut self,
         obj: Objid,
         pname: &str,
         player_flags: EnumSet<ObjFlag>,
@@ -82,7 +83,7 @@ pub trait WorldState {
 
     // Commit all modifications made to the state of this world since the start of its transaction.
     // Consumes self.
-    fn commit(self) -> Result<(), anyhow::Error>;
+    fn commit(self) -> Result<CommitResult, anyhow::Error>;
 
     // Rollback all modifications made to the state of this world since the start of its transaction.
     // Consumes self.

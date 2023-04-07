@@ -81,7 +81,7 @@ pub trait Objects {
         attrs: &ObjAttrs,
     ) -> Result<Objid, anyhow::Error>;
     fn destroy_object(&mut self, oid: Objid) -> Result<(), anyhow::Error>;
-    fn object_valid(&self, oid: Objid) -> Result<bool, anyhow::Error>;
+    fn object_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error>;
 
     fn object_get_attrs(
         &mut self,
@@ -90,8 +90,8 @@ pub trait Objects {
     ) -> Result<ObjAttrs, anyhow::Error>;
     fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), anyhow::Error>;
 
-    fn object_children(&self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
-    fn object_contents(&self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
+    fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
+    fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
 }
 
 trait Player {

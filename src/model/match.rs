@@ -3,7 +3,7 @@ use int_enum::IntEnum;
 
 /// TODO verb-matching
 ///
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Encode, Decode, Hash, Ord, PartialOrd)]
 #[repr(u8)]
 pub enum ArgSpec {
     None = 0,
@@ -11,7 +11,7 @@ pub enum ArgSpec {
     This = 2,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode, Hash, Ord, PartialOrd)]
 pub enum PrepSpec {
     Any,
     None,
@@ -20,7 +20,7 @@ pub enum PrepSpec {
     ),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Encode, Decode, Hash, Ord, PartialOrd)]
 pub struct VerbArgsSpec {
     pub dobj: ArgSpec,
     pub prep: PrepSpec,

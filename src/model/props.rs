@@ -13,7 +13,7 @@ pub enum PropFlag {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Pid(pub i64);
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Propdef {
     pub pid: Pid,
     pub definer: Objid,
@@ -91,7 +91,7 @@ pub trait Properties {
 
     // Find a property by name, starting from the given object and going up the inheritance tree.
     fn find_property(
-        &self,
+        &mut self,
         oid: Objid,
         name: &str,
         attrs: EnumSet<PropAttr>,
@@ -100,7 +100,7 @@ pub trait Properties {
     // Get a property by its unique pid from its property definition, seeking the inheritance
     // hierarchy.
     fn get_property(
-        &self,
+        &mut self,
         oid: Objid,
         handle: Pid,
         attrs: EnumSet<PropAttr>,

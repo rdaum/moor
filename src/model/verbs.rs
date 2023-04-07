@@ -16,7 +16,7 @@ pub enum VerbFlag {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Vid(pub i64);
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Program(pub bytes::Bytes);
 
 #[derive(EnumSetType, Debug)]
@@ -58,18 +58,18 @@ pub trait Verbs {
 
     /// Get all verbs attached to the given object.
     fn get_verbs(
-        &self,
+        &mut self,
         oid: Objid,
         attrs: EnumSet<VerbAttr>,
     ) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
-    fn get_verb(&self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
+    fn get_verb(&mut self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
 
-    fn update_verb(&self, vid: Vid, attrs: VerbAttrs) -> Result<(), anyhow::Error>;
+    fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), anyhow::Error>;
 
     /// Match verbs using prepositional pieces.
     fn find_command_verb(
-        &self,
+        &mut self,
         oid: Objid,
         verb: &str,
         arg_spec: VerbArgsSpec,
@@ -78,7 +78,7 @@ pub trait Verbs {
 
     /// Find the verbs that match based on the provided name-stem.
     fn find_callable_verb(
-        &self,
+        &mut self,
         oid: Objid,
         verb: &str,
         attrs: EnumSet<VerbAttr>,
@@ -86,7 +86,7 @@ pub trait Verbs {
 
     /// Find the verb that is the Nth verb in insertion order for the object.
     fn find_indexed_verb(
-        &self,
+        &mut self,
         oid: Objid,
         index: usize,
         attrs: EnumSet<VerbAttr>,

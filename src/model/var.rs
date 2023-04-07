@@ -16,7 +16,7 @@ pub const AMBIGUOUS: Objid = Objid(-2);
 pub const FAILED_MATCH: Objid = Objid(-3);
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 #[allow(non_camel_case_types)]
 pub enum Error {
     E_NONE = 0,
@@ -119,7 +119,7 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
 pub enum Var {
     Clear,
     None,

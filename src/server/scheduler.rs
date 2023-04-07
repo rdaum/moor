@@ -1,7 +1,6 @@
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
 use crate::model::var::Objid;
-use crate::model::ObjDB;
 use crate::server::parse_cmd::ParsedCommand;
 use crate::vm::execute::{ExecutionResult, VM};
 use enumset::EnumSet;
