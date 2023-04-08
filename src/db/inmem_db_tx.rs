@@ -284,7 +284,7 @@ impl PropDefs for ImDBTx {
 
 impl WorldState for ImDBTx {
     fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        self.object_get_attrs(obj, BitEnum::from(BitEnum::new_with(ObjAttr::Location)))
+        self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Location))
             .map(|attrs| attrs.location.unwrap())
     }
 

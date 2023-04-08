@@ -1,11 +1,15 @@
 use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
 use crate::db::CommitResult;
-use bytes::BytesMut;
+
+use rkyv::ser::serializers::{
+    AlignedSerializer, AllocSerializer, CompositeSerializer,
+};
 use rkyv::ser::Serializer;
-use rkyv::with::ArchiveWith;
-use rkyv::{Archive, Archived, Deserialize, Resolver, Serialize};
+
+use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use std::collections::{BTreeMap, Bound, HashMap, HashSet};
-use std::sync::atomic::AtomicUsize;
+use std::marker::PhantomData;
+use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -18,23 +22,53 @@ pub enum Error {
     Conflict,
 }
 
-pub trait OrderedKeyTraits: Clone + Eq + PartialEq + Ord + Archive {}
-impl<T: Clone + Eq + PartialEq + Ord + Archive> OrderedKeyTraits for T {}
+pub trait SerializationTraits:
+    rkyv::Serialize<
+    CompositeSerializer<
+        AlignedSerializer<AlignedVec>,
+        rkyv::ser::serializers::FallbackScratch<
+            rkyv::ser::serializers::HeapScratch<0>,
+            rkyv::ser::serializers::AllocScratch,
+        >,
+        rkyv::ser::serializers::SharedSerializeMap,
+    >,
+>
+{
+}
+impl<
+        T: rkyv::Serialize<
+            CompositeSerializer<
+                AlignedSerializer<AlignedVec>,
+                rkyv::ser::serializers::FallbackScratch<
+                    rkyv::ser::serializers::HeapScratch<0>,
+                    rkyv::ser::serializers::AllocScratch,
+                >,
+                rkyv::ser::serializers::SharedSerializeMap,
+            >,
+        >,
+    > SerializationTraits for T
+{
+}
+
+pub trait TupleValueTraits: Clone + Eq + PartialEq + Ord + Archive + SerializationTraits {}
+impl<T: Clone + Eq + PartialEq + Ord + Archive + SerializationTraits> TupleValueTraits for T {}
 
 #[derive(
     Debug, Serialize, Deserialize, Archive, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash,
 )]
-pub struct TupleId(usize);
+#[archive(compare(PartialEq), check_bytes)]
+#[archive_attr(derive(Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash,))]
+pub struct TupleId(u64);
 
 // Describes a sort of specialized 2-ary relation, where L and R are the types of the two 'columns'.
 // Indexes can exist for both K and T columns, but must always exist for K.
 // The tuple values are stored in the indexes.
-pub struct Relation<L: OrderedKeyTraits, R: OrderedKeyTraits> {
+pub struct Relation<L: TupleValueTraits, R: TupleValueTraits> {
     // Tuple storage for this relation.
     // Right now this is a hash mapping tuple IDs to the tuple values.
     // There are likely much faster data structures for this.
     values: HashMap<TupleId, MvccTuple<TupleId, (L, R)>>,
-    next_tuple_id: AtomicUsize,
+    next_tuple_id: AtomicU64,
 
     // Indexes for the L and (optionally) R attributes.
     l_index: BTreeMap<L, TupleId>,
@@ -45,13 +79,13 @@ pub struct Relation<L: OrderedKeyTraits, R: OrderedKeyTraits> {
     wals: HashMap<u64, WAL<TupleId, (L, R)>>,
 }
 
-impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Default for Relation<L, R> {
+impl<L: TupleValueTraits, R: TupleValueTraits> Default for Relation<L, R> {
     fn default() -> Self {
         Relation::new()
     }
 }
 
-impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
+impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     pub fn new() -> Self {
         Relation {
             values: Default::default(),
@@ -296,6 +330,54 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
         self.wals.remove(&tx.tx_id);
         Ok(())
     }
+
+    pub fn serialize(&self) -> Result<AlignedVec, Error>
+    where
+        <L as Archive>::Archived: Ord,
+        <R as Archive>::Archived: Ord,
+    {
+        // First we copy into a PRelation / PMvccTuple, which removes locks, WAL, and any other things
+        // that are irrelevant for the on-disk form.
+        // Then we serialize that.
+
+        let mut pr = PRelation {
+            values: Default::default(),
+            next_tuple_id: AtomicU64::new(self.next_tuple_id.load(Ordering::SeqCst)),
+            l_index: self.l_index.clone(),
+            r_index: self.r_index.clone(),
+        };
+
+        for (tuple_id, tuple) in self.values.iter() {
+            let versions = tuple.versions.read();
+            let pmvcc = PMvccTuple {
+                versions: versions.clone(),
+                pd: Default::default(),
+            };
+            pr.values.push((*tuple_id, pmvcc));
+        }
+
+        let mut serializer = AllocSerializer::<0>::default();
+        serializer.serialize_value(&pr).unwrap();
+        let bytes = serializer.into_serializer().into_inner();
+
+        Ok(bytes)
+    }
+}
+
+#[derive(Serialize, Deserialize, Archive)]
+pub struct PMvccTuple<K: TupleValueTraits, V: TupleValueTraits> {
+    pub versions: Vec<MvccEntry<V>>,
+    pd: PhantomData<K>,
+}
+
+#[derive(Serialize, Deserialize, Archive)]
+pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
+    values: Vec<(TupleId, PMvccTuple<TupleId, (L, R)>)>,
+    next_tuple_id: AtomicU64,
+
+    // Indexes for the L and (optionally) R attributes.
+    l_index: BTreeMap<L, TupleId>,
+    r_index: Option<BTreeMap<R, HashSet<TupleId>>>,
 }
 
 #[cfg(test)]

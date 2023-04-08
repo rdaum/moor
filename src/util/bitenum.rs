@@ -1,5 +1,4 @@
 /// A barebones minimal custom bitset enum, to replace use of EnumSet crate which was not rkyv'able.
-
 use num_traits::ToPrimitive;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::marker::PhantomData;

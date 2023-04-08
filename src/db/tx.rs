@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use hybrid_lock::HybridLock;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::db::relations::OrderedKeyTraits;
+use crate::db::relations::TupleValueTraits;
 use crate::db::tx::CommitResult::Success;
 use crate::db::CommitResult;
 use crate::db::CommitResult::ConflictRetry;
@@ -24,24 +24,24 @@ use crate::db::CommitResult::ConflictRetry;
 // TODO clean up what's in here vs relations.rs
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub enum EntryValue<V: OrderedKeyTraits> {
+pub enum EntryValue<V: TupleValueTraits> {
     Value(V),
     Tombstone,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct WALEntry<V: OrderedKeyTraits> {
+pub struct WALEntry<V: TupleValueTraits> {
     value: EntryValue<V>,
     wts: u64,
     rts: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct WAL<K, V: OrderedKeyTraits> {
+pub struct WAL<K, V: TupleValueTraits> {
     pub entries: BTreeMap<K, WALEntry<V>>,
 }
 
-impl<K: OrderedKeyTraits, V: OrderedKeyTraits> WAL<K, V> {
+impl<K: TupleValueTraits, V: TupleValueTraits> WAL<K, V> {
     pub fn set(&mut self, key: K, value: EntryValue<V>, ts_i: u64) {
         self.entries.insert(
             key,
@@ -54,7 +54,7 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> WAL<K, V> {
     }
 }
 
-impl<K: OrderedKeyTraits, V: OrderedKeyTraits> Default for WAL<K, V> {
+impl<K: TupleValueTraits, V: TupleValueTraits> Default for WAL<K, V> {
     fn default() -> Self {
         WAL {
             entries: Default::default(),
@@ -63,19 +63,19 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> Default for WAL<K, V> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct MvccEntry<V: OrderedKeyTraits> {
+pub struct MvccEntry<V: TupleValueTraits> {
     value: EntryValue<V>,
     read_timestamp: u64,
     write_timestmap: u64,
 }
 
 #[derive(Serialize, Deserialize, Archive)]
-pub struct MvccTuple<K: OrderedKeyTraits, V: OrderedKeyTraits> {
+pub struct MvccTuple<K: TupleValueTraits, V: TupleValueTraits> {
     pub versions: HybridLock<Vec<MvccEntry<V>>>,
     pd: PhantomData<K>,
 }
 
-impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K, V> {
+impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     pub fn new(ts_i: u64, initial_value: EntryValue<V>) -> Self {
         MvccTuple {
             versions: HybridLock::new(vec![MvccEntry {
@@ -88,7 +88,7 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K, V> {
     }
 }
 
-impl<K: OrderedKeyTraits, V: OrderedKeyTraits> Default for MvccTuple<K, V> {
+impl<K: TupleValueTraits, V: TupleValueTraits> Default for MvccTuple<K, V> {
     fn default() -> Self {
         MvccTuple {
             versions: HybridLock::new(Vec::new()),
@@ -98,12 +98,12 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> Default for MvccTuple<K, V> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct WalValue<K: OrderedKeyTraits, V: OrderedKeyTraits> {
+pub struct WalValue<K: TupleValueTraits, V: TupleValueTraits> {
     tuple: (K, V),
     wts: u64,
 }
 
-impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K, V> {
+impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     // TODO: vacuum/GC of old versions
 
     pub fn commit(&mut self, ts_t: u64, value: &WALEntry<V>) -> CommitResult {

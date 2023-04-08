@@ -11,7 +11,7 @@ use antlr_rust::token_factory::TokenFactory;
 use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
 use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
-use decorum::R64;
+
 use paste::paste;
 
 use crate::compiler::ast::Expr::VarExpr;
@@ -504,7 +504,7 @@ impl<'node> mooVisitor<'node> for ASTGenVisitor {
 
     fn visit_Float(&mut self, ctx: &FloatContext<'node>) {
         let f = f64::from_str(ctx.get_text().as_str()).unwrap();
-        self._expr_stack.push(VarExpr(Var::Float(R64::from(f))));
+        self._expr_stack.push(VarExpr(Var::Float(f)));
     }
 
     fn visit_String(&mut self, ctx: &StringContext<'node>) {

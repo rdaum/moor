@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Read};
 
 use crate::compiler::codegen::Label;
 use anyhow::anyhow;
-use decorum::R64;
+
 use int_enum::IntEnum;
 use text_io::scan;
 
@@ -124,7 +124,7 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_NONE => Var::None,
             VarType::TYPE_CATCH => Var::_Catch(Label(self.read_num()? as u32)),
             VarType::TYPE_FINALLY => Var::_Finally(Label(self.read_num()? as u32)),
-            VarType::TYPE_FLOAT => Var::Float(R64::from(self.read_float()?)),
+            VarType::TYPE_FLOAT => Var::Float(self.read_float()?),
         };
         Ok(v)
     }

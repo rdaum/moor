@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
@@ -6,9 +7,9 @@ use crate::model::var::Error::{E_RANGE, E_TYPE};
 use decorum::{Real, R64};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
-use num_traits::ToPrimitive;
+
 use rkyv::{
-    ser::Serializer, with::ArchiveWith, Archive, Archived, Deserialize, Resolver, Serialize,
+    ser::Serializer, Archive, Archived, Deserialize, Serialize,
 };
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Archive,
@@ -123,26 +124,6 @@ impl Error {
     }
 }
 
-pub struct EncodeR64;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct F64Wrap(f64);
-impl PartialEq<R64> for ArchivedF64Wrap {
-    fn eq(&self, other: &R64) -> bool {
-        self.0 == other.to_f64().unwrap()
-    }
-}
-
-impl ArchiveWith<R64> for EncodeR64 {
-    type Archived = Archived<F64Wrap>;
-    type Resolver = Resolver<F64Wrap>;
-
-    unsafe fn resolve_with(field: &R64, pos: usize, r: F64WrapResolver, out: *mut Self::Archived) {
-        let f = F64Wrap(field.to_f64().unwrap());
-        f.resolve(pos, r, out);
-    }
-}
-
 pub struct ArchivedUsize(Archived<usize>);
 
 impl PartialEq<usize> for ArchivedUsize {
@@ -190,7 +171,7 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash, Archive)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 #[archive(compare(PartialEq), check_bytes)]
 #[archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))]
 #[archive_attr(check_bytes(
@@ -202,7 +183,7 @@ pub enum Var {
     Str(String),
     Obj(Objid),
     Int(i64),
-    Float(#[with(EncodeR64)] R64),
+    Float(f64),
     Err(Error),
     List(
         #[omit_bounds]
@@ -215,6 +196,130 @@ pub enum Var {
     _Label(Label),
 }
 
+impl Var {
+    pub fn type_id(&self) -> VarType {
+        match self {
+            Var::Clear => VarType::TYPE_CLEAR,
+            Var::None => VarType::TYPE_NONE,
+            Var::Str(_) => VarType::TYPE_STR,
+            Var::Obj(_) => VarType::TYPE_OBJ,
+            Var::Int(_) => VarType::TYPE_INT,
+            Var::Float(_) => VarType::TYPE_FLOAT,
+            Var::Err(_) => VarType::TYPE_ERR,
+            Var::List(_) => VarType::TYPE_LIST,
+            Var::_Catch(_) => VarType::TYPE_CATCH,
+            Var::_Finally(_) => VarType::TYPE_FINALLY,
+            Var::_Label(_) => VarType::TYPE_CATCH,
+        }
+    }
+}
+impl PartialEq<Self> for Var {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Var::Clear, Var::Clear) => true,
+            (Var::None, Var::None) => true,
+            (Var::Str(l), Var::Str(r)) => l == r,
+            (Var::Obj(l), Var::Obj(r)) => l == r,
+            (Var::Int(l), Var::Int(r)) => l == r,
+            (Var::Float(l), Var::Float(r)) => l == r,
+            (Var::Err(l), Var::Err(r)) => l == r,
+            (Var::List(l), Var::List(r)) => l == r,
+            (Var::Clear, _) => false,
+            (Var::None, _) => false,
+            (Var::Str(_), _) => false,
+            (Var::Obj(_), _) => false,
+            (Var::Int(_), _) => false,
+            (Var::Float(_), _) => false,
+            (Var::Err(_), _) => false,
+            (Var::List(_), _) => false,
+            (Var::_Catch(a), Var::_Catch(b)) => a == b,
+            (Var::_Finally(a), Var::_Finally(b)) => a == b,
+            (Var::_Label(a), Var::_Label(b)) => a == b,
+            (Var::_Catch(_a), _) => false,
+            (Var::_Label(_a), _) => false,
+            (Var::_Finally(_a), _) => false,
+        }
+    }
+}
+
+impl PartialOrd<Self> for Var {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Var::Clear, Var::Clear) => Some(Ordering::Equal),
+            (Var::None, Var::None) => Some(Ordering::Equal),
+            (Var::Str(l), Var::Str(r)) => l.partial_cmp(r),
+            (Var::Obj(l), Var::Obj(r)) => l.partial_cmp(r),
+            (Var::Int(l), Var::Int(r)) => l.partial_cmp(r),
+            (Var::Float(l), Var::Float(r)) => R64::from(*l).partial_cmp(&R64::from(*r)),
+            (Var::Err(l), Var::Err(r)) => l.partial_cmp(r),
+            (Var::List(l), Var::List(r)) => l.partial_cmp(r),
+            (Var::Clear, _) => Some(Ordering::Less),
+            (Var::None, _) => Some(Ordering::Less),
+            (Var::Str(_), _) => Some(Ordering::Less),
+            (Var::Obj(_), _) => Some(Ordering::Less),
+            (Var::Int(_), _) => Some(Ordering::Less),
+            (Var::Float(_), _) => Some(Ordering::Less),
+            (Var::Err(_), _) => Some(Ordering::Less),
+            (Var::List(_), _) => Some(Ordering::Less),
+            (Var::_Catch(a), Var::_Catch(b)) => a.partial_cmp(b),
+            (Var::_Finally(a), Var::_Finally(b)) => a.partial_cmp(b),
+            (Var::_Label(a), Var::_Label(b)) => a.partial_cmp(b),
+            (Var::_Catch(_a), _) => Some(Ordering::Less),
+            (Var::_Label(_a), _) => Some(Ordering::Less),
+            (Var::_Finally(_a), _) => Some(Ordering::Less),
+        }
+    }
+}
+
+impl Ord for Var {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Var::Clear, Var::Clear) => Ordering::Equal,
+            (Var::None, Var::None) => Ordering::Equal,
+            (Var::Str(l), Var::Str(r)) => l.cmp(r),
+            (Var::Obj(l), Var::Obj(r)) => l.cmp(r),
+            (Var::Int(l), Var::Int(r)) => l.cmp(r),
+            (Var::Float(l), Var::Float(r)) => R64::from(*l).cmp(&R64::from(*r)),
+            (Var::Err(l), Var::Err(r)) => l.cmp(r),
+            (Var::List(l), Var::List(r)) => l.cmp(r),
+            (Var::Clear, _) => Ordering::Less,
+            (Var::None, _) => Ordering::Less,
+            (Var::Str(_), _) => Ordering::Less,
+            (Var::Obj(_), _) => Ordering::Less,
+            (Var::Int(_), _) => Ordering::Less,
+            (Var::Float(_), _) => Ordering::Less,
+            (Var::Err(_), _) => Ordering::Less,
+            (Var::List(_), _) => Ordering::Less,
+            (Var::_Catch(a), Var::_Catch(b)) => a.cmp(b),
+            (Var::_Finally(a), Var::_Finally(b)) => a.cmp(b),
+            (Var::_Label(a), Var::_Label(b)) => a.cmp(b),
+            (Var::_Catch(_a), _) => Ordering::Less,
+            (Var::_Label(_a), _) => Ordering::Less,
+            (Var::_Finally(_a), _) => Ordering::Less,
+        }
+    }
+}
+impl Hash for Var {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let t = self.type_id() as u8;
+        t.hash(state);
+        match self {
+            Var::Clear => {}
+            Var::None => {}
+            Var::Str(s) => s.hash(state),
+            Var::Obj(o) => o.hash(state),
+            Var::Int(i) => i.hash(state),
+            Var::Float(f) => R64::from(*f).hash(state),
+            Var::Err(e) => e.hash(state),
+            Var::List(l) => l.hash(state),
+            Var::_Catch(l) => l.hash(state),
+            Var::_Finally(l) => l.hash(state),
+            Var::_Label(l) => l.hash(state),
+        }
+    }
+}
+impl Eq for Var {}
+
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
@@ -222,10 +327,7 @@ macro_rules! binary_numeric_coercion_op {
                 (Var::Float(l), Var::Float(r)) => Ok(Var::Float(l.$op(*r))),
                 (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.$op(*r))),
                 (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.$op(*r as f64))),
-                (Var::Int(l), Var::Float(r)) => {
-                    let l = R64::from(*l as f64);
-                    Ok(Var::Float(l.$op(*r)))
-                }
+                (Var::Int(l), Var::Float(r)) => Ok(Var::Float((*l as f64).$op(*r))),
                 (_, _) => Err(E_TYPE),
             }
         }
@@ -260,10 +362,7 @@ impl Var {
             (Var::Float(l), Var::Float(r)) => Ok(Var::Float(*l + *r)),
             (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l + r)),
             (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l + (*r as f64))),
-            (Var::Int(l), Var::Float(r)) => {
-                let l = R64::from(*l as f64);
-                Ok(Var::Float(l + (*r)))
-            }
+            (Var::Int(l), Var::Float(r)) => Ok(Var::Float(*l as f64 + *r)),
             (Var::Str(s), Var::Str(r)) => {
                 let mut c = s.clone();
                 c.push_str(r);
@@ -286,10 +385,7 @@ impl Var {
             (Var::Float(l), Var::Float(r)) => Ok(Var::Float(*l % *r)),
             (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l % r)),
             (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l % (*r as f64))),
-            (Var::Int(l), Var::Float(r)) => {
-                let l = R64::from(*l as f64);
-                Ok(Var::Float(l % (*r)))
-            }
+            (Var::Int(l), Var::Float(r)) => Ok(Var::Float(*l as f64 % (*r))),
             (_, _) => Err(E_TYPE),
         }
     }
@@ -299,10 +395,7 @@ impl Var {
             (Var::Float(l), Var::Float(r)) => Ok(Var::Float(l.powf(*r))),
             (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.pow(*r as u32))),
             (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.powi(*r as i32))),
-            (Var::Int(l), Var::Float(r)) => {
-                let l = R64::from(*l as f64);
-                Ok(Var::Float(l.powf(*r)))
-            }
+            (Var::Int(l), Var::Float(r)) => Ok(Var::Float((*l as f64).powf(*r))),
             (_, _) => Err(E_TYPE),
         }
     }
@@ -410,7 +503,7 @@ impl From<i64> for Var {
 
 impl From<f64> for Var {
     fn from(f: f64) -> Self {
-        Self::Float(R64::from(f))
+        Self::Float(f)
     }
 }
 
@@ -504,18 +597,9 @@ mod tests {
     #[test]
     fn test_add() {
         assert_eq!(Var::Int(1).add(&Var::Int(2)), Ok(Var::Int(3)));
-        assert_eq!(
-            Var::Int(1).add(&Var::Float(R64::from(2.0))),
-            Ok(Var::Float(R64::from(3.0)))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).add(&Var::Int(2)),
-            Ok(Var::Float(R64::from(3.0)))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).add(&Var::Float(R64::from(2.0))),
-            Ok(Var::Float(R64::from(3.0)))
-        );
+        assert_eq!(Var::Int(1).add(&Var::Float(2.0)), Ok(Var::Float(3.0)));
+        assert_eq!(Var::Float(1.).add(&Var::Int(2)), Ok(Var::Float(3.)));
+        assert_eq!(Var::Float(1.).add(&Var::Float(2.)), Ok(Var::Float(3.)));
         assert_eq!(
             Var::Str(String::from("a")).add(&Var::Str(String::from("b"))),
             Ok(Var::Str(String::from("ab")))
@@ -525,72 +609,36 @@ mod tests {
     #[test]
     fn test_sub() -> Result<(), Error> {
         assert_eq!(Var::Int(1).sub(&Var::Int(2))?, Var::Int(-1));
-        assert_eq!(
-            Var::Int(1).sub(&Var::Float(R64::from(2.0)))?,
-            Var::Float(R64::from(-1.0))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).sub(&Var::Int(2))?,
-            Var::Float(R64::from(-1.0))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).sub(&Var::Float(R64::from(2.0)))?,
-            Var::Float(R64::from(-1.0))
-        );
+        assert_eq!(Var::Int(1).sub(&Var::Float(2.))?, Var::Float(1.));
+        assert_eq!(Var::Float(1.).sub(&Var::Int(2))?, Var::Float(1.));
+        assert_eq!(Var::Float(1.).sub(&Var::Float(2.))?, Var::Float(1.));
         Ok(())
     }
 
     #[test]
     fn test_mul() -> Result<(), Error> {
         assert_eq!(Var::Int(1).mul(&Var::Int(2))?, Var::Int(2));
-        assert_eq!(
-            Var::Int(1).mul(&Var::Float(R64::from(2.0)))?,
-            Var::Float(R64::from(2.0))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).mul(&Var::Int(2))?,
-            Var::Float(R64::from(2.0))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).mul(&Var::Float(R64::from(2.0)))?,
-            Var::Float(R64::from(2.0))
-        );
+        assert_eq!(Var::Int(1).mul(&Var::Float(2.))?, Var::Float(2.));
+        assert_eq!(Var::Float(1.).mul(&Var::Int(2))?, Var::Float(2.));
+        assert_eq!(Var::Float(1.).mul(&Var::Float(2.))?, Var::Float(2.));
         Ok(())
     }
 
     #[test]
     fn test_div() -> Result<(), Error> {
         assert_eq!(Var::Int(1).div(&Var::Int(2))?, Var::Int(0));
-        assert_eq!(
-            Var::Int(1).div(&Var::Float(R64::from(2.0)))?,
-            Var::Float(R64::from(0.5))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).div(&Var::Int(2))?,
-            Var::Float(R64::from(0.5))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).div(&Var::Float(R64::from(2.0)))?,
-            Var::Float(R64::from(0.5))
-        );
+        assert_eq!(Var::Int(1).div(&Var::Float(2.))?, Var::Float(0.));
+        assert_eq!(Var::Float(1.).div(&Var::Int(2))?, Var::Float(0.));
+        assert_eq!(Var::Float(1.).div(&Var::Float(2.))?, Var::Float(0.));
         Ok(())
     }
 
     #[test]
     fn test_modulus() {
         assert_eq!(Var::Int(1).modulus(&Var::Int(2)), Ok(Var::Int(1)));
-        assert_eq!(
-            Var::Int(1).modulus(&Var::Float(R64::from(2.0))),
-            Ok(Var::Float(R64::from(1.0)))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).modulus(&Var::Int(2)),
-            Ok(Var::Float(R64::from(1.0)))
-        );
-        assert_eq!(
-            Var::Float(R64::from(1.0)).modulus(&Var::Float(R64::from(2.0))),
-            Ok(Var::Float(R64::from(1.0)))
-        );
+        assert_eq!(Var::Int(1).modulus(&Var::Float(2.)), Ok(Var::Float(1.)));
+        assert_eq!(Var::Float(1.).modulus(&Var::Int(2)), Ok(Var::Float(1.)));
+        assert_eq!(Var::Float(1.).modulus(&Var::Float(2.)), Ok(Var::Float(1.)));
         assert_eq!(
             Var::Str("moop".into()).modulus(&Var::Int(2)),
             Err(Error::E_TYPE)
@@ -601,27 +649,15 @@ mod tests {
     fn test_pow() {
         assert_eq!(Var::Int(1).pow(&Var::Int(2)), Ok(Var::Int(1)));
         assert_eq!(Var::Int(2).pow(&Var::Int(2)), Ok(Var::Int(4)));
-        assert_eq!(
-            Var::Int(2).pow(&Var::Float(R64::from(2.0))),
-            Ok(Var::Float(R64::from(4.0)))
-        );
-        assert_eq!(
-            Var::Float(R64::from(2.0)).pow(&Var::Int(2)),
-            Ok(Var::Float(R64::from(4.0)))
-        );
-        assert_eq!(
-            Var::Float(R64::from(2.0)).pow(&Var::Float(R64::from(2.0))),
-            Ok(Var::Float(R64::from(4.0)))
-        );
+        assert_eq!(Var::Int(2).pow(&Var::Float(2.)), Ok(Var::Float(4.)));
+        assert_eq!(Var::Float(2.).pow(&Var::Int(2)), Ok(Var::Float(4.)));
+        assert_eq!(Var::Float(2.).pow(&Var::Float(2.)), Ok(Var::Float(4.)));
     }
 
     #[test]
     fn test_negative() {
         assert_eq!(Var::Int(1).negative(), Ok(Var::Int(-1)));
-        assert_eq!(
-            Var::Float(R64::from(1.0)).negative(),
-            Ok(Var::Float(R64::from(-1.0)))
-        );
+        assert_eq!(Var::Float(1.).negative(), Ok(Var::Float(1.)));
     }
 
     #[test]
@@ -652,7 +688,7 @@ mod tests {
     #[test]
     fn test_eq() {
         assert_eq!(Var::Int(1), Var::Int(1));
-        assert_eq!(Var::Float(R64::from(1.0)), Var::Float(R64::from(1.0)));
+        assert_eq!(Var::Float(1.), Var::Float(1.));
         assert_eq!(Var::Str(String::from("a")), Var::Str(String::from("a")));
         assert_eq!(
             Var::List(vec![Var::Int(1), Var::Int(2)]),
@@ -665,7 +701,7 @@ mod tests {
     #[test]
     fn test_ne() {
         assert_ne!(Var::Int(1), Var::Int(2));
-        assert_ne!(Var::Float(R64::from(1.0)), Var::Float(R64::from(2.0)));
+        assert_ne!(Var::Float(1.), Var::Float(2.));
         assert_ne!(Var::Str(String::from("a")), Var::Str(String::from("b")));
         assert_ne!(
             Var::List(vec![Var::Int(1), Var::Int(2)]),
@@ -678,7 +714,7 @@ mod tests {
     #[test]
     fn test_lt() {
         assert!(Var::Int(1) < Var::Int(2));
-        assert!(Var::Float(R64::from(1.0)) < Var::Float(R64::from(2.0)));
+        assert!(Var::Float(1.) < Var::Float(2.));
         assert!(Var::Str(String::from("a")) < Var::Str(String::from("b")));
         assert!(
             Var::List(vec![Var::Int(1), Var::Int(2)]) < Var::List(vec![Var::Int(1), Var::Int(3)])
@@ -690,7 +726,7 @@ mod tests {
     #[test]
     fn test_le() {
         assert!(Var::Int(1) <= Var::Int(2));
-        assert!(Var::Float(R64::from(1.0)) <= Var::Float(R64::from(2.0)));
+        assert!(Var::Float(1.) <= Var::Float(2.));
         assert!(Var::Str(String::from("a")) <= Var::Str(String::from("b")));
         assert!(
             Var::List(vec![Var::Int(1), Var::Int(2)]) <= Var::List(vec![Var::Int(1), Var::Int(3)])
@@ -702,7 +738,7 @@ mod tests {
     #[test]
     fn test_gt() {
         assert!(Var::Int(2) > Var::Int(1));
-        assert!(Var::Float(R64::from(2.0)) > Var::Float(R64::from(1.0)));
+        assert!(Var::Float(2.) > Var::Float(1.));
         assert!(Var::Str(String::from("b")) > Var::Str(String::from("a")));
         assert!(
             Var::List(vec![Var::Int(1), Var::Int(3)]) > Var::List(vec![Var::Int(1), Var::Int(2)])
@@ -714,7 +750,7 @@ mod tests {
     #[test]
     fn test_ge() {
         assert!(Var::Int(2) >= Var::Int(1));
-        assert!(Var::Float(R64::from(2.0)) >= Var::Float(R64::from(1.0)));
+        assert!(Var::Float(2.) >= Var::Float(1.));
         assert!(Var::Str(String::from("b")) >= Var::Str(String::from("a")));
         assert!(
             Var::List(vec![Var::Int(1), Var::Int(3)]) >= Var::List(vec![Var::Int(1), Var::Int(2)])
@@ -727,7 +763,7 @@ mod tests {
     fn test_partial_cmp() {
         assert_eq!(Var::Int(1).partial_cmp(&Var::Int(1)), Some(Ordering::Equal));
         assert_eq!(
-            Var::Float(R64::from(1.0)).partial_cmp(&Var::Float(R64::from(1.0))),
+            Var::Float(1.).partial_cmp(&Var::Float(1.)),
             Some(Ordering::Equal)
         );
         assert_eq!(
@@ -750,7 +786,7 @@ mod tests {
 
         assert_eq!(Var::Int(1).partial_cmp(&Var::Int(2)), Some(Ordering::Less));
         assert_eq!(
-            Var::Float(R64::from(1.0)).partial_cmp(&Var::Float(R64::from(2.0))),
+            Var::Float(1.).partial_cmp(&Var::Float(2.)),
             Some(Ordering::Less)
         );
         assert_eq!(
@@ -776,7 +812,7 @@ mod tests {
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::Float(R64::from(2.0)).partial_cmp(&Var::Float(R64::from(1.0))),
+            Var::Float(2.).partial_cmp(&Var::Float(1.)),
             Some(Ordering::Greater)
         );
         assert_eq!(
@@ -801,10 +837,7 @@ mod tests {
     #[test]
     fn test_cmp() {
         assert_eq!(Var::Int(1).cmp(&Var::Int(1)), Ordering::Equal);
-        assert_eq!(
-            Var::Float(R64::from(1.0)).cmp(&Var::Float(R64::from(1.0))),
-            Ordering::Equal
-        );
+        assert_eq!(Var::Float(1.).cmp(&Var::Float(1.)), Ordering::Equal);
         assert_eq!(
             Var::Str(String::from("a")).cmp(&Var::Str(String::from("a"))),
             Ordering::Equal
@@ -818,10 +851,7 @@ mod tests {
         assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_TYPE)), Ordering::Equal);
 
         assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
-        assert_eq!(
-            Var::Float(R64::from(1.0)).cmp(&Var::Float(R64::from(2.0))),
-            Ordering::Less
-        );
+        assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
         assert_eq!(
             Var::Str(String::from("a")).cmp(&Var::Str(String::from("b"))),
             Ordering::Less
@@ -835,10 +865,7 @@ mod tests {
         assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_RANGE)), Ordering::Less);
 
         assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
-        assert_eq!(
-            Var::Float(R64::from(2.0)).cmp(&Var::Float(R64::from(1.0))),
-            Ordering::Greater
-        );
+        assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
         assert_eq!(
             Var::Str(String::from("b")).cmp(&Var::Str(String::from("a"))),
             Ordering::Greater
@@ -862,9 +889,7 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(
-            Var::Float(R64::from(1.0))
-                .partial_cmp(&Var::Float(R64::from(1.0)))
-                .unwrap(),
+            Var::Float(1.).partial_cmp(&Var::Float(1.)).unwrap(),
             Ordering::Equal
         );
         assert_eq!(
@@ -893,9 +918,7 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(
-            Var::Float(R64::from(1.0))
-                .partial_cmp(&Var::Float(R64::from(2.0)))
-                .unwrap(),
+            Var::Float(1.).partial_cmp(&Var::Float(2.)).unwrap(),
             Ordering::Less
         );
         assert_eq!(
@@ -924,9 +947,7 @@ mod tests {
             Ordering::Greater
         );
         assert_eq!(
-            Var::Float(R64::from(2.0))
-                .partial_cmp(&Var::Float(R64::from(1.0)))
-                .unwrap(),
+            Var::Float(2.).partial_cmp(&Var::Float(1.)).unwrap(),
             Ordering::Greater
         );
         assert_eq!(
@@ -954,10 +975,7 @@ mod tests {
     #[test]
     fn test_ord() {
         assert_eq!(Var::Int(1).cmp(&Var::Int(1)), Ordering::Equal);
-        assert_eq!(
-            Var::Float(R64::from(1.0)).cmp(&Var::Float(R64::from(1.0))),
-            Ordering::Equal
-        );
+        assert_eq!(Var::Float(1.).cmp(&Var::Float(1.)), Ordering::Equal);
         assert_eq!(
             Var::Str(String::from("a")).cmp(&Var::Str(String::from("a"))),
             Ordering::Equal
@@ -971,10 +989,7 @@ mod tests {
         assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_TYPE)), Ordering::Equal);
 
         assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
-        assert_eq!(
-            Var::Float(R64::from(1.0)).cmp(&Var::Float(R64::from(2.0))),
-            Ordering::Less
-        );
+        assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
         assert_eq!(
             Var::Str(String::from("a")).cmp(&Var::Str(String::from("b"))),
             Ordering::Less
@@ -988,10 +1003,7 @@ mod tests {
         assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_RANGE)), Ordering::Less);
 
         assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
-        assert_eq!(
-            Var::Float(R64::from(2.0)).cmp(&Var::Float(R64::from(1.0))),
-            Ordering::Greater
-        );
+        assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
         assert_eq!(
             Var::Str(String::from("b")).cmp(&Var::Str(String::from("a"))),
             Ordering::Greater
@@ -1011,7 +1023,7 @@ mod tests {
     #[test]
     fn test_is_true() {
         assert!(Var::Int(1).is_true());
-        assert!(Var::Float(R64::from(1.0)).is_true());
+        assert!(Var::Float(1.).is_true());
         assert!(Var::Str(String::from("a")).is_true());
         assert!(Var::List(vec![Var::Int(1), Var::Int(2)]).is_true());
         assert!(!Var::Obj(Objid(1)).is_true());
