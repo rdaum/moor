@@ -1,14 +1,14 @@
+use crate::compiler::codegen::Label;
 use crate::db::state::{StateError, WorldState};
-use enumset::EnumSet;
 use std::sync::Arc;
 use std::sync::Mutex;
-use crate::compiler::codegen::Label;
 
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, ErrorPack, Objid, Offset, Var};
+use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::opcode::{Op, ScatterLabel};
 
@@ -106,8 +106,11 @@ macro_rules! binary_var_op {
 }
 
 impl VM {
-    pub fn new( state: Arc<Mutex<dyn WorldState>>) -> Self {
-        Self { stack: vec![], state: state.clone() }
+    pub fn new(state: Arc<Mutex<dyn WorldState>>) -> Self {
+        Self {
+            stack: vec![],
+            state: state.clone(),
+        }
     }
 
     fn find_handler_active(&mut self, raise_code: Error) -> Option<(usize, &Activation)> {
@@ -343,7 +346,7 @@ impl VM {
 
     fn get_prop(
         &mut self,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
         propname: Var,
         obj: Var,
     ) -> Result<ExecutionResult, anyhow::Error> {
@@ -429,7 +432,7 @@ impl VM {
         _do_pass: bool,
         this: Objid,
         player: Objid,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
         caller: Objid,
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error> {
@@ -809,7 +812,7 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                return self.get_prop( self.top().player_flags, propname, obj);
+                return self.get_prop(self.top().player_flags, propname, obj);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
@@ -825,7 +828,8 @@ impl VM {
                     }
                 };
                 let mut state = self.state.lock().unwrap();
-                let update_result = state.update_property(obj, &propname, self.top().player_flags, &rhs);
+                let update_result =
+                    state.update_property(obj, &propname, self.top().player_flags, &rhs);
                 drop(state);
                 match update_result {
                     Ok(()) => {
@@ -1024,18 +1028,18 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use anyhow::Error;
-    use enumset::EnumSet;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::parse::Names;
-    use crate::db::CommitResult;
     use crate::db::state::{StateError, WorldState};
+    use crate::db::CommitResult;
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
+    use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
@@ -1085,7 +1089,7 @@ mod tests {
                         attrs: VerbAttrs {
                             definer: Some(o),
                             owner: Some(o),
-                            flags: Some(VerbFlag::Exec | VerbFlag::Read),
+                            flags: Some(BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read),
                             args_spec: Some(VerbArgsSpec {
                                 dobj: ArgSpec::This,
                                 prep: PrepSpec::None,
@@ -1119,7 +1123,7 @@ mod tests {
                 false,
                 o,
                 o,
-                ObjFlag::Wizard | ObjFlag::Programmer,
+                BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
                 o,
                 vec![],
             )
@@ -1141,7 +1145,7 @@ mod tests {
             &mut self,
             obj: Objid,
             pname: &str,
-            _player_flags: EnumSet<ObjFlag>,
+            _player_flags: BitEnum<ObjFlag>,
         ) -> Result<Var, Error> {
             let p = self.properties.get(&(obj, pname.to_string()));
             match p {
@@ -1154,7 +1158,7 @@ mod tests {
             &mut self,
             obj: Objid,
             pname: &str,
-            _player_flags: EnumSet<ObjFlag>,
+            _player_flags: BitEnum<ObjFlag>,
             value: &Var,
         ) -> Result<(), Error> {
             self.properties
@@ -1167,7 +1171,7 @@ mod tests {
             obj: Objid,
             pname: &str,
             _owner: Objid,
-            _prop_flags: EnumSet<PropFlag>,
+            _prop_flags: BitEnum<PropFlag>,
             initial_value: Option<Var>,
         ) -> Result<(), Error> {
             self.properties
@@ -1228,7 +1232,7 @@ mod tests {
                 false,
                 o,
                 o,
-                ObjFlag::Wizard | ObjFlag::Programmer,
+                BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
                 o,
                 vec![],
             )
@@ -1242,7 +1246,7 @@ mod tests {
         let binary = mk_binary(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
         let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
-        
+
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
         assert_eq!(result, Var::None);
@@ -1270,7 +1274,14 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0.into()), Imm(1.into()), Imm(2.into()), RangeRef, Return, Done],
+                vec![
+                    Imm(0.into()),
+                    Imm(1.into()),
+                    Imm(2.into()),
+                    RangeRef,
+                    Return,
+                    Done,
+                ],
                 vec![Var::Str("hello".to_string()), 2.into(), 4.into()],
                 Names::new(),
             ),
@@ -1306,7 +1317,14 @@ mod tests {
         let state = MockState::new_with_verb(
             "test",
             &mk_binary(
-                vec![Imm(0.into()), Imm(1.into()), Imm(2.into()), RangeRef, Return, Done],
+                vec![
+                    Imm(0.into()),
+                    Imm(1.into()),
+                    Imm(2.into()),
+                    RangeRef,
+                    Return,
+                    Done,
+                ],
                 vec![
                     Var::List(vec![111.into(), 222.into(), 333.into()]),
                     2.into(),
@@ -1424,7 +1442,7 @@ mod tests {
             ),
         );
         let mut vm = VM::new(state);
-        
+
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
         assert_eq!(result, Var::Str("manbozorian".to_string()));
@@ -1447,7 +1465,7 @@ mod tests {
                     Objid(0),
                     "test_prop",
                     Objid(0),
-                    PropFlag::Read | PropFlag::Write,
+                    BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
                     Some(Var::Int(666)),
                 )
                 .unwrap();

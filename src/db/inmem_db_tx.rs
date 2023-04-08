@@ -1,23 +1,25 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicU64;
-use anyhow::{anyhow, Error};
-use enumset::EnumSet;
-use crate::db::{CommitResult, relations};
 use crate::db::inmem_db::ImDB;
-use crate::db::state::{WorldState, WorldStateSource, StateError};
+use crate::db::state::{StateError, WorldState, WorldStateSource};
 use crate::db::tx::Tx;
+use crate::db::{relations, CommitResult};
+use anyhow::{anyhow, Error};
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex};
 
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::permissions::Permissions;
-use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag};
+use crate::model::props::{
+    Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
+};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
-use crate::vm::opcode::{Binary};
+use crate::util::bitenum::BitEnum;
+use crate::vm::opcode::Binary;
 
 pub struct ImDbTxSource {
     db: Arc<Mutex<ImDB>>,
-    next_tx_id : AtomicU64,
+    next_tx_id: AtomicU64,
 
     // Global atomic counter for the next transactions start timestamp
     gtls: AtomicU64,
@@ -25,17 +27,23 @@ pub struct ImDbTxSource {
 
 impl ImDbTxSource {
     pub fn new(db: ImDB) -> ImDbTxSource {
-        ImDbTxSource { db: Arc::new(Mutex::new(db)), next_tx_id: Default::default(), gtls: Default::default() }
+        ImDbTxSource {
+            db: Arc::new(Mutex::new(db)),
+            next_tx_id: Default::default(),
+            gtls: Default::default(),
+        }
     }
 }
 
 impl WorldStateSource for ImDbTxSource {
     fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error> {
-        let tx_id = self.next_tx_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let tx_id = self
+            .next_tx_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let tx_start_ts = self.gtls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let tx = Tx::new(tx_id, tx_start_ts);
-        Ok(ImDBTx::new(self.db.clone(), tx ))
+        Ok(ImDBTx::new(self.db.clone(), tx))
     }
 }
 
@@ -52,7 +60,10 @@ impl ImDBTx {
 
 impl Objects for ImDBTx {
     fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, Error> {
-        self.db.lock().unwrap().create_object( &mut self.tx, oid, attrs)
+        self.db
+            .lock()
+            .unwrap()
+            .create_object(&mut self.tx, oid, attrs)
     }
 
     fn destroy_object(&mut self, oid: Objid) -> Result<(), Error> {
@@ -63,12 +74,22 @@ impl Objects for ImDBTx {
         self.db.lock().unwrap().object_valid(&mut self.tx, oid)
     }
 
-    fn object_get_attrs(&mut self, oid: Objid, attributes: EnumSet<ObjAttr>) -> Result<ObjAttrs, Error> {
-        self.db.lock().unwrap().object_get_attrs(&mut self.tx, oid, attributes)
+    fn object_get_attrs(
+        &mut self,
+        oid: Objid,
+        attributes: BitEnum<ObjAttr>,
+    ) -> Result<ObjAttrs, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .object_get_attrs(&mut self.tx, oid, attributes)
     }
 
     fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), Error> {
-        self.db.lock().unwrap().object_set_attrs(&mut self.tx, oid, attributes)
+        self.db
+            .lock()
+            .unwrap()
+            .object_set_attrs(&mut self.tx, oid, attributes)
     }
 
     fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, Error> {
@@ -81,74 +102,179 @@ impl Objects for ImDBTx {
 }
 
 impl Properties for ImDBTx {
-    fn find_property(&mut self, oid: Objid, name: &str, attrs: EnumSet<PropAttr>) -> Result<Option<PropertyInfo>, Error> {
-        self.db.lock().unwrap().find_property(&mut self.tx, oid, name, attrs)
+    fn find_property(
+        &mut self,
+        oid: Objid,
+        name: &str,
+        attrs: BitEnum<PropAttr>,
+    ) -> Result<Option<PropertyInfo>, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .find_property(&mut self.tx, oid, name, attrs)
     }
 
-    fn get_property(&mut self, oid: Objid, handle: Pid, attrs: EnumSet<PropAttr>) -> Result<Option<PropAttrs>, Error> {
-        self.db.lock().unwrap().get_property(&mut self.tx, oid, handle, attrs)
+    fn get_property(
+        &mut self,
+        oid: Objid,
+        handle: Pid,
+        attrs: BitEnum<PropAttr>,
+    ) -> Result<Option<PropAttrs>, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .get_property(&mut self.tx, oid, handle, attrs)
     }
 
-    fn set_property(&mut self, handle: Pid, location: Objid, value: Var, owner: Objid, flags: EnumSet<PropFlag>) -> Result<(), Error> {
-        self.db.lock().unwrap().set_property(&mut self.tx, handle, location, value, owner, flags)
+    fn set_property(
+        &mut self,
+        handle: Pid,
+        location: Objid,
+        value: Var,
+        owner: Objid,
+        flags: BitEnum<PropFlag>,
+    ) -> Result<(), Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .set_property(&mut self.tx, handle, location, value, owner, flags)
     }
 }
 
 impl Verbs for ImDBTx {
-    fn add_verb(&mut self, oid: Objid, names: Vec<&str>, owner: Objid, flags: EnumSet<VerbFlag>, arg_spec: VerbArgsSpec, program: Binary) -> Result<VerbInfo, Error> {
-        self.db.lock().unwrap().add_verb(&mut self.tx, oid, names, owner, flags, arg_spec, program)
+    fn add_verb(
+        &mut self,
+        oid: Objid,
+        names: Vec<&str>,
+        owner: Objid,
+        flags: BitEnum<VerbFlag>,
+        arg_spec: VerbArgsSpec,
+        program: Binary,
+    ) -> Result<VerbInfo, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .add_verb(&mut self.tx, oid, names, owner, flags, arg_spec, program)
     }
 
-    fn get_verbs(&mut self, oid: Objid, attrs: EnumSet<VerbAttr>) -> Result<Vec<VerbInfo>, Error> {
+    fn get_verbs(&mut self, oid: Objid, attrs: BitEnum<VerbAttr>) -> Result<Vec<VerbInfo>, Error> {
         self.db.lock().unwrap().get_verbs(&mut self.tx, oid, attrs)
     }
 
-    fn get_verb(&mut self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, Error> {
+    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, Error> {
         self.db.lock().unwrap().get_verb(&mut self.tx, vid, attrs)
     }
 
     fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
-        self.db.lock().unwrap().update_verb(&mut self.tx, vid, attrs)
+        self.db
+            .lock()
+            .unwrap()
+            .update_verb(&mut self.tx, vid, attrs)
     }
 
-    fn find_command_verb(&mut self, oid: Objid, verb: &str, arg_spec: VerbArgsSpec, attrs: EnumSet<VerbAttr>) -> Result<Option<VerbInfo>, Error> {
-        self.db.lock().unwrap().find_command_verb(&mut self.tx, oid, verb, arg_spec, attrs)
+    fn find_command_verb(
+        &mut self,
+        oid: Objid,
+        verb: &str,
+        arg_spec: VerbArgsSpec,
+        attrs: BitEnum<VerbAttr>,
+    ) -> Result<Option<VerbInfo>, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .find_command_verb(&mut self.tx, oid, verb, arg_spec, attrs)
     }
 
-    fn find_callable_verb(&mut self, oid: Objid, verb: &str, attrs: EnumSet<VerbAttr>) -> Result<Option<VerbInfo>, Error> {
-        self.db.lock().unwrap().find_callable_verb(&mut self.tx, oid, verb, attrs)
+    fn find_callable_verb(
+        &mut self,
+        oid: Objid,
+        verb: &str,
+        attrs: BitEnum<VerbAttr>,
+    ) -> Result<Option<VerbInfo>, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .find_callable_verb(&mut self.tx, oid, verb, attrs)
     }
 
-    fn find_indexed_verb(&mut self, oid: Objid, index: usize, attrs: EnumSet<VerbAttr>) -> Result<Option<VerbInfo>, Error> {
-        self.db.lock().unwrap().find_indexed_verb(&mut self.tx, oid, index, attrs)
+    fn find_indexed_verb(
+        &mut self,
+        oid: Objid,
+        index: usize,
+        attrs: BitEnum<VerbAttr>,
+    ) -> Result<Option<VerbInfo>, Error> {
+        self.db
+            .lock()
+            .unwrap()
+            .find_indexed_verb(&mut self.tx, oid, index, attrs)
     }
 }
 
 impl Permissions for ImDBTx {
-    fn property_allows(&mut self, check_flags: EnumSet<PropFlag>, player: Objid, player_flags: EnumSet<ObjFlag>, prop_flags: EnumSet<PropFlag>, prop_owner: Objid) -> bool {
-        self.db.lock().unwrap().property_allows(&mut self.tx, check_flags, player, player_flags, prop_flags, prop_owner)
+    fn property_allows(
+        &mut self,
+        check_flags: BitEnum<PropFlag>,
+        player: Objid,
+        player_flags: BitEnum<ObjFlag>,
+        prop_flags: BitEnum<PropFlag>,
+        prop_owner: Objid,
+    ) -> bool {
+        self.db.lock().unwrap().property_allows(
+            &mut self.tx,
+            check_flags,
+            player,
+            player_flags,
+            prop_flags,
+            prop_owner,
+        )
     }
 }
 
 impl PropDefs for ImDBTx {
     fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, Error> {
-        self.db.lock().unwrap().get_propdef(&mut self.tx, definer, pname)
+        self.db
+            .lock()
+            .unwrap()
+            .get_propdef(&mut self.tx, definer, pname)
     }
 
-    fn add_propdef(&mut self, definer: Objid, name: &str, owner: Objid, flags: EnumSet<PropFlag>, initial_value: Option<Var>) -> Result<Pid, Error> {
-        self.db.lock().unwrap().add_propdef(&mut self.tx, definer, name, owner, flags, initial_value)
+    fn add_propdef(
+        &mut self,
+        definer: Objid,
+        name: &str,
+        owner: Objid,
+        flags: BitEnum<PropFlag>,
+        initial_value: Option<Var>,
+    ) -> Result<Pid, Error> {
+        self.db.lock().unwrap().add_propdef(
+            &mut self.tx,
+            definer,
+            name,
+            owner,
+            flags,
+            initial_value,
+        )
     }
 
     fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), Error> {
-        self.db.lock().unwrap().rename_propdef(&mut self.tx, definer, old, new)
+        self.db
+            .lock()
+            .unwrap()
+            .rename_propdef(&mut self.tx, definer, old, new)
     }
 
     fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), Error> {
-        self.db.lock().unwrap().delete_propdef(&mut self.tx, definer, pname)
+        self.db
+            .lock()
+            .unwrap()
+            .delete_propdef(&mut self.tx, definer, pname)
     }
 
     fn count_propdefs(&mut self, definer: Objid) -> Result<usize, Error> {
-        self.db.lock().unwrap().count_propdefs(&mut self.tx, definer)
+        self.db
+            .lock()
+            .unwrap()
+            .count_propdefs(&mut self.tx, definer)
     }
 
     fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, Error> {
@@ -158,7 +284,7 @@ impl PropDefs for ImDBTx {
 
 impl WorldState for ImDBTx {
     fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        self.object_get_attrs(obj, EnumSet::from(ObjAttr::Location))
+        self.object_get_attrs(obj, BitEnum::from(BitEnum::new_with(ObjAttr::Location)))
             .map(|attrs| attrs.location.unwrap())
     }
 
@@ -170,7 +296,10 @@ impl WorldState for ImDBTx {
         let h = self.find_callable_verb(
             obj,
             vname,
-            VerbAttr::Program | VerbAttr::Flags | VerbAttr::Owner | VerbAttr::Definer,
+            BitEnum::new_with(VerbAttr::Program)
+                | VerbAttr::Flags
+                | VerbAttr::Owner
+                | VerbAttr::Definer,
         )?;
         let Some(vi) = h else {
             return Err(anyhow!(StateError::VerbNotFound(obj, vname.to_string())));
@@ -187,14 +316,17 @@ impl WorldState for ImDBTx {
         &mut self,
         obj: Objid,
         property_name: &str,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, Error> {
         // TODO builtin properties!
         let find = self
             .find_property(
                 obj,
                 property_name,
-                PropAttr::Owner | PropAttr::Flags | PropAttr::Location | PropAttr::Value,
+                BitEnum::new_with(PropAttr::Owner)
+                    | PropAttr::Flags
+                    | PropAttr::Location
+                    | PropAttr::Value,
             )
             .expect("db fail");
         match find {
@@ -231,11 +363,15 @@ impl WorldState for ImDBTx {
         &mut self,
         obj: Objid,
         property_name: &str,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
         value: &Var,
     ) -> Result<(), Error> {
         let h = self
-            .find_property(obj, property_name, PropAttr::Owner | PropAttr::Flags)
+            .find_property(
+                obj,
+                property_name,
+                BitEnum::new_with(PropAttr::Owner) | PropAttr::Flags,
+            )
             .expect("Unable to perform property lookup");
 
         // TODO handle built-in properties
@@ -264,7 +400,7 @@ impl WorldState for ImDBTx {
             p.attrs.owner.unwrap(),
             p.attrs.flags.unwrap(),
         )
-            .expect("could not set property");
+        .expect("could not set property");
         Ok(())
     }
 
@@ -273,7 +409,7 @@ impl WorldState for ImDBTx {
         obj: Objid,
         pname: &str,
         _owner: Objid,
-        prop_flags: EnumSet<PropFlag>,
+        prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), anyhow::Error> {
         self.add_propdef(obj, pname, obj, prop_flags, initial_value)?;
@@ -281,7 +417,8 @@ impl WorldState for ImDBTx {
     }
 
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        let attrs = self.object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)?;
+        let attrs =
+            self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Parent) | ObjAttr::Owner)?;
         // TODO: this masks other (internal?) errors..
         attrs
             .parent
@@ -291,14 +428,14 @@ impl WorldState for ImDBTx {
     fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
         // TODO: this masks other (internal?) errors..
         Ok(self
-            .object_get_attrs(obj, ObjAttr::Parent | ObjAttr::Owner)
+            .object_get_attrs(obj, BitEnum::new_with(ObjAttr::Parent) | ObjAttr::Owner)
             .is_ok())
     }
 
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
         // TODO implement support for aliases.
         let name = self
-            .object_get_attrs(obj, EnumSet::from(ObjAttr::Name))?
+            .object_get_attrs(obj, BitEnum::from(ObjAttr::Name))?
             .name
             .unwrap();
         Ok((name, vec![]))
@@ -308,9 +445,7 @@ impl WorldState for ImDBTx {
         match self.db.lock().unwrap().do_commit_tx(&mut self.tx) {
             Ok(_) => Ok(CommitResult::Success),
             Err(relations::Error::Conflict) => Ok(CommitResult::ConflictRetry),
-            Err(e) => {
-                Err(anyhow!(e))
-            }
+            Err(e) => Err(anyhow!(e)),
         }
     }
 

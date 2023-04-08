@@ -29,8 +29,6 @@ impl MockMatchEnvironment {
     }
 }
 
-
-
 impl MatchEnvironment for MockMatchEnvironment {
     fn is_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error> {
         Ok(self.objects.contains_key(&oid))

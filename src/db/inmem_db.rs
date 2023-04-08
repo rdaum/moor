@@ -1,21 +1,19 @@
 use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 
-use crate::model::props::{
-    Pid, PropAttr, PropAttrs, PropFlag, Propdef, Properties, PropertyInfo,
-};
+use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, Properties, PropertyInfo};
 use crate::model::r#match::VerbArgsSpec;
 
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use anyhow::{anyhow, Error};
-use enumset::EnumSet;
 use itertools::Itertools;
 use std::collections::Bound::Included;
 
+use crate::db::relations;
 use crate::db::relations::Relation;
 use crate::db::state::WorldState;
 use crate::db::tx::Tx;
-use crate::db::{relations};
+use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
 const MAX_PROP_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
@@ -33,7 +31,7 @@ pub struct ImDB {
     obj_attr_owner: Relation<Objid, Objid>,
     obj_attr_parent: Relation<Objid, Objid>,
     obj_attr_name: Relation<Objid, String>,
-    obj_attr_flags: Relation<Objid, EnumSet<ObjFlag>>,
+    obj_attr_flags: Relation<Objid, BitEnum<ObjFlag>>,
 
     // Property definitions & properties
 
@@ -46,7 +44,7 @@ pub struct ImDB {
     property_value: Relation<(Objid, Pid), Var>,
     property_location: Relation<(Objid, Pid), Objid>,
     property_owner: Relation<(Objid, Pid), Objid>,
-    property_flags: Relation<(Objid, Pid), EnumSet<PropFlag>>,
+    property_flags: Relation<(Objid, Pid), BitEnum<PropFlag>>,
 
     // Verbs and their attributes
     verbdefs: Relation<(Objid, String), Vid>,
@@ -54,7 +52,7 @@ pub struct ImDB {
     verb_names: Relation<Vid, Vec<String>>,
     verb_attr_definer: Relation<Vid, Objid>,
     verb_attr_owner: Relation<Vid, Objid>,
-    verb_attr_flags: Relation<Vid, EnumSet<VerbFlag>>,
+    verb_attr_flags: Relation<Vid, BitEnum<VerbFlag>>,
     verb_attr_args_spec: Relation<Vid, VerbArgsSpec>,
     verb_attr_program: Relation<Vid, Binary>,
 }
@@ -135,7 +133,6 @@ impl ImDB {
         Ok(())
     }
 
-
     pub fn get_object_inheritance_chain(&mut self, tx: &mut Tx, oid: Objid) -> Vec<Objid> {
         if self.obj_attr_flags.seek_for_l_eq(tx, &oid).is_none() {
             return Vec::new();
@@ -147,7 +144,10 @@ impl ImDB {
         let mut current = oid;
         while current != NOTHING {
             chain.push(current);
-            current = self.obj_attr_parent.seek_for_l_eq(tx, &current).unwrap_or(NOTHING);
+            current = self
+                .obj_attr_parent
+                .seek_for_l_eq(tx, &current)
+                .unwrap_or(NOTHING);
         }
         chain
     }
@@ -158,7 +158,7 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         handle: Pid,
-        attrs: EnumSet<PropAttr>,
+        attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropAttrs>, Error> {
         let propkey = (oid, handle);
         let Some(flags) = self.property_flags.seek_for_l_eq(tx, &propkey) else {
@@ -207,7 +207,7 @@ impl ImDB {
         self.obj_attr_owner.insert(tx, &oid, &NOTHING)?;
         self.obj_attr_parent.insert(tx, &oid, &NOTHING)?;
 
-        let noflags: EnumSet<ObjFlag> = EnumSet::new();
+        let noflags: BitEnum<ObjFlag> = BitEnum::new();
         self.obj_attr_flags.insert(tx, &oid, &noflags)?;
 
         // TODO validate all attributes present.
@@ -235,22 +235,26 @@ impl ImDB {
         &mut self,
         tx: &mut Tx,
         oid: Objid,
-        attributes: EnumSet<ObjAttr>,
+        attributes: BitEnum<ObjAttr>,
     ) -> Result<ObjAttrs, Error> {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
         let mut return_attrs = ObjAttrs::default();
-        for a in attributes {
-            match a {
-                ObjAttr::Owner => return_attrs.owner = self.obj_attr_owner.seek_for_l_eq(tx, &oid),
-                ObjAttr::Name => return_attrs.name = self.obj_attr_name.seek_for_l_eq(tx, &oid),
-                ObjAttr::Parent => return_attrs.parent = self.obj_attr_parent.seek_for_l_eq(tx, &oid),
-                ObjAttr::Location => {
-                    return_attrs.location = self.obj_attr_location.seek_for_l_eq(tx, &oid)
-                }
-                ObjAttr::Flags => return_attrs.flags = self.obj_attr_flags.seek_for_l_eq(tx, &oid),
-            }
+        if attributes.contains(ObjAttr::Owner) {
+            return_attrs.owner = self.obj_attr_owner.seek_for_l_eq(tx, &oid);
+        }
+        if attributes.contains(ObjAttr::Name) {
+            return_attrs.name = self.obj_attr_name.seek_for_l_eq(tx, &oid);
+        }
+        if attributes.contains(ObjAttr::Parent) {
+            return_attrs.parent = self.obj_attr_parent.seek_for_l_eq(tx, &oid);
+        }
+        if attributes.contains(ObjAttr::Location) {
+            return_attrs.location = self.obj_attr_location.seek_for_l_eq(tx, &oid);
+        }
+        if attributes.contains(ObjAttr::Flags) {
+            return_attrs.flags = self.obj_attr_flags.seek_for_l_eq(tx, &oid);
         }
         Ok(return_attrs)
     }
@@ -314,7 +318,7 @@ impl ImDB {
         definer: Objid,
         name: &str,
         owner: Objid,
-        flags: EnumSet<PropFlag>,
+        flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, Error> {
         let pid = Pid(self.next_pid);
@@ -344,7 +348,8 @@ impl ImDB {
         match self.propdefs.seek_for_l_eq(tx, &(definer, old.to_string())) {
             None => return Err(anyhow!("property does not exist")),
             Some(pd) => {
-                self.propdefs.remove_for_l(tx, &(definer, old.to_string()))?;
+                self.propdefs
+                    .remove_for_l(tx, &(definer, old.to_string()))?;
                 let mut new_pd = pd;
                 new_pd.pname = new.to_string();
                 self.propdefs
@@ -360,7 +365,8 @@ impl ImDB {
         definer: Objid,
         pname: &str,
     ) -> Result<(), Error> {
-        self.propdefs.remove_for_l(tx, &(definer, pname.to_string()))?;
+        self.propdefs
+            .remove_for_l(tx, &(definer, pname.to_string()))?;
         Ok(())
     }
 
@@ -387,7 +393,7 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         name: &str,
-        attrs: EnumSet<PropAttr>,
+        attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropertyInfo>, Error> {
         let self_and_parents = self.get_object_inheritance_chain(tx, oid);
 
@@ -418,7 +424,7 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         handle: Pid,
-        attrs: EnumSet<PropAttr>,
+        attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropAttrs>, Error> {
         let self_and_parents = self.get_object_inheritance_chain(tx, oid);
         for oid in self_and_parents {
@@ -438,7 +444,7 @@ impl ImDB {
         location: Objid,
         value: Var,
         owner: Objid,
-        flags: EnumSet<PropFlag>,
+        flags: BitEnum<PropFlag>,
     ) -> Result<(), Error> {
         let propkey = (location, handle);
         self.property_value.insert(tx, &propkey, &value)?;
@@ -455,7 +461,7 @@ impl ImDB {
         oid: Objid,
         names: Vec<&str>,
         owner: Objid,
-        flags: EnumSet<VerbFlag>,
+        flags: BitEnum<VerbFlag>,
         arg_spec: VerbArgsSpec,
         program: Binary,
     ) -> Result<VerbInfo, Error> {
@@ -492,7 +498,7 @@ impl ImDB {
         &mut self,
         tx: &mut Tx,
         oid: Objid,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<Vec<VerbInfo>, Error> {
         let obj_verbs = self.verbdefs.range_r(
             tx,
@@ -522,7 +528,7 @@ impl ImDB {
         &mut self,
         tx: &mut Tx,
         vid: Vid,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<VerbInfo, Error> {
         if self.verb_attr_args_spec.seek_for_l_eq(tx, &vid).is_none() {
             return Err(anyhow!("no such verb"));
@@ -574,7 +580,7 @@ impl ImDB {
         _oid: Objid,
         _verb: &str,
         _arg_spec: VerbArgsSpec,
-        _attrs: EnumSet<VerbAttr>,
+        _attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
         todo!()
     }
@@ -584,7 +590,7 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         verb: &str,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
         let parent_chain = self.get_object_inheritance_chain(tx, oid);
         for parent in parent_chain {
@@ -603,7 +609,7 @@ impl ImDB {
 
         _oid: Objid,
         _index: usize,
-        _attrs: EnumSet<VerbAttr>,
+        _attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
         todo!()
     }
@@ -611,10 +617,10 @@ impl ImDB {
     pub fn property_allows(
         &self,
         _tx: &mut Tx,
-        _check_flags: EnumSet<PropFlag>,
+        _check_flags: BitEnum<PropFlag>,
         _player: Objid,
-        _player_flags: EnumSet<ObjFlag>,
-        _prop_flags: EnumSet<PropFlag>,
+        _player_flags: BitEnum<ObjFlag>,
+        _prop_flags: BitEnum<PropFlag>,
         _prop_owner: Objid,
     ) -> bool {
         todo!()
@@ -631,7 +637,7 @@ mod tests {
     use crate::model::verbs::{VerbAttr, VerbFlag, Verbs};
 
     use crate::db::tx::Tx;
-    use enumset::enum_set;
+    use crate::util::bitenum::BitEnum;
     use crate::vm::opcode::Binary;
 
     #[test]
@@ -690,12 +696,16 @@ mod tests {
                 None,
                 ObjAttrs::new()
                     .name("test")
-                    .flags(ObjFlag::Write | ObjFlag::Read),
+                    .flags(BitEnum::new_with(ObjFlag::Write) | ObjFlag::Read),
             )
             .unwrap();
 
         let attrs = s
-            .object_get_attrs(&mut tx, o, ObjAttr::Flags | ObjAttr::Name)
+            .object_get_attrs(
+                &mut tx,
+                o,
+                BitEnum::new_with(ObjAttr::Flags) | ObjAttr::Name,
+            )
             .unwrap();
 
         assert_eq!(attrs.name.unwrap(), "test");
@@ -792,7 +802,7 @@ mod tests {
                 Objid(1),
                 "color",
                 Objid(1),
-                enum_set!(PropFlag::Read),
+                BitEnum::new_with(PropFlag::Read),
                 None,
             )
             .unwrap();
@@ -802,7 +812,7 @@ mod tests {
                 Objid(1),
                 "size",
                 Objid(2),
-                PropFlag::Read | PropFlag::Write,
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
                 Some(Var::Int(42)),
             )
             .unwrap();
@@ -868,7 +878,7 @@ mod tests {
                 parent,
                 "test",
                 parent,
-                PropFlag::Chown | PropFlag::Read,
+                BitEnum::new_with(PropFlag::Chown) | PropFlag::Read,
                 Some(Var::Str(String::from("testing"))),
             )
             .unwrap();
@@ -880,7 +890,12 @@ mod tests {
 
         // Verify initially that we get the value all the way from root.
         let v = s
-            .get_property(&mut tx, child2, pid, PropAttr::Value | PropAttr::Location)
+            .get_property(
+                &mut tx,
+                child2,
+                pid,
+                BitEnum::new_with(PropAttr::Value) | PropAttr::Location,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(v.location, Some(parent));
@@ -892,13 +907,18 @@ mod tests {
             child1,
             Var::Str(String::from("testing")),
             parent,
-            PropFlag::Read | PropFlag::Write,
+            BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
         )
         .unwrap();
 
         // And then verify we get it from there...
         let v = s
-            .get_property(&mut tx, child2, pid, PropAttr::Value | PropAttr::Location)
+            .get_property(
+                &mut tx,
+                child2,
+                pid,
+                BitEnum::new_with(PropAttr::Value) | PropAttr::Location,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(v.location, Some(child1));
@@ -910,13 +930,18 @@ mod tests {
             child2,
             Var::Str(String::from("testing")),
             parent,
-            PropFlag::Read | PropFlag::Write,
+            BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
         )
         .unwrap();
 
         // And then verify we get it from there...
         let v = s
-            .get_property(&mut tx, child2, pid, PropAttr::Value | PropAttr::Location)
+            .get_property(
+                &mut tx,
+                child2,
+                pid,
+                BitEnum::new_with(PropAttr::Value) | PropAttr::Location,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(v.location, Some(child2));
@@ -927,7 +952,7 @@ mod tests {
                 &mut tx,
                 child2,
                 "test",
-                PropAttr::Value | PropAttr::Location,
+                BitEnum::new_with(PropAttr::Value) | PropAttr::Location,
             )
             .unwrap()
             .unwrap();
@@ -938,7 +963,7 @@ mod tests {
                 &mut tx,
                 other_root,
                 pid,
-                PropAttr::Value | PropAttr::Location,
+                BitEnum::new_with(PropAttr::Value) | PropAttr::Location,
             )
             .unwrap();
         assert!(v.is_none());
@@ -975,7 +1000,7 @@ mod tests {
                 parent,
                 vec!["look_down", "look_up"],
                 parent,
-                VerbFlag::Exec | VerbFlag::Read,
+                BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read,
                 thisnonethis,
                 Binary::default(),
             )
@@ -985,7 +1010,10 @@ mod tests {
             .get_verbs(
                 &mut tx,
                 parent,
-                VerbAttr::Definer | VerbAttr::Owner | VerbAttr::Flags | VerbAttr::ArgsSpec,
+                BitEnum::new_with(VerbAttr::Definer)
+                    | VerbAttr::Owner
+                    | VerbAttr::Flags
+                    | VerbAttr::ArgsSpec,
             )
             .unwrap();
         assert_eq!(verbs.len(), 1);
@@ -1000,7 +1028,7 @@ mod tests {
                 &mut tx,
                 child2,
                 "look_up",
-                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+                BitEnum::new_with(VerbAttr::Definer) | VerbAttr::Flags | VerbAttr::ArgsSpec,
             )
             .unwrap();
         assert!(v.is_some());
@@ -1013,7 +1041,7 @@ mod tests {
                 child1,
                 vec!["look_down", "look_up"],
                 parent,
-                VerbFlag::Exec | VerbFlag::Read,
+                BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read,
                 thisnonethis,
                 Binary::default(),
             )
@@ -1025,7 +1053,7 @@ mod tests {
                 &mut tx,
                 child2,
                 "look_up",
-                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+                BitEnum::new_with(VerbAttr::Definer) | VerbAttr::Flags | VerbAttr::ArgsSpec,
             )
             .unwrap();
         assert!(v.is_some());
@@ -1038,7 +1066,7 @@ mod tests {
                 child2,
                 vec!["look_down", "look_up"],
                 parent,
-                VerbFlag::Exec | VerbFlag::Read,
+                BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read,
                 thisnonethis,
                 Binary::default(),
             )
@@ -1050,7 +1078,7 @@ mod tests {
                 &mut tx,
                 child2,
                 "look_up",
-                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+                BitEnum::new_with(VerbAttr::Definer) | VerbAttr::Flags | VerbAttr::ArgsSpec,
             )
             .unwrap();
         assert!(v.is_some());
@@ -1062,7 +1090,7 @@ mod tests {
                 &mut tx,
                 other_root,
                 "look_up",
-                VerbAttr::Definer | VerbAttr::Flags | VerbAttr::ArgsSpec,
+                BitEnum::new_with(VerbAttr::Definer) | VerbAttr::Flags | VerbAttr::ArgsSpec,
             )
             .unwrap();
         assert!(v.is_none());

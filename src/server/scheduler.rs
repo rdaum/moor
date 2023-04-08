@@ -3,11 +3,11 @@ use crate::model::objects::ObjFlag;
 use crate::model::var::Objid;
 use crate::server::parse_cmd::ParsedCommand;
 use crate::vm::execute::{ExecutionResult, VM};
-use enumset::EnumSet;
 use slotmap::{new_key_type, SlotMap};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::util::bitenum::BitEnum;
 use tokio::task::spawn_local;
 
 new_key_type! { pub struct TaskId; }
@@ -30,11 +30,11 @@ impl Scheduler {
     pub fn new(state_source: Arc<Mutex<dyn WorldStateSource>>) -> Self {
         let sm: SlotMap<TaskId, Arc<Mutex<Task>>> = SlotMap::with_key();
         let task_state = Arc::new(Mutex::new(TaskState {
-            tasks: Arc::new(Mutex::new(sm))
+            tasks: Arc::new(Mutex::new(sm)),
         }));
         Self {
             state_source,
-            task_state
+            task_state,
         }
     }
 
@@ -56,7 +56,7 @@ impl Scheduler {
             false,
             player,
             player,
-            EnumSet::from(ObjFlag::Wizard),
+            BitEnum::new_with(ObjFlag::Wizard),
             player,
             command.args,
         )
@@ -134,21 +134,20 @@ impl Scheduler {
     // be as well.
 
     // The following below is only provisional.
-
-
 }
 
 impl TaskState {
-    pub fn new_task(&mut self, player: Objid, state_source: Arc<Mutex<dyn WorldStateSource>>) -> Result<TaskId, anyhow::Error> {
+    pub fn new_task(
+        &mut self,
+        player: Objid,
+        state_source: Arc<Mutex<dyn WorldStateSource>>,
+    ) -> Result<TaskId, anyhow::Error> {
         let mut state_source = state_source.lock().unwrap();
         let state = state_source.new_transaction()?;
         let vm = Arc::new(Mutex::new(VM::new(state.clone())));
         let tasks = self.tasks.clone();
         let mut tasks = tasks.lock().unwrap();
-        let id = tasks.insert(Arc::new(Mutex::new(Task {
-            player,
-            vm,
-        })));
+        let id = tasks.insert(Arc::new(Mutex::new(Task { player, vm })));
 
         Ok(id)
     }

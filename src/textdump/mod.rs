@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 
+use crate::compiler::codegen::Label;
 use anyhow::anyhow;
 use decorum::R64;
 use int_enum::IntEnum;
 use text_io::scan;
-use crate::compiler::codegen::Label;
 
 use crate::model::var::{Error, Objid, Var, VarType};
 

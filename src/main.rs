@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
-use enumset::EnumSet;
 
 use crate::compiler::codegen::compile;
 use crate::db::inmem_db::ImDB;
@@ -22,6 +21,7 @@ use crate::model::verbs::{VerbFlag, Verbs};
 use crate::server::scheduler::Scheduler;
 
 use crate::textdump::{Object, TextdumpReader};
+use crate::util::bitenum::BitEnum;
 
 pub mod compiler;
 pub mod db;
@@ -29,6 +29,7 @@ pub mod grammar;
 pub mod model;
 pub mod server;
 pub mod textdump;
+pub mod util;
 pub mod vm;
 
 struct RProp {
@@ -103,7 +104,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     // Pass 1 Create objects
     eprintln!("Instantiating objects...");
     for (objid, o) in &td.objects {
-        let flags: EnumSet<ObjFlag> = EnumSet::from_u8(o.flags);
+        let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
         s.create_object(
             &mut tx,
@@ -122,7 +123,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     for (objid, o) in &td.objects {
         for (pnum, _) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
-            let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
+            let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
                 s.add_propdef(
                     &mut tx,
@@ -141,7 +142,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
-            let flags: EnumSet<PropFlag> = EnumSet::from_u8(resolved.flags);
+            let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             let pdf = s.get_propdef(&mut tx, resolved.definer, resolved.name.as_str())?;
             s.set_property(
                 &mut tx,
@@ -158,7 +159,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     // Pass 4 define verbs
     for (objid, o) in &td.objects {
         for (vn, v) in o.verbdefs.iter().enumerate() {
-            let mut flags: EnumSet<VerbFlag> = EnumSet::new();
+            let mut flags: BitEnum<VerbFlag> = BitEnum::new();
             let permflags = v.flags & VF_PERMMASK;
             if permflags & VF_READ != 0 {
                 flags |= VerbFlag::Read;
@@ -200,15 +201,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 }
             };
 
-            s.add_verb(
-                &mut tx,
-                *objid,
-                names,
-                v.owner,
-                flags,
-                argspec,
-                binary,
-            )?;
+            s.add_verb(&mut tx, *objid, names, v.owner, flags, argspec, binary)?;
         }
     }
     eprintln!("Verbs defined.\nImport complete.");

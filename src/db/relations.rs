@@ -1,7 +1,11 @@
-use crate::db::tx::{EntryValue, MvccTuple, Tx, WAL};
+use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
 use crate::db::CommitResult;
-use slotmap::{new_key_type, SlotMap};
+use bytes::BytesMut;
+use rkyv::ser::Serializer;
+use rkyv::with::ArchiveWith;
+use rkyv::{Archive, Archived, Deserialize, Resolver, Serialize};
 use std::collections::{BTreeMap, Bound, HashMap, HashSet};
+use std::sync::atomic::AtomicUsize;
 use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -14,18 +18,30 @@ pub enum Error {
     Conflict,
 }
 
-pub trait OrderedKeyTraits: Clone + Eq + PartialEq + Ord {}
-impl<T: Clone + Eq + PartialEq + Ord> OrderedKeyTraits for T {}
-new_key_type! {struct TupleId;}
+pub trait OrderedKeyTraits: Clone + Eq + PartialEq + Ord + Archive {}
+impl<T: Clone + Eq + PartialEq + Ord + Archive> OrderedKeyTraits for T {}
+
+#[derive(
+    Debug, Serialize, Deserialize, Archive, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash,
+)]
+pub struct TupleId(usize);
 
 // Describes a sort of specialized 2-ary relation, where L and R are the types of the two 'columns'.
 // Indexes can exist for both K and T columns, but must always exist for K.
 // The tuple values are stored in the indexes.
-
 pub struct Relation<L: OrderedKeyTraits, R: OrderedKeyTraits> {
-    values: SlotMap<TupleId, MvccTuple<TupleId, (L, R)>>,
-    k_index: BTreeMap<L, TupleId>,
-    t_index: Option<BTreeMap<R, HashSet<TupleId>>>,
+    // Tuple storage for this relation.
+    // Right now this is a hash mapping tuple IDs to the tuple values.
+    // There are likely much faster data structures for this.
+    values: HashMap<TupleId, MvccTuple<TupleId, (L, R)>>,
+    next_tuple_id: AtomicUsize,
+
+    // Indexes for the L and (optionally) R attributes.
+    l_index: BTreeMap<L, TupleId>,
+    r_index: Option<BTreeMap<R, HashSet<TupleId>>>,
+
+    // The set of current active write-ahead-log entries for transactions that are currently active
+    // on this relation.
     wals: HashMap<u64, WAL<TupleId, (L, R)>>,
 }
 
@@ -39,8 +55,9 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     pub fn new() -> Self {
         Relation {
             values: Default::default(),
-            k_index: Default::default(),
-            t_index: None,
+            next_tuple_id: Default::default(),
+            l_index: Default::default(),
+            r_index: None,
             wals: Default::default(),
         }
     }
@@ -48,17 +65,18 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     pub fn new_bidrectional() -> Self {
         Relation {
             values: Default::default(),
-            k_index: Default::default(),
-            t_index: Some(Default::default()),
+            next_tuple_id: Default::default(),
+            l_index: Default::default(),
+            r_index: Some(Default::default()),
             wals: Default::default(),
         }
     }
 
     fn has_with_l(&mut self, tx: &mut Tx, k: &L, wal: &mut WAL<TupleId, (L, R)>) -> bool {
-        if let Some(tuple_id) = self.k_index.get(k) {
+        if let Some(tuple_id) = self.l_index.get(k) {
             let value = self
                 .values
-                .get_mut(*tuple_id)
+                .get_mut(tuple_id)
                 .unwrap()
                 .get(tx.tx_start_ts, tuple_id, wal);
             return value.is_some();
@@ -68,8 +86,8 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
 
     pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
         // If there's already a tuple for this row, then we need to check if it's visible to us.
-        if let Some(tuple_id) = self.k_index.get(l) {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+        if let Some(tuple_id) = self.l_index.get(l) {
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
@@ -82,14 +100,21 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
             tuple.set(tx.tx_start_ts, tuple_id, &(l.clone(), r.clone()), wal);
         } else {
             // Didn't exist for any transaction, so create a new version, stick in our WAL.
-            let tuple_id = self.values.insert(Default::default());
-
-            self.k_index.insert(l.clone(), tuple_id);
+            let tuple_id = TupleId(
+                self.next_tuple_id
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            );
+            self.values.insert(tuple_id, Default::default());
+            self.l_index.insert(l.clone(), tuple_id);
 
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            wal.set(tuple_id, EntryValue::Value((l.clone(), r.clone())), tx.tx_start_ts);
+            wal.set(
+                tuple_id,
+                EntryValue::Value((l.clone(), r.clone())),
+                tx.tx_start_ts,
+            );
 
-            if let Some(t_index) = &mut self.t_index {
+            if let Some(t_index) = &mut self.r_index {
                 t_index
                     .entry(r.clone())
                     .or_insert_with(Default::default)
@@ -101,8 +126,8 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     }
 
     pub fn upsert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(l) {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+        if let Some(tuple_id) = self.l_index.get(l) {
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
 
             // There's a tuple there, either invisible to us or not. But we'll set it on our
@@ -110,14 +135,22 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
             tuple.set(tx.tx_start_ts, tuple_id, &((l.clone(), r.clone())), wal);
         } else {
             // Didn't exist for any transaction, so create a new version, stick in our WAL.
-            let tuple_id = self.values.insert(Default::default());
+            let tuple_id = TupleId(
+                self.next_tuple_id
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            );
+            self.values.insert(tuple_id, Default::default());
 
-            self.k_index.insert(l.clone(), tuple_id);
+            self.l_index.insert(l.clone(), tuple_id);
 
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            wal.set(tuple_id, EntryValue::Value((l.clone(), r.clone())), tx.tx_start_ts);
+            wal.set(
+                tuple_id,
+                EntryValue::Value((l.clone(), r.clone())),
+                tx.tx_start_ts,
+            );
 
-            if let Some(t_index) = &mut self.t_index {
+            if let Some(t_index) = &mut self.r_index {
                 t_index
                     .entry(r.clone())
                     .or_insert_with(Default::default)
@@ -130,8 +163,8 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     }
 
     pub fn remove_for_l(&mut self, tx: &mut Tx, l: &L) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(l) {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+        if let Some(tuple_id) = self.l_index.get(l) {
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
@@ -152,8 +185,8 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     }
 
     pub fn update_l(&mut self, tx: &mut Tx, l: &L, new_l: &L) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(l) {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+        if let Some(tuple_id) = self.l_index.get(l) {
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
@@ -174,8 +207,8 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     }
 
     pub fn update_r(&mut self, tx: &mut Tx, l: &L, new_r: &R) -> Result<(), Error> {
-        if let Some(tuple_id) = self.k_index.get(l) {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+        if let Some(tuple_id) = self.l_index.get(l) {
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
@@ -194,8 +227,8 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     }
 
     pub fn seek_for_l_eq(&mut self, tx: &mut Tx, k: &L) -> Option<R> {
-        if let Some(tuple_id) = self.k_index.get(k) {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+        if let Some(tuple_id) = self.l_index.get(k) {
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             return tuple.get(tx.tx_start_ts, tuple_id, wal).map(|v| v.1);
         }
@@ -204,9 +237,9 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
 
     pub fn range_r(&mut self, tx: &mut Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
         let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-        let tuple_range = self.k_index.range(range);
+        let tuple_range = self.l_index.range(range);
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
-            let tuple = self.values.get(*tuple_id);
+            let tuple = self.values.get(tuple_id);
             if let Some(tuple) = tuple {
                 let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
                 if let Some(value) = value {
@@ -219,7 +252,7 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
     }
 
     pub fn seek_for_r_eq(&mut self, tx: &mut Tx, t: &R) -> Vec<L> {
-        let Some(t_index) = &self.t_index else {
+        let Some(t_index) = &self.r_index else {
             panic!("secondary index query without index");
         };
 
@@ -228,7 +261,7 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
             None => vec![],
             Some(tuples) => {
                 let visible_tuples = tuples.iter().filter_map(|tuple_id| {
-                    let tuple = self.values.get(*tuple_id);
+                    let tuple = self.values.get(tuple_id);
                     if let Some(tuple) = tuple {
                         let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
                         if let Some(value) = value {
@@ -248,7 +281,7 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
             return Ok(());
         };
         for (tuple_id, wal_entry) in wal.entries.iter() {
-            let tuple = self.values.get_mut(*tuple_id).unwrap();
+            let tuple = self.values.get_mut(tuple_id).unwrap();
             let result = tuple.commit(tx.tx_start_ts, wal_entry);
             match result {
                 CommitResult::Success => continue,
@@ -267,7 +300,6 @@ impl<L: OrderedKeyTraits, R: OrderedKeyTraits> Relation<L, R> {
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
 
@@ -341,15 +373,9 @@ mod tests {
         assert_eq!(a.commit(&mut s), Ok(()));
 
         let mut t1 = Tx::new(2, 2);
-        assert_eq!(
-            a.update_r(&mut t1, &"hello".to_string(), &2),
-            Ok(())
-        );
+        assert_eq!(a.update_r(&mut t1, &"hello".to_string(), &2), Ok(()));
         let mut t2 = Tx::new(3, 3);
-        assert_eq!(
-            a.update_r(&mut t2, &"hello".to_string(), &3),
-            Ok(())
-        );
+        assert_eq!(a.update_r(&mut t2, &"hello".to_string(), &3), Ok(()));
         assert_eq!(a.commit(&mut t2), Ok(()));
         assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
     }
@@ -395,10 +421,7 @@ mod tests {
 
         // now that t1 has been committed, this insert should succeed.
         let mut t3 = Tx::new(4, 4);
-        assert_eq!(
-            a.insert(&mut t3, &"hello".to_string(), &3),
-            Ok(())
-        );
+        assert_eq!(a.insert(&mut t3, &"hello".to_string(), &3), Ok(()));
         assert_eq!(a.commit(&mut t3), Ok(()));
     }
 
@@ -411,10 +434,7 @@ mod tests {
         assert_eq!(a.commit(&mut s), Ok(()));
 
         let mut t1 = Tx::new(2, 2);
-        assert_eq!(
-            a.update_r(&mut t1, &"hello".to_string(), &2),
-            Ok(())
-        );
+        assert_eq!(a.update_r(&mut t1, &"hello".to_string(), &2), Ok(()));
 
         let mut t2 = Tx::new(3, 3);
         assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Ok(()));
@@ -445,7 +465,10 @@ mod tests {
         assert_eq!(a.insert(&mut t1, &"hello".to_string(), &1), Ok(()));
 
         let mut t2 = Tx::new(2, 2);
-        assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Err(Error::NotFound));
+        assert_eq!(
+            a.remove_for_l(&mut t2, &"hello".to_string()),
+            Err(Error::NotFound)
+        );
 
         let mut t3 = Tx::new(3, 3);
         assert_eq!(a.insert(&mut t3, &"hello".to_string(), &3), Ok(()));
@@ -463,7 +486,10 @@ mod tests {
         assert_eq!(a.insert(&mut t1, &"hello".to_string(), &1), Ok(()));
 
         let mut t2 = Tx::new(2, 2);
-        assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Err(Error::NotFound));
+        assert_eq!(
+            a.remove_for_l(&mut t2, &"hello".to_string()),
+            Err(Error::NotFound)
+        );
 
         assert_eq!(a.commit(&mut t1), Ok(()));
         let mut t3 = Tx::new(3, 3);
@@ -471,5 +497,4 @@ mod tests {
         assert_eq!(a.commit(&mut t2), Ok(()));
         assert_eq!(a.commit(&mut t3), Ok(()));
     }
-
 }

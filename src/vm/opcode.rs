@@ -2,13 +2,10 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::compiler::codegen::{JumpLabel, Label};
 use crate::compiler::parse::Names;
-use crate::model::var::{Var, Offset};
+use crate::model::var::{Offset, Var};
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Archive, Ord, PartialOrd)]
-#[archive(
-    compare(PartialEq),
-    check_bytes,
-)]
+#[archive(compare(PartialEq), check_bytes)]
 pub enum ScatterLabel {
     Required(Label),
     Rest(Label),
@@ -16,10 +13,7 @@ pub enum ScatterLabel {
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Archive, Ord, PartialOrd)]
-#[archive(
-    compare(PartialEq),
-    check_bytes,
-)]
+#[archive(compare(PartialEq), check_bytes)]
 pub enum Op {
     If(Label),
     Eif(Label),
@@ -119,10 +113,7 @@ pub enum Op {
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(
-    compare(PartialEq),
-    check_bytes,
-)]
+#[archive(compare(PartialEq), check_bytes)]
 pub struct Binary {
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
@@ -147,10 +138,12 @@ impl Binary {
     }
 
     pub fn find_literal(&self, l: Var) -> Label {
-        Label(self.literals
-            .iter()
-            .position(|x| *x == l)
-            .expect("literal not found") as u32)
+        Label(
+            self.literals
+                .iter()
+                .position(|x| *x == l)
+                .expect("literal not found") as u32,
+        )
     }
 }
 

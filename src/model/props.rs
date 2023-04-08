@@ -1,19 +1,35 @@
-use enumset::EnumSet;
-use enumset_derive::EnumSetType;
+use enum_primitive_derive::Primitive;
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::model::var::{Objid, Var};
+use crate::util::bitenum::BitEnum;
 
-#[derive(EnumSetType, Debug)]
-#[enumset(serialize_repr = "u8")]
+#[derive(
+    Serialize,
+    Deserialize,
+    Archive,
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Primitive,
+)]
 pub enum PropFlag {
-    Read,
-    Write,
-    Chown,
+    Read = 0,
+    Write = 1,
+    Chown = 2,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+
+#[derive(
+    Serialize, Deserialize, Archive, Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash,
+)]
 pub struct Pid(pub i64);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Serialize, Deserialize, Archive, Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Propdef {
     pub pid: Pid,
     pub definer: Objid,
@@ -34,7 +50,7 @@ pub trait PropDefs {
         definer: Objid,
         name: &str,
         owner: Objid,
-        flags: EnumSet<PropFlag>,
+        flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, anyhow::Error>;
 
@@ -52,26 +68,30 @@ pub trait PropDefs {
     fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, anyhow::Error>;
 }
 
-#[derive(EnumSetType, Debug)]
-#[enumset(serialize_repr = "u8")]
+#[derive(Serialize, Deserialize, Archive, Debug, Clone, Copy, Primitive)]
 pub enum PropAttr {
-    Value,
-    Location,
-    Owner,
-    Flags,
+    Value = 0,
+    Location = 1,
+    Owner = 2,
+    Flags = 3,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Serialize, Deserialize, Archive, Debug)]
 pub struct PropAttrs {
     pub value: Option<Var>,
     pub location: Option<Objid>,
     pub owner: Option<Objid>,
-    pub flags: Option<EnumSet<PropFlag>>,
+    pub flags: Option<BitEnum<PropFlag>>,
 }
 
 impl PropAttrs {
     pub fn new() -> Self {
-        Self { value: None, location: None, owner: None, flags: None }
+        Self {
+            value: None,
+            location: None,
+            owner: None,
+            flags: None,
+        }
     }
 }
 
@@ -81,20 +101,19 @@ impl Default for PropAttrs {
     }
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Archive, Clone)]
 pub struct PropertyInfo {
     pub pid: Pid,
     pub attrs: PropAttrs,
 }
 
 pub trait Properties {
-
     // Find a property by name, starting from the given object and going up the inheritance tree.
     fn find_property(
         &mut self,
         oid: Objid,
         name: &str,
-        attrs: EnumSet<PropAttr>,
+        attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropertyInfo>, anyhow::Error>;
 
     // Get a property by its unique pid from its property definition, seeking the inheritance
@@ -103,7 +122,7 @@ pub trait Properties {
         &mut self,
         oid: Objid,
         handle: Pid,
-        attrs: EnumSet<PropAttr>,
+        attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropAttrs>, anyhow::Error>;
 
     // Set a property using its unique pid from its property definition.
@@ -113,6 +132,6 @@ pub trait Properties {
         location: Objid,
         value: Var,
         owner: Objid,
-        flags: EnumSet<PropFlag>,
+        flags: BitEnum<PropFlag>,
     ) -> Result<(), anyhow::Error>;
 }

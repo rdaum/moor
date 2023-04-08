@@ -1,19 +1,18 @@
 use crate::db::matching::MatchEnvironment;
-use anyhow::{Error};
+use anyhow::Error;
 
-
-use enumset::EnumSet;
+use crate::db::CommitResult;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
-use crate::db::CommitResult;
 
-use crate::model::objects::{ObjFlag};
-use crate::model::props::{PropFlag};
+use crate::model::objects::ObjFlag;
+use crate::model::props::PropFlag;
 use crate::model::var::{Objid, Var};
-use crate::model::verbs::{VerbInfo};
+use crate::model::verbs::VerbInfo;
+use crate::util::bitenum::BitEnum;
 
-use crate::vm::opcode::{Binary};
+use crate::vm::opcode::Binary;
 
 #[derive(Error, Debug)]
 pub enum StateError {
@@ -43,14 +42,18 @@ pub trait WorldState {
     fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, anyhow::Error>;
 
     // Retrieve a verb/method from the given object.
-    fn retrieve_verb(&mut self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), anyhow::Error>;
+    fn retrieve_verb(
+        &mut self,
+        obj: Objid,
+        vname: &str,
+    ) -> Result<(Binary, VerbInfo), anyhow::Error>;
 
     // Retrieve a property from the given object, walking transitively up its inheritance chain.
     fn retrieve_property(
         &mut self,
         obj: Objid,
         pname: &str,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, anyhow::Error>;
 
     // Update a property on the given object.
@@ -58,7 +61,7 @@ pub trait WorldState {
         &mut self,
         obj: Objid,
         pname: &str,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
         value: &Var,
     ) -> Result<(), anyhow::Error>;
 
@@ -68,7 +71,7 @@ pub trait WorldState {
         obj: Objid,
         pname: &str,
         owner: Objid,
-        prop_flags: EnumSet<PropFlag>,
+        prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), anyhow::Error>;
 
@@ -93,7 +96,6 @@ pub trait WorldState {
 pub trait WorldStateSource {
     fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error>;
 }
-
 
 impl MatchEnvironment for dyn WorldState {
     fn is_valid(&mut self, oid: Objid) -> Result<bool, Error> {

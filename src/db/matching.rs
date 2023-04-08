@@ -1,6 +1,6 @@
-use crate::db::state::{StateError};
+use crate::db::state::StateError;
 use crate::model::var::{Objid, AMBIGUOUS, FAILED_MATCH, NOTHING};
-use anyhow::{anyhow};
+use anyhow::anyhow;
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
@@ -128,9 +128,7 @@ pub fn world_environment_match_object(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::matching::{
-        do_match_object_names, world_environment_match_object, MatchData,
-    };
+    use crate::db::matching::{do_match_object_names, world_environment_match_object, MatchData};
     use crate::db::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };

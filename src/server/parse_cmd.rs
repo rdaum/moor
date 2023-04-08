@@ -80,7 +80,8 @@ pub fn match_preposition(prep: &str) -> Option<Prep> {
     unsafe {
         PREPOSITIONS
             .iter()
-            .find(|p| p.phrases.iter().any(|t| t == &prep)).cloned()
+            .find(|p| p.phrases.iter().any(|t| t == &prep))
+            .cloned()
     }
 }
 

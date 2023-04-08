@@ -1,14 +1,14 @@
 /// MVCC transaction mgmt
-
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use hybrid_lock::HybridLock;
+use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::db::CommitResult;
-use crate::db::CommitResult::ConflictRetry;
 use crate::db::relations::OrderedKeyTraits;
 use crate::db::tx::CommitResult::Success;
+use crate::db::CommitResult;
+use crate::db::CommitResult::ConflictRetry;
 
 // Each base relation carries a WAL for each transaction that is currently active.
 // The WAL has a copy of each tuple that was modified by the transaction.
@@ -23,33 +23,38 @@ use crate::db::tx::CommitResult::Success;
 // TODO optimize
 // TODO clean up what's in here vs relations.rs
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub enum EntryValue<V: OrderedKeyTraits> {
     Value(V),
     Tombstone,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct WALEntry<V: OrderedKeyTraits> {
     value: EntryValue<V>,
     wts: u64,
     rts: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct WAL<K, V: OrderedKeyTraits> {
-    pub entries: BTreeMap<K, WALEntry<V>>
+    pub entries: BTreeMap<K, WALEntry<V>>,
 }
 
-impl <K: OrderedKeyTraits, V: OrderedKeyTraits> WAL<K,V> {
+impl<K: OrderedKeyTraits, V: OrderedKeyTraits> WAL<K, V> {
     pub fn set(&mut self, key: K, value: EntryValue<V>, ts_i: u64) {
-        self.entries.insert(key, WALEntry {
-            value,
-            wts: ts_i,
-            rts: ts_i,
-        });
+        self.entries.insert(
+            key,
+            WALEntry {
+                value,
+                wts: ts_i,
+                rts: ts_i,
+            },
+        );
     }
 }
 
-impl <K: OrderedKeyTraits, V: OrderedKeyTraits> Default for WAL<K, V> {
+impl<K: OrderedKeyTraits, V: OrderedKeyTraits> Default for WAL<K, V> {
     fn default() -> Self {
         WAL {
             entries: Default::default(),
@@ -57,19 +62,21 @@ impl <K: OrderedKeyTraits, V: OrderedKeyTraits> Default for WAL<K, V> {
     }
 }
 
-struct MvccEntry<V: OrderedKeyTraits> {
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub struct MvccEntry<V: OrderedKeyTraits> {
     value: EntryValue<V>,
     read_timestamp: u64,
     write_timestmap: u64,
 }
 
+#[derive(Serialize, Deserialize, Archive)]
 pub struct MvccTuple<K: OrderedKeyTraits, V: OrderedKeyTraits> {
-    versions: HybridLock<Vec<MvccEntry<V>>>,
+    pub versions: HybridLock<Vec<MvccEntry<V>>>,
     pd: PhantomData<K>,
 }
 
-impl <K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V> {
-    pub fn new(ts_i : u64, initial_value: EntryValue<V>) -> Self {
+impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K, V> {
+    pub fn new(ts_i: u64, initial_value: EntryValue<V>) -> Self {
         MvccTuple {
             versions: HybridLock::new(vec![MvccEntry {
                 value: initial_value,
@@ -81,7 +88,7 @@ impl <K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V> {
     }
 }
 
-impl <K: OrderedKeyTraits, V: OrderedKeyTraits> Default for MvccTuple<K,V> {
+impl<K: OrderedKeyTraits, V: OrderedKeyTraits> Default for MvccTuple<K, V> {
     fn default() -> Self {
         MvccTuple {
             versions: HybridLock::new(Vec::new()),
@@ -90,12 +97,13 @@ impl <K: OrderedKeyTraits, V: OrderedKeyTraits> Default for MvccTuple<K,V> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct WalValue<K: OrderedKeyTraits, V: OrderedKeyTraits> {
     tuple: (K, V),
     wts: u64,
 }
 
-impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V>{
+impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K, V> {
     // TODO: vacuum/GC of old versions
 
     pub fn commit(&mut self, ts_t: u64, value: &WALEntry<V>) -> CommitResult {
@@ -128,21 +136,27 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V>{
 
     pub fn set(&mut self, ts_t: u64, key: &K, value: &V, tx_wal: &mut WAL<K, V>) {
         // Set a value in the WAL for this transaction.
-        tx_wal.entries.insert(key.clone(), WALEntry {
-            value: EntryValue::Value(value.clone()),
-            wts: ts_t,
-            rts: ts_t,
-        });
+        tx_wal.entries.insert(
+            key.clone(),
+            WALEntry {
+                value: EntryValue::Value(value.clone()),
+                wts: ts_t,
+                rts: ts_t,
+            },
+        );
     }
 
     pub fn delete(&mut self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) {
         // Set a value in the WAL for this transaction.
         // TODO: is this correct?
-        tx_wal.entries.insert(key.clone(), WALEntry {
-            value: EntryValue::Tombstone,
-            wts: ts_t,
-            rts: ts_t,
-        });
+        tx_wal.entries.insert(
+            key.clone(),
+            WALEntry {
+                value: EntryValue::Tombstone,
+                wts: ts_t,
+                rts: ts_t,
+            },
+        );
     }
 
     pub fn get(&self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) -> Option<V> {
@@ -150,8 +164,8 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V>{
         if let Some(wal_local_val) = tx_wal.entries.get(key) {
             return match &wal_local_val.value {
                 EntryValue::Value(v) => Some(v.clone()),
-                EntryValue::Tombstone => None
-            }
+                EntryValue::Tombstone => None,
+            };
         };
 
         // Reads see the latest version of an object that was committed before our tx started
@@ -161,31 +175,29 @@ impl<K: OrderedKeyTraits, V: OrderedKeyTraits> MvccTuple<K,V>{
         // "Let Xk denote the version of X where for a given txn Ti: W-TS(Xk) ≤ TS(Ti)"
         let versions = self.versions.write();
 
-        let x_k = versions
-            .iter()
-            .rev()
-            .filter(|v| v.write_timestmap <= ts_t);
+        let x_k = versions.iter().rev().filter(|v| v.write_timestmap <= ts_t);
 
         for x in x_k {
             let rts_x = x.read_timestamp;
             if ts_t >= rts_x {
                 // We make a copy of the value and shove it into our WAL.
-                tx_wal.entries.insert(key.clone(), WALEntry {
-                    value: x.value.clone(),
-                    wts: x.write_timestmap,
-                    rts: ts_t,
-                });
+                tx_wal.entries.insert(
+                    key.clone(),
+                    WALEntry {
+                        value: x.value.clone(),
+                        wts: x.write_timestmap,
+                        rts: ts_t,
+                    },
+                );
                 return match &x.value {
                     EntryValue::Value(v) => Some(v.clone()),
-                    EntryValue::Tombstone => None
-                }
+                    EntryValue::Tombstone => None,
+                };
             }
         }
 
         None
     }
-
-
 }
 
 pub struct Tx {
@@ -195,9 +207,6 @@ pub struct Tx {
 
 impl Tx {
     pub fn new(tx_id: u64, tx_start_ts: u64) -> Tx {
-        Self {
-            tx_id,
-            tx_start_ts,
-        }
+        Self { tx_id, tx_start_ts }
     }
 }

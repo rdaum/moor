@@ -4,9 +4,9 @@ use crate::model::var::Error::E_VARNF;
 use crate::model::var::{Objid, Var};
 use crate::server::parse_cmd::ParsedCommand;
 
-use crate::vm::opcode::{Binary, Op};
-use enumset::EnumSet;
 use crate::compiler::codegen::Label;
+use crate::util::bitenum::BitEnum;
+use crate::vm::opcode::{Binary, Op};
 
 pub(crate) struct Activation {
     pub(crate) binary: Binary,
@@ -17,7 +17,7 @@ pub(crate) struct Activation {
     pub(crate) temp: Var,
     pub(crate) this: Objid,
     pub(crate) player: Objid,
-    pub(crate) player_flags: EnumSet<ObjFlag>,
+    pub(crate) player_flags: BitEnum<ObjFlag>,
     pub(crate) verb_owner: Objid,
     pub(crate) definer: Objid,
     pub(crate) verb: String,
@@ -29,7 +29,7 @@ impl Activation {
         caller: Objid,
         this: Objid,
         player: Objid,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
         verb_owner: Objid,
         definer: Objid,
         verb: String,
@@ -80,7 +80,7 @@ impl Activation {
         caller: Objid,
         this: Objid,
         player: Objid,
-        player_flags: EnumSet<ObjFlag>,
+        player_flags: BitEnum<ObjFlag>,
         verb_owner: Objid,
         definer: Objid,
         parsed_cmd: &ParsedCommand,

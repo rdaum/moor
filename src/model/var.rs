@@ -1,4 +1,3 @@
-
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
@@ -9,17 +8,7 @@ use int_enum::IntEnum;
 use num_traits::identities::Zero;
 use num_traits::ToPrimitive;
 use rkyv::{
-    ser::{
-        Serializer,
-    },
-    with::{
-        ArchiveWith,
-    },
-    Archive,
-    Archived,
-    Deserialize,
-    Resolver,
-    Serialize,
+    ser::Serializer, with::ArchiveWith, Archive, Archived, Deserialize, Resolver, Serialize,
 };
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Archive,
@@ -154,7 +143,6 @@ impl ArchiveWith<R64> for EncodeR64 {
     }
 }
 
-
 pub struct ArchivedUsize(Archived<usize>);
 
 impl PartialEq<usize> for ArchivedUsize {
@@ -216,7 +204,11 @@ pub enum Var {
     Int(i64),
     Float(#[with(EncodeR64)] R64),
     Err(Error),
-    List(#[omit_bounds] #[archive_attr(omit_bounds)] Vec<Var>),
+    List(
+        #[omit_bounds]
+        #[archive_attr(omit_bounds)]
+        Vec<Var>,
+    ),
     // Special for exception handling
     _Catch(Label),
     _Finally(Label),

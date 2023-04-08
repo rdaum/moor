@@ -1,6 +1,6 @@
+use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 use std::str::FromStr;
-use rkyv::{Archive, Deserialize, Serialize};
 
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
@@ -55,11 +55,11 @@ struct LoopEntry {
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq),check_bytes)]
+#[archive(compare(PartialEq), check_bytes)]
 pub struct Name(pub Label);
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq),check_bytes)]
+#[archive(compare(PartialEq), check_bytes)]
 pub struct Names {
     pub names: Vec<String>,
 }

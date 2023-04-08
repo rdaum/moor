@@ -1,41 +1,56 @@
-use enumset::EnumSet;
-use enumset_derive::EnumSetType;
+use enum_primitive_derive::Primitive;
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::Objid;
+use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
-#[derive(EnumSetType, Debug)]
-#[enumset(serialize_repr = "u16")]
-pub enum VerbFlag {
-    Read,
-    Write,
-    Exec,
+#[derive(
     Debug,
+    Serialize,
+    Deserialize,
+    Archive,
+    Ord,
+    PartialOrd,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Primitive,
+)]
+pub enum VerbFlag {
+    Read = 0,
+    Write = 1,
+    Exec = 2,
+    Debug = 3,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(
+    Serialize, Deserialize, Archive, Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash,
+)]
 pub struct Vid(pub i64);
 
-#[derive(EnumSetType, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, Archive, Debug, Primitive)]
 pub enum VerbAttr {
-    Definer,
-    Owner,
-    Flags,
-    ArgsSpec,
-    Program,
+    Definer = 0,
+    Owner = 1,
+    Flags = 2,
+    ArgsSpec = 3,
+    Program = 4,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Archive, Clone)]
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
     pub owner: Option<Objid>,
-    pub flags: Option<EnumSet<VerbFlag>>,
+    pub flags: Option<BitEnum<VerbFlag>>,
     pub args_spec: Option<VerbArgsSpec>,
     pub program: Option<Binary>,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Archive, Clone)]
 pub struct VerbInfo {
     pub vid: Vid,
     pub names: Vec<String>,
@@ -49,7 +64,7 @@ pub trait Verbs {
         oid: Objid,
         names: Vec<&str>,
         owner: Objid,
-        flags: EnumSet<VerbFlag>,
+        flags: BitEnum<VerbFlag>,
         arg_spec: VerbArgsSpec,
         program: Binary,
     ) -> Result<VerbInfo, anyhow::Error>;
@@ -58,10 +73,10 @@ pub trait Verbs {
     fn get_verbs(
         &mut self,
         oid: Objid,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<Vec<VerbInfo>, anyhow::Error>;
 
-    fn get_verb(&mut self, vid: Vid, attrs: EnumSet<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
+    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
 
     fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), anyhow::Error>;
 
@@ -71,7 +86,7 @@ pub trait Verbs {
         oid: Objid,
         verb: &str,
         arg_spec: VerbArgsSpec,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, anyhow::Error>;
 
     /// Find the verbs that match based on the provided name-stem.
@@ -79,7 +94,7 @@ pub trait Verbs {
         &mut self,
         oid: Objid,
         verb: &str,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, anyhow::Error>;
 
     /// Find the verb that is the Nth verb in insertion order for the object.
@@ -87,6 +102,6 @@ pub trait Verbs {
         &mut self,
         oid: Objid,
         index: usize,
-        attrs: EnumSet<VerbAttr>,
+        attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, anyhow::Error>;
 }

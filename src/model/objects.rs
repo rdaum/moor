@@ -1,30 +1,42 @@
-use enumset::EnumSet;
-use enumset_derive::EnumSetType;
+use enum_primitive_derive::Primitive;
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::model::var::Objid;
+use crate::util::bitenum::BitEnum;
 
-#[derive(EnumSetType, Debug)]
-#[enumset(serialize_repr = "u8")]
+#[derive(
+    Debug,
+    Serialize,
+    Deserialize,
+    Archive,
+    Ord,
+    PartialOrd,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Primitive,
+)]
 pub enum ObjFlag {
-    User,
-    Programmer,
-    Wizard,
-    Obsolete1,
-    Read,
-    Write,
-    Obsolete2,
-    Fertile,
+    User = 0,
+    Programmer = 1,
+    Wizard = 2,
+    Obsolete1 = 3,
+    Read = 4,
+    Write = 5,
+    Obsolete2 = 6,
+    Fertile = 8,
 }
 
 // The set of built-in object attributes
-#[derive(EnumSetType, Debug, Hash)]
-#[enumset(serialize_repr = "u8")]
+#[derive(Debug, Hash, Serialize, Deserialize, Archive, Primitive)]
 pub enum ObjAttr {
-    Owner,
-    Name,
-    Parent,
-    Location,
-    Flags,
+    Owner = 0,
+    Name = 1,
+    Parent = 2,
+    Location = 3,
+    Flags = 4,
 }
 
 impl Default for ObjAttrs {
@@ -59,19 +71,19 @@ impl ObjAttrs {
         self.name = Some(String::from(s));
         self
     }
-    pub fn flags(&mut self, flags: EnumSet<ObjFlag>) -> &mut ObjAttrs {
+    pub fn flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut ObjAttrs {
         self.flags = Some(flags);
         self
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Archive, Debug, Clone)]
 pub struct ObjAttrs {
     pub owner: Option<Objid>,
     pub name: Option<String>,
     pub parent: Option<Objid>,
     pub location: Option<Objid>,
-    pub flags: Option<EnumSet<ObjFlag>>,
+    pub flags: Option<BitEnum<ObjFlag>>,
 }
 
 pub trait Objects {
@@ -86,7 +98,7 @@ pub trait Objects {
     fn object_get_attrs(
         &mut self,
         oid: Objid,
-        attributes: EnumSet<ObjAttr>,
+        attributes: BitEnum<ObjAttr>,
     ) -> Result<ObjAttrs, anyhow::Error>;
     fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), anyhow::Error>;
 

@@ -33,7 +33,9 @@ pub struct JumpLabel {
     pub(crate) position: Offset,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord, Hash,
+)]
 #[archive(compare(PartialEq), check_bytes)]
 pub struct Label(pub u32);
 
@@ -1535,7 +1537,10 @@ mod tests {
     fn test_string_get() {
         let program = "return \"test\"[1];";
         let binary = compile(program).unwrap();
-        assert_eq!(binary.main_vector, vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done]);
+        assert_eq!(
+            binary.main_vector,
+            vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done]
+        );
     }
 
     #[test]
@@ -1544,7 +1549,14 @@ mod tests {
         let binary = compile(program).unwrap();
         assert_eq!(
             binary.main_vector,
-            vec![Imm(0.into()), Imm(1.into()), Imm(2.into()), RangeRef, Return, Done]
+            vec![
+                Imm(0.into()),
+                Imm(1.into()),
+                Imm(2.into()),
+                RangeRef,
+                Return,
+                Done
+            ]
         );
     }
 
