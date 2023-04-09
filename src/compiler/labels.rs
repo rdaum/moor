@@ -15,7 +15,7 @@ pub struct JumpLabel {
 }
 
 #[derive(
-Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord, Hash,
+    Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord, Hash,
 )]
 #[archive(compare(PartialEq), check_bytes)]
 pub struct Label(pub u32);
@@ -31,7 +31,6 @@ impl From<i32> for Label {
         Label(value as u32)
     }
 }
-
 
 #[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
 #[archive(compare(PartialEq), check_bytes)]

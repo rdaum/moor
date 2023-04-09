@@ -2,12 +2,10 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
-use decorum::{R64, Real};
+use decorum::{Real, R64};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
-use rkyv::{
-    Archive, Archived, Deserialize, ser::Serializer, Serialize,
-};
+use rkyv::{ser::Serializer, Archive, Archived, Deserialize, Serialize};
 
 use crate::compiler::labels::Label;
 use crate::model::var::Error::{E_RANGE, E_TYPE};

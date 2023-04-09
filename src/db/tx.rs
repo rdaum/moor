@@ -5,10 +5,10 @@ use std::marker::PhantomData;
 use hybrid_lock::HybridLock;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::db::CommitResult;
-use crate::db::CommitResult::ConflictRetry;
 use crate::db::relations::TupleValueTraits;
 use crate::db::tx::CommitResult::Success;
+use crate::db::CommitResult;
+use crate::db::CommitResult::ConflictRetry;
 
 // Each base relation carries a WAL for each transaction that is currently active.
 // The WAL has a copy of each tuple that was modified by the transaction.
@@ -104,7 +104,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
         let mut versions = self.versions.write();
 
         // find the most recent committed version (write timestamp is greatest)
-        let mut most_recent = versions.iter_mut().max_by_key(|x| x.write_timestmap);
+        let most_recent = versions.iter_mut().max_by_key(|x| x.write_timestmap);
 
         // verify that the version we're trying to commit is based on a newer or same timestamp
         if let Some(x) = most_recent {
@@ -148,7 +148,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
         );
     }
 
-    pub fn delete(&mut self, ts_t: u64, rts : u64, key: &K, tx_wal: &mut WAL<K, V>) {
+    pub fn delete(&mut self, ts_t: u64, rts: u64, key: &K, tx_wal: &mut WAL<K, V>) {
         // Set a value in the WAL for this transaction.
         // The read-timestamp should be the version of the tuple that we're basing it off.
         tx_wal.entries.insert(
@@ -164,10 +164,13 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     pub fn get(&self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) -> (u64, Option<V>) {
         // If the transaction WAL has a value for this key, return that.
         if let Some(wal_local_val) = tx_wal.entries.get(key) {
-            return (wal_local_val.read_timestamp, match &wal_local_val.value {
-                EntryValue::Value(v) => Some(v.clone()),
-                EntryValue::Tombstone => None,
-            });
+            return (
+                wal_local_val.read_timestamp,
+                match &wal_local_val.value {
+                    EntryValue::Value(v) => Some(v.clone()),
+                    EntryValue::Tombstone => None,
+                },
+            );
         };
 
         // Reads see the latest version of an object that was committed before our tx started
@@ -186,14 +189,14 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
             // then we can return that version.
             if ts_t >= rts_x {
                 // We make a copy of the value and shove it into our WAL.
-                tx_wal.entries.insert(
-                    key.clone(),
-                    x.clone()
+                tx_wal.entries.insert(key.clone(), x.clone());
+                return (
+                    rts_x,
+                    match &x.value {
+                        EntryValue::Value(v) => Some(v.clone()),
+                        EntryValue::Tombstone => None,
+                    },
                 );
-                return (rts_x, match &x.value {
-                    EntryValue::Value(v) => Some(v.clone()),
-                    EntryValue::Tombstone => None,
-                });
             }
         }
 

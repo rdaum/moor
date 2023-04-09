@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use anyhow::Error;
 use thiserror::Error;
 
-use crate::db::CommitResult;
 use crate::db::matching::MatchEnvironment;
+use crate::db::CommitResult;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::var::{Objid, Var};

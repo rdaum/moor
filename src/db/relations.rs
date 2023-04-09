@@ -1,16 +1,14 @@
-use std::collections::{Bound, BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, Bound, HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
+use rkyv::ser::serializers::{AlignedSerializer, AllocSerializer, CompositeSerializer};
 use rkyv::ser::Serializer;
-use rkyv::ser::serializers::{
-    AlignedSerializer, AllocSerializer, CompositeSerializer,
-};
+use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::db::CommitResult;
 use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
+use crate::db::CommitResult;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -108,11 +106,11 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
     fn has_with_l(&mut self, tx: &mut Tx, k: &L, wal: &mut WAL<TupleId, (L, R)>) -> bool {
         if let Some(tuple_id) = self.l_index.get(k) {
-            let (rts, value) = self
-                .values
-                .get_mut(tuple_id)
-                .unwrap()
-                .get(tx.tx_start_ts, tuple_id, wal);
+            let (_rts, value) =
+                self.values
+                    .get_mut(tuple_id)
+                    .unwrap()
+                    .get(tx.tx_start_ts, tuple_id, wal);
             return value.is_some();
         }
         false
@@ -139,8 +137,10 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             );
             // Start with a tombstone, just to reserve the slot
-            self.values.insert(tuple_id,
-                               MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone));
+            self.values.insert(
+                tuple_id,
+                MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone),
+            );
             self.l_index.insert(l.clone(), tuple_id);
 
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
@@ -169,7 +169,13 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
             // There's a tuple there, either invisible to us or not. But we'll set it on our
             // WAL regardless.
-            tuple.set(tx.tx_start_ts, rts, tuple_id, &((l.clone(), r.clone())), wal);
+            tuple.set(
+                tx.tx_start_ts,
+                rts,
+                tuple_id,
+                &((l.clone(), r.clone())),
+                wal,
+            );
         } else {
             // Didn't exist for any transaction, so create a new version, stick in our WAL.
             let tuple_id = TupleId(
@@ -177,9 +183,10 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             );
             // Start with a tombstone, just to reserve the slot
-            self.values.insert(tuple_id,
-                               MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone));
-
+            self.values.insert(
+                tuple_id,
+                MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone),
+            );
 
             self.l_index.insert(l.clone(), tuple_id);
 
@@ -214,7 +221,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             }
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.delete(tx.tx_start_ts, rts,tuple_id, wal);
+            tuple.delete(tx.tx_start_ts, rts, tuple_id, wal);
 
             return Ok(());
         }
@@ -258,7 +265,13 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             };
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.set(tx.tx_start_ts, rts, tuple_id, &(value.0, new_r.clone()), wal);
+            tuple.set(
+                tx.tx_start_ts,
+                rts,
+                tuple_id,
+                &(value.0, new_r.clone()),
+                wal,
+            );
 
             return Ok(());
         }
@@ -281,7 +294,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
             let tuple = self.values.get(tuple_id);
             if let Some(tuple) = tuple {
-                let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+                let (_rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
                 if let Some(value) = value {
                     return Some((k.clone(), value.1));
                 }
@@ -303,7 +316,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 let visible_tuples = tuples.iter().filter_map(|tuple_id| {
                     let tuple = self.values.get(tuple_id);
                     if let Some(tuple) = tuple {
-                        let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+                        let (_rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
                         if let Some(value) = value {
                             return Some(value.0);
                         }
@@ -391,8 +404,8 @@ pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::relations::Error::Conflict;
     use super::*;
+    use crate::db::relations::Error::Conflict;
 
     #[test]
     fn insert_new_tuple() {

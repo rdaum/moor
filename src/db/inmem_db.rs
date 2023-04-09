@@ -7,10 +7,10 @@ use crate::db::relations;
 use crate::db::relations::Relation;
 use crate::db::state::WorldState;
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
-use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, Properties, PropertyInfo, PropFlag};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, Properties, PropertyInfo};
 use crate::model::r#match::VerbArgsSpec;
-use crate::model::var::{NOTHING, Objid, Var};
+use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
@@ -630,8 +630,8 @@ impl ImDB {
 mod tests {
     use crate::db::inmem_db::ImDB;
     use crate::db::tx::Tx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
-    use crate::model::props::{PropAttr, Propdef, PropDefs, Properties, PropFlag};
+    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+    use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttr, VerbFlag, Verbs};

@@ -232,7 +232,7 @@ where
 mod tests {
     use crate::db::matching::world_environment_match_object;
     use crate::db::mock_matching_env::{
-        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
+        setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
     use crate::model::var::NOTHING;
 
