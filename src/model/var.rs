@@ -592,9 +592,9 @@ mod tests {
     #[test]
     fn test_sub() -> Result<(), Error> {
         assert_eq!(Var::Int(1).sub(&Var::Int(2))?, Var::Int(-1));
-        assert_eq!(Var::Int(1).sub(&Var::Float(2.))?, Var::Float(1.));
-        assert_eq!(Var::Float(1.).sub(&Var::Int(2))?, Var::Float(1.));
-        assert_eq!(Var::Float(1.).sub(&Var::Float(2.))?, Var::Float(1.));
+        assert_eq!(Var::Int(1).sub(&Var::Float(2.))?, Var::Float(-1.));
+        assert_eq!(Var::Float(1.).sub(&Var::Int(2))?, Var::Float(-1.));
+        assert_eq!(Var::Float(1.).sub(&Var::Float(2.))?, Var::Float(-1.));
         Ok(())
     }
 
@@ -610,9 +610,9 @@ mod tests {
     #[test]
     fn test_div() -> Result<(), Error> {
         assert_eq!(Var::Int(1).div(&Var::Int(2))?, Var::Int(0));
-        assert_eq!(Var::Int(1).div(&Var::Float(2.))?, Var::Float(0.));
-        assert_eq!(Var::Float(1.).div(&Var::Int(2))?, Var::Float(0.));
-        assert_eq!(Var::Float(1.).div(&Var::Float(2.))?, Var::Float(0.));
+        assert_eq!(Var::Int(1).div(&Var::Float(2.))?, Var::Float(0.5));
+        assert_eq!(Var::Float(1.).div(&Var::Int(2))?, Var::Float(0.5));
+        assert_eq!(Var::Float(1.).div(&Var::Float(2.))?, Var::Float(0.5));
         Ok(())
     }
 
@@ -640,7 +640,7 @@ mod tests {
     #[test]
     fn test_negative() {
         assert_eq!(Var::Int(1).negative(), Ok(Var::Int(-1)));
-        assert_eq!(Var::Float(1.).negative(), Ok(Var::Float(1.)));
+        assert_eq!(Var::Float(1.).negative(), Ok(Var::Float(-1.0)));
     }
 
     #[test]
