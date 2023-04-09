@@ -289,14 +289,22 @@ impl ImDB {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        Ok(self.obj_attr_parent.seek_for_r_eq(tx, &oid).into_iter().collect())
+        Ok(self
+            .obj_attr_parent
+            .seek_for_r_eq(tx, &oid)
+            .into_iter()
+            .collect())
     }
 
     pub fn object_contents(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, Error> {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        Ok(self.obj_attr_location.seek_for_r_eq(tx, &oid).into_iter().collect())
+        Ok(self
+            .obj_attr_location
+            .seek_for_r_eq(tx, &oid)
+            .into_iter()
+            .collect())
     }
 
     pub fn get_propdef(

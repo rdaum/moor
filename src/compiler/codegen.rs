@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
@@ -1667,7 +1666,7 @@ mod tests {
         let program = "return {@args[1..2]};";
         let binary = compile(program).unwrap();
 
-        /**
+        /*
           0: 076                   PUSH args
           1: 124                   NUM 1
           2: 125                   NUM 2

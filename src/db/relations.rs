@@ -238,7 +238,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+            let (_rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // If it's deleted by us or invisible to us, we can't update it, can we.
             let Some(value) = value else {
@@ -247,7 +247,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
             drop(tuple_id);
 
-            self.remove_for_l(tx, &value.0.clone())?;
+            self.remove_for_l(tx, &value.0)?;
             self.insert(tx, l, new_r)?;
 
             return Ok(());
@@ -381,9 +381,11 @@ pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::db::relations::Error::Conflict;
     use std::collections::Bound::{Included, Unbounded};
+
+    use crate::db::relations::Error::Conflict;
+
+    use super::*;
 
     #[test]
     fn insert_new_tuple() {

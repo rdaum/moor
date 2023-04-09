@@ -1,3 +1,5 @@
+#![allow(non_camel_case_types, non_snake_case)]
+
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
@@ -139,7 +141,6 @@ impl PartialEq<ArchivedUsize> for usize {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Serialize, Deserialize, Archive)]
-#[allow(non_camel_case_types)]
 #[archive(compare(PartialEq), check_bytes)]
 pub enum VarType {
     TYPE_INT = 0,
