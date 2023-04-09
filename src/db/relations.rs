@@ -1,16 +1,16 @@
-use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
-use crate::db::CommitResult;
+use std::collections::{Bound, BTreeMap, HashMap, HashSet};
+use std::marker::PhantomData;
+use std::sync::atomic::{AtomicU64, Ordering};
 
+use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
+use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
     AlignedSerializer, AllocSerializer, CompositeSerializer,
 };
-use rkyv::ser::Serializer;
-
-use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
-use std::collections::{BTreeMap, Bound, HashMap, HashSet};
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
+
+use crate::db::CommitResult;
+use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -382,7 +382,6 @@ pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     #[test]

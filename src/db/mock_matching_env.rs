@@ -1,9 +1,9 @@
-use crate::db::matching::MatchEnvironment;
-
-use crate::model::var::{Objid, NOTHING};
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
-use std::collections::{HashMap, HashSet};
+
+use crate::db::matching::MatchEnvironment;
+use crate::model::var::{NOTHING, Objid};
 
 pub const MOCK_PLAYER: Objid = Objid(3);
 pub const MOCK_ROOM1: Objid = Objid(1);

@@ -1,15 +1,16 @@
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicU64;
+
+use anyhow::{anyhow, Error};
+
+use crate::db::{CommitResult, relations};
 use crate::db::inmem_db::ImDB;
 use crate::db::state::{StateError, WorldState, WorldStateSource};
 use crate::db::tx::Tx;
-use crate::db::{relations, CommitResult};
-use anyhow::{anyhow, Error};
-use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex};
-
-use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
 use crate::model::permissions::Permissions;
 use crate::model::props::{
-    Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
+    Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
 };
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::{Objid, Var};

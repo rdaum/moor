@@ -1,13 +1,13 @@
-use crate::compiler::codegen::Label;
-use crate::db::state::{StateError, WorldState};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::compiler::labels::{Label, Offset};
+use crate::db::state::{StateError, WorldState};
 use crate::model::objects::ObjFlag;
+use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, ErrorPack, Objid, Offset, Var};
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -1030,19 +1030,19 @@ mod tests {
     use anyhow::Error;
 
     use crate::compiler::codegen::compile;
-    use crate::compiler::parse::Names;
-    use crate::db::state::{StateError, WorldState};
+    use crate::compiler::labels::Names;
     use crate::db::CommitResult;
+    use crate::db::state::{StateError, WorldState};
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
+    use crate::vm::opcode::Op::*;
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,

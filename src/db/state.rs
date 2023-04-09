@@ -1,17 +1,16 @@
-use crate::db::matching::MatchEnvironment;
-use anyhow::Error;
-
-use crate::db::CommitResult;
 use std::sync::Arc;
 use std::sync::Mutex;
+
+use anyhow::Error;
 use thiserror::Error;
 
+use crate::db::CommitResult;
+use crate::db::matching::MatchEnvironment;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::VerbInfo;
 use crate::util::bitenum::BitEnum;
-
 use crate::vm::opcode::Binary;
 
 #[derive(Error, Debug)]

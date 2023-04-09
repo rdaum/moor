@@ -2,15 +2,16 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
-use crate::compiler::codegen::Label;
-use crate::model::var::Error::{E_RANGE, E_TYPE};
-use decorum::{Real, R64};
+use decorum::{R64, Real};
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
-
 use rkyv::{
-    ser::Serializer, Archive, Archived, Deserialize, Serialize,
+    Archive, Archived, Deserialize, ser::Serializer, Serialize,
 };
+
+use crate::compiler::labels::Label;
+use crate::model::var::Error::{E_RANGE, E_TYPE};
+
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Archive,
 )]
@@ -135,22 +136,6 @@ impl PartialEq<usize> for ArchivedUsize {
 impl PartialEq<ArchivedUsize> for usize {
     fn eq(&self, other: &ArchivedUsize) -> bool {
         *self as u64 == other.0 as u64
-    }
-}
-
-#[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq), check_bytes)]
-pub struct Offset(pub u32);
-
-impl From<i32> for Offset {
-    fn from(value: i32) -> Self {
-        Offset(value as u32)
-    }
-}
-
-impl From<usize> for Offset {
-    fn from(value: usize) -> Self {
-        Offset(value as u32)
     }
 }
 

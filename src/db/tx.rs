@@ -5,10 +5,10 @@ use std::marker::PhantomData;
 use hybrid_lock::HybridLock;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::db::relations::TupleValueTraits;
-use crate::db::tx::CommitResult::Success;
 use crate::db::CommitResult;
 use crate::db::CommitResult::ConflictRetry;
+use crate::db::relations::TupleValueTraits;
+use crate::db::tx::CommitResult::Success;
 
 // Each base relation carries a WAL for each transaction that is currently active.
 // The WAL has a copy of each tuple that was modified by the transaction.

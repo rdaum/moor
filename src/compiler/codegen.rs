@@ -2,14 +2,15 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use itertools::Itertools;
+
 use thiserror::Error;
 
 use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
-use crate::compiler::parse::{parse_program, Name, Names};
-use crate::model::var::{Offset, Var};
-use crate::vm::opcode::Op::Jump;
+use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
+use crate::compiler::parse::parse_program;
+use crate::model::var::Var;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
-use rkyv::{Archive, Deserialize, Serialize};
+use crate::vm::opcode::Op::Jump;
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -17,46 +18,6 @@ pub enum CompileError {
     UnknownBuiltinFunction(String),
     #[error("Could not find loop with id: {0}")]
     UnknownLoopLabel(String),
-}
-
-// Fixup for a jump label
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq), check_bytes)]
-pub struct JumpLabel {
-    // The unique id for the jump label, which is also its offset in the jump vector.
-    pub(crate) id: Label,
-
-    // If there's a unique identifier assigned to this label, it goes here.
-    label: Option<Name>,
-
-    // The temporary and then final resolved position of the label in terms of PC offsets.
-    pub(crate) position: Offset,
-}
-
-#[derive(
-    Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord, Hash,
-)]
-#[archive(compare(PartialEq), check_bytes)]
-pub struct Label(pub u32);
-
-impl From<usize> for Label {
-    fn from(value: usize) -> Self {
-        Label(value as u32)
-    }
-}
-
-impl From<i32> for Label {
-    fn from(value: i32) -> Self {
-        Label(value as u32)
-    }
-}
-
-// References to vars using the name idx.
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq), check_bytes)]
-pub struct VarRef {
-    pub(crate) id: Label,
-    pub(crate) name: Name,
 }
 
 pub struct Loop {

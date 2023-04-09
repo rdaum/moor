@@ -1,7 +1,7 @@
-use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 use std::str::FromStr;
 
+use antlr_rust::{InputStream, Parser};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::error_listener::ErrorListener;
 use antlr_rust::errors::ANTLRError;
@@ -9,21 +9,20 @@ use antlr_rust::recognizer::Recognizer;
 use antlr_rust::token::Token;
 use antlr_rust::token_factory::TokenFactory;
 use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
-use antlr_rust::{InputStream, Parser};
 use anyhow::anyhow;
-
 use paste::paste;
 
-use crate::compiler::ast::Expr::VarExpr;
+
 use crate::compiler::ast::{
     Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
-use crate::compiler::codegen::Label;
+use crate::compiler::ast::Expr::VarExpr;
+use crate::compiler::labels::{Name, Names};
 use crate::grammar::moolexer::mooLexer;
 use crate::grammar::mooparser::*;
 use crate::grammar::moovisitor::mooVisitor;
-use crate::model::var::Var::{Obj, Str};
 use crate::model::var::{Error, Objid, Var};
+use crate::model::var::Var::{Obj, Str};
 
 pub struct VerbCompileErrorListener {
     pub program: String,
@@ -54,69 +53,6 @@ struct LoopEntry {
     is_barrier: bool,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq), check_bytes)]
-pub struct Name(pub Label);
-
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]
-#[archive(compare(PartialEq), check_bytes)]
-pub struct Names {
-    pub names: Vec<String>,
-}
-
-impl Names {
-    pub fn new() -> Self {
-        let mut names = Self { names: vec![] };
-
-        names.find_or_add_name("NUM");
-        names.find_or_add_name("OBJ");
-        names.find_or_add_name("STR");
-        names.find_or_add_name("LIST");
-        names.find_or_add_name("ERR");
-        names.find_or_add_name("INT");
-        names.find_or_add_name("FLOAT");
-        names.find_or_add_name("player");
-        names.find_or_add_name("this");
-        names.find_or_add_name("caller");
-        names.find_or_add_name("verb");
-        names.find_or_add_name("args");
-        names.find_or_add_name("argstr");
-        names.find_or_add_name("dobj");
-        names.find_or_add_name("dobjstr");
-        names.find_or_add_name("prepstr");
-        names.find_or_add_name("iobj");
-        names.find_or_add_name("iobjstr");
-        names
-    }
-
-    pub fn find_or_add_name(&mut self, name: &str) -> Name {
-        match self
-            .names
-            .iter()
-            .position(|n| n.to_lowercase().as_str() == name.to_lowercase())
-        {
-            None => {
-                let pos = self.names.len();
-                self.names.push(String::from(name));
-                Name(pos.into())
-            }
-            Some(n) => Name(n.into()),
-        }
-    }
-
-    pub fn find_name(&self, name: &str) -> Option<Name> {
-        self.find_name_offset(name).map(|x| Name(x.into()))
-    }
-
-    pub fn find_name_offset(&self, name: &str) -> Option<usize> {
-        self.names
-            .iter()
-            .position(|x| x.to_lowercase() == name.to_lowercase())
-    }
-    pub fn width(&self) -> usize {
-        self.names.len()
-    }
-}
 
 pub struct ASTGenVisitor {
     pub program: Vec<Stmt>,
@@ -835,11 +771,11 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
     use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt};
+    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
     use crate::compiler::parse::parse_program;
-    use crate::model::var::Var::Str;
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Var::Str;
 
     #[test]
     fn test_parse_simple_var_assignment_precedence() {

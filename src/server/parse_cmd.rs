@@ -1,8 +1,8 @@
-use crate::model::r#match::PrepSpec;
-use crate::model::var::{Objid, Var};
-
 use std::string::ToString;
 use std::sync::Once;
+
+use crate::model::r#match::PrepSpec;
+use crate::model::var::{Objid, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
@@ -230,12 +230,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::db::matching::world_environment_match_object;
     use crate::db::mock_matching_env::{
-        setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
+        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
     };
     use crate::model::var::NOTHING;
+
+    use super::*;
 
     #[test]
     fn test_parse_into_words_simple() {

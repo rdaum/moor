@@ -1,8 +1,7 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::compiler::codegen::{JumpLabel, Label};
-use crate::compiler::parse::Names;
-use crate::model::var::{Offset, Var};
+use crate::compiler::labels::{JumpLabel, Label, Names, Offset};
+use crate::model::var::Var;
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Archive, Ord, PartialOrd)]
 #[archive(compare(PartialEq), check_bytes)]

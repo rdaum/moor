@@ -13,13 +13,12 @@ use crate::compiler::codegen::compile;
 use crate::db::inmem_db::ImDB;
 use crate::db::inmem_db_tx::ImDbTxSource;
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{PropDefs, PropFlag, Properties};
+use crate::model::objects::{ObjAttrs, Objects, ObjFlag};
+use crate::model::props::{PropDefs, Properties, PropFlag};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::{VerbFlag, Verbs};
 use crate::server::scheduler::Scheduler;
-
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;
 
