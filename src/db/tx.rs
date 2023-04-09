@@ -30,25 +30,18 @@ pub enum EntryValue<V: TupleValueTraits> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct WALEntry<V: TupleValueTraits> {
-    value: EntryValue<V>,
-    wts: u64,
-    rts: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct WAL<K, V: TupleValueTraits> {
-    pub entries: BTreeMap<K, WALEntry<V>>,
+    pub entries: BTreeMap<K, MvccEntry<V>>,
 }
 
 impl<K: TupleValueTraits, V: TupleValueTraits> WAL<K, V> {
     pub fn set(&mut self, key: K, value: EntryValue<V>, ts_i: u64) {
         self.entries.insert(
             key,
-            WALEntry {
+            MvccEntry {
                 value,
-                wts: ts_i,
-                rts: ts_i,
+                write_timestmap: ts_i,
+                read_timestamp: ts_i,
             },
         );
     }
@@ -106,17 +99,25 @@ pub struct WalValue<K: TupleValueTraits, V: TupleValueTraits> {
 impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     // TODO: vacuum/GC of old versions
 
-    pub fn commit(&mut self, ts_t: u64, value: &WALEntry<V>) -> CommitResult {
-        // If ts_t is younger than the read stamp of any of our values, then we have a conflict
-        // abort and restart the transaction.
-        // If ts_t == wts_x, then we can overwrite.
+    // Try to commit a value to the tuple.
+    pub fn commit(&mut self, ts_t: u64, value: &MvccEntry<V>) -> CommitResult {
         let mut versions = self.versions.write();
-        for x in versions.iter_mut().rev() {
+
+        // find the most recent committed version (write timestamp is greatest)
+        let mut most_recent = versions.iter_mut().max_by_key(|x| x.write_timestmap);
+
+        // verify that the version we're trying to commit is based on a newer or same timestamp
+        if let Some(x) = most_recent {
             let rts_x = x.read_timestamp;
             let wts_x = x.write_timestmap;
-            if ts_t < rts_x {
+
+            // The version we're trying to commit has to be based on a read timestamp newer or eq  this...
+            if value.read_timestamp < rts_x {
                 return ConflictRetry;
             }
+
+            // If this is our version, we can just overwrite it.
+            // I don't think this happens in our world with the WAL tho.
             if ts_t == wts_x {
                 x.value = value.value.clone();
                 x.write_timestmap = ts_t;
@@ -124,7 +125,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
             }
         }
 
-        // Otherwise create a new version of the value
+        // Otherwise create a new version of the value.
         versions.push(MvccEntry {
             value: value.value.clone(),
             read_timestamp: ts_t,
@@ -134,38 +135,39 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
         Success
     }
 
-    pub fn set(&mut self, ts_t: u64, key: &K, value: &V, tx_wal: &mut WAL<K, V>) {
+    pub fn set(&mut self, ts_t: u64, rts: u64, key: &K, value: &V, tx_wal: &mut WAL<K, V>) {
         // Set a value in the WAL for this transaction.
+        // The read-timestamp should be the version of the tuple that we're basing it off.
         tx_wal.entries.insert(
             key.clone(),
-            WALEntry {
+            MvccEntry {
                 value: EntryValue::Value(value.clone()),
-                wts: ts_t,
-                rts: ts_t,
+                write_timestmap: ts_t,
+                read_timestamp: rts,
             },
         );
     }
 
-    pub fn delete(&mut self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) {
+    pub fn delete(&mut self, ts_t: u64, rts : u64, key: &K, tx_wal: &mut WAL<K, V>) {
         // Set a value in the WAL for this transaction.
-        // TODO: is this correct?
+        // The read-timestamp should be the version of the tuple that we're basing it off.
         tx_wal.entries.insert(
             key.clone(),
-            WALEntry {
+            MvccEntry {
                 value: EntryValue::Tombstone,
-                wts: ts_t,
-                rts: ts_t,
+                write_timestmap: ts_t,
+                read_timestamp: rts,
             },
         );
     }
 
-    pub fn get(&self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) -> Option<V> {
+    pub fn get(&self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) -> (u64, Option<V>) {
         // If the transaction WAL has a value for this key, return that.
         if let Some(wal_local_val) = tx_wal.entries.get(key) {
-            return match &wal_local_val.value {
+            return (wal_local_val.read_timestamp, match &wal_local_val.value {
                 EntryValue::Value(v) => Some(v.clone()),
                 EntryValue::Tombstone => None,
-            };
+            });
         };
 
         // Reads see the latest version of an object that was committed before our tx started
@@ -179,24 +181,23 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
 
         for x in x_k {
             let rts_x = x.read_timestamp;
+
+            // If our timestamp is greater than the read timestamp of the version we're looking at,
+            // then we can return that version.
             if ts_t >= rts_x {
                 // We make a copy of the value and shove it into our WAL.
                 tx_wal.entries.insert(
                     key.clone(),
-                    WALEntry {
-                        value: x.value.clone(),
-                        wts: x.write_timestmap,
-                        rts: ts_t,
-                    },
+                    x.clone()
                 );
-                return match &x.value {
+                return (rts_x, match &x.value {
                     EntryValue::Value(v) => Some(v.clone()),
                     EntryValue::Tombstone => None,
-                };
+                });
             }
         }
 
-        None
+        (ts_t, None)
     }
 }
 

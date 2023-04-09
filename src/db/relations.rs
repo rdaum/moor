@@ -108,7 +108,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
     fn has_with_l(&mut self, tx: &mut Tx, k: &L, wal: &mut WAL<TupleId, (L, R)>) -> bool {
         if let Some(tuple_id) = self.l_index.get(k) {
-            let value = self
+            let (rts, value) = self
                 .values
                 .get_mut(tuple_id)
                 .unwrap()
@@ -123,7 +123,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
+            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // There's a value visible to us that's not deleted.
             if let Some(_value) = value {
@@ -131,14 +131,16 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             }
 
             // The value for the tuple at this index is either tombstoned for us, or invisible, so we can add a new version.
-            tuple.set(tx.tx_start_ts, tuple_id, &(l.clone(), r.clone()), wal);
+            tuple.set(tx.tx_start_ts, rts, tuple_id, &(l.clone(), r.clone()), wal);
         } else {
             // Didn't exist for any transaction, so create a new version, stick in our WAL.
             let tuple_id = TupleId(
                 self.next_tuple_id
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             );
-            self.values.insert(tuple_id, Default::default());
+            // Start with a tombstone, just to reserve the slot
+            self.values.insert(tuple_id,
+                               MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone));
             self.l_index.insert(l.clone(), tuple_id);
 
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
@@ -163,17 +165,21 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
+            let (rts, _) = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // There's a tuple there, either invisible to us or not. But we'll set it on our
             // WAL regardless.
-            tuple.set(tx.tx_start_ts, tuple_id, &((l.clone(), r.clone())), wal);
+            tuple.set(tx.tx_start_ts, rts, tuple_id, &((l.clone(), r.clone())), wal);
         } else {
             // Didn't exist for any transaction, so create a new version, stick in our WAL.
             let tuple_id = TupleId(
                 self.next_tuple_id
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             );
-            self.values.insert(tuple_id, Default::default());
+            // Start with a tombstone, just to reserve the slot
+            self.values.insert(tuple_id,
+                               MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone));
+
 
             self.l_index.insert(l.clone(), tuple_id);
 
@@ -200,7 +206,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
+            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // If we already deleted it or it's not visible to us, we can't delete it.
             if value.is_none() {
@@ -208,7 +214,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             }
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.delete(tx.tx_start_ts, tuple_id, wal);
+            tuple.delete(tx.tx_start_ts, rts,tuple_id, wal);
 
             return Ok(());
         }
@@ -222,15 +228,15 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
+            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
-            // If it's deleted by us or invisible to us, we can't update it, can we.
+            // If it's deleted by us or invisible to us, we can't update it, can we?
             let Some(value) = value else {
                 return Err(Error::NotFound);
             };
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.set(tx.tx_start_ts, tuple_id, &(new_l.clone(), value.1), wal);
+            tuple.set(rts, rts, tuple_id, &(new_l.clone(), value.1), wal);
 
             return Ok(());
         }
@@ -244,7 +250,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
+            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
 
             // If it's deleted by us or invisible to us, we can't update it, can we.
             let Some(value) = value else {
@@ -252,7 +258,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             };
 
             // There's a value there in some fashion. Tombstone it.
-            tuple.set(tx.tx_start_ts, tuple_id, &(value.0, new_r.clone()), wal);
+            tuple.set(tx.tx_start_ts, rts, tuple_id, &(value.0, new_r.clone()), wal);
 
             return Ok(());
         }
@@ -264,7 +270,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         if let Some(tuple_id) = self.l_index.get(k) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            return tuple.get(tx.tx_start_ts, tuple_id, wal).map(|v| v.1);
+            return tuple.get(tx.tx_start_ts, tuple_id, wal).1.map(|v| v.1);
         }
         None
     }
@@ -275,7 +281,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
             let tuple = self.values.get(tuple_id);
             if let Some(tuple) = tuple {
-                let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
+                let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
                 if let Some(value) = value {
                     return Some((k.clone(), value.1));
                 }
@@ -297,7 +303,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 let visible_tuples = tuples.iter().filter_map(|tuple_id| {
                     let tuple = self.values.get(tuple_id);
                     if let Some(tuple) = tuple {
-                        let value = tuple.get(tx.tx_start_ts, tuple_id, wal);
+                        let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
                         if let Some(value) = value {
                             return Some(value.0);
                         }
@@ -310,10 +316,11 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn commit(&mut self, tx: &mut Tx) -> Result<(), Error> {
-        // Flush the Tx's WAL writes to the main data structures.
+        // we have nothing to commit
         let Some(wal) = self.wals.get(&tx.tx_id) else {
             return Ok(());
         };
+        // Flush the Tx's WAL writes to the main data structures.
         for (tuple_id, wal_entry) in wal.entries.iter() {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let result = tuple.commit(tx.tx_start_ts, wal_entry);
@@ -322,6 +329,8 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 CommitResult::ConflictRetry => return Err(Error::Conflict),
             }
         }
+        // Delete the WAL.
+        self.wals.remove(&tx.tx_id);
         Ok(())
     }
 
@@ -382,6 +391,7 @@ pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
 
 #[cfg(test)]
 mod tests {
+    use crate::db::relations::Error::Conflict;
     use super::*;
 
     #[test]
@@ -457,8 +467,11 @@ mod tests {
         assert_eq!(a.update_r(&mut t1, &"hello".to_string(), &2), Ok(()));
         let mut t2 = Tx::new(3, 3);
         assert_eq!(a.update_r(&mut t2, &"hello".to_string(), &3), Ok(()));
-        assert_eq!(a.commit(&mut t2), Ok(()));
-        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t1), Ok(()));
+
+        // should fail because t2 (ts 3) is trying to commit a change based on (ts 1) but the most
+        // recent committed change is (ts 2)
+        assert_eq!(a.commit(&mut t2), Err(Error::Conflict));
     }
 
     #[test]
@@ -475,8 +488,8 @@ mod tests {
         let mut t2 = Tx::new(3, 3);
         assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Ok(()));
 
-        assert_eq!(a.commit(&mut t2), Ok(()));
-        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t1), Ok(()));
+        assert_eq!(a.commit(&mut t2), Err(Error::Conflict));
     }
 
     #[test]
@@ -521,7 +534,7 @@ mod tests {
         assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Ok(()));
 
         assert_eq!(a.commit(&mut t2), Ok(()));
-        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t1), Err(Conflict));
     }
 
     #[test]
@@ -554,9 +567,12 @@ mod tests {
         let mut t3 = Tx::new(3, 3);
         assert_eq!(a.insert(&mut t3, &"hello".to_string(), &3), Ok(()));
 
-        assert_eq!(a.commit(&mut t1), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t1), Ok(()));
         assert_eq!(a.commit(&mut t2), Ok(()));
-        assert_eq!(a.commit(&mut t3), Ok(()));
+
+        // should fail because t3 (ts 3) is trying to commit a change based on a version where
+        // there was no tuple present at all. (ts 1 had not committed yet)
+        assert_eq!(a.commit(&mut t3), Err(Error::Conflict));
     }
 
     #[test]
@@ -576,6 +592,9 @@ mod tests {
         let mut t3 = Tx::new(3, 3);
         assert_eq!(a.update_r(&mut t3, &"hello".to_string(), &3), Ok(()));
         assert_eq!(a.commit(&mut t2), Ok(()));
-        assert_eq!(a.commit(&mut t3), Ok(()));
+
+        // Fails with conflict because t2 committed its version before t3 did, and t3 based its
+        // version off t1's
+        assert_eq!(a.commit(&mut t3), Err(Error::Conflict));
     }
 }
