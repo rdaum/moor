@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, Bound, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, Bound, HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -7,6 +7,7 @@ use rkyv::ser::Serializer;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::db::relations::Error::NotFound;
 use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
 use crate::db::CommitResult;
 
@@ -94,7 +95,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         }
     }
 
-    pub fn new_bidrectional() -> Self {
+    pub fn new_bidirectional() -> Self {
         Relation {
             values: Default::default(),
             next_tuple_id: Default::default(),
@@ -118,7 +119,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
     pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
         // If there's already a tuple for this row, then we need to check if it's visible to us.
-        if let Some(tuple_id) = self.l_index.get(l) {
+        let tuple_id = if let Some(tuple_id) = self.l_index.get(l) {
             let tuple = self.values.get_mut(tuple_id).unwrap();
             let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
             let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
@@ -130,6 +131,8 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
             // The value for the tuple at this index is either tombstoned for us, or invisible, so we can add a new version.
             tuple.set(tx.tx_start_ts, rts, tuple_id, &(l.clone(), r.clone()), wal);
+
+            *tuple_id
         } else {
             // Didn't exist for any transaction, so create a new version, stick in our WAL.
             let tuple_id = TupleId(
@@ -150,62 +153,25 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 tx.tx_start_ts,
             );
 
-            if let Some(t_index) = &mut self.r_index {
-                t_index
-                    .entry(r.clone())
-                    .or_insert_with(Default::default)
-                    .insert(tuple_id);
-            }
-        }
+            tuple_id
+        };
 
+        if let Some(r_index) = &mut self.r_index {
+            r_index
+                .entry(r.clone())
+                .or_insert_with(Default::default)
+                .insert(tuple_id);
+        }
         Ok(())
     }
 
     pub fn upsert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
-        if let Some(tuple_id) = self.l_index.get(l) {
-            let tuple = self.values.get_mut(tuple_id).unwrap();
-            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            let (rts, _) = tuple.get(tx.tx_start_ts, tuple_id, wal);
-
-            // There's a tuple there, either invisible to us or not. But we'll set it on our
-            // WAL regardless.
-            tuple.set(
-                tx.tx_start_ts,
-                rts,
-                tuple_id,
-                &((l.clone(), r.clone())),
-                wal,
-            );
-        } else {
-            // Didn't exist for any transaction, so create a new version, stick in our WAL.
-            let tuple_id = TupleId(
-                self.next_tuple_id
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            );
-            // Start with a tombstone, just to reserve the slot
-            self.values.insert(
-                tuple_id,
-                MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone),
-            );
-
-            self.l_index.insert(l.clone(), tuple_id);
-
-            let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
-            wal.set(
-                tuple_id,
-                EntryValue::Value((l.clone(), r.clone())),
-                tx.tx_start_ts,
-            );
-
-            if let Some(t_index) = &mut self.r_index {
-                t_index
-                    .entry(r.clone())
-                    .or_insert_with(Default::default)
-                    .insert(tuple_id);
-            }
+        let e = self.remove_for_l(tx, l);
+        if e != Ok(()) && e != Err(NotFound) {
+            return e;
         }
+        self.insert(tx, l, r)?;
 
-        // TODO secondary index
         Ok(())
     }
 
@@ -223,12 +189,17 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             // There's a value there in some fashion. Tombstone it.
             tuple.delete(tx.tx_start_ts, rts, tuple_id, wal);
 
+            if let Some(r_index) = &mut self.r_index {
+                if let Some(value) = value {
+                    r_index.entry(value.1).and_modify(|s| {
+                        s.remove(tuple_id);
+                    });
+                }
+            }
             return Ok(());
         }
 
         Err(Error::NotFound)
-
-        // TODO secondary index
     }
 
     pub fn update_l(&mut self, tx: &mut Tx, l: &L, new_l: &L) -> Result<(), Error> {
@@ -242,15 +213,25 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 return Err(Error::NotFound);
             };
 
-            // There's a value there in some fashion. Tombstone it.
-            tuple.set(rts, rts, tuple_id, &(new_l.clone(), value.1), wal);
+            if let Some(r_index) = &mut self.r_index {
+                r_index.entry(value.1.clone()).and_modify(|s| {
+                    s.remove(tuple_id);
+                });
+            }
+
+            // There's a value there in some fashion. Update it to tombstone, and then perform an
+            // insert-equiv for the new key.
+            tuple.delete(tx.tx_start_ts, rts, tuple_id, wal);
+
+            // tuple_id is borrowed from self, ugly drop it here so we can use self to do the
+            // insert.
+            drop(tuple_id);
+            self.insert(tx, new_l, &value.1)?;
 
             return Ok(());
         }
 
         Err(Error::NotFound)
-
-        // TODO secondary index
     }
 
     pub fn update_r(&mut self, tx: &mut Tx, l: &L, new_r: &R) -> Result<(), Error> {
@@ -264,14 +245,10 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 return Err(Error::NotFound);
             };
 
-            // There's a value there in some fashion. Tombstone it.
-            tuple.set(
-                tx.tx_start_ts,
-                rts,
-                tuple_id,
-                &(value.0, new_r.clone()),
-                wal,
-            );
+            drop(tuple_id);
+
+            self.remove_for_l(tx, &value.0.clone())?;
+            self.insert(tx, l, new_r)?;
 
             return Ok(());
         }
@@ -288,7 +265,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         None
     }
 
-    pub fn range_r(&mut self, tx: &mut Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
+    pub fn range_for_l_eq(&mut self, tx: &mut Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
         let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
         let tuple_range = self.l_index.range(range);
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
@@ -304,14 +281,14 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         visible_tuples.collect()
     }
 
-    pub fn seek_for_r_eq(&mut self, tx: &mut Tx, t: &R) -> Vec<L> {
+    pub fn seek_for_r_eq(&mut self, tx: &mut Tx, t: &R) -> BTreeSet<L> {
         let Some(t_index) = &self.r_index else {
             panic!("secondary index query without index");
         };
 
         let wal = self.wals.entry(tx.tx_id).or_insert_with(Default::default);
         match t_index.get(t) {
-            None => vec![],
+            None => BTreeSet::new(),
             Some(tuples) => {
                 let visible_tuples = tuples.iter().filter_map(|tuple_id| {
                     let tuple = self.values.get(tuple_id);
@@ -406,6 +383,7 @@ pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
 mod tests {
     use super::*;
     use crate::db::relations::Error::Conflict;
+    use std::collections::Bound::{Included, Unbounded};
 
     #[test]
     fn insert_new_tuple() {
@@ -465,6 +443,67 @@ mod tests {
         assert_eq!(
             relation.remove_for_l(&mut tx1, &"hello".to_string()),
             Err(Error::NotFound)
+        );
+    }
+
+    #[test]
+    fn test_secondary_index() {
+        let mut relation = Relation::<String, i32>::new_bidirectional();
+        let mut tx1 = Tx::new(1, 1);
+        assert_eq!(relation.insert(&mut tx1, &"hello".to_string(), &1), Ok(()));
+        assert_eq!(relation.insert(&mut tx1, &"bye".to_string(), &1), Ok(()));
+        assert_eq!(
+            relation.insert(&mut tx1, &"tomorrow".to_string(), &2),
+            Ok(())
+        );
+        assert_eq!(
+            relation.insert(&mut tx1, &"yesterday".to_string(), &2),
+            Ok(())
+        );
+
+        assert_eq!(
+            relation.seek_for_r_eq(&mut tx1, &1),
+            BTreeSet::from(["hello".into(), "bye".into()])
+        );
+        assert_eq!(
+            relation.seek_for_r_eq(&mut tx1, &2),
+            BTreeSet::from(["tomorrow".into(), "yesterday".into()])
+        );
+
+        assert_eq!(
+            relation.update_l(&mut tx1, &"hello".to_string(), &"everyday".to_string()),
+            Ok(())
+        );
+        assert_eq!(
+            relation.seek_for_r_eq(&mut tx1, &1),
+            BTreeSet::from(["everyday".into(), "bye".into()])
+        );
+
+        assert_eq!(
+            relation.remove_for_l(&mut tx1, &"everyday".to_string()),
+            Ok(())
+        );
+        assert_eq!(
+            relation.seek_for_r_eq(&mut tx1, &1),
+            BTreeSet::from(["bye".into()])
+        );
+
+        assert_eq!(relation.upsert(&mut tx1, &"bye".to_string(), &3), Ok(()));
+        assert_eq!(relation.seek_for_r_eq(&mut tx1, &1), BTreeSet::from([]));
+        assert_eq!(
+            relation.seek_for_r_eq(&mut tx1, &3),
+            BTreeSet::from(["bye".into()])
+        );
+        assert_eq!(relation.update_r(&mut tx1, &"bye".to_string(), &4), Ok(()));
+        assert_eq!(
+            relation.seek_for_r_eq(&mut tx1, &4),
+            BTreeSet::from(["bye".into()])
+        );
+        assert_eq!(relation.seek_for_r_eq(&mut tx1, &3), BTreeSet::from([]));
+
+        assert_eq!(
+            relation.range_for_l_eq(&mut tx1, (Included(&"tomorrow".into()), Unbounded)),
+            vec![("tomorrow".into(), 2), ("yesterday".into(), 2)]
         );
     }
 

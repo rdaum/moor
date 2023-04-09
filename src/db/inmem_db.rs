@@ -68,9 +68,9 @@ impl ImDB {
             next_objid: 0,
             next_pid: 0,
             next_vid: 0,
-            obj_attr_location: Relation::new_bidrectional(),
-            obj_attr_owner: Relation::new_bidrectional(),
-            obj_attr_parent: Relation::new_bidrectional(),
+            obj_attr_location: Relation::new_bidirectional(),
+            obj_attr_owner: Relation::new_bidirectional(),
+            obj_attr_parent: Relation::new_bidirectional(),
             obj_attr_name: Default::default(),
             obj_attr_flags: Default::default(),
             propdefs: Default::default(),
@@ -289,14 +289,14 @@ impl ImDB {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        Ok(self.obj_attr_parent.seek_for_r_eq(tx, &oid))
+        Ok(self.obj_attr_parent.seek_for_r_eq(tx, &oid).into_iter().collect())
     }
 
     pub fn object_contents(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, Error> {
         if !self.object_valid(tx, oid)? {
             return Err(anyhow!("invalid object"));
         }
-        Ok(self.obj_attr_location.seek_for_r_eq(tx, &oid))
+        Ok(self.obj_attr_location.seek_for_r_eq(tx, &oid).into_iter().collect())
     }
 
     pub fn get_propdef(
@@ -374,7 +374,7 @@ impl ImDB {
         let end = (definer, MAX_PROP_NAME.to_string());
         let range = self
             .propdefs
-            .range_r(tx, (Included(&start), Included(&end)));
+            .range_for_l_eq(tx, (Included(&start), Included(&end)));
         Ok(range.len())
     }
 
@@ -383,7 +383,7 @@ impl ImDB {
         let end = (definer, MAX_PROP_NAME.to_string());
         let range = self
             .propdefs
-            .range_r(tx, (Included(&start), Included(&end)));
+            .range_for_l_eq(tx, (Included(&start), Included(&end)));
         Ok(range.iter().map(|(_, pd)| pd.clone()).collect())
     }
 
@@ -499,7 +499,7 @@ impl ImDB {
         oid: Objid,
         attrs: BitEnum<VerbAttr>,
     ) -> Result<Vec<VerbInfo>, Error> {
-        let obj_verbs = self.verbdefs.range_r(
+        let obj_verbs = self.verbdefs.range_for_l_eq(
             tx,
             (
                 Included(&(oid, String::new())),
