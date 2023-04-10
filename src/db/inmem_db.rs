@@ -8,10 +8,10 @@ use crate::db::relations;
 use crate::db::relations::Relation;
 use crate::db::state::WorldState;
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
-use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, Properties, PropertyInfo, PropFlag};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, Properties, PropertyInfo};
 use crate::model::r#match::VerbArgsSpec;
-use crate::model::var::{NOTHING, Objid, Var};
+use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
@@ -19,12 +19,18 @@ use crate::vm::opcode::Binary;
 const MAX_PROP_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
 const MAX_VERB_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
 
-// Basic non-transactional, non-persistent in-memory "database" to bootstrap things.
-
+// Basic (for now) non-persistent in-memory "database" to bootstrap things.
+// Supporting (relatively inefficient) MVCC transaction isolation.
+// Built around a series of generic binary Relations.
 pub struct ImDB {
     next_objid: AtomicI64,
     next_pid: AtomicI64,
     next_vid: AtomicI64,
+
+    next_tx_id: AtomicU64,
+
+    // Global atomic counter for the next transactions start timestamp
+    gtls: AtomicU64,
 
     // Objects and their attributes
     obj_attr_location: Relation<Objid, Objid>,
@@ -69,6 +75,8 @@ impl ImDB {
             next_objid: Default::default(),
             next_pid: Default::default(),
             next_vid: Default::default(),
+            next_tx_id: Default::default(),
+            gtls: Default::default(),
             obj_attr_location: Relation::new_bidirectional(),
             obj_attr_owner: Relation::new_bidirectional(),
             obj_attr_parent: Relation::new_bidirectional(),
@@ -89,26 +97,32 @@ impl ImDB {
         }
     }
 
-    pub fn do_begin_tx(&mut self, tx: &mut Tx) -> Result<(), relations::Error> {
-        self.obj_attr_location.begin(tx)?;
-        self.obj_attr_owner.begin(tx)?;
-        self.obj_attr_parent.begin(tx)?;
-        self.obj_attr_name.begin(tx)?;
-        self.obj_attr_flags.begin(tx)?;
-        self.propdefs.begin(tx)?;
-        self.property_value.begin(tx)?;
-        self.property_location.begin(tx)?;
-        self.property_owner.begin(tx)?;
-        self.property_flags.begin(tx)?;
-        self.verbdefs.begin(tx)?;
-        self.verb_names.begin(tx)?;
-        self.verb_attr_definer.begin(tx)?;
-        self.verb_attr_owner.begin(tx)?;
-        self.verb_attr_flags.begin(tx)?;
-        self.verb_attr_args_spec.begin(tx)?;
-        self.verb_attr_program.begin(tx)?;
+    pub fn do_begin_tx(&mut self) -> Result<Tx, relations::Error> {
+        let tx_id = self
+            .next_tx_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let tx_start_ts = self.gtls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut tx = Tx::new(tx_id, tx_start_ts);
 
-        Ok(())
+        self.obj_attr_location.begin(&mut tx)?;
+        self.obj_attr_owner.begin(&mut tx)?;
+        self.obj_attr_parent.begin(&mut tx)?;
+        self.obj_attr_name.begin(&mut tx)?;
+        self.obj_attr_flags.begin(&mut tx)?;
+        self.propdefs.begin(&mut tx)?;
+        self.property_value.begin(&mut tx)?;
+        self.property_location.begin(&mut tx)?;
+        self.property_owner.begin(&mut tx)?;
+        self.property_flags.begin(&mut tx)?;
+        self.verbdefs.begin(&mut tx)?;
+        self.verb_names.begin(&mut tx)?;
+        self.verb_attr_definer.begin(&mut tx)?;
+        self.verb_attr_owner.begin(&mut tx)?;
+        self.verb_attr_flags.begin(&mut tx)?;
+        self.verb_attr_args_spec.begin(&mut tx)?;
+        self.verb_attr_program.begin(&mut tx)?;
+
+        Ok(tx)
     }
 
     pub fn do_commit_tx(&mut self, tx: &mut Tx) -> Result<(), relations::Error> {
@@ -335,6 +349,7 @@ impl ImDB {
         definer: Objid,
         pname: &str,
     ) -> Result<Propdef, Error> {
+        let pname = pname.to_lowercase();
         self.propdefs
             .seek_for_l_eq(tx, &(definer, pname.to_string()))
             .ok_or_else(|| anyhow!("no such property definition {} on #{}", pname, definer.0))
@@ -350,14 +365,14 @@ impl ImDB {
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, Error> {
+        let name = name.to_lowercase();
         let pid = Pid(self.next_pid.fetch_add(1, Ordering::SeqCst));
         let pd = Propdef {
             pid,
             definer,
-            pname: name.to_string(),
+            pname: name.clone(),
         };
-        self.propdefs
-            .insert(tx, &(definer, name.to_string().to_lowercase()), &pd)?;
+        self.propdefs.insert(tx, &(definer, name), &pd)?;
 
         if let Some(initial_value) = initial_value {
             self.set_property(tx, pid, definer, initial_value, owner, flags)?;
@@ -650,7 +665,8 @@ impl ImDB {
         _prop_flags: BitEnum<PropFlag>,
         _prop_owner: Objid,
     ) -> bool {
-        todo!()
+        // TODO implement security check
+        true
     }
 }
 
@@ -658,8 +674,8 @@ impl ImDB {
 mod tests {
     use crate::db::inmem_db::ImDB;
     use crate::db::tx::Tx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
-    use crate::model::props::{PropAttr, Propdef, PropDefs, Properties, PropFlag};
+    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+    use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttr, VerbFlag, Verbs};

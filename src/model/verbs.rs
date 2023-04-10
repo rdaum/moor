@@ -41,7 +41,7 @@ pub enum VerbAttr {
     Program = 4,
 }
 
-#[derive(Serialize, Deserialize, Archive, Clone)]
+#[derive(Serialize, Deserialize, Archive, Clone, Debug)]
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
     pub owner: Option<Objid>,
@@ -50,7 +50,7 @@ pub struct VerbAttrs {
     pub program: Option<Binary>,
 }
 
-#[derive(Serialize, Deserialize, Archive, Clone)]
+#[derive(Serialize, Deserialize, Archive, Clone, Debug)]
 pub struct VerbInfo {
     pub vid: Vid,
     pub names: Vec<String>,

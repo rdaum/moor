@@ -1,5 +1,5 @@
 pub mod inmem_db;
-pub mod inmem_db_tx;
+pub mod inmem_db_worldstate;
 pub mod matching;
 pub mod state;
 

@@ -1,17 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, Bound, HashMap, HashSet};
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 use hybrid_lock::HybridLock;
-use libc::posix_madvise;
-use rkyv::ser::serializers::{AlignedSerializer, AllocSerializer, CompositeSerializer};
+use rkyv::ser::serializers::{AlignedSerializer, CompositeSerializer};
 use rkyv::ser::Serializer;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::db::relations::Error::{Conflict, NotFound};
 use crate::db::tx::{CommitCheckResult, EntryValue, MvccEntry, MvccTuple, Tx};
-use crate::db::CommitResult;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -130,7 +128,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     fn has_with_l(&self, tx: &Tx, k: &L) -> bool {
-        let mut inner = self.inner.read();
+        let inner = self.inner.read();
         if let Some(tuple_id) = inner.l_index.get(k).cloned() {
             let (_rts, value) = inner.values.get(&tuple_id).unwrap().get(tx.tx_start_ts);
             return value.is_some();
@@ -143,8 +141,8 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
         // If there's already a tuple for this row, then we need to check if it's visible to us.
         let tuple_id = if let Some(tuple_id) = inner.l_index.get(l) {
-            let tuple_id = tuple_id.clone();
-            let mut tuple = inner.values.get_mut(&tuple_id).unwrap();
+            let tuple_id = *tuple_id;
+            let tuple = inner.values.get_mut(&tuple_id).unwrap();
             let (rts, value) = tuple.get(tx.tx_start_ts);
 
             // A row visible to us? That's a duplicate.
@@ -243,7 +241,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         let mut inner = self.inner.write();
 
         if let Some(tuple_id) = inner.l_index.get(l).cloned() {
-            let tuple_id = tuple_id.clone();
+            let tuple_id = tuple_id;
 
             let tuple = inner.values.get_mut(&tuple_id).unwrap();
             let (rts, value) = tuple.get(tx.tx_start_ts);
@@ -275,7 +273,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn seek_for_l_eq(&self, tx: &Tx, k: &L) -> Option<R> {
-        let mut inner = self.inner.read();
+        let inner = self.inner.read();
 
         if let Some(tuple_id) = inner.l_index.get(k).cloned() {
             let tuple = inner.values.get(&tuple_id).unwrap();
@@ -285,7 +283,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn range_for_l_eq(&self, tx: &Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
-        let mut inner = self.inner.read();
+        let inner = self.inner.read();
 
         let tuple_range = inner.l_index.range(range);
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
@@ -302,7 +300,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn seek_for_r_eq(&self, tx: &Tx, t: &R) -> BTreeSet<L> {
-        let mut inner = self.inner.read();
+        let inner = self.inner.read();
 
         let Some(t_index) = &inner.r_index else {
             panic!("secondary index query without index");

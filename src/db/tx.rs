@@ -1,16 +1,10 @@
-/// MVCC transaction mgmt
-use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
-use hybrid_lock::HybridLock;
 use itertools::Itertools;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::db::relations::TupleValueTraits;
-use crate::db::tx::CommitResult::Success;
 use crate::db::tx::EntryValue::Tombstone;
-use crate::db::CommitResult;
-use crate::db::CommitResult::ConflictRetry;
 
 // Each base relation carries a WAL for each transaction that is currently active.
 // The WAL has a copy of each tuple that was modified by the transaction.
@@ -85,7 +79,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     // Check whether we can commit for a given tuple.
     pub fn can_commit(&mut self, ts_t: u64) -> CommitCheckResult {
         // Find the read timestamp and position of the version we created.
-        let mut our_version = self.versions.iter_mut().find_position(|v| v.tx_id == ts_t);
+        let our_version = self.versions.iter_mut().find_position(|v| v.tx_id == ts_t);
 
         // If we don't have a version of our own, we can just move on (shouldn't get here because
         // we were called because the commit set mentioned us, but still ...)
@@ -108,7 +102,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
                 return CommitCheckResult::Conflict;
             }
         }
-        return CommitCheckResult::CanCommit(position);
+        CommitCheckResult::CanCommit(position)
     }
 
     pub fn do_commit(&mut self, ts_t: u64, position: usize) {
@@ -211,7 +205,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
             .max()
             .unwrap_or(0);
 
-        return (highest, None);
+        (highest, None)
     }
 }
 

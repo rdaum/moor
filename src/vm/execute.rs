@@ -1,13 +1,10 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-
 use crate::compiler::labels::{Label, Offset};
 use crate::db::state::{StateError, WorldState};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
+use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -109,7 +106,7 @@ impl VM {
     pub fn new(state: Box<dyn WorldState>) -> Self {
         Self {
             stack: vec![],
-            state
+            state,
         }
     }
 
@@ -358,9 +355,9 @@ impl VM {
             return self.push_error(E_INVIND);
         };
 
-        
-
-        let result = self.state.retrieve_property(obj, propname.as_str(), player_flags);
+        let result = self
+            .state
+            .retrieve_property(obj, propname.as_str(), player_flags);
         let v = match result {
             Ok(v) => v,
             Err(e) => match e.downcast_ref::<StateError>() {
@@ -395,12 +392,11 @@ impl VM {
 
         let self_valid = self.state.valid(this)?;
         if !self_valid {
-            
             return self.push_error(E_INVIND);
         }
         // find callable verb
         let result = self.state.retrieve_verb(this, verb.as_str());
-        
+
         let Ok((binary, verbinfo)) = result else {
             return self.push_error(E_VERBNF);
         };
@@ -434,7 +430,6 @@ impl VM {
     ) -> Result<Var, anyhow::Error> {
         // TODO do_pass
         // TODO stack traces, error catch etc?
-        
 
         let (binary, vi) = match self.state.retrieve_verb(obj, verb_name) {
             Ok(binary) => binary,
@@ -823,10 +818,11 @@ impl VM {
                         return self.push_error(E_TYPE);
                     }
                 };
-                
+
                 let update_result =
-                    self.state.update_property(obj, &propname, self.top().player_flags, &rhs);
-                
+                    self.state
+                        .update_property(obj, &propname, self.top().player_flags, &rhs);
+
                 match update_result {
                     Ok(()) => {
                         self.push(&Var::None);
@@ -1008,12 +1004,12 @@ impl VM {
     }
 
     pub fn commit(&mut self) -> Result<(), anyhow::Error> {
-        // self.self.state.lock().unwrap().commit()
+        self.state.commit()?;
         Ok(())
     }
 
     pub fn rollback(&mut self) -> Result<(), anyhow::Error> {
-        // self.self.state.lock().unwrap().rollback()
+        self.state.rollback()?;
         Ok(())
     }
 }
@@ -1021,24 +1017,23 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
 
     use anyhow::Error;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::CommitResult;
     use crate::db::state::{StateError, WorldState};
+    use crate::db::CommitResult;
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{Objid, Var};
     use crate::model::var::Error::{E_NONE, E_VERBNF};
+    use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::{Binary, Op};
     use crate::vm::opcode::Op::*;
+    use crate::vm::opcode::{Binary, Op};
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -1194,11 +1189,11 @@ mod tests {
             Ok(true)
         }
 
-        fn commit(self) -> Result<CommitResult, anyhow::Error> {
+        fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
             Ok(CommitResult::Success)
         }
 
-        fn rollback(self) -> Result<(), anyhow::Error> {
+        fn rollback(&mut self) -> Result<(), anyhow::Error> {
             Ok(())
         }
     }

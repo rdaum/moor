@@ -2,21 +2,27 @@ extern crate core;
 
 use std::collections::HashMap;
 use std::fs::File;
+use std::io;
 use std::io::BufReader;
-use std::sync::{Arc, Mutex};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
+use futures_util::{StreamExt, TryStreamExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex;
+use tokio_tungstenite::accept_async;
+use tokio_tungstenite::tungstenite::Error;
 
 use crate::compiler::codegen::compile;
 use crate::db::inmem_db::ImDB;
-use crate::db::inmem_db_tx::ImDbTxSource;
-use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{PropDefs, PropFlag, Properties};
+use crate::db::inmem_db_worldstate::ImDbWorldStateSource;
+use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::model::props::{PropAttr, PropDefs, Properties, PropFlag};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{Objid, Var};
+use crate::model::var::{Objid, SYSTEM_OBJECT, Var};
 use crate::model::verbs::{VerbFlag, Verbs};
 use crate::server::scheduler::Scheduler;
 use crate::textdump::{Object, TextdumpReader};
@@ -98,7 +104,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     let mut tdr = TextdumpReader::new(br);
     let td = tdr.read_textdump()?;
 
-    let mut tx = Tx::new(0, 0);
+    let mut tx = s.do_begin_tx().expect("Unable to start transaction");
 
     // Pass 1 Create objects
     eprintln!("Instantiating objects...");
@@ -124,14 +130,21 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                s.add_propdef(
+                eprintln!("Defining prop: #{}.{}", objid.0, resolved.name);
+                let res = s.add_propdef(
                     &mut tx,
                     *objid,
                     resolved.name.as_str(),
                     resolved.owner,
                     flags,
                     None,
-                )?;
+                );
+                if res.is_err() {
+                    eprintln!(
+                        "Unable to define property {}.{}: {:?}",
+                        objid.0, resolved.name, res
+                    );
+                }
             }
         }
     }
@@ -142,15 +155,27 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
-            let pdf = s.get_propdef(&mut tx, resolved.definer, resolved.name.as_str())?;
-            s.set_property(
+            eprintln!("Setting prop: #{}.{}", objid.0, resolved.name);
+
+            let result = s.get_propdef(&mut tx, resolved.definer, resolved.name.as_str());
+            let Ok(pdf) = result else {
+                eprintln!("Unable to find property {}.{}: {:?}", objid.0, resolved.name, result);
+                continue;
+            };
+            let result = s.set_property(
                 &mut tx,
                 pdf.pid,
                 *objid,
                 p.value.clone(),
                 resolved.owner,
                 flags,
-            )?;
+            );
+            if result.is_err() {
+                eprintln!(
+                    "Unable to set property {}.{}: {:?}",
+                    objid.0, resolved.name, result
+                );
+            }
         }
     }
 
@@ -200,40 +225,120 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 }
             };
 
-            s.add_verb(&mut tx, *objid, names, v.owner, flags, argspec, binary)?;
+            let av = s.add_verb(
+                &mut tx,
+                *objid,
+                names.clone(),
+                v.owner,
+                flags,
+                argspec,
+                binary,
+            );
+            if av.is_err() {
+                eprintln!(
+                    "Unable to add verb: #{}:{}: {:?}",
+                    objid.0,
+                    names.first().unwrap(),
+                    av
+                );
+            }
         }
     }
     eprintln!("Verbs defined.\nImport complete.");
 
-    // s.commit()?;
+    s.do_commit_tx(&mut tx)?;
 
     Ok(())
 }
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
-    #[arg(value_name = "DB", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
+    #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
     db: std::path::PathBuf,
 
-    #[arg(value_name = "Textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
+    #[arg(value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
     textdump: Option<std::path::PathBuf>,
+
+    #[arg(value_name = "listen", help = "Listen address")]
+    listen_address: Option<String>,
 }
 
-fn main() {
+async fn accept_connection(scheduler: Arc<Mutex<Scheduler>>, peer: SocketAddr, stream: TcpStream) {
+    if let Err(e) = handle_connection(scheduler.clone(), peer, stream).await {
+        match e {
+            Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
+            err => eprintln!("Error processing connection: {}", err),
+        }
+    }
+}
+
+async fn handle_connection(
+    scheduler: Arc<Mutex<Scheduler>>,
+    peer: SocketAddr,
+    stream: TcpStream,
+) -> Result<(), tungstenite::Error> {
+    let mut ws_stream = accept_async(stream).await.expect("Failed to accept");
+
+    eprintln!("New WebSocket connection: {}", peer);
+
+    while let Some(msg) = ws_stream.next().await {
+        let msg = msg?;
+        if msg.is_text() || msg.is_binary() {
+            let mut scheduler = scheduler.lock().await;
+            let cmd = msg.into_text().unwrap();
+            let cmd = cmd.as_str().trim();
+            let setup_result = scheduler.setup_parse_command_task(Objid(2), cmd).await;
+            let Ok(task_id) = setup_result else {
+                eprintln!("Unable to parse command ({}): {:?}", cmd, setup_result);
+                continue;
+            };
+            eprintln!("Task: {:?}", task_id);
+
+            if let Err(e) = scheduler.start_task(task_id).await {
+                eprintln!("Unable to execute: {}", e);
+                continue;
+            };
+
+            // ws_stream.send(msg).await?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), io::Error> {
     let args: Args = Args::parse();
 
     eprintln!("Moor");
 
-    let mut s = ImDB::new();
+    let mut src = ImDB::new();
     if let Some(textdump) = args.textdump {
         eprintln!("Loading textdump...");
-        textdump_load(&mut s, textdump.to_str().unwrap()).unwrap();
+        textdump_load(&mut src, textdump.to_str().unwrap()).unwrap();
     }
 
-    let src = ImDB::new();
-    let state_src = ImDbTxSource::new(src);
+    let state_src = Arc::new(Mutex::new(ImDbWorldStateSource::new(src)));
+    let scheduler = Arc::new(Mutex::new(Scheduler::new(state_src.clone())));
 
-    let _scheduler = Scheduler::new(Arc::new(Mutex::new(state_src)));
+    let addr = args
+        .listen_address
+        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+
+    // Create the event loop and TCP listener we'll accept connections on.
+    let try_socket = TcpListener::bind(&addr).await;
+    let listener = try_socket.expect("Failed to bind");
+    eprintln!("Listening on: {}", addr);
+
+    while let Ok((stream, _)) = listener.accept().await {
+        let peer = stream
+            .peer_addr()
+            .expect("connected streams should have a peer address");
+
+        tokio::spawn(accept_connection(scheduler.clone(), peer, stream));
+    }
 
     eprintln!("Done.");
+
+    Ok(())
 }

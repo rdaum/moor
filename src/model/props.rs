@@ -101,7 +101,7 @@ impl Default for PropAttrs {
     }
 }
 
-#[derive(Serialize, Deserialize, Archive, Clone)]
+#[derive(Serialize, Deserialize, Archive, Clone, Debug)]
 pub struct PropertyInfo {
     pub pid: Pid,
     pub attrs: PropAttrs,

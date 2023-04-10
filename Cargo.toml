@@ -16,17 +16,20 @@ paste = "1.0.9"
 serde = { version = "1.0.147", features = ["derive"] }
 bytes = "1.2.1"
 itertools = "0.10.5"
-bytecheck = "0.7.0"
+bytecheck = "*"
 decorum = "0.3.1"
 num-traits = "0.2.15"
 snailquote = "0.3.1"
 clap = "4.0.29"
 clap_derive = "4.0.21"
 slotmap = "1.0.6"
-tokio = "1.27.0"
+tokio = { version = "1.27.0", features = ["full"] }
 tokio-test = "0.4.2"
+tokio-tungstenite = "*"
+tungstenite = "*"
 libc = "0.2.140"
 hybrid-lock = "0.1.0"
-rkyv = { git = "https://github.com/rkyv/rkyv.git", features = ["validation"] }
+rkyv = { version = "0.7.41", features = ["validation"] }
 repr-trait = "1.0.0"
 enum-primitive-derive = "0.2.2"
+futures-util = "0.3.28"

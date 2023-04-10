@@ -1,16 +1,15 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicPtr, AtomicU64};
+use std::sync::atomic::AtomicPtr;
 
 use anyhow::{anyhow, Error};
 
-use crate::db::{CommitResult, relations};
 use crate::db::inmem_db::ImDB;
 use crate::db::state::{StateError, WorldState, WorldStateSource};
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::db::{relations, CommitResult};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::permissions::Permissions;
 use crate::model::props::{
-    Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
+    Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
 };
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::{Objid, Var};
@@ -18,33 +17,21 @@ use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
-pub struct ImDbTxSource {
+pub struct ImDbWorldStateSource {
     db: ImDB,
-    next_tx_id: AtomicU64,
-
-    // Global atomic counter for the next transactions start timestamp
-    gtls: AtomicU64,
 }
+unsafe impl Send for ImDbWorldStateSource {}
+unsafe impl Sync for ImDbWorldStateSource {}
 
-impl ImDbTxSource {
+impl ImDbWorldStateSource {
     pub fn new(db: ImDB) -> Self {
-        ImDbTxSource {
-            db,
-            next_tx_id: Default::default(),
-            gtls: Default::default(),
-        }
+        ImDbWorldStateSource { db }
     }
 }
 
-impl WorldStateSource for ImDbTxSource {
-    fn new_transaction(&mut self) -> Result<Box<dyn WorldState>, Error> {
-        let tx_id = self
-            .next_tx_id
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let tx_start_ts = self.gtls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-        let mut tx = Tx::new(tx_id, tx_start_ts);
-        self.db.do_begin_tx(&mut tx)?;
+impl WorldStateSource for ImDbWorldStateSource {
+    fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, Error> {
+        let tx = self.db.do_begin_tx()?;
         let odb = ImDBTx::new(AtomicPtr::new(&mut self.db), tx);
         Ok(odb)
     }
@@ -89,11 +76,13 @@ impl Objects for ImDBTx {
         oid: Objid,
         attributes: BitEnum<ObjAttr>,
     ) -> Result<ObjAttrs, Error> {
-        self.get_db().object_get_attrs(&mut self.tx, oid, attributes)
+        self.get_db()
+            .object_get_attrs(&mut self.tx, oid, attributes)
     }
 
     fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), Error> {
-        self.get_db().object_set_attrs(&mut self.tx, oid, attributes)
+        self.get_db()
+            .object_set_attrs(&mut self.tx, oid, attributes)
     }
 
     fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, Error> {
@@ -180,7 +169,8 @@ impl Verbs for ImDBTx {
         verb: &str,
         attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
-        self.get_db().find_callable_verb(&mut self.tx, oid, verb, attrs)
+        self.get_db()
+            .find_callable_verb(&mut self.tx, oid, verb, attrs)
     }
 
     fn find_indexed_verb(
@@ -189,7 +179,8 @@ impl Verbs for ImDBTx {
         index: usize,
         attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
-        self.get_db().find_indexed_verb(&mut self.tx, oid, index, attrs)
+        self.get_db()
+            .find_indexed_verb(&mut self.tx, oid, index, attrs)
     }
 }
 
@@ -226,18 +217,13 @@ impl PropDefs for ImDBTx {
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, Error> {
-        self.get_db().add_propdef(
-            &mut self.tx,
-            definer,
-            name,
-            owner,
-            flags,
-            initial_value,
-        )
+        self.get_db()
+            .add_propdef(&mut self.tx, definer, name, owner, flags, initial_value)
     }
 
     fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), Error> {
-        self.get_db().rename_propdef(&mut self.tx, definer, old, new)
+        self.get_db()
+            .rename_propdef(&mut self.tx, definer, old, new)
     }
 
     fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), Error> {
@@ -412,7 +398,7 @@ impl WorldState for ImDBTx {
         Ok((name, vec![]))
     }
 
-    fn commit(mut self) -> Result<CommitResult, anyhow::Error> {
+    fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
         match self.get_db().do_commit_tx(&mut self.tx) {
             Ok(_) => Ok(CommitResult::Success),
             Err(relations::Error::Conflict) => Ok(CommitResult::ConflictRetry),
@@ -420,7 +406,7 @@ impl WorldState for ImDBTx {
         }
     }
 
-    fn rollback(mut self) -> Result<(), anyhow::Error> {
+    fn rollback(&mut self) -> Result<(), anyhow::Error> {
         self.get_db().do_rollback_tx(&mut self.tx)?;
         Ok(())
     }

@@ -1,13 +1,15 @@
 use std::sync::Arc;
-use std::sync::Mutex;
 
+use anyhow::{anyhow, Error};
 use slotmap::{new_key_type, SlotMap};
-use tokio::task::spawn_local;
+use tokio::sync::Mutex;
 
+use crate::db::matching::{world_environment_match_object, MatchEnvironment};
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
-use crate::model::var::Objid;
-use crate::server::parse_cmd::ParsedCommand;
+use crate::model::var::Error::E_NONE;
+use crate::model::var::{Objid, Var};
+use crate::server::parse_cmd::{parse_command, ParsedCommand};
 use crate::util::bitenum::BitEnum;
 use crate::vm::execute::{ExecutionResult, VM};
 
@@ -23,12 +25,42 @@ pub struct TaskState {
 }
 
 pub struct Scheduler {
-    state_source: Arc<Mutex<dyn WorldStateSource>>,
+    state_source: Arc<Mutex<dyn WorldStateSource + Send + Sync>>,
     task_state: Arc<Mutex<TaskState>>,
 }
 
+struct DBMatchEnvironment<'a> {
+    ws: &'a mut dyn WorldState,
+}
+
+impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
+    fn is_valid(&mut self, oid: Objid) -> Result<bool, Error> {
+        self.ws.valid(oid)
+    }
+
+    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, Error> {
+        let mut names = self.ws.names_of(oid)?;
+        let mut object_names = vec![names.0];
+        object_names.append(&mut names.1);
+        Ok(object_names)
+    }
+
+    fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, Error> {
+        let location = self.ws.location_of(player)?;
+        let mut surroundings = self.ws.contents_of(location)?;
+        surroundings.push(location);
+        surroundings.push(player);
+
+        Ok(surroundings)
+    }
+
+    fn location_of(&mut self, player: Objid) -> Result<Objid, Error> {
+        self.ws.location_of(player)
+    }
+}
+
 impl Scheduler {
-    pub fn new(state_source: Arc<Mutex<dyn WorldStateSource>>) -> Self {
+    pub fn new(state_source: Arc<Mutex<dyn WorldStateSource + Sync + Send>>) -> Self {
         let sm: SlotMap<TaskId, Arc<Mutex<Task>>> = SlotMap::with_key();
         let task_state = Arc::new(Mutex::new(TaskState {
             tasks: Arc::new(Mutex::new(sm)),
@@ -39,19 +71,40 @@ impl Scheduler {
         }
     }
 
-    pub fn setup_command_task(
+    pub async fn setup_parse_command_task(
+        &mut self,
+        player: Objid,
+        command: &str,
+    ) -> Result<TaskId, anyhow::Error> {
+        let pc = {
+            let mut ss = self.state_source.lock().await;
+            let mut ws = ss.new_world_state().unwrap();
+            let mut me = DBMatchEnvironment { ws: ws.as_mut() };
+            let match_object_fn =
+                |name: &str| world_environment_match_object(&mut me, player, name).unwrap();
+            let pc = parse_command(command, match_object_fn);
+            ws.rollback()?;
+
+            eprintln!("Parsed command: {:?}", pc);
+            pc
+        };
+
+        self.setup_command_task(player, pc).await
+    }
+
+    pub async fn setup_command_task(
         &mut self,
         player: Objid,
         command: ParsedCommand,
     ) -> Result<TaskId, anyhow::Error> {
-        let mut ts = self.task_state.lock().unwrap();
-        let task_id = ts.new_task(player, self.state_source.clone())?;
+        let mut ts = self.task_state.lock().await;
+        let task_id = ts.new_task(player, self.state_source.clone()).await?;
 
-        let task_ref = ts.get_task(task_id).unwrap();
-        let task_ref = task_ref.lock().unwrap();
+        let task_ref = ts.get_task(task_id).await.unwrap();
+        let task_ref = task_ref.lock().await;
         let player = task_ref.player;
-        let mut vm = task_ref.vm.lock().unwrap();
-        vm.do_method_verb(
+        let mut vm = task_ref.vm.lock().await;
+        let result = vm.do_method_verb(
             player,
             command.verb.as_str(),
             false,
@@ -60,123 +113,178 @@ impl Scheduler {
             BitEnum::new_with(ObjFlag::Wizard),
             player,
             command.args,
-        )
-        .unwrap();
-
+        )?;
+        if result != Var::Err(E_NONE) {
+            return Err(anyhow!("exception while setting up VM: {:?}", result));
+        }
         Ok(task_id)
     }
 
     pub async fn start_task(&mut self, task_id: TaskId) -> Result<(), anyhow::Error> {
-        let (vm, ts) = {
-            let ts = self.task_state.lock().unwrap();
-            let task_ref_guard = ts.get_task(task_id).unwrap();
+        let ts = self.task_state.lock().await;
+        let task_ref = ts.get_task(task_id).await.unwrap();
 
-            let task_ref_ref = task_ref_guard;
-            let task_ref = task_ref_ref.lock().unwrap();
-            let vm = task_ref.vm.clone();
-            (vm, self.task_state.clone())
-        };
+        tokio::spawn(async move {
+            eprintln!("Starting up task: {:?}", task_id);
+            let mut task_ref = task_ref.lock().await;
 
-        drop(self);
-        // We use spawn_local because of the amount of bound variables (vm, state) here that
-        // would be difficult to have as 'Send.
-        spawn_local(async move {
-            loop {
-                let mut vm = vm.lock().unwrap();
-                let result = vm.exec().await;
-                match result {
-                    Ok(ExecutionResult::More) => continue,
-                    Ok(ExecutionResult::Complete(a)) => {
-                        let mut ts = ts.lock().unwrap();
-                        ts.commit_task(task_id).unwrap();
+            task_ref.run(task_id).await;
 
-                        eprintln!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
-                        break;
-                    }
-                    Err(e) => {
-                        let mut ts = ts.lock().unwrap();
-                        ts.rollback_task(task_id).unwrap();
-                        eprintln!("Task {} failed with error: {:?}", task_id.0.as_ffi(), e);
-                        panic!("error during execution: {:?}", e)
-                    }
-                }
-            }
-        });
+            eprintln!("Completed task: {:?}", task_id);
+        })
+        .await?;
 
         Ok(())
     }
+}
 
-    // TODO:
-    // Add concept of a 'connection' to the scheduler? Or is player sufficient?
-    // Should be able to dispatch through:
+impl Task {
+    pub async fn run(&mut self, task_id: TaskId) {
+        eprintln!("Entering task loop...");
+        let mut vm = self.vm.lock().await;
+        loop {
+            let result = vm.exec().await;
+            match result {
+                Ok(ExecutionResult::More) => {}
+                Ok(ExecutionResult::Complete(a)) => {
+                    vm.commit().unwrap();
 
-    // - do_login_task: login, create player, etc.
-    //      - need to think about what this means for us
-    // - do_command_task: parse command, then execute verb
-    //      - requires functionality in ODB to find/match command verb.  missing now
-
-    // After configuration as above, a task would be created, and then the scheduler would
-    // be able to spawn a new thread to execute the task. The execution would be invocation of
-    // the VM in a loop until completion, at which time a commit or rollback would be invoked.
-    // The task would be removed from the scheduler, and the thread would exit.
-
-    // Note that each physical connection is not 1:1 to a thread.
-
-    // Look into if tokio is a good fit here. Bad luck with it in the past, but this might be
-    // an appropriate place for it.
-
-    // Could just as easily just be a standard thread pool. async might be overkill, as there
-    // would be little I/O blocking here, unless we rework the lower DB layer to be async as well.
-
-    // Which would be major surgery and require piping async all the way up to the VM layer.
-    // Might be worth it but ouch.
-
-    // On the other hand most network I/O layers are async, and the websockets library likely will
-    // be as well.
-
-    // The following below is only provisional.
+                    eprintln!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
+                    return;
+                }
+                Err(e) => {
+                    vm.rollback().unwrap();
+                    eprintln!("Task {} failed with error: {:?}", task_id.0.as_ffi(), e);
+                    return;
+                }
+            }
+        }
+    }
 }
 
 impl TaskState {
-    pub fn new_task(
+    pub async fn new_task(
         &mut self,
         player: Objid,
-        state_source: Arc<Mutex<dyn WorldStateSource>>,
+        state_source: Arc<Mutex<dyn WorldStateSource + Send + Sync>>,
     ) -> Result<TaskId, anyhow::Error> {
-        let mut state_source = state_source.lock().unwrap();
-        let state = state_source.new_transaction()?;
+        let mut state_source = state_source.lock().await;
+        let state = state_source.new_world_state()?;
         let vm = Arc::new(Mutex::new(VM::new(state)));
         let tasks = self.tasks.clone();
-        let mut tasks = tasks.lock().unwrap();
+        let mut tasks = tasks.lock().await;
         let id = tasks.insert(Arc::new(Mutex::new(Task { player, vm })));
 
         Ok(id)
     }
 
-    pub fn get_task(&self, id: TaskId) -> Option<Arc<Mutex<Task>>> {
-        let mut tasks = self.tasks.lock().unwrap();
+    pub async fn get_task(&self, id: TaskId) -> Option<Arc<Mutex<Task>>> {
+        let mut tasks = self.tasks.lock().await;
         tasks.get_mut(id).cloned()
     }
 
-    pub fn commit_task(&mut self, id: TaskId) -> Result<(), anyhow::Error> {
-        let task = self.get_task(id).ok_or(anyhow::anyhow!("Task not found"))?;
-        let task = task.lock().unwrap();
-        task.vm.lock().unwrap().commit()?;
-        self.remove_task(id)?;
+    pub async fn commit_task(&mut self, id: TaskId) -> Result<(), anyhow::Error> {
+        let task = self
+            .get_task(id)
+            .await
+            .ok_or(anyhow::anyhow!("Task not found"))?;
+        let task = task.lock().await;
+        task.vm.lock().await.commit()?;
+        self.remove_task(id).await?;
         Ok(())
     }
 
-    pub fn rollback_task(&mut self, id: TaskId) -> Result<(), anyhow::Error> {
-        let task = self.get_task(id).ok_or(anyhow::anyhow!("Task not found"))?;
-        let task = task.lock().unwrap();
-        task.vm.lock().unwrap().rollback()?;
-        self.remove_task(id)?;
+    pub async fn rollback_task(&mut self, id: TaskId) -> Result<(), anyhow::Error> {
+        let task = self
+            .get_task(id)
+            .await
+            .ok_or(anyhow::anyhow!("Task not found"))?;
+        let task = task.lock().await;
+        task.vm.lock().await.rollback()?;
+        self.remove_task(id).await?;
         Ok(())
     }
 
-    fn remove_task(&mut self, id: TaskId) -> Result<(), anyhow::Error> {
-        let mut tasks = self.tasks.lock().unwrap();
+    async fn remove_task(&mut self, id: TaskId) -> Result<(), anyhow::Error> {
+        let mut tasks = self.tasks.lock().await;
         tasks.remove(id).ok_or(anyhow::anyhow!("Task not found"))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tokio::sync::Mutex;
+
+    use crate::compiler::codegen::compile;
+    use crate::db::inmem_db::ImDB;
+    use crate::db::inmem_db_worldstate::ImDbWorldStateSource;
+    use crate::model::objects::{ObjAttrs, ObjFlag};
+    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+    use crate::model::var::NOTHING;
+    use crate::model::verbs::VerbFlag;
+    use crate::server::parse_cmd::ParsedCommand;
+    use crate::server::scheduler::Scheduler;
+    use crate::util::bitenum::BitEnum;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn setup() {
+        let mut db = ImDB::new();
+
+        let mut tx = db.do_begin_tx().unwrap();
+        let sys_obj = db
+            .create_object(
+                &mut tx,
+                None,
+                ObjAttrs::new()
+                    .location(NOTHING)
+                    .parent(NOTHING)
+                    .name("System")
+                    .flags(BitEnum::new_with(ObjFlag::Read)),
+            )
+            .unwrap();
+        db.add_verb(
+            &mut tx,
+            sys_obj,
+            vec!["test"],
+            sys_obj,
+            BitEnum::new_with(VerbFlag::Read),
+            VerbArgsSpec {
+                dobj: ArgSpec::This,
+                prep: PrepSpec::None,
+                iobj: ArgSpec::This,
+            },
+            compile("return {1,2,3,4};").unwrap(),
+        )
+        .unwrap();
+
+        db.do_commit_tx(&mut tx).expect("Commit of test data");
+
+        let src = ImDbWorldStateSource::new(db);
+
+        let mut sched = Scheduler::new(Arc::new(Mutex::new(src)));
+        let task = sched
+            .setup_command_task(
+                sys_obj,
+                ParsedCommand {
+                    verb: "test".to_string(),
+                    argstr: "".to_string(),
+                    args: vec![],
+                    dobjstr: "".to_string(),
+                    dobj: NOTHING,
+                    prepstr: "".to_string(),
+                    prep: PrepSpec::Any,
+                    iobjstr: "".to_string(),
+                    iobj: NOTHING,
+                },
+            )
+            .await
+            .expect("setup command task");
+
+        sched.start_task(task).await.unwrap();
+
+        eprintln!("Done");
     }
 }

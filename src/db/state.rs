@@ -1,11 +1,7 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-
 use anyhow::Error;
 use thiserror::Error;
 
 use crate::db::CommitResult;
-use crate::db::matching::MatchEnvironment;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::var::{Objid, Var};
@@ -33,7 +29,7 @@ pub enum StateError {
     AmbiguousMatch(String),
 }
 
-pub trait WorldState {
+pub trait WorldState: Send + Sync {
     // Get the location of the given object.
     fn location_of(&mut self, obj: Objid) -> Result<Objid, anyhow::Error>;
 
@@ -84,40 +80,12 @@ pub trait WorldState {
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), anyhow::Error>;
 
     // Commit all modifications made to the state of this world since the start of its transaction.
-    // Consumes self.
-    fn commit(self) -> Result<CommitResult, anyhow::Error>;
+    fn commit(&mut self) -> Result<CommitResult, anyhow::Error>;
 
     // Rollback all modifications made to the state of this world since the start of its transaction.
-    // Consumes self.
-    fn rollback(self) -> Result<(), anyhow::Error>;
+    fn rollback(&mut self) -> Result<(), anyhow::Error>;
 }
 
 pub trait WorldStateSource {
-    fn new_transaction(&mut self) -> Result<Box<dyn WorldState>, Error>;
-}
-
-impl MatchEnvironment for dyn WorldState {
-    fn is_valid(&mut self, oid: Objid) -> Result<bool, Error> {
-        self.valid(oid)
-    }
-
-    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, Error> {
-        let mut names = self.names_of(oid)?;
-        let mut object_names = vec![names.0];
-        object_names.append(&mut names.1);
-        Ok(object_names)
-    }
-
-    fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, Error> {
-        let location = self.location_of(player)?;
-        let mut surroundings = self.contents_of(location)?;
-        surroundings.push(location);
-        surroundings.push(player);
-
-        Ok(surroundings)
-    }
-
-    fn location_of(&mut self, player: Objid) -> Result<Objid, Error> {
-        self.location_of(player)
-    }
+    fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, Error>;
 }
