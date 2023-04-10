@@ -8,6 +8,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::db::relations::TupleValueTraits;
 use crate::db::tx::CommitResult::Success;
+use crate::db::tx::EntryValue::Tombstone;
 use crate::db::CommitResult;
 use crate::db::CommitResult::ConflictRetry;
 
@@ -31,51 +32,30 @@ pub enum EntryValue<V: TupleValueTraits> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct WAL<K, V: TupleValueTraits> {
-    pub ts: u64,
-    pub entries: BTreeMap<K, MvccEntry<V>>,
-}
-
-impl<K: TupleValueTraits, V: TupleValueTraits> WAL<K, V> {
-    pub fn new(ts: u64) -> Self {
-        Self {
-            ts,
-            entries: Default::default(),
-        }
-    }
-    pub fn set(&mut self, tx: &mut Tx, key: K, value: EntryValue<V>, ts_i: u64) {
-        self.entries.insert(
-            key,
-            MvccEntry {
-                value,
-                write_timestmap: tx.tx_start_ts,
-                read_timestamp: ts_i,
-            },
-        );
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct MvccEntry<V: TupleValueTraits> {
+    pub tx_id: u64,
     pub value: EntryValue<V>,
     pub read_timestamp: u64,
-    pub write_timestmap: u64,
+    pub write_timestamp: u64,
+    pub committed: bool,
 }
 
 #[derive(Serialize, Deserialize, Archive)]
 pub struct MvccTuple<K: TupleValueTraits, V: TupleValueTraits> {
-    pub versions: HybridLock<Vec<MvccEntry<V>>>,
+    pub versions: Vec<MvccEntry<V>>,
     pd: PhantomData<K>,
 }
 
 impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     pub fn new(ts_i: u64, initial_value: EntryValue<V>) -> Self {
         MvccTuple {
-            versions: HybridLock::new(vec![MvccEntry {
+            versions: vec![MvccEntry {
+                tx_id: ts_i,
                 value: initial_value,
                 read_timestamp: ts_i,
-                write_timestmap: ts_i,
-            }]),
+                write_timestamp: ts_i,
+                committed: false,
+            }],
             pd: PhantomData,
         }
     }
@@ -84,7 +64,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
 impl<K: TupleValueTraits, V: TupleValueTraits> Default for MvccTuple<K, V> {
     fn default() -> Self {
         MvccTuple {
-            versions: HybridLock::new(Vec::new()),
+            versions: Vec::new(),
             pd: PhantomData,
         }
     }
@@ -96,89 +76,114 @@ pub struct WalValue<K: TupleValueTraits, V: TupleValueTraits> {
     wts: u64,
 }
 
+pub enum CommitCheckResult {
+    None,
+    Conflict,
+    CanCommit(usize),
+}
 impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
-    // TODO: vacuum/GC of old versions
+    // Check whether we can commit for a given tuple.
+    pub fn can_commit(&mut self, ts_t: u64) -> CommitCheckResult {
+        // Find the read timestamp and position of the version we created.
+        let mut our_version = self.versions.iter_mut().find_position(|v| v.tx_id == ts_t);
 
-    // Try to commit a value to the tuple.
-    pub fn commit(&mut self, ts_t: u64, value: &MvccEntry<V>) -> CommitResult {
-        let mut versions = self.versions.write();
+        // If we don't have a version of our own, we can just move on (shouldn't get here because
+        // we were called because the commit set mentioned us, but still ...)
+        let Some(our_version) = our_version else {
+            return CommitCheckResult::None;
+        };
+        let (position, our_rts) = (our_version.0, our_version.1.read_timestamp);
 
-        let iter_versions = versions.iter_mut().sorted_by_key(|v| v.read_timestamp);
+        drop(our_version);
 
-        // verify that the version we're trying to commit is based on a newer or same timestamp
-        for x in iter_versions {
-            let rts_x = x.read_timestamp;
-            let wts_x = x.write_timestmap;
-
-            // We can't commit a new version if there's extant versions that have a timestamp less
-            // than ours.
-            if rts_x < ts_t {
-                return ConflictRetry;
+        // verify that the version we're trying to commit is based on a newer or same timestamp than
+        // any of the extant versions that are out there.
+        for x in self.versions.iter_mut() {
+            if !x.committed {
+                continue;
             }
+            let rts_x = x.read_timestamp;
 
-            // If this is our version, we can just overwrite it.
-            if ts_t == wts_x {
-                *x = value.clone();
-                return Success;
+            if our_rts < rts_x {
+                return CommitCheckResult::Conflict;
             }
         }
-
-        // Otherwise create a new version of the value.
-        versions.push(MvccEntry {
-            value: value.value.clone(),
-            read_timestamp: ts_t,
-            write_timestmap: ts_t,
-        });
-
-        Success
+        return CommitCheckResult::CanCommit(position);
     }
 
-    pub fn set(&mut self, ts_t: u64, rts: u64, key: &K, value: &V, tx_wal: &mut WAL<K, V>) {
-        // Set a tuple value in the WAL for this transaction.
-        // The read-timestamp should be the version of the tuple that we're basing it off.
-        tx_wal.entries.insert(
-            key.clone(),
-            MvccEntry {
-                value: EntryValue::Value(value.clone()),
-                write_timestmap: ts_t,
-                read_timestamp: rts,
-            },
-        );
+    pub fn do_commit(&mut self, ts_t: u64, position: usize) {
+        let mut our_version = self.versions.get_mut(position).unwrap();
+        our_version.committed = true;
+        our_version.read_timestamp = ts_t;
+        our_version.write_timestamp = ts_t;
     }
 
-    pub fn delete(&mut self, ts_t: u64, rts: u64, key: &K, tx_wal: &mut WAL<K, V>) {
-        // Set a value in the WAL for this transaction.
-        // The read-timestamp should be the version of the tuple that we're basing it off.
-        tx_wal.entries.insert(
-            key.clone(),
-            MvccEntry {
-                value: EntryValue::Tombstone,
-                write_timestmap: ts_t,
-                read_timestamp: rts,
-            },
-        );
+    pub fn rollback(&mut self, ts_t: u64) -> Result<(), anyhow::Error> {
+        let version_position = self.versions.iter().position(|t| t.tx_id == ts_t);
+        if let Some(version_position) = version_position {
+            self.versions.remove(version_position);
+        }
+        Ok(())
     }
 
-    pub fn get(&self, ts_t: u64, key: &K, tx_wal: &mut WAL<K, V>) -> (u64, Option<V>) {
-        // If the transaction WAL has a value for this key, return that.
-        if let Some(wal_local_val) = tx_wal.entries.get(key) {
-            return (
-                wal_local_val.read_timestamp,
-                match &wal_local_val.value {
-                    EntryValue::Value(v) => Some(v.clone()),
-                    EntryValue::Tombstone => None,
-                },
-            );
+    pub fn set(&mut self, ts_t: u64, rts: u64, value: &V) {
+        // If there's a versions lready for this transaction, get it.
+        let version = self.versions.iter_mut().find(|p| p.tx_id == ts_t);
+        if let Some(version) = version {
+            version.value = EntryValue::Value(value.clone());
+            version.write_timestamp = ts_t;
+            version.read_timestamp = rts;
+            return;
         };
 
-        // Reads see the latest version of an object that was committed before our tx started
+        self.versions.push(MvccEntry {
+            tx_id: ts_t,
+            value: EntryValue::Value(value.clone()),
+            write_timestamp: ts_t,
+            read_timestamp: rts,
+            committed: false,
+        });
+    }
+
+    pub fn delete(&mut self, ts_t: u64, rts: u64) {
+        // If there's a versions already for this transaction, get it.
+        let version = self.versions.iter_mut().find(|p| p.tx_id == ts_t);
+        if let Some(version) = version {
+            version.value = Tombstone;
+            version.write_timestamp = ts_t;
+            version.read_timestamp = rts;
+            return;
+        }
+        self.versions.push(MvccEntry {
+            tx_id: ts_t,
+            value: Tombstone,
+            write_timestamp: ts_t,
+            read_timestamp: rts,
+            committed: false,
+        });
+    }
+
+    pub fn get(&self, ts_t: u64) -> (u64, Option<V>) {
+        // If we have our own tx version, use that.
+        let version = self.versions.iter().find(|p| p.tx_id == ts_t);
+        if let Some(version) = version {
+            let value = match &version.value {
+                EntryValue::Value(v) => Some(v.clone()),
+                Tombstone => None,
+            };
+            return (version.read_timestamp, value);
+        }
+
+        // Reads see the latest version of an object that was *committed* before our tx started
         // So scan through the versions in reverse order, and return the first one that
         // was committed before our tx started.
 
         // "Let Xk denote the version of X where for a given txn Ti: W-TS(Xk) ≤ TS(Ti)"
-        let versions = self.versions.write();
-
-        let x_k = versions.iter().rev().filter(|v| v.write_timestmap <= ts_t);
+        let x_k = self
+            .versions
+            .iter()
+            .rev()
+            .filter(|v| v.write_timestamp <= ts_t && v.committed);
 
         for x in x_k {
             let rts_x = x.read_timestamp;
@@ -186,8 +191,6 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
             // If our timestamp is greater than the read timestamp of the version we're looking at,
             // then we can return that version.
             if ts_t >= rts_x {
-                // We make a copy of the value and shove it into our WAL.
-                tx_wal.entries.insert(key.clone(), x.clone());
                 return (
                     rts_x,
                     match &x.value {
@@ -198,7 +201,17 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
             }
         }
 
-        (ts_t, None)
+        // the returned read-timestamp needs to be the highest committed timestamp for this tuple.
+        // if there is none, we return 0.
+        let highest = self
+            .versions
+            .iter()
+            .filter(|v| v.committed)
+            .map(|v| v.read_timestamp)
+            .max()
+            .unwrap_or(0);
+
+        return (highest, None);
     }
 }
 

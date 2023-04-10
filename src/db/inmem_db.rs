@@ -1,4 +1,5 @@
 use std::collections::Bound::Included;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use anyhow::{anyhow, Error};
 use itertools::Itertools;
@@ -7,10 +8,10 @@ use crate::db::relations;
 use crate::db::relations::Relation;
 use crate::db::state::WorldState;
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, Properties, PropertyInfo};
+use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, Properties, PropertyInfo, PropFlag};
 use crate::model::r#match::VerbArgsSpec;
-use crate::model::var::{Objid, Var, NOTHING};
+use crate::model::var::{NOTHING, Objid, Var};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
@@ -21,9 +22,9 @@ const MAX_VERB_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
 // Basic non-transactional, non-persistent in-memory "database" to bootstrap things.
 
 pub struct ImDB {
-    next_objid: i64,
-    next_pid: i64,
-    next_vid: i64,
+    next_objid: AtomicI64,
+    next_pid: AtomicI64,
+    next_vid: AtomicI64,
 
     // Objects and their attributes
     obj_attr_location: Relation<Objid, Objid>,
@@ -65,9 +66,9 @@ impl Default for ImDB {
 impl ImDB {
     pub fn new() -> Self {
         Self {
-            next_objid: 0,
-            next_pid: 0,
-            next_vid: 0,
+            next_objid: Default::default(),
+            next_pid: Default::default(),
+            next_vid: Default::default(),
             obj_attr_location: Relation::new_bidirectional(),
             obj_attr_owner: Relation::new_bidirectional(),
             obj_attr_parent: Relation::new_bidirectional(),
@@ -217,8 +218,7 @@ impl ImDB {
     ) -> Result<Objid, Error> {
         let oid = match oid {
             None => {
-                let oid = self.next_objid;
-                self.next_objid += 1;
+                let oid = self.next_objid.fetch_add(1, Ordering::SeqCst);
                 Objid(oid)
             }
             Some(oid) => oid,
@@ -350,8 +350,7 @@ impl ImDB {
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, Error> {
-        let pid = Pid(self.next_pid);
-        self.next_pid += 1;
+        let pid = Pid(self.next_pid.fetch_add(1, Ordering::SeqCst));
         let pd = Propdef {
             pid,
             definer,
@@ -494,8 +493,7 @@ impl ImDB {
         arg_spec: VerbArgsSpec,
         program: Binary,
     ) -> Result<VerbInfo, Error> {
-        let vid = Vid(self.next_vid);
-        self.next_vid += 1;
+        let vid = Vid(self.next_vid.fetch_add(1, Ordering::SeqCst));
 
         for name in names.clone() {
             self.verbdefs.insert(tx, &(oid, name.to_string()), &vid)?;
@@ -660,8 +658,8 @@ impl ImDB {
 mod tests {
     use crate::db::inmem_db::ImDB;
     use crate::db::tx::Tx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-    use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
+    use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+    use crate::model::props::{PropAttr, Propdef, PropDefs, Properties, PropFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttr, VerbFlag, Verbs};

@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use anyhow::Error;
 use thiserror::Error;
 
-use crate::db::matching::MatchEnvironment;
 use crate::db::CommitResult;
+use crate::db::matching::MatchEnvironment;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::var::{Objid, Var};
@@ -93,7 +93,7 @@ pub trait WorldState {
 }
 
 pub trait WorldStateSource {
-    fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error>;
+    fn new_transaction(&mut self) -> Result<Box<dyn WorldState>, Error>;
 }
 
 impl MatchEnvironment for dyn WorldState {

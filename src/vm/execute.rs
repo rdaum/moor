@@ -4,10 +4,10 @@ use std::sync::Mutex;
 use crate::compiler::labels::{Label, Offset};
 use crate::db::state::{StateError, WorldState};
 use crate::model::objects::ObjFlag;
+use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -75,7 +75,7 @@ pub enum ExecutionOutcome {
 pub struct VM {
     // Activation stack.
     stack: Vec<Activation>,
-    state: Arc<Mutex<dyn WorldState>>,
+    state: Box<dyn WorldState>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -106,10 +106,10 @@ macro_rules! binary_var_op {
 }
 
 impl VM {
-    pub fn new(state: Arc<Mutex<dyn WorldState>>) -> Self {
+    pub fn new(state: Box<dyn WorldState>) -> Self {
         Self {
             stack: vec![],
-            state: state.clone(),
+            state
         }
     }
 
@@ -358,10 +358,9 @@ impl VM {
             return self.push_error(E_INVIND);
         };
 
-        let mut state = self.state.lock().unwrap();
+        
 
-        let result = state.retrieve_property(obj, propname.as_str(), player_flags);
-        drop(state);
+        let result = self.state.retrieve_property(obj, propname.as_str(), player_flags);
         let v = match result {
             Ok(v) => v,
             Err(e) => match e.downcast_ref::<StateError>() {
@@ -383,28 +382,25 @@ impl VM {
         args: Vec<Var>,
         do_pass: bool,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let mut state = self.state.lock().unwrap();
-
         let this = if do_pass {
-            let valid_definer = state.valid(self.top().definer)?;
+            let valid_definer = self.state.valid(self.top().definer)?;
 
             if !valid_definer {
-                drop(state);
                 return self.push_error(E_INVIND);
             }
-            state.parent_of(this)?
+            self.state.parent_of(this)?
         } else {
             this
         };
 
-        let self_valid = state.valid(this)?;
+        let self_valid = self.state.valid(this)?;
         if !self_valid {
-            drop(state);
+            
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let result = state.retrieve_verb(this, verb.as_str());
-        drop(state);
+        let result = self.state.retrieve_verb(this, verb.as_str());
+        
         let Ok((binary, verbinfo)) = result else {
             return self.push_error(E_VERBNF);
         };
@@ -438,9 +434,9 @@ impl VM {
     ) -> Result<Var, anyhow::Error> {
         // TODO do_pass
         // TODO stack traces, error catch etc?
-        let mut state = self.state.lock().unwrap();
+        
 
-        let (binary, vi) = match state.retrieve_verb(obj, verb_name) {
+        let (binary, vi) = match self.state.retrieve_verb(obj, verb_name) {
             Ok(binary) => binary,
             Err(e) => {
                 return match e.downcast_ref::<StateError>() {
@@ -827,10 +823,10 @@ impl VM {
                         return self.push_error(E_TYPE);
                     }
                 };
-                let mut state = self.state.lock().unwrap();
+                
                 let update_result =
-                    state.update_property(obj, &propname, self.top().player_flags, &rhs);
-                drop(state);
+                    self.state.update_property(obj, &propname, self.top().player_flags, &rhs);
+                
                 match update_result {
                     Ok(()) => {
                         self.push(&Var::None);
@@ -1012,12 +1008,12 @@ impl VM {
     }
 
     pub fn commit(&mut self) -> Result<(), anyhow::Error> {
-        // self.state.lock().unwrap().commit()
+        // self.self.state.lock().unwrap().commit()
         Ok(())
     }
 
     pub fn rollback(&mut self) -> Result<(), anyhow::Error> {
-        // self.state.lock().unwrap().rollback()
+        // self.self.state.lock().unwrap().rollback()
         Ok(())
     }
 }
@@ -1031,18 +1027,18 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::state::{StateError, WorldState};
     use crate::db::CommitResult;
+    use crate::db::state::{StateError, WorldState};
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
+    use crate::vm::opcode::Op::*;
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -1050,24 +1046,24 @@ mod tests {
     }
 
     impl MockState {
-        fn new() -> Arc<Mutex<dyn WorldState>> {
+        fn new() -> Box<dyn WorldState> {
             let ws = Self {
                 verbs: Default::default(),
                 properties: Default::default(),
             };
-            Arc::new(Mutex::new(ws))
+            Box::new(ws)
         }
 
-        pub fn new_with_verb(name: &str, binary: &Binary) -> Arc<Mutex<dyn WorldState>> {
+        pub fn new_with_verb(name: &str, binary: &Binary) -> Box<dyn WorldState> {
             let mut ws = Self {
                 verbs: Default::default(),
                 properties: Default::default(),
             };
             ws.set_verb(Objid(0), name, binary);
-            Arc::new(Mutex::new(ws))
+            Box::new(ws)
         }
 
-        pub fn new_with_verbs(verbs: Vec<(&str, &Binary)>) -> Arc<Mutex<dyn WorldState>> {
+        pub fn new_with_verbs(verbs: Vec<(&str, &Binary)>) -> Box<dyn WorldState> {
             let mut ws = Self {
                 verbs: Default::default(),
                 properties: Default::default(),
@@ -1075,7 +1071,7 @@ mod tests {
             for (v, b) in verbs {
                 ws.set_verb(Objid(0), v, b);
             }
-            Arc::new(Mutex::new(ws))
+            Box::new(ws)
         }
 
         fn set_verb(&mut self, o: Objid, name: &str, binary: &Binary) {
@@ -1450,7 +1446,7 @@ mod tests {
 
     #[test]
     fn test_property_retrieval() {
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
@@ -1459,7 +1455,6 @@ mod tests {
             ),
         );
         {
-            let mut state = state.lock().unwrap();
             state
                 .add_property(
                     Objid(0),

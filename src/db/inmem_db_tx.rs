@@ -1,16 +1,16 @@
-use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicPtr, AtomicU64};
 
 use anyhow::{anyhow, Error};
 
+use crate::db::{CommitResult, relations};
 use crate::db::inmem_db::ImDB;
 use crate::db::state::{StateError, WorldState, WorldStateSource};
 use crate::db::tx::Tx;
-use crate::db::{relations, CommitResult};
-use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
+use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
 use crate::model::permissions::Permissions;
 use crate::model::props::{
-    Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
+    Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
 };
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::var::{Objid, Var};
@@ -19,7 +19,7 @@ use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
 pub struct ImDbTxSource {
-    db: Arc<Mutex<ImDB>>,
+    db: ImDB,
     next_tx_id: AtomicU64,
 
     // Global atomic counter for the next transactions start timestamp
@@ -29,7 +29,7 @@ pub struct ImDbTxSource {
 impl ImDbTxSource {
     pub fn new(db: ImDB) -> Self {
         ImDbTxSource {
-            db: Arc::new(Mutex::new(db)),
+            db,
             next_tx_id: Default::default(),
             gtls: Default::default(),
         }
@@ -37,44 +37,51 @@ impl ImDbTxSource {
 }
 
 impl WorldStateSource for ImDbTxSource {
-    fn new_transaction(&mut self) -> Result<Arc<Mutex<dyn WorldState>>, Error> {
+    fn new_transaction(&mut self) -> Result<Box<dyn WorldState>, Error> {
         let tx_id = self
             .next_tx_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let tx_start_ts = self.gtls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let mut tx = Tx::new(tx_id, tx_start_ts);
-        self.db.lock().unwrap().do_begin_tx(&mut tx)?;
-        let odb = ImDBTx::new(self.db.clone(), tx);
+        self.db.do_begin_tx(&mut tx)?;
+        let odb = ImDBTx::new(AtomicPtr::new(&mut self.db), tx);
         Ok(odb)
     }
 }
 
 pub struct ImDBTx {
-    db: Arc<Mutex<ImDB>>,
+    db: AtomicPtr<ImDB>,
     tx: Tx,
 }
 
 impl ImDBTx {
-    pub fn new(db: Arc<Mutex<ImDB>>, tx: Tx) -> Arc<Mutex<dyn WorldState>> {
-        Arc::new(Mutex::new(ImDBTx { db, tx }))
+    pub fn new(db: AtomicPtr<ImDB>, tx: Tx) -> Box<dyn WorldState> {
+        Box::new(ImDBTx { db, tx })
+    }
+
+    pub fn get_db<'a>(&mut self) -> &'a mut ImDB {
+        unsafe { return self.db.get_mut().as_mut().unwrap() }
     }
 }
 
+// The DB itself attempts to be thread-safe, there's no need to hold it in an Arc/Mutex.
+// We can the tx handle here send and sync-able, and it can be passed around and traded.
+unsafe impl Send for ImDBTx {}
+unsafe impl Sync for ImDBTx {}
+
 impl Objects for ImDBTx {
     fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .create_object(&mut self.tx, oid, attrs)
+        let db = self.get_db();
+        db.create_object(&mut self.tx, oid, attrs)
     }
 
     fn destroy_object(&mut self, oid: Objid) -> Result<(), Error> {
-        self.db.lock().unwrap().destroy_object(&mut self.tx, oid)
+        self.get_db().destroy_object(&mut self.tx, oid)
     }
 
     fn object_valid(&mut self, oid: Objid) -> Result<bool, Error> {
-        self.db.lock().unwrap().object_valid(&mut self.tx, oid)
+        self.get_db().object_valid(&mut self.tx, oid)
     }
 
     fn object_get_attrs(
@@ -82,25 +89,19 @@ impl Objects for ImDBTx {
         oid: Objid,
         attributes: BitEnum<ObjAttr>,
     ) -> Result<ObjAttrs, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .object_get_attrs(&mut self.tx, oid, attributes)
+        self.get_db().object_get_attrs(&mut self.tx, oid, attributes)
     }
 
     fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .object_set_attrs(&mut self.tx, oid, attributes)
+        self.get_db().object_set_attrs(&mut self.tx, oid, attributes)
     }
 
     fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, Error> {
-        self.db.lock().unwrap().object_children(&mut self.tx, oid)
+        self.get_db().object_children(&mut self.tx, oid)
     }
 
     fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, Error> {
-        self.db.lock().unwrap().object_contents(&mut self.tx, oid)
+        self.get_db().object_contents(&mut self.tx, oid)
     }
 }
 
@@ -111,10 +112,7 @@ impl Properties for ImDBTx {
         name: &str,
         attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropertyInfo>, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .find_property(&mut self.tx, oid, name, attrs)
+        self.get_db().find_property(&mut self.tx, oid, name, attrs)
     }
 
     fn get_property(
@@ -123,10 +121,7 @@ impl Properties for ImDBTx {
         handle: Pid,
         attrs: BitEnum<PropAttr>,
     ) -> Result<Option<PropAttrs>, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .get_property(&mut self.tx, oid, handle, attrs)
+        self.get_db().get_property(&mut self.tx, oid, handle, attrs)
     }
 
     fn set_property(
@@ -137,9 +132,7 @@ impl Properties for ImDBTx {
         owner: Objid,
         flags: BitEnum<PropFlag>,
     ) -> Result<(), Error> {
-        self.db
-            .lock()
-            .unwrap()
+        self.get_db()
             .set_property(&mut self.tx, handle, location, value, owner, flags)
     }
 }
@@ -154,25 +147,20 @@ impl Verbs for ImDBTx {
         arg_spec: VerbArgsSpec,
         program: Binary,
     ) -> Result<VerbInfo, Error> {
-        self.db
-            .lock()
-            .unwrap()
+        self.get_db()
             .add_verb(&mut self.tx, oid, names, owner, flags, arg_spec, program)
     }
 
     fn get_verbs(&mut self, oid: Objid, attrs: BitEnum<VerbAttr>) -> Result<Vec<VerbInfo>, Error> {
-        self.db.lock().unwrap().get_verbs(&mut self.tx, oid, attrs)
+        self.get_db().get_verbs(&mut self.tx, oid, attrs)
     }
 
     fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, Error> {
-        self.db.lock().unwrap().get_verb(&mut self.tx, vid, attrs)
+        self.get_db().get_verb(&mut self.tx, vid, attrs)
     }
 
     fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .update_verb(&mut self.tx, vid, attrs)
+        self.get_db().update_verb(&mut self.tx, vid, attrs)
     }
 
     fn find_command_verb(
@@ -182,9 +170,7 @@ impl Verbs for ImDBTx {
         arg_spec: VerbArgsSpec,
         attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
-        self.db
-            .lock()
-            .unwrap()
+        self.get_db()
             .find_command_verb(&mut self.tx, oid, verb, arg_spec, attrs)
     }
 
@@ -194,10 +180,7 @@ impl Verbs for ImDBTx {
         verb: &str,
         attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .find_callable_verb(&mut self.tx, oid, verb, attrs)
+        self.get_db().find_callable_verb(&mut self.tx, oid, verb, attrs)
     }
 
     fn find_indexed_verb(
@@ -206,10 +189,7 @@ impl Verbs for ImDBTx {
         index: usize,
         attrs: BitEnum<VerbAttr>,
     ) -> Result<Option<VerbInfo>, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .find_indexed_verb(&mut self.tx, oid, index, attrs)
+        self.get_db().find_indexed_verb(&mut self.tx, oid, index, attrs)
     }
 }
 
@@ -222,7 +202,7 @@ impl Permissions for ImDBTx {
         prop_flags: BitEnum<PropFlag>,
         prop_owner: Objid,
     ) -> bool {
-        self.db.lock().unwrap().property_allows(
+        self.get_db().property_allows(
             &mut self.tx,
             check_flags,
             player,
@@ -235,10 +215,7 @@ impl Permissions for ImDBTx {
 
 impl PropDefs for ImDBTx {
     fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .get_propdef(&mut self.tx, definer, pname)
+        self.get_db().get_propdef(&mut self.tx, definer, pname)
     }
 
     fn add_propdef(
@@ -249,7 +226,7 @@ impl PropDefs for ImDBTx {
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<Pid, Error> {
-        self.db.lock().unwrap().add_propdef(
+        self.get_db().add_propdef(
             &mut self.tx,
             definer,
             name,
@@ -260,28 +237,19 @@ impl PropDefs for ImDBTx {
     }
 
     fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .rename_propdef(&mut self.tx, definer, old, new)
+        self.get_db().rename_propdef(&mut self.tx, definer, old, new)
     }
 
     fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .delete_propdef(&mut self.tx, definer, pname)
+        self.get_db().delete_propdef(&mut self.tx, definer, pname)
     }
 
     fn count_propdefs(&mut self, definer: Objid) -> Result<usize, Error> {
-        self.db
-            .lock()
-            .unwrap()
-            .count_propdefs(&mut self.tx, definer)
+        self.get_db().count_propdefs(&mut self.tx, definer)
     }
 
     fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, Error> {
-        self.db.lock().unwrap().get_propdefs(&mut self.tx, definer)
+        self.get_db().get_propdefs(&mut self.tx, definer)
     }
 }
 
@@ -445,7 +413,7 @@ impl WorldState for ImDBTx {
     }
 
     fn commit(mut self) -> Result<CommitResult, anyhow::Error> {
-        match self.db.lock().unwrap().do_commit_tx(&mut self.tx) {
+        match self.get_db().do_commit_tx(&mut self.tx) {
             Ok(_) => Ok(CommitResult::Success),
             Err(relations::Error::Conflict) => Ok(CommitResult::ConflictRetry),
             Err(e) => Err(anyhow!(e)),
@@ -453,7 +421,7 @@ impl WorldState for ImDBTx {
     }
 
     fn rollback(mut self) -> Result<(), anyhow::Error> {
-        self.db.lock().unwrap().do_rollback_tx(&mut self.tx)?;
+        self.get_db().do_rollback_tx(&mut self.tx)?;
         Ok(())
     }
 }

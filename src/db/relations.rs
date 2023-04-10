@@ -2,13 +2,15 @@ use std::collections::{BTreeMap, BTreeSet, Bound, HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use hybrid_lock::HybridLock;
+use libc::posix_madvise;
 use rkyv::ser::serializers::{AlignedSerializer, AllocSerializer, CompositeSerializer};
 use rkyv::ser::Serializer;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::db::relations::Error::NotFound;
-use crate::db::tx::{EntryValue, MvccEntry, MvccTuple, Tx, WAL};
+use crate::db::relations::Error::{Conflict, NotFound};
+use crate::db::tx::{CommitCheckResult, EntryValue, MvccEntry, MvccTuple, Tx};
 use crate::db::CommitResult;
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -59,23 +61,39 @@ impl<T: Clone + Eq + PartialEq + Ord + Archive + SerializationTraits> TupleValue
 #[archive_attr(derive(Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash,))]
 pub struct TupleId(u64);
 
-// Describes a sort of specialized 2-ary relation, where L and R are the types of the two 'columns'.
-// Indexes can exist for both K and T columns, but must always exist for K.
-// The tuple values are stored in the indexes.
-pub struct Relation<L: TupleValueTraits, R: TupleValueTraits> {
+// The inner state that can be locked.
+struct RelationInner<L: TupleValueTraits, R: TupleValueTraits> {
     // Tuple storage for this relation.
     // Right now this is a hash mapping tuple IDs to the tuple values.
     // There are likely much faster data structures for this.
     values: HashMap<TupleId, MvccTuple<TupleId, (L, R)>>,
-    next_tuple_id: AtomicU64,
 
     // Indexes for the L and (optionally) R attributes.
     l_index: BTreeMap<L, TupleId>,
     r_index: Option<BTreeMap<R, HashSet<TupleId>>>,
 
-    // The set of current active write-ahead-log entries for transactions that are currently active
-    // on this relation.
-    wals: HashMap<u64, WAL<TupleId, (L, R)>>,
+    // The commit-set per transaction id. Holds the set of dirtied tuple IDs to be managed at commit
+    // time.
+    // Hashtable for now, but can revisit later.
+    commit_sets: HashMap<u64, Vec<TupleId>>,
+}
+
+impl<L: TupleValueTraits, R: TupleValueTraits> RelationInner<L, R> {
+    fn add_to_commit_set(&mut self, tx: &mut Tx, tuple_id: TupleId) {
+        self.commit_sets
+            .entry(tx.tx_id)
+            .and_modify(|c| c.push(tuple_id))
+            .or_insert(vec![tuple_id]);
+    }
+}
+
+// Describes a sort of specialized 2-ary relation, where L and R are the types of the two 'columns'.
+// Indexes can exist for both L and R columns, but must always exist for L.
+// The tuple values are stored in the indexes.
+pub struct Relation<L: TupleValueTraits, R: TupleValueTraits> {
+    next_tuple_id: AtomicU64,
+
+    inner: HybridLock<RelationInner<L, R>>,
 }
 
 impl<L: TupleValueTraits, R: TupleValueTraits> Default for Relation<L, R> {
@@ -86,47 +104,48 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Default for Relation<L, R> {
 
 impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     pub fn new() -> Self {
-        Relation {
+        let inner = RelationInner {
             values: Default::default(),
-            next_tuple_id: Default::default(),
             l_index: Default::default(),
             r_index: None,
-            wals: Default::default(),
+            commit_sets: Default::default(),
+        };
+        Relation {
+            next_tuple_id: Default::default(),
+            inner: HybridLock::new(inner),
         }
     }
 
     pub fn new_bidirectional() -> Self {
-        Relation {
+        let inner = RelationInner {
             values: Default::default(),
-            next_tuple_id: Default::default(),
             l_index: Default::default(),
             r_index: Some(Default::default()),
-            wals: Default::default(),
+            commit_sets: Default::default(),
+        };
+        Relation {
+            next_tuple_id: Default::default(),
+            inner: HybridLock::new(inner),
         }
     }
 
-    fn has_with_l(&mut self, tx: &mut Tx, k: &L, wal: &mut WAL<TupleId, (L, R)>) -> bool {
-        if let Some(tuple_id) = self.l_index.get(k) {
-            let (_rts, value) =
-                self.values
-                    .get_mut(tuple_id)
-                    .unwrap()
-                    .get(tx.tx_start_ts, tuple_id, wal);
+    fn has_with_l(&self, tx: &Tx, k: &L) -> bool {
+        let mut inner = self.inner.read();
+        if let Some(tuple_id) = inner.l_index.get(k).cloned() {
+            let (_rts, value) = inner.values.get(&tuple_id).unwrap().get(tx.tx_start_ts);
             return value.is_some();
         }
         false
     }
 
     pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
+        let mut inner = self.inner.write();
+
         // If there's already a tuple for this row, then we need to check if it's visible to us.
-        let tuple_id = if let Some(tuple_id) = self.l_index.get(l) {
+        let tuple_id = if let Some(tuple_id) = inner.l_index.get(l) {
             let tuple_id = tuple_id.clone();
-            let tuple = self.values.get_mut(&tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(|| WAL::new(tx.tx_start_ts));
-            let (rts, value) = tuple.get(tx.tx_start_ts, &tuple_id, wal);
+            let mut tuple = inner.values.get_mut(&tuple_id).unwrap();
+            let (rts, value) = tuple.get(tx.tx_start_ts);
 
             // A row visible to us? That's a duplicate.
             if let Some(_value) = value {
@@ -138,14 +157,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             // we don't know what they might do with it (they could roll back, etc.)
             // At commit time, this should get sorted out as a conflict, depending on who got there
             // first.
-            wal.entries.insert(
-                tuple_id,
-                MvccEntry {
-                    value: EntryValue::Value((l.clone(), r.clone())),
-                    read_timestamp: rts,
-                    write_timestmap: tx.tx_start_ts,
-                },
-            );
+            tuple.set(tx.tx_id, rts, &(l.clone(), r.clone()));
 
             tuple_id
         } else {
@@ -155,32 +167,27 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                     .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             );
             // Start with a tombstone, just to reserve the slot
-            self.values.insert(
+            inner.values.insert(
                 tuple_id,
                 MvccTuple::new(tx.tx_start_ts, EntryValue::Tombstone),
             );
-            self.l_index.insert(l.clone(), tuple_id);
+            inner.l_index.insert(l.clone(), tuple_id);
 
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(|| WAL::new(tx.tx_start_ts));
-            wal.set(
-                tx,
-                tuple_id,
-                EntryValue::Value((l.clone(), r.clone())),
-                tx.tx_start_ts,
-            );
+            let tuple = inner.values.get_mut(&tuple_id).unwrap();
+            tuple.set(tx.tx_id, tx.tx_start_ts, &(l.clone(), r.clone()));
 
             tuple_id
         };
 
-        if let Some(r_index) = &mut self.r_index {
+        // TODO versioning on secondary indexes is suspect.
+        if let Some(r_index) = &mut inner.r_index {
             r_index
                 .entry(r.clone())
                 .or_insert_with(Default::default)
                 .insert(tuple_id);
         }
+        inner.add_to_commit_set(tx, tuple_id);
+
         Ok(())
     }
 
@@ -195,32 +202,24 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn remove_for_l(&mut self, tx: &mut Tx, l: &L) -> Result<(), Error> {
-        if let Some(tuple_id) = self.l_index.get(l) {
-            let tuple = self.values.get_mut(tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(|| WAL::new(tx.tx_start_ts));
-            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+        let mut inner = self.inner.write();
+
+        if let Some(tuple_id) = inner.l_index.get(l).cloned() {
+            let tuple = inner.values.get_mut(&tuple_id).unwrap();
+            let (rts, value) = tuple.get(tx.tx_start_ts);
 
             // If we already deleted it or it's not visible to us, we can't delete it.
             if value.is_none() {
                 return Err(Error::NotFound);
             }
 
-            wal.entries.insert(
-                *tuple_id,
-                MvccEntry {
-                    value: EntryValue::Tombstone,
-                    read_timestamp: rts,
-                    write_timestmap: tx.tx_start_ts,
-                },
-            );
+            tuple.delete(tx.tx_id, rts);
+            inner.add_to_commit_set(tx, tuple_id);
 
-            if let Some(r_index) = &mut self.r_index {
+            if let Some(r_index) = &mut inner.r_index {
                 if let Some(value) = value {
                     r_index.entry(value.1).and_modify(|s| {
-                        s.remove(tuple_id);
+                        s.remove(&tuple_id);
                     });
                 }
             }
@@ -231,65 +230,35 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn update_l(&mut self, tx: &mut Tx, l: &L, new_l: &L) -> Result<(), Error> {
-        if let Some(tuple_id) = self.l_index.get(l) {
-            let tuple = self.values.get_mut(tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(|| WAL::new(tx.tx_start_ts));
-            let (rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+        let Some(current_r) = self.seek_for_l_eq(tx, l) else {
+            return Err(Error::NotFound);
+        };
+        self.remove_for_l(tx, l)?;
+        self.insert(tx, new_l, &current_r)?;
 
-            // If it's deleted by us or invisible to us, we can't update it, can we?
-            let Some(value) = value else {
-                return Err(Error::NotFound);
-            };
-
-            if let Some(r_index) = &mut self.r_index {
-                r_index.entry(value.1.clone()).and_modify(|s| {
-                    s.remove(tuple_id);
-                });
-            }
-
-            // There's a value there in some fashion. Update it to tombstone, and then perform an
-            // insert-equiv for the new key.
-            tuple.delete(tx.tx_start_ts, rts, tuple_id, wal);
-
-            // tuple_id is borrowed from self, ugly drop it here so we can use self to do the
-            // insert.
-            drop(tuple_id);
-            self.insert(tx, new_l, &value.1)?;
-
-            return Ok(());
-        }
-
-        Err(Error::NotFound)
+        Ok(())
     }
 
     pub fn update_r(&mut self, tx: &mut Tx, l: &L, new_r: &R) -> Result<(), Error> {
-        if let Some(tuple_id) = self.l_index.get(l) {
+        let mut inner = self.inner.write();
+
+        if let Some(tuple_id) = inner.l_index.get(l).cloned() {
             let tuple_id = tuple_id.clone();
 
-            let tuple = self.values.get_mut(&tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(|| WAL::new(tx.tx_start_ts));
-            let (rts, value) = tuple.get(tx.tx_start_ts, &tuple_id, wal);
+            let tuple = inner.values.get_mut(&tuple_id).unwrap();
+            let (rts, value) = tuple.get(tx.tx_start_ts);
 
             // If it's deleted by us or invisible to us, we can't update it, can we.
             let Some(old_value) = value else {
                 return Err(Error::NotFound);
             };
 
-            wal.set(
-                tx,
-                tuple_id,
-                EntryValue::Value((l.clone(), new_r.clone())),
-                rts,
-            );
+            tuple.set(tx.tx_id, rts, &(l.clone(), new_r.clone()));
+            inner.add_to_commit_set(tx, tuple_id);
 
             // Update secondary index.
-            if let Some(r_index) = &mut self.r_index {
+            // TODO: this is not versioned...
+            if let Some(r_index) = &mut inner.r_index {
                 r_index
                     .entry(old_value.1)
                     .or_insert_with(Default::default)
@@ -305,29 +274,24 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Err(Error::NotFound)
     }
 
-    pub fn seek_for_l_eq(&mut self, tx: &mut Tx, k: &L) -> Option<R> {
-        if let Some(tuple_id) = self.l_index.get(k) {
-            let tuple = self.values.get_mut(tuple_id).unwrap();
-            let wal = self
-                .wals
-                .entry(tx.tx_id)
-                .or_insert_with(|| WAL::new(tx.tx_start_ts));
-            return tuple.get(tx.tx_start_ts, tuple_id, wal).1.map(|v| v.1);
+    pub fn seek_for_l_eq(&self, tx: &Tx, k: &L) -> Option<R> {
+        let mut inner = self.inner.read();
+
+        if let Some(tuple_id) = inner.l_index.get(k).cloned() {
+            let tuple = inner.values.get(&tuple_id).unwrap();
+            return tuple.get(tx.tx_start_ts).1.map(|v| v.1);
         }
         None
     }
 
-    pub fn range_for_l_eq(&mut self, tx: &mut Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
-        let wal = self
-            .wals
-            .entry(tx.tx_id)
-            .or_insert_with(|| WAL::new(tx.tx_start_ts));
+    pub fn range_for_l_eq(&self, tx: &Tx, range: (Bound<&L>, Bound<&L>)) -> Vec<(L, R)> {
+        let mut inner = self.inner.read();
 
-        let tuple_range = self.l_index.range(range);
+        let tuple_range = inner.l_index.range(range);
         let visible_tuples = tuple_range.filter_map(|(k, tuple_id)| {
-            let tuple = self.values.get(tuple_id);
+            let tuple = inner.values.get(tuple_id);
             if let Some(tuple) = tuple {
-                let (_rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+                let (_rts, value) = tuple.get(tx.tx_start_ts);
                 if let Some(value) = value {
                     return Some((k.clone(), value.1));
                 }
@@ -337,23 +301,20 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         visible_tuples.collect()
     }
 
-    pub fn seek_for_r_eq(&mut self, tx: &mut Tx, t: &R) -> BTreeSet<L> {
-        let Some(t_index) = &self.r_index else {
+    pub fn seek_for_r_eq(&self, tx: &Tx, t: &R) -> BTreeSet<L> {
+        let mut inner = self.inner.read();
+
+        let Some(t_index) = &inner.r_index else {
             panic!("secondary index query without index");
         };
-
-        let wal = self
-            .wals
-            .entry(tx.tx_id)
-            .or_insert_with(|| WAL::new(tx.tx_start_ts));
 
         match t_index.get(t) {
             None => BTreeSet::new(),
             Some(tuples) => {
                 let visible_tuples = tuples.iter().filter_map(|tuple_id| {
-                    let tuple = self.values.get(tuple_id);
+                    let tuple = inner.values.get(tuple_id);
                     if let Some(tuple) = tuple {
-                        let (_rts, value) = tuple.get(tx.tx_start_ts, tuple_id, wal);
+                        let (_rts, value) = tuple.get(tx.tx_start_ts);
                         if let Some(value) = value {
                             return Some(value.0);
                         }
@@ -366,111 +327,87 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     }
 
     pub fn begin(&mut self, tx: &mut Tx) -> Result<(), Error> {
-        self.wals.insert(tx.tx_id, WAL::new(tx.tx_start_ts));
+        let mut inner = self.inner.write();
+        inner.commit_sets.entry(tx.tx_id).or_default();
         Ok(())
     }
 
-    fn wal_versions(&self, tx: &Tx) -> Vec<MvccEntry<(L, R)>> {
-        // Collect the versions from the other WALs on this transaction
-        let mut wal_versions = vec![];
-        for w in self.wals.iter() {
-            if *w.0 == tx.tx_id {
-                continue;
-            }
-            let mut entry_tuples: Vec<MvccEntry<(L, R)>> =
-                w.1.entries.values().map(|e| e.clone()).collect();
-            wal_versions.append(&mut entry_tuples);
-        }
-        wal_versions
-    }
-
     pub fn commit(&mut self, tx: &mut Tx) -> Result<(), Error> {
-        // we have nothing to commit
-        let Some(wal) = self.wals.get(&tx.tx_id) else {
-            return Ok(());
-        };
+        let mut inner = self.inner.write();
 
         // Flush the Tx's WAL writes to the main data structures.
-        for (tuple_id, wal_entry) in wal.entries.iter() {
-            let tuple = self.values.get_mut(tuple_id).unwrap();
-            let result = tuple.commit(tx.tx_start_ts, wal_entry);
+        let commit_set = inner.commit_sets.get(&tx.tx_id).cloned();
+        let Some(commit_set) = commit_set else {
+            // No commit set for this transaction (probably means `begin` was not called, which is
+            // a bit dubious.
+            return Ok(())
+        };
+
+        let mut versions = vec![];
+
+        let mut can_commit = true;
+        for tuple_id in commit_set {
+            let tuple = inner
+                .values
+                .get_mut(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            let result = tuple.can_commit(tx.tx_start_ts);
             match result {
-                CommitResult::Success => continue,
-                CommitResult::ConflictRetry => return Err(Error::Conflict),
+                CommitCheckResult::CanCommit(version_offset) => {
+                    versions.push((tuple_id, version_offset))
+                }
+                CommitCheckResult::Conflict => {
+                    can_commit = false;
+                }
+                CommitCheckResult::None => continue,
             }
         }
-        // Delete the WAL.
-        self.wals.remove(&tx.tx_id);
+
+        // If commit check failed, rollback, which will destroy our extant versions.
+        if !can_commit {
+            drop(inner);
+            self.rollback(tx)?;
+            return Err(Conflict);
+        }
+
+        // Do the actual commits.
+        for (tuple_id, position) in versions {
+            let tuple = inner
+                .values
+                .get_mut(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            tuple.do_commit(tx.tx_start_ts, position);
+        }
+
         Ok(())
     }
 
     pub fn rollback(&mut self, tx: &mut Tx) -> Result<(), Error> {
-        // Rollback should be throwing away the WAL without applying its changes.
-        self.wals.remove(&tx.tx_id);
+        let mut inner = self.inner.write();
+
+        // Rollback means we have to go delete all the versions created by us.
+        // And throw away the commit sets for this tx.
+        let Some(commit_set) = inner.commit_sets.remove(&tx.tx_id) else {
+            return Ok(())
+        };
+
+        // Find this transactions versions and destroy them.
+        for tuple_id in commit_set {
+            let tuple = inner
+                .values
+                .get_mut(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            tuple.rollback(tx.tx_id);
+        }
+
+        drop(inner);
+
         Ok(())
     }
 
     pub fn vacuum(&mut self) -> Result<(), Error> {
-        // Clear out any versions which precede the start timestamp of any live
-        // transactions in the WALs we know about.
-        let earliest_wal = self.wals.iter().min_by(|a, b| a.1.ts.cmp(&b.1.ts));
-
-        // If there's no active transactions, prune back to the latest version
-        let Some(earliest_wal) = earliest_wal else {
-            for v in &self.values {
-                let mut versions = v.1.versions.write();
-                let highest_write = versions.clone().into_iter().max_by(|a,b| {
-                    a.write_timestmap.cmp(&b.write_timestmap)
-                });
-                if let Some(highest_write) = highest_write {
-                    *versions = vec![highest_write.clone()];
-                }
-            }
-
-            return Ok(())
-        };
-        let earliest_ts = earliest_wal.1.ts;
-        for v in &self.values {
-            let mut versions = v.1.versions.write();
-            let to_keep = versions.iter().filter(|version| {
-                version.read_timestamp >= earliest_ts || version.write_timestmap >= earliest_ts
-            });
-            *versions = to_keep.cloned().collect();
-        }
-
+        todo!("implement");
         Ok(())
-    }
-
-    pub fn serialize(&self) -> Result<AlignedVec, Error>
-    where
-        <L as Archive>::Archived: Ord,
-        <R as Archive>::Archived: Ord,
-    {
-        // First we copy into a PRelation / PMvccTuple, which removes locks, WAL, and any other things
-        // that are irrelevant for the on-disk form.
-        // Then we serialize that.
-
-        let mut pr = PRelation {
-            values: Default::default(),
-            next_tuple_id: AtomicU64::new(self.next_tuple_id.load(Ordering::SeqCst)),
-            l_index: self.l_index.clone(),
-            r_index: self.r_index.clone(),
-        };
-
-        for (tuple_id, tuple) in self.values.iter() {
-            let versions = tuple.versions.read();
-            let pmvcc = PMvccTuple {
-                versions: versions.clone(),
-                pd: Default::default(),
-            };
-            pr.values.push((*tuple_id, pmvcc));
-        }
-
-        let mut serializer = AllocSerializer::<0>::default();
-        serializer.serialize_value(&pr).unwrap();
-        let bytes = serializer.into_serializer().into_inner();
-
-        Ok(bytes)
     }
 }
 
@@ -630,6 +567,7 @@ mod tests {
 
         let mut t1 = Tx::new(2, 2);
         assert_eq!(a.update_r(&mut t1, &"hello".to_string(), &2), Ok(()));
+
         let mut t2 = Tx::new(3, 3);
         assert_eq!(a.update_r(&mut t2, &"hello".to_string(), &3), Ok(()));
         assert_eq!(a.commit(&mut t1), Ok(()));
@@ -700,8 +638,8 @@ mod tests {
 
         // T2 should return Conflict, because it tried to delete before t1 (which had earlier ts
         // committed. Write timestamp for t2's a.hello should be later than t1's.
-        assert_eq!(a.commit(&mut t2), Err(Conflict));
         assert_eq!(a.commit(&mut t1), Ok(()));
+        assert_eq!(a.commit(&mut t2), Err(Conflict));
     }
 
     #[test]
@@ -737,9 +675,8 @@ mod tests {
         assert_eq!(a.commit(&mut t1), Ok(()));
         assert_eq!(a.commit(&mut t2), Ok(()));
 
-        // should fail because t3 (ts 3) is trying to commit a change based on a version where
-        // there was no tuple present at all. (ts 1 had not committed yet)
-        assert_eq!(a.commit(&mut t3), Err(Error::Conflict));
+        // this fails because the remove_for_l didn't succeed (invisible) and t1 already committed
+        assert_eq!(a.commit(&mut t3), Err(Conflict));
     }
 
     #[test]
@@ -754,15 +691,14 @@ mod tests {
             a.remove_for_l(&mut t2, &"hello".to_string()),
             Err(Error::NotFound)
         );
-
         assert_eq!(a.commit(&mut t1), Ok(()));
+
         let mut t3 = Tx::new(3, 3);
         assert_eq!(a.update_r(&mut t3, &"hello".to_string(), &3), Ok(()));
         assert_eq!(a.commit(&mut t2), Ok(()));
 
-        // Fails with conflict because t2 committed its version before t3 did, but t3 based its
-        // version off t1's
-        assert_eq!(a.commit(&mut t3), Err(Error::Conflict));
+        // this succeeds because t3 forked from t1's version, and t2 failed in its delete.
+        assert_eq!(a.commit(&mut t3), Ok(()));
     }
 
     #[test]
@@ -780,7 +716,8 @@ mod tests {
 
         assert_eq!(a.commit(&mut t1), Ok(()));
 
-        // T2 should be a conflict because t1 got there first.
+        // T2 should be a conflict because t1 got there first, and we didn't know about the
+        // tuple there at the time of our insert.
         assert_eq!(a.commit(&mut t2), Err(Conflict));
 
         let mut t3 = Tx::new(3, 3);

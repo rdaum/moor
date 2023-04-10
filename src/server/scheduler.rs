@@ -145,7 +145,7 @@ impl TaskState {
     ) -> Result<TaskId, anyhow::Error> {
         let mut state_source = state_source.lock().unwrap();
         let state = state_source.new_transaction()?;
-        let vm = Arc::new(Mutex::new(VM::new(state.clone())));
+        let vm = Arc::new(Mutex::new(VM::new(state)));
         let tasks = self.tasks.clone();
         let mut tasks = tasks.lock().unwrap();
         let id = tasks.insert(Arc::new(Mutex::new(Task { player, vm })));
