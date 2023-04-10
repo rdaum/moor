@@ -88,6 +88,28 @@ impl ImDB {
         }
     }
 
+    pub fn do_begin_tx(&mut self, tx: &mut Tx) -> Result<(), relations::Error> {
+        self.obj_attr_location.begin(tx)?;
+        self.obj_attr_owner.begin(tx)?;
+        self.obj_attr_parent.begin(tx)?;
+        self.obj_attr_name.begin(tx)?;
+        self.obj_attr_flags.begin(tx)?;
+        self.propdefs.begin(tx)?;
+        self.property_value.begin(tx)?;
+        self.property_location.begin(tx)?;
+        self.property_owner.begin(tx)?;
+        self.property_flags.begin(tx)?;
+        self.verbdefs.begin(tx)?;
+        self.verb_names.begin(tx)?;
+        self.verb_attr_definer.begin(tx)?;
+        self.verb_attr_owner.begin(tx)?;
+        self.verb_attr_flags.begin(tx)?;
+        self.verb_attr_args_spec.begin(tx)?;
+        self.verb_attr_program.begin(tx)?;
+
+        Ok(())
+    }
+
     pub fn do_commit_tx(&mut self, tx: &mut Tx) -> Result<(), relations::Error> {
         self.obj_attr_location.commit(tx)?;
         self.obj_attr_owner.commit(tx)?;

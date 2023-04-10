@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use hybrid_lock::HybridLock;
+use itertools::Itertools;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::db::relations::TupleValueTraits;
@@ -31,35 +32,34 @@ pub enum EntryValue<V: TupleValueTraits> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct WAL<K, V: TupleValueTraits> {
+    pub ts: u64,
     pub entries: BTreeMap<K, MvccEntry<V>>,
 }
 
 impl<K: TupleValueTraits, V: TupleValueTraits> WAL<K, V> {
-    pub fn set(&mut self, key: K, value: EntryValue<V>, ts_i: u64) {
+    pub fn new(ts: u64) -> Self {
+        Self {
+            ts,
+            entries: Default::default(),
+        }
+    }
+    pub fn set(&mut self, tx: &mut Tx, key: K, value: EntryValue<V>, ts_i: u64) {
         self.entries.insert(
             key,
             MvccEntry {
                 value,
-                write_timestmap: ts_i,
+                write_timestmap: tx.tx_start_ts,
                 read_timestamp: ts_i,
             },
         );
     }
 }
 
-impl<K: TupleValueTraits, V: TupleValueTraits> Default for WAL<K, V> {
-    fn default() -> Self {
-        WAL {
-            entries: Default::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct MvccEntry<V: TupleValueTraits> {
-    value: EntryValue<V>,
-    read_timestamp: u64,
-    write_timestmap: u64,
+    pub value: EntryValue<V>,
+    pub read_timestamp: u64,
+    pub write_timestmap: u64,
 }
 
 #[derive(Serialize, Deserialize, Archive)]
@@ -103,24 +103,22 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     pub fn commit(&mut self, ts_t: u64, value: &MvccEntry<V>) -> CommitResult {
         let mut versions = self.versions.write();
 
-        // find the most recent committed version (write timestamp is greatest)
-        let most_recent = versions.iter_mut().max_by_key(|x| x.write_timestmap);
+        let iter_versions = versions.iter_mut().sorted_by_key(|v| v.read_timestamp);
 
         // verify that the version we're trying to commit is based on a newer or same timestamp
-        if let Some(x) = most_recent {
+        for x in iter_versions {
             let rts_x = x.read_timestamp;
             let wts_x = x.write_timestmap;
 
-            // The version we're trying to commit has to be based on a read timestamp newer or eq  this...
-            if value.read_timestamp < rts_x {
+            // We can't commit a new version if there's extant versions that have a timestamp less
+            // than ours.
+            if rts_x < ts_t {
                 return ConflictRetry;
             }
 
             // If this is our version, we can just overwrite it.
-            // I don't think this happens in our world with the WAL tho.
             if ts_t == wts_x {
-                x.value = value.value.clone();
-                x.write_timestmap = ts_t;
+                *x = value.clone();
                 return Success;
             }
         }
@@ -136,7 +134,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     }
 
     pub fn set(&mut self, ts_t: u64, rts: u64, key: &K, value: &V, tx_wal: &mut WAL<K, V>) {
-        // Set a value in the WAL for this transaction.
+        // Set a tuple value in the WAL for this transaction.
         // The read-timestamp should be the version of the tuple that we're basing it off.
         tx_wal.entries.insert(
             key.clone(),

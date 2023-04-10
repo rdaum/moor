@@ -27,7 +27,7 @@ pub struct ImDbTxSource {
 }
 
 impl ImDbTxSource {
-    pub fn new(db: ImDB) -> ImDbTxSource {
+    pub fn new(db: ImDB) -> Self {
         ImDbTxSource {
             db: Arc::new(Mutex::new(db)),
             next_tx_id: Default::default(),
@@ -43,8 +43,10 @@ impl WorldStateSource for ImDbTxSource {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let tx_start_ts = self.gtls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        let tx = Tx::new(tx_id, tx_start_ts);
-        Ok(ImDBTx::new(self.db.clone(), tx))
+        let mut tx = Tx::new(tx_id, tx_start_ts);
+        self.db.lock().unwrap().do_begin_tx(&mut tx)?;
+        let odb = ImDBTx::new(self.db.clone(), tx);
+        Ok(odb)
     }
 }
 
@@ -450,7 +452,8 @@ impl WorldState for ImDBTx {
         }
     }
 
-    fn rollback(self) -> Result<(), anyhow::Error> {
+    fn rollback(mut self) -> Result<(), anyhow::Error> {
+        self.db.lock().unwrap().do_rollback_tx(&mut self.tx)?;
         Ok(())
     }
 }
