@@ -11,7 +11,6 @@ use crate::vm::activation::Activation;
 use crate::vm::builtin_functions::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
 
-
 #[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
     Fallthrough,

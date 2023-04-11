@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet, Bound, HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 
-
 use hybrid_lock::HybridLock;
 use rkyv::ser::serializers::{AlignedSerializer, CompositeSerializer};
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
@@ -76,7 +75,6 @@ struct RelationInner<L: TupleValueTraits, R: TupleValueTraits> {
     commit_sets: HashMap<u64, Vec<TupleId>>,
 }
 
-
 impl<L: TupleValueTraits, R: TupleValueTraits> RelationInner<L, R> {
     fn add_to_commit_set(&mut self, tx: &mut Tx, tuple_id: TupleId) {
         self.commit_sets
@@ -121,7 +119,11 @@ impl<L: TupleValueTraits, R: TupleValueTraits> RelationInner<L, R> {
         Ok(versions)
     }
 
-    pub fn complete_commit(&mut self, tx: &Tx, versions: Vec<(TupleId, usize)>) -> Result<(), RelationError> {
+    pub fn complete_commit(
+        &mut self,
+        tx: &Tx,
+        versions: Vec<(TupleId, usize)>,
+    ) -> Result<(), RelationError> {
         // Do the actual commits.
         for (tuple_id, position) in versions {
             let tuple = self
@@ -136,7 +138,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> RelationInner<L, R> {
         Ok(())
     }
 
-    pub fn rollback(&mut self, tx : &Tx) -> Result<(), anyhow::Error> {
+    pub fn rollback(&mut self, tx: &Tx) -> Result<(), anyhow::Error> {
         let commit_set = self.commit_sets.remove(&tx.tx_id);
 
         let Some(commit_set) =  commit_set else {
@@ -392,12 +394,16 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Ok(())
     }
 
-    pub fn check_commit(&mut self, tx: &Tx) -> Result<Vec<(TupleId, usize)>, RelationError>{
+    pub fn check_commit(&mut self, tx: &Tx) -> Result<Vec<(TupleId, usize)>, RelationError> {
         let inner = self.inner.read();
         inner.check_commit(tx)
     }
 
-    pub fn complete_commit(&mut self, tx: &Tx, versions: Vec<(TupleId, usize)>) -> Result<(), RelationError> {
+    pub fn complete_commit(
+        &mut self,
+        tx: &Tx,
+        versions: Vec<(TupleId, usize)>,
+    ) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
         inner.complete_commit(tx, versions)
     }

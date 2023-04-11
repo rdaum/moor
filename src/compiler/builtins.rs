@@ -1,5 +1,6 @@
-use crate::compiler::labels::Label;
 use std::collections::HashMap;
+
+use crate::compiler::labels::Label;
 
 pub const BUILTINS: &[&str] = &[
     // disassemble
