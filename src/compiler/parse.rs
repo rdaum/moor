@@ -769,6 +769,7 @@ pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::Arg::Normal;
     use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
     use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt};
     use crate::compiler::parse::parse_program;
@@ -791,6 +792,21 @@ mod tests {
                     Box::new(VarExpr(Var::Int(1))),
                     Box::new(VarExpr(Var::Int(2))),
                 )),
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_call_literal() {
+        let program = "notify(\"test\");";
+        let parse = parse_program(program).unwrap();
+
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::Expr(Expr::Call {
+                function: "notify".to_string(),
+                args: vec![Normal(VarExpr(Str("test".into())))],
             })
         );
     }

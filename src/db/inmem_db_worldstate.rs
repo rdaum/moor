@@ -14,7 +14,6 @@ use crate::model::props::{
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
-
 use crate::server::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
@@ -376,15 +375,6 @@ impl WorldState for ImDBTx {
         Ok(())
     }
 
-    fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
-        let attrs =
-            self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Parent) | ObjAttr::Owner)?;
-        // TODO: this masks other (internal?) errors..
-        attrs
-            .parent
-            .ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
-    }
-
     fn find_command_verb_on(
         &mut self,
         oid: Objid,
@@ -408,6 +398,15 @@ impl WorldState for ImDBTx {
         let iobj = spec_for_fn(oid, pc.iobj);
 
         self.find_command_verb(oid, pc.verb.as_str(), dobj, pc.prep, iobj)
+    }
+
+    fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+        let attrs =
+            self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Parent) | ObjAttr::Owner)?;
+        // TODO: this masks other (internal?) errors..
+        attrs
+            .parent
+            .ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
     }
 
     fn valid(&mut self, obj: Objid) -> Result<bool, Error> {

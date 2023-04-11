@@ -3,7 +3,6 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::Objid;
-
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 

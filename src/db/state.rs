@@ -4,7 +4,6 @@ use thiserror::Error;
 use crate::db::CommitResult;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
-
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::VerbInfo;
 use crate::server::parse_cmd::ParsedCommand;

@@ -130,7 +130,7 @@ impl Activation {
         Ok(a)
     }
 
-    fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
+    pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
         let n = self.binary.var_names.find_name_offset(name);
         if let Some(n) = n {
             self.environment[n] = value;

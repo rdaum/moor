@@ -9,7 +9,6 @@ use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::E_NONE;
 use crate::model::var::{Objid, Var, NOTHING};
-
 use crate::server::parse_cmd::{parse_command, ParsedCommand};
 use crate::util::bitenum::BitEnum;
 use crate::vm::execute::{ExecutionResult, VM};

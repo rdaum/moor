@@ -1,3 +1,4 @@
+use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
 use crate::db::state::{StateError, WorldState};
 use crate::model::objects::ObjFlag;
@@ -7,7 +8,9 @@ use crate::model::var::Error::{
 use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
+use crate::vm::builtin_functions::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
+
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
@@ -69,10 +72,16 @@ pub enum ExecutionOutcome {
     Blocked, // Task called a blocking built-in function.
 }
 
+pub(crate) trait BfFunction: Sync + Send {
+    fn name(&self) -> String;
+    fn call(&self, act: &mut dyn WorldState, args: Vec<Var>) -> Result<Var, anyhow::Error>;
+}
+
 pub struct VM {
     // Activation stack.
     stack: Vec<Activation>,
     state: Box<dyn WorldState>,
+    bf_funcs: Vec<Box<dyn BfFunction>>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -104,9 +113,15 @@ macro_rules! binary_var_op {
 
 impl VM {
     pub fn new(state: Box<dyn WorldState>) -> Self {
+        let mut bf_init: Vec<Box<dyn BfFunction>> = Vec::with_capacity(BUILTINS.len());
+        for _ in 0..BUILTINS.len() {
+            bf_init.push(Box::new(BfNoop {}))
+        }
+        let _bf_noop = Box::new(BfNoop {});
         Self {
             stack: vec![],
             state,
+            bf_funcs: bf_init,
         }
     }
 
@@ -866,9 +881,18 @@ impl VM {
             Op::Done => {
                 return self.unwind_stack(FinallyReason::Return(Var::None));
             }
-            Op::FuncCall { .. } => {
-                // TODO Actually perform call. For now we just raise permissions.
-                return self.push_error(E_PERM);
+            Op::FuncCall { id } => {
+                // Pop arguments, should be a list.
+                let args = self.pop();
+                let Var::List(args) = args else {
+                    return self.push_error(E_ARGS);
+                };
+                if id.0 as usize >= self.bf_funcs.len() {
+                    return self.push_error(E_VARNF);
+                }
+                let bf = self.bf_funcs[id.0 as usize].as_ref();
+                let result = bf.call(self.state.as_mut(), args)?;
+                self.push(&result);
             }
             Op::PushLabel(label) => {
                 self.push(&Var::_Label(label));
@@ -1673,5 +1697,17 @@ mod tests {
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
         assert_eq!(result, Var::Int(666));
+    }
+
+    #[test]
+    fn test_call_builtin() {
+        let program = "return notify(\"test\");";
+        let binary = compile(program).unwrap();
+        let state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new(state);
+
+        call_verb("test", &mut vm);
+        let result = exec_vm(&mut vm);
+        assert_eq!(result, Var::Err(E_NONE));
     }
 }

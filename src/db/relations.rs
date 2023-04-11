@@ -707,7 +707,7 @@ mod tests {
         // tuple there at the time of our insert.
         assert_eq!(a.commit(&mut t2), Err(Conflict));
 
-        let mut t3 = Tx::new(3, 3);
+        let t3 = Tx::new(3, 3);
         assert_eq!(a.seek_for_l_eq(&t3, &"hello".to_string()), Some(1));
     }
 }
