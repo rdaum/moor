@@ -320,6 +320,40 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Ok(())
     }
 
+    pub fn check_commit(&mut self, tx: &Tx) -> Result<bool, Error> {
+        let mut inner = self.inner.write();
+
+        // Flush the Tx's WAL writes to the main data structures.
+        let commit_set = inner.commit_sets.get(&tx.tx_id).cloned();
+        let Some(commit_set) = commit_set else {
+                // No commit set for this transaction (probably means `begin` was not called, which is
+                // a bit dubious.
+                return Ok(true)
+            };
+
+        let mut versions = vec![];
+
+        let mut can_commit = true;
+        for tuple_id in commit_set {
+            let tuple = inner
+                .values
+                .get_mut(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            let result = tuple.can_commit(tx.tx_start_ts);
+            match result {
+                CommitCheckResult::CanCommit(version_offset) => {
+                    versions.push((tuple_id, version_offset))
+                }
+                CommitCheckResult::Conflict => {
+                    can_commit = false;
+                }
+                CommitCheckResult::None => continue,
+            }
+        }
+
+        Ok(can_commit)
+    }
+
     pub fn commit(&mut self, tx: &mut Tx) -> Result<(), Error> {
         let mut inner = self.inner.write();
 

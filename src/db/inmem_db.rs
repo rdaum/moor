@@ -2,6 +2,7 @@ use std::collections::Bound::Included;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use anyhow::{anyhow, Error};
+use hybrid_lock::HybridLock;
 use itertools::Itertools;
 
 use crate::db::relations;
@@ -27,6 +28,15 @@ pub struct ImDB {
     next_vid: AtomicI64,
 
     next_tx_id: AtomicU64,
+
+    // Commit lock, held while a transaction is attempting to commit across all relations, to stop
+    // others from attempting commit at the same time, since while each tx commit is effectively
+    // atomic, the set of them is not.
+    // The underlying u64 just counts the number of commit attempts, and the value is never really
+    // read, but is just here to give the lock something to hold.
+    // Architecturally not ideal, difficult to get around with the way the tx logic is managed per
+    // relation and the way each relation holds different types.
+    commit_lock: HybridLock<u64>,
 
     // Global atomic counter for the next transactions start timestamp
     gtls: AtomicU64,
@@ -75,6 +85,7 @@ impl ImDB {
             next_pid: Default::default(),
             next_vid: Default::default(),
             next_tx_id: Default::default(),
+            commit_lock: HybridLock::new(0),
             gtls: Default::default(),
             obj_attr_location: Relation::new_bidirectional(),
             obj_attr_owner: Relation::new_bidirectional(),
@@ -125,45 +136,79 @@ impl ImDB {
     }
 
     pub fn do_commit_tx(&mut self, tx: &mut Tx) -> Result<(), relations::Error> {
-        self.obj_attr_location.commit(tx)?;
-        self.obj_attr_owner.commit(tx)?;
-        self.obj_attr_parent.commit(tx)?;
-        self.obj_attr_name.commit(tx)?;
-        self.obj_attr_flags.commit(tx)?;
-        self.propdefs.commit(tx)?;
-        self.property_value.commit(tx)?;
-        self.property_location.commit(tx)?;
-        self.property_owner.commit(tx)?;
-        self.property_flags.commit(tx)?;
-        self.verbdefs.commit(tx)?;
-        self.verb_names.commit(tx)?;
-        self.verb_attr_definer.commit(tx)?;
-        self.verb_attr_owner.commit(tx)?;
-        self.verb_attr_flags.commit(tx)?;
-        self.verb_attr_args_spec.commit(tx)?;
-        self.verb_attr_program.commit(tx)?;
+        let mut commit_lock = self.commit_lock.write();
+        *commit_lock += 1;
+
+        let can_commit = self.obj_attr_location.check_commit(tx)?
+            && self.obj_attr_owner.check_commit(tx)?
+            && self.obj_attr_parent.check_commit(tx)?
+            && self.obj_attr_name.check_commit(tx)?
+            && self.obj_attr_flags.check_commit(tx)?
+            && self.propdefs.check_commit(tx)?
+            && self.property_value.check_commit(tx)?
+            && self.property_location.check_commit(tx)?
+            && self.property_owner.check_commit(tx)?
+            && self.property_flags.check_commit(tx)?
+            && self.verbdefs.check_commit(tx)?
+            && self.verb_names.check_commit(tx)?
+            && self.verb_attr_definer.check_commit(tx)?
+            && self.verb_attr_owner.check_commit(tx)?
+            && self.verb_attr_flags.check_commit(tx)?
+            && self.verb_attr_args_spec.check_commit(tx)?
+            && self.verb_attr_program.check_commit(tx)?;
+
+        if !can_commit {
+            drop(commit_lock);
+            return self.do_rollback_tx(tx);
+        }
+
+        // Now that we've confirmed we can commit on all of the above, proceed to actually commit
+        // them. A failure on any of these should be a panic, because it should not be possible for
+        // integrity to be violated while the commit lock is held. (Other transactions should not
+        // be able to commit or rollback).
+        self.obj_attr_location.commit(tx).unwrap();
+        self.obj_attr_owner.commit(tx).unwrap();
+        self.obj_attr_parent.commit(tx).unwrap();
+        self.obj_attr_name.commit(tx).unwrap();
+        self.obj_attr_flags.commit(tx).unwrap();
+        self.propdefs.commit(tx).unwrap();
+        self.property_value.commit(tx).unwrap();
+        self.property_location.commit(tx).unwrap();
+        self.property_owner.commit(tx).unwrap();
+        self.property_flags.commit(tx).unwrap();
+        self.verbdefs.commit(tx).unwrap();
+        self.verb_names.commit(tx).unwrap();
+        self.verb_attr_definer.commit(tx).unwrap();
+        self.verb_attr_owner.commit(tx).unwrap();
+        self.verb_attr_flags.commit(tx).unwrap();
+        self.verb_attr_args_spec.commit(tx).unwrap();
+        self.verb_attr_program.commit(tx).unwrap();
 
         Ok(())
     }
 
     pub fn do_rollback_tx(&mut self, tx: &mut Tx) -> Result<(), relations::Error> {
-        self.obj_attr_location.rollback(tx)?;
-        self.obj_attr_owner.rollback(tx)?;
-        self.obj_attr_parent.rollback(tx)?;
-        self.obj_attr_name.rollback(tx)?;
-        self.obj_attr_flags.rollback(tx)?;
-        self.propdefs.rollback(tx)?;
-        self.property_value.rollback(tx)?;
-        self.property_location.rollback(tx)?;
-        self.property_owner.rollback(tx)?;
-        self.property_flags.rollback(tx)?;
-        self.verbdefs.rollback(tx)?;
-        self.verb_names.rollback(tx)?;
-        self.verb_attr_definer.rollback(tx)?;
-        self.verb_attr_owner.rollback(tx)?;
-        self.verb_attr_flags.rollback(tx)?;
-        self.verb_attr_args_spec.rollback(tx)?;
-        self.verb_attr_program.rollback(tx)?;
+        let mut commit_lock = self.commit_lock.write();
+        *commit_lock += 1;
+
+        // Failure to rollback is a panic, as it indicates a fundamental system issue.
+        self.obj_attr_location.rollback(tx).unwrap();
+        self.obj_attr_owner.rollback(tx).unwrap();
+        self.obj_attr_parent.rollback(tx).unwrap();
+        self.obj_attr_name.rollback(tx).unwrap();
+        self.obj_attr_flags.rollback(tx).unwrap();
+        self.propdefs.rollback(tx).unwrap();
+        self.property_value.rollback(tx).unwrap();
+        self.property_location.rollback(tx).unwrap();
+        self.property_owner.rollback(tx).unwrap();
+        self.property_flags.rollback(tx).unwrap();
+        self.verbdefs.rollback(tx).unwrap();
+        self.verb_names.rollback(tx).unwrap();
+        self.verb_attr_definer.rollback(tx).unwrap();
+        self.verb_attr_owner.rollback(tx).unwrap();
+        self.verb_attr_flags.rollback(tx).unwrap();
+        self.verb_attr_args_spec.rollback(tx).unwrap();
+        self.verb_attr_program.rollback(tx).unwrap();
 
         Ok(())
     }
