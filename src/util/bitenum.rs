@@ -36,6 +36,13 @@ impl<T: ToPrimitive> BitEnum<T> {
         s
     }
 
+    pub fn all() -> Self {
+        Self {
+            value: u64::MAX,
+            phantom: PhantomData,
+        }
+    }
+
     pub fn set(&mut self, value: T) {
         self.value |= 1 << value.to_u64().unwrap();
     }
@@ -57,6 +64,12 @@ impl<T: ToPrimitive> BitOr for BitEnum<T> {
             value: self.value | rhs.value,
             phantom: PhantomData,
         }
+    }
+}
+
+impl<T: ToPrimitive> Default for BitEnum<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

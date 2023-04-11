@@ -11,9 +11,11 @@ use crate::model::permissions::Permissions;
 use crate::model::props::{
     Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
 };
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::var::{Objid, Var};
+use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
+
+use crate::server::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
@@ -154,13 +156,14 @@ impl Verbs for ImDBTx {
 
     fn find_command_verb(
         &mut self,
-        oid: Objid,
+        obj: Objid,
         verb: &str,
-        arg_spec: VerbArgsSpec,
-        attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, Error> {
+        dobj: ArgSpec,
+        prep: PrepSpec,
+        iobj: ArgSpec,
+    ) -> Result<Option<VerbInfo>, anyhow::Error> {
         self.get_db()
-            .find_command_verb(&mut self.tx, oid, verb, arg_spec, attrs)
+            .find_command_verb(&mut self.tx, obj, verb, dobj, prep, iobj)
     }
 
     fn find_callable_verb(
@@ -380,6 +383,31 @@ impl WorldState for ImDBTx {
         attrs
             .parent
             .ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
+    }
+
+    fn find_command_verb_on(
+        &mut self,
+        oid: Objid,
+        pc: &ParsedCommand,
+    ) -> Result<Option<VerbInfo>, anyhow::Error> {
+        if !self.valid(oid)? {
+            return Ok(None);
+        }
+
+        let spec_for_fn = |oid, pco| -> ArgSpec {
+            if pco == oid {
+                ArgSpec::This
+            } else if pco == NOTHING {
+                ArgSpec::None
+            } else {
+                ArgSpec::Any
+            }
+        };
+
+        let dobj = spec_for_fn(oid, pc.dobj);
+        let iobj = spec_for_fn(oid, pc.iobj);
+
+        self.find_command_verb(oid, pc.verb.as_str(), dobj, pc.prep, iobj)
     }
 
     fn valid(&mut self, obj: Objid) -> Result<bool, Error> {

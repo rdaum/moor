@@ -1030,6 +1030,7 @@ mod tests {
     use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
+    use crate::server::parse_cmd::ParsedCommand;
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
@@ -1195,6 +1196,14 @@ mod tests {
 
         fn rollback(&mut self) -> Result<(), anyhow::Error> {
             Ok(())
+        }
+
+        fn find_command_verb_on(
+            &mut self,
+            _oid: Objid,
+            _pc: &ParsedCommand,
+        ) -> Result<Option<VerbInfo>, Error> {
+            unimplemented!()
         }
     }
 

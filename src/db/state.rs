@@ -4,8 +4,10 @@ use thiserror::Error;
 use crate::db::CommitResult;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
+
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::VerbInfo;
+use crate::server::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
@@ -69,6 +71,12 @@ pub trait WorldState: Send + Sync {
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), anyhow::Error>;
+
+    fn find_command_verb_on(
+        &mut self,
+        oid: Objid,
+        pc: &ParsedCommand,
+    ) -> Result<Option<VerbInfo>, anyhow::Error>;
 
     // Get the object that is the parent of the given object.
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, anyhow::Error>;

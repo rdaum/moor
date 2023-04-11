@@ -1,8 +1,9 @@
 use enum_primitive_derive::Primitive;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::model::r#match::VerbArgsSpec;
+use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::Objid;
+
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
@@ -83,10 +84,11 @@ pub trait Verbs {
     /// Match verbs using prepositional pieces.
     fn find_command_verb(
         &mut self,
-        oid: Objid,
+        obj: Objid,
         verb: &str,
-        arg_spec: VerbArgsSpec,
-        attrs: BitEnum<VerbAttr>,
+        dobj: ArgSpec,
+        prep: PrepSpec,
+        iobj: ArgSpec,
     ) -> Result<Option<VerbInfo>, anyhow::Error>;
 
     /// Find the verbs that match based on the provided name-stem.

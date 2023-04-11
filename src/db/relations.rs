@@ -4,7 +4,6 @@ use std::sync::atomic::AtomicU64;
 
 use hybrid_lock::HybridLock;
 use rkyv::ser::serializers::{AlignedSerializer, CompositeSerializer};
-use rkyv::ser::Serializer;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
@@ -125,15 +124,6 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             next_tuple_id: Default::default(),
             inner: HybridLock::new(inner),
         }
-    }
-
-    fn has_with_l(&self, tx: &Tx, k: &L) -> bool {
-        let inner = self.inner.read();
-        if let Some(tuple_id) = inner.l_index.get(k).cloned() {
-            let (_rts, value) = inner.values.get(&tuple_id).unwrap().get(tx.tx_start_ts);
-            return value.is_some();
-        }
-        false
     }
 
     pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
@@ -395,7 +385,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
                 .values
                 .get_mut(&tuple_id)
                 .expect("tuple in commit set missing from relation");
-            tuple.rollback(tx.tx_id);
+            tuple.rollback(tx.tx_id).unwrap();
         }
 
         drop(inner);
@@ -405,7 +395,6 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
     pub fn vacuum(&mut self) -> Result<(), Error> {
         todo!("implement");
-        Ok(())
     }
 }
 
@@ -510,11 +499,11 @@ mod tests {
         );
 
         assert_eq!(
-            relation.seek_for_r_eq(&mut tx1, &1),
+            relation.seek_for_r_eq(&tx1, &1),
             BTreeSet::from(["hello".into(), "bye".into()])
         );
         assert_eq!(
-            relation.seek_for_r_eq(&mut tx1, &2),
+            relation.seek_for_r_eq(&tx1, &2),
             BTreeSet::from(["tomorrow".into(), "yesterday".into()])
         );
 
@@ -523,7 +512,7 @@ mod tests {
             Ok(())
         );
         assert_eq!(
-            relation.seek_for_r_eq(&mut tx1, &1),
+            relation.seek_for_r_eq(&tx1, &1),
             BTreeSet::from(["everyday".into(), "bye".into()])
         );
 
@@ -532,25 +521,25 @@ mod tests {
             Ok(())
         );
         assert_eq!(
-            relation.seek_for_r_eq(&mut tx1, &1),
+            relation.seek_for_r_eq(&tx1, &1),
             BTreeSet::from(["bye".into()])
         );
 
         assert_eq!(relation.upsert(&mut tx1, &"bye".to_string(), &3), Ok(()));
-        assert_eq!(relation.seek_for_r_eq(&mut tx1, &1), BTreeSet::from([]));
+        assert_eq!(relation.seek_for_r_eq(&tx1, &1), BTreeSet::from([]));
         assert_eq!(
-            relation.seek_for_r_eq(&mut tx1, &3),
+            relation.seek_for_r_eq(&tx1, &3),
             BTreeSet::from(["bye".into()])
         );
         assert_eq!(relation.update_r(&mut tx1, &"bye".to_string(), &4), Ok(()));
         assert_eq!(
-            relation.seek_for_r_eq(&mut tx1, &4),
+            relation.seek_for_r_eq(&tx1, &4),
             BTreeSet::from(["bye".into()])
         );
-        assert_eq!(relation.seek_for_r_eq(&mut tx1, &3), BTreeSet::from([]));
+        assert_eq!(relation.seek_for_r_eq(&tx1, &3), BTreeSet::from([]));
 
         assert_eq!(
-            relation.range_for_l_eq(&mut tx1, (Included(&"tomorrow".into()), Unbounded)),
+            relation.range_for_l_eq(&tx1, (Included(&"tomorrow".into()), Unbounded)),
             vec![("tomorrow".into(), 2), ("yesterday".into(), 2)]
         );
     }
@@ -719,6 +708,6 @@ mod tests {
         assert_eq!(a.commit(&mut t2), Err(Conflict));
 
         let mut t3 = Tx::new(3, 3);
-        assert_eq!(a.seek_for_l_eq(&mut t3, &"hello".to_string()), Some(1));
+        assert_eq!(a.seek_for_l_eq(&t3, &"hello".to_string()), Some(1));
     }
 }

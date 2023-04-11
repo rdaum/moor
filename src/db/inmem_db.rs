@@ -6,13 +6,12 @@ use itertools::Itertools;
 
 use crate::db::relations;
 use crate::db::relations::Relation;
-use crate::db::state::WorldState;
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, Properties, PropertyInfo};
-use crate::model::r#match::VerbArgsSpec;
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
+use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, PropertyInfo};
+use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var, NOTHING};
-use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
+use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Vid};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
@@ -616,15 +615,33 @@ impl ImDB {
     }
 
     pub fn find_command_verb(
-        &self,
-        _tx: &mut Tx,
+        &mut self,
+        tx: &mut Tx,
+        oid: Objid,
+        verb: &str,
+        dobj: ArgSpec,
+        prep: PrepSpec,
+        iobj: ArgSpec,
+    ) -> Result<Option<VerbInfo>, anyhow::Error> {
+        let parent_chain = self.get_object_inheritance_chain(tx, oid);
+        let attrs = BitEnum::all();
+        for parent in parent_chain {
+            let vid = self.verbdefs.seek_for_l_eq(tx, &(parent, verb.to_string()));
+            if let Some(vid) = vid {
+                let vi = self.get_verb(tx, vid, attrs)?;
+                if let Some(argspec) = vi.attrs.args_spec {
+                    if (argspec.prep == PrepSpec::Any || argspec.prep == prep)
+                        && (argspec.dobj == ArgSpec::Any || argspec.dobj == dobj)
+                        && (argspec.iobj == ArgSpec::Any || argspec.iobj == iobj)
+                    {
+                        return Ok(Some(vi));
+                    }
+                }
+            }
+        }
 
-        _oid: Objid,
-        _verb: &str,
-        _arg_spec: VerbArgsSpec,
-        _attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, Error> {
-        todo!()
+        eprintln!("No match");
+        Ok(None)
     }
 
     pub fn find_callable_verb(
@@ -674,11 +691,11 @@ impl ImDB {
 mod tests {
     use crate::db::inmem_db::ImDB;
     use crate::db::tx::Tx;
-    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
-    use crate::model::props::{PropAttr, PropDefs, PropFlag, Propdef, Properties};
+    use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
+    use crate::model::props::{PropAttr, PropFlag, Propdef};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::var::{Objid, Var};
-    use crate::model::verbs::{VerbAttr, VerbFlag, Verbs};
+    use crate::model::verbs::{VerbAttr, VerbFlag};
     use crate::util::bitenum::BitEnum;
     use crate::vm::opcode::Binary;
 

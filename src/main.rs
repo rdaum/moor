@@ -10,7 +10,7 @@ use std::sync::Arc;
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::accept_async;
@@ -19,11 +19,11 @@ use tokio_tungstenite::tungstenite::Error;
 use crate::compiler::codegen::compile;
 use crate::db::inmem_db::ImDB;
 use crate::db::inmem_db_worldstate::ImDbWorldStateSource;
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
-use crate::model::props::{PropAttr, PropDefs, Properties, PropFlag};
+use crate::model::objects::{ObjAttrs, ObjFlag};
+use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{Objid, SYSTEM_OBJECT, Var};
-use crate::model::verbs::{VerbFlag, Verbs};
+use crate::model::var::{Objid, Var};
+use crate::model::verbs::VerbFlag;
 use crate::server::scheduler::Scheduler;
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;
@@ -290,16 +290,23 @@ async fn handle_connection(
             let setup_result = scheduler.setup_parse_command_task(Objid(2), cmd).await;
             let Ok(task_id) = setup_result else {
                 eprintln!("Unable to parse command ({}): {:?}", cmd, setup_result);
+                ws_stream.send(format!("Unable to parse command ({}): {:?}", cmd, setup_result).into()).await?;
+
                 continue;
             };
             eprintln!("Task: {:?}", task_id);
 
             if let Err(e) = scheduler.start_task(task_id).await {
                 eprintln!("Unable to execute: {}", e);
+                ws_stream
+                    .send(format!("Unable to execute: {}", e).into())
+                    .await?;
+
                 continue;
             };
-
-            // ws_stream.send(msg).await?;
+            ws_stream
+                .send(format!("Command parsed correctly and ran in task {:?}", task_id).into())
+                .await?;
         }
     }
 
@@ -317,6 +324,24 @@ async fn main() -> Result<(), io::Error> {
         eprintln!("Loading textdump...");
         textdump_load(&mut src, textdump.to_str().unwrap()).unwrap();
     }
+
+    let mut tx = src.do_begin_tx().unwrap();
+
+    // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
+    // match against.
+    src.object_set_attrs(
+        &mut tx,
+        Objid(2),
+        ObjAttrs {
+            owner: None,
+            name: None,
+            parent: None,
+            location: Some(Objid(70)),
+            flags: None,
+        },
+    )
+    .unwrap();
+    src.do_commit_tx(&mut tx).unwrap();
 
     let state_src = Arc::new(Mutex::new(ImDbWorldStateSource::new(src)));
     let scheduler = Arc::new(Mutex::new(Scheduler::new(state_src.clone())));

@@ -8,7 +8,8 @@ use crate::db::matching::{world_environment_match_object, MatchEnvironment};
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::E_NONE;
-use crate::model::var::{Objid, Var};
+use crate::model::var::{Objid, Var, NOTHING};
+
 use crate::server::parse_cmd::{parse_command, ParsedCommand};
 use crate::util::bitenum::BitEnum;
 use crate::vm::execute::{ExecutionResult, VM};
@@ -76,20 +77,34 @@ impl Scheduler {
         player: Objid,
         command: &str,
     ) -> Result<TaskId, anyhow::Error> {
-        let pc = {
+        let (vloc, pc) = {
             let mut ss = self.state_source.lock().await;
             let mut ws = ss.new_world_state().unwrap();
             let mut me = DBMatchEnvironment { ws: ws.as_mut() };
             let match_object_fn =
                 |name: &str| world_environment_match_object(&mut me, player, name).unwrap();
             let pc = parse_command(command, match_object_fn);
-            ws.rollback()?;
 
-            eprintln!("Parsed command: {:?}", pc);
-            pc
+            let loc = ws.location_of(player)?;
+            let mut vloc = NOTHING;
+            if let Some(_vh) = ws.find_command_verb_on(player, &pc)? {
+                vloc = player;
+            } else if let Some(_vh) = ws.find_command_verb_on(loc, &pc)? {
+                vloc = loc;
+            } else if let Some(_vh) = ws.find_command_verb_on(pc.dobj, &pc)? {
+                vloc = pc.dobj;
+            } else if let Some(_vh) = ws.find_command_verb_on(pc.iobj, &pc)? {
+                vloc = pc.iobj;
+            }
+
+            if vloc == NOTHING {
+                return Err(anyhow!("I didn't understand that: {:?}", pc));
+            }
+
+            (vloc, pc)
         };
 
-        self.setup_command_task(player, pc).await
+        self.setup_command_task(vloc, pc).await
     }
 
     pub async fn setup_command_task(

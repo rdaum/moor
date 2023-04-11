@@ -152,7 +152,7 @@ where
     // Check for built-in commands
     let i = 0;
     let verb = words[i].to_string();
-    let mut dobjstr = String::new();
+    let dobjstr;
     let mut dobj = None;
     let mut prepstr = String::new();
     let mut prep = PrepSpec::None;
