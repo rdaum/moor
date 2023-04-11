@@ -804,10 +804,11 @@ mod tests {
             .unwrap();
 
         let mut children = s.object_children(&mut tx, o1).unwrap();
-        assert_eq!(children.sort(), vec![o2, o3].sort());
+        children.sort();
+        assert_eq!(children, vec![o2, o3]);
 
         let mut contents = s.object_contents(&mut tx, o1).unwrap();
-        assert_eq!(contents.sort(), vec![o2, o3].sort());
+        assert_eq!(contents, vec![o2, o3]);
 
         s.do_commit_tx(&mut tx).unwrap();
     }
@@ -904,11 +905,13 @@ mod tests {
 
         // Test object_children for o1
         let mut children = odb.object_children(&mut tx, o1).unwrap();
-        assert_eq!(children.sort(), vec![Objid(2), Objid(5)].sort());
+        children.sort();
+        assert_eq!(children, vec![Objid(2), Objid(5)]);
 
         // Test object_children for o2
         let mut children = odb.object_children(&mut tx, o2).unwrap();
-        assert_eq!(children.sort(), vec![Objid(3), Objid(4)].sort());
+        children.sort();
+        assert_eq!(children, vec![Objid(3), Objid(4)]);
 
         // Test object_children for non-existent object
         let children = odb.object_children(&mut tx, Objid(7));
