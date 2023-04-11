@@ -77,9 +77,9 @@ pub enum CommitCheckResult {
 }
 impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
     // Check whether we can commit for a given tuple.
-    pub fn can_commit(&mut self, ts_t: u64) -> CommitCheckResult {
+    pub fn can_commit(&self, ts_t: u64) -> CommitCheckResult {
         // Find the read timestamp and position of the version we created.
-        let our_version = self.versions.iter_mut().find_position(|v| v.tx_id == ts_t);
+        let our_version = self.versions.iter().find_position(|v| v.tx_id == ts_t);
 
         // If we don't have a version of our own, we can just move on (shouldn't get here because
         // we were called because the commit set mentioned us, but still ...)
@@ -92,7 +92,7 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
 
         // verify that the version we're trying to commit is based on a newer or same timestamp than
         // any of the extant versions that are out there.
-        for x in self.versions.iter_mut() {
+        for x in self.versions.iter() {
             if !x.committed {
                 continue;
             }
@@ -105,11 +105,13 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
         CommitCheckResult::CanCommit(position)
     }
 
-    pub fn do_commit(&mut self, ts_t: u64, position: usize) {
+    pub fn do_commit(&mut self, ts_t: u64, position: usize) -> Result<(), anyhow::Error> {
         let mut our_version = self.versions.get_mut(position).unwrap();
         our_version.committed = true;
         our_version.read_timestamp = ts_t;
         our_version.write_timestamp = ts_t;
+
+        Ok(())
     }
 
     pub fn rollback(&mut self, ts_t: u64) -> Result<(), anyhow::Error> {

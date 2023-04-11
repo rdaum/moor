@@ -2,16 +2,17 @@ use std::collections::{BTreeMap, BTreeSet, Bound, HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 
+
 use hybrid_lock::HybridLock;
 use rkyv::ser::serializers::{AlignedSerializer, CompositeSerializer};
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::db::relations::Error::{Conflict, NotFound};
+use crate::db::relations::RelationError::{Conflict, NotFound};
 use crate::db::tx::{CommitCheckResult, EntryValue, MvccEntry, MvccTuple, Tx};
 
 #[derive(Error, Debug, Eq, PartialEq)]
-pub enum Error {
+pub enum RelationError {
     #[error("tuple not found for key")]
     NotFound,
     #[error("duplicate tuple")]
@@ -75,12 +76,83 @@ struct RelationInner<L: TupleValueTraits, R: TupleValueTraits> {
     commit_sets: HashMap<u64, Vec<TupleId>>,
 }
 
+
 impl<L: TupleValueTraits, R: TupleValueTraits> RelationInner<L, R> {
     fn add_to_commit_set(&mut self, tx: &mut Tx, tuple_id: TupleId) {
         self.commit_sets
             .entry(tx.tx_id)
             .and_modify(|c| c.push(tuple_id))
             .or_insert(vec![tuple_id]);
+    }
+
+    pub fn check_commit(&self, tx: &Tx) -> Result<Vec<(TupleId, usize)>, RelationError> {
+        // Flush the Tx's WAL writes to the main data structures.
+        let commit_set = self.commit_sets.get(&tx.tx_id).cloned();
+        let Some(commit_set) = commit_set else {
+            // No commit set for this transaction (probably means `begin` was not called, which is
+            // a bit dubious.
+            return Ok(vec![])
+        };
+
+        let mut versions = vec![];
+
+        let mut can_commit = true;
+        for tuple_id in commit_set {
+            let tuple = self
+                .values
+                .get(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            let result = tuple.can_commit(tx.tx_start_ts);
+            match result {
+                CommitCheckResult::CanCommit(version_offset) => {
+                    versions.push((tuple_id, version_offset))
+                }
+                CommitCheckResult::Conflict => {
+                    can_commit = false;
+                }
+                CommitCheckResult::None => continue,
+            }
+        }
+
+        if !can_commit {
+            return Err(Conflict);
+        }
+
+        Ok(versions)
+    }
+
+    pub fn complete_commit(&mut self, tx: &Tx, versions: Vec<(TupleId, usize)>) -> Result<(), RelationError> {
+        // Do the actual commits.
+        for (tuple_id, position) in versions {
+            let tuple = self
+                .values
+                .get_mut(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            if tuple.do_commit(tx.tx_start_ts, position).is_err() {
+                return Err(RelationError::Conflict);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn rollback(&mut self, tx : &Tx) -> Result<(), anyhow::Error> {
+        let commit_set = self.commit_sets.remove(&tx.tx_id);
+
+        let Some(commit_set) =  commit_set else {
+            return Ok(())
+        };
+
+        // Find this transactions versions and destroy them.
+        for tuple_id in commit_set {
+            let tuple = self
+                .values
+                .get_mut(&tuple_id)
+                .expect("tuple in commit set missing from relation");
+            tuple.rollback(tx.tx_id)?
+        }
+
+        Ok(())
     }
 }
 
@@ -126,7 +198,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         }
     }
 
-    pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
+    pub fn insert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
 
         // If there's already a tuple for this row, then we need to check if it's visible to us.
@@ -137,7 +209,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
             // A row visible to us? That's a duplicate.
             if let Some(_value) = value {
-                return Err(Error::Duplicate);
+                return Err(RelationError::Duplicate);
             }
 
             // There's a value invisible to us that's not deleted, we will actually treat that as an
@@ -179,7 +251,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Ok(())
     }
 
-    pub fn upsert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), Error> {
+    pub fn upsert(&mut self, tx: &mut Tx, l: &L, r: &R) -> Result<(), RelationError> {
         let e = self.remove_for_l(tx, l);
         if e != Ok(()) && e != Err(NotFound) {
             return e;
@@ -189,7 +261,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Ok(())
     }
 
-    pub fn remove_for_l(&mut self, tx: &mut Tx, l: &L) -> Result<(), Error> {
+    pub fn remove_for_l(&mut self, tx: &mut Tx, l: &L) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
 
         if let Some(tuple_id) = inner.l_index.get(l).cloned() {
@@ -198,7 +270,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
             // If we already deleted it or it's not visible to us, we can't delete it.
             if value.is_none() {
-                return Err(Error::NotFound);
+                return Err(RelationError::NotFound);
             }
 
             tuple.delete(tx.tx_id, rts);
@@ -214,12 +286,12 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             return Ok(());
         }
 
-        Err(Error::NotFound)
+        Err(RelationError::NotFound)
     }
 
-    pub fn update_l(&mut self, tx: &mut Tx, l: &L, new_l: &L) -> Result<(), Error> {
+    pub fn update_l(&mut self, tx: &mut Tx, l: &L, new_l: &L) -> Result<(), RelationError> {
         let Some(current_r) = self.seek_for_l_eq(tx, l) else {
-            return Err(Error::NotFound);
+            return Err(RelationError::NotFound);
         };
         self.remove_for_l(tx, l)?;
         self.insert(tx, new_l, &current_r)?;
@@ -227,7 +299,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Ok(())
     }
 
-    pub fn update_r(&mut self, tx: &mut Tx, l: &L, new_r: &R) -> Result<(), Error> {
+    pub fn update_r(&mut self, tx: &mut Tx, l: &L, new_r: &R) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
 
         if let Some(tuple_id) = inner.l_index.get(l).cloned() {
@@ -238,7 +310,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
 
             // If it's deleted by us or invisible to us, we can't update it, can we.
             let Some(old_value) = value else {
-                return Err(Error::NotFound);
+                return Err(RelationError::NotFound);
             };
 
             tuple.set(tx.tx_id, rts, &(l.clone(), new_r.clone()));
@@ -259,7 +331,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
             return Ok(());
         }
 
-        Err(Error::NotFound)
+        Err(RelationError::NotFound)
     }
 
     pub fn seek_for_l_eq(&self, tx: &Tx, k: &L) -> Option<R> {
@@ -314,97 +386,30 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         }
     }
 
-    pub fn begin(&mut self, tx: &mut Tx) -> Result<(), Error> {
+    pub fn begin(&mut self, tx: &mut Tx) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
         inner.commit_sets.entry(tx.tx_id).or_default();
         Ok(())
     }
 
-    pub fn check_commit(&mut self, tx: &Tx) -> Result<bool, Error> {
-        let mut inner = self.inner.write();
-
-        // Flush the Tx's WAL writes to the main data structures.
-        let commit_set = inner.commit_sets.get(&tx.tx_id).cloned();
-        let Some(commit_set) = commit_set else {
-                // No commit set for this transaction (probably means `begin` was not called, which is
-                // a bit dubious.
-                return Ok(true)
-            };
-
-        let mut versions = vec![];
-
-        let mut can_commit = true;
-        for tuple_id in commit_set {
-            let tuple = inner
-                .values
-                .get_mut(&tuple_id)
-                .expect("tuple in commit set missing from relation");
-            let result = tuple.can_commit(tx.tx_start_ts);
-            match result {
-                CommitCheckResult::CanCommit(version_offset) => {
-                    versions.push((tuple_id, version_offset))
-                }
-                CommitCheckResult::Conflict => {
-                    can_commit = false;
-                }
-                CommitCheckResult::None => continue,
-            }
-        }
-
-        Ok(can_commit)
+    pub fn check_commit(&mut self, tx: &Tx) -> Result<Vec<(TupleId, usize)>, RelationError>{
+        let inner = self.inner.read();
+        inner.check_commit(tx)
     }
 
-    pub fn commit(&mut self, tx: &mut Tx) -> Result<(), Error> {
+    pub fn complete_commit(&mut self, tx: &Tx, versions: Vec<(TupleId, usize)>) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
-
-        // Flush the Tx's WAL writes to the main data structures.
-        let commit_set = inner.commit_sets.get(&tx.tx_id).cloned();
-        let Some(commit_set) = commit_set else {
-            // No commit set for this transaction (probably means `begin` was not called, which is
-            // a bit dubious.
-            return Ok(())
-        };
-
-        let mut versions = vec![];
-
-        let mut can_commit = true;
-        for tuple_id in commit_set {
-            let tuple = inner
-                .values
-                .get_mut(&tuple_id)
-                .expect("tuple in commit set missing from relation");
-            let result = tuple.can_commit(tx.tx_start_ts);
-            match result {
-                CommitCheckResult::CanCommit(version_offset) => {
-                    versions.push((tuple_id, version_offset))
-                }
-                CommitCheckResult::Conflict => {
-                    can_commit = false;
-                }
-                CommitCheckResult::None => continue,
-            }
-        }
-
-        // If commit check failed, rollback, which will destroy our extant versions.
-        if !can_commit {
-            drop(inner);
-            self.rollback(tx)?;
-            return Err(Conflict);
-        }
-
-        // Do the actual commits.
-        for (tuple_id, position) in versions {
-            let tuple = inner
-                .values
-                .get_mut(&tuple_id)
-                .expect("tuple in commit set missing from relation");
-            tuple.do_commit(tx.tx_start_ts, position);
-        }
-
-        Ok(())
+        inner.complete_commit(tx, versions)
     }
 
-    pub fn rollback(&mut self, tx: &mut Tx) -> Result<(), Error> {
+    pub fn commit(&mut self, tx: &mut Tx) -> Result<(), RelationError> {
+        let mut inner = self.inner.write();
+
+        let versions = inner.check_commit(tx)?;
+        inner.complete_commit(tx, versions)
+    }
+
+    pub fn rollback(&mut self, tx: &mut Tx) -> Result<(), RelationError> {
         let mut inner = self.inner.write();
 
         // Rollback means we have to go delete all the versions created by us.
@@ -427,7 +432,7 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
         Ok(())
     }
 
-    pub fn vacuum(&mut self) -> Result<(), Error> {
+    pub fn vacuum(&mut self) -> Result<(), RelationError> {
         todo!("implement");
     }
 }
@@ -452,7 +457,7 @@ pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
 mod tests {
     use std::collections::Bound::{Included, Unbounded};
 
-    use crate::db::relations::Error::Conflict;
+    use crate::db::relations::RelationError::Conflict;
 
     use super::*;
 
@@ -473,7 +478,7 @@ mod tests {
         assert_eq!(relation.insert(&mut tx1, &"hello".to_string(), &1), Ok(()));
         assert_eq!(
             relation.insert(&mut tx1, &"hello".to_string(), &2),
-            Err(Error::Duplicate)
+            Err(RelationError::Duplicate)
         );
     }
 
@@ -512,7 +517,7 @@ mod tests {
         let mut tx1 = Tx::new(1, 1);
         assert_eq!(
             relation.remove_for_l(&mut tx1, &"hello".to_string()),
-            Err(Error::NotFound)
+            Err(RelationError::NotFound)
         );
     }
 
@@ -595,7 +600,7 @@ mod tests {
 
         // should fail because t2 (ts 3) is trying to commit a change based on (ts 1) but the most
         // recent committed change is (ts 2)
-        assert_eq!(a.commit(&mut t2), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t2), Err(RelationError::Conflict));
     }
 
     #[test]
@@ -613,7 +618,7 @@ mod tests {
         assert_eq!(a.remove_for_l(&mut t2, &"hello".to_string()), Ok(()));
 
         assert_eq!(a.commit(&mut t1), Ok(()));
-        assert_eq!(a.commit(&mut t2), Err(Error::Conflict));
+        assert_eq!(a.commit(&mut t2), Err(RelationError::Conflict));
     }
 
     #[test]
@@ -632,7 +637,7 @@ mod tests {
         let mut t2 = Tx::new(3, 3);
         assert_eq!(
             a.insert(&mut t2, &"hello".to_string(), &3),
-            Err(Error::Duplicate)
+            Err(RelationError::Duplicate)
         );
         assert!(a.rollback(&mut t2).is_ok());
         assert_eq!(a.commit(&mut t1), Ok(()));
@@ -687,7 +692,7 @@ mod tests {
         let mut t2 = Tx::new(2, 2);
         assert_eq!(
             a.remove_for_l(&mut t2, &"hello".to_string()),
-            Err(Error::NotFound)
+            Err(RelationError::NotFound)
         );
 
         let mut t3 = Tx::new(3, 3);
@@ -710,7 +715,7 @@ mod tests {
         let mut t2 = Tx::new(2, 2);
         assert_eq!(
             a.remove_for_l(&mut t2, &"hello".to_string()),
-            Err(Error::NotFound)
+            Err(RelationError::NotFound)
         );
         assert_eq!(a.commit(&mut t1), Ok(()));
 

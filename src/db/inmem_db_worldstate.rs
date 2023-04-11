@@ -428,7 +428,7 @@ impl WorldState for ImDBTx {
     fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
         match self.get_db().do_commit_tx(&mut self.tx) {
             Ok(_) => Ok(CommitResult::Success),
-            Err(relations::Error::Conflict) => Ok(CommitResult::ConflictRetry),
+            Err(relations::RelationError::Conflict) => Ok(CommitResult::ConflictRetry),
             Err(e) => Err(anyhow!(e)),
         }
     }
