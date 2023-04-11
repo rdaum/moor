@@ -1066,7 +1066,7 @@ mod tests {
     }
 
     impl MockState {
-        fn new() -> Box<dyn WorldState> {
+        fn new() -> Box<Self> {
             let ws = Self {
                 verbs: Default::default(),
                 properties: Default::default(),

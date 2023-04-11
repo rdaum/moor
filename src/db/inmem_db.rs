@@ -807,7 +807,7 @@ mod tests {
         children.sort();
         assert_eq!(children, vec![o2, o3]);
 
-        let mut contents = s.object_contents(&mut tx, o1).unwrap();
+        let contents = s.object_contents(&mut tx, o1).unwrap();
         assert_eq!(contents, vec![o2, o3]);
 
         s.do_commit_tx(&mut tx).unwrap();
