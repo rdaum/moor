@@ -33,3 +33,4 @@ rkyv = { version = "0.7.41", features = ["validation"] }
 repr-trait = "1.0.0"
 enum-primitive-derive = "0.2.2"
 futures-util = "0.3.28"
+async-trait = "0.1.68"

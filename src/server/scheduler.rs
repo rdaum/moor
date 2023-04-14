@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 use slotmap::{new_key_type, SlotMap};
-
-use crate::ClientConnection;
 use tokio::sync::Mutex;
 
 use crate::db::matching::{world_environment_match_object, MatchEnvironment};
@@ -12,6 +10,7 @@ use crate::model::objects::ObjFlag;
 use crate::model::var::Error::E_NONE;
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::server::parse_cmd::{parse_command, ParsedCommand};
+use crate::server::ClientConnection;
 use crate::util::bitenum::BitEnum;
 use crate::vm::execute::{ExecutionResult, VM};
 
@@ -242,7 +241,6 @@ impl TaskState {
 mod tests {
     use std::sync::Arc;
 
-    use crate::ClientConnection;
     use tokio::sync::Mutex;
 
     use crate::compiler::codegen::compile;
@@ -254,7 +252,9 @@ mod tests {
     use crate::model::verbs::VerbFlag;
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::scheduler::Scheduler;
+    use crate::server::ws_server::ClientConnection;
     use crate::util::bitenum::BitEnum;
+    use crate::ClientConnection;
 
     struct NoopClientConnection {}
     impl NoopClientConnection {

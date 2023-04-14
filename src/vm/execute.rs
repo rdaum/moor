@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
+
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
 use crate::db::state::{StateError, WorldState};
@@ -6,14 +10,11 @@ use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, ErrorPack, Objid, Var};
+use crate::server::ClientConnection;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::builtin_functions::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
-use crate::ClientConnection;
-use std::sync::Arc;
-
-use tokio::sync::Mutex;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
@@ -126,11 +127,14 @@ impl VM {
             bf_funcs.push(Box::new(BfNoop {}))
         }
         let _bf_noop = Box::new(BfNoop {});
-        Self {
+        let mut vm = Self {
             stack: vec![],
             state,
             bf_funcs,
-        }
+        };
+
+        vm.register_bf_server().unwrap();
+        vm
     }
 
     fn find_handler_active(&mut self, raise_code: Error) -> Option<(usize, &Activation)> {
@@ -1054,7 +1058,6 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use crate::ClientConnection;
     use anyhow::Error;
     use tokio::sync::Mutex;
 
@@ -1073,6 +1076,7 @@ mod tests {
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
+    use crate::ClientConnection;
 
     struct NoopClientConnection {}
     impl NoopClientConnection {

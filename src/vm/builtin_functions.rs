@@ -1,12 +1,14 @@
+use std::sync::Arc;
+
+use anyhow::Error;
+use tokio::sync::Mutex;
+
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::E_NONE;
 use crate::model::var::Var;
+use crate::server::ClientConnection;
 use crate::vm::execute::{BfFunction, VM};
-use crate::ClientConnection;
-use anyhow::{Error};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub struct BfNoop {}
 impl BfFunction for BfNoop {
@@ -41,7 +43,7 @@ impl BfFunction for BfNotify {
 }
 
 impl VM {
-    fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
+    pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         let notify_idx = offset_for_builtin("notify").unwrap();
         self.bf_funcs[notify_idx] = Box::new(BfNotify {});
         Ok(())
