@@ -172,6 +172,12 @@ impl Task {
                     eprintln!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
                     return;
                 }
+                Ok(ExecutionResult::Exception(e)) => {
+                    vm.rollback().unwrap();
+
+                    eprintln!("Task finished with exception {:?}", e);
+                    return;
+                }
                 Err(e) => {
                     vm.rollback().unwrap();
                     eprintln!("Task {} failed with error: {:?}", task_id.0.as_ffi(), e);

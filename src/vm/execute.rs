@@ -17,7 +17,7 @@ use crate::vm::activation::Activation;
 use crate::vm::builtin_functions::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FinallyReason {
     Fallthrough,
     Raise {
@@ -99,6 +99,7 @@ pub struct VM {
 pub enum ExecutionResult {
     Complete(Var),
     More,
+    Exception(FinallyReason),
 }
 
 macro_rules! binary_bool_op {
@@ -305,6 +306,17 @@ impl VM {
                 }
             }
 
+            if let FinallyReason::Uncaught {
+                code,
+                msg,
+                value,
+                stack,
+                backtrace,
+            } = &why
+            {
+                return Ok(ExecutionResult::Exception(why));
+            }
+
             self.stack.pop().expect("Stack underflow");
 
             if self.stack.is_empty() {
@@ -495,6 +507,7 @@ impl VM {
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
+
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -1278,6 +1291,9 @@ mod tests {
                     Ok(ExecutionResult::More) => continue,
                     Ok(ExecutionResult::Complete(a)) => return a,
                     Err(e) => panic!("error during execution: {:?}", e),
+                    Ok(ExecutionResult::Exception(e)) => {
+                        panic!("MOO exception {:?}", e);
+                    }
                 }
             }
         })
@@ -1764,6 +1780,9 @@ mod tests {
                 Ok(ExecutionResult::More) => continue,
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),
+                Ok(ExecutionResult::Exception(e)) => {
+                    panic!("MOO exception {:?}", e);
+                }
             }
         }
     }
