@@ -10,7 +10,6 @@ use num_traits::identities::Zero;
 use rkyv::{Archive, Archived, Deserialize, Serialize};
 
 use crate::compiler::labels::Label;
-use crate::model::var::Error::{E_RANGE, E_TYPE};
 
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize, Archive,
@@ -312,7 +311,7 @@ macro_rules! binary_numeric_coercion_op {
                 (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.$op(*r))),
                 (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.$op(*r as f64))),
                 (Var::Int(l), Var::Float(r)) => Ok(Var::Float((*l as f64).$op(*r))),
-                (_, _) => Err(E_TYPE),
+                (_, _) => Err(Error::E_TYPE),
             }
         }
     };
@@ -331,7 +330,7 @@ impl Var {
 
     pub fn has_member(&self, v: &Var) -> Var {
         let Var::List(l) = self else {
-            return Var::Err(E_TYPE);
+            return Var::Err(Error::E_TYPE);
         };
 
         Var::Int(if l.contains(v) { 1 } else { 0 })
@@ -352,7 +351,7 @@ impl Var {
                 c.push_str(r);
                 Ok(Var::Str(c))
             }
-            (_, _) => Err(E_TYPE),
+            (_, _) => Err(Error::E_TYPE),
         }
     }
 
@@ -360,7 +359,7 @@ impl Var {
         match self {
             Var::Int(l) => Ok(Var::Int(-*l)),
             Var::Float(f) => Ok(Var::Float(f.neg())),
-            _ => Err(E_TYPE),
+            _ => Err(Error::E_TYPE),
         }
     }
 
@@ -370,7 +369,7 @@ impl Var {
             (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l % r)),
             (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l % (*r as f64))),
             (Var::Int(l), Var::Float(r)) => Ok(Var::Float(*l as f64 % (*r))),
-            (_, _) => Err(E_TYPE),
+            (_, _) => Err(Error::E_TYPE),
         }
     }
 
@@ -380,21 +379,21 @@ impl Var {
             (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.pow(*r as u32))),
             (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.powi(*r as i32))),
             (Var::Int(l), Var::Float(r)) => Ok(Var::Float((*l as f64).powf(*r))),
-            (_, _) => Err(E_TYPE),
+            (_, _) => Err(Error::E_TYPE),
         }
     }
 
     pub fn index(&self, idx: usize) -> Result<Var, Error> {
         match self {
             Var::List(l) => match l.get(idx) {
-                None => Err(E_RANGE),
+                None => Err(Error::E_RANGE),
                 Some(v) => Ok(v.clone()),
             },
             Var::Str(s) => match s.get(idx..idx + 1) {
-                None => Err(E_RANGE),
+                None => Err(Error::E_RANGE),
                 Some(v) => Ok(Var::Str(String::from(v))),
             },
-            _ => Err(E_TYPE),
+            _ => Err(Error::E_TYPE),
         }
     }
 
@@ -679,7 +678,7 @@ mod tests {
             Var::List(vec![Var::Int(1), Var::Int(2)])
         );
         assert_eq!(Var::Obj(Objid(1)), Var::Obj(Objid(1)));
-        assert_eq!(Var::Err(E_TYPE), Var::Err(E_TYPE));
+        assert_eq!(Var::Err(Error::E_TYPE), Var::Err(Error::E_TYPE));
     }
 
     #[test]
@@ -692,7 +691,7 @@ mod tests {
             Var::List(vec![Var::Int(1), Var::Int(3)])
         );
         assert_ne!(Var::Obj(Objid(1)), Var::Obj(Objid(2)));
-        assert_ne!(Var::Err(E_TYPE), Var::Err(E_RANGE));
+        assert_ne!(Var::Err(Error::E_TYPE), Var::Err(Error::E_RANGE));
     }
 
     #[test]
@@ -704,7 +703,7 @@ mod tests {
             Var::List(vec![Var::Int(1), Var::Int(2)]) < Var::List(vec![Var::Int(1), Var::Int(3)])
         );
         assert!(Var::Obj(Objid(1)) < Var::Obj(Objid(2)));
-        assert!(Var::Err(E_TYPE) < Var::Err(E_RANGE));
+        assert!(Var::Err(Error::E_TYPE) < Var::Err(Error::E_RANGE));
     }
 
     #[test]
@@ -716,7 +715,7 @@ mod tests {
             Var::List(vec![Var::Int(1), Var::Int(2)]) <= Var::List(vec![Var::Int(1), Var::Int(3)])
         );
         assert!(Var::Obj(Objid(1)) <= Var::Obj(Objid(2)));
-        assert!(Var::Err(E_TYPE) <= Var::Err(E_RANGE));
+        assert!(Var::Err(Error::E_TYPE) <= Var::Err(Error::E_RANGE));
     }
 
     #[test]
@@ -728,7 +727,7 @@ mod tests {
             Var::List(vec![Var::Int(1), Var::Int(3)]) > Var::List(vec![Var::Int(1), Var::Int(2)])
         );
         assert!(Var::Obj(Objid(2)) > Var::Obj(Objid(1)));
-        assert!(Var::Err(E_RANGE) > Var::Err(E_TYPE));
+        assert!(Var::Err(Error::E_RANGE) > Var::Err(Error::E_TYPE));
     }
 
     #[test]
@@ -740,7 +739,7 @@ mod tests {
             Var::List(vec![Var::Int(1), Var::Int(3)]) >= Var::List(vec![Var::Int(1), Var::Int(2)])
         );
         assert!(Var::Obj(Objid(2)) >= Var::Obj(Objid(1)));
-        assert!(Var::Err(E_RANGE) >= Var::Err(E_TYPE));
+        assert!(Var::Err(Error::E_RANGE) >= Var::Err(Error::E_TYPE));
     }
 
     #[test]
@@ -764,7 +763,7 @@ mod tests {
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Var::Err(E_TYPE).partial_cmp(&Var::Err(E_TYPE)),
+            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_TYPE)),
             Some(Ordering::Equal)
         );
 
@@ -787,7 +786,7 @@ mod tests {
             Some(Ordering::Less)
         );
         assert_eq!(
-            Var::Err(E_TYPE).partial_cmp(&Var::Err(E_RANGE)),
+            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_RANGE)),
             Some(Ordering::Less)
         );
 
@@ -813,7 +812,7 @@ mod tests {
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::Err(E_RANGE).partial_cmp(&Var::Err(E_TYPE)),
+            Var::Err(Error::E_RANGE).partial_cmp(&Var::Err(Error::E_TYPE)),
             Some(Ordering::Greater)
         );
     }
@@ -832,7 +831,7 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(1))), Ordering::Equal);
-        assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_TYPE)), Ordering::Equal);
+        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Equal);
 
         assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
@@ -846,7 +845,7 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(2))), Ordering::Less);
-        assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_RANGE)), Ordering::Less);
+        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)), Ordering::Less);
 
         assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
         assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
@@ -863,7 +862,7 @@ mod tests {
             Var::Obj(Objid(2)).cmp(&Var::Obj(Objid(1))),
             Ordering::Greater
         );
-        assert_eq!(Var::Err(E_RANGE).cmp(&Var::Err(E_TYPE)), Ordering::Greater);
+        assert_eq!(Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Greater);
     }
 
     #[test]
@@ -893,7 +892,7 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(
-            Var::Err(E_TYPE).partial_cmp(&Var::Err(E_TYPE)).unwrap(),
+            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_TYPE)).unwrap(),
             Ordering::Equal
         );
 
@@ -922,7 +921,7 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(
-            Var::Err(E_TYPE).partial_cmp(&Var::Err(E_RANGE)).unwrap(),
+            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_RANGE)).unwrap(),
             Ordering::Less
         );
 
@@ -951,7 +950,7 @@ mod tests {
             Ordering::Greater
         );
         assert_eq!(
-            Var::Err(E_RANGE).partial_cmp(&Var::Err(E_TYPE)).unwrap(),
+            Var::Err(Error::E_RANGE).partial_cmp(&Var::Err(Error::E_TYPE)).unwrap(),
             Ordering::Greater
         );
     }
@@ -970,7 +969,7 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(1))), Ordering::Equal);
-        assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_TYPE)), Ordering::Equal);
+        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Equal);
 
         assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
@@ -984,7 +983,7 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(2))), Ordering::Less);
-        assert_eq!(Var::Err(E_TYPE).cmp(&Var::Err(E_RANGE)), Ordering::Less);
+        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)), Ordering::Less);
 
         assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
         assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
@@ -1001,7 +1000,7 @@ mod tests {
             Var::Obj(Objid(2)).cmp(&Var::Obj(Objid(1))),
             Ordering::Greater
         );
-        assert_eq!(Var::Err(E_RANGE).cmp(&Var::Err(E_TYPE)), Ordering::Greater);
+        assert_eq!(Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Greater);
     }
 
     #[test]
@@ -1011,7 +1010,7 @@ mod tests {
         assert!(Var::Str(String::from("a")).is_true());
         assert!(Var::List(vec![Var::Int(1), Var::Int(2)]).is_true());
         assert!(!Var::Obj(Objid(1)).is_true());
-        assert!(!Var::Err(E_TYPE).is_true());
+        assert!(!Var::Err(Error::E_TYPE).is_true());
     }
 
     #[test]
