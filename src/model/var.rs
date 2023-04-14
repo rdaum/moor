@@ -831,7 +831,10 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(1))), Ordering::Equal);
-        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Equal);
+        assert_eq!(
+            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)),
+            Ordering::Equal
+        );
 
         assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
@@ -845,7 +848,10 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(2))), Ordering::Less);
-        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)), Ordering::Less);
+        assert_eq!(
+            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)),
+            Ordering::Less
+        );
 
         assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
         assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
@@ -862,7 +868,10 @@ mod tests {
             Var::Obj(Objid(2)).cmp(&Var::Obj(Objid(1))),
             Ordering::Greater
         );
-        assert_eq!(Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Greater);
+        assert_eq!(
+            Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)),
+            Ordering::Greater
+        );
     }
 
     #[test]
@@ -892,7 +901,9 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(
-            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_TYPE)).unwrap(),
+            Var::Err(Error::E_TYPE)
+                .partial_cmp(&Var::Err(Error::E_TYPE))
+                .unwrap(),
             Ordering::Equal
         );
 
@@ -921,7 +932,9 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(
-            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_RANGE)).unwrap(),
+            Var::Err(Error::E_TYPE)
+                .partial_cmp(&Var::Err(Error::E_RANGE))
+                .unwrap(),
             Ordering::Less
         );
 
@@ -950,7 +963,9 @@ mod tests {
             Ordering::Greater
         );
         assert_eq!(
-            Var::Err(Error::E_RANGE).partial_cmp(&Var::Err(Error::E_TYPE)).unwrap(),
+            Var::Err(Error::E_RANGE)
+                .partial_cmp(&Var::Err(Error::E_TYPE))
+                .unwrap(),
             Ordering::Greater
         );
     }
@@ -969,7 +984,10 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(1))), Ordering::Equal);
-        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Equal);
+        assert_eq!(
+            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)),
+            Ordering::Equal
+        );
 
         assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
@@ -983,7 +1001,10 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(2))), Ordering::Less);
-        assert_eq!(Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)), Ordering::Less);
+        assert_eq!(
+            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)),
+            Ordering::Less
+        );
 
         assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
         assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
@@ -1000,7 +1021,10 @@ mod tests {
             Var::Obj(Objid(2)).cmp(&Var::Obj(Objid(1))),
             Ordering::Greater
         );
-        assert_eq!(Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)), Ordering::Greater);
+        assert_eq!(
+            Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)),
+            Ordering::Greater
+        );
     }
 
     #[test]

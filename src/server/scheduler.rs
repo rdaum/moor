@@ -241,6 +241,7 @@ impl TaskState {
 mod tests {
     use std::sync::Arc;
 
+    use async_trait::async_trait;
     use tokio::sync::Mutex;
 
     use crate::compiler::codegen::compile;
@@ -252,9 +253,8 @@ mod tests {
     use crate::model::verbs::VerbFlag;
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::scheduler::Scheduler;
-    use crate::server::ws_server::ClientConnection;
+    use crate::server::ClientConnection;
     use crate::util::bitenum::BitEnum;
-    use crate::ClientConnection;
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -262,8 +262,10 @@ mod tests {
             Self {}
         }
     }
+
+    #[async_trait]
     impl ClientConnection for NoopClientConnection {
-        fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
+        async fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
             //
             Ok(())
         }

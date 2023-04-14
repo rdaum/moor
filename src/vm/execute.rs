@@ -1059,6 +1059,7 @@ mod tests {
     use std::sync::Arc;
 
     use anyhow::Error;
+    use async_trait::async_trait;
     use tokio::sync::Mutex;
 
     use crate::compiler::codegen::compile;
@@ -1072,11 +1073,11 @@ mod tests {
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::server::parse_cmd::ParsedCommand;
+    use crate::server::ClientConnection;
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
-    use crate::ClientConnection;
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -1084,8 +1085,10 @@ mod tests {
             Self {}
         }
     }
+
+    #[async_trait]
     impl ClientConnection for NoopClientConnection {
-        fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
+        async fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
             //
             Ok(())
         }
@@ -1740,6 +1743,6 @@ mod tests {
 
         call_verb("test", &mut vm);
         let result = exec_vm(&mut vm);
-        assert_eq!(result, Var::Err(E_NONE));
+        assert_eq!(result, Var::None);
     }
 }
