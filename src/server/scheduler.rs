@@ -255,7 +255,7 @@ mod tests {
     use crate::db::inmem_db_worldstate::ImDbWorldStateSource;
     use crate::model::objects::{ObjAttrs, ObjFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::NOTHING;
+    use crate::model::var::{Objid, NOTHING};
     use crate::model::verbs::VerbFlag;
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::scheduler::Scheduler;
@@ -271,8 +271,7 @@ mod tests {
 
     #[async_trait]
     impl ClientConnection for NoopClientConnection {
-        async fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
-            //
+        async fn send_text(&mut self, _player: Objid, _msg: String) -> Result<(), anyhow::Error> {
             Ok(())
         }
     }

@@ -307,11 +307,11 @@ impl VM {
             }
 
             if let FinallyReason::Uncaught {
-                code,
-                msg,
-                value,
-                stack,
-                backtrace,
+                code: _,
+                msg: _,
+                value: _,
+                stack: _,
+                backtrace: _,
             } = &why
             {
                 return Ok(ExecutionResult::Exception(why));
@@ -1105,7 +1105,7 @@ mod tests {
 
     #[async_trait]
     impl ClientConnection for NoopClientConnection {
-        async fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
+        async fn send_text(&mut self, _player: Objid, _msg: String) -> Result<(), anyhow::Error> {
             //
             Ok(())
         }
@@ -1764,8 +1764,8 @@ mod tests {
     }
     #[async_trait]
     impl ClientConnection for MockClientConnection {
-        async fn send_text(&mut self, msg: String) -> Result<(), Error> {
-            self.received.push(msg.clone());
+        async fn send_text(&mut self, _player: Objid, msg: String) -> Result<(), Error> {
+            self.received.push(msg);
             Ok(())
         }
     }

@@ -20,7 +20,7 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::VerbFlag;
 use crate::server::scheduler::Scheduler;
-use crate::server::ws_server::ws_server_start;
+use crate::server::ws_server::{ws_server_start, WebSocketServer};
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;
 
@@ -296,7 +296,8 @@ async fn main() -> Result<(), io::Error> {
         .listen_address
         .unwrap_or_else(|| "127.0.0.1:8080".to_string());
 
-    ws_server_start(scheduler, addr)
+    let ws_server = Arc::new(Mutex::new(WebSocketServer::new(scheduler)));
+    ws_server_start(ws_server, addr)
         .await
         .expect("Unable to run websocket server");
 
