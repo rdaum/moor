@@ -1,22 +1,25 @@
 use std::sync::Arc;
 
 use anyhow::Error;
+use async_trait::async_trait;
+use futures::executor::block_on;
 use tokio::sync::Mutex;
 
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
-use crate::model::var::Error::E_NONE;
+use crate::model::var::Error::{E_INVARG, E_NONE, E_TYPE};
 use crate::model::var::Var;
 use crate::server::ClientConnection;
 use crate::vm::execute::{BfFunction, VM};
 
 pub struct BfNoop {}
+#[async_trait]
 impl BfFunction for BfNoop {
     fn name(&self) -> String {
         "noop".to_string()
     }
 
-    fn call(
+    async fn call(
         &self,
         _world_state: &mut dyn WorldState,
         _client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
@@ -27,17 +30,28 @@ impl BfFunction for BfNoop {
 }
 
 pub struct BfNotify {}
+#[async_trait]
 impl BfFunction for BfNotify {
     fn name(&self) -> String {
         "notify".to_string()
     }
 
-    fn call(
+    async fn call(
         &self,
         _world_state: &mut dyn WorldState,
-        _client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
-        _args: Vec<Var>,
+        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+        args: Vec<Var>,
     ) -> Result<Var, Error> {
+        if args.len() != 1 {
+            return Ok(Var::Err(E_INVARG));
+        }
+        let msg = args[0].clone();
+        let Var::Str(msg) = msg else {
+            return Ok(Var::Err(E_TYPE));
+        };
+
+        client_connection.lock().await.send_text(msg).await.unwrap();
+
         Ok(Var::None)
     }
 }

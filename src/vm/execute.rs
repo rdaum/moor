@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::compiler::builtins::BUILTINS;
@@ -76,9 +77,10 @@ pub enum ExecutionOutcome {
     Blocked, // Task called a blocking built-in function.
 }
 
+#[async_trait]
 pub(crate) trait BfFunction: Sync + Send {
     fn name(&self) -> String;
-    fn call(
+    async fn call(
         &self,
         _world_state: &mut dyn WorldState,
         _client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
@@ -906,7 +908,9 @@ impl VM {
                     return self.push_error(E_VARNF);
                 }
                 let bf = self.bf_funcs[id.0 as usize].as_ref();
-                let result = bf.call(self.state.as_mut(), client_connection, args)?;
+                let result = bf
+                    .call(self.state.as_mut(), client_connection, args)
+                    .await?;
                 self.push(&result);
             }
             Op::PushLabel(label) => {
@@ -1734,15 +1738,52 @@ mod tests {
         assert_eq!(result, Var::Int(666));
     }
 
-    #[test]
-    fn test_call_builtin() {
+    struct MockClientConnection {
+        received: Vec<String>,
+    }
+    impl MockClientConnection {
+        pub fn new() -> Self {
+            Self { received: vec![] }
+        }
+    }
+    #[async_trait]
+    impl ClientConnection for MockClientConnection {
+        async fn send_text(&mut self, msg: String) -> Result<(), Error> {
+            self.received.push(msg.clone());
+            Ok(())
+        }
+    }
+
+    async fn exec_vm_with_mock_client_connection(
+        vm: &mut VM,
+        client_connection: Arc<Mutex<MockClientConnection>>,
+    ) -> Var {
+        // Call repeatedly into exec until we ge either an error or Complete.
+        loop {
+            match vm.exec(client_connection.clone()).await {
+                Ok(ExecutionResult::More) => continue,
+                Ok(ExecutionResult::Complete(a)) => return a,
+                Err(e) => panic!("error during execution: {:?}", e),
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_call_builtin() {
         let program = "return notify(\"test\");";
         let binary = compile(program).unwrap();
         let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);
 
         call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+
+        let client_connection = Arc::new(Mutex::new(MockClientConnection::new()));
+        let result = exec_vm_with_mock_client_connection(&mut vm, client_connection.clone()).await;
         assert_eq!(result, Var::None);
+
+        assert_eq!(
+            client_connection.lock().await.received,
+            vec!["test".to_string()]
+        );
     }
 }
