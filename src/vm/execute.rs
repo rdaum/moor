@@ -10,6 +10,10 @@ use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::builtin_functions::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
+use crate::ClientConnection;
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum FinallyReason {
@@ -73,14 +77,19 @@ pub enum ExecutionOutcome {
 
 pub(crate) trait BfFunction: Sync + Send {
     fn name(&self) -> String;
-    fn call(&self, act: &mut dyn WorldState, args: Vec<Var>) -> Result<Var, anyhow::Error>;
+    fn call(
+        &self,
+        _world_state: &mut dyn WorldState,
+        _client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+        _args: Vec<Var>,
+    ) -> Result<Var, anyhow::Error>;
 }
 
 pub struct VM {
     // Activation stack.
     stack: Vec<Activation>,
     state: Box<dyn WorldState>,
-    bf_funcs: Vec<Box<dyn BfFunction>>,
+    pub(crate) bf_funcs: Vec<Box<dyn BfFunction>>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -112,15 +121,15 @@ macro_rules! binary_var_op {
 
 impl VM {
     pub fn new(state: Box<dyn WorldState>) -> Self {
-        let mut bf_init: Vec<Box<dyn BfFunction>> = Vec::with_capacity(BUILTINS.len());
+        let mut bf_funcs: Vec<Box<dyn BfFunction>> = Vec::with_capacity(BUILTINS.len());
         for _ in 0..BUILTINS.len() {
-            bf_init.push(Box::new(BfNoop {}))
+            bf_funcs.push(Box::new(BfNoop {}))
         }
         let _bf_noop = Box::new(BfNoop {});
         Self {
             stack: vec![],
             state,
-            bf_funcs: bf_init,
+            bf_funcs,
         }
     }
 
@@ -473,7 +482,10 @@ impl VM {
         Ok(Var::Err(Error::E_NONE))
     }
 
-    pub async fn exec(&mut self) -> Result<ExecutionResult, anyhow::Error> {
+    pub async fn exec(
+        &mut self,
+        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+    ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
@@ -890,7 +902,7 @@ impl VM {
                     return self.push_error(E_VARNF);
                 }
                 let bf = self.bf_funcs[id.0 as usize].as_ref();
-                let result = bf.call(self.state.as_mut(), args)?;
+                let result = bf.call(self.state.as_mut(), client_connection, args)?;
                 self.push(&result);
             }
             Op::PushLabel(label) => {
@@ -1040,8 +1052,11 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
 
+    use crate::ClientConnection;
     use anyhow::Error;
+    use tokio::sync::Mutex;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
@@ -1058,6 +1073,19 @@ mod tests {
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
+
+    struct NoopClientConnection {}
+    impl NoopClientConnection {
+        pub fn new() -> Self {
+            Self {}
+        }
+    }
+    impl ClientConnection for NoopClientConnection {
+        fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
+            //
+            Ok(())
+        }
+    }
 
     struct MockState {
         verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
@@ -1232,9 +1260,10 @@ mod tests {
 
     fn exec_vm(vm: &mut VM) -> Var {
         tokio_test::block_on(async {
+            let client_connection = Arc::new(Mutex::new(NoopClientConnection::new()));
             // Call repeatedly into exec until we ge either an error or Complete.
             loop {
-                match vm.exec().await {
+                match vm.exec(client_connection.clone()).await {
                     Ok(ExecutionResult::More) => continue,
                     Ok(ExecutionResult::Complete(a)) => return a,
                     Err(e) => panic!("error during execution: {:?}", e),

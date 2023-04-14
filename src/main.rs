@@ -10,11 +10,14 @@ use std::sync::Arc;
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
+use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
-use tokio_tungstenite::accept_async;
+use tokio_test::block_on;
 use tokio_tungstenite::tungstenite::Error;
+use tokio_tungstenite::{accept_async, WebSocketStream};
+use tungstenite::Message;
 
 use crate::compiler::codegen::compile;
 use crate::db::inmem_db::ImDB;
@@ -265,10 +268,27 @@ struct Args {
 
 async fn accept_connection(scheduler: Arc<Mutex<Scheduler>>, peer: SocketAddr, stream: TcpStream) {
     if let Err(e) = handle_connection(scheduler.clone(), peer, stream).await {
-        match e {
-            Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
-            err => eprintln!("Error processing connection: {}", err),
+        if let Some(e) = e.downcast_ref::<tungstenite::Error>() {
+            match e {
+                Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
+                err => eprintln!("Error processing connection: {}", err),
+            }
         }
+    }
+}
+
+pub trait ClientConnection {
+    fn send_text(&mut self, msg: String) -> Result<(), anyhow::Error>;
+}
+
+struct WebSocketClientConnection {
+    ws_sink: SplitSink<WebSocketStream<TcpStream>, Message>,
+}
+
+impl ClientConnection for WebSocketClientConnection {
+    fn send_text(&mut self, msg: String) -> Result<(), anyhow::Error> {
+        block_on(self.ws_sink.send(msg.into()))?;
+        Ok(())
     }
 }
 
@@ -276,21 +296,28 @@ async fn handle_connection(
     scheduler: Arc<Mutex<Scheduler>>,
     peer: SocketAddr,
     stream: TcpStream,
-) -> Result<(), tungstenite::Error> {
-    let mut ws_stream = accept_async(stream).await.expect("Failed to accept");
+) -> Result<(), anyhow::Error> {
+    let ws_stream = accept_async(stream).await.expect("Failed to accept");
 
     eprintln!("New WebSocket connection: {}", peer);
+    let (ws_sender, mut ws_receiver) = ws_stream.split();
 
-    while let Some(msg) = ws_stream.next().await {
+    let client_connection = WebSocketClientConnection { ws_sink: ws_sender };
+    let client_connection = Arc::new(Mutex::new(client_connection));
+    while let Some(msg) = ws_receiver.next().await {
         let msg = msg?;
         if msg.is_text() || msg.is_binary() {
             let mut scheduler = scheduler.lock().await;
             let cmd = msg.into_text().unwrap();
             let cmd = cmd.as_str().trim();
-            let setup_result = scheduler.setup_parse_command_task(Objid(2), cmd).await;
+
+            let setup_result = scheduler
+                .setup_parse_command_task(Objid(2), cmd, client_connection.clone())
+                .await;
             let Ok(task_id) = setup_result else {
                 eprintln!("Unable to parse command ({}): {:?}", cmd, setup_result);
-                ws_stream.send(format!("Unable to parse command ({}): {:?}", cmd, setup_result).into()).await?;
+                let mut client_connection = client_connection.lock().await;
+                client_connection.send_text(format!("Unable to parse command ({}): {:?}", cmd, setup_result))?;
 
                 continue;
             };
@@ -298,15 +325,16 @@ async fn handle_connection(
 
             if let Err(e) = scheduler.start_task(task_id).await {
                 eprintln!("Unable to execute: {}", e);
-                ws_stream
-                    .send(format!("Unable to execute: {}", e).into())
-                    .await?;
+                let mut client_connection = client_connection.lock().await;
+
+                client_connection.send_text(format!("Unable to execute: {}", e))?;
 
                 continue;
             };
-            ws_stream
-                .send(format!("Command parsed correctly and ran in task {:?}", task_id).into())
-                .await?;
+            client_connection.lock().await.send_text(format!(
+                "Command parsed correctly and ran in task {:?}",
+                task_id
+            ))?;
         }
     }
 

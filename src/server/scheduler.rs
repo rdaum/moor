@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 use slotmap::{new_key_type, SlotMap};
+
+use crate::ClientConnection;
 use tokio::sync::Mutex;
 
 use crate::db::matching::{world_environment_match_object, MatchEnvironment};
@@ -18,6 +20,7 @@ new_key_type! { pub struct TaskId; }
 pub struct Task {
     pub player: Objid,
     pub vm: Arc<Mutex<VM>>,
+    pub client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
 }
 
 pub struct TaskState {
@@ -75,6 +78,7 @@ impl Scheduler {
         &mut self,
         player: Objid,
         command: &str,
+        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
     ) -> Result<TaskId, anyhow::Error> {
         let (vloc, pc) = {
             let mut ss = self.state_source.lock().await;
@@ -97,22 +101,25 @@ impl Scheduler {
             }
 
             if vloc == NOTHING {
-                return Err(anyhow!("I didn't understand that: {:?}", pc));
+                return Err(anyhow!("Could not parse command: {:?}", pc));
             }
 
             (vloc, pc)
         };
 
-        self.setup_command_task(vloc, pc).await
+        self.setup_command_task(vloc, pc, client_connection).await
     }
 
     pub async fn setup_command_task(
         &mut self,
         player: Objid,
         command: ParsedCommand,
+        client_connection: Arc<Mutex<dyn ClientConnection + Sync + Send>>,
     ) -> Result<TaskId, anyhow::Error> {
         let mut ts = self.task_state.lock().await;
-        let task_id = ts.new_task(player, self.state_source.clone()).await?;
+        let task_id = ts
+            .new_task(player, self.state_source.clone(), client_connection)
+            .await?;
 
         let task_ref = ts.get_task(task_id).await.unwrap();
         let task_ref = task_ref.lock().await;
@@ -157,7 +164,7 @@ impl Task {
         eprintln!("Entering task loop...");
         let mut vm = self.vm.lock().await;
         loop {
-            let result = vm.exec().await;
+            let result = vm.exec(self.client_connection.clone()).await;
             match result {
                 Ok(ExecutionResult::More) => {}
                 Ok(ExecutionResult::Complete(a)) => {
@@ -181,13 +188,18 @@ impl TaskState {
         &mut self,
         player: Objid,
         state_source: Arc<Mutex<dyn WorldStateSource + Send + Sync>>,
+        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
     ) -> Result<TaskId, anyhow::Error> {
         let mut state_source = state_source.lock().await;
         let state = state_source.new_world_state()?;
         let vm = Arc::new(Mutex::new(VM::new(state)));
         let tasks = self.tasks.clone();
         let mut tasks = tasks.lock().await;
-        let id = tasks.insert(Arc::new(Mutex::new(Task { player, vm })));
+        let id = tasks.insert(Arc::new(Mutex::new(Task {
+            player,
+            vm,
+            client_connection,
+        })));
 
         Ok(id)
     }
@@ -230,6 +242,7 @@ impl TaskState {
 mod tests {
     use std::sync::Arc;
 
+    use crate::ClientConnection;
     use tokio::sync::Mutex;
 
     use crate::compiler::codegen::compile;
@@ -242,6 +255,19 @@ mod tests {
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::scheduler::Scheduler;
     use crate::util::bitenum::BitEnum;
+
+    struct NoopClientConnection {}
+    impl NoopClientConnection {
+        pub fn new() -> Self {
+            Self {}
+        }
+    }
+    impl ClientConnection for NoopClientConnection {
+        fn send_text(&mut self, _msg: String) -> Result<(), anyhow::Error> {
+            //
+            Ok(())
+        }
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn setup() {
@@ -293,6 +319,7 @@ mod tests {
                     iobjstr: "".to_string(),
                     iobj: NOTHING,
                 },
+                Arc::new(Mutex::new(NoopClientConnection::new())),
             )
             .await
             .expect("setup command task");
