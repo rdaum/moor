@@ -153,6 +153,6 @@ pub fn make_builtin_labels() -> HashMap<String, Label> {
     b
 }
 
-pub fn offset_for_builtin(bf_name: &str) -> Option<usize> {
-    BUILTINS.iter().position(|b| *b == bf_name)
+pub fn offset_for_builtin(bf_name: &str) -> usize {
+    BUILTINS.iter().position(|b| *b == bf_name).unwrap()
 }

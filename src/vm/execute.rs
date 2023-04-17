@@ -14,7 +14,7 @@ use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
-use crate::vm::builtin_functions::BfNoop;
+use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -137,6 +137,7 @@ impl VM {
         };
 
         vm.register_bf_server().unwrap();
+        vm.register_bf_num().unwrap();
         vm
     }
 
@@ -1796,7 +1797,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_builtin() {
-        let program = "return notify(\"test\");";
+        let program = "return notify(#1, \"test\");";
         let binary = compile(program).unwrap();
         let state = MockState::new_with_verb("test", &binary);
         let mut vm = VM::new(state);

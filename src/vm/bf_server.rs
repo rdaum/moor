@@ -1,48 +1,26 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use tokio::sync::Mutex;
 
+use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::model::var::Var;
 use crate::server::Sessions;
 use crate::vm::execute::{BfFunction, VM};
-use stringify;
+use async_trait::async_trait;
 
-macro_rules! bf_func_declare {
-    ( $name:ident, $action:expr ) => {
-        paste::item! {
-            pub struct [<Bf $name:camel >] {}
-            #[async_trait]
-            impl BfFunction for [<Bf $name:camel >] {
-                fn name(&self) -> &str {
-                    return stringify!($name)
-                }
-                async fn call(
-                    &self,
-                    ws: &mut dyn WorldState,
-                    sess: Arc<Mutex<dyn Sessions>>,
-                    args: Vec<Var>,
-                ) -> Result<Var, anyhow::Error> {
-                    $action(ws, sess, args).await
-                }
-            }
-        }
-    };
-}
-
-async fn bf_func_noop(
+async fn bf_noop(
     _ws: &mut dyn WorldState,
     _sess: Arc<Mutex<dyn Sessions>>,
     _args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     return Ok(Var::None);
 }
-bf_func_declare!(noop, bf_func_noop);
+bf_declare!(noop, bf_noop);
 
-async fn bf_func_notify(
+async fn bf_notify(
     _ws: &mut dyn WorldState,
     sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
@@ -63,9 +41,9 @@ async fn bf_func_notify(
 
     Ok(Var::None)
 }
-bf_func_declare!(notify, bf_func_notify);
+bf_declare!(notify, bf_notify);
 
-async fn bf_func_connected_players(
+async fn bf_connected_players(
     _ws: &mut dyn WorldState,
     sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
@@ -85,12 +63,12 @@ async fn bf_func_connected_players(
             .collect(),
     ))
 }
-bf_func_declare!(connected_players, bf_func_connected_players);
+bf_declare!(connected_players, bf_connected_players);
 
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
-        let notify_idx = offset_for_builtin("notify").unwrap();
-        self.bf_funcs[notify_idx] = Box::new(BfNotify {});
+        self.bf_funcs[offset_for_builtin("notify")] = Box::new(BfNotify {});
+        self.bf_funcs[offset_for_builtin("connected_players")] = Box::new(BfConnectedPlayers {});
         Ok(())
     }
 }
