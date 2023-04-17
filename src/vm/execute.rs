@@ -11,7 +11,7 @@ use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, ErrorPack, Objid, Var};
-use crate::server::ClientConnection;
+use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
 use crate::vm::builtin_functions::BfNoop;
@@ -79,12 +79,12 @@ pub enum ExecutionOutcome {
 
 #[async_trait]
 pub(crate) trait BfFunction: Sync + Send {
-    fn name(&self) -> String;
+    fn name(&self) -> &str;
     async fn call(
         &self,
-        _world_state: &mut dyn WorldState,
-        _client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
-        _args: Vec<Var>,
+        world_state: &mut dyn WorldState,
+        sessions: Arc<Mutex<dyn Sessions>>,
+        args: Vec<Var>,
     ) -> Result<Var, anyhow::Error>;
 }
 
@@ -502,7 +502,7 @@ impl VM {
 
     pub async fn exec(
         &mut self,
-        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+        client_connection: Arc<Mutex<dyn Sessions>>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self
             .next_op()
@@ -1090,7 +1090,7 @@ mod tests {
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::server::parse_cmd::ParsedCommand;
-    use crate::server::ClientConnection;
+    use crate::server::Sessions;
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
@@ -1104,10 +1104,13 @@ mod tests {
     }
 
     #[async_trait]
-    impl ClientConnection for NoopClientConnection {
+    impl Sessions for NoopClientConnection {
         async fn send_text(&mut self, _player: Objid, _msg: String) -> Result<(), anyhow::Error> {
-            //
             Ok(())
+        }
+
+        async fn connected_players(&mut self) -> Result<Vec<Objid>, Error> {
+            Ok(vec![])
         }
     }
 
@@ -1763,10 +1766,14 @@ mod tests {
         }
     }
     #[async_trait]
-    impl ClientConnection for MockClientConnection {
+    impl Sessions for MockClientConnection {
         async fn send_text(&mut self, _player: Objid, msg: String) -> Result<(), Error> {
             self.received.push(msg);
             Ok(())
+        }
+
+        async fn connected_players(&mut self) -> Result<Vec<Objid>, Error> {
+            Ok(vec![])
         }
     }
 

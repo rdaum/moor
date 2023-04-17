@@ -13,9 +13,9 @@ use tungstenite::{Error, Message};
 
 use crate::model::var::Objid;
 use crate::server::scheduler::Scheduler;
-use crate::server::ClientConnection;
+use crate::server::Sessions;
 
-struct WebSocketConnections {
+struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,
 }
 
@@ -25,13 +25,13 @@ struct WsConnection {
 }
 
 pub struct WebSocketServer {
-    sessions: Arc<Mutex<WebSocketConnections>>,
+    sessions: Arc<Mutex<WebSocketSessions>>,
     scheduler: Arc<Mutex<Scheduler>>,
 }
 
 impl WebSocketServer {
     pub fn new(scheduler: Arc<Mutex<Scheduler>>) -> Self {
-        let inner = WebSocketConnections {
+        let inner = WebSocketSessions {
             connections: Default::default(),
         };
         Self {
@@ -81,7 +81,7 @@ async fn ws_handle_connection(
     let player = Objid(2);
 
     eprintln!("New WebSocket connection: {}", peer);
-    let (ws_sender, mut ws_receiver) = ws_stream.split();
+    let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
 
     // Register connection with player.
     {
@@ -94,7 +94,9 @@ async fn ws_handle_connection(
 
         let mut old = connections.insert(player, client_connection);
         if let Some(ref mut old) = old {
-            old.sink.send("Reconnecting".into()).await.unwrap();
+            SplitSink::send(&mut old.sink, "Reconnecting".into())
+                .await
+                .unwrap();
             old.sink
                 .close()
                 .await
@@ -174,13 +176,17 @@ pub async fn ws_server_start(
 }
 
 #[async_trait]
-impl ClientConnection for WebSocketConnections {
+impl Sessions for WebSocketSessions {
     async fn send_text(&mut self, player: Objid, msg: String) -> Result<(), anyhow::Error> {
         let Some(conn) = self.connections.get_mut(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };
-        conn.sink.send(msg.into()).await?;
+        SplitSink::send(&mut conn.sink, msg.into()).await?;
 
         Ok(())
+    }
+
+    async fn connected_players(&mut self) -> Result<Vec<Objid>, anyhow::Error> {
+        Ok(self.connections.keys().cloned().collect())
     }
 }

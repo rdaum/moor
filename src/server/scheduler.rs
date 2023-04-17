@@ -10,7 +10,7 @@ use crate::model::objects::ObjFlag;
 use crate::model::var::Error::E_NONE;
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::server::parse_cmd::{parse_command, ParsedCommand};
-use crate::server::ClientConnection;
+use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::execute::{ExecutionResult, VM};
 
@@ -19,7 +19,7 @@ new_key_type! { pub struct TaskId; }
 pub struct Task {
     pub player: Objid,
     pub vm: Arc<Mutex<VM>>,
-    pub client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+    pub sessions: Arc<Mutex<dyn Sessions + Send + Sync>>,
 }
 
 pub struct TaskState {
@@ -77,7 +77,7 @@ impl Scheduler {
         &mut self,
         player: Objid,
         command: &str,
-        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+        sessions: Arc<Mutex<dyn Sessions + Send + Sync>>,
     ) -> Result<TaskId, anyhow::Error> {
         let (vloc, pc) = {
             let mut ss = self.state_source.lock().await;
@@ -106,14 +106,14 @@ impl Scheduler {
             (vloc, pc)
         };
 
-        self.setup_command_task(vloc, pc, client_connection).await
+        self.setup_command_task(vloc, pc, sessions).await
     }
 
     pub async fn setup_command_task(
         &mut self,
         player: Objid,
         command: ParsedCommand,
-        client_connection: Arc<Mutex<dyn ClientConnection + Sync + Send>>,
+        client_connection: Arc<Mutex<dyn Sessions + Sync + Send>>,
     ) -> Result<TaskId, anyhow::Error> {
         let mut ts = self.task_state.lock().await;
         let task_id = ts
@@ -163,7 +163,7 @@ impl Task {
         eprintln!("Entering task loop...");
         let mut vm = self.vm.lock().await;
         loop {
-            let result = vm.exec(self.client_connection.clone()).await;
+            let result = vm.exec(self.sessions.clone()).await;
             match result {
                 Ok(ExecutionResult::More) => {}
                 Ok(ExecutionResult::Complete(a)) => {
@@ -193,7 +193,7 @@ impl TaskState {
         &mut self,
         player: Objid,
         state_source: Arc<Mutex<dyn WorldStateSource + Send + Sync>>,
-        client_connection: Arc<Mutex<dyn ClientConnection + Send + Sync>>,
+        client_connection: Arc<Mutex<dyn Sessions + Send + Sync>>,
     ) -> Result<TaskId, anyhow::Error> {
         let mut state_source = state_source.lock().await;
         let state = state_source.new_world_state()?;
@@ -203,7 +203,7 @@ impl TaskState {
         let id = tasks.insert(Arc::new(Mutex::new(Task {
             player,
             vm,
-            client_connection,
+            sessions: client_connection,
         })));
 
         Ok(id)
@@ -245,6 +245,7 @@ impl TaskState {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Error;
     use std::sync::Arc;
 
     use async_trait::async_trait;
@@ -259,7 +260,7 @@ mod tests {
     use crate::model::verbs::VerbFlag;
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::scheduler::Scheduler;
-    use crate::server::ClientConnection;
+    use crate::server::Sessions;
     use crate::util::bitenum::BitEnum;
 
     struct NoopClientConnection {}
@@ -270,9 +271,13 @@ mod tests {
     }
 
     #[async_trait]
-    impl ClientConnection for NoopClientConnection {
+    impl Sessions for NoopClientConnection {
         async fn send_text(&mut self, _player: Objid, _msg: String) -> Result<(), anyhow::Error> {
             Ok(())
+        }
+
+        async fn connected_players(&mut self) -> Result<Vec<Objid>, Error> {
+            Ok(vec![])
         }
     }
 
