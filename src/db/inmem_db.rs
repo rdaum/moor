@@ -19,9 +19,10 @@ use crate::vm::opcode::Binary;
 const MAX_PROP_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
 const MAX_VERB_NAME: &str = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
 
-// Basic (for now) non-persistent in-memory "database" to bootstrap things.
-// Supporting (relatively inefficient) MVCC transaction isolation.
-// Built around a series of generic binary Relations.
+/// Basic (for now) non-persistent in-memory "database" to bootstrap things.
+/// Supporting (relatively inefficient) MVCC transaction isolation.
+/// Built around a series of generic binary Relations which support two tuple attributes and one or
+/// two indexes.
 pub struct ImDB {
     next_objid: AtomicI64,
     next_pid: AtomicI64,

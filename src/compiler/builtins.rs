@@ -1,3 +1,5 @@
+/// Global registry of built-in function names.
+
 use std::collections::HashMap;
 
 use crate::compiler::labels::Label;

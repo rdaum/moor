@@ -1,3 +1,5 @@
+/// Takes the AST and turns it into a list of opcodes.
+
 use std::collections::HashMap;
 
 use anyhow::anyhow;

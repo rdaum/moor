@@ -1,3 +1,6 @@
+/// Kicks off the Pest parser and converts it into our AST.
+/// This is the main entry point for parsing.
+
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
