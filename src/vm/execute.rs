@@ -7,10 +7,10 @@ use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
 use crate::db::state::{StateError, WorldState};
 use crate::model::objects::ObjFlag;
+use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
@@ -1082,20 +1082,20 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::state::{StateError, WorldState};
     use crate::db::CommitResult;
+    use crate::db::state::{StateError, WorldState};
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::Sessions;
     use crate::util::bitenum::BitEnum;
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
+    use crate::vm::opcode::Op::*;
 
     struct NoopClientConnection {}
     impl NoopClientConnection {

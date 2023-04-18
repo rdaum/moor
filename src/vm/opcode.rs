@@ -133,7 +133,10 @@ impl Binary {
     }
 
     pub fn find_var(&self, v: &str) -> Label {
-        self.var_names.find_name(v).expect("variable not found").0
+        self.var_names
+            .find_name(v)
+            .unwrap_or_else(|| panic!("variable not found: {}", v))
+            .0
     }
 
     pub fn find_literal(&self, l: Var) -> Label {

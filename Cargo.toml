@@ -2,10 +2,8 @@
 name = "moor"
 version = "0.1.0"
 edition = "2021"
-build = "build.rs"
 
 [dependencies]
-antlr-rust = {git = "https://github.com/rrevenantt/antlr4rust"}
 lazy_static = "1.4.0"
 anyhow = "1.0.66"
 thiserror = "1.0.37"
@@ -34,3 +32,5 @@ repr-trait = "1.0.0"
 enum-primitive-derive = "0.2.2"
 futures-util = "0.3.28"
 async-trait = "0.1.68"
+pest = "2.5.7"
+pest_derive = "2.5.7"

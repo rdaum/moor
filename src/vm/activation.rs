@@ -1,8 +1,8 @@
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
+use crate::model::var::{Objid, Var};
 use crate::model::var::Error;
 use crate::model::var::Error::E_VARNF;
-use crate::model::var::{Objid, Var};
 use crate::server::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::{Binary, Op};

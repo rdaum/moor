@@ -1,0 +1,131 @@
+program = { SOI ~ statements ~ EOI}
+statements = { statement* }
+statement = { if_statement |
+              for_statement |
+              while_statement | labelled_while_statement  |
+              fork_statement | labelled_fork_statement |
+              break_statement | continue_statement | return_statement |
+              try_except_statement | try_finally_statement |
+              expr_statement
+            }
+
+if_statement = { ^"if" ~ "(" ~ expr ~ ")" ~ statements ~ (elseif_clause)* ~ (else_clause)? ~ endif_clause}
+elseif_clause = {^"elseif" ~ "(" ~ expr ~ ")" ~ statements}
+else_clause = {^"else" ~ statements}
+endif_clause = {^"endif"}
+
+for_statement = {^"for" ~ ident ~ ^"in" ~ (for_range_clause  | for_in_clause) ~ statements ~ ^"endfor"}
+for_range_clause = {"[" ~ expr ~ ".." ~ expr ~ "]"}
+for_in_clause = {"(" ~ expr ~ ")"}
+
+labelled_while_statement = {^"while" ~ ident ~ "(" ~ expr ~ ")" ~ statements ~ ^"endwhile"}
+while_statement = {^"while" ~ "(" ~ expr ~ ")" ~ statements ~ ^"endwhile"}
+
+fork_statement = {^"fork" ~ "(" ~ expr ~ ")" ~ statements ~ ^"endfork"}
+labelled_fork_statement =  {^"fork" ~ ident ~ "(" ~ expr ~ ")" ~ statements ~ ^"endfork"}
+
+break_statement = {^"break" ~ (ident)? ~ ";"}
+continue_statement = {^"continue" ~ (ident)? ~ ";"}
+
+try_except_statement = {^"try" ~ statements ~ (except)+ ~ ^"endtry"}
+try_finally_statement = {^"try" ~ statements ~ ^"finally" ~ statements ~ ^"endtry"}
+except = {^"except" ~ (labelled_except | unlabelled_except) ~ statements}
+labelled_except = {ident ~ "(" ~ codes ~ ")"}
+unlabelled_except = {"(" ~ codes ~ ")"}
+
+codes = _{^"any" | exprlist}
+
+return_statement = {^"return" ~ (expr)? ~ ";"}
+expr_statement = { (expr)? ~ ";"}
+
+expr       =   { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix* )* }
+
+infix    =  _{ add | sub | mul | div | pow | modulus | land |
+               lor | eq | neq | lte | gte | lt | gt  | in_range }
+add    =   { "+" }
+sub    =   { "-" }
+mul    =   { "*" }
+div    =   { "/" }
+pow    =   { "^" }
+modulus    =   { "%" }
+land = { "&&"}
+lor = {"||"}
+eq = {"=="}
+neq = {"!="}
+lt = {"<"}
+gt = {">"}
+lte = {"<="}
+gte = {">="}
+in_range     =   @{ ^"in" ~ !ident_continue+}
+
+prefix   =  _{ neg | not | scatter_assign}
+neg    =   { "-" } //
+not    =    { "!" }
+
+scatter_assign = { "{" ~ scatter ~ "}" ~ ASSIGN }
+scatter = _{ scatter_item ~ ("," ~scatter_item)* }
+scatter_item = _{ scatter_optional | scatter_target | scatter_rest }
+scatter_optional = {"?" ~ ident ~ (ASSIGN ~ expr)?}
+scatter_target = {ident}
+scatter_rest = {"@" ~ ident}
+
+postfix  =  _{ index_range | index_single | verb_call | verb_expr_call | prop | prop_expr | cond_expr | assign }
+index_range    =   { "[" ~ expr ~ ".." ~ expr ~ "]" }
+index_single = {"[" ~ expr ~ "]"}
+verb_call = {":" ~ ident ~ arglist}
+verb_expr_call = {":" ~ expr ~ arglist}
+prop = {"." ~ ident}
+prop_expr = {"." ~ "(" ~ expr ~ ")"}
+assign = {"=" ~ expr}
+cond_expr = {"?" ~ expr ~ "|" ~ expr}
+
+primary  =  _{ builtin_call | paren_expr | sysprop_call |
+               sysprop | try_expr | list | atom | range_end}
+paren_expr = { "(" ~ expr ~ ")" }
+
+try_expr = {"`" ~ expr ~ "!" ~ codes ~ ("=>" ~ expr)? ~ "\'"}
+builtin_call = { (ident ~ !(keyword)) ~ arglist}
+
+sysprop = { "$" ~ ident }
+sysprop_call = { sysprop ~ arglist}
+
+atom = { integer | float | hex | string | object | err | ident}
+arglist = {"(" ~ exprlist ~ ")" | "()"}
+list = { ("{" ~ exprlist ~ "}") | "{}"}
+exprlist = { argument ~ ("," ~ argument)*}
+argument = { expr | "@" ~ expr }
+
+range_end = { "$" }
+
+// An unambiguous assignment operator, for use in scatter assignments where list comparison could be a false match.
+ASSIGN = _{ "=" ~ !("=")}
+
+ERR = @{ ^"e_type" | ^"e_div" | ^"e_perm" | ^"e_propnf" | ^"e_verbnf" | ^"e_varnf" | ^"e_invind" | ^"e_recmove" |
+        ^"e_maxrec" | ^"e_range" | ^"e_args" | ^"e_nacc" | ^"e_invarg" | ^"e_quota" | ^"e_float" }
+
+err = @{ ERR ~ !ident_continue+ }
+
+object      = @{ "#" ~ integer }
+keyword = @{^"for" | ^"endfor" | ^"if" | ^"else" | ^"return" | ^"endif" | ^"elseif" | ^"while" | ^"endwhile" |
+            ^"continue" | ^"break" | ^"fork" | ^"endfork" | ^"try" | ^"except" | ^"endtry" | ^"finally" |
+            ^"in" | err}
+
+ident_start = _{ "_" | ASCII_ALPHA }
+ident_continue = _{ "_" | ASCII_ALPHANUMERIC }
+
+ident = @{ ((!keyword ~ ident_start) ~ ident_continue* ~ !ident_continue) |
+             (keyword ~ ident_start ~ ident_continue* ~ !ident_continue)}
+
+string     = @{ "\"" ~ str_inner ~ "\"" }
+str_inner  = @{ (!("\"" | "\\" | "\u{0000}" | "\u{001F}") ~ ANY)* ~ (escape ~ str_inner)? }
+
+hex        = @{ "0x" ~ (ASCII_HEX_DIGIT)+ }
+integer    = @{ ("+" | "-")? ~ int ~ !("." ~ digits)}
+float      = @{ ("+" | "-")? ~ int ~ ("." ~ digits ~ exp? | exp)? }
+int        = @{ "0" | (ASCII_NONZERO_DIGIT ~ digits?) }
+digits     = @{ (ASCII_DIGIT | ("_" ~ ASCII_DIGIT))+ }
+exp        = @{ ("E" | "e") ~ ("+" | "-")? ~ int }
+
+escape  = @{ "\\" ~ ("b" | "t" | "n" | "f" | "r" | "\"" | "\\" | NEWLINE)? }
+
+WHITESPACE = _{ " " | "\t" | NEWLINE }

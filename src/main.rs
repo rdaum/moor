@@ -1,10 +1,13 @@
 extern crate core;
+#[macro_use]
+extern crate pest_derive;
 
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::sync::Arc;
+use std::time::Instant;
 
 use clap::builder::ValueHint;
 use clap::Parser;
@@ -20,13 +23,12 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::VerbFlag;
 use crate::server::scheduler::Scheduler;
-use crate::server::ws_server::{ws_server_start, WebSocketServer};
+use crate::server::ws_server::{WebSocketServer, ws_server_start};
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;
 
 pub mod compiler;
 pub mod db;
-pub mod grammar;
 pub mod model;
 pub mod server;
 pub mod textdump;
@@ -95,6 +97,8 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
+    let start = Instant::now();
+
     let jhcore = File::open(path)?;
     let br = BufReader::new(jhcore);
     let mut tdr = TextdumpReader::new(br);
@@ -243,6 +247,10 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     eprintln!("Verbs defined.\nImport complete.");
 
     s.do_commit_tx(&mut tx)?;
+
+    let duration = start.elapsed();
+
+    eprintln!("Time elapsed in textdump import is: {:?}", duration);
 
     Ok(())
 }

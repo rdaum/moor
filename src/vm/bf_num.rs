@@ -1,3 +1,9 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use decorum::R64;
+use tokio::sync::Mutex;
+
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
@@ -5,10 +11,6 @@ use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::model::var::Var;
 use crate::server::Sessions;
 use crate::vm::execute::{BfFunction, VM};
-use async_trait::async_trait;
-use decorum::R64;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 async fn bf_abs(
     _ws: &mut dyn WorldState,

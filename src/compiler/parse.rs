@@ -1,780 +1,741 @@
-use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
-use antlr_rust::common_token_stream::CommonTokenStream;
-use antlr_rust::error_listener::ErrorListener;
-use antlr_rust::errors::ANTLRError;
-use antlr_rust::recognizer::Recognizer;
-use antlr_rust::token::Token;
-use antlr_rust::token_factory::TokenFactory;
-use antlr_rust::tree::{ParseTree, ParseTreeVisitor, TerminalNode, Tree, Visitable};
-use antlr_rust::{InputStream, Parser};
-use anyhow::anyhow;
-use paste::paste;
+pub use pest::Parser as PestParser;
+use pest::pratt_parser::{Assoc, Op, PrattParser};
 
-use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
     Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
-use crate::compiler::labels::{Name, Names};
-use crate::grammar::moolexer::mooLexer;
-use crate::grammar::mooparser::*;
-use crate::grammar::moovisitor::mooVisitor;
-use crate::model::var::Var::{Obj, Str};
-use crate::model::var::{Error, Objid, Var};
+use crate::compiler::ast::Expr::VarExpr;
+use crate::compiler::labels::Names;
+use crate::compiler::Parse;
+use crate::compiler::parse::moo::{MooParser, Rule};
+use crate::model::var::{Error, Objid, SYSTEM_OBJECT, Var};
 
-pub struct VerbCompileErrorListener {
-    pub program: String,
+pub mod moo {
+    #[derive(Parser)]
+    #[grammar = "src/compiler/moo.pest"]
+    pub struct MooParser;
 }
 
-impl<'a, T: Recognizer<'a>> ErrorListener<'a, T> for VerbCompileErrorListener {
-    fn syntax_error(
-        &self,
-        _recognizer: &T,
-        offending_symbol: Option<&<T::TF as TokenFactory<'a>>::Inner>,
-        line: isize,
-        column: isize,
-        msg: &str,
-        _e: Option<&ANTLRError>,
-    ) {
-        if let Some(_of) = offending_symbol {
-            let lines: Vec<&str> = self.program.lines().collect();
-            eprintln!("Error {} in:\n{}", msg, lines[line as usize - 1]);
-            eprintln!("{}^", (0..column).map(|_| " ").collect::<String>());
-            panic!("Compilation fail.");
+fn parse_atom(
+    names: Arc<Mutex<Names>>,
+    pairs: pest::iterators::Pair<Rule>,
+) -> Result<Expr, anyhow::Error> {
+    match pairs.as_rule() {
+        Rule::ident => {
+            let name = names
+                .lock()
+                .unwrap()
+                .find_or_add_name(pairs.as_str().trim());
+            Ok(Expr::Id(name))
+        }
+        Rule::object => {
+            let ostr = &pairs.as_str()[1..];
+            let oid = i64::from_str(ostr).unwrap();
+            let objid = Objid(oid);
+            Ok(Expr::VarExpr(Var::Obj(objid)))
+        }
+        Rule::integer => {
+            let int = pairs.as_str().parse::<i64>().unwrap();
+            Ok(Expr::VarExpr(Var::Int(int)))
+        }
+        Rule::hex => {
+            let int = i64::from_str_radix(&pairs.as_str()[2..], 16).unwrap();
+            Ok(Expr::VarExpr(Var::Int(int)))
+        }
+        Rule::float => {
+            let float = pairs.as_str().parse::<f64>().unwrap();
+            Ok(Expr::VarExpr(Var::Float(float)))
+        }
+        Rule::string => {
+            let string = pairs.as_str();
+            // Note we don't trim the start and end quotes, because snailquote is expecting them.
+            let parsed = snailquote::unescape(string).unwrap();
+            Ok(Expr::VarExpr(Var::Str(parsed)))
+        }
+        Rule::err => {
+            let e = pairs.as_str();
+            Ok(VarExpr(match e.to_lowercase().as_str() {
+                "e_type" => Var::Err(Error::E_TYPE),
+                "e_div" => Var::Err(Error::E_DIV),
+                "e_perm" => Var::Err(Error::E_PERM),
+                "e_propnf" => Var::Err(Error::E_PROPNF),
+                "e_verbnf" => Var::Err(Error::E_VERBNF),
+                "e_varnf" => Var::Err(Error::E_VARNF),
+                "e_invind" => Var::Err(Error::E_INVIND),
+                "e_recmove" => Var::Err(Error::E_RECMOVE),
+                "e_maxrec" => Var::Err(Error::E_MAXREC),
+                "e_range" => Var::Err(Error::E_RANGE),
+                "e_args" => Var::Err(Error::E_ARGS),
+                "e_nacc" => Var::Err(Error::E_NACC),
+                "e_invarg" => Var::Err(Error::E_INVARG),
+                "e_quota" => Var::Err(Error::E_QUOTA),
+                "e_float" => Var::Err(Error::E_FLOAT),
+                &_ => {
+                    panic!("unknown error")
+                }
+            }))
+        }
+        _ => {
+            panic!("Unimplemented atom: {:?}", pairs);
         }
     }
 }
 
-#[derive(Debug)]
-struct LoopEntry {
-    name: Option<String>,
-    is_barrier: bool,
-}
-
-pub struct ASTGenVisitor {
-    pub program: Vec<Stmt>,
-    pub names: Names,
-    _statement_stack: Vec<Vec<Stmt>>,
-    _expr_stack: Vec<Expr>,
-    _cond_arm_stack: Vec<Vec<CondArm>>,
-    _loop_stack: Vec<LoopEntry>,
-    _excepts_stack: Vec<Vec<ExceptArm>>,
-    _args_stack: Vec<Vec<Arg>>,
-    _scatter_stack: Vec<Vec<ScatterItem>>,
-}
-
-impl ASTGenVisitor {
-    pub fn new(names: Names) -> Self {
-        Self {
-            program: Default::default(),
-            names,
-            _statement_stack: Default::default(),
-            _expr_stack: Default::default(),
-            _cond_arm_stack: Default::default(),
-            _loop_stack: Default::default(),
-            _excepts_stack: Default::default(),
-            _args_stack: Default::default(),
-            _scatter_stack: Default::default(),
+fn parse_exprlist(
+    names: Arc<Mutex<Names>>,
+    pairs: pest::iterators::Pairs<Rule>,
+) -> Result<Vec<Arg>, anyhow::Error> {
+    let mut args = vec![];
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::argument => {
+                let arg = if pair.as_str().starts_with('@') {
+                    Arg::Splice(parse_expr(
+                        names.clone(),
+                        pair.into_inner().next().unwrap().into_inner(),
+                    )?)
+                } else {
+                    Arg::Normal(parse_expr(
+                        names.clone(),
+                        pair.into_inner().next().unwrap().into_inner(),
+                    )?)
+                };
+                args.push(arg);
+            }
+            _ => {
+                panic!("Unimplemented exprlist: {:?}", pair);
+            }
         }
     }
+    Ok(args)
 }
 
-enum LoopExitKind {
-    Break,
-    Continue,
+fn parse_arglist(
+    names: Arc<Mutex<Names>>,
+    pairs: pest::iterators::Pairs<Rule>,
+) -> Result<Vec<Arg>, anyhow::Error> {
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::exprlist => {
+                return parse_exprlist(names, pair.into_inner());
+            }
+            _ => {
+                panic!("Unimplemented arglist: {:?}", pair);
+            }
+        }
+    }
+    Ok(vec![])
 }
 
-impl ASTGenVisitor {
-    // Loop scope management
-    fn push_loop_name(&mut self, name: Option<&String>) {
-        self._loop_stack.push(LoopEntry {
-            name: name.map(String::from),
-            is_barrier: false,
+fn parse_expr(
+    names: Arc<Mutex<Names>>,
+    pairs: pest::iterators::Pairs<Rule>,
+) -> Result<Expr, anyhow::Error> {
+    let pratt = PrattParser::new()
+        // CondExpr is right-associative in C-ish languages, and should sit above all the infix rules
+        // to make Pratt happy, it seems.
+        .op(Op::postfix(Rule::assign))
+        .op(Op::postfix(Rule::cond_expr))
+        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
+        .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
+        .op(Op::infix(Rule::gt, Assoc::Left) | Op::infix(Rule::lt, Assoc::Left))
+        .op(Op::infix(Rule::land, Assoc::Left) | Op::infix(Rule::lor, Assoc::Left))
+        .op(Op::infix(Rule::gte, Assoc::Left) | Op::infix(Rule::lte, Assoc::Left))
+        .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
+        .op(Op::infix(Rule::pow, Assoc::Left))
+        .op(Op::infix(Rule::modulus, Assoc::Left))
+        .op(Op::infix(Rule::in_range, Assoc::Left))
+        .op(Op::postfix(Rule::index_range))
+        .op(Op::postfix(Rule::index_single))
+        .op(Op::postfix(Rule::verb_call))
+        .op(Op::postfix(Rule::verb_expr_call))
+        .op(Op::postfix(Rule::prop))
+        .op(Op::postfix(Rule::prop_expr))
+        .op(Op::prefix(Rule::scatter_assign))
+        .op(Op::prefix(Rule::neg))
+        .op(Op::prefix(Rule::not));
+
+    return pratt
+        .map_primary(|primary| match primary.as_rule() {
+            Rule::atom => {
+                let mut inner = primary.into_inner();
+                let expr = parse_atom(names.clone(), inner.next().unwrap())?;
+                Ok(expr)
+            }
+            Rule::sysprop => {
+                let mut inner = primary.into_inner();
+                let property = inner.next().unwrap().as_str();
+                Ok(Expr::Prop {
+                    location: Box::new(VarExpr(Var::Obj(SYSTEM_OBJECT))),
+                    property: Box::new(VarExpr(Var::Str(property.to_string()))),
+                })
+            }
+            Rule::sysprop_call => {
+                let mut inner = primary.into_inner();
+                let verb = inner.next().unwrap().as_str();
+                let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
+                Ok(Expr::Verb {
+                    location: Box::new(VarExpr(Var::Obj(SYSTEM_OBJECT))),
+                    verb: Box::new(VarExpr(Var::Str(verb.to_string()))),
+                    args,
+                })
+            }
+            Rule::list => {
+                let mut inner = primary.into_inner();
+                if let Some(arglist) = inner.next() {
+                    let args = parse_exprlist(names.clone(), arglist.into_inner())?;
+                    Ok(Expr::List(args))
+                } else {
+                    Ok(Expr::List(vec![]))
+                }
+            }
+            Rule::builtin_call => {
+                let mut inner = primary.into_inner();
+                let bf = inner.next().unwrap().as_str();
+                let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
+                Ok(Expr::Call {
+                    function: bf.to_string(),
+                    args,
+                })
+            }
+            Rule::range_end => Ok(Expr::Length),
+            Rule::try_expr => {
+                let mut inner = primary.into_inner();
+                let try_expr = parse_expr(names.clone(), inner.next().unwrap().into_inner())?;
+                let codes = parse_exprlist(names.clone(), inner.next().unwrap().into_inner())?;
+                let except = inner
+                    .next()
+                    .map(|e| Box::new(parse_expr(names.clone(), e.into_inner()).unwrap()));
+                Ok(Expr::Catch {
+                    trye: Box::new(try_expr),
+                    codes,
+                    except,
+                })
+            }
+            Rule::paren_expr => {
+                let mut inner = primary.into_inner();
+                let expr = parse_expr(names.clone(), inner.next().unwrap().into_inner())?;
+                Ok(expr)
+            }
+            _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
         })
-    }
-    fn resume_loop_scope(&mut self) {
-        let last_entry = self._loop_stack.last();
-        match last_entry {
-            None => {
-                // TODO should be a recoverable error?
-                panic!("PARSER: Empty loop stack in RESUME_LOOP_SCOPE!")
-            }
-            Some(loop_entry) if !loop_entry.is_barrier => {
-                // TODO should be a recoverable error?
-                panic!(
-                    "PARSER: Tried to resume non-loop-scope barrier! (current loop: {:?}",
-                    loop_entry
-                )
-            }
-            Some(_) => {
-                self._loop_stack.pop();
-            }
-        }
-    }
-    fn pop_loop_name(&mut self) -> LoopEntry {
-        let last_entry = self._loop_stack.pop();
-        match last_entry {
-            None => {
-                // TODO should be a recoverable error?
-                panic!("PARSER: Empty loop stack in POP_LOOP_NAME!")
-            }
-            Some(loop_entry) if loop_entry.is_barrier => {
-                // TODO should be a recoverable error?
-                panic!("PARSER: Tried to pop loop-scope barrier!")
-            }
-            Some(loop_entry) => loop_entry,
-        }
-    }
-    fn suspend_loop_scope(&mut self) {
-        self._loop_stack.push(LoopEntry {
-            name: None,
-            is_barrier: true,
+        .map_infix(|lhs, op, rhs| match op.as_rule() {
+            Rule::add => Ok(Expr::Binary(
+                BinaryOp::Add,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::sub => Ok(Expr::Binary(
+                BinaryOp::Sub,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::mul => Ok(Expr::Binary(
+                BinaryOp::Mul,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::div => Ok(Expr::Binary(
+                BinaryOp::Div,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::pow => Ok(Expr::Binary(
+                BinaryOp::Eq,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::modulus => Ok(Expr::Binary(
+                BinaryOp::Mod,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::eq => Ok(Expr::Binary(
+                BinaryOp::Eq,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::neq => Ok(Expr::Binary(
+                BinaryOp::NEq,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::lt => Ok(Expr::Binary(
+                BinaryOp::Lt,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::lte => Ok(Expr::Binary(
+                BinaryOp::LtE,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::gt => Ok(Expr::Binary(
+                BinaryOp::Gt,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            Rule::gte => Ok(Expr::Binary(
+                BinaryOp::GtE,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+
+            Rule::land => Ok(Expr::And(Box::new(lhs?), Box::new(rhs.unwrap()))),
+            Rule::lor => Ok(Expr::Or(Box::new(lhs?), Box::new(rhs.unwrap()))),
+            Rule::in_range => Ok(Expr::Binary(
+                BinaryOp::In,
+                Box::new(lhs?),
+                Box::new(rhs.unwrap()),
+            )),
+            _ => todo!("Unimplemented infix: {:?}", op.as_rule()),
         })
-    }
-    fn check_loop_name(
-        &mut self,
-        name: Option<&String>,
-        kind: LoopExitKind,
-    ) -> Result<(), anyhow::Error> {
-        match name {
-            None => {
-                let last = self._loop_stack.last();
-                if last.is_none() || last.unwrap().is_barrier {
-                    match kind {
-                        LoopExitKind::Break => {
-                            return Err(anyhow!("No enclosing loop for `break' statement"));
+        .map_prefix(|op, rhs| match op.as_rule() {
+            Rule::scatter_assign => {
+                let inner = op.into_inner();
+                let mut items = vec![];
+                for scatter_item in inner {
+                    match scatter_item.as_rule() {
+                        Rule::scatter_optional => {
+                            let mut inner = scatter_item.into_inner();
+                            let id = inner.next().unwrap().as_str();
+                            let id = names.lock().unwrap().find_or_add_name(id);
+                            let expr = inner
+                                .next()
+                                .map(|e| parse_expr(names.clone(), e.into_inner()).unwrap());
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Optional,
+                                id,
+                                expr,
+                            });
                         }
-                        LoopExitKind::Continue => {
-                            return Err(anyhow!("No enclosing loop for `continue' statement"));
+                        Rule::scatter_target => {
+                            let mut inner = scatter_item.into_inner();
+                            let id = inner.next().unwrap().as_str();
+                            let id = names.lock().unwrap().find_or_add_name(id);
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Required,
+                                id,
+                                expr: None,
+                            });
+                        }
+                        Rule::scatter_rest => {
+                            let mut inner = scatter_item.into_inner();
+                            let id = inner.next().unwrap().as_str();
+                            let id = names.lock().unwrap().find_or_add_name(id);
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Rest,
+                                id,
+                                expr: None,
+                            });
+                        }
+                        _ => {
+                            panic!("Unimplemented scatter_item: {:?}", scatter_item);
                         }
                     }
                 }
-                Ok(())
+                Ok(Expr::Scatter(items, Box::new(rhs?)))
             }
-            Some(n) => {
-                let entry = self._loop_stack.iter().rev().find(|e| {
-                    if e.is_barrier {
-                        return false;
+            Rule::not => Ok(Expr::Unary(UnaryOp::Not, Box::new(rhs?))),
+            Rule::neg => Ok(Expr::Unary(UnaryOp::Neg, Box::new(rhs?))),
+            _ => todo!("Unimplemented prefix: {:?}", op.as_rule()),
+        })
+        .map_postfix(|lhs, op| match op.as_rule() {
+            Rule::verb_call => {
+                let mut parts = op.into_inner();
+                let ident = parts.next().unwrap().as_str();
+                let args_expr = parts.next().unwrap();
+                let args = parse_arglist(names.clone(), args_expr.into_inner())?;
+                Ok(Expr::Verb {
+                    location: Box::new(lhs?),
+                    verb: Box::new(Expr::VarExpr(Var::Str(ident.to_string()))),
+                    args,
+                })
+            }
+            Rule::verb_expr_call => {
+                let mut parts = op.into_inner();
+                let expr = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                let args_expr = parts.next().unwrap();
+                let args = parse_arglist(names.clone(), args_expr.into_inner())?;
+                Ok(Expr::Verb {
+                    location: Box::new(lhs?),
+                    verb: Box::new(expr),
+                    args,
+                })
+            }
+            Rule::prop => {
+                let mut parts = op.into_inner();
+                let ident = parts.next().unwrap().as_str();
+                Ok(Expr::Prop {
+                    location: Box::new(lhs?),
+                    property: Box::new(Expr::VarExpr(Var::Str(ident.to_string()))),
+                })
+            }
+            Rule::prop_expr => {
+                let mut parts = op.into_inner();
+                let expr = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                Ok(Expr::Prop {
+                    location: Box::new(lhs?),
+                    property: Box::new(expr),
+                })
+            }
+            Rule::assign => {
+                let mut parts = op.into_inner();
+                let right = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                Ok(Expr::Assign {
+                    left: Box::new(lhs?),
+                    right: Box::new(right),
+                })
+            }
+            Rule::index_single => {
+                let mut parts = op.into_inner();
+                let index = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                Ok(Expr::Index(Box::new(lhs?), Box::new(index)))
+            }
+            Rule::index_range => {
+                let mut parts = op.into_inner();
+                let start = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                let end = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                Ok(Expr::Range {
+                    base: Box::new(lhs?),
+                    from: Box::new(start),
+                    to: Box::new(end),
+                })
+            }
+            Rule::cond_expr => {
+                let mut parts = op.into_inner();
+                let true_expr = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                let false_expr = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                Ok(Expr::Cond {
+                    condition: Box::new(lhs?),
+                    consequence: Box::new(true_expr),
+                    alternative: Box::new(false_expr),
+                })
+            }
+            _ => todo!("Unimplemented postfix: {:?}", op.as_rule()),
+        })
+        .parse(pairs);
+}
+
+fn parse_statement(
+    names: Arc<Mutex<Names>>,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<Option<Stmt>, anyhow::Error> {
+    match pair.as_rule() {
+        Rule::expr_statement => {
+            let mut inner = pair.into_inner();
+            if let Some(rule) = inner.next() {
+                let expr = parse_expr(names, rule.into_inner())?;
+                return Ok(Some(Stmt::Expr(expr)));
+            }
+            Ok(None)
+        }
+        Rule::while_statement => {
+            let mut parts = pair.into_inner();
+            let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+            let mut body = vec![];
+            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            Ok(Some(Stmt::While {
+                id: None,
+                condition,
+                body,
+            }))
+        }
+        Rule::labelled_while_statement => {
+            let mut parts = pair.into_inner();
+            let id = names
+                .lock()
+                .unwrap()
+                .find_or_add_name(parts.next().unwrap().as_str());
+            let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+            let mut body = vec![];
+            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            Ok(Some(Stmt::While {
+                id: Some(id),
+                condition,
+                body,
+            }))
+        }
+        Rule::if_statement => {
+            let mut parts = pair.into_inner();
+            let mut arms = vec![];
+            let mut otherwise = vec![];
+            let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+            let mut body = vec![];
+            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            arms.push(CondArm {
+                condition,
+                statements: body,
+            });
+            for remainder in parts {
+                match remainder.as_rule() {
+                    Rule::endif_clause => {
+                        continue;
                     }
-                    if let Some(name) = &e.name {
-                        if name == n {
-                            return true;
-                        }
+                    Rule::elseif_clause => {
+                        let mut parts = remainder.into_inner();
+                        let condition =
+                            parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+                        let mut body = vec![];
+                        parse_statements(
+                            names.clone(),
+                            parts.next().unwrap().into_inner(),
+                            &mut body,
+                        )?;
+                        arms.push(CondArm {
+                            condition,
+                            statements: body,
+                        });
                     }
-                    false
-                });
-                if entry.is_some() {
-                    return Ok(());
+                    Rule::else_clause => {
+                        let mut parts = remainder.into_inner();
+                        parse_statements(
+                            names.clone(),
+                            parts.next().unwrap().into_inner(),
+                            &mut otherwise,
+                        )?;
+                    }
+                    _ => panic!("Unimplemented if clause: {:?}", remainder),
                 }
-                match kind {
-                    LoopExitKind::Break => {
-                        Err(anyhow!("Invalid loop name in `break` statement: {}", n))
+            }
+            Ok(Some(Stmt::Cond { arms, otherwise }))
+        }
+        Rule::break_statement => {
+            let mut parts = pair.into_inner();
+            let label = parts
+                .next()
+                .map(|id| names.lock().unwrap().find_or_add_name(id.as_str()));
+            Ok(Some(Stmt::Break { exit: label }))
+        }
+        Rule::continue_statement => {
+            let mut parts = pair.into_inner();
+            let label = parts
+                .next()
+                .map(|id| names.lock().unwrap().find_or_add_name(id.as_str()));
+            Ok(Some(Stmt::Continue { exit: label }))
+        }
+        Rule::return_statement => {
+            let mut parts = pair.into_inner();
+            let expr = parts
+                .next()
+                .map(|expr| parse_expr(names.clone(), expr.into_inner()).unwrap());
+            Ok(Some(Stmt::Return { expr }))
+        }
+        Rule::for_statement => {
+            let mut parts = pair.into_inner();
+            let id = names
+                .lock()
+                .unwrap()
+                .find_or_add_name(parts.next().unwrap().as_str());
+            let clause = parts.next().unwrap();
+            let mut body = vec![];
+            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            match clause.as_rule() {
+                Rule::for_range_clause => {
+                    let mut clause_inner = clause.into_inner();
+                    let from_rule = clause_inner.next().unwrap();
+                    let to_rule = clause_inner.next().unwrap();
+                    let from = parse_expr(names.clone(), from_rule.into_inner())?;
+                    let to = parse_expr(names, to_rule.into_inner())?;
+                    Ok(Some(Stmt::ForRange { id, from, to, body }))
+                }
+                Rule::for_in_clause => {
+                    let mut clause_inner = clause.into_inner();
+                    let in_rule = clause_inner.next().unwrap();
+                    let expr = parse_expr(names, in_rule.into_inner())?;
+                    Ok(Some(Stmt::ForList { id, expr, body }))
+                }
+                _ => panic!("Unimplemented for clause: {:?}", clause),
+            }
+        }
+        Rule::try_finally_statement => {
+            let mut parts = pair.into_inner();
+            let mut body = vec![];
+            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            let mut handler = vec![];
+            parse_statements(names, parts.next().unwrap().into_inner(), &mut handler)?;
+            Ok(Some(Stmt::TryFinally { body, handler }))
+        }
+        Rule::try_except_statement => {
+            let mut parts = pair.into_inner();
+            let mut body = vec![];
+            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            let mut excepts = vec![];
+            for except in parts {
+                match except.as_rule() {
+                    Rule::except => {
+                        let mut except_clause_parts = except.into_inner();
+                        let clause = except_clause_parts.next().unwrap();
+                        let (id, codes) = match clause.as_rule() {
+                            Rule::labelled_except => {
+                                let mut my_parts = clause.into_inner();
+                                let exception = my_parts
+                                    .next()
+                                    .map(|id| names.lock().unwrap().find_or_add_name(id.as_str()));
+
+                                let codes = my_parts.next().unwrap();
+                                let codes = match codes.as_rule() {
+                                    Rule::exprlist => {
+                                        parse_exprlist(names.clone(), codes.into_inner())?
+                                    }
+                                    _ => panic!("Unimplemented exception codes: {:?}", codes),
+                                };
+                                (exception, codes)
+                            }
+                            Rule::unlabelled_except => {
+                                let mut my_parts = clause.into_inner();
+
+                                let codes = my_parts.next().unwrap();
+                                let codes = match codes.as_rule() {
+                                    Rule::exprlist => {
+                                        parse_exprlist(names.clone(), codes.into_inner())?
+                                    }
+                                    _ => panic!("Unimplemented exception codes: {:?}", codes),
+                                };
+                                (None, codes)
+                            }
+                            _ => panic!("Unimplemented except clause: {:?}", clause),
+                        };
+                        let mut statements = vec![];
+                        parse_statements(
+                            names.clone(),
+                            except_clause_parts.next().unwrap().into_inner(),
+                            &mut statements,
+                        )?;
+
+                        excepts.push(ExceptArm {
+                            id,
+                            codes,
+                            statements,
+                        });
                     }
-                    LoopExitKind::Continue => {
-                        Err(anyhow!("Invalid loop name in `continue` statement: {}", n))
+                    _ => panic!("Unimplemented except clause: {:?}", except),
+                }
+            }
+            Ok(Some(Stmt::TryExcept { body, excepts }))
+        }
+        Rule::fork_statement => {
+            let mut parts = pair.into_inner();
+            let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+            let mut body = vec![];
+            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            Ok(Some(Stmt::Fork {
+                id: None,
+                time,
+                body,
+            }))
+        }
+        Rule::labelled_fork_statement => {
+            let mut parts = pair.into_inner();
+            let id = names
+                .lock()
+                .unwrap()
+                .find_or_add_name(parts.next().unwrap().as_str());
+            let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
+            let mut body = vec![];
+            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            Ok(Some(Stmt::Fork {
+                id: Some(id),
+                time,
+                body,
+            }))
+        }
+        _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
+    }
+}
+
+fn parse_statements(
+    names: Arc<Mutex<Names>>,
+    pairs: pest::iterators::Pairs<Rule>,
+    statements: &mut Vec<Stmt>,
+) -> Result<(), anyhow::Error> {
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::statement => {
+                let stmt = parse_statement(names.clone(), pair.into_inner().next().unwrap())?;
+                if let Some(stmt) = stmt {
+                    statements.push(stmt);
+                }
+            }
+            _ => {
+                panic!("Unexpected rule: {:?}", pair.as_rule());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
+    let pairs = MooParser::parse(moo::Rule::program, program_text)?;
+
+    let mut program = Vec::new();
+    // This has to be tossed into an Arc because the precedence parser uses it in multiple closures,
+    // causing multiple borrows.
+    let names = Arc::new(Mutex::new(Names::new()));
+    for pair in pairs {
+        match pair.as_rule() {
+            moo::Rule::program => {
+                let inna = pair.into_inner().next().unwrap();
+
+                match inna.as_rule() {
+                    Rule::statements => {
+                        parse_statements(names.clone(), inna.into_inner(), &mut program)?;
+                    }
+
+                    _ => {
+                        panic!("Unexpected rule: {:?}", inna.as_rule());
                     }
                 }
             }
-        }
-    }
-
-    // Local names slot mgmt. Find or create.
-    fn find_id(&mut self, name: &String) -> Name {
-        self.names.find_or_add_name(name)
-    }
-
-    fn reduce_expr(&mut self, node: &Option<Rc<ExprContextAll>>) -> Expr {
-        node.as_ref().unwrap().accept(self);
-        self._expr_stack.pop().unwrap()
-    }
-
-    fn reduce_opt_expr(&mut self, node: &Option<Rc<ExprContextAll>>) -> Option<Expr> {
-        match node.as_ref() {
-            None => None,
-            Some(node) => {
-                node.accept(self);
-                Some(self._expr_stack.pop().unwrap())
+            _ => {
+                panic!("Unexpected rule: {:?}", pair.as_rule());
             }
         }
     }
-
-    fn reduce_statements(&mut self, node: &Option<Rc<StatementsContextAll>>) -> Vec<Stmt> {
-        self._statement_stack.push(vec![]);
-        node.iter().for_each(|stmt| stmt.accept(self));
-        self._statement_stack.pop().unwrap()
-    }
-
-    fn get_id(id: &Option<Rc<TerminalNode<mooParserContextType>>>) -> String {
-        id.as_ref().unwrap().get_text()
-    }
-
-    fn get_opt_id(id: &Option<Rc<TerminalNode<mooParserContextType>>>) -> Option<String> {
-        id.as_ref().map(|s| String::from(s.get_text().as_str()))
-    }
-}
-
-macro_rules! binary_expr {
-    ( $op:ident ) => {
-        paste! {
-            fn [<visit_ $op Expr>](&mut self, ctx: &[<$op ExprContext>]<'node>) {
-                let left = self.reduce_expr(&ctx.expr(0));
-                let right = self.reduce_expr(&ctx.expr(1));
-                self._expr_stack
-                    .push(Expr::Binary(BinaryOp::$op, Box::new(left), Box::new(right)));
-            }
-        }
-    };
-}
-
-macro_rules! unary_expr {
-    ( $op:ident ) => {
-        paste! {
-            fn [<visit_ $op Expr>](&mut self, ctx: &[<$op ExprContext>]<'node>) {
-                let expr = self.reduce_expr(&ctx.expr());
-                self._expr_stack
-                    .push(Expr::Unary(UnaryOp::$op, Box::new(expr)));
-            }
-        }
-    };
-}
-impl<'node> ParseTreeVisitor<'node, mooParserContextType> for ASTGenVisitor {}
-
-impl<'node> mooVisitor<'node> for ASTGenVisitor {
-    fn visit_program(&mut self, ctx: &ProgramContext<'node>) {
-        self._statement_stack.push(vec![]);
-        ctx.statements().iter().for_each(|item| item.accept(self));
-        self.program = self._statement_stack.pop().unwrap();
-    }
-
-    fn visit_statements(&mut self, ctx: &StatementsContext<'node>) {
-        ctx.statement_all()
-            .iter()
-            .for_each(|item| item.accept(self));
-    }
-
-    fn visit_If(&mut self, ctx: &IfContext<'node>) {
-        let condition = self.reduce_expr(&ctx.expr());
-        let statements = self.reduce_statements(&ctx.statements(0));
-
-        self._cond_arm_stack.push(vec![CondArm {
-            condition,
-            statements,
-        }]);
-        for ei in ctx.elseif_all().iter() {
-            ei.accept(self);
-        }
-        let cond_arms = self._cond_arm_stack.pop().unwrap();
-
-        let otherwise = if ctx.elsepart.is_some() {
-            self.reduce_statements(&ctx.elsepart)
-        } else {
-            vec![]
-        };
-
-        let cond = Stmt::Cond {
-            arms: cond_arms,
-            otherwise,
-        };
-        self._statement_stack.last_mut().unwrap().push(cond);
-    }
-
-    fn visit_ForExpr(&mut self, ctx: &ForExprContext<'node>) {
-        let id = Self::get_id(&ctx.ID());
-        self.push_loop_name(Some(&id));
-        let id = self.find_id(&id);
-
-        let expr_node = self.reduce_expr(&ctx.expr());
-
-        let body = self.reduce_statements(&ctx.statements());
-
-        let stmt = Stmt::ForList {
-            id,
-            expr: expr_node,
-            body,
-        };
-        self.pop_loop_name();
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_ForRange(&mut self, ctx: &ForRangeContext<'node>) {
-        let id = Self::get_id(&ctx.ID());
-        self.push_loop_name(Some(&id));
-
-        let id = self.find_id(&id);
-        let from = self.reduce_expr(&ctx.from);
-        let to = self.reduce_expr(&ctx.to);
-
-        let body = self.reduce_statements(&ctx.statements());
-        let stmt = Stmt::ForRange { id, from, to, body };
-        self.pop_loop_name();
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_While(&mut self, ctx: &WhileContext<'node>) {
-        // Handle ID's while loops as well as non-ID'd
-        let id = Self::get_opt_id(&ctx.ID());
-        self.push_loop_name(id.as_ref());
-        let id = id.map(|id| self.find_id(&id));
-
-        let condition = self.reduce_expr(&ctx.condition);
-        let body = self.reduce_statements(&ctx.statements());
-        let stmt = Stmt::While {
-            id,
-            condition,
-            body,
-        };
-        self.pop_loop_name();
-
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_Fork(&mut self, ctx: &ForkContext<'node>) {
-        self.suspend_loop_scope();
-        let id = Self::get_opt_id(&ctx.ID());
-        let id = id.map(|id| self.find_id(&id));
-
-        let time = self.reduce_expr(&ctx.time);
-        let body = self.reduce_statements(&ctx.statements());
-
-        let stmt = Stmt::Fork { id, time, body };
-        self._statement_stack.last_mut().unwrap().push(stmt);
-        self.resume_loop_scope();
-    }
-
-    fn visit_Break(&mut self, ctx: &BreakContext<'node>) {
-        let id = Self::get_opt_id(&ctx.ID());
-        // TODO propagate error correctly
-        self.check_loop_name(id.as_ref(), LoopExitKind::Break)
-            .expect("Bad break");
-
-        let exit = id.as_ref().map(|id| self.find_id(id));
-        let stmt = Stmt::Break { exit };
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_Continue(&mut self, ctx: &ContinueContext<'node>) {
-        let id = Self::get_opt_id(&ctx.ID());
-        // TODO propagate error correctly
-        self.check_loop_name(id.as_ref(), LoopExitKind::Continue)
-            .expect("Bad break");
-
-        let exit = id.as_ref().map(|id| self.find_id(id));
-        let stmt = Stmt::Continue { exit };
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_Return(&mut self, ctx: &ReturnContext<'node>) {
-        let expr = self.reduce_opt_expr(&ctx.expr());
-        let stmt = Stmt::Return { expr };
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_TryExcept(&mut self, ctx: &TryExceptContext<'node>) {
-        let body = self.reduce_statements(&ctx.statements());
-        self._excepts_stack.push(vec![]);
-        ctx.excepts().as_ref().iter().for_each(|e| e.accept(self));
-        let excepts = self._excepts_stack.pop().unwrap();
-        let stmt = Stmt::TryExcept { body, excepts };
-        self._statement_stack.last_mut().unwrap().push(stmt);
-    }
-
-    fn visit_TryFinally(&mut self, ctx: &TryFinallyContext<'node>) {
-        let body = self.reduce_statements(&ctx.statements(0));
-        let handler = self.reduce_statements(&ctx.statements(1));
-        self._statement_stack
-            .last_mut()
-            .unwrap()
-            .push(Stmt::TryFinally { body, handler })
-    }
-
-    fn visit_ExprStmt(&mut self, ctx: &ExprStmtContext<'node>) {
-        match self.reduce_opt_expr(&ctx.expr()) {
-            None => {}
-            Some(expr) => {
-                let stmt = Stmt::Expr(expr);
-                self._statement_stack.last_mut().unwrap().push(stmt);
-            }
-        }
-    }
-
-    fn visit_elseif(&mut self, ctx: &ElseifContext<'node>) {
-        let condition = self.reduce_expr(&ctx.condition);
-        let statements = self.reduce_statements(&ctx.statements());
-
-        let cond_arm = CondArm {
-            condition,
-            statements,
-        };
-        self._cond_arm_stack.last_mut().unwrap().push(cond_arm);
-    }
-
-    fn visit_excepts(&mut self, ctx: &ExceptsContext<'node>) {
-        // Just visit each 'except' arm, and that will fill the _excepts_stack
-        ctx.except_all().iter().for_each(|e| e.accept(self));
-    }
-
-    fn visit_except(&mut self, ctx: &ExceptContext<'node>) {
-        // Produce an except arm
-        let id = Self::get_opt_id(&ctx.ID());
-        let id = id.map(|id| self.find_id(&id));
-
-        self._args_stack.push(vec![]);
-        ctx.codes().iter().for_each(|c| c.accept(self));
-        let codes = self._args_stack.pop().unwrap();
-        let statements = self.reduce_statements(&ctx.statements());
-        let except_arm = ExceptArm {
-            id,
-            codes,
-            statements,
-        };
-        self._excepts_stack.last_mut().unwrap().push(except_arm);
-    }
-
-    fn visit_Int(&mut self, ctx: &IntContext<'node>) {
-        let i = i64::from_str(ctx.get_text().as_str()).unwrap();
-        self._expr_stack.push(VarExpr(Var::Int(i)));
-    }
-
-    fn visit_Float(&mut self, ctx: &FloatContext<'node>) {
-        let f = f64::from_str(ctx.get_text().as_str()).unwrap();
-        self._expr_stack.push(VarExpr(Var::Float(f)));
-    }
-
-    fn visit_String(&mut self, ctx: &StringContext<'node>) {
-        let string = ctx.get_text();
-        let string = string.as_str().clone();
-        // TODO error handling.
-        let string = snailquote::unescape(string).unwrap();
-        self._expr_stack.push(VarExpr(Var::Str(string)));
-    }
-
-    fn visit_Object(&mut self, ctx: &ObjectContext<'node>) {
-        let oid_txt = ctx.get_text();
-        let i = i64::from_str(&oid_txt.as_str()[1..]).unwrap();
-        self._expr_stack.push(VarExpr(Var::Obj(Objid(i))));
-    }
-
-    fn visit_Error(&mut self, ctx: &ErrorContext<'node>) {
-        let e = ctx.get_text();
-        let e = match e.to_lowercase().as_str() {
-            "e_type" => Var::Err(Error::E_TYPE),
-            "e_div" => Var::Err(Error::E_DIV),
-            "e_perm" => Var::Err(Error::E_PERM),
-            "e_propnf" => Var::Err(Error::E_PROPNF),
-            "e_verbnf" => Var::Err(Error::E_VERBNF),
-            "e_varnf" => Var::Err(Error::E_VARNF),
-            "e_invind" => Var::Err(Error::E_INVIND),
-            "e_recmove" => Var::Err(Error::E_RECMOVE),
-            "e_maxrec" => Var::Err(Error::E_MAXREC),
-            "e_range" => Var::Err(Error::E_RANGE),
-            "e_args" => Var::Err(Error::E_ARGS),
-            "e_nacc" => Var::Err(Error::E_NACC),
-            "e_invarg" => Var::Err(Error::E_INVARG),
-            "e_quota" => Var::Err(Error::E_QUOTA),
-            "e_float" => Var::Err(Error::E_FLOAT),
-            &_ => {
-                panic!("unknown error")
-            }
-        };
-        self._expr_stack.push(VarExpr(e));
-    }
-
-    fn visit_Identifier(&mut self, ctx: &IdentifierContext<'node>) {
-        let id = self.find_id(&ctx.get_text());
-        self._expr_stack.push(Expr::Id(id))
-    }
-
-    fn visit_PropertyExprReference(&mut self, ctx: &PropertyExprReferenceContext<'node>) {
-        let expr = self.reduce_expr(&ctx.location);
-        let property_expr = self.reduce_expr(&ctx.property);
-        self._expr_stack.push(Expr::Prop {
-            location: Box::new(expr),
-            property: Box::new(property_expr),
-        })
-    }
-
-    fn visit_IndexRangeExpr(&mut self, ctx: &IndexRangeExprContext<'node>) {
-        let expr = self.reduce_expr(&ctx.expr(0));
-        let start = self.reduce_expr(&ctx.expr(1));
-        let end = self.reduce_expr(&ctx.expr(2));
-        self._expr_stack.push(Expr::Range {
-            base: Box::new(expr),
-            from: Box::new(start),
-            to: Box::new(end),
-        })
-    }
-
-    fn visit_RangeEnd(&mut self, _ctx: &RangeEndContext<'node>) {
-        self._expr_stack.push(Expr::Length);
-    }
-
-    fn visit_AtomExpr(&mut self, ctx: &AtomExprContext<'node>) {
-        ctx.get_children().for_each(|c| c.accept(self))
-    }
-
-    fn visit_ListExpr(&mut self, ctx: &ListExprContext<'node>) {
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let list = self._args_stack.pop().unwrap();
-        self._expr_stack.push(Expr::List(list));
-    }
-
-    fn visit_VerbExprCall(&mut self, ctx: &VerbExprCallContext<'node>) {
-        let expr = self.reduce_expr(&ctx.location);
-        let verb = self.reduce_expr(&ctx.verb);
-
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let args = self._args_stack.pop().unwrap();
-
-        self._expr_stack.push(Expr::Verb {
-            location: Box::new(expr),
-            verb: Box::new(verb),
-            args,
-        });
-    }
-
-    fn visit_SysProp(&mut self, ctx: &SysPropContext<'node>) {
-        let prop_id = ctx.id.as_ref().unwrap();
-        let property = String::from(prop_id.get_text());
-        let obj = Objid(0);
-        self._expr_stack.push(Expr::Prop {
-            location: Box::new(VarExpr(Var::Obj(obj))),
-            property: Box::new(VarExpr(Var::Str(property))),
-        });
-    }
-
-    fn visit_SysVerb(&mut self, ctx: &SysVerbContext<'node>) {
-        let verb_id = ctx.id.as_ref().unwrap();
-        let verb = String::from(verb_id.get_text());
-        let obj = Objid(0);
-
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let args = self._args_stack.pop().unwrap();
-
-        self._expr_stack.push(Expr::Verb {
-            location: Box::new(VarExpr(Obj(obj))),
-            verb: Box::new(VarExpr(Str(verb))),
-            args,
-        });
-    }
-
-    fn visit_PropertyReference(&mut self, ctx: &PropertyReferenceContext<'node>) {
-        let expr = self.reduce_expr(&ctx.location);
-        let prop_id = &ctx.property.as_ref().unwrap();
-        let property = Var::Str(String::from(prop_id.get_text()));
-        self._expr_stack.push(Expr::Prop {
-            location: Box::new(expr),
-            property: Box::new(VarExpr(property)),
-        })
-    }
-
-    fn visit_ErrorEscape(&mut self, ctx: &ErrorEscapeContext<'node>) {
-        let try_expr = self.reduce_expr(&ctx.try_e);
-        self._args_stack.push(vec![]);
-        ctx.codes().iter().for_each(|c| c.accept(self));
-        let codes = self._args_stack.pop().unwrap();
-        let except = self.reduce_opt_expr(&ctx.except_expr).map(Box::new);
-        self._expr_stack.push(Expr::Catch {
-            trye: Box::new(try_expr),
-            codes,
-            except,
-        })
-    }
-
-    fn visit_BuiltinCall(&mut self, ctx: &BuiltinCallContext<'node>) {
-        let builtin_id = &ctx.builtin.as_ref().unwrap();
-        let builtin_id = String::from(builtin_id.get_text());
-
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let args = self._args_stack.pop().unwrap();
-
-        self._expr_stack.push(Expr::Call {
-            function: builtin_id,
-            args,
-        });
-    }
-
-    fn visit_VerbCall(&mut self, ctx: &VerbCallContext<'node>) {
-        let expr = self.reduce_expr(&ctx.location);
-        let verb_id = &ctx.verb.as_ref().unwrap();
-        let verb = Str(String::from(verb_id.get_text()));
-
-        self._args_stack.push(vec![]);
-        ctx.arglist().iter().for_each(|c| c.accept(self));
-        let args = self._args_stack.pop().unwrap();
-
-        self._expr_stack.push(Expr::Verb {
-            location: Box::new(expr),
-            verb: Box::new(VarExpr(verb)),
-            args,
-        });
-    }
-
-    fn visit_codes(&mut self, ctx: &CodesContext<'node>) {
-        // Push to the arglist.
-        ctx.ne_arglist().iter().for_each(|al| al.accept(self));
-    }
-
-    fn visit_arglist(&mut self, ctx: &ArglistContext<'node>) {
-        ctx.ne_arglist().iter().for_each(|al| al.accept(self));
-    }
-
-    fn visit_ne_arglist(&mut self, ctx: &Ne_arglistContext<'node>) {
-        ctx.argument_all().iter().for_each(|a| a.accept(self));
-    }
-
-    fn visit_Arg(&mut self, ctx: &ArgContext<'node>) {
-        let expr = self.reduce_expr(&ctx.expr());
-        self._args_stack.last_mut().unwrap().push(Arg::Normal(expr));
-    }
-
-    fn visit_SpliceArg(&mut self, ctx: &SpliceArgContext<'node>) {
-        let expr = self.reduce_expr(&ctx.expr());
-        self._args_stack.last_mut().unwrap().push(Arg::Splice(expr));
-    }
-
-    fn visit_ScatterExpr(&mut self, ctx: &ScatterExprContext<'node>) {
-        self._scatter_stack.push(vec![]);
-        ctx.scatter().iter().for_each(|s| s.accept(self));
-        let scatters = self._scatter_stack.pop().unwrap();
-        let rhs = self.reduce_expr(&ctx.expr());
-        self._expr_stack
-            .push(Expr::Scatter(scatters, Box::new(rhs)));
-    }
-
-    fn visit_scatter(&mut self, ctx: &ScatterContext<'node>) {
-        ctx.scatter_item_all().iter().for_each(|si| si.accept(self));
-    }
-
-    fn visit_ScatterOptionalTarget(&mut self, ctx: &ScatterOptionalTargetContext<'node>) {
-        let expr = self.reduce_opt_expr(&ctx.expr());
-        let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = ScatterItem {
-            kind: ScatterKind::Optional,
-            id,
-            expr,
-        };
-        self._scatter_stack.last_mut().unwrap().push(sd);
-    }
-
-    fn visit_ScatterTarget(&mut self, ctx: &ScatterTargetContext<'node>) {
-        let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = ScatterItem {
-            kind: ScatterKind::Required,
-            id,
-            expr: None,
-        };
-        self._scatter_stack.last_mut().unwrap().push(sd);
-    }
-
-    fn visit_ScatterRestTarget(&mut self, ctx: &ScatterRestTargetContext<'node>) {
-        let id = self.find_id(&String::from(ctx.sid.as_ref().unwrap().get_text()));
-        let sd = ScatterItem {
-            kind: ScatterKind::Rest,
-            id,
-            expr: None,
-        };
-        self._scatter_stack.last_mut().unwrap().push(sd);
-    }
-
-    fn visit_AndExpr(&mut self, ctx: &AndExprContext<'node>) {
-        let left = self.reduce_expr(&ctx.expr(0));
-        let right = self.reduce_expr(&ctx.expr(1));
-        self._expr_stack
-            .push(Expr::And(Box::new(left), Box::new(right)));
-    }
-
-    fn visit_OrExpr(&mut self, ctx: &OrExprContext<'node>) {
-        let left = self.reduce_expr(&ctx.expr(0));
-        let right = self.reduce_expr(&ctx.expr(1));
-        self._expr_stack
-            .push(Expr::Or(Box::new(left), Box::new(right)));
-    }
-
-    fn visit_IndexExpr(&mut self, ctx: &IndexExprContext<'node>) {
-        let left = self.reduce_expr(&ctx.expr(0));
-        let right = self.reduce_expr(&ctx.expr(1));
-        self._expr_stack
-            .push(Expr::Index(Box::new(left), Box::new(right)));
-    }
-
-    fn visit_AssignExpr(&mut self, ctx: &AssignExprContext<'node>) {
-        let left = self.reduce_expr(&ctx.expr(0));
-        let right = self.reduce_expr(&ctx.expr(1));
-        self._expr_stack.push(Expr::Assign {
-            left: Box::new(left),
-            right: Box::new(right),
-        });
-    }
-
-    binary_expr!(Mul);
-    binary_expr!(Div);
-    binary_expr!(Add);
-    binary_expr!(Sub);
-    binary_expr!(Lt);
-    binary_expr!(LtE);
-    binary_expr!(Gt);
-    binary_expr!(GtE);
-    binary_expr!(Exp);
-    binary_expr!(In);
-    binary_expr!(Eq);
-    binary_expr!(NEq);
-
-    unary_expr!(Not);
-    unary_expr!(Neg);
-
-    fn visit_CondExpr(&mut self, ctx: &CondExprContext<'node>) {
-        let cond = self.reduce_expr(&ctx.expr(0));
-        let left = self.reduce_expr(&ctx.expr(1));
-        let right = self.reduce_expr(&ctx.expr(2));
-        self._expr_stack.push(Expr::Cond {
-            condition: Box::new(cond),
-            consequence: Box::new(left),
-            alternative: Box::new(right),
-        });
-    }
-}
-
-pub struct Parse {
-    pub stmts: Vec<Stmt>,
-    pub names: Names,
-}
-
-pub fn parse_program(program: &str) -> Result<Parse, anyhow::Error> {
-    let is = InputStream::new(program);
-    let lexer = mooLexer::new(is);
-    let source = CommonTokenStream::new(lexer);
-    let mut parser = mooParser::new(source);
-
-    let err_listener = Box::new(VerbCompileErrorListener {
-        program: String::from(program),
-    });
-
-    parser.add_error_listener(err_listener);
-    let program_context = parser.program().unwrap();
-
-    let names = Names::new();
-    let mut astgen_visitor = ASTGenVisitor::new(names);
-    program_context.accept(&mut astgen_visitor);
-
+    let names = names.lock().unwrap();
+    let names = names.clone();
     Ok(Parse {
-        stmts: astgen_visitor.program,
-        names: astgen_visitor.names,
+        stmts: program,
+        names,
     })
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::{
+        Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+    };
     use crate::compiler::ast::Arg::Normal;
-    use crate::compiler::ast::Expr::{Id, Prop, VarExpr};
-    use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt};
+    use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
+    use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::model::var::Var::Str;
     use crate::model::var::{Objid, Var};
+    use crate::model::var::Error::E_PROPNF;
+    use crate::model::var::Var::Str;
+
+    #[test]
+    fn test_call_verb() {
+        let program = r#"#0:test_verb(1,2,3,"test");"#;
+        let _names = Names::new();
+        let parsed = parse_program(program).unwrap();
+        assert_eq!(parsed.stmts.len(), 1);
+        assert_eq!(
+            parsed.stmts,
+            vec![Stmt::Expr(Expr::Verb {
+                location: Box::new(Expr::VarExpr(Var::Obj(Objid(0)))),
+                verb: Box::new(Expr::VarExpr(Var::Str("test_verb".to_string()))),
+                args: vec![
+                    Arg::Normal(Expr::VarExpr(Var::Int(1))),
+                    Arg::Normal(Expr::VarExpr(Var::Int(2))),
+                    Arg::Normal(Expr::VarExpr(Var::Int(3))),
+                    Arg::Normal(Expr::VarExpr(Var::Str("test".to_string())))
+                ]
+            })]
+        );
+    }
 
     #[test]
     fn test_parse_simple_var_assignment_precedence() {
@@ -1086,5 +1047,428 @@ mod tests {
                 Stmt::Return { expr: Some(Id(i)) },
             ]
         )
+    }
+
+    #[test]
+    fn test_scatter_required() {
+        let program = "{a, b, c} = args;";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Scatter(
+                vec![
+                    ScatterItem {
+                        kind: ScatterKind::Required,
+                        id: parse.names.find_name("a").unwrap(),
+                        expr: None,
+                    },
+                    ScatterItem {
+                        kind: ScatterKind::Required,
+                        id: parse.names.find_name("b").unwrap(),
+                        expr: None,
+                    },
+                    ScatterItem {
+                        kind: ScatterKind::Required,
+                        id: parse.names.find_name("c").unwrap(),
+                        expr: None,
+                    },
+                ],
+                Box::new(Id(parse.names.find_name("args").unwrap())),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_valid_underscore_and_no_underscore_ident() {
+        let program = "_house == home;";
+        let parse = parse_program(program).unwrap();
+        let house = parse.names.find_name("_house").unwrap();
+        let home = parse.names.find_name("home").unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Binary(
+                BinaryOp::Eq,
+                Box::new(Id(house)),
+                Box::new(Id(home)),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_arg_splice() {
+        let program = "return {@results, pass(@args)};";
+        let parse = parse_program(program).unwrap();
+        let results = parse.names.find_name("results").unwrap();
+        let args = parse.names.find_name("args").unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Return {
+                expr: Some(Expr::List(vec![
+                    Arg::Splice(Id(results)),
+                    Arg::Normal(Expr::Call {
+                        function: "pass".to_string(),
+                        args: vec![Arg::Splice(Id(args))],
+                    }),
+                ])),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_string_escape_codes() {
+        let program = r#"
+            "\n \t \r \" \\ ";
+        "#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::VarExpr(Var::Str(
+                "\n \t \r \" \\ ".to_string()
+            )))]
+        );
+    }
+
+    #[test]
+    fn test_empty_expr_stmt() {
+        let program = r#"
+            ;;;;
+    "#;
+
+        let parse = parse_program(program).unwrap();
+
+        assert_eq!(parse.stmts, vec![]);
+    }
+    #[test]
+    fn test_assign_ambiguous_w_keyword_varname() {
+        let program = r#"
+            for a in ({1,2,3})
+            endfor
+            info = 5;
+            forgotten = 3;
+        "#;
+
+        let parse = parse_program(program).unwrap();
+        let a = parse.names.find_name("a").unwrap();
+        let info = parse.names.find_name("info").unwrap();
+        let forgotten = parse.names.find_name("forgotten").unwrap();
+
+        assert_eq!(
+            parse.stmts,
+            vec![
+                Stmt::ForList {
+                    id: a,
+                    expr: Expr::List(vec![
+                        Arg::Normal(VarExpr(Var::Int(1))),
+                        Arg::Normal(VarExpr(Var::Int(2))),
+                        Arg::Normal(VarExpr(Var::Int(3))),
+                    ]),
+                    body: vec![],
+                },
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Id(info)),
+                    right: Box::new(VarExpr(Var::Int(5))),
+                }),
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Id(forgotten)),
+                    right: Box::new(VarExpr(Var::Int(3))),
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_if_else() {
+        let program = r#"if (5 == 5)
+                        return 5;
+                       else
+                        return 3;
+                       endif"#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Cond {
+                arms: vec![CondArm {
+                    condition: Expr::Binary(
+                        BinaryOp::Eq,
+                        Box::new(VarExpr(Var::Int(5))),
+                        Box::new(VarExpr(Var::Int(5))),
+                    ),
+                    statements: vec![Stmt::Return {
+                        expr: Some(VarExpr(Var::Int(5)))
+                    }],
+                }],
+                otherwise: vec![Stmt::Return {
+                    expr: Some(VarExpr(Var::Int(3)))
+                }],
+            }]
+        );
+    }
+
+    #[test]
+    fn test_if_elseif_else() {
+        let program = r#"if (5 == 5)
+                        return 5;
+                        elseif (2 == 2)
+                        return 2;
+                       else
+                        return 3;
+                       endif"#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Cond {
+                arms: vec![
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(VarExpr(Var::Int(5))),
+                            Box::new(VarExpr(Var::Int(5))),
+                        ),
+                        statements: vec![Stmt::Return {
+                            expr: Some(VarExpr(Var::Int(5)))
+                        }],
+                    },
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(VarExpr(Var::Int(2))),
+                            Box::new(VarExpr(Var::Int(2))),
+                        ),
+                        statements: vec![Stmt::Return {
+                            expr: Some(VarExpr(Var::Int(2)))
+                        }],
+                    },
+                ],
+                otherwise: vec![Stmt::Return {
+                    expr: Some(VarExpr(Var::Int(3)))
+                }],
+            }]
+        );
+    }
+
+    #[test]
+    fn test_if_in_range() {
+        let program = r#"if (5 in {1,2,3})
+                       endif"#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Cond {
+                arms: vec![CondArm {
+                    condition: Expr::Binary(
+                        BinaryOp::In,
+                        Box::new(VarExpr(Var::Int(5))),
+                        Box::new(Expr::List(vec![
+                            Arg::Normal(VarExpr(Var::Int(1))),
+                            Arg::Normal(VarExpr(Var::Int(2))),
+                            Arg::Normal(VarExpr(Var::Int(3))),
+                        ])),
+                    ),
+                    statements: vec![],
+                }],
+                otherwise: vec![],
+            }]
+        );
+    }
+
+    #[test]
+    fn try_except() {
+        let program = r#"try
+                            5;
+                         except (E_PROPNF)
+                            return;
+                         endtry"#;
+        let parse = parse_program(program).unwrap();
+
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::TryExcept {
+                body: vec![Stmt::Expr(Expr::VarExpr(Var::Int(5)))],
+                excepts: vec![ExceptArm {
+                    id: None,
+                    codes: vec![Arg::Normal(VarExpr(Var::Err(E_PROPNF)))],
+                    statements: vec![Stmt::Return { expr: None }],
+                }],
+            }]
+        );
+    }
+
+    #[test]
+    fn test_float() {
+        let program = "10000.0;";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::VarExpr(Var::Float(10000.0)))]
+        );
+    }
+
+    #[test]
+    fn test_in_range() {
+        let program = "a in {1,2,3};";
+        let parse = parse_program(program).unwrap();
+        let a = parse.names.find_name("a").unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Binary(
+                BinaryOp::In,
+                Box::new(Id(a)),
+                Box::new(Expr::List(vec![
+                    Arg::Normal(VarExpr(Var::Int(1))),
+                    Arg::Normal(VarExpr(Var::Int(2))),
+                    Arg::Normal(VarExpr(Var::Int(3))),
+                ])),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_empty_list() {
+        let program = "{};";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts, vec![Stmt::Expr(Expr::List(vec![]))]);
+    }
+
+    #[test]
+    fn test_verb_expr() {
+        let program = "this:(\"verb\")(1,2,3);";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Verb {
+                location: Box::new(Id(parse.names.find_name("this").unwrap())),
+                verb: Box::new(VarExpr(Str("verb".to_string()))),
+                args: vec![
+                    Arg::Normal(VarExpr(Var::Int(1))),
+                    Arg::Normal(VarExpr(Var::Int(2))),
+                    Arg::Normal(VarExpr(Var::Int(3))),
+                ],
+            })]
+        );
+    }
+
+    #[test]
+    fn test_prop_expr() {
+        let program = "this.(\"prop\");";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Prop {
+                location: Box::new(Id(parse.names.find_name("this").unwrap())),
+                property: Box::new(VarExpr(Str("prop".to_string()))),
+            })]
+        );
+    }
+
+    #[test]
+    fn test_not_expr() {
+        let program = "!2;";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Unary(
+                UnaryOp::Not,
+                Box::new(VarExpr(Var::Int(2))),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_comparison_assign_chain() {
+        let program = "(2 <= (len = length(text)));";
+        let parse = parse_program(program).unwrap();
+        let len = parse.names.find_name("len").unwrap();
+        let text = parse.names.find_name("text").unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Binary(
+                BinaryOp::LtE,
+                Box::new(VarExpr(Var::Int(2))),
+                Box::new(Expr::Assign {
+                    left: Box::new(Id(len)),
+                    right: Box::new(Expr::Call {
+                        function: "length".to_string(),
+                        args: vec![Arg::Normal(Id(text))],
+                    }),
+                }),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_cond_expr() {
+        let program = "a = (1 == 2 ? 3 | 4);";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Assign {
+                left: Box::new(Id(parse.names.find_name("a").unwrap())),
+                right: Box::new(Expr::Cond {
+                    condition: Box::new(Expr::Binary(
+                        BinaryOp::Eq,
+                        Box::new(VarExpr(Var::Int(1))),
+                        Box::new(VarExpr(Var::Int(2))),
+                    )),
+                    consequence: Box::new(VarExpr(Var::Int(3))),
+                    alternative: Box::new(VarExpr(Var::Int(4))),
+                }),
+            })]
+        );
+    }
+
+    #[test]
+    fn test_list_compare() {
+        let program = "{what} == args;";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Binary(
+                BinaryOp::Eq,
+                Box::new(Expr::List(vec![Arg::Normal(Id(parse
+                    .names
+                    .find_name("what")
+                    .unwrap())),])),
+                Box::new(Id(parse.names.find_name("args").unwrap())),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_raise_bf_call_incorrect_err() {
+        // detect ambiguous match on E_PERMS != E_PERM
+        let program = "raise(E_PERMS);";
+        let parse = parse_program(program).unwrap();
+
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Call {
+                function: "raise".to_string(),
+                args: vec![Arg::Normal(Id(parse.names.find_name("E_PERMS").unwrap()))]
+            })]
+        );
+    }
+
+    #[test]
+    fn test_keyword_disambig_call() {
+        let program = r#"
+            for line in ({1,2,3})
+            endfor(52);
+        "#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![
+                Stmt::ForList {
+                    id: parse.names.find_name("line").unwrap(),
+                    expr: Expr::List(vec![
+                        Arg::Normal(VarExpr(Var::Int(1))),
+                        Arg::Normal(VarExpr(Var::Int(2))),
+                        Arg::Normal(VarExpr(Var::Int(3))),
+                    ]),
+                    body: vec![],
+                },
+                Stmt::Expr(VarExpr(Var::Int(52))),
+            ]
+        );
     }
 }

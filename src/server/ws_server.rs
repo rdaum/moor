@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
+use futures_util::stream::SplitSink;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};

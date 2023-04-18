@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::bf_declare;
@@ -9,14 +10,13 @@ use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::model::var::Var;
 use crate::server::Sessions;
 use crate::vm::execute::{BfFunction, VM};
-use async_trait::async_trait;
 
 async fn bf_noop(
     _ws: &mut dyn WorldState,
     _sess: Arc<Mutex<dyn Sessions>>,
     _args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
-    return Ok(Var::None);
+    Ok(Var::None)
 }
 bf_declare!(noop, bf_noop);
 

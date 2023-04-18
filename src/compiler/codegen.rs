@@ -9,8 +9,8 @@ use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
 use crate::model::var::Var;
-use crate::vm::opcode::Op::Jump;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
+use crate::vm::opcode::Op::Jump;
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -408,6 +408,7 @@ impl CodegenState {
             Expr::Call { function, args } => {
                 // Lookup builtin.
                 let Some(builtin) = self.builtins.get(function) else {
+                    eprintln!("Unknown builtin function: {}({:?}", function, args);
                     return Err(CompileError::UnknownBuiltinFunction(function.clone()).into());
                 };
                 let builtin = *builtin;
