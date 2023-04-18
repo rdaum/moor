@@ -181,26 +181,8 @@ impl Activation {
         Vec::from(&self.valstack[l - width..])
     }
 
-    pub fn poke(&mut self, p: usize, v: &Var) {
-        let l = self.valstack.len() - 1;
-        self.valstack[l - p] = v.clone();
-    }
-
-    pub fn stack_size(&self) -> usize {
-        self.valstack.len()
-    }
-
     pub fn jump(&mut self, label_id: Label) {
         let label = &self.binary.jump_labels[label_id.0 as usize];
         self.pc = label.position.0 as usize;
-    }
-
-    pub fn seek_finally(&self) -> Option<Label> {
-        for i in (0..self.valstack.len()).rev() {
-            if let Var::_Finally(label) = self.valstack[i] {
-                return Some(label);
-            }
-        }
-        None
     }
 }

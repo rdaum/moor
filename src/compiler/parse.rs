@@ -1,4 +1,3 @@
-use futures_util::StreamExt;
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
 use std::str::FromStr;
@@ -139,13 +138,13 @@ fn parse_except_codes(
 ) -> Result<CatchCodes, anyhow::Error> {
     match pairs.as_rule() {
         Rule::anycode => {
-            return Ok(CatchCodes::Any);
+            Ok(CatchCodes::Any)
         }
         Rule::exprlist => {
-            return Ok(CatchCodes::Codes(parse_exprlist(
+            Ok(CatchCodes::Codes(parse_exprlist(
                 names,
                 pairs.into_inner(),
-            )?));
+            )?))
         }
         _ => {
             panic!("Unimplemented except_codes: {:?}", pairs);
@@ -732,7 +731,7 @@ mod tests {
     };
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::model::var::Error::{E_PROPNF, E_VARNF, E_VERBNF};
+    use crate::model::var::Error::{E_PROPNF, E_VARNF};
     use crate::model::var::Var::Str;
     use crate::model::var::{Objid, Var};
 

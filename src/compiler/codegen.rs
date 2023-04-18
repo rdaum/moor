@@ -142,10 +142,6 @@ impl CodegenState {
         old
     }
 
-    fn saved_stack_top(&self) -> Option<Offset> {
-        self.saved_stack
-    }
-
     fn restore_stack_top(&mut self, old: Option<Offset>) {
         self.saved_stack = old
     }
@@ -453,7 +449,7 @@ impl CodegenState {
                 except,
                 trye,
             } => {
-                self.generate_codes(&codes)?;
+                self.generate_codes(codes)?;
                 // Is this push-label necessary, if the Catch op could just be modified to hold it?
                 let handler_label = self.make_label(None);
                 self.emit(Op::PushLabel(handler_label));

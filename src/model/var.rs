@@ -508,69 +508,6 @@ impl From<Error> for Var {
     }
 }
 
-fn rangeset_check(base: &Var, _inst: &Var, from: i64, to: i64) -> Result<(), Error> {
-    let blen = match base {
-        Var::Str(s) => s.len() as i64,
-        Var::List(l) => l.len() as i64,
-        _ => return Err(Error::E_TYPE),
-    };
-
-    if from <= 0 || from > blen + 1 || to < 1 || to > blen {
-        return Err(Error::E_RANGE);
-    }
-
-    Ok(())
-}
-
-fn listrangeset(base: Var, from: i64, to: i64, value: Var) -> Result<Var, Error> {
-    rangeset_check(&base, &value, from, to)?;
-
-    let (base_list, val_list) = match (base, value) {
-        (Var::List(bl), Var::List(vl)) => (bl, vl),
-        _ => return Err(Error::E_TYPE),
-    };
-
-    let val_len = val_list.len() as i64;
-    let base_len = base_list.len() as i64;
-    let lenleft = if from > 1 { from - 1 } else { 0 };
-    let lenmiddle = val_len;
-    let lenright = if base_len > to { base_len - to } else { 0 };
-    let newsize = lenleft + lenmiddle + lenright;
-
-    let mut ans = Vec::with_capacity(newsize as usize);
-
-    let (from, to) = (from as usize, to as usize);
-    ans.extend_from_slice(&base_list[..from - 1]);
-    ans.extend_from_slice(&val_list);
-    ans.extend_from_slice(&base_list[to..]);
-
-    Ok(Var::List(ans))
-}
-
-fn strrangeset(base: Var, from: i64, to: i64, value: Var) -> Result<Var, Error> {
-    rangeset_check(&base, &value, from, to)?;
-
-    let (base_str, val_str) = match (base, value) {
-        (Var::Str(base), Var::Str(val)) => (base, val),
-        _ => return Err(Error::E_TYPE),
-    };
-
-    let base_len = base_str.len() as i64;
-    let val_len = val_str.len() as i64;
-    let lenleft = if from > 1 { from - 1 } else { 0 };
-    let lenmiddle = val_len;
-    let lenright = if base_len > to { base_len - to } else { 0 };
-    let newsize = lenleft + lenmiddle + lenright;
-
-    let (from, to) = (from as usize, to as usize);
-    let mut s = String::with_capacity(newsize as usize);
-    s.push_str(&base_str[..(from - 1)]);
-    s.push_str(&val_str);
-    s.push_str(&base_str[to..]);
-
-    Ok(Var::Str(s))
-}
-
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;

@@ -40,7 +40,7 @@ struct RProp {
     name: String,
     owner: Objid,
     flags: u8,
-    val: Var,
+    _val: Var,
 }
 
 fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Option<RProp> {
@@ -53,7 +53,7 @@ fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Opt
             name,
             owner: pval.owner,
             flags: pval.flags,
-            val: pval.value.clone(),
+            _val: pval.value.clone(),
         });
     }
 
@@ -194,8 +194,11 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
             if permflags & VF_EXEC != 0 {
                 flags |= VerbFlag::Exec;
             }
+            if permflags & VF_DEBUG != 0 {
+                flags |= VerbFlag::Debug;
+            }
             let dobjflags = (v.flags >> VF_DOBJSHIFT) & VF_OBJMASK;
-            let iobjflags = (v.flags >> VF_DOBJSHIFT) & VF_OBJMASK;
+            let iobjflags = (v.flags >> VF_IOBJSHIFT) & VF_OBJMASK;
 
             let argspec = VerbArgsSpec {
                 dobj: cv_aspec_flag(dobjflags),
