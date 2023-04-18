@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use thiserror::Error;
 
-use crate::compiler::ast::{Arg, BinaryOp, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
+use crate::compiler::ast::{Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
 use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
@@ -314,12 +314,15 @@ impl CodegenState {
         Ok(())
     }
 
-    fn generate_codes(&mut self, arg_list: &Vec<Arg>) -> Result<(), anyhow::Error> {
-        if !arg_list.is_empty() {
-            self.generate_arg_list(arg_list)?;
-        } else {
-            self.emit(Op::Push(Label(0)));
-            self.push_stack(0);
+    fn generate_codes(&mut self, codes: &CatchCodes) -> Result<(), anyhow::Error> {
+        match codes {
+            CatchCodes::Codes(codes) => {
+                self.generate_arg_list(codes)?;
+            }
+            CatchCodes::Any => {
+                self.emit(Op::Push(Label(0)));
+                self.push_stack(1);
+            }
         }
         Ok(())
     }
@@ -450,7 +453,7 @@ impl CodegenState {
                 except,
                 trye,
             } => {
-                self.generate_codes(codes)?;
+                self.generate_codes(&codes)?;
                 // Is this push-label necessary, if the Catch op could just be modified to hold it?
                 let handler_label = self.make_label(None);
                 self.emit(Op::PushLabel(handler_label));

@@ -1,20 +1,20 @@
+use futures_util::StreamExt;
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
-
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-pub use pest::Parser as PestParser;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
+pub use pest::Parser as PestParser;
 
-use crate::compiler::ast::{
-    Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
-};
 use crate::compiler::ast::Expr::VarExpr;
+use crate::compiler::ast::{
+    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+};
 use crate::compiler::labels::Names;
-use crate::compiler::Parse;
 use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::model::var::{Error, Objid, SYSTEM_OBJECT, Var};
+use crate::compiler::Parse;
+use crate::model::var::{Error, Objid, Var, SYSTEM_OBJECT};
 
 pub mod moo {
     #[derive(Parser)]
@@ -133,6 +133,26 @@ fn parse_arglist(
     Ok(vec![])
 }
 
+fn parse_except_codes(
+    names: Arc<Mutex<Names>>,
+    pairs: pest::iterators::Pair<Rule>,
+) -> Result<CatchCodes, anyhow::Error> {
+    match pairs.as_rule() {
+        Rule::anycode => {
+            return Ok(CatchCodes::Any);
+        }
+        Rule::exprlist => {
+            return Ok(CatchCodes::Codes(parse_exprlist(
+                names,
+                pairs.into_inner(),
+            )?));
+        }
+        _ => {
+            panic!("Unimplemented except_codes: {:?}", pairs);
+        }
+    }
+}
+
 fn parse_expr(
     names: Arc<Mutex<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
@@ -208,16 +228,19 @@ fn parse_expr(
             Rule::try_expr => {
                 let mut inner = primary.into_inner();
                 let try_expr = parse_expr(names.clone(), inner.next().unwrap().into_inner())?;
-                let codes = parse_exprlist(names.clone(), inner.next().unwrap().into_inner())?;
+                let codes = inner.next().unwrap();
+                let catch_codes =
+                    parse_except_codes(names.clone(), codes.into_inner().next().unwrap())?;
                 let except = inner
                     .next()
                     .map(|e| Box::new(parse_expr(names.clone(), e.into_inner()).unwrap()));
                 Ok(Expr::Catch {
                     trye: Box::new(try_expr),
-                    codes,
+                    codes: catch_codes,
                     except,
                 })
             }
+
             Rule::paren_expr => {
                 let mut inner = primary.into_inner();
                 let expr = parse_expr(names.clone(), inner.next().unwrap().into_inner())?;
@@ -579,25 +602,18 @@ fn parse_statement(
                                     .next()
                                     .map(|id| names.lock().unwrap().find_or_add_name(id.as_str()));
 
-                                let codes = my_parts.next().unwrap();
-                                let codes = match codes.as_rule() {
-                                    Rule::exprlist => {
-                                        parse_exprlist(names.clone(), codes.into_inner())?
-                                    }
-                                    _ => panic!("Unimplemented exception codes: {:?}", codes),
-                                };
+                                let codes = parse_except_codes(
+                                    names.clone(),
+                                    my_parts.next().unwrap().into_inner().next().unwrap(),
+                                )?;
                                 (exception, codes)
                             }
                             Rule::unlabelled_except => {
                                 let mut my_parts = clause.into_inner();
-
-                                let codes = my_parts.next().unwrap();
-                                let codes = match codes.as_rule() {
-                                    Rule::exprlist => {
-                                        parse_exprlist(names.clone(), codes.into_inner())?
-                                    }
-                                    _ => panic!("Unimplemented exception codes: {:?}", codes),
-                                };
+                                let codes = parse_except_codes(
+                                    names.clone(),
+                                    my_parts.next().unwrap().into_inner().next().unwrap(),
+                                )?;
                                 (None, codes)
                             }
                             _ => panic!("Unimplemented except clause: {:?}", clause),
@@ -708,16 +724,17 @@ pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::{
-        Arg, BinaryOp, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
-    };
     use crate::compiler::ast::Arg::Normal;
     use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
+    use crate::compiler::ast::{
+        Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
+        UnaryOp,
+    };
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::model::var::{Objid, Var};
-    use crate::model::var::Error::E_PROPNF;
+    use crate::model::var::Error::{E_PROPNF, E_VARNF, E_VERBNF};
     use crate::model::var::Var::Str;
+    use crate::model::var::{Objid, Var};
 
     #[test]
     fn test_call_verb() {
@@ -1289,7 +1306,7 @@ mod tests {
                 body: vec![Stmt::Expr(Expr::VarExpr(Var::Int(5)))],
                 excepts: vec![ExceptArm {
                     id: None,
-                    codes: vec![Arg::Normal(VarExpr(Var::Err(E_PROPNF)))],
+                    codes: CatchCodes::Codes(vec![Arg::Normal(VarExpr(Var::Err(E_PROPNF)))]),
                     statements: vec![Stmt::Return { expr: None }],
                 }],
             }]
@@ -1473,5 +1490,48 @@ mod tests {
                 Stmt::Expr(VarExpr(Var::Int(52))),
             ]
         );
+    }
+
+    #[test]
+    fn try_catch_expr() {
+        let program = "return {`x ! e_varnf => 666'};";
+        let parse = parse_program(program).unwrap();
+
+        let varnf = Arg::Normal(VarExpr(Var::Err(E_VARNF)));
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Return {
+                expr: Some(Expr::List(vec![Arg::Normal(Expr::Catch {
+                    trye: Box::new(Id(parse.names.find_name("x").unwrap())),
+                    codes: CatchCodes::Codes(vec![varnf]),
+                    except: Some(Box::new(VarExpr(Var::Int(666)))),
+                })],))
+            }]
+        )
+    }
+
+    #[test]
+    fn test_try_any_expr() {
+        let program = r#"`$ftp_client:finish_get(this.connection) ! ANY';"#;
+        let parse = parse_program(program).unwrap();
+
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Catch {
+                trye: Box::new(Verb {
+                    location: Box::new(Expr::Prop {
+                        location: Box::new(VarExpr(Var::Obj(Objid(0)))),
+                        property: Box::new(VarExpr(Str("ftp_client".to_string()))),
+                    }),
+                    verb: Box::new(VarExpr(Str("finish_get".to_string()))),
+                    args: vec![Arg::Normal(Expr::Prop {
+                        location: Box::new(Id(parse.names.find_name("this").unwrap())),
+                        property: Box::new(VarExpr(Str("connection".to_string()))),
+                    })],
+                }),
+                codes: CatchCodes::Any,
+                except: None,
+            })]
+        )
     }
 }

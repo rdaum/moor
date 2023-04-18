@@ -47,6 +47,12 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+pub enum CatchCodes {
+    Codes(Vec<Arg>),
+    Any
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Expr {
     Assign {
         left: Box<Expr>,
@@ -84,7 +90,7 @@ pub enum Expr {
     },
     Catch {
         trye: Box<Expr>,
-        codes: Vec<Arg>,
+        codes: CatchCodes,
         except: Option<Box<Expr>>,
     },
     Index(Box<Expr>, Box<Expr>),
@@ -102,7 +108,7 @@ pub struct CondArm {
 #[derive(Debug, Eq, PartialEq)]
 pub struct ExceptArm {
     pub id: Option<Name>,
-    pub codes: Vec<Arg>,
+    pub codes: CatchCodes,
     pub statements: Vec<Stmt>,
 }
 
