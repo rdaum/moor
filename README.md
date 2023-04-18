@@ -24,8 +24,8 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
 * Embedded JavaScript engine to allow implementation of MOO verbs in a more modern standard language.
 * Extended protocol support (WebSockets, HTTP, etc. inbound and outbound).
 * Incremental runtime changes:
-  * Remove object numbers and replace with capability references.
-  * Lightweight transient object values in addition to rooted objects.
+  * Remove object numbers and replace with obj-capability references.
+  * Lightweight transient object values in addition to rooted objects. (ala "WAIFs")
   * New primitive types in the language / properties.
    
 ## LambdaMOO is 30+ years old, why remain compatible?
@@ -50,12 +50,14 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
 
 ### Next steps
 
-   * Implementation of the task scheduler, tying it to database transaction, to forked tasks, and to the websocket
-     listener loop.
-   * `Fork` opcode for above. The only remaining unimplemented opcode.
-   * Implementation of websocket listener loop.
+   * Refinement and completion of the task scheduler...
+   * ... + `fork` opcode & friends for above. The only remaining unimplemented opcode.
+   * More work on the of websocket listener loop, to add the auth/connect phase.
    * Implementation of all (or most) built-ins.
-   * Decompilation
+   * Decompilation of MOO verbs + proper handling of line numbers in error messages, etc.
+   * Non-stubbed implementation of ACL/permission checks. 
+   * Some kind of RPC interface in addition to websockets and/or telnet.
+
 #
 Contributions are welcome and encouraged. 
 
