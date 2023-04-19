@@ -683,6 +683,9 @@ fn parse_statements(
 }
 
 pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
+    let parse_program_span = tracing::trace_span!("parse_program");
+    let _enter = parse_program_span.enter();
+
     let pairs = MooParser::parse(moo::Rule::program, program_text)?;
 
     let mut program = Vec::new();

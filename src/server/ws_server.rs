@@ -9,6 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
+use tracing::{error, info};
 use tungstenite::{Error, Message};
 
 use crate::model::var::Objid;
@@ -50,7 +51,7 @@ async fn ws_accept_connection(
         if let Some(e) = e.downcast_ref::<tungstenite::Error>() {
             match e {
                 Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
-                err => eprintln!("Error processing connection: {}", err),
+                err => info!("Error processing connection: {}", err),
             }
         }
     }
@@ -80,7 +81,7 @@ async fn ws_handle_connection(
 
     let player = Objid(2);
 
-    eprintln!("New WebSocket connection: {}", peer);
+    info!("New WebSocket connection: {}", peer);
     let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
 
     // Register connection with player.
@@ -121,7 +122,7 @@ async fn ws_handle_connection(
             let task_id = match task_id {
                 Ok(task_id) => task_id,
                 Err(e) => {
-                    eprintln!("Unable to parse command ({}): {:?}", cmd, e);
+                    error!("Unable to parse command ({}): {:?}", cmd, e);
                     ws_send_error(
                         server.clone(),
                         player,
@@ -132,12 +133,12 @@ async fn ws_handle_connection(
                     continue;
                 }
             };
-            eprintln!("Task: {:?}", task_id);
+            info!("Task: {:?}", task_id);
             {
                 let server = server.lock().await;
                 let mut scheduler = server.scheduler.lock().await;
                 if let Err(e) = scheduler.start_task(task_id).await {
-                    eprintln!("Unable to execute: {}", e);
+                    error!("Unable to execute: {}", e);
                     continue;
                 };
             }
@@ -162,7 +163,7 @@ pub async fn ws_server_start(
     // Create the event loop and TCP listener we'll accept connections on.
     let try_socket = TcpListener::bind(&addr).await;
     let listener = try_socket.expect("Failed to bind");
-    eprintln!("Listening on: {}", addr);
+    info!("Listening on: {}", addr);
 
     while let Ok((stream, _)) = listener.accept().await {
         let peer = stream

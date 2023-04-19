@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use anyhow::anyhow;
 use itertools::Itertools;
 use thiserror::Error;
+use tracing::error;
 
 use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
@@ -410,7 +411,7 @@ impl CodegenState {
             Expr::Call { function, args } => {
                 // Lookup builtin.
                 let Some(builtin) = self.builtins.get(function) else {
-                    eprintln!("Unknown builtin function: {}({:?}", function, args);
+                    error!("Unknown builtin function: {}({:?}", function, args);
                     return Err(CompileError::UnknownBuiltinFunction(function.clone()).into());
                 };
                 let builtin = *builtin;
@@ -744,6 +745,9 @@ impl CodegenState {
 }
 
 pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
+    let compile_span = tracing::trace_span!("compile");
+    let _compile_guard = compile_span.enter();
+
     let builtins = make_builtin_labels();
     let parse = parse_program(program)?;
     let mut cg_state = CodegenState::new(parse.names, builtins);

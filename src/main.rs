@@ -2,12 +2,15 @@ extern crate core;
 #[macro_use]
 extern crate pest_derive;
 
+use tracing::{info, span, Level};
+
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::sync::Arc;
-use std::time::Instant;
+
 
 use clap::builder::ValueHint;
 use clap::Parser;
@@ -97,7 +100,8 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
-    let start = Instant::now();
+    let textdump_import_span = span!(Level::INFO, "textdump_import");
+    let _enter = textdump_import_span.enter();
 
     let jhcore = File::open(path)?;
     let br = BufReader::new(jhcore);
@@ -107,7 +111,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
     let mut tx = s.do_begin_tx().expect("Unable to start transaction");
 
     // Pass 1 Create objects
-    eprintln!("Instantiating objects...");
+    info!("Instantiating objects...");
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
@@ -122,7 +126,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 .flags(flags),
         )?;
     }
-    eprintln!("Instantiated objects\nDefining props...");
+    info!("Instantiated objects\nDefining props...");
 
     // Pass 2 define props
     for (objid, o) in &td.objects {
@@ -130,7 +134,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                eprintln!("Defining prop: #{}.{}", objid.0, resolved.name);
+                info!("Defining prop: #{}.{}", objid.0, resolved.name);
                 let res = s.add_propdef(
                     &mut tx,
                     *objid,
@@ -140,7 +144,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                     None,
                 );
                 if res.is_err() {
-                    eprintln!(
+                    info!(
                         "Unable to define property {}.{}: {:?}",
                         objid.0, resolved.name, res
                     );
@@ -149,17 +153,17 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
         }
     }
 
-    eprintln!("Defined props\nSetting props...");
+    info!("Defined props\nSetting props...");
     // Pass 3 set props
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
-            eprintln!("Setting prop: #{}.{}", objid.0, resolved.name);
+            info!("Setting prop: #{}.{}", objid.0, resolved.name);
 
             let result = s.get_propdef(&mut tx, resolved.definer, resolved.name.as_str());
             let Ok(pdf) = result else {
-                eprintln!("Unable to find property {}.{}: {:?}", objid.0, resolved.name, result);
+                info!("Unable to find property {}.{}: {:?}", objid.0, resolved.name, result);
                 continue;
             };
             let result = s.set_property(
@@ -171,7 +175,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 flags,
             );
             if result.is_err() {
-                eprintln!(
+                info!(
                     "Unable to set property {}.{}: {:?}",
                     objid.0, resolved.name, result
                 );
@@ -179,7 +183,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
         }
     }
 
-    eprintln!("Set props\nDefining verbs...");
+    info!("Set props\nDefining verbs...");
     // Pass 4 define verbs
     for (objid, o) in &td.objects {
         for (vn, v) in o.verbdefs.iter().enumerate() {
@@ -216,8 +220,8 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 Some(v) => v,
             };
 
-            eprintln!(
-                "Compiling #{}/{} (#{}:{})...",
+            info!(
+                "Compiling #{}:{} (#{}:{})...",
                 objid.0, names[0], objid.0, vn
             );
 
@@ -238,7 +242,7 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
                 binary,
             );
             if av.is_err() {
-                eprintln!(
+                info!(
                     "Unable to add verb: #{}:{}: {:?}",
                     objid.0,
                     names.first().unwrap(),
@@ -247,13 +251,10 @@ fn textdump_load(s: &mut ImDB, path: &str) -> Result<(), anyhow::Error> {
             }
         }
     }
-    eprintln!("Verbs defined.\nImport complete.");
+    info!("Verbs defined.");
+    info!("Import complete.");
 
     s.do_commit_tx(&mut tx)?;
-
-    let duration = start.elapsed();
-
-    eprintln!("Time elapsed in textdump import is: {:?}", duration);
 
     Ok(())
 }
@@ -272,14 +273,20 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), io::Error> {
+    // install global collector configured based on RUST_LOG env var.
+    tracing_subscriber::fmt::init();
+
     let args: Args = Args::parse();
 
-    eprintln!("Moor");
+    info!("Moor");
 
     let mut src = ImDB::new();
     if let Some(textdump) = args.textdump {
-        eprintln!("Loading textdump...");
+        info!("Loading textdump...");
+        let start = std::time::Instant::now();
         textdump_load(&mut src, textdump.to_str().unwrap()).unwrap();
+        let duration = start.elapsed();
+        info!("Loaded textdump in {:?}", duration);
     }
 
     let mut tx = src.do_begin_tx().unwrap();
@@ -312,7 +319,7 @@ async fn main() -> Result<(), io::Error> {
         .await
         .expect("Unable to run websocket server");
 
-    eprintln!("Done.");
+    info!("Done.");
 
     Ok(())
 }

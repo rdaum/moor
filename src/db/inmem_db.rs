@@ -137,6 +137,9 @@ impl ImDB {
     }
 
     pub fn do_commit_tx(&mut self, tx: &mut Tx) -> Result<(), relations::RelationError> {
+        let span = tracing::trace_span!("commit_tx", tx_id = tx.tx_id);
+        let _enter = span.enter();
+
         let mut commit_lock = self.commit_lock.write();
         *commit_lock += 1;
 
@@ -212,6 +215,9 @@ impl ImDB {
     }
 
     pub fn do_rollback_tx(&mut self, tx: &mut Tx) -> Result<(), relations::RelationError> {
+        let span = tracing::trace_span!("rollback_tx", tx_id = tx.tx_id);
+        let _enter = span.enter();
+
         let mut commit_lock = self.commit_lock.write();
         *commit_lock += 1;
 
@@ -709,7 +715,6 @@ impl ImDB {
             }
         }
 
-        eprintln!("No match");
         Ok(None)
     }
 

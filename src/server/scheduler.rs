@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Error};
 use slotmap::{new_key_type, SlotMap};
 use tokio::sync::Mutex;
+use tracing::{error, info};
 
 use crate::db::matching::{world_environment_match_object, MatchEnvironment};
 use crate::db::state::{WorldState, WorldStateSource};
@@ -145,12 +146,12 @@ impl Scheduler {
         let task_ref = ts.get_task(task_id).await.unwrap();
 
         tokio::spawn(async move {
-            eprintln!("Starting up task: {:?}", task_id);
+            info!("Starting up task: {:?}", task_id);
             let mut task_ref = task_ref.lock().await;
 
             task_ref.run(task_id).await;
 
-            eprintln!("Completed task: {:?}", task_id);
+            info!("Completed task: {:?}", task_id);
         })
         .await?;
 
@@ -160,7 +161,10 @@ impl Scheduler {
 
 impl Task {
     pub async fn run(&mut self, task_id: TaskId) {
-        eprintln!("Entering task loop...");
+        let task_run_span = tracing::info_span!("task_run", task_id = %task_id.0.as_ffi());
+        let _task_run_span_guard = task_run_span.enter();
+        
+        info!("Entering task loop...");
         let mut vm = self.vm.lock().await;
         loop {
             let result = vm.exec(self.sessions.clone()).await;
@@ -169,18 +173,18 @@ impl Task {
                 Ok(ExecutionResult::Complete(a)) => {
                     vm.commit().unwrap();
 
-                    eprintln!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
+                    info!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
                     return;
                 }
                 Ok(ExecutionResult::Exception(e)) => {
                     vm.rollback().unwrap();
 
-                    eprintln!("Task finished with exception {:?}", e);
+                    error!("Task finished with exception {:?}", e);
                     return;
                 }
                 Err(e) => {
                     vm.rollback().unwrap();
-                    eprintln!("Task {} failed with error: {:?}", task_id.0.as_ffi(), e);
+                    error!("Task {} failed with error: {:?}", task_id.0.as_ffi(), e);
                     return;
                 }
             }
@@ -250,6 +254,7 @@ mod tests {
     use anyhow::Error;
     use async_trait::async_trait;
     use tokio::sync::Mutex;
+    use tracing::info;
 
     use crate::compiler::codegen::compile;
     use crate::db::inmem_db::ImDB;
@@ -338,6 +343,6 @@ mod tests {
 
         sched.start_task(task).await.unwrap();
 
-        eprintln!("Done");
+        info!("Done");
     }
 }

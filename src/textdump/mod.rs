@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader, Read};
 use anyhow::anyhow;
 use int_enum::IntEnum;
 use text_io::scan;
+use tracing::info;
 
 use crate::compiler::labels::Label;
 use crate::model::var::{Error, Objid, Var, VarType};
@@ -224,21 +225,21 @@ impl<R: Read> TextdumpReader<R> {
 
     pub fn read_textdump(&mut self) -> Result<Textdump, anyhow::Error> {
         let version = self.read_string()?;
-        println!("version {}", version);
+        info!("version {}", version);
         let nobjs = self.read_num()? as usize;
-        println!("# objs: {}", nobjs);
+        info!("# objs: {}", nobjs);
         let nprogs = self.read_num()? as usize;
-        println!("# progs: {}", nprogs);
+        info!("# progs: {}", nprogs);
         let _dummy = self.read_num()?;
         let nusers = self.read_num()? as usize;
-        println!("# users: {}", nusers);
+        info!("# users: {}", nusers);
 
         let mut users = Vec::with_capacity(nusers);
         for _ in 0..nusers {
             users.push(self.read_objid()?);
         }
 
-        println!("Parsing objects...");
+        info!("Parsing objects...");
         let mut objects = HashMap::new();
         for _i in 0..nobjs {
             if let Some(o) = self.read_object()? {
@@ -246,7 +247,7 @@ impl<R: Read> TextdumpReader<R> {
             }
         }
 
-        println!("Reading verbs...");
+        info!("Reading verbs...");
         let mut verbs = HashMap::with_capacity(nprogs);
         for _p in 0..nprogs {
             let verb = self.read_verb()?;
