@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -5,12 +6,15 @@ use tokio::sync::Mutex;
 
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
-use crate::db::state::{StateError, WorldState};
+use crate::db::state::WorldState;
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, ErrorPack, Objid, Var};
+use crate::model::ObjectError::{
+    PropertyNotFound, PropertyPermissionDenied, VerbNotFound, VerbPermissionDenied,
+};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
@@ -402,9 +406,9 @@ impl VM {
             .retrieve_property(obj, propname.as_str(), player_flags);
         let v = match result {
             Ok(v) => v,
-            Err(e) => match e.downcast_ref::<StateError>() {
-                Some(StateError::PropertyPermissionDenied(_, _)) => return self.push_error(E_PERM),
-                Some(StateError::PropertyNotFound(_, _)) => return self.push_error(E_PROPNF),
+            Err(e) => match e {
+                PropertyPermissionDenied(_, _) => return self.push_error(E_PERM),
+                PropertyNotFound(_, _) => return self.push_error(E_PROPNF),
                 _ => {
                     panic!("Unexpected error in property retrieval: {:?}", e);
                 }
@@ -476,10 +480,10 @@ impl VM {
         let (binary, vi) = match self.state.retrieve_verb(obj, verb_name) {
             Ok(binary) => binary,
             Err(e) => {
-                return match e.downcast_ref::<StateError>() {
-                    Some(StateError::VerbNotFound(_, _)) => Ok(Var::Err(E_VERBNF)),
-                    Some(StateError::VerbPermissionDenied(_, _)) => Ok(Var::Err(E_PERM)),
-                    _ => Err(e),
+                return match e {
+                    VerbNotFound(_, _) => Ok(Var::Err(E_VERBNF)),
+                    VerbPermissionDenied(_, _) => Ok(Var::Err(E_PERM)),
+                    _ => Err(anyhow!(e)),
                 };
             }
         };
@@ -873,11 +877,11 @@ impl VM {
                     Ok(()) => {
                         self.push(&Var::None);
                     }
-                    Err(e) => match e.downcast_ref::<StateError>() {
-                        Some(StateError::PropertyNotFound(_, _)) => {
+                    Err(e) => match e {
+                        PropertyNotFound(_, _) => {
                             return self.push_error(E_PROPNF);
                         }
-                        Some(StateError::PropertyPermissionDenied(_, _)) => {
+                        PropertyPermissionDenied(_, _) => {
                             return self.push_error(E_PERM);
                         }
                         _ => {
@@ -1082,7 +1086,7 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::state::{StateError, WorldState};
+    use crate::db::state::WorldState;
     use crate::db::CommitResult;
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
@@ -1090,6 +1094,8 @@ mod tests {
     use crate::model::var::Error::{E_NONE, E_VERBNF};
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
+    use crate::model::ObjectError;
+    use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::Sessions;
     use crate::util::bitenum::BitEnum;
@@ -1204,10 +1210,14 @@ mod tests {
     }
 
     impl WorldState for MockState {
-        fn retrieve_verb(&mut self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
+        fn retrieve_verb(
+            &mut self,
+            obj: Objid,
+            vname: &str,
+        ) -> Result<(Binary, VerbInfo), ObjectError> {
             let v = self.verbs.get(&(obj, vname.to_string()));
             match v {
-                None => Err(StateError::VerbNotFound(obj, vname.to_string()).into()),
+                None => Err(VerbNotFound(obj, vname.to_string())),
                 Some(v) => Ok(v.clone()),
             }
         }
@@ -1217,10 +1227,10 @@ mod tests {
             obj: Objid,
             pname: &str,
             _player_flags: BitEnum<ObjFlag>,
-        ) -> Result<Var, Error> {
+        ) -> Result<Var, ObjectError> {
             let p = self.properties.get(&(obj, pname.to_string()));
             match p {
-                None => Err(StateError::PropertyNotFound(obj, pname.to_string()).into()),
+                None => Err(PropertyNotFound(obj, pname.to_string())),
                 Some(p) => Ok(p.clone()),
             }
         }
@@ -1231,7 +1241,7 @@ mod tests {
             pname: &str,
             _player_flags: BitEnum<ObjFlag>,
             value: &Var,
-        ) -> Result<(), Error> {
+        ) -> Result<(), ObjectError> {
             self.properties
                 .insert((obj, pname.to_string()), value.clone());
             Ok(())
@@ -1244,28 +1254,28 @@ mod tests {
             _owner: Objid,
             _prop_flags: BitEnum<PropFlag>,
             initial_value: Option<Var>,
-        ) -> Result<(), Error> {
+        ) -> Result<(), ObjectError> {
             self.properties
                 .insert((obj, pname.to_string()), initial_value.unwrap_or(Var::None));
             Ok(())
         }
 
-        fn location_of(&mut self, _obj: Objid) -> Result<Objid, Error> {
+        fn location_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
             unimplemented!()
         }
 
-        fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, Error> {
+        fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
             unimplemented!()
         }
 
-        fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), Error> {
+        fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
             unimplemented!()
         }
-        fn parent_of(&mut self, _obj: Objid) -> Result<Objid, Error> {
+        fn parent_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
             Ok(Objid(-1))
         }
 
-        fn valid(&mut self, _obj: Objid) -> Result<bool, Error> {
+        fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
             Ok(true)
         }
 
@@ -1281,7 +1291,7 @@ mod tests {
             &mut self,
             _oid: Objid,
             _pc: &ParsedCommand,
-        ) -> Result<Option<VerbInfo>, Error> {
+        ) -> Result<Option<VerbInfo>, ObjectError> {
             unimplemented!()
         }
     }

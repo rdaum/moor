@@ -1,8 +1,6 @@
 use int_enum::IntEnum;
 use rkyv::{Archive, Deserialize, Serialize};
 
-/// TODO verb-matching
-///
 #[derive(
     Clone,
     Copy,

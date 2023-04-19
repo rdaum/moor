@@ -1,9 +1,8 @@
+use anyhow::anyhow;
 use std::sync::atomic::AtomicPtr;
 
-use anyhow::{anyhow, Error};
-
 use crate::db::inmem_db::ImDB;
-use crate::db::state::{StateError, WorldState, WorldStateSource};
+use crate::db::state::{WorldState, WorldStateSource};
 use crate::db::tx::Tx;
 use crate::db::{relations, CommitResult};
 use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
@@ -14,7 +13,12 @@ use crate::model::props::{
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
+use crate::model::ObjectError;
+use crate::model::ObjectError::{
+    ObjectNotFound, PropertyNotFound, PropertyPermissionDenied, VerbDecodeError, VerbNotFound,
+};
 use crate::server::parse_cmd::ParsedCommand;
+
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
@@ -31,7 +35,7 @@ impl ImDbWorldStateSource {
 }
 
 impl WorldStateSource for ImDbWorldStateSource {
-    fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, Error> {
+    fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, anyhow::Error> {
         let tx = self.db.do_begin_tx()?;
         let odb = ImDBTx::boxed(AtomicPtr::new(&mut self.db), tx);
         Ok(odb)
@@ -59,16 +63,20 @@ unsafe impl Send for ImDBTx {}
 unsafe impl Sync for ImDBTx {}
 
 impl Objects for ImDBTx {
-    fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs) -> Result<Objid, Error> {
+    fn create_object(
+        &mut self,
+        oid: Option<Objid>,
+        attrs: &ObjAttrs,
+    ) -> Result<Objid, ObjectError> {
         let db = self.get_db();
         db.create_object(&mut self.tx, oid, attrs)
     }
 
-    fn destroy_object(&mut self, oid: Objid) -> Result<(), Error> {
+    fn destroy_object(&mut self, oid: Objid) -> Result<(), ObjectError> {
         self.get_db().destroy_object(&mut self.tx, oid)
     }
 
-    fn object_valid(&mut self, oid: Objid) -> Result<bool, Error> {
+    fn object_valid(&mut self, oid: Objid) -> Result<bool, ObjectError> {
         self.get_db().object_valid(&mut self.tx, oid)
     }
 
@@ -76,21 +84,21 @@ impl Objects for ImDBTx {
         &mut self,
         oid: Objid,
         attributes: BitEnum<ObjAttr>,
-    ) -> Result<ObjAttrs, Error> {
+    ) -> Result<ObjAttrs, ObjectError> {
         self.get_db()
             .object_get_attrs(&mut self.tx, oid, attributes)
     }
 
-    fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), Error> {
+    fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), ObjectError> {
         self.get_db()
             .object_set_attrs(&mut self.tx, oid, attributes)
     }
 
-    fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, Error> {
+    fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, ObjectError> {
         self.get_db().object_children(&mut self.tx, oid)
     }
 
-    fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, Error> {
+    fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, ObjectError> {
         self.get_db().object_contents(&mut self.tx, oid)
     }
 }
@@ -101,7 +109,7 @@ impl Properties for ImDBTx {
         oid: Objid,
         name: &str,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropertyInfo>, Error> {
+    ) -> Result<Option<PropertyInfo>, ObjectError> {
         self.get_db().find_property(&mut self.tx, oid, name, attrs)
     }
 
@@ -110,7 +118,7 @@ impl Properties for ImDBTx {
         oid: Objid,
         handle: Pid,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropAttrs>, Error> {
+    ) -> Result<Option<PropAttrs>, ObjectError> {
         self.get_db().get_property(&mut self.tx, oid, handle, attrs)
     }
 
@@ -121,7 +129,7 @@ impl Properties for ImDBTx {
         value: Var,
         owner: Objid,
         flags: BitEnum<PropFlag>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ObjectError> {
         self.get_db()
             .set_property(&mut self.tx, handle, location, value, owner, flags)
     }
@@ -136,20 +144,24 @@ impl Verbs for ImDBTx {
         flags: BitEnum<VerbFlag>,
         arg_spec: VerbArgsSpec,
         program: Binary,
-    ) -> Result<VerbInfo, Error> {
+    ) -> Result<VerbInfo, ObjectError> {
         self.get_db()
             .add_verb(&mut self.tx, oid, names, owner, flags, arg_spec, program)
     }
 
-    fn get_verbs(&mut self, oid: Objid, attrs: BitEnum<VerbAttr>) -> Result<Vec<VerbInfo>, Error> {
+    fn get_verbs(
+        &mut self,
+        oid: Objid,
+        attrs: BitEnum<VerbAttr>,
+    ) -> Result<Vec<VerbInfo>, ObjectError> {
         self.get_db().get_verbs(&mut self.tx, oid, attrs)
     }
 
-    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, Error> {
+    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, ObjectError> {
         self.get_db().get_verb(&mut self.tx, vid, attrs)
     }
 
-    fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), Error> {
+    fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), ObjectError> {
         self.get_db().update_verb(&mut self.tx, vid, attrs)
     }
 
@@ -160,7 +172,7 @@ impl Verbs for ImDBTx {
         dobj: ArgSpec,
         prep: PrepSpec,
         iobj: ArgSpec,
-    ) -> Result<Option<VerbInfo>, anyhow::Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         self.get_db()
             .find_command_verb(&mut self.tx, obj, verb, dobj, prep, iobj)
     }
@@ -170,7 +182,7 @@ impl Verbs for ImDBTx {
         oid: Objid,
         verb: &str,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         self.get_db()
             .find_callable_verb(&mut self.tx, oid, verb, attrs)
     }
@@ -180,7 +192,7 @@ impl Verbs for ImDBTx {
         oid: Objid,
         index: usize,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         self.get_db()
             .find_indexed_verb(&mut self.tx, oid, index, attrs)
     }
@@ -207,7 +219,7 @@ impl Permissions for ImDBTx {
 }
 
 impl PropDefs for ImDBTx {
-    fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, Error> {
+    fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, ObjectError> {
         self.get_db().get_propdef(&mut self.tx, definer, pname)
     }
 
@@ -218,40 +230,44 @@ impl PropDefs for ImDBTx {
         owner: Objid,
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
-    ) -> Result<Pid, Error> {
+    ) -> Result<Pid, ObjectError> {
         self.get_db()
             .add_propdef(&mut self.tx, definer, name, owner, flags, initial_value)
     }
 
-    fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), Error> {
+    fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), ObjectError> {
         self.get_db()
             .rename_propdef(&mut self.tx, definer, old, new)
     }
 
-    fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), Error> {
+    fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), ObjectError> {
         self.get_db().delete_propdef(&mut self.tx, definer, pname)
     }
 
-    fn count_propdefs(&mut self, definer: Objid) -> Result<usize, Error> {
+    fn count_propdefs(&mut self, definer: Objid) -> Result<usize, ObjectError> {
         self.get_db().count_propdefs(&mut self.tx, definer)
     }
 
-    fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, Error> {
+    fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, ObjectError> {
         self.get_db().get_propdefs(&mut self.tx, definer)
     }
 }
 
 impl WorldState for ImDBTx {
-    fn location_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+    fn location_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Location))
             .map(|attrs| attrs.location.unwrap())
     }
 
-    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, Error> {
+    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
         self.object_contents(obj)
     }
 
-    fn retrieve_verb(&mut self, obj: Objid, vname: &str) -> Result<(Binary, VerbInfo), Error> {
+    fn retrieve_verb(
+        &mut self,
+        obj: Objid,
+        vname: &str,
+    ) -> Result<(Binary, VerbInfo), ObjectError> {
         let h = self.find_callable_verb(
             obj,
             vname,
@@ -261,11 +277,11 @@ impl WorldState for ImDBTx {
                 | VerbAttr::Definer,
         )?;
         let Some(vi) = h else {
-            return Err(anyhow!(StateError::VerbNotFound(obj, vname.to_string())));
+            return Err(VerbNotFound(obj, vname.to_string()));
         };
 
         let Some(binary) = &vi.attrs.program else {
-            return Err(anyhow!(StateError::VerbDecodeError(obj, vname.to_string())));
+            return Err(VerbDecodeError(obj, vname.to_string()));
         };
 
         Ok((binary.clone(), vi))
@@ -276,7 +292,7 @@ impl WorldState for ImDBTx {
         obj: Objid,
         property_name: &str,
         player_flags: BitEnum<ObjFlag>,
-    ) -> Result<Var, Error> {
+    ) -> Result<Var, ObjectError> {
         // TODO builtin properties!
         let find = self
             .find_property(
@@ -289,10 +305,7 @@ impl WorldState for ImDBTx {
             )
             .expect("db fail");
         match find {
-            None => Err(anyhow!(StateError::PropertyNotFound(
-                obj,
-                property_name.to_string()
-            ))),
+            None => Err(PropertyNotFound(obj, property_name.to_string())),
             Some(p) => {
                 if !self.property_allows(
                     PropFlag::Read.into(),
@@ -301,16 +314,10 @@ impl WorldState for ImDBTx {
                     p.attrs.flags.unwrap(),
                     p.attrs.owner.unwrap(),
                 ) {
-                    Err(anyhow!(StateError::PropertyPermissionDenied(
-                        obj,
-                        property_name.to_string()
-                    )))
+                    Err(PropertyPermissionDenied(obj, property_name.to_string()))
                 } else {
                     match p.attrs.value {
-                        None => Err(anyhow!(StateError::PropertyNotFound(
-                            obj,
-                            property_name.to_string()
-                        ))),
+                        None => Err(PropertyNotFound(obj, property_name.to_string())),
                         Some(p) => Ok(p),
                     }
                 }
@@ -324,7 +331,7 @@ impl WorldState for ImDBTx {
         property_name: &str,
         player_flags: BitEnum<ObjFlag>,
         value: &Var,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ObjectError> {
         let h = self
             .find_property(
                 obj,
@@ -335,7 +342,7 @@ impl WorldState for ImDBTx {
 
         // TODO handle built-in properties
         let Some(p) = h else {
-            return Err(anyhow!(StateError::PropertyNotFound(obj, property_name.to_string())));
+            return Err(PropertyNotFound(obj, property_name.to_string()));
         };
 
         if self.property_allows(
@@ -345,10 +352,7 @@ impl WorldState for ImDBTx {
             p.attrs.flags.unwrap(),
             p.attrs.owner.unwrap(),
         ) {
-            return Err(anyhow!(StateError::PropertyPermissionDenied(
-                obj,
-                property_name.to_string()
-            )));
+            return Err(PropertyPermissionDenied(obj, property_name.to_string()));
         }
 
         // Failure on this is a panic.
@@ -370,7 +374,7 @@ impl WorldState for ImDBTx {
         _owner: Objid,
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), ObjectError> {
         self.add_propdef(obj, pname, obj, prop_flags, initial_value)?;
         Ok(())
     }
@@ -379,7 +383,7 @@ impl WorldState for ImDBTx {
         &mut self,
         oid: Objid,
         pc: &ParsedCommand,
-    ) -> Result<Option<VerbInfo>, anyhow::Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         if !self.valid(oid)? {
             return Ok(None);
         }
@@ -400,23 +404,21 @@ impl WorldState for ImDBTx {
         self.find_command_verb(oid, pc.verb.as_str(), dobj, pc.prep, iobj)
     }
 
-    fn parent_of(&mut self, obj: Objid) -> Result<Objid, Error> {
+    fn parent_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         let attrs =
             self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Parent) | ObjAttr::Owner)?;
         // TODO: this masks other (internal?) errors..
-        attrs
-            .parent
-            .ok_or(anyhow!(StateError::ObjectNotFoundError(obj)))
+        attrs.parent.ok_or(ObjectNotFound(obj))
     }
 
-    fn valid(&mut self, obj: Objid) -> Result<bool, Error> {
+    fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError> {
         // TODO: this masks other (internal?) errors..
         Ok(self
             .object_get_attrs(obj, BitEnum::new_with(ObjAttr::Parent) | ObjAttr::Owner)
             .is_ok())
     }
 
-    fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), Error> {
+    fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
         // TODO implement support for aliases.
         let name = self
             .object_get_attrs(obj, BitEnum::from(ObjAttr::Name))?

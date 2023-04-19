@@ -151,6 +151,7 @@ async fn ws_handle_connection(
         let server = server.lock().await;
         let connections = &mut server.sessions.lock().await.connections;
         connections.remove(&player).unwrap();
+        info!("WebSocket session finished: {}", peer);
     }
 
     Ok(())

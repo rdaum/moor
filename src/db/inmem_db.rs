@@ -1,7 +1,6 @@
 use std::collections::Bound::Included;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
-use anyhow::{anyhow, Error};
 use hybrid_lock::HybridLock;
 use itertools::Itertools;
 
@@ -13,6 +12,10 @@ use crate::model::props::{Pid, PropAttr, PropAttrs, PropFlag, Propdef, PropertyI
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Vid};
+use crate::model::ObjectError;
+use crate::model::ObjectError::{
+    InvalidVerb, ObjectAttributeError, ObjectDbError, ObjectNotFound, PropertyDbError,
+};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 
@@ -71,6 +74,18 @@ pub struct ImDB {
     verb_attr_flags: Relation<Vid, BitEnum<VerbFlag>>,
     verb_attr_args_spec: Relation<Vid, VerbArgsSpec>,
     verb_attr_program: Relation<Vid, Binary>,
+}
+
+fn trans_attr_err(oid: Objid, attr: ObjAttr, _err: relations::RelationError) -> ObjectError {
+    ObjectAttributeError(attr, oid)
+}
+
+fn trans_obj_err<E: std::error::Error>(oid: Objid, e: E) -> ObjectError {
+    ObjectDbError(oid, e.to_string())
+}
+
+fn trans_prop_err<E: std::error::Error>(oid: Objid, prop: &str, e: E) -> ObjectError {
+    PropertyDbError(oid, prop.to_string(), e.to_string())
 }
 
 impl Default for ImDB {
@@ -269,7 +284,7 @@ impl ImDB {
         oid: Objid,
         handle: Pid,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropAttrs>, Error> {
+    ) -> Result<Option<PropAttrs>, ObjectError> {
         let propkey = (oid, handle);
         let Some(flags) = self.property_flags.seek_for_l_eq(tx, &propkey) else {
             return Ok(None);
@@ -303,7 +318,7 @@ impl ImDB {
         tx: &mut Tx,
         oid: Option<Objid>,
         attrs: &ObjAttrs,
-    ) -> Result<Objid, Error> {
+    ) -> Result<Objid, ObjectError> {
         let oid = match oid {
             None => {
                 let oid = self.next_objid.fetch_add(1, Ordering::SeqCst);
@@ -311,32 +326,52 @@ impl ImDB {
             }
             Some(oid) => oid,
         };
-        self.obj_attr_name.insert(tx, &oid, &String::new())?;
-        self.obj_attr_location.insert(tx, &oid, &NOTHING)?;
-        self.obj_attr_owner.insert(tx, &oid, &NOTHING)?;
-        self.obj_attr_parent.insert(tx, &oid, &NOTHING)?;
+        self.obj_attr_name
+            .insert(tx, &oid, &String::new())
+            .map_err(|e| trans_attr_err(oid, ObjAttr::Name, e))?;
+        self.obj_attr_location
+            .insert(tx, &oid, &NOTHING)
+            .map_err(|e| trans_attr_err(oid, ObjAttr::Location, e))?;
+        self.obj_attr_owner
+            .insert(tx, &oid, &NOTHING)
+            .map_err(|e| trans_attr_err(oid, ObjAttr::Owner, e))?;
+        self.obj_attr_parent
+            .insert(tx, &oid, &NOTHING)
+            .map_err(|e| trans_attr_err(oid, ObjAttr::Parent, e))?;
 
         let noflags: BitEnum<ObjFlag> = BitEnum::new();
-        self.obj_attr_flags.insert(tx, &oid, &noflags)?;
+        self.obj_attr_flags
+            .insert(tx, &oid, &noflags)
+            .map_err(|e| trans_attr_err(oid, ObjAttr::Flags, e))?;
 
         // TODO validate all attributes present.
         self.object_set_attrs(tx, oid, attrs.clone())?;
         Ok(oid)
     }
 
-    pub fn destroy_object(&mut self, tx: &mut Tx, oid: Objid) -> Result<(), Error> {
+    pub fn destroy_object(&mut self, tx: &mut Tx, oid: Objid) -> Result<(), ObjectError> {
         if !self.object_valid(tx, oid)? {
-            return Err(anyhow!("invalid object"));
+            return Err(ObjectNotFound(oid));
         }
-        self.obj_attr_parent.remove_for_l(tx, &oid)?;
-        self.obj_attr_location.remove_for_l(tx, &oid)?;
-        self.obj_attr_flags.remove_for_l(tx, &oid)?;
-        self.obj_attr_name.remove_for_l(tx, &oid)?;
-        self.obj_attr_owner.remove_for_l(tx, &oid)?;
+        self.obj_attr_parent
+            .remove_for_l(tx, &oid)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.obj_attr_location
+            .remove_for_l(tx, &oid)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.obj_attr_flags
+            .remove_for_l(tx, &oid)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.obj_attr_name
+            .remove_for_l(tx, &oid)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.obj_attr_owner
+            .remove_for_l(tx, &oid)
+            .map_err(|e| trans_obj_err(oid, e))?;
         Ok(())
     }
 
-    pub fn object_valid(&mut self, tx: &mut Tx, oid: Objid) -> Result<bool, Error> {
+    pub fn object_valid(&mut self, tx: &mut Tx, oid: Objid) -> Result<bool, ObjectError> {
         Ok(self.obj_attr_flags.seek_for_l_eq(tx, &oid).is_some())
     }
 
@@ -345,9 +380,9 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         attributes: BitEnum<ObjAttr>,
-    ) -> Result<ObjAttrs, Error> {
+    ) -> Result<ObjAttrs, ObjectError> {
         if !self.object_valid(tx, oid)? {
-            return Err(anyhow!("invalid object"));
+            return Err(ObjectNotFound(oid));
         }
         let mut return_attrs = ObjAttrs::default();
         if attributes.contains(ObjAttr::Owner) {
@@ -373,31 +408,41 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         attributes: ObjAttrs,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ObjectError> {
         if !self.object_valid(tx, oid)? {
-            return Err(anyhow!("invalid object"));
+            return Err(ObjectNotFound(oid));
         }
         if let Some(parent) = attributes.parent {
-            self.obj_attr_parent.update_r(tx, &oid, &parent)?;
+            self.obj_attr_parent
+                .update_r(tx, &oid, &parent)
+                .map_err(|e| trans_attr_err(oid, ObjAttr::Parent, e))?;
         }
         if let Some(owner) = attributes.owner {
-            self.obj_attr_owner.update_r(tx, &oid, &owner)?;
+            self.obj_attr_owner
+                .update_r(tx, &oid, &owner)
+                .map_err(|e| trans_attr_err(oid, ObjAttr::Owner, e))?;
         }
         if let Some(location) = attributes.location {
-            self.obj_attr_location.update_r(tx, &oid, &location)?;
+            self.obj_attr_location
+                .update_r(tx, &oid, &location)
+                .map_err(|e| trans_attr_err(oid, ObjAttr::Location, e))?;
         }
         if let Some(flags) = attributes.flags {
-            self.obj_attr_flags.update_r(tx, &oid, &flags)?;
+            self.obj_attr_flags
+                .update_r(tx, &oid, &flags)
+                .map_err(|e| trans_attr_err(oid, ObjAttr::Flags, e))?;
         }
         if let Some(name) = attributes.name {
-            self.obj_attr_name.update_r(tx, &oid, &name)?;
+            self.obj_attr_name
+                .update_r(tx, &oid, &name)
+                .map_err(|e| trans_attr_err(oid, ObjAttr::Name, e))?;
         }
         Ok(())
     }
 
-    pub fn object_children(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, Error> {
+    pub fn object_children(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, ObjectError> {
         if !self.object_valid(tx, oid)? {
-            return Err(anyhow!("invalid object"));
+            return Err(ObjectNotFound(oid));
         }
         Ok(self
             .obj_attr_parent
@@ -406,9 +451,9 @@ impl ImDB {
             .collect())
     }
 
-    pub fn object_contents(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, Error> {
+    pub fn object_contents(&mut self, tx: &mut Tx, oid: Objid) -> Result<Vec<Objid>, ObjectError> {
         if !self.object_valid(tx, oid)? {
-            return Err(anyhow!("invalid object"));
+            return Err(ObjectNotFound(oid));
         }
         Ok(self
             .obj_attr_location
@@ -422,11 +467,11 @@ impl ImDB {
         tx: &mut Tx,
         definer: Objid,
         pname: &str,
-    ) -> Result<Propdef, Error> {
+    ) -> Result<Propdef, ObjectError> {
         let pname = pname.to_lowercase();
         self.propdefs
             .seek_for_l_eq(tx, &(definer, pname.to_string()))
-            .ok_or_else(|| anyhow!("no such property definition {} on #{}", pname, definer.0))
+            .ok_or(ObjectError::PropertyNotFound(definer, pname))
     }
 
     pub fn add_propdef(
@@ -438,7 +483,7 @@ impl ImDB {
         owner: Objid,
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
-    ) -> Result<Pid, Error> {
+    ) -> Result<Pid, ObjectError> {
         let name = name.to_lowercase();
         let pid = Pid(self.next_pid.fetch_add(1, Ordering::SeqCst));
         let pd = Propdef {
@@ -446,10 +491,13 @@ impl ImDB {
             definer,
             pname: name.clone(),
         };
-        self.propdefs.insert(tx, &(definer, name), &pd)?;
+        self.propdefs
+            .insert(tx, &(definer, name.clone()), &pd)
+            .map_err(|e| trans_prop_err(definer, name.clone().as_str(), e))?;
 
         if let Some(initial_value) = initial_value {
-            self.set_property(tx, pid, definer, initial_value, owner, flags)?;
+            self.set_property(tx, pid, definer, initial_value, owner, flags)
+                .map_err(|e| trans_prop_err(definer, name.clone().as_str(), e))?;
         }
 
         Ok(pid)
@@ -461,16 +509,23 @@ impl ImDB {
         definer: Objid,
         old: &str,
         new: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ObjectError> {
         match self.propdefs.seek_for_l_eq(tx, &(definer, old.to_string())) {
-            None => return Err(anyhow!("property does not exist")),
+            None => {
+                return Err(ObjectError::PropertyDefinitionNotFound(
+                    definer,
+                    old.to_string(),
+                ))
+            }
             Some(pd) => {
                 self.propdefs
-                    .remove_for_l(tx, &(definer, old.to_string()))?;
+                    .remove_for_l(tx, &(definer, old.to_string()))
+                    .map_err(|e| trans_prop_err(definer, old, e))?;
                 let mut new_pd = pd;
                 new_pd.pname = new.to_string();
                 self.propdefs
-                    .insert(tx, &(definer, new.to_string()), &new_pd)?;
+                    .insert(tx, &(definer, new.to_string()), &new_pd)
+                    .map_err(|e| trans_prop_err(definer, old, e))?;
             }
         }
         Ok(())
@@ -481,13 +536,14 @@ impl ImDB {
         tx: &mut Tx,
         definer: Objid,
         pname: &str,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ObjectError> {
         self.propdefs
-            .remove_for_l(tx, &(definer, pname.to_string()))?;
+            .remove_for_l(tx, &(definer, pname.to_string()))
+            .map_err(|e| trans_prop_err(definer, pname, e))?;
         Ok(())
     }
 
-    pub fn count_propdefs(&mut self, tx: &mut Tx, definer: Objid) -> Result<usize, Error> {
+    pub fn count_propdefs(&mut self, tx: &mut Tx, definer: Objid) -> Result<usize, ObjectError> {
         let start = (definer, String::new());
         let end = (definer, MAX_PROP_NAME.to_string());
         let range = self
@@ -496,7 +552,11 @@ impl ImDB {
         Ok(range.len())
     }
 
-    pub fn get_propdefs(&mut self, tx: &mut Tx, definer: Objid) -> Result<Vec<Propdef>, Error> {
+    pub fn get_propdefs(
+        &mut self,
+        tx: &mut Tx,
+        definer: Objid,
+    ) -> Result<Vec<Propdef>, ObjectError> {
         let start = (definer, String::new());
         let end = (definer, MAX_PROP_NAME.to_string());
         let range = self
@@ -511,7 +571,7 @@ impl ImDB {
         oid: Objid,
         name: &str,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropertyInfo>, Error> {
+    ) -> Result<Option<PropertyInfo>, ObjectError> {
         let self_and_parents = self.get_object_inheritance_chain(tx, oid);
 
         // Look for the property definition on self and then all the way up the parents, stopping
@@ -520,7 +580,7 @@ impl ImDB {
             .iter()
             .filter_map(|&oid| self.propdefs.seek_for_l_eq(tx, &(oid, name.to_string())))
             .next()
-            .ok_or_else(|| anyhow!("no such property: #{}.{}", oid.0, name))?;
+            .ok_or_else(|| ObjectError::PropertyNotFound(oid, name.to_string()))?;
 
         // Then use the Pid from that to again look at self and all the way up the parents for the
         let pid = propdef.pid;
@@ -542,7 +602,7 @@ impl ImDB {
         oid: Objid,
         handle: Pid,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropAttrs>, Error> {
+    ) -> Result<Option<PropAttrs>, ObjectError> {
         let self_and_parents = self.get_object_inheritance_chain(tx, oid);
         for oid in self_and_parents {
             let propattrs = self.get_local_property(tx, oid, handle, attrs)?;
@@ -562,12 +622,20 @@ impl ImDB {
         value: Var,
         owner: Objid,
         flags: BitEnum<PropFlag>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ObjectError> {
         let propkey = (location, handle);
-        self.property_value.insert(tx, &propkey, &value)?;
-        self.property_flags.insert(tx, &propkey, &flags)?;
-        self.property_owner.insert(tx, &propkey, &owner)?;
-        self.property_location.insert(tx, &propkey, &location)?;
+        self.property_value
+            .insert(tx, &propkey, &value)
+            .map_err(|e| trans_obj_err(location, e))?;
+        self.property_flags
+            .insert(tx, &propkey, &flags)
+            .map_err(|e| trans_obj_err(location, e))?;
+        self.property_owner
+            .insert(tx, &propkey, &owner)
+            .map_err(|e| trans_obj_err(location, e))?;
+        self.property_location
+            .insert(tx, &propkey, &location)
+            .map_err(|e| trans_obj_err(location, e))?;
 
         Ok(())
     }
@@ -581,20 +649,34 @@ impl ImDB {
         flags: BitEnum<VerbFlag>,
         arg_spec: VerbArgsSpec,
         program: Binary,
-    ) -> Result<VerbInfo, Error> {
+    ) -> Result<VerbInfo, ObjectError> {
         let vid = Vid(self.next_vid.fetch_add(1, Ordering::SeqCst));
 
         for name in names.clone() {
-            self.verbdefs.insert(tx, &(oid, name.to_string()), &vid)?;
+            self.verbdefs
+                .insert(tx, &(oid, name.to_string()), &vid)
+                .map_err(|e| trans_obj_err(oid, e))?;
         }
 
-        self.verb_attr_definer.insert(tx, &vid, &oid)?;
-        self.verb_attr_owner.insert(tx, &vid, &owner)?;
-        self.verb_attr_flags.insert(tx, &vid, &flags)?;
-        self.verb_attr_program.insert(tx, &vid, &program)?;
-        self.verb_attr_args_spec.insert(tx, &vid, &arg_spec)?;
+        self.verb_attr_definer
+            .insert(tx, &vid, &oid)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.verb_attr_owner
+            .insert(tx, &vid, &owner)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.verb_attr_flags
+            .insert(tx, &vid, &flags)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.verb_attr_program
+            .insert(tx, &vid, &program)
+            .map_err(|e| trans_obj_err(oid, e))?;
+        self.verb_attr_args_spec
+            .insert(tx, &vid, &arg_spec)
+            .map_err(|e| trans_obj_err(oid, e))?;
         let name_set: Vec<String> = names.iter().map(|s| s.to_string()).collect();
-        self.verb_names.insert(tx, &vid, &name_set)?;
+        self.verb_names
+            .insert(tx, &vid, &name_set)
+            .map_err(|e| trans_obj_err(oid, e))?;
 
         let vi = VerbInfo {
             vid,
@@ -615,7 +697,7 @@ impl ImDB {
         tx: &mut Tx,
         oid: Objid,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Vec<VerbInfo>, Error> {
+    ) -> Result<Vec<VerbInfo>, ObjectError> {
         let obj_verbs = self.verbdefs.range_for_l_eq(
             tx,
             (
@@ -645,9 +727,9 @@ impl ImDB {
         tx: &mut Tx,
         vid: Vid,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<VerbInfo, Error> {
+    ) -> Result<VerbInfo, ObjectError> {
         if self.verb_attr_args_spec.seek_for_l_eq(tx, &vid).is_none() {
-            return Err(anyhow!("no such verb"));
+            return Err(InvalidVerb(vid));
         }
 
         let names = self.verb_names.seek_for_l_eq(tx, &vid).unwrap();
@@ -682,7 +764,12 @@ impl ImDB {
         })
     }
 
-    pub fn update_verb(&self, _tx: &mut Tx, _vid: Vid, _attrs: VerbAttrs) -> Result<(), Error> {
+    pub fn update_verb(
+        &self,
+        _tx: &mut Tx,
+        _vid: Vid,
+        _attrs: VerbAttrs,
+    ) -> Result<(), ObjectError> {
         // Updating names is going to be complicated! Rewriting the oid,name index to remove the
         // old names, then re-establishing them...
 
@@ -697,7 +784,7 @@ impl ImDB {
         dobj: ArgSpec,
         prep: PrepSpec,
         iobj: ArgSpec,
-    ) -> Result<Option<VerbInfo>, anyhow::Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         let parent_chain = self.get_object_inheritance_chain(tx, oid);
         let attrs = BitEnum::all();
         for parent in parent_chain {
@@ -724,7 +811,7 @@ impl ImDB {
         oid: Objid,
         verb: &str,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         let parent_chain = self.get_object_inheritance_chain(tx, oid);
         for parent in parent_chain {
             let vid = self.verbdefs.seek_for_l_eq(tx, &(parent, verb.to_string()));
@@ -743,7 +830,7 @@ impl ImDB {
         _oid: Objid,
         _index: usize,
         _attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, Error> {
+    ) -> Result<Option<VerbInfo>, ObjectError> {
         todo!()
     }
 

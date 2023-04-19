@@ -1,5 +1,7 @@
+use crate::model::ObjectError;
 use enum_primitive_derive::Primitive;
 use rkyv::{Archive, Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 use crate::model::var::Objid;
 use crate::util::bitenum::BitEnum;
@@ -37,6 +39,17 @@ pub enum ObjAttr {
     Parent = 2,
     Location = 3,
     Flags = 4,
+}
+impl Display for ObjAttr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ObjAttr::Owner => f.write_str("owner"),
+            ObjAttr::Name => f.write_str("name"),
+            ObjAttr::Parent => f.write_str("parent"),
+            ObjAttr::Location => f.write_str("location"),
+            ObjAttr::Flags => f.write_str("flags"),
+        }
+    }
 }
 
 impl Default for ObjAttrs {
@@ -87,23 +100,20 @@ pub struct ObjAttrs {
 }
 
 pub trait Objects {
-    fn create_object(
-        &mut self,
-        oid: Option<Objid>,
-        attrs: &ObjAttrs,
-    ) -> Result<Objid, anyhow::Error>;
-    fn destroy_object(&mut self, oid: Objid) -> Result<(), anyhow::Error>;
-    fn object_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error>;
+    fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs)
+        -> Result<Objid, ObjectError>;
+    fn destroy_object(&mut self, oid: Objid) -> Result<(), ObjectError>;
+    fn object_valid(&mut self, oid: Objid) -> Result<bool, ObjectError>;
 
     fn object_get_attrs(
         &mut self,
         oid: Objid,
         attributes: BitEnum<ObjAttr>,
-    ) -> Result<ObjAttrs, anyhow::Error>;
-    fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), anyhow::Error>;
+    ) -> Result<ObjAttrs, ObjectError>;
+    fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), ObjectError>;
 
-    fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
-    fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, anyhow::Error>;
+    fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, ObjectError>;
+    fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, ObjectError>;
 }
 
 trait Player {

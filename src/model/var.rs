@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case)]
 
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
@@ -16,6 +17,12 @@ use crate::compiler::labels::Label;
 )]
 #[archive(compare(PartialEq), check_bytes)]
 pub struct Objid(pub i64);
+
+impl Display for Objid {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("#{}", self.0))
+    }
+}
 
 pub const SYSTEM_OBJECT: Objid = Objid(0);
 pub const NOTHING: Objid = Objid(-1);

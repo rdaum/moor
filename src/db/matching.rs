@@ -1,6 +1,6 @@
+use crate::model::ObjectError;
 use anyhow::anyhow;
 
-use crate::db::state::StateError;
 use crate::model::var::{Objid, AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 // This is the interface that the matching code needs to be able to call into the world state.
@@ -110,7 +110,7 @@ pub fn world_environment_match_object(
 
     // Check if the player is valid.
     if !env.obj_valid(player)? {
-        return Err(anyhow!(StateError::FailedMatch(
+        return Err(anyhow!(ObjectError::FailedMatch(
             "Invalid current player when performing object match".to_string()
         )));
     }

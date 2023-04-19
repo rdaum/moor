@@ -1,7 +1,9 @@
+use crate::model::ObjectError;
 use enum_primitive_derive::Primitive;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::model::var::{Objid, Var};
+
 use crate::util::bitenum::BitEnum;
 
 #[derive(
@@ -42,7 +44,7 @@ pub struct Propdef {
 
 pub trait PropDefs {
     // Get a property definition by its name.
-    fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, anyhow::Error>;
+    fn get_propdef(&mut self, definer: Objid, pname: &str) -> Result<Propdef, ObjectError>;
 
     // Add a property definition.
     fn add_propdef(
@@ -52,20 +54,19 @@ pub trait PropDefs {
         owner: Objid,
         flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
-    ) -> Result<Pid, anyhow::Error>;
+    ) -> Result<Pid, ObjectError>;
 
     // Rename a property.
-    fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str)
-        -> Result<(), anyhow::Error>;
+    fn rename_propdef(&mut self, definer: Objid, old: &str, new: &str) -> Result<(), ObjectError>;
 
     // Delete a property definition.
-    fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), anyhow::Error>;
+    fn delete_propdef(&mut self, definer: Objid, pname: &str) -> Result<(), ObjectError>;
 
     // Count the number of property definitions on an object.
-    fn count_propdefs(&mut self, definer: Objid) -> Result<usize, anyhow::Error>;
+    fn count_propdefs(&mut self, definer: Objid) -> Result<usize, ObjectError>;
 
     // Get all property definitions on an object.
-    fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, anyhow::Error>;
+    fn get_propdefs(&mut self, definer: Objid) -> Result<Vec<Propdef>, ObjectError>;
 }
 
 #[derive(Serialize, Deserialize, Archive, Debug, Clone, Copy, Primitive)]
@@ -114,7 +115,7 @@ pub trait Properties {
         oid: Objid,
         name: &str,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropertyInfo>, anyhow::Error>;
+    ) -> Result<Option<PropertyInfo>, ObjectError>;
 
     // Get a property by its unique pid from its property definition, seeking the inheritance
     // hierarchy.
@@ -123,7 +124,7 @@ pub trait Properties {
         oid: Objid,
         handle: Pid,
         attrs: BitEnum<PropAttr>,
-    ) -> Result<Option<PropAttrs>, anyhow::Error>;
+    ) -> Result<Option<PropAttrs>, ObjectError>;
 
     // Set a property using its unique pid from its property definition.
     fn set_property(
@@ -133,5 +134,5 @@ pub trait Properties {
         value: Var,
         owner: Objid,
         flags: BitEnum<PropFlag>,
-    ) -> Result<(), anyhow::Error>;
+    ) -> Result<(), ObjectError>;
 }

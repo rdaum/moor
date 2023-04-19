@@ -38,7 +38,7 @@ struct DBMatchEnvironment<'a> {
 
 impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
     fn obj_valid(&mut self, oid: Objid) -> Result<bool, Error> {
-        self.ws.valid(oid)
+        self.ws.valid(oid).map_err(|e| anyhow!(e))
     }
 
     fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, Error> {
@@ -58,7 +58,7 @@ impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
     }
 
     fn location_of(&mut self, player: Objid) -> Result<Objid, Error> {
-        self.ws.location_of(player)
+        Ok(self.ws.location_of(player)?)
     }
 }
 

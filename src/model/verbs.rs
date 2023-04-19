@@ -1,3 +1,4 @@
+use crate::model::ObjectError;
 use enum_primitive_derive::Primitive;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -67,18 +68,18 @@ pub trait Verbs {
         flags: BitEnum<VerbFlag>,
         arg_spec: VerbArgsSpec,
         program: Binary,
-    ) -> Result<VerbInfo, anyhow::Error>;
+    ) -> Result<VerbInfo, ObjectError>;
 
     /// Get all verbs attached to the given object.
     fn get_verbs(
         &mut self,
         oid: Objid,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Vec<VerbInfo>, anyhow::Error>;
+    ) -> Result<Vec<VerbInfo>, ObjectError>;
 
-    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, anyhow::Error>;
+    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, ObjectError>;
 
-    fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), anyhow::Error>;
+    fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), ObjectError>;
 
     /// Match verbs using prepositional pieces.
     fn find_command_verb(
@@ -88,7 +89,7 @@ pub trait Verbs {
         dobj: ArgSpec,
         prep: PrepSpec,
         iobj: ArgSpec,
-    ) -> Result<Option<VerbInfo>, anyhow::Error>;
+    ) -> Result<Option<VerbInfo>, ObjectError>;
 
     /// Find the verbs that match based on the provided name-stem.
     fn find_callable_verb(
@@ -96,7 +97,7 @@ pub trait Verbs {
         oid: Objid,
         verb: &str,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, anyhow::Error>;
+    ) -> Result<Option<VerbInfo>, ObjectError>;
 
     /// Find the verb that is the Nth verb in insertion order for the object.
     fn find_indexed_verb(
@@ -104,5 +105,5 @@ pub trait Verbs {
         oid: Objid,
         index: usize,
         attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, anyhow::Error>;
+    ) -> Result<Option<VerbInfo>, ObjectError>;
 }
