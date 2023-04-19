@@ -39,7 +39,7 @@ struct Args {
     listen_address: Option<String>,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), io::Error> {
     tracing_subscriber::fmt::init();
 
