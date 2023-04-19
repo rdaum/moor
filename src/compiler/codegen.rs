@@ -1,18 +1,19 @@
 /// Takes the AST and turns it into a list of opcodes.
-
 use std::collections::HashMap;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use thiserror::Error;
 
-use crate::compiler::ast::{Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
+use crate::compiler::ast::{
+    Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+};
 use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
 use crate::model::var::Var;
-use crate::vm::opcode::{Binary, Op, ScatterLabel};
 use crate::vm::opcode::Op::Jump;
+use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -154,12 +155,12 @@ impl CodegenState {
 
     fn generate_assign(
         &mut self,
-        left: &Box<Expr>,
-        right: &Box<Expr>,
+        left: &Expr,
+        right: &Expr,
     ) -> Result<(), anyhow::Error> {
         self.push_lvalue(left, false)?;
         self.generate_expr(right)?;
-        match left.as_ref() {
+        match left {
             Expr::Range { .. } => self.emit(Op::PutTemp),
             Expr::Index(..) => self.emit(Op::PutTemp),
             _ => {}
@@ -169,7 +170,7 @@ impl CodegenState {
         loop {
             // Figure out the form of assignment, handle correctly, then walk through
             // chained assignments
-            match e.as_ref() {
+            match e {
                 Expr::Range {
                     base,
                     from: _,
@@ -216,9 +217,9 @@ impl CodegenState {
     fn generate_scatter_assign(
         &mut self,
         scatter: &Vec<ScatterItem>,
-        right: &Box<Expr>,
+        right: &Expr,
     ) -> Result<(), anyhow::Error> {
-        self.generate_expr(right.as_ref())?;
+        self.generate_expr(right)?;
         let nargs = scatter.len();
         let nreq = scatter
             .iter()
@@ -512,8 +513,8 @@ impl CodegenState {
                         self.generate_stmt(stmt)?;
                     }
                 }
-                if end_label.is_some() {
-                    self.commit_label(end_label.unwrap());
+                if let Some(end_label) = end_label {
+                    self.commit_label(end_label);
                 }
             }
             Stmt::ForList { id, expr, body } => {

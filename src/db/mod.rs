@@ -5,7 +5,7 @@ pub mod state;
 
 #[doc(hidden)]
 pub mod mock_matching_env;
-mod relations;
+pub mod relations;
 pub mod tx;
 
 pub enum CommitResult {

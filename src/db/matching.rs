@@ -1,13 +1,13 @@
 use anyhow::anyhow;
 
 use crate::db::state::StateError;
-use crate::model::var::{AMBIGUOUS, FAILED_MATCH, NOTHING, Objid};
+use crate::model::var::{Objid, AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
 pub trait MatchEnvironment {
     // Test whether a given object is valid in this environment.
-    fn is_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error>;
+    fn obj_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error>;
 
     // Return all match names & aliases for an object.
     fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, anyhow::Error>;
@@ -73,7 +73,7 @@ pub fn match_contents(
 
     let search = env.get_surroundings(player)?; // location, contents, player
     for oid in search {
-        if !env.is_valid(oid)? {
+        if !env.obj_valid(oid)? {
             continue;
         }
 
@@ -101,15 +101,15 @@ pub fn world_environment_match_object(
 
     // If if's an object number (is prefixed with # and is followed by a valid integer), return
     // an Objid directly.
-    if object_name.starts_with('#') {
-        let object_number = object_name[1..].parse::<i64>();
+    if let Some(stripped) = object_name.strip_prefix('#') {
+        let object_number = stripped.parse::<i64>();
         if let Ok(object_number) = object_number {
             return Ok(Some(Objid(object_number)));
         }
     }
 
     // Check if the player is valid.
-    if !env.is_valid(player)? {
+    if !env.obj_valid(player)? {
         return Err(anyhow!(StateError::FailedMatch(
             "Invalid current player when performing object match".to_string()
         )));
@@ -129,11 +129,11 @@ pub fn world_environment_match_object(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::matching::{do_match_object_names, MatchData, world_environment_match_object};
+    use crate::db::matching::{do_match_object_names, world_environment_match_object, MatchData};
     use crate::db::mock_matching_env::{
-        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
+        setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
-    use crate::model::var::{FAILED_MATCH, NOTHING, Objid};
+    use crate::model::var::{Objid, FAILED_MATCH, NOTHING};
 
     #[test]
     fn test_match_object_names_fail() {

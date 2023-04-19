@@ -1,5 +1,4 @@
 /// Management of variable and jump labels during parsing, code generation, and execution.
-
 use rkyv::{Archive, Deserialize, Serialize};
 
 // Fixup for a jump label
@@ -42,6 +41,12 @@ pub struct Name(pub Label);
 #[archive(compare(PartialEq), check_bytes)]
 pub struct Names {
     pub names: Vec<String>,
+}
+
+impl Default for Names {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize, Debug, PartialEq, Archive, Eq, PartialOrd, Ord)]

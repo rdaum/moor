@@ -4,11 +4,11 @@ use anyhow::{anyhow, Error};
 use slotmap::{new_key_type, SlotMap};
 use tokio::sync::Mutex;
 
-use crate::db::matching::{MatchEnvironment, world_environment_match_object};
+use crate::db::matching::{world_environment_match_object, MatchEnvironment};
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{NOTHING, Objid, Var};
 use crate::model::var::Error::E_NONE;
+use crate::model::var::{Objid, Var, NOTHING};
 use crate::server::parse_cmd::{parse_command, ParsedCommand};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
@@ -36,7 +36,7 @@ struct DBMatchEnvironment<'a> {
 }
 
 impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
-    fn is_valid(&mut self, oid: Objid) -> Result<bool, Error> {
+    fn obj_valid(&mut self, oid: Objid) -> Result<bool, Error> {
         self.ws.valid(oid)
     }
 
@@ -256,7 +256,7 @@ mod tests {
     use crate::db::inmem_db_worldstate::ImDbWorldStateSource;
     use crate::model::objects::{ObjAttrs, ObjFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{NOTHING, Objid};
+    use crate::model::var::{Objid, NOTHING};
     use crate::model::verbs::VerbFlag;
     use crate::server::parse_cmd::ParsedCommand;
     use crate::server::scheduler::Scheduler;

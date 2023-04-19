@@ -1,5 +1,4 @@
 /// The abstract syntax tree produced by the parser and converted by codgen into opcodes.
-
 use crate::compiler::labels::Name;
 use crate::model::var::Var;
 
@@ -49,7 +48,7 @@ pub enum UnaryOp {
 #[derive(Debug, Eq, PartialEq)]
 pub enum CatchCodes {
     Codes(Vec<Arg>),
-    Any
+    Any,
 }
 
 #[derive(Debug, Eq, PartialEq)]

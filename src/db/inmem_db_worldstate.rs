@@ -2,17 +2,17 @@ use std::sync::atomic::AtomicPtr;
 
 use anyhow::{anyhow, Error};
 
-use crate::db::{CommitResult, relations};
 use crate::db::inmem_db::ImDB;
 use crate::db::state::{StateError, WorldState, WorldStateSource};
 use crate::db::tx::Tx;
-use crate::model::objects::{ObjAttr, ObjAttrs, Objects, ObjFlag};
+use crate::db::{relations, CommitResult};
+use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, Objects};
 use crate::model::permissions::Permissions;
 use crate::model::props::{
-    Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
+    Pid, PropAttr, PropAttrs, PropDefs, PropFlag, Propdef, Properties, PropertyInfo,
 };
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{NOTHING, Objid, Var};
+use crate::model::var::{Objid, Var, NOTHING};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::server::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
@@ -33,7 +33,7 @@ impl ImDbWorldStateSource {
 impl WorldStateSource for ImDbWorldStateSource {
     fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, Error> {
         let tx = self.db.do_begin_tx()?;
-        let odb = ImDBTx::new(AtomicPtr::new(&mut self.db), tx);
+        let odb = ImDBTx::boxed(AtomicPtr::new(&mut self.db), tx);
         Ok(odb)
     }
 }
@@ -44,7 +44,7 @@ pub struct ImDBTx {
 }
 
 impl ImDBTx {
-    pub fn new(db: AtomicPtr<ImDB>, tx: Tx) -> Box<dyn WorldState> {
+    pub fn boxed(db: AtomicPtr<ImDB>, tx: Tx) -> Box<dyn WorldState> {
         Box::new(ImDBTx { db, tx })
     }
 

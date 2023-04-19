@@ -137,15 +137,11 @@ fn parse_except_codes(
     pairs: pest::iterators::Pair<Rule>,
 ) -> Result<CatchCodes, anyhow::Error> {
     match pairs.as_rule() {
-        Rule::anycode => {
-            Ok(CatchCodes::Any)
-        }
-        Rule::exprlist => {
-            Ok(CatchCodes::Codes(parse_exprlist(
-                names,
-                pairs.into_inner(),
-            )?))
-        }
+        Rule::anycode => Ok(CatchCodes::Any),
+        Rule::exprlist => Ok(CatchCodes::Codes(parse_exprlist(
+            names,
+            pairs.into_inner(),
+        )?)),
         _ => {
             panic!("Unimplemented except_codes: {:?}", pairs);
         }

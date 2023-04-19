@@ -1,14 +1,14 @@
-use std::collections::{Bound, BTreeMap, BTreeSet, HashMap, HashSet};
-use std::marker::PhantomData;
+use std::collections::{BTreeMap, BTreeSet, Bound, HashMap, HashSet};
+
 use std::sync::atomic::AtomicU64;
 
 use hybrid_lock::HybridLock;
-use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use rkyv::ser::serializers::{AlignedSerializer, CompositeSerializer};
+use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::db::relations::RelationError::{Conflict, NotFound};
-use crate::db::tx::{CommitCheckResult, EntryValue, MvccEntry, MvccTuple, Tx};
+use crate::db::tx::{CommitCheckResult, EntryValue, MvccTuple, Tx};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum RelationError {
@@ -133,25 +133,6 @@ impl<L: TupleValueTraits, R: TupleValueTraits> RelationInner<L, R> {
             if tuple.do_commit(tx.tx_start_ts, position).is_err() {
                 return Err(RelationError::Conflict);
             }
-        }
-
-        Ok(())
-    }
-
-    pub fn rollback(&mut self, tx: &Tx) -> Result<(), anyhow::Error> {
-        let commit_set = self.commit_sets.remove(&tx.tx_id);
-
-        let Some(commit_set) =  commit_set else {
-            return Ok(())
-        };
-
-        // Find this transactions versions and destroy them.
-        for tuple_id in commit_set {
-            let tuple = self
-                .values
-                .get_mut(&tuple_id)
-                .expect("tuple in commit set missing from relation");
-            tuple.rollback(tx.tx_id)?
         }
 
         Ok(())
@@ -441,22 +422,6 @@ impl<L: TupleValueTraits, R: TupleValueTraits> Relation<L, R> {
     pub fn vacuum(&mut self) -> Result<(), RelationError> {
         todo!("implement");
     }
-}
-
-#[derive(Serialize, Deserialize, Archive)]
-pub struct PMvccTuple<K: TupleValueTraits, V: TupleValueTraits> {
-    pub versions: Vec<MvccEntry<V>>,
-    pd: PhantomData<K>,
-}
-
-#[derive(Serialize, Deserialize, Archive)]
-pub struct PRelation<L: TupleValueTraits, R: TupleValueTraits> {
-    values: Vec<(TupleId, PMvccTuple<TupleId, (L, R)>)>,
-    next_tuple_id: AtomicU64,
-
-    // Indexes for the L and (optionally) R attributes.
-    l_index: BTreeMap<L, TupleId>,
-    r_index: Option<BTreeMap<R, HashSet<TupleId>>>,
 }
 
 #[cfg(test)]

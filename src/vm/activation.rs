@@ -1,9 +1,9 @@
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Objid, Var};
 use crate::model::var::Error;
 use crate::model::var::Error::E_VARNF;
-use crate::server::parse_cmd::ParsedCommand;
+use crate::model::var::{Objid, Var};
+
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::{Binary, Op};
 
@@ -12,7 +12,6 @@ pub(crate) struct Activation {
     pub(crate) environment: Vec<Var>,
     pub(crate) valstack: Vec<Var>,
     pub(crate) pc: usize,
-    pub(crate) error_pc: usize,
     pub(crate) temp: Var,
     pub(crate) this: Objid,
     pub(crate) player: Objid,
@@ -41,7 +40,6 @@ impl Activation {
             environment,
             valstack: vec![],
             pc: 0,
-            error_pc: 0,
             temp: Var::None,
             this,
             player,
@@ -73,63 +71,7 @@ impl Activation {
 
         Ok(a)
     }
-
-    pub fn new_for_command(
-        binary: Binary,
-        caller: Objid,
-        this: Objid,
-        player: Objid,
-        player_flags: BitEnum<ObjFlag>,
-        verb_owner: Objid,
-        definer: Objid,
-        parsed_cmd: &ParsedCommand,
-    ) -> Result<Self, anyhow::Error> {
-        let environment = vec![Var::None; binary.var_names.width()];
-
-        let mut a = Activation {
-            binary,
-            environment,
-            valstack: vec![],
-            pc: 0,
-            error_pc: 0,
-            temp: Var::None,
-            this,
-            player,
-            player_flags,
-            verb_owner,
-            definer,
-            verb: parsed_cmd.verb.clone(),
-        };
-
-        a.set_var("this", Var::Obj(this)).unwrap();
-        a.set_var("player", Var::Obj(player)).unwrap();
-        a.set_var("caller", Var::Obj(caller)).unwrap();
-        a.set_var("NUM", Var::Int(0)).unwrap();
-        a.set_var("OBJ", Var::Int(1)).unwrap();
-        a.set_var("STR", Var::Int(2)).unwrap();
-        a.set_var("ERR", Var::Int(3)).unwrap();
-        a.set_var("LIST", Var::Int(4)).unwrap();
-        a.set_var("INT", Var::Int(0)).unwrap();
-        a.set_var("FLOAT", Var::Int(9)).unwrap();
-
-        a.set_var("verb", Var::Str(parsed_cmd.verb.clone()))
-            .unwrap();
-        a.set_var("argstr", Var::Str(parsed_cmd.argstr.clone()))
-            .unwrap();
-        a.set_var("args", Var::List(parsed_cmd.args.clone()))
-            .unwrap();
-        a.set_var("iobjstr", Var::Str(parsed_cmd.iobjstr.clone()))
-            .unwrap();
-        a.set_var("iobj", Var::Obj(parsed_cmd.iobj)).unwrap();
-        a.set_var("dobjstr", Var::Str(parsed_cmd.dobjstr.clone()))
-            .unwrap();
-        a.set_var("dobj", Var::Obj(parsed_cmd.dobj)).unwrap();
-        a.set_var("prepstr", Var::Str(parsed_cmd.prepstr.clone()))
-            .unwrap();
-
-        Ok(a)
-    }
-
+    
     pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
         let n = self.binary.var_names.find_name_offset(name);
         if let Some(n) = n {

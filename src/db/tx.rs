@@ -88,8 +88,6 @@ impl<K: TupleValueTraits, V: TupleValueTraits> MvccTuple<K, V> {
         };
         let (position, our_rts) = (our_version.0, our_version.1.read_timestamp);
 
-        drop(our_version);
-
         // verify that the version we're trying to commit is based on a newer or same timestamp than
         // any of the extant versions that are out there.
         for x in self.versions.iter() {

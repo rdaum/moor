@@ -126,7 +126,7 @@ impl Binary {
         Binary {
             literals: Vec::new(),
             jump_labels: Vec::new(),
-            var_names: Names::new(),
+            var_names: Default::default(),
             main_vector: Vec::new(),
             fork_vectors: Vec::new(),
         }
