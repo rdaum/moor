@@ -6,8 +6,6 @@ pub mod read;
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
 
-
-
 use crate::model::var::{Objid, Var};
 
 #[derive(Clone)]

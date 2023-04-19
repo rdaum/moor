@@ -520,7 +520,7 @@ impl ImDB {
             .iter()
             .filter_map(|&oid| self.propdefs.seek_for_l_eq(tx, &(oid, name.to_string())))
             .next()
-            .ok_or_else(|| anyhow!("no such property"))?;
+            .ok_or_else(|| anyhow!("no such property: #{}.{}", oid.0, name))?;
 
         // Then use the Pid from that to again look at self and all the way up the parents for the
         let pid = propdef.pid;

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Error};
 use slotmap::{new_key_type, SlotMap};
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::{debug, error, instrument, trace};
 
 use crate::db::matching::{world_environment_match_object, MatchEnvironment};
 use crate::db::state::{WorldState, WorldStateSource};
@@ -74,6 +74,7 @@ impl Scheduler {
         }
     }
 
+    #[instrument(skip(self, sessions), name = "start_task")]
     pub async fn setup_parse_command_task(
         &mut self,
         player: Objid,
@@ -107,12 +108,13 @@ impl Scheduler {
             (vloc, pc)
         };
 
-        self.setup_command_task(vloc, pc, sessions).await
+        self.setup_command_task(player, vloc, pc, sessions).await
     }
 
-    pub async fn setup_command_task(
+    async fn setup_command_task(
         &mut self,
         player: Objid,
+        vloc: Objid,
         command: ParsedCommand,
         client_connection: Arc<Mutex<dyn Sessions + Sync + Send>>,
     ) -> Result<TaskId, anyhow::Error> {
@@ -126,10 +128,10 @@ impl Scheduler {
         let player = task_ref.player;
         let mut vm = task_ref.vm.lock().await;
         let result = vm.do_method_verb(
-            player,
+            vloc,
             command.verb.as_str(),
             false,
-            player,
+            vloc,
             player,
             BitEnum::new_with(ObjFlag::Wizard),
             player,
@@ -141,17 +143,18 @@ impl Scheduler {
         Ok(task_id)
     }
 
+    #[instrument(skip(self), name="scheduler_start_task", fields(task_id = task_id.0.as_ffi()))]
     pub async fn start_task(&mut self, task_id: TaskId) -> Result<(), anyhow::Error> {
         let ts = self.task_state.lock().await;
         let task_ref = ts.get_task(task_id).await.unwrap();
 
         tokio::spawn(async move {
-            info!("Starting up task: {:?}", task_id);
+            debug!("Starting up task: {:?}", task_id);
             let mut task_ref = task_ref.lock().await;
 
             task_ref.run(task_id).await;
 
-            info!("Completed task: {:?}", task_id);
+            debug!("Completed task: {:?}", task_id);
         })
         .await?;
 
@@ -160,11 +163,9 @@ impl Scheduler {
 }
 
 impl Task {
+    #[instrument(skip(self), name="task_run", fields(task_id = task_id.0.as_ffi()))]
     pub async fn run(&mut self, task_id: TaskId) {
-        let task_run_span = tracing::info_span!("task_run", task_id = %task_id.0.as_ffi());
-        let _task_run_span_guard = task_run_span.enter();
-
-        info!("Entering task loop...");
+        trace!("Entering task loop...");
         let mut vm = self.vm.lock().await;
         loop {
             let result = vm.exec(self.sessions.clone()).await;
@@ -173,13 +174,20 @@ impl Task {
                 Ok(ExecutionResult::Complete(a)) => {
                     vm.commit().unwrap();
 
-                    info!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
+                    debug!("Task {} complete with result: {:?}", task_id.0.as_ffi(), a);
                     return;
                 }
                 Ok(ExecutionResult::Exception(e)) => {
                     vm.rollback().unwrap();
 
-                    error!("Task finished with exception {:?}", e);
+                    debug!("Task finished with exception {:?}", e);
+                    self.sessions
+                        .lock()
+                        .await
+                        .send_text(self.player, format!("Exception: {:?}", e).to_string())
+                        .await
+                        .unwrap();
+
                     return;
                 }
                 Err(e) => {
@@ -324,6 +332,7 @@ mod tests {
         let mut sched = Scheduler::new(Arc::new(Mutex::new(src)));
         let task = sched
             .setup_command_task(
+                sys_obj,
                 sys_obj,
                 ParsedCommand {
                     verb: "test".to_string(),

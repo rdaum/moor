@@ -8,16 +8,16 @@ use std::sync::Arc;
 use clap::Parser;
 use clap_derive::Parser;
 use tokio::sync::Mutex;
-use tracing::{info};
+use tracing::info;
 
-use clap::builder::ValueHint;
 use crate::db::inmem_db::ImDB;
 use crate::db::inmem_db_worldstate::ImDbWorldStateSource;
 use crate::model::objects::ObjAttrs;
 use crate::model::var::Objid;
 use crate::server::scheduler::Scheduler;
-use crate::server::ws_server::{WebSocketServer, ws_server_start};
+use crate::server::ws_server::{ws_server_start, WebSocketServer};
 use crate::textdump::load_db::textdump_load;
+use clap::builder::ValueHint;
 
 pub mod compiler;
 pub mod db;
@@ -79,7 +79,7 @@ async fn main() -> Result<(), io::Error> {
 
     let addr = args
         .listen_address
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+        .unwrap_or_else(|| "0.0.0.0:8080".to_string());
 
     let ws_server = Arc::new(Mutex::new(WebSocketServer::new(scheduler)));
     ws_server_start(ws_server, addr)

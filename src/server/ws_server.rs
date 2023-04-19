@@ -9,7 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
-use tracing::{error, info};
+use tracing::{debug, error, info, instrument};
 use tungstenite::{Error, Message};
 
 use crate::model::var::Objid;
@@ -72,6 +72,7 @@ async fn ws_send_error(
         .await
 }
 
+#[instrument(skip(server, stream))]
 async fn ws_handle_connection(
     server: Arc<Mutex<WebSocketServer>>,
     peer: SocketAddr,
@@ -133,7 +134,7 @@ async fn ws_handle_connection(
                     continue;
                 }
             };
-            info!("Task: {:?}", task_id);
+            debug!("Task started: {:?}", task_id);
             {
                 let server = server.lock().await;
                 let mut scheduler = server.scheduler.lock().await;
@@ -182,6 +183,13 @@ impl Sessions for WebSocketSessions {
         let Some(conn) = self.connections.get_mut(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };
+        if conn.player != player {
+            return Err(anyhow!(
+                "integrity error; connection for objid: #{} is for player: #{}",
+                player.0,
+                conn.player.0
+            ));
+        }
         SplitSink::send(&mut conn.sink, msg.into()).await?;
 
         Ok(())
