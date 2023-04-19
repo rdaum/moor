@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
+use futures_util::stream::SplitSink;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
@@ -82,7 +82,7 @@ async fn ws_handle_connection(
 
     let player = Objid(2);
 
-    info!("New WebSocket connection: {}", peer);
+    info!("New inbound websocket connection: {}", peer);
     let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
 
     // Register connection with player.
@@ -108,7 +108,10 @@ async fn ws_handle_connection(
 
     // Task submission loop.
     while let Some(msg) = ws_receiver.next().await {
-        let msg = msg?;
+        let Ok(msg) = msg else {
+            error!("Error receiving a message: {}", msg.unwrap_err());
+            break;
+        };
         if msg.is_text() || msg.is_binary() {
             let cmd = msg.into_text().unwrap();
             let cmd = cmd.as_str().trim();
@@ -117,9 +120,11 @@ async fn ws_handle_connection(
                 let server = server.lock().await;
                 let mut scheduler = server.scheduler.lock().await;
                 scheduler
-                    .setup_parse_command_task(player, cmd, server.sessions.clone())
+                    .setup_command_task(player, cmd, server.sessions.clone())
                     .await
             };
+            debug!("Submitted task: {:?}", task_id);
+
             let task_id = match task_id {
                 Ok(task_id) => task_id,
                 Err(e) => {
@@ -129,7 +134,7 @@ async fn ws_handle_connection(
                         player,
                         format!("Unable to parse command ({}): {:?}", cmd, e),
                     )
-                    .await?;
+                        .await?;
 
                     continue;
                 }
@@ -159,7 +164,6 @@ async fn ws_handle_connection(
 
 pub async fn ws_server_start(
     server: Arc<Mutex<WebSocketServer>>,
-
     addr: String,
 ) -> Result<(), anyhow::Error> {
     // Create the event loop and TCP listener we'll accept connections on.

@@ -81,10 +81,12 @@ async fn main() -> Result<(), io::Error> {
         .listen_address
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
 
-    let ws_server = Arc::new(Mutex::new(WebSocketServer::new(scheduler)));
+    let ws_server = Arc::new(Mutex::new(WebSocketServer::new(scheduler.clone())));
     ws_server_start(ws_server, addr)
         .await
         .expect("Unable to run websocket server");
+
+    Scheduler::stop(scheduler.clone()).await.expect("Unable to stop scheduler");
 
     info!("Done.");
 

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -13,7 +13,7 @@ use crate::model::var::Error::{
 };
 use crate::model::var::{Error, ErrorPack, Objid, Var};
 use crate::model::ObjectError::{
-    PropertyNotFound, PropertyPermissionDenied, VerbNotFound, VerbPermissionDenied,
+    PropertyNotFound, PropertyPermissionDenied,
 };
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
@@ -473,20 +473,11 @@ impl VM {
         player_flags: BitEnum<ObjFlag>,
         caller: Objid,
         args: Vec<Var>,
-    ) -> Result<Var, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         // TODO do_pass
         // TODO stack traces, error catch etc?
 
-        let (binary, vi) = match self.state.retrieve_verb(obj, verb_name) {
-            Ok(binary) => binary,
-            Err(e) => {
-                return match e {
-                    VerbNotFound(_, _) => Ok(Var::Err(E_VERBNF)),
-                    VerbPermissionDenied(_, _) => Ok(Var::Err(E_PERM)),
-                    _ => Err(anyhow!(e)),
-                };
-            }
-        };
+        let (binary, vi) = self.state.retrieve_verb(obj, verb_name)?;
 
         let a = Activation::new_for_method(
             binary,
@@ -502,7 +493,7 @@ impl VM {
 
         self.stack.push(a);
 
-        Ok(Var::Err(Error::E_NONE))
+        Ok(())
     }
 
     pub async fn exec(
@@ -1091,7 +1082,7 @@ mod tests {
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::Error::{E_NONE, E_VERBNF};
+    
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::model::ObjectError;
@@ -1193,7 +1184,7 @@ mod tests {
     fn call_verb(verb_name: &str, vm: &mut VM) {
         let o = Objid(0);
 
-        assert_eq!(
+        assert!(
             vm.do_method_verb(
                 o,
                 verb_name,
@@ -1203,10 +1194,7 @@ mod tests {
                 BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
                 o,
                 vec![],
-            )
-            .unwrap(),
-            Var::Err(E_NONE),
-        );
+            ).is_ok());
     }
 
     impl WorldState for MockState {
@@ -1318,20 +1306,31 @@ mod tests {
         let state = MockState::new();
         let mut vm = VM::new(state);
         let o = Objid(0);
-        assert_eq!(
-            vm.do_method_verb(
-                o,
-                "test",
-                false,
-                o,
-                o,
-                BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
-                o,
-                vec![],
-            )
-            .unwrap(),
-            Var::Err(E_VERBNF)
-        );
+
+        match vm.do_method_verb(
+            o,
+            "test",
+            false,
+            o,
+            o,
+            BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
+            o,
+            vec![],
+        ) {
+            Err(e) => {
+                match e.downcast::<ObjectError>() {
+                    Ok(VerbNotFound(vo, vs)) => {
+                        assert_eq!(vo, o);
+                        assert_eq!(vs, "test");
+                    }
+                    _ => {
+                        panic!("expected verbnf error");
+                    }
+                }
+            }
+            _ => panic!("expected verbnf error"),
+        }
+
     }
 
     #[test]
