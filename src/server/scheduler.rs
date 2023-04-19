@@ -163,7 +163,7 @@ impl Task {
     pub async fn run(&mut self, task_id: TaskId) {
         let task_run_span = tracing::info_span!("task_run", task_id = %task_id.0.as_ffi());
         let _task_run_span_guard = task_run_span.enter();
-        
+
         info!("Entering task loop...");
         let mut vm = self.vm.lock().await;
         loop {

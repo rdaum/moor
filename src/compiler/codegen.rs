@@ -154,11 +154,7 @@ impl CodegenState {
         Label(fv as u32)
     }
 
-    fn generate_assign(
-        &mut self,
-        left: &Expr,
-        right: &Expr,
-    ) -> Result<(), anyhow::Error> {
+    fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), anyhow::Error> {
         self.push_lvalue(left, false)?;
         self.generate_expr(right)?;
         match left {
