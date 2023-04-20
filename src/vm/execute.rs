@@ -10,7 +10,7 @@ use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, ErrorPack, NOTHING, Objid, Var};
+use crate::model::var::{Error, ErrorPack, Objid, Var, NOTHING};
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
@@ -353,7 +353,9 @@ impl VM {
     }
 
     fn pop(&mut self) -> Var {
-        self.top_mut().pop().expect("stack underflow")
+        self.top_mut()
+            .pop()
+            .expect(format!("stack underflow, activation depth: {}", self.stack.len()).as_str())
     }
 
     fn push(&mut self, v: &Var) {
@@ -455,7 +457,7 @@ impl VM {
             top.player,
             top.player_flags,
             verbinfo,
-            args
+            args,
         )?;
 
         self.stack.push(a);
@@ -479,15 +481,7 @@ impl VM {
 
         let (binary, vi) = state.retrieve_verb(obj, verb_name)?;
 
-        let a = Activation::new_for_method(
-            binary,
-            NOTHING,
-            this,
-            player,
-            player_flags,
-            vi,
-            args,
-        )?;
+        let a = Activation::new_for_method(binary, NOTHING, this, player, player_flags, vi, args)?;
 
         self.stack.push(a);
 
@@ -742,9 +736,11 @@ impl VM {
                 }
             }
             Op::Or(label) => {
-                let v = self.pop().is_true();
+                let v = self.peek_top().is_true();
                 if v {
-                    self.jump(label)
+                    self.jump(label);
+                } else {
+                    self.pop();
                 }
             }
             Op::Not => {
@@ -1488,6 +1484,16 @@ mod tests {
             result,
             Var::List(vec![Var::List(vec![2.into(), 3.into()]), Var::Int(1)])
         );
+    }
+
+    #[test]
+    fn test_if_or_expr() {
+        let program = "if (1 || 0) return 1; else return 2; endif";
+        let mut state = MockState::new_with_verb("test", &compile(program).unwrap());
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, Var::Int(1));
     }
 
     #[test]
