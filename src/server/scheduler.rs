@@ -452,7 +452,7 @@ impl Task {
                                 .send((self.task_id, TaskControlResponse::AbortCancelled))
                                 .expect("Could not send exception response");
                         }
-                        FinallyReason::Uncaught { code: _, msg, value: _, stack: _, backtrace } => {
+                        FinallyReason::Uncaught { code: _, msg: _, value: _, stack: _, backtrace } => {
 
                             // Compose a string out of the backtrace
                             let mut traceback = vec![];

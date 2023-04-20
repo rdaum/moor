@@ -293,7 +293,35 @@ impl WorldState for ImDBTx {
         property_name: &str,
         player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, ObjectError> {
-        // TODO builtin properties!
+        match property_name {
+            "location" => {
+                return Ok(Var::Obj(
+                    self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Location))
+                        .map(|attrs| attrs.location.unwrap())?,
+                ))
+            }
+            "contents" => {
+                return Ok(Var::List(
+                    self.object_contents(obj)?
+                        .into_iter()
+                        .map(Var::Obj)
+                        .collect(),
+                ))
+            }
+            "owner" => {
+                return Ok(Var::Obj(
+                    self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Owner))
+                        .map(|attrs| attrs.owner.unwrap())?,
+                ))
+            }
+            "name" => {
+                return Ok(Var::Str(
+                    self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Name))
+                        .map(|attrs| attrs.name.unwrap())?,
+                ))
+            }
+            _ => {}
+        }
         let find = self
             .find_property(
                 obj,
