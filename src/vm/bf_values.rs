@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
-use crate::model::var::Error::E_INVARG;
+use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::model::var::{Objid, Var};
 use crate::server::Sessions;
 use crate::vm::execute::{BfFunction, VM};
@@ -38,7 +38,7 @@ async fn bf_tostr(
             Var::Str(s) => result.push_str(&s),
             Var::Obj(o) => result.push_str(&o.to_string()),
             Var::List(_) => result.push_str("{list}"),
-            Var::Err(e) => result.push_str(&e.name()),
+            Var::Err(e) => result.push_str(e.name()),
             _ => {}
         }
     }
@@ -117,7 +117,7 @@ async fn bf_toobj(
     match &args[0] {
         Var::Int(i) => Ok(Var::Obj(Objid(*i))),
         Var::Float(f) => Ok(Var::Obj(Objid(*f as i64))),
-        Var::Str(s) if s.starts_with("#" ) => {
+        Var::Str(s) if s.starts_with('#' ) => {
             let i = s[1..].parse::<i64>();
             match i {
                 Ok(i) => Ok(Var::Obj(Objid(i))),
@@ -205,6 +205,23 @@ async fn bf_value_hash(
 }
 bf_declare!(value_hash, bf_value_hash);
 
+async fn bf_length(
+    _ws: &mut dyn WorldState,
+    _sess: Arc<Mutex<dyn Sessions>>,
+    args: Vec<Var>,
+) -> Result<Var, anyhow::Error> {
+    if args.len() != 1 {
+        return Ok(Var::Err(E_INVARG));
+    }
+
+    match &args[0] {
+        Var::Str(s) => Ok(Var::Int(s.len() as i64)),
+        Var::List(l) => Ok(Var::Int(l.len() as i64)),
+        _ => Ok(Var::Err(E_TYPE))
+    }
+}
+bf_declare!(length, bf_length);
+
 impl VM {
     pub(crate) fn register_bf_values(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("typeof")] = Box::new(BfTypeof {});
@@ -218,6 +235,7 @@ impl VM {
         self.bf_funcs[offset_for_builtin("value_bytes")] = Box::new(BfValueBytes {});
         self.bf_funcs[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
 
+        self.bf_funcs[offset_for_builtin("length")] = Box::new(BfLength {});
         Ok(())
     }
 }

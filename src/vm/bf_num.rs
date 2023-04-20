@@ -214,7 +214,7 @@ async fn bf_asin(
         _ => return Ok(Var::Err(E_TYPE)),
     };
 
-    if x < -1.0 || x > 1.0 {
+    if !(-1.0..=1.0).contains(&x) {
         return Ok(Var::Err(E_INVARG));
     }
 
@@ -236,7 +236,7 @@ async fn bf_acos(
         _ => return Ok(Var::Err(E_TYPE)),
     };
 
-    if x < -1.0 || x > 1.0 {
+    if !(-1.0..=1.0).contains(&x) {
         return Ok(Var::Err(E_INVARG));
     }
 
@@ -249,7 +249,7 @@ async fn bf_atan(
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
-    if args.len() < 1 || args.len() > 2 {
+    if args.is_empty() || args.len() > 2 {
         return Ok(Var::Err(E_INVARG));
     }
 

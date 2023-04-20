@@ -209,7 +209,7 @@ impl VM {
                 pieces.push(format!(" (this == #{})", a.this.0));
             }
             // TODO line number
-            if i == self.stack.len() - 1 {
+            if i == 0 {
                 pieces.push(format!(": {}", raise_msg));
             }
             // TODO builtin-function name if a builtin

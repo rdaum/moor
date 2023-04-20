@@ -422,20 +422,63 @@ impl Task {
                         .expect("Could not send success response");
                     return;
                 }
-                Ok(ExecutionResult::Exception(e)) => {
+                Ok(ExecutionResult::Exception(fr)) => {
                     vm.rollback().unwrap();
 
-                    debug!("Task finished with exception {:?}", e);
-                    self.sessions
-                        .lock()
-                        .await
-                        .send_text(self.player, format!("Exception: {:?}", e).to_string())
-                        .await
-                        .unwrap();
+                    match &fr {
+                        FinallyReason::Fallthrough => {
+                            unreachable!("Fallthrough reached for task {} in scheduler", task_id)
+                        }
+                        FinallyReason::Raise { code: _, msg: _, value: _, stack: _ } => {
+                            unreachable!("Raise reached for task {} in scheduler", task_id)
+                        }
 
-                    self.response_sender
-                        .send((self.task_id, TaskControlResponse::Exception(e)))
-                        .expect("Could not send exception response");
+                        FinallyReason::Return(_) => {
+                            unreachable!("Return reached for task {} in scheduler", task_id)
+                        }
+                        FinallyReason::Exit { stack: _, label: _ } => {
+                            unreachable!("Exit reached for task {} in scheduler", task_id)
+                        }
+                        FinallyReason::Abort => {
+                            error!("Task {} aborted", task_id);
+                            self.sessions
+                                .lock()
+                                .await
+                                .send_text(self.player, format!("Aborted: {:?}", fr).to_string())
+                                .await
+                                .unwrap();
+
+                            self.response_sender
+                                .send((self.task_id, TaskControlResponse::AbortCancelled))
+                                .expect("Could not send exception response");
+                        }
+                        FinallyReason::Uncaught { code: _, msg, value: _, stack: _, backtrace } => {
+
+                            // Compose a string out of the backtrace
+                            let mut traceback = vec![];
+                            for frame in backtrace.iter() {
+                                let Var::Str(s) = frame else {
+                                    continue;
+                                };
+                                traceback.push(format!("{:}\n", s));
+                            }
+
+                            for l in traceback.iter() {
+                                self.sessions
+                                    .lock()
+                                    .await
+                                    .send_text(self.player, l.to_string())
+                                    .await
+                                    .unwrap();
+                            }
+
+
+                            self.response_sender
+                                .send((self.task_id, TaskControlResponse::Exception(fr)))
+                                .expect("Could not send exception response");
+                        }
+                    }
+
 
                     return;
                 }
