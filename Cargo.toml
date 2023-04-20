@@ -40,3 +40,6 @@ tracing = "0.1.29"
 tracing-subscriber = "0.3"
 
 fast-counter = "1.0.0"
+
+magic-crypt = "3.1.12"
+md5 = "0.7.0"

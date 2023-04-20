@@ -15,6 +15,9 @@ pub trait WorldState: Send + Sync {
     // Get the contents of a given object.
     fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError>;
 
+    // Flags of an object.
+    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError>;
+
     // Retrieve a verb/method from the given object.
     fn retrieve_verb(&mut self, obj: Objid, vname: &str)
         -> Result<(Binary, VerbInfo), ObjectError>;

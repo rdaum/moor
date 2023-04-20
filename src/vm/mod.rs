@@ -3,9 +3,12 @@ pub mod opcode;
 
 mod activation;
 
-mod bf_values;
+mod bf_list_sets;
 mod bf_num;
+mod bf_objects;
 mod bf_server;
+mod bf_strings;
+mod bf_values;
 
 #[macro_export]
 macro_rules! bf_declare {
@@ -20,10 +23,11 @@ macro_rules! bf_declare {
                 async fn call(
                     &self,
                     ws: &mut dyn WorldState,
+                    frame: &mut Activation,
                     sess: Arc<Mutex<dyn Sessions>>,
                     args: Vec<Var>,
                 ) -> Result<Var, anyhow::Error> {
-                    $action(ws, sess, args).await
+                    $action(ws, frame, sess, args).await
                 }
             }
         }

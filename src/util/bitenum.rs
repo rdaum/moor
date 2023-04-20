@@ -20,6 +20,11 @@ impl<T: ToPrimitive> BitEnum<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn to_u64(&self) -> u64 {
+        self.value
+    }
+
     pub fn from_u8(value: u8) -> Self {
         Self {
             value: value as u64,

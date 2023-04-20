@@ -253,6 +253,16 @@ impl PropDefs for ImDBTx {
     }
 }
 
+fn builtin_propname_to_objattr(name: &str) -> Option<ObjAttr> {
+    match name {
+        "name" => Some(ObjAttr::Name),
+        "location" => Some(ObjAttr::Location),
+        "owner" => Some(ObjAttr::Owner),
+        "parent" => Some(ObjAttr::Parent),
+        _ => None,
+    }
+}
+
 impl WorldState for ImDBTx {
     fn location_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Location))
@@ -261,6 +271,11 @@ impl WorldState for ImDBTx {
 
     fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
         self.object_contents(obj)
+    }
+
+    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+        let obj_attrs = self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Flags))?;
+        obj_attrs.flags.ok_or(ObjectError::ObjectNotFound(obj))
     }
 
     fn retrieve_verb(
@@ -293,35 +308,45 @@ impl WorldState for ImDBTx {
         property_name: &str,
         player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, ObjectError> {
-        match property_name {
-            "location" => {
-                return Ok(Var::Obj(
-                    self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Location))
-                        .map(|attrs| attrs.location.unwrap())?,
-                ))
-            }
-            "contents" => {
-                return Ok(Var::List(
-                    self.object_contents(obj)?
-                        .into_iter()
-                        .map(Var::Obj)
-                        .collect(),
-                ))
-            }
-            "owner" => {
-                return Ok(Var::Obj(
-                    self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Owner))
-                        .map(|attrs| attrs.owner.unwrap())?,
-                ))
-            }
-            "name" => {
-                return Ok(Var::Str(
-                    self.object_get_attrs(obj, BitEnum::new_with(ObjAttr::Name))
-                        .map(|attrs| attrs.name.unwrap())?,
-                ))
-            }
-            _ => {}
+        if let Some(builtin) = builtin_propname_to_objattr(property_name) {
+            let attrs = self.object_get_attrs(obj, BitEnum::new_with(builtin))?;
+            return Ok(match builtin {
+                ObjAttr::Name => Var::Str(attrs.name.unwrap()),
+                ObjAttr::Location => Var::Obj(attrs.location.unwrap()),
+                ObjAttr::Owner => Var::Obj(attrs.owner.unwrap()),
+                ObjAttr::Parent => Var::Obj(attrs.parent.unwrap()),
+                _ => unreachable!(),
+            });
         }
+        if property_name == "contents" {
+            return Ok(Var::List(
+                self.object_contents(obj)?
+                    .into_iter()
+                    .map(Var::Obj)
+                    .collect(),
+            ));
+        }
+        if property_name == "wizard" {
+            let is_wizard = player_flags.contains(ObjFlag::Wizard);
+            return Ok(Var::Int(if is_wizard { 1 } else { 0 }));
+        }
+        if property_name == "programmer" {
+            let is_programmer = player_flags.contains(ObjFlag::Programmer);
+            return Ok(Var::Int(if is_programmer { 1 } else { 0 }));
+        }
+        if property_name == "r" {
+            let readable = player_flags.contains(ObjFlag::Read);
+            return Ok(Var::Int(if readable { 1 } else { 0 }));
+        }
+        if property_name == "w" {
+            let writable = player_flags.contains(ObjFlag::Write);
+            return Ok(Var::Int(if writable { 1 } else { 0 }));
+        }
+        if property_name == "f" {
+            let forceable = player_flags.contains(ObjFlag::Fertile);
+            return Ok(Var::Int(if forceable { 1 } else { 0 }));
+        }
+
         let find = self
             .find_property(
                 obj,
@@ -330,8 +355,7 @@ impl WorldState for ImDBTx {
                     | PropAttr::Flags
                     | PropAttr::Location
                     | PropAttr::Value,
-            )
-            .expect("db fail");
+            )?;
         match find {
             None => Err(PropertyNotFound(obj, property_name.to_string())),
             Some(p) => {
@@ -368,7 +392,6 @@ impl WorldState for ImDBTx {
             )
             .expect("Unable to perform property lookup");
 
-        // TODO handle built-in properties
         let Some(p) = h else {
             return Err(PropertyNotFound(obj, property_name.to_string()));
         };

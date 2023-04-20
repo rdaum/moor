@@ -32,7 +32,7 @@ pub enum ObjFlag {
 }
 
 // The set of built-in object attributes
-#[derive(Debug, Hash, Serialize, Deserialize, Archive, Primitive)]
+#[derive(Clone, Copy, Debug, Hash, Serialize, Deserialize, Archive, Primitive)]
 pub enum ObjAttr {
     Owner = 0,
     Name = 1,

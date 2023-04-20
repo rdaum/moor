@@ -10,7 +10,7 @@ use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use crate::model::var::{Error, ErrorPack, Objid, Var};
+use crate::model::var::{Error, ErrorPack, NOTHING, Objid, Var};
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
@@ -84,6 +84,7 @@ pub(crate) trait BfFunction: Sync + Send {
     async fn call(
         &self,
         world_state: &mut dyn WorldState,
+        frame: &mut Activation,
         sessions: Arc<Mutex<dyn Sessions>>,
         args: Vec<Var>,
     ) -> Result<Var, anyhow::Error>;
@@ -92,8 +93,7 @@ pub(crate) trait BfFunction: Sync + Send {
 pub struct VM {
     // Activation stack.
     stack: Vec<Activation>,
-    state: Box<dyn WorldState>,
-    pub(crate) bf_funcs: Vec<Box<dyn BfFunction>>,
+    pub(crate) bf_funcs: Vec<Arc<Box<dyn BfFunction>>>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -125,21 +125,23 @@ macro_rules! binary_var_op {
 }
 
 impl VM {
-    pub fn new(state: Box<dyn WorldState>) -> Self {
-        let mut bf_funcs: Vec<Box<dyn BfFunction>> = Vec::with_capacity(BUILTINS.len());
+    pub fn new() -> Self {
+        let mut bf_funcs: Vec<Arc<Box<dyn BfFunction>>> = Vec::with_capacity(BUILTINS.len());
         for _ in 0..BUILTINS.len() {
-            bf_funcs.push(Box::new(BfNoop {}))
+            bf_funcs.push(Arc::new(Box::new(BfNoop {})))
         }
         let _bf_noop = Box::new(BfNoop {});
         let mut vm = Self {
             stack: vec![],
-            state,
             bf_funcs,
         };
 
         vm.register_bf_server().unwrap();
         vm.register_bf_num().unwrap();
         vm.register_bf_values().unwrap();
+        vm.register_bf_strings().unwrap();
+        vm.register_bf_list_sets().unwrap();
+        vm.register_bf_objects().unwrap();
 
         vm
     }
@@ -183,9 +185,9 @@ impl VM {
             // its definer, its location, and the current player, and 'this'.
             let traceback_entry = vec![
                 Var::Obj(a.this),
-                Var::Str(a.verb.clone()),
-                Var::Obj(a.definer),
-                Var::Obj(a.verb_owner),
+                Var::Str(a.verb_name().to_string()),
+                Var::Obj(a.verb_definer()),
+                Var::Obj(a.verb_owner()),
                 Var::Obj(a.player),
                 // TODO: find_line_number and add here.
             ];
@@ -204,8 +206,8 @@ impl VM {
             if i != 0 {
                 pieces.push("... called from ".to_string());
             }
-            pieces.push(format!("#{}:{}", a.definer.0, a.verb));
-            if a.definer != a.this {
+            pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name()));
+            if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));
             }
             // TODO line number
@@ -388,6 +390,7 @@ impl VM {
 
     fn get_prop(
         &mut self,
+        state: &mut dyn WorldState,
         player_flags: BitEnum<ObjFlag>,
         propname: Var,
         obj: Var,
@@ -400,9 +403,7 @@ impl VM {
             return self.push_error(E_INVIND);
         };
 
-        let result = self
-            .state
-            .retrieve_property(obj, propname.as_str(), player_flags);
+        let result = state.retrieve_property(obj, propname.as_str(), player_flags);
         let v = match result {
             Ok(v) => v,
             Err(e) => match e {
@@ -419,28 +420,29 @@ impl VM {
 
     fn call_verb(
         &mut self,
+        state: &mut dyn WorldState,
         this: Objid,
         verb: String,
         args: Vec<Var>,
         do_pass: bool,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let this = if do_pass {
-            let valid_definer = self.state.valid(self.top().definer)?;
+            let valid_definer = state.valid(self.top().verb_definer())?;
 
             if !valid_definer {
                 return self.push_error(E_INVIND);
             }
-            self.state.parent_of(this)?
+            state.parent_of(this)?
         } else {
             this
         };
 
-        let self_valid = self.state.valid(this)?;
+        let self_valid = state.valid(this)?;
         if !self_valid {
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let result = self.state.retrieve_verb(this, verb.as_str());
+        let result = state.retrieve_verb(this, verb.as_str());
 
         let Ok((binary, verbinfo)) = result else {
             return self.push_error(E_VERBNF);
@@ -448,14 +450,12 @@ impl VM {
         let top = self.top();
         let a = Activation::new_for_method(
             binary,
-            top.definer,
+            top.verb_definer(),
             this,
             top.player,
             top.player_flags,
-            verbinfo.attrs.owner.unwrap(),
-            verbinfo.attrs.definer.unwrap(),
-            verb,
-            args,
+            verbinfo,
+            args
         )?;
 
         self.stack.push(a);
@@ -464,29 +464,28 @@ impl VM {
 
     pub fn do_method_verb(
         &mut self,
+        state: &mut dyn WorldState,
         obj: Objid,
         verb_name: &str,
         _do_pass: bool,
         this: Objid,
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
-        caller: Objid,
+        _caller: Objid,
         args: Vec<Var>,
     ) -> Result<(), anyhow::Error> {
         // TODO do_pass
         // TODO stack traces, error catch etc?
 
-        let (binary, vi) = self.state.retrieve_verb(obj, verb_name)?;
+        let (binary, vi) = state.retrieve_verb(obj, verb_name)?;
 
         let a = Activation::new_for_method(
             binary,
-            caller,
+            NOTHING,
             this,
             player,
             player_flags,
-            vi.attrs.owner.unwrap(),
-            vi.attrs.definer.unwrap(),
-            String::from(verb_name),
+            vi,
             args,
         )?;
 
@@ -497,6 +496,7 @@ impl VM {
 
     pub async fn exec(
         &mut self,
+        state: &mut dyn WorldState,
         client_connection: Arc<Mutex<dyn Sessions>>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self
@@ -843,12 +843,12 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                return self.get_prop(self.top().player_flags, propname, obj);
+                return self.get_prop(state, self.top().player_flags, propname, obj);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                return self.get_prop(self.top().player_flags, propname, obj);
+                return self.get_prop(state, self.top().player_flags, propname, obj);
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
@@ -860,8 +860,7 @@ impl VM {
                 };
 
                 let update_result =
-                    self.state
-                        .update_property(obj, &propname, self.top().player_flags, &rhs);
+                    state.update_property(obj, &propname, self.top().player_flags, &rhs);
 
                 match update_result {
                     Ok(()) => {
@@ -894,7 +893,7 @@ impl VM {
                 };
                 // TODO: check obj for validity, return E_INVIND if not
 
-                return self.call_verb(obj, verb, args, false);
+                return self.call_verb(state, obj, verb, args, false);
             }
             Op::Return => {
                 let ret_val = self.pop();
@@ -915,9 +914,9 @@ impl VM {
                 if id.0 as usize >= self.bf_funcs.len() {
                     return self.push_error(E_VARNF);
                 }
-                let bf = self.bf_funcs[id.0 as usize].as_ref();
+                let bf = self.bf_funcs[id.0 as usize].clone();
                 let result = bf
-                    .call(self.state.as_mut(), client_connection, args)
+                    .call(state, self.top_mut(), client_connection, args)
                     .await?;
                 self.push(&result);
             }
@@ -1053,16 +1052,6 @@ impl VM {
         }
         Ok(ExecutionResult::More)
     }
-
-    pub fn commit(&mut self) -> Result<(), anyhow::Error> {
-        self.state.commit()?;
-        Ok(())
-    }
-
-    pub fn rollback(&mut self) -> Result<(), anyhow::Error> {
-        self.state.rollback()?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -1180,11 +1169,12 @@ mod tests {
         }
     }
 
-    fn call_verb(verb_name: &str, vm: &mut VM) {
+    fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
         let o = Objid(0);
 
         assert!(vm
             .do_method_verb(
+                state,
                 o,
                 verb_name,
                 false,
@@ -1282,14 +1272,18 @@ mod tests {
         ) -> Result<Option<VerbInfo>, ObjectError> {
             unimplemented!()
         }
+
+        fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+            Ok(BitEnum::all())
+        }
     }
 
-    fn exec_vm(vm: &mut VM) -> Var {
+    fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
         tokio_test::block_on(async {
             let client_connection = Arc::new(Mutex::new(NoopClientConnection::new()));
             // Call repeatedly into exec until we ge either an error or Complete.
             loop {
-                match vm.exec(client_connection.clone()).await {
+                match vm.exec(state, client_connection.clone()).await {
                     Ok(ExecutionResult::More) => continue,
                     Ok(ExecutionResult::Complete(a)) => return a,
                     Err(e) => panic!("error during execution: {:?}", e),
@@ -1303,11 +1297,12 @@ mod tests {
 
     #[test]
     fn test_verbnf() {
-        let state = MockState::new();
-        let mut vm = VM::new(state);
+        let mut state = MockState::new();
+        let mut vm = VM::new();
         let o = Objid(0);
 
         match vm.do_method_verb(
+            state.as_mut(),
             o,
             "test",
             false,
@@ -1333,17 +1328,17 @@ mod tests {
     #[test]
     fn test_simple_vm_execute() {
         let binary = mk_binary(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::None);
     }
 
     #[test]
     fn test_string_value_simple_indexing() {
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
@@ -1351,16 +1346,16 @@ mod tests {
                 Names::new(),
             ),
         );
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Str("e".to_string()));
     }
 
     #[test]
     fn test_string_value_range_indexing() {
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1375,15 +1370,15 @@ mod tests {
                 Names::new(),
             ),
         );
-        let mut vm = VM::new(state);
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Str("ell".to_string()));
     }
 
     #[test]
     fn test_list_value_simple_indexing() {
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
@@ -1394,16 +1389,16 @@ mod tests {
                 Names::new(),
             ),
         );
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(222));
     }
 
     #[test]
     fn test_list_value_range_indexing() {
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1422,10 +1417,10 @@ mod tests {
                 Names::new(),
             ),
         );
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::List(vec![222.into(), 333.into()]));
     }
 
@@ -1433,7 +1428,7 @@ mod tests {
     fn test_list_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1463,10 +1458,10 @@ mod tests {
                 var_names,
             ),
         );
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::List(vec![111.into(), 321.into(), 123.into()]));
     }
 
@@ -1474,21 +1469,21 @@ mod tests {
     fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
         let _args = binary.find_var("args");
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::List(vec![2.into(), 3.into(), 4.into()]));
     }
 
     #[test]
     fn test_list_range_length() {
         let program = "return {{1,2,3}[2..$], {1}[$]};";
-        let state = MockState::new_with_verb("test", &compile(program).unwrap());
-        let mut vm = VM::new(state);
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        let mut state = MockState::new_with_verb("test", &compile(program).unwrap());
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(
             result,
             Var::List(vec![Var::List(vec![2.into(), 3.into()]), Var::Int(1)])
@@ -1500,7 +1495,7 @@ mod tests {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
 
-        let state = MockState::new_with_verb(
+        let mut state = MockState::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1530,10 +1525,10 @@ mod tests {
                 var_names,
             ),
         );
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Str("manbozorian".to_string()));
     }
 
@@ -1558,10 +1553,10 @@ mod tests {
                 )
                 .unwrap();
         }
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(666));
     }
 
@@ -1593,16 +1588,16 @@ mod tests {
             ],
             Names::new(),
         );
-        let state = MockState::new_with_verbs(vec![
+        let mut state = MockState::new_with_verbs(vec![
             ("test_return_verb", &return_verb_binary),
             ("test_call_verb", &call_verb_binary),
         ]);
-        let mut vm = VM::new(state);
+        let mut vm = VM::new();
 
         // Invoke the second verb
-        call_verb("test_call_verb", &mut vm);
+        call_verb(state.as_mut(), "test_call_verb", &mut vm);
 
-        let result = exec_vm(&mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
 
         assert_eq!(result, Var::Int(666));
     }
@@ -1611,10 +1606,10 @@ mod tests {
     fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(3));
     }
 
@@ -1623,11 +1618,11 @@ mod tests {
         let program =
             "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(75));
     }
 
@@ -1635,11 +1630,11 @@ mod tests {
     fn test_while_labelled_loop() {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(50));
     }
 
@@ -1647,11 +1642,11 @@ mod tests {
     fn test_while_breaks() {
         let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(50));
     }
 
@@ -1659,11 +1654,11 @@ mod tests {
     fn test_for_list_loop() {
         let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::List(vec![Var::Int(4), Var::Int(10)]));
     }
 
@@ -1671,11 +1666,11 @@ mod tests {
     fn test_for_range_loop() {
         let program = "z = 0; for i in [1..4] z = z + i; endfor return {i,z};";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::List(vec![Var::Int(4), Var::Int(10)]));
     }
 
@@ -1683,11 +1678,11 @@ mod tests {
     fn test_basic_scatter_assign() {
         let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(
             result,
             Var::List(vec![Var::Int(4), Var::Int(3), Var::Int(2), Var::Int(1)])
@@ -1698,11 +1693,11 @@ mod tests {
     fn test_more_scatter_assign() {
         let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(
             result,
             Var::List(vec![
@@ -1720,11 +1715,11 @@ mod tests {
     fn test_conditional_expr() {
         let program = "return 1 ? 2 | 3;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(2));
     }
 
@@ -1732,11 +1727,11 @@ mod tests {
     fn test_catch_expr() {
         let program = "return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(321)]));
     }
 
@@ -1744,11 +1739,11 @@ mod tests {
     fn test_try_except_stmt() {
         let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(666));
     }
 
@@ -1756,11 +1751,11 @@ mod tests {
     fn test_try_finally_stmt() {
         let program = "try a; finally return 666; endtry return 333;";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
-        let result = exec_vm(&mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, Var::Int(666));
     }
 
@@ -1786,11 +1781,12 @@ mod tests {
 
     async fn exec_vm_with_mock_client_connection(
         vm: &mut VM,
+        state: &mut dyn WorldState,
         client_connection: Arc<Mutex<MockClientConnection>>,
     ) -> Var {
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
-            match vm.exec(client_connection.clone()).await {
+            match vm.exec(state, client_connection.clone()).await {
                 Ok(ExecutionResult::More) => continue,
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),
@@ -1805,13 +1801,15 @@ mod tests {
     async fn test_call_builtin() {
         let program = "return notify(#1, \"test\");";
         let binary = compile(program).unwrap();
-        let state = MockState::new_with_verb("test", &binary);
-        let mut vm = VM::new(state);
+        let mut state = MockState::new_with_verb("test", &binary);
+        let mut vm = VM::new();
 
-        call_verb("test", &mut vm);
+        call_verb(state.as_mut(), "test", &mut vm);
 
         let client_connection = Arc::new(Mutex::new(MockClientConnection::new()));
-        let result = exec_vm_with_mock_client_connection(&mut vm, client_connection.clone()).await;
+        let result =
+            exec_vm_with_mock_client_connection(&mut vm, state.as_mut(), client_connection.clone())
+                .await;
         assert_eq!(result, Var::None);
 
         assert_eq!(

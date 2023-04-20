@@ -1,9 +1,9 @@
+use async_trait::async_trait;
+use rkyv::ser::serializers::AllocSerializer;
+use rkyv::ser::Serializer;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use async_trait::async_trait;
-use rkyv::ser::Serializer;
-use rkyv::ser::serializers::AllocSerializer;
 use tokio::sync::Mutex;
 
 use crate::bf_declare;
@@ -12,10 +12,12 @@ use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::model::var::{Objid, Var};
 use crate::server::Sessions;
+use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
 
 async fn bf_typeof(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -26,6 +28,7 @@ bf_declare!(typeof, bf_typeof);
 
 async fn bf_tostr(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -72,6 +75,7 @@ fn to_literal(arg: &Var) -> String {
 
 async fn bf_toliteral(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -83,9 +87,12 @@ async fn bf_toliteral(
 }
 bf_declare!(toliteral, bf_toliteral);
 
-async fn bf_toint(    _ws: &mut dyn WorldState,
-                      _sess: Arc<Mutex<dyn Sessions>>,
-                      args: Vec<Var>) -> Result<Var, anyhow::Error> {
+async fn bf_toint(
+    _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<Mutex<dyn Sessions>>,
+    args: Vec<Var>,
+) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(Var::Err(E_INVARG));
     }
@@ -101,13 +108,13 @@ async fn bf_toint(    _ws: &mut dyn WorldState,
         }
         Var::Err(e) => Ok(Var::Int(*e as i64)),
         _ => Ok(Var::Err(E_INVARG)),
-
     }
 }
 bf_declare!(toint, bf_toint);
 
 async fn bf_toobj(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -117,7 +124,7 @@ async fn bf_toobj(
     match &args[0] {
         Var::Int(i) => Ok(Var::Obj(Objid(*i))),
         Var::Float(f) => Ok(Var::Obj(Objid(*f as i64))),
-        Var::Str(s) if s.starts_with('#' ) => {
+        Var::Str(s) if s.starts_with('#') => {
             let i = s[1..].parse::<i64>();
             match i {
                 Ok(i) => Ok(Var::Obj(Objid(i))),
@@ -138,6 +145,7 @@ bf_declare!(toobj, bf_toobj);
 
 async fn bf_tofloat(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -162,6 +170,7 @@ bf_declare!(tofloat, bf_tofloat);
 
 async fn bf_equal(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -170,7 +179,7 @@ async fn bf_equal(
     }
     let result = match (&args[0], &args[1]) {
         (Var::Str(s1), Var::Str(s2)) => s1.to_lowercase() == s2.to_lowercase(),
-        _ => args[0] == args[1]
+        _ => args[0] == args[1],
     };
     Ok(Var::Int(if result { 1 } else { 0 }))
 }
@@ -178,6 +187,7 @@ bf_declare!(equal, bf_equal);
 
 async fn bf_value_bytes(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -193,6 +203,7 @@ bf_declare!(value_bytes, bf_value_bytes);
 
 async fn bf_value_hash(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -207,6 +218,7 @@ bf_declare!(value_hash, bf_value_hash);
 
 async fn bf_length(
     _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
     _sess: Arc<Mutex<dyn Sessions>>,
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
@@ -217,25 +229,25 @@ async fn bf_length(
     match &args[0] {
         Var::Str(s) => Ok(Var::Int(s.len() as i64)),
         Var::List(l) => Ok(Var::Int(l.len() as i64)),
-        _ => Ok(Var::Err(E_TYPE))
+        _ => Ok(Var::Err(E_TYPE)),
     }
 }
 bf_declare!(length, bf_length);
 
 impl VM {
     pub(crate) fn register_bf_values(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("typeof")] = Box::new(BfTypeof {});
-        self.bf_funcs[offset_for_builtin("tostr")] = Box::new(BfTostr {});
-        self.bf_funcs[offset_for_builtin("toliteral")] = Box::new(BfToliteral {});
-        self.bf_funcs[offset_for_builtin("toint")] = Box::new(BfToint {});
-        self.bf_funcs[offset_for_builtin("tonum")] = Box::new(BfToint {});
-        self.bf_funcs[offset_for_builtin("toobj")] = Box::new(BfToobj {});
-        self.bf_funcs[offset_for_builtin("tofloat")] = Box::new(BfTofloat {});
-        self.bf_funcs[offset_for_builtin("equal")] = Box::new(BfEqual {});
-        self.bf_funcs[offset_for_builtin("value_bytes")] = Box::new(BfValueBytes {});
-        self.bf_funcs[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
+        self.bf_funcs[offset_for_builtin("typeof")] = Arc::new(Box::new(BfTypeof {}));
+        self.bf_funcs[offset_for_builtin("tostr")] = Arc::new(Box::new(BfTostr {}));
+        self.bf_funcs[offset_for_builtin("toliteral")] = Arc::new(Box::new(BfToliteral {}));
+        self.bf_funcs[offset_for_builtin("toint")] = Arc::new(Box::new(BfToint {}));
+        self.bf_funcs[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
+        self.bf_funcs[offset_for_builtin("toobj")] = Arc::new(Box::new(BfToobj {}));
+        self.bf_funcs[offset_for_builtin("tofloat")] = Arc::new(Box::new(BfTofloat {}));
+        self.bf_funcs[offset_for_builtin("equal")] = Arc::new(Box::new(BfEqual {}));
+        self.bf_funcs[offset_for_builtin("value_bytes")] = Arc::new(Box::new(BfValueBytes {}));
+        self.bf_funcs[offset_for_builtin("value_hash")] = Arc::new(Box::new(BfValueHash {}));
 
-        self.bf_funcs[offset_for_builtin("length")] = Box::new(BfLength {});
+        self.bf_funcs[offset_for_builtin("length")] = Arc::new(Box::new(BfLength {}));
         Ok(())
     }
 }

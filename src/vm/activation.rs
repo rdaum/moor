@@ -3,6 +3,7 @@ use crate::model::objects::ObjFlag;
 use crate::model::var::Error;
 use crate::model::var::Error::E_VARNF;
 use crate::model::var::{Objid, Var};
+use crate::model::verbs::VerbInfo;
 
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::{Binary, Op};
@@ -13,12 +14,11 @@ pub(crate) struct Activation {
     pub(crate) valstack: Vec<Var>,
     pub(crate) pc: usize,
     pub(crate) temp: Var,
+    pub(crate) caller_perms: Objid,
     pub(crate) this: Objid,
     pub(crate) player: Objid,
     pub(crate) player_flags: BitEnum<ObjFlag>,
-    pub(crate) verb_owner: Objid,
-    pub(crate) definer: Objid,
-    pub(crate) verb: String,
+    pub(crate) verb_info: VerbInfo,
 }
 
 impl Activation {
@@ -28,12 +28,13 @@ impl Activation {
         this: Objid,
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
-        verb_owner: Objid,
-        definer: Objid,
-        verb: String,
+        verb_info: VerbInfo,
         args: Vec<Var>,
     ) -> Result<Self, anyhow::Error> {
         let environment = vec![Var::None; binary.var_names.width()];
+
+        // Take a copy of the verb name because we're going to move verb_info.
+        let verb_name = verb_info.names.first().unwrap().clone();
 
         let mut a = Activation {
             binary,
@@ -41,12 +42,11 @@ impl Activation {
             valstack: vec![],
             pc: 0,
             temp: Var::None,
+            caller_perms: caller,
             this,
             player,
             player_flags,
-            verb_owner,
-            definer,
-            verb: verb.clone(),
+            verb_info
         };
 
         a.set_var("this", Var::Obj(this)).unwrap();
@@ -60,7 +60,7 @@ impl Activation {
         a.set_var("INT", Var::Int(0)).unwrap();
         a.set_var("FLOAT", Var::Int(9)).unwrap();
 
-        a.set_var("verb", Var::Str(verb)).unwrap();
+        a.set_var("verb", Var::Str(verb_name)).unwrap();
         a.set_var("argstr", Var::Str(String::from(""))).unwrap();
         a.set_var("args", Var::List(args)).unwrap();
         a.set_var("iobjstr", Var::Str(String::from(""))).unwrap();
@@ -70,6 +70,18 @@ impl Activation {
         a.set_var("prepstr", Var::Str(String::from(""))).unwrap();
 
         Ok(a)
+    }
+
+    pub fn verb_name(&self) -> &str {
+        self.verb_info.names.first().unwrap()
+    }
+
+    pub fn verb_definer(&self) -> Objid {
+        self.verb_info.attrs.definer.unwrap()
+    }
+
+    pub fn verb_owner(&self) -> Objid {
+        self.verb_info.attrs.owner.unwrap()
     }
 
     pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {

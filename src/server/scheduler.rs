@@ -51,6 +51,7 @@ pub struct Task {
     player: Objid,
     vm: Arc<Mutex<VM>>,
     sessions: Arc<Mutex<dyn Sessions + Send + Sync>>,
+    state: Box<dyn WorldState>,
 }
 
 struct TaskControl {
@@ -266,7 +267,7 @@ impl Scheduler {
     ) -> Result<TaskId, anyhow::Error> {
         let mut state_source = state_source.lock().await;
         let state = state_source.new_world_state()?;
-        let vm = Arc::new(Mutex::new(VM::new(state)));
+        let vm = Arc::new(Mutex::new(VM::new()));
 
         let (tx_control, rx_control) = tokio::sync::mpsc::unbounded_channel();
 
@@ -278,6 +279,7 @@ impl Scheduler {
             player,
             vm,
             sessions: client_connection,
+            state,
         };
         let task_info = TaskControl {
             task: Arc::new(Mutex::new(task)),
@@ -360,6 +362,7 @@ impl Task {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     vm.do_method_verb(
+                        self.state.as_mut(),
                         vloc,
                         command.verb.as_str(),
                         false,
@@ -382,6 +385,7 @@ impl Task {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     vm.do_method_verb(
+                        self.state.as_mut(),
                         vloc,
                         verb.as_str(),
                         false,
@@ -396,7 +400,7 @@ impl Task {
                 }
                 // We've been asked to die.
                 Some(TaskControlMsg::Abort) => {
-                    vm.rollback().unwrap();
+                    self.state.rollback().unwrap();
 
                     self.response_sender
                         .send((self.task_id, TaskControlResponse::AbortCancelled))
@@ -409,11 +413,11 @@ impl Task {
             if !running_method {
                 continue;
             }
-            let result = vm.exec(self.sessions.clone()).await;
+            let result = vm.exec(self.state.as_mut(), self.sessions.clone()).await;
             match result {
                 Ok(ExecutionResult::More) => {}
                 Ok(ExecutionResult::Complete(a)) => {
-                    vm.commit().unwrap();
+                    self.state.commit().unwrap();
 
                     debug!("Task {} complete with result: {:?}", task_id, a);
 
@@ -423,22 +427,9 @@ impl Task {
                     return;
                 }
                 Ok(ExecutionResult::Exception(fr)) => {
-                    vm.rollback().unwrap();
+                    self.state.rollback().unwrap();
 
                     match &fr {
-                        FinallyReason::Fallthrough => {
-                            unreachable!("Fallthrough reached for task {} in scheduler", task_id)
-                        }
-                        FinallyReason::Raise { code: _, msg: _, value: _, stack: _ } => {
-                            unreachable!("Raise reached for task {} in scheduler", task_id)
-                        }
-
-                        FinallyReason::Return(_) => {
-                            unreachable!("Return reached for task {} in scheduler", task_id)
-                        }
-                        FinallyReason::Exit { stack: _, label: _ } => {
-                            unreachable!("Exit reached for task {} in scheduler", task_id)
-                        }
                         FinallyReason::Abort => {
                             error!("Task {} aborted", task_id);
                             self.sessions
@@ -452,8 +443,13 @@ impl Task {
                                 .send((self.task_id, TaskControlResponse::AbortCancelled))
                                 .expect("Could not send exception response");
                         }
-                        FinallyReason::Uncaught { code: _, msg: _, value: _, stack: _, backtrace } => {
-
+                        FinallyReason::Uncaught {
+                            code: _,
+                            msg: _,
+                            value: _,
+                            stack: _,
+                            backtrace,
+                        } => {
                             // Compose a string out of the backtrace
                             let mut traceback = vec![];
                             for frame in backtrace.iter() {
@@ -472,18 +468,25 @@ impl Task {
                                     .unwrap();
                             }
 
-
                             self.response_sender
                                 .send((self.task_id, TaskControlResponse::Exception(fr)))
                                 .expect("Could not send exception response");
                         }
+                        _ => {
+                            self.response_sender
+                                .send((self.task_id, TaskControlResponse::Exception(fr.clone())))
+                                .expect("Could not send exception response");
+                            unreachable!(
+                                "Invalid FinallyReason {:?} reached for task {} in scheduler",
+                                fr, task_id
+                            )
+                        }
                     }
-
 
                     return;
                 }
                 Err(e) => {
-                    vm.rollback().unwrap();
+                    self.state.rollback().unwrap();
                     error!("Task {} failed with error: {:?}", task_id, e);
 
                     self.response_sender
