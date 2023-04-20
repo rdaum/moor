@@ -139,6 +139,8 @@ impl VM {
 
         vm.register_bf_server().unwrap();
         vm.register_bf_num().unwrap();
+        vm.register_bf_values().unwrap();
+
         vm
     }
 

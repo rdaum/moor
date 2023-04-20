@@ -576,6 +576,7 @@ dependencies = [
  "paste",
  "pest",
  "pest_derive",
+ "rand",
  "repr-trait",
  "rkyv",
  "snailquote",

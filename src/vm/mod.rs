@@ -1,9 +1,11 @@
-pub mod bf_num;
-pub mod bf_server;
 pub mod execute;
 pub mod opcode;
 
 mod activation;
+
+mod bf_values;
+mod bf_num;
+mod bf_server;
 
 #[macro_export]
 macro_rules! bf_declare {
