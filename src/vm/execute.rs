@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -12,9 +11,7 @@ use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::model::var::{Error, ErrorPack, Objid, Var};
-use crate::model::ObjectError::{
-    PropertyNotFound, PropertyPermissionDenied,
-};
+use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::Activation;
@@ -1082,7 +1079,7 @@ mod tests {
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    
+
     use crate::model::var::{Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::model::ObjectError;
@@ -1184,8 +1181,8 @@ mod tests {
     fn call_verb(verb_name: &str, vm: &mut VM) {
         let o = Objid(0);
 
-        assert!(
-            vm.do_method_verb(
+        assert!(vm
+            .do_method_verb(
                 o,
                 verb_name,
                 false,
@@ -1194,7 +1191,8 @@ mod tests {
                 BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
                 o,
                 vec![],
-            ).is_ok());
+            )
+            .is_ok());
     }
 
     impl WorldState for MockState {
@@ -1317,20 +1315,17 @@ mod tests {
             o,
             vec![],
         ) {
-            Err(e) => {
-                match e.downcast::<ObjectError>() {
-                    Ok(VerbNotFound(vo, vs)) => {
-                        assert_eq!(vo, o);
-                        assert_eq!(vs, "test");
-                    }
-                    _ => {
-                        panic!("expected verbnf error");
-                    }
+            Err(e) => match e.downcast::<ObjectError>() {
+                Ok(VerbNotFound(vo, vs)) => {
+                    assert_eq!(vo, o);
+                    assert_eq!(vs, "test");
                 }
-            }
+                _ => {
+                    panic!("expected verbnf error");
+                }
+            },
             _ => panic!("expected verbnf error"),
         }
-
     }
 
     #[test]

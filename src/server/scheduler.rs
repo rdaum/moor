@@ -7,7 +7,7 @@ use fast_counter::ConcurrentCounter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, instrument, trace};
 
 use crate::db::matching::{world_environment_match_object, MatchEnvironment};
 use crate::db::state::{WorldState, WorldStateSource};
@@ -115,7 +115,7 @@ impl Scheduler {
             response_sender,
             response_receiver,
             num_scheduled_tasks: ConcurrentCounter::new(0),
-            num_started_tasks:  ConcurrentCounter::new(0),
+            num_started_tasks: ConcurrentCounter::new(0),
             num_succeeded_tasks: ConcurrentCounter::new(0),
             num_aborted_tasks: ConcurrentCounter::new(0),
             num_errored_tasks: ConcurrentCounter::new(0),
@@ -194,79 +194,61 @@ impl Scheduler {
         };
 
         // This gets enqueued as the first thing the task sees when it is started.
-        task_ref
-            .control_sender
-            .send(TaskControlMsg::StartVerb {
-                player,
-                vloc,
-                verb,
-                args
-            })?;
+        task_ref.control_sender.send(TaskControlMsg::StartVerb {
+            player,
+            vloc,
+            verb,
+            args,
+        })?;
 
         Ok(task_id)
     }
 
     #[instrument(skip(self))]
     pub(crate) async fn do_process(&mut self) -> Result<(), anyhow::Error> {
-        match self.response_receiver.recv().await {
-            None => {}
-            Some((task_id, TaskControlResponse::AbortCancelled)) => {
+        let msg = match self.response_receiver.try_recv() {
+            Ok(msg) => msg,
+            Err(TryRecvError::Empty) => return Ok(()),
+            Err(e) => {
+                return Err(anyhow!(e));
+            }
+        };
+        match msg {
+            (task_id, TaskControlResponse::AbortCancelled) => {
                 self.num_aborted_tasks.add(1);
 
                 debug!("Cleaning up cancelled task {:?}", task_id);
-                self
-                    .remove_task(task_id)
+                self.remove_task(task_id)
                     .await
                     .expect("Could not remove task");
             }
-            Some((task_id, TaskControlResponse::AbortError(e))) => {
+            (task_id, TaskControlResponse::AbortError(e)) => {
                 self.num_errored_tasks.add(1);
 
                 error!("Error in task {:?}: {:?}", task_id, e);
-                self
-                    .remove_task(task_id)
+                self.remove_task(task_id)
                     .await
                     .expect("Could not remove task");
             }
-            Some((task_id, TaskControlResponse::Exception(finally_reason))) => {
+            (task_id, TaskControlResponse::Exception(finally_reason)) => {
                 self.num_excepted_tasks.add(1);
 
                 error!("Exception in task {:?}: {:?}", task_id, finally_reason);
-                self
-                    .remove_task(task_id)
+                self.remove_task(task_id)
                     .await
                     .expect("Could not remove task");
             }
-            Some((task_id, TaskControlResponse::Success(value))) => {
+            (task_id, TaskControlResponse::Success(value)) => {
                 self.num_succeeded_tasks.add(1);
                 debug!(
-                        "Task {:?} completed successfully with return value: {:?}",
-                        task_id, value
-                    );
-                self
-                    .remove_task(task_id)
+                    "Task {:?} completed successfully with return value: {:?}",
+                    task_id, value
+                );
+                self.remove_task(task_id)
                     .await
                     .expect("Could not remove task");
             }
         }
-        Ok(())
-    }
-
-    pub async fn run(scheduler: Arc<Mutex<Self>>) -> Result<(), anyhow::Error> {
-        {
-            let scheduler = scheduler.lock().await;
-            scheduler.running.store(true, Ordering::SeqCst);
-        }
-        info!("Starting scheduler");
-        loop {
-            let mut scheduler = scheduler.lock().await;
-            if !scheduler.running.load(Ordering::SeqCst) {
-                break;
-            }
-            scheduler.do_process().await?;
-        }
-        info!("Scheduler stopped.");
-
         Ok(())
     }
 

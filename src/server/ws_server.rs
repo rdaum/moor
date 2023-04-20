@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt};
 use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{accept_async, WebSocketStream};
@@ -134,7 +134,7 @@ async fn ws_handle_connection(
                         player,
                         format!("Unable to parse command ({}): {:?}", cmd, e),
                     )
-                        .await?;
+                    .await?;
 
                     continue;
                 }
@@ -171,12 +171,15 @@ pub async fn ws_server_start(
     let listener = try_socket.expect("Failed to bind");
     info!("Listening on: {}", addr);
 
-    while let Ok((stream, _)) = listener.accept().await {
-        let peer = stream
-            .peer_addr()
-            .expect("connected streams should have a peer address");
+    tokio::select! {
+        stream = listener.accept() => {
+            let stream = stream.unwrap().0;
+            let peer = stream
+                .peer_addr()
+                .expect("connected streams should have a peer address");
 
-        tokio::spawn(ws_accept_connection(server.clone(), peer, stream));
+            tokio::spawn(ws_accept_connection(server.clone(), peer, stream));
+        }
     }
 
     Ok(())

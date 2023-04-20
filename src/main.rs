@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use clap::Parser;
 use clap_derive::Parser;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::Mutex;
 use tracing::info;
 
@@ -82,12 +84,32 @@ async fn main() -> Result<(), io::Error> {
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
 
     let ws_server = Arc::new(Mutex::new(WebSocketServer::new(scheduler.clone())));
-    ws_server_start(ws_server, addr)
-        .await
-        .expect("Unable to run websocket server");
+    let mut hup_signal =
+        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
+    let mut stop_signal =
+        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
-    Scheduler::stop(scheduler.clone()).await.expect("Unable to stop scheduler");
+    let mut scheduler_process_interval =
+        tokio::time::interval(std::time::Duration::from_millis(100));
+    let ws_server_future = tokio::spawn(ws_server_start(ws_server.clone(), addr));
 
+    loop {
+        select! {
+            _ = scheduler_process_interval.tick() => {
+                scheduler.lock().await.do_process().await.unwrap();
+            }
+            _ = hup_signal.recv() => {
+                info!("HUP received, stopping...");
+                ws_server_future.abort();
+                break;
+            }
+            _ = stop_signal.recv() => {
+                info!("STOP received, stopping...");
+                ws_server_future.abort();
+                break;
+            }
+        }
+    }
     info!("Done.");
 
     Ok(())
