@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 
-use crate::compiler::ast::Expr::VarExpr;
 use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
@@ -59,7 +58,7 @@ fn parse_atom(
         }
         Rule::err => {
             let e = pairs.as_str();
-            Ok(VarExpr(match e.to_lowercase().as_str() {
+            Ok(Expr::VarExpr(match e.to_lowercase().as_str() {
                 "e_type" => Var::Err(Error::E_TYPE),
                 "e_div" => Var::Err(Error::E_DIV),
                 "e_perm" => Var::Err(Error::E_PERM),
@@ -187,8 +186,8 @@ fn parse_expr(
                 let mut inner = primary.into_inner();
                 let property = inner.next().unwrap().as_str();
                 Ok(Expr::Prop {
-                    location: Box::new(VarExpr(Var::Obj(SYSTEM_OBJECT))),
-                    property: Box::new(VarExpr(Var::Str(property.to_string()))),
+                    location: Box::new(Expr::VarExpr(Var::Obj(SYSTEM_OBJECT))),
+                    property: Box::new(Expr::VarExpr(Var::Str(property.to_string()))),
                 })
             }
             Rule::sysprop_call => {
@@ -196,8 +195,8 @@ fn parse_expr(
                 let verb = inner.next().unwrap().as_str();
                 let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(Expr::Verb {
-                    location: Box::new(VarExpr(Var::Obj(SYSTEM_OBJECT))),
-                    verb: Box::new(VarExpr(Var::Str(verb.to_string()))),
+                    location: Box::new(Expr::VarExpr(Var::Obj(SYSTEM_OBJECT))),
+                    verb: Box::new(Expr::VarExpr(Var::Str(verb.to_string()))),
                     args,
                 })
             }

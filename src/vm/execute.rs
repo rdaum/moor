@@ -12,6 +12,7 @@ use crate::model::var::Error::{
 };
 use crate::model::var::{Error, ErrorPack, Objid, Var, NOTHING};
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
+use crate::server::scheduler::TaskId;
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::activation::{Activation, Caller};
@@ -460,7 +461,9 @@ impl VM {
         };
         let top = self.top();
         let mut callers = top.callers.to_vec();
-        callers.push( Caller {
+        let task_id = top.task_id;
+
+        callers.push(Caller {
             this,
             verb_name: top.verb_name().to_string(),
             programmer: top.verb_owner(),
@@ -470,6 +473,7 @@ impl VM {
         });
 
         let a = Activation::new_for_method(
+            task_id,
             binary,
             top.verb_definer(),
             this,
@@ -477,7 +481,7 @@ impl VM {
             top.player_flags,
             verbinfo,
             args,
-            callers
+            callers,
         )?;
 
         self.stack.push(a);
@@ -486,6 +490,7 @@ impl VM {
 
     pub fn do_method_verb(
         &mut self,
+        task_id: TaskId,
         state: &mut dyn WorldState,
         obj: Objid,
         verb_name: &str,
@@ -498,7 +503,17 @@ impl VM {
     ) -> Result<(), anyhow::Error> {
         let (binary, vi) = state.retrieve_verb(obj, verb_name)?;
 
-        let a = Activation::new_for_method(binary, NOTHING, this, player, player_flags, vi, args, vec![])?;
+        let a = Activation::new_for_method(
+            task_id,
+            binary,
+            NOTHING,
+            this,
+            player,
+            player_flags,
+            vi,
+            args,
+            vec![],
+        )?;
 
         self.stack.push(a);
 
@@ -1187,6 +1202,7 @@ mod tests {
 
         assert!(vm
             .do_method_verb(
+                0,
                 state,
                 o,
                 verb_name,
@@ -1315,6 +1331,7 @@ mod tests {
         let o = Objid(0);
 
         match vm.do_method_verb(
+            0,
             state.as_mut(),
             o,
             "test",

@@ -4,6 +4,7 @@ use crate::model::var::Error;
 use crate::model::var::Error::E_VARNF;
 use crate::model::var::{Objid, Var};
 use crate::model::verbs::VerbInfo;
+use crate::server::scheduler::TaskId;
 
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::{Binary, Op};
@@ -20,6 +21,7 @@ pub struct Caller {
 }
 
 pub(crate) struct Activation {
+    pub(crate) task_id: TaskId,
     pub(crate) binary: Binary,
     pub(crate) environment: Vec<Var>,
     pub(crate) valstack: Vec<Var>,
@@ -35,6 +37,7 @@ pub(crate) struct Activation {
 
 impl Activation {
     pub fn new_for_method(
+        task_id: TaskId,
         binary: Binary,
         caller: Objid,
         this: Objid,
@@ -50,6 +53,7 @@ impl Activation {
         let verb_name = verb_info.names.first().unwrap().clone();
 
         let mut a = Activation {
+            task_id,
             binary,
             environment,
             valstack: vec![],

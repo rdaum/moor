@@ -18,7 +18,7 @@ use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::vm::execute::{ExecutionResult, FinallyReason, VM};
 
-type TaskId = usize;
+pub type TaskId = usize;
 
 #[derive(Debug)]
 enum TaskControlMsg {
@@ -362,6 +362,7 @@ impl Task {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     vm.do_method_verb(
+                        self.task_id,
                         self.state.as_mut(),
                         vloc,
                         command.verb.as_str(),
@@ -385,6 +386,7 @@ impl Task {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     vm.do_method_verb(
+                        self.task_id,
                         self.state.as_mut(),
                         vloc,
                         verb.as_str(),

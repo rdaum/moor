@@ -161,6 +161,20 @@ async fn bf_callers(
 }
 bf_declare!(callers, bf_callers);
 
+async fn bf_task_id(
+    _ws: &mut dyn WorldState,
+    frame: &mut Activation,
+    _sess: Arc<Mutex<dyn Sessions>>,
+    args: Vec<Var>,
+) -> Result<Var, anyhow::Error> {
+    if !args.is_empty() {
+        return Ok(Var::Err(E_INVARG));
+    }
+
+    Ok(Var::Int(frame.task_id as i64))
+}
+bf_declare!(task_id, bf_task_id);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -170,6 +184,7 @@ impl VM {
         self.bf_funcs[offset_for_builtin("caller_perms")] = Arc::new(Box::new(BfCallerPerms {}));
         self.bf_funcs[offset_for_builtin("set_task_perms")] = Arc::new(Box::new(BfSetTaskPerms {}));
         self.bf_funcs[offset_for_builtin("callers")] = Arc::new(Box::new(BfCallers {}));
+        self.bf_funcs[offset_for_builtin("task_id")] = Arc::new(Box::new(BfTaskId {}));
 
         Ok(())
     }
