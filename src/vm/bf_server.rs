@@ -21,7 +21,7 @@ async fn bf_noop(
     _sess: Arc<Mutex<dyn Sessions>>,
     _args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
-    Ok(Var::None)
+    unimplemented!("BF is not implemented");
 }
 bf_declare!(noop, bf_noop);
 
@@ -131,6 +131,36 @@ async fn bf_set_task_perms(
 }
 bf_declare!(set_task_perms, bf_set_task_perms);
 
+async fn bf_callers(
+    _ws: &mut dyn WorldState,
+    frame: &mut Activation,
+    _sess: Arc<Mutex<dyn Sessions>>,
+    args: Vec<Var>,
+) -> Result<Var, anyhow::Error> {
+    if !args.is_empty() {
+        return Ok(Var::Err(E_INVARG));
+    }
+
+    Ok(Var::List(
+        frame
+            .callers
+            .iter()
+            .map(|c| {
+                let callers = vec![
+                    Var::Obj(c.this),
+                    Var::Str(c.verb_name.clone()),
+                    Var::Obj(c.programmer),
+                    Var::Obj(c.verb_loc),
+                    Var::Obj(c.player),
+                    Var::Int(c.line_number as i64),
+                ];
+                Var::List(callers)
+            })
+            .collect(),
+    ))
+}
+bf_declare!(callers, bf_callers);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -139,6 +169,7 @@ impl VM {
         self.bf_funcs[offset_for_builtin("is_player")] = Arc::new(Box::new(BfIsPlayer {}));
         self.bf_funcs[offset_for_builtin("caller_perms")] = Arc::new(Box::new(BfCallerPerms {}));
         self.bf_funcs[offset_for_builtin("set_task_perms")] = Arc::new(Box::new(BfSetTaskPerms {}));
+        self.bf_funcs[offset_for_builtin("callers")] = Arc::new(Box::new(BfCallers {}));
 
         Ok(())
     }

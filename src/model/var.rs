@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case)]
 
 use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
@@ -122,10 +122,10 @@ impl Error {
         }
     }
 
-    pub fn make_error_pack(&self) -> ErrorPack {
+    pub fn make_error_pack(&self, msg: Option<String>) -> ErrorPack {
         ErrorPack {
             code: *self,
-            msg: self.message().to_string(),
+            msg: msg.unwrap_or(self.message().to_string()),
             value: Var::None,
         }
     }
@@ -161,7 +161,7 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+#[derive(Clone, Serialize, Deserialize, Archive)]
 #[archive(compare(PartialEq), check_bytes)]
 #[archive(bound(serialize = "__S: rkyv::ser::ScratchSpace + rkyv::ser::Serializer"))]
 #[archive_attr(check_bytes(
@@ -202,7 +202,44 @@ impl Var {
             Var::_Label(_) => VarType::TYPE_CATCH,
         }
     }
+
+    pub fn to_literal(&self) -> String {
+        match self {
+            Var::None => "None".to_string(),
+            Var::Int(i) => i.to_string(),
+            Var::Float(f) => f.to_string(),
+            Var::Str(s) => format!("\"{}\"", s),
+            Var::Obj(o) => format!("{}", o),
+            Var::List(l) => {
+                let mut result = String::new();
+                result.push('{');
+                for (i, v) in l.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&v.to_literal());
+                }
+                result.push('}');
+                result
+            }
+            Var::Err(e) => e.name().to_string(),
+            _ => "".to_string(),
+        }
+    }
 }
+
+impl Display for Var {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_literal().as_str())
+    }
+}
+
+impl Debug for Var {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_literal().as_str())
+    }
+}
+
 impl PartialEq<Self> for Var {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {

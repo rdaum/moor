@@ -49,30 +49,6 @@ async fn bf_tostr(
 }
 bf_declare!(tostr, bf_tostr);
 
-fn to_literal(arg: &Var) -> String {
-    match arg {
-        Var::None => "None".to_string(),
-        Var::Int(i) => i.to_string(),
-        Var::Float(f) => f.to_string(),
-        Var::Str(s) => format!("\"{}\"", s),
-        Var::Obj(o) => format!("#{}", o),
-        Var::List(l) => {
-            let mut result = String::new();
-            result.push('{');
-            for (i, v) in l.iter().enumerate() {
-                if i > 0 {
-                    result.push(',');
-                }
-                result.push_str(&to_literal(v));
-            }
-            result.push('}');
-            result
-        }
-        Var::Err(e) => e.name().to_string(),
-        _ => "".to_string(),
-    }
-}
-
 async fn bf_toliteral(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
@@ -82,7 +58,7 @@ async fn bf_toliteral(
     if args.len() != 1 {
         return Ok(Var::Err(E_INVARG));
     }
-    let literal = to_literal(&args[0]);
+    let literal = args[0].to_literal();
     Ok(Var::Str(literal))
 }
 bf_declare!(toliteral, bf_toliteral);

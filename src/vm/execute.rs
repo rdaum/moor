@@ -14,7 +14,7 @@ use crate::model::var::{Error, ErrorPack, Objid, Var, NOTHING};
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::server::Sessions;
 use crate::util::bitenum::BitEnum;
-use crate::vm::activation::Activation;
+use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
 
@@ -208,7 +208,7 @@ impl VM {
             }
             pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name()));
             if a.verb_definer() != a.this {
-                pieces.push(format!(" (this == #{})", a.this.0));
+                pieces.push(format!(" (this == {})", a.this.0));
             }
             // TODO line number
             if i == 0 {
@@ -249,11 +249,20 @@ impl VM {
 
     fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
         self.push(&Var::Err(code));
-        self.raise_error_pack(code.make_error_pack())
+        self.raise_error_pack(code.make_error_pack(None))
+    }
+
+    fn push_error_msg(
+        &mut self,
+        code: Error,
+        msg: String,
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        self.push(&Var::Err(code));
+        self.raise_error_pack(code.make_error_pack(Some(msg)))
     }
 
     fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
-        self.raise_error_pack(code.make_error_pack())
+        self.raise_error_pack(code.make_error_pack(None))
     }
 
     fn unwind_stack(&mut self, why: FinallyReason) -> Result<ExecutionResult, anyhow::Error> {
@@ -355,7 +364,7 @@ impl VM {
     fn pop(&mut self) -> Var {
         self.top_mut()
             .pop()
-            .expect(format!("stack underflow, activation depth: {}", self.stack.len()).as_str())
+            .unwrap_or_else(|| panic!("stack underflow, activation depth: {}", self.stack.len()))
     }
 
     fn push(&mut self, v: &Var) {
@@ -447,9 +456,19 @@ impl VM {
         let result = state.retrieve_verb(this, verb.as_str());
 
         let Ok((binary, verbinfo)) = result else {
-            return self.push_error(E_VERBNF);
+            return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb));
         };
         let top = self.top();
+        let mut callers = top.callers.to_vec();
+        callers.push( Caller {
+            this,
+            verb_name: top.verb_name().to_string(),
+            programmer: top.verb_owner(),
+            verb_loc: top.verb_definer(),
+            player: top.player,
+            line_number: 0,
+        });
+
         let a = Activation::new_for_method(
             binary,
             top.verb_definer(),
@@ -458,6 +477,7 @@ impl VM {
             top.player_flags,
             verbinfo,
             args,
+            callers
         )?;
 
         self.stack.push(a);
@@ -476,12 +496,9 @@ impl VM {
         _caller: Objid,
         args: Vec<Var>,
     ) -> Result<(), anyhow::Error> {
-        // TODO do_pass
-        // TODO stack traces, error catch etc?
-
         let (binary, vi) = state.retrieve_verb(obj, verb_name)?;
 
-        let a = Activation::new_for_method(binary, NOTHING, this, player, player_flags, vi, args)?;
+        let a = Activation::new_for_method(binary, NOTHING, this, player, player_flags, vi, args, vec![])?;
 
         self.stack.push(a);
 

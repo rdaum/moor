@@ -8,6 +8,17 @@ use crate::model::verbs::VerbInfo;
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::{Binary, Op};
 
+// {this, verb-name, programmer, verb-loc, player, line-number}
+#[derive(Clone)]
+pub struct Caller {
+    pub this: Objid,
+    pub verb_name: String,
+    pub programmer: Objid,
+    pub verb_loc: Objid,
+    pub player: Objid,
+    pub line_number: usize,
+}
+
 pub(crate) struct Activation {
     pub(crate) binary: Binary,
     pub(crate) environment: Vec<Var>,
@@ -19,6 +30,7 @@ pub(crate) struct Activation {
     pub(crate) player: Objid,
     pub(crate) player_flags: BitEnum<ObjFlag>,
     pub(crate) verb_info: VerbInfo,
+    pub(crate) callers: Vec<Caller>,
 }
 
 impl Activation {
@@ -30,6 +42,7 @@ impl Activation {
         player_flags: BitEnum<ObjFlag>,
         verb_info: VerbInfo,
         args: Vec<Var>,
+        callers: Vec<Caller>,
     ) -> Result<Self, anyhow::Error> {
         let environment = vec![Var::None; binary.var_names.width()];
 
@@ -46,7 +59,8 @@ impl Activation {
             this,
             player,
             player_flags,
-            verb_info
+            verb_info,
+            callers
         };
 
         a.set_var("this", Var::Obj(this)).unwrap();
