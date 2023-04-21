@@ -73,10 +73,55 @@ Function: none move (obj what, obj where)
 Changes what's location to be where. This is a complex process because a number of permissions checks and notifications must be performed. The actual movement takes place as described in the following paragraphs.
  */
 
+async fn bf_verbs(
+    ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<Mutex<dyn Sessions>>,
+    args: Vec<Var>,
+) -> Result<Var, anyhow::Error> {
+    if args.len() != 1 {
+        return Ok(Var::Err(E_INVARG));
+    }
+    let Var::Obj(obj) = &args[0] else {
+        return Ok(Var::Err(E_TYPE));
+    };
+    let verbs = ws.verbs(*obj)?;
+    let verbs = verbs
+        .iter()
+        .map(|v| Var::Str(v.names.first().unwrap().clone()))
+        .collect();
+    Ok(Var::List(verbs))
+}
+bf_declare!(verbs, bf_verbs);
+
+/*
+Function: list properties (obj object)
+Returns a list of the names of the properties defined directly on the given object, not inherited from its parent. If object is not valid, then E_INVARG is raised. If the programmer does not have read permission on object, then E_PERM is raised.
+ */
+async fn bf_properties(
+    ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<Mutex<dyn Sessions>>,
+    args: Vec<Var>,
+) -> Result<Var, anyhow::Error> {
+    if args.len() != 1 {
+        return Ok(Var::Err(E_INVARG));
+    }
+    let Var::Obj(obj) = &args[0] else {
+        return Ok(Var::Err(E_TYPE));
+    };
+    let props = ws.properties(*obj)?;
+    let props = props.iter().map(|p| Var::Str(p.0.clone())).collect();
+    Ok(Var::List(props))
+}
+bf_declare!(properties, bf_properties);
+
 impl VM {
     pub(crate) fn register_bf_objects(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("create")] = Arc::new(Box::new(BfCreate {}));
         self.bf_funcs[offset_for_builtin("valid")] = Arc::new(Box::new(BfValid {}));
+        self.bf_funcs[offset_for_builtin("verbs")] = Arc::new(Box::new(BfVerbs {}));
+        self.bf_funcs[offset_for_builtin("properties")] = Arc::new(Box::new(BfProperties {}));
 
         Ok(())
     }

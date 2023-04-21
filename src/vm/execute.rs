@@ -125,6 +125,12 @@ macro_rules! binary_var_op {
     };
 }
 
+impl Default for VM {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VM {
     pub fn new() -> Self {
         let mut bf_funcs: Vec<Arc<Box<dyn BfFunction>>> = Vec::with_capacity(BUILTINS.len());
@@ -1096,7 +1102,7 @@ mod tests {
     use crate::db::state::WorldState;
     use crate::db::CommitResult;
     use crate::model::objects::ObjFlag;
-    use crate::model::props::PropFlag;
+    use crate::model::props::{PropAttrs, PropFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 
     use crate::model::var::{Objid, Var};
@@ -1217,6 +1223,26 @@ mod tests {
     }
 
     impl WorldState for MockState {
+        fn location_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
+            unimplemented!()
+        }
+
+        fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
+            unimplemented!()
+        }
+
+        fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+            Ok(BitEnum::all())
+        }
+
+        fn verbs(&mut self, _obj: Objid) -> Result<Vec<VerbInfo>, ObjectError> {
+            unimplemented!()
+        }
+
+        fn properties(&mut self, _obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
+            unimplemented!()
+        }
+
         fn retrieve_verb(
             &mut self,
             obj: Objid,
@@ -1266,34 +1292,6 @@ mod tests {
                 .insert((obj, pname.to_string()), initial_value.unwrap_or(Var::None));
             Ok(())
         }
-
-        fn location_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-            unimplemented!()
-        }
-
-        fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
-            unimplemented!()
-        }
-
-        fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
-            unimplemented!()
-        }
-        fn parent_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-            Ok(Objid(-1))
-        }
-
-        fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
-            Ok(true)
-        }
-
-        fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
-            Ok(CommitResult::Success)
-        }
-
-        fn rollback(&mut self) -> Result<(), anyhow::Error> {
-            Ok(())
-        }
-
         fn find_command_verb_on(
             &mut self,
             _oid: Objid,
@@ -1302,8 +1300,24 @@ mod tests {
             unimplemented!()
         }
 
-        fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-            Ok(BitEnum::all())
+        fn parent_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
+            Ok(Objid(-1))
+        }
+
+        fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
+            Ok(true)
+        }
+
+        fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
+            unimplemented!()
+        }
+
+        fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
+            Ok(CommitResult::Success)
+        }
+
+        fn rollback(&mut self) -> Result<(), anyhow::Error> {
+            Ok(())
         }
     }
 

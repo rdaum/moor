@@ -278,6 +278,24 @@ impl WorldState for ImDBTx {
         obj_attrs.flags.ok_or(ObjectError::ObjectNotFound(obj))
     }
 
+    fn verbs(&mut self, obj: Objid) -> Result<Vec<VerbInfo>, ObjectError> {
+        self.get_verbs(obj, BitEnum::all())
+    }
+
+    fn properties(&mut self, obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
+        let propdefs = self.get_propdefs(obj)?;
+        let properties = propdefs.into_iter().map(|pd| {
+            (
+                pd.pname.clone(),
+                self.get_property(obj, pd.pid, BitEnum::all())
+                    .unwrap()
+                    .unwrap()
+                    ,
+            )
+        });
+        Ok(properties.collect())
+    }
+
     fn retrieve_verb(
         &mut self,
         obj: Objid,
@@ -347,15 +365,14 @@ impl WorldState for ImDBTx {
             return Ok(Var::Int(if forceable { 1 } else { 0 }));
         }
 
-        let find = self
-            .find_property(
-                obj,
-                property_name,
-                BitEnum::new_with(PropAttr::Owner)
-                    | PropAttr::Flags
-                    | PropAttr::Location
-                    | PropAttr::Value,
-            )?;
+        let find = self.find_property(
+            obj,
+            property_name,
+            BitEnum::new_with(PropAttr::Owner)
+                | PropAttr::Flags
+                | PropAttr::Location
+                | PropAttr::Value,
+        )?;
         match find {
             None => Err(PropertyNotFound(obj, property_name.to_string())),
             Some(p) => {

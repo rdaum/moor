@@ -64,7 +64,7 @@ impl Activation {
             player,
             player_flags,
             verb_info,
-            callers
+            callers,
         };
 
         a.set_var("this", Var::Obj(this)).unwrap();
