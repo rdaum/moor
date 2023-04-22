@@ -10,7 +10,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
-use crate::model::var::Var;
+use crate::model::var::{v_err, Var, v_int, v_str};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -50,18 +50,18 @@ async fn bf_strsub(
         false
     } else if args.len() == 4 {
         let Some(Var::Int(case_matters)) = args.get(3) else {
-            return Ok(Var::Err(E_TYPE));
+            return Ok(v_err(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     };
     let (subject, what, with) = (&args[0], &args[1], &args[2]);
     match (subject, what, with) {
         (Var::Str(subject), Var::Str(what), Var::Str(with)) => {
-            Ok(Var::Str(strsub(subject, what, with, case_matters)))
+            Ok(v_str(strsub(subject, what, with, case_matters).as_str()))
         }
-        _ => Ok(Var::Err(E_TYPE)),
+        _ => Ok(v_err(E_TYPE)),
     }
 }
 bf_declare!(strsub, bf_strsub);
@@ -100,17 +100,17 @@ async fn bf_index(
         false
     } else if args.len() == 3 {
         let Some(Var::Int(case_matters)) = args.get(2) else {
-            return Ok(Var::Err(E_TYPE));
+            return Ok(v_err(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     };
 
     let (subject, what) = (&args[0], &args[1]);
     match (subject, what) {
-        (Var::Str(subject), Var::Str(what)) => Ok(Var::Int(str_index(subject, what, case_matters))),
-        _ => Ok(Var::Err(E_TYPE)),
+        (Var::Str(subject), Var::Str(what)) => Ok(v_int(str_index(subject, what, case_matters))),
+        _ => Ok(v_err(E_TYPE)),
     }
 }
 bf_declare!(index, bf_index);
@@ -125,19 +125,19 @@ async fn bf_rindex(
         false
     } else if args.len() == 3 {
         let Some(Var::Int(case_matters)) = args.get(2) else {
-            return Ok(Var::Err(E_TYPE));
+            return Ok(v_err(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     };
 
     let (subject, what) = (&args[0], &args[1]);
     match (subject, what) {
         (Var::Str(subject), Var::Str(what)) => {
-            Ok(Var::Int(str_rindex(subject, what, case_matters)))
+            Ok(v_int(str_rindex(subject, what, case_matters)))
         }
-        _ => Ok(Var::Err(E_TYPE)),
+        _ => Ok(v_err(E_TYPE)),
     }
 }
 bf_declare!(rindex, bf_rindex);
@@ -149,12 +149,12 @@ async fn bf_strcmp(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (str1, str2) = (&args[0], &args[1]);
     match (str1, str2) {
-        (Var::Str(str1), Var::Str(str2)) => Ok(Var::Int(str1.cmp(str2) as i64)),
-        _ => Ok(Var::Err(E_TYPE)),
+        (Var::Str(str1), Var::Str(str2)) => Ok(v_int(str1.cmp(str2) as i64)),
+        _ => Ok(v_err(E_TYPE)),
     }
 }
 bf_declare!(strcmp, bf_strcmp);
@@ -183,7 +183,7 @@ async fn bf_crypt(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.is_empty() || args.len() > 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let salt = if args.len() == 1 {
         let mut rng = rand::thread_rng();
@@ -194,14 +194,14 @@ async fn bf_crypt(
         salt
     } else {
         let Var::Str(salt) = &args[1] else {
-            return Ok(Var::Err(E_TYPE));
+            return Ok(v_err(E_TYPE));
         };
         salt.clone()
     };
     if let Var::Str(text) = &args[0] {
-        Ok(Var::Str(des_crypt(text, salt.as_str())))
+        Ok(v_str(des_crypt(text, salt.as_str()).as_str()))
     } else {
-        Ok(Var::Err(E_TYPE))
+        Ok(v_err(E_TYPE))
     }
 }
 bf_declare!(crypt, bf_crypt);
@@ -213,14 +213,14 @@ async fn bf_string_hash(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     match &args[0] {
         Var::Str(s) => {
             let hash_digest = md5::compute(s.as_bytes());
-            Ok(Var::Str(format!("{:x}", hash_digest)))
+            Ok(v_str(format!("{:x}", hash_digest).as_str()))
         }
-        _ => Ok(Var::Err(E_INVARG)),
+        _ => Ok(v_err(E_INVARG)),
     }
 }
 bf_declare!(string_hash, bf_string_hash);

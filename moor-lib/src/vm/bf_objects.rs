@@ -7,7 +7,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
-use crate::model::var::Var;
+use crate::model::var::{v_err, Var, v_int, v_list};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -38,13 +38,13 @@ async fn bf_valid(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let Var::Obj(obj) = &args[0] else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let is_valid = ws.valid(*obj)?;
-    Ok(Var::Int(if is_valid { 1 } else { 0 }))
+    Ok(v_int(if is_valid { 1 } else { 0 }))
 }
 bf_declare!(valid, bf_valid);
 /*
@@ -80,17 +80,17 @@ async fn bf_verbs(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let Var::Obj(obj) = &args[0] else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let verbs = ws.verbs(*obj)?;
     let verbs = verbs
         .iter()
         .map(|v| Var::Str(v.names.first().unwrap().clone()))
         .collect();
-    Ok(Var::List(verbs))
+    Ok(v_list(verbs))
 }
 bf_declare!(verbs, bf_verbs);
 
@@ -105,14 +105,14 @@ async fn bf_properties(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let Var::Obj(obj) = &args[0] else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let props = ws.properties(*obj)?;
     let props = props.iter().map(|p| Var::Str(p.0.clone())).collect();
-    Ok(Var::List(props))
+    Ok(v_list(props))
 }
 bf_declare!(properties, bf_properties);
 

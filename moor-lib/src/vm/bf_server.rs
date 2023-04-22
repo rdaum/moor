@@ -9,7 +9,7 @@ use crate::db::state::WorldState;
 use crate::model::ObjectError;
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{E_INVARG, E_PERM, E_TYPE};
-use crate::model::var::Var;
+use crate::model::var::{v_err, Var, v_int, v_list};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -31,15 +31,15 @@ async fn bf_notify(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let player = args[0].clone();
     let Var::Obj(player) = player else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let msg = args[1].clone();
     let Var::Str(msg) = msg else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
 
     sess.write().await.send_text(player, msg).await.unwrap();
@@ -55,10 +55,10 @@ async fn bf_connected_players(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
 
-    Ok(Var::List(
+    Ok(v_list(
         sess.read()
             .await
             .connected_players()
@@ -78,19 +78,19 @@ async fn bf_is_player(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let player = args[0].clone();
     let Var::Obj(player) = player else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
 
     let is_player = match ws.flags_of(player) {
         Ok(flags) => flags.contains(ObjFlag::User),
-        Err(ObjectError::ObjectNotFound(_)) => return Ok(Var::Err(E_INVARG)),
+        Err(ObjectError::ObjectNotFound(_)) => return Ok(v_err(E_INVARG)),
         Err(e) => return Err(e.into()),
     };
-    Ok(Var::Int(if is_player { 1 } else { 0 }))
+    Ok(v_int(if is_player { 1 } else { 0 }))
 }
 bf_declare!(is_player, bf_is_player);
 
@@ -101,7 +101,7 @@ async fn bf_caller_perms(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
 
     Ok(Var::Obj(frame.caller_perms))
@@ -115,14 +115,14 @@ async fn bf_set_task_perms(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let Var::Obj(player) = args[0] else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
 
     if !frame.player_flags.contains(ObjFlag::Wizard) {
-        return Ok(Var::Err(E_PERM));
+        return Ok(v_err(E_PERM));
     }
     frame.caller_perms = player;
 
@@ -137,10 +137,10 @@ async fn bf_callers(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
 
-    Ok(Var::List(
+    Ok(v_list(
         frame
             .callers
             .iter()
@@ -167,10 +167,10 @@ async fn bf_task_id(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
 
-    Ok(Var::Int(frame.task_id as i64))
+    Ok(v_int(frame.task_id as i64))
 }
 bf_declare!(task_id, bf_task_id);
 

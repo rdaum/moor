@@ -8,7 +8,7 @@ use crate::compiler::labels::{Label, Offset};
 use crate::db::state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Error, ErrorPack, NOTHING, Objid, Var};
+use crate::model::var::{Error, ErrorPack, v_int, v_list, v_str, NOTHING, Objid, Var};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
@@ -226,7 +226,7 @@ impl VM {
             let piece = pieces.join("");
             backtrace_list.push(Var::Str(piece))
         }
-        backtrace_list.push(Var::Str(String::from("(End of traceback)")));
+        backtrace_list.push(v_str("(End of traceback)"));
         backtrace_list
     }
 
@@ -640,7 +640,7 @@ impl VM {
                     }
                 }
             }
-            Op::MkEmptyList => self.push(&Var::List(vec![])),
+            Op::MkEmptyList => self.push(&v_list(vec![])),
             Op::ListAddTail => {
                 let tail = self.pop();
                 let list = self.pop();
@@ -712,7 +712,7 @@ impl VM {
             }
             Op::MakeSingletonList => {
                 let v = self.pop();
-                self.push(&Var::List(vec![v]))
+                self.push(&v_list(vec![v]))
             }
             Op::PutTemp => {
                 self.top_mut().temp = self.peek_top();
@@ -934,7 +934,7 @@ impl VM {
                 return self.unwind_stack(FinallyReason::Return(ret_val));
             }
             Op::Return0 => {
-                return self.unwind_stack(FinallyReason::Return(Var::Int(0)));
+                return self.unwind_stack(FinallyReason::Return(v_int(0)));
             }
             Op::Done => {
                 return self.unwind_stack(FinallyReason::Return(Var::None));
@@ -987,8 +987,8 @@ impl VM {
                 let Var::_Finally(_marker) = v else {
                     panic!("Stack marker is not type Finally");
                 };
-                self.push(&Var::Int(0) /* fallthrough */);
-                self.push(&Var::Int(0));
+                self.push(&v_int(0) /* fallthrough */);
+                self.push(&v_int(0));
             }
             Op::Continue => {
                 let why = self.pop();
@@ -1106,7 +1106,7 @@ mod tests {
     use crate::model::objects::ObjFlag;
     use crate::model::props::{PropAttrs, PropFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{Objid, Var};
+    use crate::model::var::{v_int, v_list, v_obj, v_str, Objid, Var};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::tasks::parse_cmd::ParsedCommand;
     use crate::tasks::Sessions;
@@ -1385,7 +1385,7 @@ mod tests {
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
-                vec![Var::Str("hello".to_string()), 2.into()],
+                vec![v_str("hello"), 2.into()],
                 Names::new(),
             ),
         );
@@ -1393,7 +1393,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Str("e".to_string()));
+        assert_eq!(result, v_str("e"));
     }
 
     #[test]
@@ -1409,14 +1409,14 @@ mod tests {
                     Return,
                     Done,
                 ],
-                vec![Var::Str("hello".to_string()), 2.into(), 4.into()],
+                vec![v_str("hello"), 2.into(), 4.into()],
                 Names::new(),
             ),
         );
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Str("ell".to_string()));
+        assert_eq!(result, v_str("ell"));
     }
 
     #[test]
@@ -1426,7 +1426,7 @@ mod tests {
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![
-                    Var::List(vec![111.into(), 222.into(), 333.into()]),
+                    v_list(vec![111.into(), 222.into(), 333.into()]),
                     2.into(),
                 ],
                 Names::new(),
@@ -1436,7 +1436,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(222));
+        assert_eq!(result, v_int(222));
     }
 
     #[test]
@@ -1453,7 +1453,7 @@ mod tests {
                     Done,
                 ],
                 vec![
-                    Var::List(vec![111.into(), 222.into(), 333.into()]),
+                    v_list(vec![111.into(), 222.into(), 333.into()]),
                     2.into(),
                     3.into(),
                 ],
@@ -1464,7 +1464,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::List(vec![222.into(), 333.into()]));
+        assert_eq!(result, v_list(vec![222.into(), 333.into()]));
     }
 
     #[test]
@@ -1493,10 +1493,10 @@ mod tests {
                     Done,
                 ],
                 vec![
-                    Var::List(vec![111.into(), 222.into(), 333.into()]),
+                    v_list(vec![111.into(), 222.into(), 333.into()]),
                     2.into(),
                     3.into(),
-                    Var::List(vec![321.into(), 123.into()]),
+                    v_list(vec![321.into(), 123.into()]),
                 ],
                 var_names,
             ),
@@ -1517,7 +1517,7 @@ mod tests {
         let _args = binary.find_var("args");
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::List(vec![2.into(), 3.into(), 4.into()]));
+        assert_eq!(result, v_list(vec![2.into(), 3.into(), 4.into()]));
     }
 
     #[test]
@@ -1529,7 +1529,7 @@ mod tests {
         let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(
             result,
-            Var::List(vec![Var::List(vec![2.into(), 3.into()]), Var::Int(1)])
+            v_list(vec![Var::List(vec![2.into(), 3.into()]), v_int(1)])
         );
     }
 
@@ -1540,7 +1540,7 @@ mod tests {
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(1));
+        assert_eq!(result, v_int(1));
     }
 
     #[test]
@@ -1570,10 +1570,10 @@ mod tests {
                     Done,
                 ],
                 vec![
-                    Var::Str("mandalorian".to_string()),
+                    v_str("mandalorian"),
                     4.into(),
                     7.into(),
-                    Var::Str("bozo".to_string()),
+                    v_str("bozo"),
                 ],
                 var_names,
             ),
@@ -1582,7 +1582,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Str("manbozorian".to_string()));
+        assert_eq!(result, v_str("manbozorian"));
     }
 
     #[test]
@@ -1591,7 +1591,7 @@ mod tests {
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
-                vec![Var::Obj(Objid(0)), Var::Str(String::from("test_prop"))],
+                vec![v_obj(0), v_str("test_prop")],
                 Names::new(),
             ),
         );
@@ -1602,7 +1602,7 @@ mod tests {
                     "test_prop",
                     Objid(0),
                     BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                    Some(Var::Int(666)),
+                    Some(v_int(666)),
                 )
                 .unwrap();
         }
@@ -1610,7 +1610,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(666));
+        assert_eq!(result, v_int(666));
     }
 
     #[test]
@@ -1620,7 +1620,7 @@ mod tests {
         // The first merely returns the value "666" immediately.
         let return_verb_binary = mk_binary(
             vec![Imm(0.into()), Return, Done],
-            vec![Var::Int(666)],
+            vec![v_int(666)],
             Names::new(),
         );
 
@@ -1635,9 +1635,9 @@ mod tests {
                 Done,
             ],
             vec![
-                Var::Obj(Objid(0)),
-                Var::Str(String::from("test_return_verb")),
-                Var::List(vec![]),
+                v_obj(0),
+                v_str("test_return_verb"),
+                v_list(vec![]),
             ],
             Names::new(),
         );
@@ -1652,7 +1652,7 @@ mod tests {
 
         let result = exec_vm(state.as_mut(), &mut vm);
 
-        assert_eq!(result, Var::Int(666));
+        assert_eq!(result, v_int(666));
     }
 
     #[test]
@@ -1663,7 +1663,7 @@ mod tests {
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(3));
+        assert_eq!(result, v_int(3));
     }
 
     #[test]
@@ -1676,7 +1676,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(75));
+        assert_eq!(result, v_int(75));
     }
 
     #[test]
@@ -1688,7 +1688,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(50));
+        assert_eq!(result, v_int(50));
     }
 
     #[test]
@@ -1700,7 +1700,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(50));
+        assert_eq!(result, v_int(50));
     }
 
     #[test]
@@ -1712,7 +1712,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::List(vec![Var::Int(4), Var::Int(10)]));
+        assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
 
     #[test]
@@ -1724,7 +1724,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::List(vec![Var::Int(4), Var::Int(10)]));
+        assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
 
     #[test]
@@ -1738,7 +1738,7 @@ mod tests {
         let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(
             result,
-            Var::List(vec![Var::Int(4), Var::Int(3), Var::Int(2), Var::Int(1)])
+            v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)])
         );
     }
 
@@ -1754,12 +1754,12 @@ mod tests {
         assert_eq!(
             result,
             Var::List(vec![
-                Var::Int(1),
-                Var::Int(2),
-                Var::List(vec![Var::Int(3), Var::Int(4)]),
-                Var::Int(5),
-                Var::List(vec![Var::Int(6), Var::Int(7)]),
-                Var::Int(8),
+                v_int(1),
+                v_int(2),
+                v_list(vec![v_int(3), v_int(4)]),
+                v_int(5),
+                v_list(vec![v_int(6), v_int(7)]),
+                v_int(8),
             ])
         );
     }
@@ -1773,7 +1773,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(2));
+        assert_eq!(result, v_int(2));
     }
 
     #[test]
@@ -1785,7 +1785,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::List(vec![Var::Int(666), Var::Int(321)]));
+        assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
     }
 
     #[test]
@@ -1797,7 +1797,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(666));
+        assert_eq!(result, v_int(666));
     }
 
     #[test]
@@ -1809,7 +1809,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, Var::Int(666));
+        assert_eq!(result, v_int(666));
     }
 
     struct MockClientConnection {

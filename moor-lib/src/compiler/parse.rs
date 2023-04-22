@@ -13,7 +13,8 @@ use crate::compiler::ast::{
 use crate::compiler::labels::Names;
 use crate::compiler::Parse;
 use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::model::var::{Error, Objid, SYSTEM_OBJECT, Var};
+use crate::model::var::{v_err, Objid, SYSTEM_OBJECT, Var};
+use crate::model::var::Error::{E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF};
 
 pub mod moo {
     #[derive(Parser)]
@@ -57,21 +58,21 @@ fn parse_atom(
         Rule::err => {
             let e = pairs.as_str();
             Ok(Expr::VarExpr(match e.to_lowercase().as_str() {
-                "e_type" => Var::Err(Error::E_TYPE),
-                "e_div" => Var::Err(Error::E_DIV),
-                "e_perm" => Var::Err(Error::E_PERM),
-                "e_propnf" => Var::Err(Error::E_PROPNF),
-                "e_verbnf" => Var::Err(Error::E_VERBNF),
-                "e_varnf" => Var::Err(Error::E_VARNF),
-                "e_invind" => Var::Err(Error::E_INVIND),
-                "e_recmove" => Var::Err(Error::E_RECMOVE),
-                "e_maxrec" => Var::Err(Error::E_MAXREC),
-                "e_range" => Var::Err(Error::E_RANGE),
-                "e_args" => Var::Err(Error::E_ARGS),
-                "e_nacc" => Var::Err(Error::E_NACC),
-                "e_invarg" => Var::Err(Error::E_INVARG),
-                "e_quota" => Var::Err(Error::E_QUOTA),
-                "e_float" => Var::Err(Error::E_FLOAT),
+                "e_type" => v_err(E_TYPE),
+                "e_div" => v_err(E_DIV),
+                "e_perm" => v_err(E_PERM),
+                "e_propnf" => v_err(E_PROPNF),
+                "e_verbnf" => v_err(E_VERBNF),
+                "e_varnf" => v_err(E_VARNF),
+                "e_invind" => v_err(E_INVIND),
+                "e_recmove" => v_err(E_RECMOVE),
+                "e_maxrec" => v_err(E_MAXREC),
+                "e_range" => v_err(E_RANGE),
+                "e_args" => v_err(E_ARGS),
+                "e_nacc" => v_err(E_NACC),
+                "e_invarg" => v_err(E_INVARG),
+                "e_quota" => v_err(E_QUOTA),
+                "e_float" => v_err(E_FLOAT),
                 &_ => {
                     panic!("unknown error")
                 }
@@ -724,7 +725,7 @@ mod tests {
     use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::model::var::{Objid, Var};
+    use crate::model::var::{v_err, v_int, v_obj, v_str, Var};
     use crate::model::var::Error::{E_PROPNF, E_VARNF};
     use crate::model::var::Var::Str;
 
@@ -737,13 +738,13 @@ mod tests {
         assert_eq!(
             parsed.stmts,
             vec![Stmt::Expr(Expr::Verb {
-                location: Box::new(Expr::VarExpr(Var::Obj(Objid(0)))),
-                verb: Box::new(Expr::VarExpr(Var::Str("test_verb".to_string()))),
+                location: Box::new(Expr::VarExpr(v_obj(0))),
+                verb: Box::new(Expr::VarExpr(v_str("test_verb"))),
                 args: vec![
-                    Arg::Normal(Expr::VarExpr(Var::Int(1))),
-                    Arg::Normal(Expr::VarExpr(Var::Int(2))),
-                    Arg::Normal(Expr::VarExpr(Var::Int(3))),
-                    Arg::Normal(Expr::VarExpr(Var::Str("test".to_string())))
+                    Arg::Normal(Expr::VarExpr(v_int(1))),
+                    Arg::Normal(Expr::VarExpr(v_int(2))),
+                    Arg::Normal(Expr::VarExpr(v_int(3))),
+                    Arg::Normal(Expr::VarExpr(v_str("test")))
                 ]
             })]
         );
@@ -762,8 +763,8 @@ mod tests {
                 left: Box::new(Id(a)),
                 right: Box::new(Expr::Binary(
                     BinaryOp::Add,
-                    Box::new(VarExpr(Var::Int(1))),
-                    Box::new(VarExpr(Var::Int(2))),
+                    Box::new(VarExpr(v_int(1))),
+                    Box::new(VarExpr(v_int(2))),
                 )),
             })
         );
@@ -796,27 +797,27 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(Var::Int(1))),
-                            Box::new(VarExpr(Var::Int(2))),
+                            Box::new(VarExpr(v_int(1))),
+                            Box::new(VarExpr(v_int(2))),
                         ),
                         statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(Var::Int(5))),
+                            expr: Some(VarExpr(v_int(5))),
                         }],
                     },
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(Var::Int(2))),
-                            Box::new(VarExpr(Var::Int(3))),
+                            Box::new(VarExpr(v_int(2))),
+                            Box::new(VarExpr(v_int(3))),
                         ),
                         statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(Var::Int(3))),
+                            expr: Some(VarExpr(v_int(3))),
                         }],
                     },
                 ],
 
                 otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(Var::Int(6))),
+                    expr: Some(VarExpr(v_int(6))),
                 }],
             }
         );
@@ -834,16 +835,16 @@ mod tests {
             Stmt::ForList {
                 id: x,
                 expr: Expr::List(vec![
-                    Arg::Normal(VarExpr(Var::Int(1))),
-                    Arg::Normal(VarExpr(Var::Int(2))),
-                    Arg::Normal(VarExpr(Var::Int(3))),
+                    Arg::Normal(VarExpr(v_int(1))),
+                    Arg::Normal(VarExpr(v_int(2))),
+                    Arg::Normal(VarExpr(v_int(3))),
                 ]),
                 body: vec![Stmt::Expr(Expr::Assign {
                     left: Box::new(Expr::Id(b)),
                     right: Box::new(Expr::Binary(
                         BinaryOp::Add,
                         Box::new(Expr::Id(x)),
-                        Box::new(VarExpr(Var::Int(5))),
+                        Box::new(VarExpr(v_int(5))),
                     )),
                 })],
             }
@@ -861,14 +862,14 @@ mod tests {
             parse.stmts[0],
             Stmt::ForRange {
                 id: x,
-                from: VarExpr(Var::Int(1)),
-                to: VarExpr(Var::Int(5)),
+                from: VarExpr(v_int(1)),
+                to: VarExpr(v_int(5)),
                 body: vec![Stmt::Expr(Expr::Assign {
                     left: Box::new(Id(b)),
                     right: Box::new(Expr::Binary(
                         BinaryOp::Add,
                         Box::new(Id(x)),
-                        Box::new(VarExpr(Var::Int(5))),
+                        Box::new(VarExpr(v_int(5))),
                     )),
                 })],
             }
@@ -889,16 +890,16 @@ mod tests {
                 Stmt::Expr(Expr::Assign {
                     left: Box::new(Expr::Id(a)),
                     right: Box::new(Expr::List(vec![
-                        Arg::Normal(VarExpr(Var::Int(1))),
-                        Arg::Normal(VarExpr(Var::Int(2))),
-                        Arg::Normal(VarExpr(Var::Int(3))),
+                        Arg::Normal(VarExpr(v_int(1))),
+                        Arg::Normal(VarExpr(v_int(2))),
+                        Arg::Normal(VarExpr(v_int(3))),
                     ])),
                 }),
                 Stmt::Expr(Expr::Assign {
                     left: Box::new(Expr::Id(b)),
                     right: Box::new(Expr::Range {
                         base: Box::new(Expr::Id(a)),
-                        from: Box::new(VarExpr(Var::Int(2))),
+                        from: Box::new(VarExpr(v_int(2))),
                         to: Box::new(Expr::Length),
                     }),
                 }),
@@ -916,14 +917,14 @@ mod tests {
             parse.stmts,
             vec![Stmt::While {
                 id: None,
-                condition: VarExpr(Var::Int(1)),
+                condition: VarExpr(v_int(1)),
                 body: vec![
                     Stmt::Expr(Expr::Assign {
                         left: Box::new(Expr::Id(x)),
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
                             Box::new(Expr::Id(x)),
-                            Box::new(VarExpr(Var::Int(1))),
+                            Box::new(VarExpr(v_int(1))),
                         )),
                     }),
                     Stmt::Cond {
@@ -931,7 +932,7 @@ mod tests {
                             condition: Expr::Binary(
                                 BinaryOp::Gt,
                                 Box::new(Expr::Id(x)),
-                                Box::new(VarExpr(Var::Int(5))),
+                                Box::new(VarExpr(v_int(5))),
                             ),
                             statements: vec![Stmt::Break { exit: None }],
                         }],
@@ -953,14 +954,14 @@ mod tests {
             parse.stmts,
             vec![Stmt::While {
                 id: Some(chuckles),
-                condition: VarExpr(Var::Int(1)),
+                condition: VarExpr(v_int(1)),
                 body: vec![
                     Stmt::Expr(Expr::Assign {
                         left: Box::new(Id(x)),
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
                             Box::new(Id(x)),
-                            Box::new(VarExpr(Var::Int(1))),
+                            Box::new(VarExpr(v_int(1))),
                         )),
                     }),
                     Stmt::Cond {
@@ -968,7 +969,7 @@ mod tests {
                             condition: Expr::Binary(
                                 BinaryOp::Gt,
                                 Box::new(Id(x)),
-                                Box::new(VarExpr(Var::Int(5))),
+                                Box::new(VarExpr(v_int(5))),
                             ),
                             statements: vec![Stmt::Break {
                                 exit: Some(chuckles)
@@ -990,10 +991,10 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Verb {
                 location: Box::new(Prop {
-                    location: Box::new(VarExpr(Var::Obj(Objid(0)))),
+                    location: Box::new(VarExpr(v_obj(0))),
                     property: Box::new(VarExpr(Str("string_utils".to_string()))),
                 }),
-                verb: Box::new(VarExpr(Var::Str("from_list".to_string()))),
+                verb: Box::new(VarExpr(v_str("from_list"))),
                 args: vec![Arg::Normal(Id(test_string))],
             })]
         );
@@ -1031,9 +1032,9 @@ mod tests {
                         location: Box::new(Id(this)),
                         property: Box::new(VarExpr(Str("stack".to_string()))),
                     }),
-                    Box::new(VarExpr(Var::Int(5))),
+                    Box::new(VarExpr(v_int(5))),
                 )),
-                right: Box::new(VarExpr(Var::Int(5))),
+                right: Box::new(VarExpr(v_int(5))),
             })]
         );
     }
@@ -1050,9 +1051,9 @@ mod tests {
                 Stmt::ForList {
                     id: i,
                     expr: Expr::List(vec![
-                        Arg::Normal(VarExpr(Var::Int(1))),
-                        Arg::Normal(VarExpr(Var::Int(2))),
-                        Arg::Normal(VarExpr(Var::Int(3))),
+                        Arg::Normal(VarExpr(v_int(1))),
+                        Arg::Normal(VarExpr(v_int(2))),
+                        Arg::Normal(VarExpr(v_int(3))),
                     ]),
                     body: vec![],
                 },
@@ -1170,19 +1171,19 @@ mod tests {
                 Stmt::ForList {
                     id: a,
                     expr: Expr::List(vec![
-                        Arg::Normal(VarExpr(Var::Int(1))),
-                        Arg::Normal(VarExpr(Var::Int(2))),
-                        Arg::Normal(VarExpr(Var::Int(3))),
+                        Arg::Normal(VarExpr(v_int(1))),
+                        Arg::Normal(VarExpr(v_int(2))),
+                        Arg::Normal(VarExpr(v_int(3))),
                     ]),
                     body: vec![],
                 },
                 Stmt::Expr(Expr::Assign {
                     left: Box::new(Id(info)),
-                    right: Box::new(VarExpr(Var::Int(5))),
+                    right: Box::new(VarExpr(v_int(5))),
                 }),
                 Stmt::Expr(Expr::Assign {
                     left: Box::new(Id(forgotten)),
-                    right: Box::new(VarExpr(Var::Int(3))),
+                    right: Box::new(VarExpr(v_int(3))),
                 }),
             ]
         );
@@ -1202,15 +1203,15 @@ mod tests {
                 arms: vec![CondArm {
                     condition: Expr::Binary(
                         BinaryOp::Eq,
-                        Box::new(VarExpr(Var::Int(5))),
-                        Box::new(VarExpr(Var::Int(5))),
+                        Box::new(VarExpr(v_int(5))),
+                        Box::new(VarExpr(v_int(5))),
                     ),
                     statements: vec![Stmt::Return {
-                        expr: Some(VarExpr(Var::Int(5)))
+                        expr: Some(VarExpr(v_int(5)))
                     }],
                 }],
                 otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(Var::Int(3)))
+                    expr: Some(VarExpr(v_int(3)))
                 }],
             }]
         );
@@ -1233,26 +1234,26 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(Var::Int(5))),
-                            Box::new(VarExpr(Var::Int(5))),
+                            Box::new(VarExpr(v_int(5))),
+                            Box::new(VarExpr(v_int(5))),
                         ),
                         statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(Var::Int(5)))
+                            expr: Some(VarExpr(v_int(5)))
                         }],
                     },
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(Var::Int(2))),
-                            Box::new(VarExpr(Var::Int(2))),
+                            Box::new(VarExpr(v_int(2))),
+                            Box::new(VarExpr(v_int(2))),
                         ),
                         statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(Var::Int(2)))
+                            expr: Some(VarExpr(v_int(2)))
                         }],
                     },
                 ],
                 otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(Var::Int(3)))
+                    expr: Some(VarExpr(v_int(3)))
                 }],
             }]
         );
@@ -1269,11 +1270,11 @@ mod tests {
                 arms: vec![CondArm {
                     condition: Expr::Binary(
                         BinaryOp::In,
-                        Box::new(VarExpr(Var::Int(5))),
+                        Box::new(VarExpr(v_int(5))),
                         Box::new(Expr::List(vec![
-                            Arg::Normal(VarExpr(Var::Int(1))),
-                            Arg::Normal(VarExpr(Var::Int(2))),
-                            Arg::Normal(VarExpr(Var::Int(3))),
+                            Arg::Normal(VarExpr(v_int(1))),
+                            Arg::Normal(VarExpr(v_int(2))),
+                            Arg::Normal(VarExpr(v_int(3))),
                         ])),
                     ),
                     statements: vec![],
@@ -1295,10 +1296,10 @@ mod tests {
         assert_eq!(
             parse.stmts,
             vec![Stmt::TryExcept {
-                body: vec![Stmt::Expr(Expr::VarExpr(Var::Int(5)))],
+                body: vec![Stmt::Expr(Expr::VarExpr(v_int(5)))],
                 excepts: vec![ExceptArm {
                     id: None,
-                    codes: CatchCodes::Codes(vec![Arg::Normal(VarExpr(Var::Err(E_PROPNF)))]),
+                    codes: CatchCodes::Codes(vec![Arg::Normal(VarExpr(v_err(E_PROPNF)))]),
                     statements: vec![Stmt::Return { expr: None }],
                 }],
             }]
@@ -1326,9 +1327,9 @@ mod tests {
                 BinaryOp::In,
                 Box::new(Id(a)),
                 Box::new(Expr::List(vec![
-                    Arg::Normal(VarExpr(Var::Int(1))),
-                    Arg::Normal(VarExpr(Var::Int(2))),
-                    Arg::Normal(VarExpr(Var::Int(3))),
+                    Arg::Normal(VarExpr(v_int(1))),
+                    Arg::Normal(VarExpr(v_int(2))),
+                    Arg::Normal(VarExpr(v_int(3))),
                 ])),
             ))]
         );
@@ -1351,9 +1352,9 @@ mod tests {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
                 verb: Box::new(VarExpr(Str("verb".to_string()))),
                 args: vec![
-                    Arg::Normal(VarExpr(Var::Int(1))),
-                    Arg::Normal(VarExpr(Var::Int(2))),
-                    Arg::Normal(VarExpr(Var::Int(3))),
+                    Arg::Normal(VarExpr(v_int(1))),
+                    Arg::Normal(VarExpr(v_int(2))),
+                    Arg::Normal(VarExpr(v_int(3))),
                 ],
             })]
         );
@@ -1380,7 +1381,7 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Unary(
                 UnaryOp::Not,
-                Box::new(VarExpr(Var::Int(2))),
+                Box::new(VarExpr(v_int(2))),
             ))]
         );
     }
@@ -1395,7 +1396,7 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Binary(
                 BinaryOp::LtE,
-                Box::new(VarExpr(Var::Int(2))),
+                Box::new(VarExpr(v_int(2))),
                 Box::new(Expr::Assign {
                     left: Box::new(Id(len)),
                     right: Box::new(Expr::Call {
@@ -1418,11 +1419,11 @@ mod tests {
                 right: Box::new(Expr::Cond {
                     condition: Box::new(Expr::Binary(
                         BinaryOp::Eq,
-                        Box::new(VarExpr(Var::Int(1))),
-                        Box::new(VarExpr(Var::Int(2))),
+                        Box::new(VarExpr(v_int(1))),
+                        Box::new(VarExpr(v_int(2))),
                     )),
-                    consequence: Box::new(VarExpr(Var::Int(3))),
-                    alternative: Box::new(VarExpr(Var::Int(4))),
+                    consequence: Box::new(VarExpr(v_int(3))),
+                    alternative: Box::new(VarExpr(v_int(4))),
                 }),
             })]
         );
@@ -1473,13 +1474,13 @@ mod tests {
                 Stmt::ForList {
                     id: parse.names.find_name("line").unwrap(),
                     expr: Expr::List(vec![
-                        Arg::Normal(VarExpr(Var::Int(1))),
-                        Arg::Normal(VarExpr(Var::Int(2))),
-                        Arg::Normal(VarExpr(Var::Int(3))),
+                        Arg::Normal(VarExpr(v_int(1))),
+                        Arg::Normal(VarExpr(v_int(2))),
+                        Arg::Normal(VarExpr(v_int(3))),
                     ]),
                     body: vec![],
                 },
-                Stmt::Expr(VarExpr(Var::Int(52))),
+                Stmt::Expr(VarExpr(v_int(52))),
             ]
         );
     }
@@ -1489,14 +1490,14 @@ mod tests {
         let program = "return {`x ! e_varnf => 666'};";
         let parse = parse_program(program).unwrap();
 
-        let varnf = Arg::Normal(VarExpr(Var::Err(E_VARNF)));
+        let varnf = Arg::Normal(VarExpr(v_err(E_VARNF)));
         assert_eq!(
             parse.stmts,
             vec![Stmt::Return {
                 expr: Some(Expr::List(vec![Arg::Normal(Expr::Catch {
                     trye: Box::new(Id(parse.names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
-                    except: Some(Box::new(VarExpr(Var::Int(666)))),
+                    except: Some(Box::new(VarExpr(v_int(666)))),
                 })],))
             }]
         )
@@ -1512,7 +1513,7 @@ mod tests {
             vec![Stmt::Expr(Expr::Catch {
                 trye: Box::new(Verb {
                     location: Box::new(Expr::Prop {
-                        location: Box::new(VarExpr(Var::Obj(Objid(0)))),
+                        location: Box::new(VarExpr(v_obj(0))),
                         property: Box::new(VarExpr(Str("ftp_client".to_string()))),
                     }),
                     verb: Box::new(VarExpr(Str("finish_get".to_string()))),

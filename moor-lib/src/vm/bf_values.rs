@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
-use crate::model::var::{Objid, Var};
+use crate::model::var::{v_err, v_int, v_obj, Objid, Var, v_float, v_str};
 use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
@@ -21,7 +21,7 @@ async fn bf_typeof(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     let arg = args[0].clone();
-    Ok(Var::Int(arg.type_id() as i64))
+    Ok(v_int(arg.type_id() as i64))
 }
 bf_declare!(typeof, bf_typeof);
 
@@ -44,7 +44,7 @@ async fn bf_tostr(
             _ => {}
         }
     }
-    Ok(Var::Str(result))
+    Ok(v_str(result.as_str()))
 }
 bf_declare!(tostr, bf_tostr);
 
@@ -55,10 +55,10 @@ async fn bf_toliteral(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let literal = args[0].to_literal();
-    Ok(Var::Str(literal))
+    Ok(v_str(literal.as_str()))
 }
 bf_declare!(toliteral, bf_toliteral);
 
@@ -69,20 +69,20 @@ async fn bf_toint(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     match &args[0] {
-        Var::Int(i) => Ok(Var::Int(*i)),
-        Var::Float(f) => Ok(Var::Int(*f as i64)),
+        Var::Int(i) => Ok(v_int(*i)),
+        Var::Float(f) => Ok(v_int(*f as i64)),
         Var::Str(s) => {
             let i = s.parse::<i64>();
             match i {
-                Ok(i) => Ok(Var::Int(i)),
-                Err(_) => Ok(Var::Int(0)),
+                Ok(i) => Ok(v_int(i)),
+                Err(_) => Ok(v_int(0)),
             }
         }
-        Var::Err(e) => Ok(Var::Int(*e as i64)),
-        _ => Ok(Var::Err(E_INVARG)),
+        Var::Err(e) => Ok(v_int(*e as i64)),
+        _ => Ok(v_err(E_INVARG)),
     }
 }
 bf_declare!(toint, bf_toint);
@@ -94,7 +94,7 @@ async fn bf_toobj(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     match &args[0] {
         Var::Int(i) => Ok(Var::Obj(Objid(*i))),
@@ -102,18 +102,18 @@ async fn bf_toobj(
         Var::Str(s) if s.starts_with('#') => {
             let i = s[1..].parse::<i64>();
             match i {
-                Ok(i) => Ok(Var::Obj(Objid(i))),
-                Err(_) => Ok(Var::Obj(Objid(0))),
+                Ok(i) => Ok(v_obj(i)),
+                Err(_) => Ok(v_obj(0)),
             }
         }
         Var::Str(s) => {
             let i = s.parse::<i64>();
             match i {
-                Ok(i) => Ok(Var::Obj(Objid(i))),
-                Err(_) => Ok(Var::Obj(Objid(0))),
+                Ok(i) => Ok(v_obj(i)),
+                Err(_) => Ok(v_obj(0)),
             }
         }
-        _ => Ok(Var::Err(E_INVARG)),
+        _ => Ok(v_err(E_INVARG)),
     }
 }
 bf_declare!(toobj, bf_toobj);
@@ -125,20 +125,20 @@ async fn bf_tofloat(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     match &args[0] {
-        Var::Int(i) => Ok(Var::Float(*i as f64)),
-        Var::Float(f) => Ok(Var::Float(*f)),
+        Var::Int(i) => Ok(v_float(*i as f64)),
+        Var::Float(f) => Ok(v_float(*f)),
         Var::Str(s) => {
             let f = s.parse::<f64>();
             match f {
-                Ok(f) => Ok(Var::Float(f)),
-                Err(_) => Ok(Var::Float(0.0)),
+                Ok(f) => Ok(v_float(f)),
+                Err(_) => Ok(v_float(0.0)),
             }
         }
-        Var::Err(e) => Ok(Var::Float(*e as u8 as f64)),
-        _ => Ok(Var::Err(E_INVARG)),
+        Var::Err(e) => Ok(v_float(*e as u8 as f64)),
+        _ => Ok(v_err(E_INVARG)),
     }
 }
 bf_declare!(tofloat, bf_tofloat);
@@ -150,13 +150,13 @@ async fn bf_equal(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let result = match (&args[0], &args[1]) {
         (Var::Str(s1), Var::Str(s2)) => s1.to_lowercase() == s2.to_lowercase(),
         _ => args[0] == args[1],
     };
-    Ok(Var::Int(if result { 1 } else { 0 }))
+    Ok(v_int(if result { 1 } else { 0 }))
 }
 bf_declare!(equal, bf_equal);
 
@@ -167,7 +167,7 @@ async fn bf_value_bytes(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     unimplemented!("value_bytes");
 }
@@ -180,11 +180,11 @@ async fn bf_value_hash(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let mut s = DefaultHasher::new();
     args[0].hash(&mut s);
-    Ok(Var::Int(s.finish() as i64))
+    Ok(v_int(s.finish() as i64))
 }
 bf_declare!(value_hash, bf_value_hash);
 
@@ -195,13 +195,13 @@ async fn bf_length(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
 
     match &args[0] {
-        Var::Str(s) => Ok(Var::Int(s.len() as i64)),
-        Var::List(l) => Ok(Var::Int(l.len() as i64)),
-        _ => Ok(Var::Err(E_TYPE)),
+        Var::Str(s) => Ok(v_int(s.len() as i64)),
+        Var::List(l) => Ok(v_int(l.len() as i64)),
+        _ => Ok(v_err(E_TYPE)),
     }
 }
 bf_declare!(length, bf_length);

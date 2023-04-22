@@ -1,6 +1,6 @@
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Objid, Var};
+use crate::model::var::{v_int, v_list, v_str, Objid, Var, v_objid, NOTHING};
 use crate::model::var::Error;
 use crate::model::var::Error::E_VARNF;
 use crate::model::verbs::VerbInfo;
@@ -66,25 +66,25 @@ impl Activation {
             callers,
         };
 
-        a.set_var("this", Var::Obj(this)).unwrap();
-        a.set_var("player", Var::Obj(player)).unwrap();
-        a.set_var("caller", Var::Obj(caller)).unwrap();
-        a.set_var("NUM", Var::Int(0)).unwrap();
-        a.set_var("OBJ", Var::Int(1)).unwrap();
-        a.set_var("STR", Var::Int(2)).unwrap();
-        a.set_var("ERR", Var::Int(3)).unwrap();
-        a.set_var("LIST", Var::Int(4)).unwrap();
-        a.set_var("INT", Var::Int(0)).unwrap();
-        a.set_var("FLOAT", Var::Int(9)).unwrap();
+        a.set_var("this", v_objid(this)).unwrap();
+        a.set_var("player", v_objid(player)).unwrap();
+        a.set_var("caller", v_objid(caller)).unwrap();
+        a.set_var("NUM", v_int(0)).unwrap();
+        a.set_var("OBJ", v_int(1)).unwrap();
+        a.set_var("STR", v_int(2)).unwrap();
+        a.set_var("ERR", v_int(3)).unwrap();
+        a.set_var("LIST", v_int(4)).unwrap();
+        a.set_var("INT", v_int(0)).unwrap();
+        a.set_var("FLOAT", v_int(9)).unwrap();
 
-        a.set_var("verb", Var::Str(verb_name)).unwrap();
-        a.set_var("argstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("args", Var::List(args)).unwrap();
-        a.set_var("iobjstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("iobj", Var::Obj(Objid(-1))).unwrap();
-        a.set_var("dobjstr", Var::Str(String::from(""))).unwrap();
-        a.set_var("dobj", Var::Obj(Objid(-1))).unwrap();
-        a.set_var("prepstr", Var::Str(String::from(""))).unwrap();
+        a.set_var("verb", v_str(verb_name.as_str())).unwrap();
+        a.set_var("argstr", v_str("")).unwrap();
+        a.set_var("args", v_list(args)).unwrap();
+        a.set_var("iobjstr", v_str("")).unwrap();
+        a.set_var("iobj", v_objid(NOTHING)).unwrap();
+        a.set_var("dobjstr", v_str("")).unwrap();
+        a.set_var("dobj", v_objid(NOTHING)).unwrap();
+        a.set_var("prepstr", v_str("")).unwrap();
 
         Ok(a)
     }

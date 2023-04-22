@@ -234,7 +234,7 @@ mod tests {
     use crate::db::mock_matching_env::{
         MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
     };
-    use crate::model::var::NOTHING;
+    use crate::model::var::{v_str, NOTHING};
 
     use super::*;
 
@@ -285,7 +285,7 @@ mod tests {
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
         assert_eq!(parsed.iobj, Objid(-1));
-        assert_eq!(parsed.args, vec![Var::Str("obj".to_string())]);
+        assert_eq!(parsed.args, vec![v_str("obj")]);
         assert_eq!(parsed.argstr, "obj");
     }
 
@@ -303,9 +303,9 @@ mod tests {
         assert_eq!(
             parsed.args,
             vec![
-                Var::Str("arg1".to_string()),
-                Var::Str("arg2".to_string()),
-                Var::Str("arg3".to_string())
+                v_str("arg1"),
+                v_str("arg2"),
+                v_str("arg3")
             ]
         );
         assert_eq!(parsed.argstr, "arg1 arg2 arg3");
@@ -326,9 +326,9 @@ mod tests {
         assert_eq!(
             parsed.args,
             vec![
-                Var::Str("obj".to_string()),
-                Var::Str("to".to_string()),
-                Var::Str("player".to_string())
+                v_str("obj"),
+                v_str("to"),
+                v_str("player")
             ]
         );
         assert_eq!(parsed.argstr, "obj to player");
@@ -346,8 +346,8 @@ mod tests {
         assert_eq!(
             parsed.args,
             vec![
-                Var::Str("hello,".to_string()),
-                Var::Str("world!".to_string())
+                v_str("hello,"),
+                v_str("world!")
             ]
         );
         assert_eq!(parsed.argstr, "hello, world!");
@@ -367,8 +367,8 @@ mod tests {
         assert_eq!(
             parsed.args,
             vec![
-                Var::Str("waves".to_string()),
-                Var::Str("happily.".to_string())
+                v_str("waves"),
+                v_str("happily.")
             ]
         );
         assert_eq!(parsed.argstr, "waves happily.");
@@ -388,8 +388,8 @@ mod tests {
         assert_eq!(
             parsed.args,
             vec![
-                Var::Str("waves".to_string()),
-                Var::Str("happily.".to_string())
+                v_str("waves"),
+                v_str("happily.")
             ]
         );
         assert_eq!(parsed.argstr, "waves happily.");
@@ -409,9 +409,9 @@ mod tests {
         assert_eq!(
             parsed.args,
             vec![
-                Var::Str("1".to_string()),
-                Var::Str("+".to_string()),
-                Var::Str("1".to_string())
+                v_str("1"),
+                v_str("+"),
+                v_str("1")
             ]
         );
         assert_eq!(parsed.argstr, "1 + 1");
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "hello, world!");
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
-        assert_eq!(parsed.args, vec![Var::Str("hello, world!".to_string())]);
+        assert_eq!(parsed.args, vec![v_str("hello, world!")]);
         assert_eq!(parsed.argstr, "\"hello, world!\"");
         assert_eq!(parsed.dobj, Objid(-1));
         assert_eq!(parsed.iobj, Objid(-1));
@@ -443,7 +443,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "hello, world!");
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
-        assert_eq!(parsed.args, vec![Var::Str("hello, world!".to_string())]);
+        assert_eq!(parsed.args, vec![v_str("hello, world!")]);
         assert_eq!(parsed.argstr, "\"hello, world!\"");
         assert_eq!(parsed.dobj, Objid(-1));
         assert_eq!(parsed.iobj, Objid(-1));
@@ -458,7 +458,7 @@ mod tests {
         let result = parse_command("get thing1", match_object_fn);
         assert_eq!(result.verb, "get".to_string());
         assert_eq!(result.argstr, "thing1".to_string());
-        assert_eq!(result.args, vec![Var::Str("thing1".to_string())]);
+        assert_eq!(result.args, vec![v_str("thing1")]);
         assert_eq!(result.dobjstr, "thing1".to_string());
         assert_eq!(result.dobj, MOCK_THING1);
         assert_eq!(result.prepstr, "".to_string());
@@ -479,9 +479,9 @@ mod tests {
         assert_eq!(
             result.args,
             vec![
-                Var::Str("thing1".to_string()),
-                Var::Str("in".to_string()),
-                Var::Str("t2".to_string())
+                v_str("thing1"),
+                v_str("in"),
+                v_str("t2")
             ]
         );
         assert_eq!(result.dobjstr, "thing1".to_string());
@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(result.argstr, "at here".to_string());
         assert_eq!(
             result.args,
-            vec![Var::Str("at".to_string()), Var::Str("here".to_string()),]
+            vec![v_str("at"), v_str("here"),]
         );
         assert_eq!(result.dobjstr, "".to_string());
         assert_eq!(result.dobj, NOTHING);

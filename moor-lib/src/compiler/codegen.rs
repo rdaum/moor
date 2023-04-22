@@ -12,7 +12,7 @@ use crate::compiler::ast::{
 use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
-use crate::model::var::Var;
+use crate::model::var::{v_int, Var};
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
 use crate::vm::opcode::Op::Jump;
 
@@ -471,7 +471,7 @@ impl CodegenState {
                         self.generate_expr(except.as_ref())?;
                     }
                     None => {
-                        self.emit(Op::Val(Var::Int(1)));
+                        self.emit(Op::Val(v_int(1)));
                         self.emit(Op::Ref);
                     }
                 }
@@ -519,7 +519,7 @@ impl CodegenState {
 
                 // Note that MOO is 1-indexed, so this is counter value is 1 in LambdaMOO;
                 // we use 0 here to make it easier to implement the ForList instruction.
-                self.emit(Op::Val(Var::Int(0))); /* loop list index... */
+                self.emit(Op::Val(v_int(0))); /* loop list index... */
                 self.push_stack(1);
                 let loop_top = self.make_label(Some(*id));
                 self.commit_label(loop_top);
@@ -774,7 +774,7 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use crate::model::var::Error::{E_INVARG, E_PERM, E_PROPNF};
-    use crate::model::var::Objid;
+    use crate::model::var::{v_obj, Objid};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::ScatterLabel;
 
@@ -1063,7 +1063,7 @@ mod tests {
                 ListAddTail,
                 Imm(three),
                 ListAddTail,
-                Val(Var::Int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
+                Val(v_int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
                 ForList {
                     id: x,
                     label: 1.into()
@@ -2027,7 +2027,7 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(binary.find_literal(Var::Obj(Objid(0)))),
+                Imm(binary.find_literal(v_obj(0))),
                 Imm(binary.find_literal("test_verb".into())),
                 MkEmptyList,
                 CallVerb,

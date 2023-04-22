@@ -857,7 +857,7 @@ mod tests {
     use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
     use crate::model::props::{PropAttr, Propdef, PropFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{Objid, Var};
+    use crate::model::var::{v_int, v_str, Objid};
     use crate::model::verbs::{VerbAttr, VerbFlag};
     use crate::util::bitenum::BitEnum;
     use crate::vm::opcode::Binary;
@@ -1038,7 +1038,7 @@ mod tests {
                 "size",
                 Objid(2),
                 BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                Some(Var::Int(42)),
+                Some(v_int(42)),
             )
             .unwrap();
 
@@ -1104,7 +1104,7 @@ mod tests {
                 "test",
                 parent,
                 BitEnum::new_with(PropFlag::Chown) | PropFlag::Read,
-                Some(Var::Str(String::from("testing"))),
+                Some(v_str("testing")),
             )
             .unwrap();
 
@@ -1130,7 +1130,7 @@ mod tests {
             &mut tx,
             pid,
             child1,
-            Var::Str(String::from("testing")),
+            v_str("testing"),
             parent,
             BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
         )
@@ -1153,7 +1153,7 @@ mod tests {
             &mut tx,
             pid,
             child2,
-            Var::Str(String::from("testing")),
+            v_str("testing"),
             parent,
             BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
         )

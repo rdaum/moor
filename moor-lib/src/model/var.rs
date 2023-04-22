@@ -10,6 +10,7 @@ use int_enum::IntEnum;
 use num_traits::identities::Zero;
 
 use crate::compiler::labels::Label;
+use crate::model::var::Error::{E_RANGE, E_TYPE};
 
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash,
@@ -156,6 +157,28 @@ pub enum Var {
     _Catch(Label),
     _Finally(Label),
     _Label(Label),
+}
+
+pub fn v_int(i: i64) -> Var {
+    Var::Int(i)
+}
+pub fn v_float(f: f64) -> Var {
+    Var::Float(f)
+}
+pub fn v_str(s: &str) -> Var {
+    Var::Str(s.to_string())
+}
+pub fn v_objid(o: Objid) -> Var {
+    Var::Obj(o)
+}
+pub fn v_obj(o : i64) -> Var {
+    Var::Obj(Objid(o))
+}
+pub fn v_err(e: Error) -> Var {
+    Var::Err(e)
+}
+pub fn v_list(l: Vec<Var>) -> Var {
+    Var::List(l)
 }
 
 impl Var {
@@ -323,11 +346,11 @@ macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
             match (self, v) {
-                (Var::Float(l), Var::Float(r)) => Ok(Var::Float(l.$op(*r))),
-                (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.$op(*r))),
-                (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.$op(*r as f64))),
-                (Var::Int(l), Var::Float(r)) => Ok(Var::Float((*l as f64).$op(*r))),
-                (_, _) => Err(Error::E_TYPE),
+                (Var::Float(l), Var::Float(r)) => Ok(v_float(l.$op(*r))),
+                (Var::Int(l), Var::Int(r)) => Ok(v_int(l.$op(*r))),
+                (Var::Float(l), Var::Int(r)) => Ok(v_float(l.$op(*r as f64))),
+                (Var::Int(l), Var::Float(r)) => Ok(v_float((*l as f64).$op(*r))),
+                (_, _) => Ok(v_err(E_TYPE)),
             }
         }
     };
@@ -346,7 +369,7 @@ impl Var {
 
     pub fn has_member(&self, v: &Var) -> Var {
         let Var::List(l) = self else {
-            return Var::Err(Error::E_TYPE);
+            return v_err(E_TYPE);
         };
 
         Var::Int(if l.contains(v) { 1 } else { 0 })
@@ -358,58 +381,58 @@ impl Var {
 
     pub fn add(&self, v: &Var) -> Result<Var, Error> {
         match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Ok(Var::Float(*l + *r)),
-            (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l + r)),
-            (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l + (*r as f64))),
-            (Var::Int(l), Var::Float(r)) => Ok(Var::Float(*l as f64 + *r)),
+            (Var::Float(l), Var::Float(r)) => Ok(v_float(*l + *r)),
+            (Var::Int(l), Var::Int(r)) => Ok(v_int(l + r)),
+            (Var::Float(l), Var::Int(r)) => Ok(v_float(*l + (*r as f64))),
+            (Var::Int(l), Var::Float(r)) => Ok(v_float(*l as f64 + *r)),
             (Var::Str(s), Var::Str(r)) => {
                 let mut c = s.clone();
                 c.push_str(r);
-                Ok(Var::Str(c))
+                Ok(v_str(c.as_str()))
             }
-            (_, _) => Err(Error::E_TYPE),
+            (_, _) => Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn negative(&self) -> Result<Var, Error> {
         match self {
-            Var::Int(l) => Ok(Var::Int(-*l)),
-            Var::Float(f) => Ok(Var::Float(f.neg())),
-            _ => Err(Error::E_TYPE),
+            Var::Int(l) => Ok(v_int(-*l)),
+            Var::Float(f) => Ok(v_float(f.neg())),
+            _ => Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn modulus(&self, v: &Var) -> Result<Var, Error> {
         match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Ok(Var::Float(*l % *r)),
-            (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l % r)),
-            (Var::Float(l), Var::Int(r)) => Ok(Var::Float(*l % (*r as f64))),
-            (Var::Int(l), Var::Float(r)) => Ok(Var::Float(*l as f64 % (*r))),
-            (_, _) => Err(Error::E_TYPE),
+            (Var::Float(l), Var::Float(r)) => Ok(v_float(*l % *r)),
+            (Var::Int(l), Var::Int(r)) => Ok(v_int(l % r)),
+            (Var::Float(l), Var::Int(r)) => Ok(v_float(*l % (*r as f64))),
+            (Var::Int(l), Var::Float(r)) => Ok(v_float(*l as f64 % (*r))),
+            (_, _) =>Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn pow(&self, v: &Var) -> Result<Var, Error> {
         match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Ok(Var::Float(l.powf(*r))),
-            (Var::Int(l), Var::Int(r)) => Ok(Var::Int(l.pow(*r as u32))),
-            (Var::Float(l), Var::Int(r)) => Ok(Var::Float(l.powi(*r as i32))),
-            (Var::Int(l), Var::Float(r)) => Ok(Var::Float((*l as f64).powf(*r))),
-            (_, _) => Err(Error::E_TYPE),
+            (Var::Float(l), Var::Float(r)) => Ok(v_float(l.powf(*r))),
+            (Var::Int(l), Var::Int(r)) => Ok(v_int(l.pow(*r as u32))),
+            (Var::Float(l), Var::Int(r)) => Ok(v_float(l.powi(*r as i32))),
+            (Var::Int(l), Var::Float(r)) => Ok(v_float((*l as f64).powf(*r))),
+            (_, _) =>Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn index(&self, idx: usize) -> Result<Var, Error> {
         match self {
             Var::List(l) => match l.get(idx) {
-                None => Err(Error::E_RANGE),
+                None => Ok(v_err(E_RANGE)),
                 Some(v) => Ok(v.clone()),
             },
             Var::Str(s) => match s.get(idx..idx + 1) {
-                None => Err(Error::E_RANGE),
-                Some(v) => Ok(Var::Str(String::from(v))),
+                None => Ok(v_err(E_RANGE)),
+                Some(v) => Ok(v_str(v)),
             },
-            _ => Err(Error::E_TYPE),
+            _ => Ok(v_err(E_TYPE)),
         }
     }
 
@@ -418,24 +441,24 @@ impl Var {
             Var::Str(s) => {
                 let len = s.len() as i64;
                 if from <= 0 || from > len + 1 || to < 1 || to > len {
-                    return Err(Error::E_RANGE);
+                    return Ok(v_err(E_RANGE));
                 }
                 let (from, to) = (from as usize, to as usize);
-                Ok(Var::Str(s[from - 1..to].to_string()))
+                Ok(v_str(&s[from - 1..to]))
             }
             Var::List(l) => {
                 let len = l.len() as i64;
                 if from <= 0 || from > len + 1 || to < 1 || to > len {
-                    return Err(Error::E_RANGE);
+                    return Ok(v_err(E_RANGE));
                 }
                 let (from, to) = (from as usize, to as usize);
                 let mut res = Vec::with_capacity(to - from + 1);
                 for i in from..=to {
                     res.push(l[i - 1].clone());
                 }
-                Ok(Var::List(res))
+                Ok(v_list(res))
             }
-            _ => Err(Error::E_TYPE),
+            _ => Ok(v_err(E_TYPE)),
         }
     }
 
@@ -447,11 +470,11 @@ impl Var {
             (Var::List(base_list), Var::List(val_list)) => {
                 (base_list.len() as i64, val_list.len() as i64)
             }
-            _ => return Err(Error::E_TYPE),
+            _ => return Ok(v_err(E_TYPE)),
         };
 
         if from <= 0 || from > base_len + 1 || to < 1 || to > base_len {
-            return Err(Error::E_RANGE);
+            return Ok(v_err(E_RANGE));
         }
 
         let lenleft = if from > 1 { from - 1 } else { 0 };
@@ -527,224 +550,225 @@ impl From<Error> for Var {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use crate::model::var::Error::E_RANGE;
 
     use super::*;
 
     #[test]
     fn test_add() {
-        assert_eq!(Var::Int(1).add(&Var::Int(2)), Ok(Var::Int(3)));
-        assert_eq!(Var::Int(1).add(&Var::Float(2.0)), Ok(Var::Float(3.0)));
-        assert_eq!(Var::Float(1.).add(&Var::Int(2)), Ok(Var::Float(3.)));
-        assert_eq!(Var::Float(1.).add(&Var::Float(2.)), Ok(Var::Float(3.)));
+        assert_eq!(v_int(1).add(&v_int(2)), Ok(v_int(3)));
+        assert_eq!(v_int(1).add(&Var::Float(2.0)), Ok(v_float(3.0)));
+        assert_eq!(Var::Float(1.).add(&v_int(2)), Ok(v_float(3.)));
+        assert_eq!(Var::Float(1.).add(&Var::Float(2.)), Ok(v_float(3.)));
         assert_eq!(
-            Var::Str(String::from("a")).add(&Var::Str(String::from("b"))),
-            Ok(Var::Str(String::from("ab")))
+            v_str("a").add(&v_str("b")),
+            Ok(v_str("ab"))
         );
     }
 
     #[test]
     fn test_sub() -> Result<(), Error> {
-        assert_eq!(Var::Int(1).sub(&Var::Int(2))?, Var::Int(-1));
-        assert_eq!(Var::Int(1).sub(&Var::Float(2.))?, Var::Float(-1.));
-        assert_eq!(Var::Float(1.).sub(&Var::Int(2))?, Var::Float(-1.));
+        assert_eq!(v_int(1).sub(&v_int(2))?, Var::Int(-1));
+        assert_eq!(v_int(1).sub(&Var::Float(2.))?, Var::Float(-1.));
+        assert_eq!(Var::Float(1.).sub(&v_int(2))?, Var::Float(-1.));
         assert_eq!(Var::Float(1.).sub(&Var::Float(2.))?, Var::Float(-1.));
         Ok(())
     }
 
     #[test]
     fn test_mul() -> Result<(), Error> {
-        assert_eq!(Var::Int(1).mul(&Var::Int(2))?, Var::Int(2));
-        assert_eq!(Var::Int(1).mul(&Var::Float(2.))?, Var::Float(2.));
-        assert_eq!(Var::Float(1.).mul(&Var::Int(2))?, Var::Float(2.));
+        assert_eq!(v_int(1).mul(&v_int(2))?, v_int(2));
+        assert_eq!(v_int(1).mul(&Var::Float(2.))?, Var::Float(2.));
+        assert_eq!(Var::Float(1.).mul(&v_int(2))?, Var::Float(2.));
         assert_eq!(Var::Float(1.).mul(&Var::Float(2.))?, Var::Float(2.));
         Ok(())
     }
 
     #[test]
     fn test_div() -> Result<(), Error> {
-        assert_eq!(Var::Int(1).div(&Var::Int(2))?, Var::Int(0));
-        assert_eq!(Var::Int(1).div(&Var::Float(2.))?, Var::Float(0.5));
-        assert_eq!(Var::Float(1.).div(&Var::Int(2))?, Var::Float(0.5));
+        assert_eq!(v_int(1).div(&v_int(2))?, v_int(0));
+        assert_eq!(v_int(1).div(&Var::Float(2.))?, Var::Float(0.5));
+        assert_eq!(Var::Float(1.).div(&v_int(2))?, Var::Float(0.5));
         assert_eq!(Var::Float(1.).div(&Var::Float(2.))?, Var::Float(0.5));
         Ok(())
     }
 
     #[test]
     fn test_modulus() {
-        assert_eq!(Var::Int(1).modulus(&Var::Int(2)), Ok(Var::Int(1)));
-        assert_eq!(Var::Int(1).modulus(&Var::Float(2.)), Ok(Var::Float(1.)));
-        assert_eq!(Var::Float(1.).modulus(&Var::Int(2)), Ok(Var::Float(1.)));
-        assert_eq!(Var::Float(1.).modulus(&Var::Float(2.)), Ok(Var::Float(1.)));
+        assert_eq!(v_int(1).modulus(&v_int(2)), Ok(v_int(1)));
+        assert_eq!(v_int(1).modulus(&Var::Float(2.)), Ok(v_float(1.)));
+        assert_eq!(Var::Float(1.).modulus(&v_int(2)), Ok(v_float(1.)));
+        assert_eq!(Var::Float(1.).modulus(&Var::Float(2.)), Ok(v_float(1.)));
         assert_eq!(
-            Var::Str("moop".into()).modulus(&Var::Int(2)),
-            Err(Error::E_TYPE)
+            Var::Str("moop".into()).modulus(&v_int(2)),
+            Ok(v_err(E_TYPE))
         );
     }
 
     #[test]
     fn test_pow() {
-        assert_eq!(Var::Int(1).pow(&Var::Int(2)), Ok(Var::Int(1)));
-        assert_eq!(Var::Int(2).pow(&Var::Int(2)), Ok(Var::Int(4)));
-        assert_eq!(Var::Int(2).pow(&Var::Float(2.)), Ok(Var::Float(4.)));
-        assert_eq!(Var::Float(2.).pow(&Var::Int(2)), Ok(Var::Float(4.)));
-        assert_eq!(Var::Float(2.).pow(&Var::Float(2.)), Ok(Var::Float(4.)));
+        assert_eq!(v_int(1).pow(&v_int(2)), Ok(v_int(1)));
+        assert_eq!(v_int(2).pow(&v_int(2)), Ok(v_int(4)));
+        assert_eq!(v_int(2).pow(&Var::Float(2.)), Ok(v_float(4.)));
+        assert_eq!(Var::Float(2.).pow(&v_int(2)), Ok(v_float(4.)));
+        assert_eq!(Var::Float(2.).pow(&Var::Float(2.)), Ok(v_float(4.)));
     }
 
     #[test]
     fn test_negative() {
-        assert_eq!(Var::Int(1).negative(), Ok(Var::Int(-1)));
-        assert_eq!(Var::Float(1.).negative(), Ok(Var::Float(-1.0)));
+        assert_eq!(v_int(1).negative(), Ok(v_int(-1)));
+        assert_eq!(Var::Float(1.).negative(), Ok(v_float(-1.0)));
     }
 
     #[test]
     fn test_index() {
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]).index(0),
-            Ok(Var::Int(1))
+            v_list(vec![v_int(1), v_int(2)]).index(0),
+            Ok(v_int(1))
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]).index(1),
-            Ok(Var::Int(2))
+            v_list(vec![v_int(1), v_int(2)]).index(1),
+            Ok(v_int(2))
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]).index(2),
-            Err(Error::E_RANGE)
+            v_list(vec![v_int(1), v_int(2)]).index(2),
+            Ok(v_err(E_RANGE))
         );
         assert_eq!(
-            Var::Str(String::from("ab")).index(0),
-            Ok(Var::Str(String::from("a")))
+            v_str("ab").index(0),
+            Ok(v_str("a"))
         );
         assert_eq!(
-            Var::Str(String::from("ab")).index(1),
-            Ok(Var::Str(String::from("b")))
+            v_str("ab").index(1),
+            Ok(v_str("b"))
         );
-        assert_eq!(Var::Str(String::from("ab")).index(2), Err(Error::E_RANGE));
+        assert_eq!(v_str("ab").index(2), Ok(v_err(E_RANGE)));
     }
 
     #[test]
     fn test_eq() {
-        assert_eq!(Var::Int(1), Var::Int(1));
+        assert_eq!(v_int(1), v_int(1));
         assert_eq!(Var::Float(1.), Var::Float(1.));
-        assert_eq!(Var::Str(String::from("a")), Var::Str(String::from("a")));
+        assert_eq!(v_str("a"), v_str("a"));
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]),
-            Var::List(vec![Var::Int(1), Var::Int(2)])
+            v_list(vec![v_int(1), v_int(2)]),
+            v_list(vec![v_int(1), v_int(2)])
         );
-        assert_eq!(Var::Obj(Objid(1)), Var::Obj(Objid(1)));
-        assert_eq!(Var::Err(Error::E_TYPE), Var::Err(Error::E_TYPE));
+        assert_eq!(v_obj(1), v_obj(1));
+        assert_eq!(v_err(E_TYPE), v_err(E_TYPE));
     }
 
     #[test]
     fn test_ne() {
-        assert_ne!(Var::Int(1), Var::Int(2));
+        assert_ne!(v_int(1), v_int(2));
         assert_ne!(Var::Float(1.), Var::Float(2.));
-        assert_ne!(Var::Str(String::from("a")), Var::Str(String::from("b")));
+        assert_ne!(v_str("a"), v_str("b"));
         assert_ne!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]),
-            Var::List(vec![Var::Int(1), Var::Int(3)])
+            v_list(vec![v_int(1), v_int(2)]),
+            v_list(vec![v_int(1), v_int(3)])
         );
-        assert_ne!(Var::Obj(Objid(1)), Var::Obj(Objid(2)));
-        assert_ne!(Var::Err(Error::E_TYPE), Var::Err(Error::E_RANGE));
+        assert_ne!(v_obj(1), v_obj(2));
+        assert_ne!(v_err(E_TYPE), v_err(E_RANGE));
     }
 
     #[test]
     fn test_lt() {
-        assert!(Var::Int(1) < Var::Int(2));
+        assert!(v_int(1) < v_int(2));
         assert!(Var::Float(1.) < Var::Float(2.));
-        assert!(Var::Str(String::from("a")) < Var::Str(String::from("b")));
+        assert!(v_str("a") < v_str("b"));
         assert!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]) < Var::List(vec![Var::Int(1), Var::Int(3)])
+            v_list(vec![v_int(1), v_int(2)]) < v_list(vec![v_int(1), v_int(3)])
         );
-        assert!(Var::Obj(Objid(1)) < Var::Obj(Objid(2)));
-        assert!(Var::Err(Error::E_TYPE) < Var::Err(Error::E_RANGE));
+        assert!(v_obj(1) < v_obj(2));
+        assert!(v_err(E_TYPE) < v_err(E_RANGE));
     }
 
     #[test]
     fn test_le() {
-        assert!(Var::Int(1) <= Var::Int(2));
+        assert!(v_int(1) <= v_int(2));
         assert!(Var::Float(1.) <= Var::Float(2.));
-        assert!(Var::Str(String::from("a")) <= Var::Str(String::from("b")));
+        assert!(v_str("a") <= v_str("b"));
         assert!(
-            Var::List(vec![Var::Int(1), Var::Int(2)]) <= Var::List(vec![Var::Int(1), Var::Int(3)])
+            v_list(vec![v_int(1), v_int(2)]) <= v_list(vec![v_int(1), v_int(3)])
         );
-        assert!(Var::Obj(Objid(1)) <= Var::Obj(Objid(2)));
-        assert!(Var::Err(Error::E_TYPE) <= Var::Err(Error::E_RANGE));
+        assert!(v_obj(1) <= v_obj(2));
+        assert!(v_err(E_TYPE) <= v_err(E_RANGE));
     }
 
     #[test]
     fn test_gt() {
-        assert!(Var::Int(2) > Var::Int(1));
+        assert!(v_int(2) > v_int(1));
         assert!(Var::Float(2.) > Var::Float(1.));
-        assert!(Var::Str(String::from("b")) > Var::Str(String::from("a")));
+        assert!(v_str("b") > v_str("a"));
         assert!(
-            Var::List(vec![Var::Int(1), Var::Int(3)]) > Var::List(vec![Var::Int(1), Var::Int(2)])
+            v_list(vec![v_int(1), v_int(3)]) > v_list(vec![v_int(1), v_int(2)])
         );
-        assert!(Var::Obj(Objid(2)) > Var::Obj(Objid(1)));
-        assert!(Var::Err(Error::E_RANGE) > Var::Err(Error::E_TYPE));
+        assert!(v_obj(2) > v_obj(1));
+        assert!(v_err(E_RANGE) > v_err(E_TYPE));
     }
 
     #[test]
     fn test_ge() {
-        assert!(Var::Int(2) >= Var::Int(1));
+        assert!(v_int(2) >= v_int(1));
         assert!(Var::Float(2.) >= Var::Float(1.));
-        assert!(Var::Str(String::from("b")) >= Var::Str(String::from("a")));
+        assert!(v_str("b") >= v_str("a"));
         assert!(
-            Var::List(vec![Var::Int(1), Var::Int(3)]) >= Var::List(vec![Var::Int(1), Var::Int(2)])
+            v_list(vec![v_int(1), v_int(3)]) >= v_list(vec![v_int(1), v_int(2)])
         );
-        assert!(Var::Obj(Objid(2)) >= Var::Obj(Objid(1)));
-        assert!(Var::Err(Error::E_RANGE) >= Var::Err(Error::E_TYPE));
+        assert!(v_obj(2) >= v_obj(1));
+        assert!(v_err(E_RANGE) >= v_err(E_TYPE));
     }
 
     #[test]
     fn test_partial_cmp() {
-        assert_eq!(Var::Int(1).partial_cmp(&Var::Int(1)), Some(Ordering::Equal));
+        assert_eq!(v_int(1).partial_cmp(&v_int(1)), Some(Ordering::Equal));
         assert_eq!(
             Var::Float(1.).partial_cmp(&Var::Float(1.)),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Var::Str(String::from("a")).partial_cmp(&Var::Str(String::from("a"))),
+            v_str("a").partial_cmp(&v_str("a")),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .partial_cmp(&Var::List(vec![Var::Int(1), Var::Int(2)])),
+            v_list(vec![v_int(1), v_int(2)])
+                .partial_cmp(&v_list(vec![v_int(1), v_int(2)])),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Var::Obj(Objid(1)).partial_cmp(&Var::Obj(Objid(1))),
+            v_obj(1).partial_cmp(&v_obj(1)),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_TYPE)),
+            v_err(E_TYPE).partial_cmp(&v_err(E_TYPE)),
             Some(Ordering::Equal)
         );
 
-        assert_eq!(Var::Int(1).partial_cmp(&Var::Int(2)), Some(Ordering::Less));
+        assert_eq!(v_int(1).partial_cmp(&v_int(2)), Some(Ordering::Less));
         assert_eq!(
             Var::Float(1.).partial_cmp(&Var::Float(2.)),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Var::Str(String::from("a")).partial_cmp(&Var::Str(String::from("b"))),
+            v_str("a").partial_cmp(&v_str("b")),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .partial_cmp(&Var::List(vec![Var::Int(1), Var::Int(3)])),
+            v_list(vec![v_int(1), v_int(2)])
+                .partial_cmp(&v_list(vec![v_int(1), v_int(3)])),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Var::Obj(Objid(1)).partial_cmp(&Var::Obj(Objid(2))),
+            v_obj(1).partial_cmp(&v_obj(2)),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Var::Err(Error::E_TYPE).partial_cmp(&Var::Err(Error::E_RANGE)),
+            v_err(E_TYPE).partial_cmp(&v_err(E_RANGE)),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            Var::Int(2).partial_cmp(&Var::Int(1)),
+            v_int(2).partial_cmp(&v_int(1)),
             Some(Ordering::Greater)
         );
         assert_eq!(
@@ -752,77 +776,77 @@ mod tests {
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::Str(String::from("b")).partial_cmp(&Var::Str(String::from("a"))),
+            v_str("b").partial_cmp(&v_str("a")),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(3)])
-                .partial_cmp(&Var::List(vec![Var::Int(1), Var::Int(2)])),
+            v_list(vec![v_int(1), v_int(3)])
+                .partial_cmp(&v_list(vec![v_int(1), v_int(2)])),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::Obj(Objid(2)).partial_cmp(&Var::Obj(Objid(1))),
+            v_obj(2).partial_cmp(&v_obj(1)),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::Err(Error::E_RANGE).partial_cmp(&Var::Err(Error::E_TYPE)),
+            v_err(E_RANGE).partial_cmp(&v_err(E_TYPE)),
             Some(Ordering::Greater)
         );
     }
 
     #[test]
     fn test_cmp() {
-        assert_eq!(Var::Int(1).cmp(&Var::Int(1)), Ordering::Equal);
+        assert_eq!(v_int(1).cmp(&v_int(1)), Ordering::Equal);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(1.)), Ordering::Equal);
         assert_eq!(
-            Var::Str(String::from("a")).cmp(&Var::Str(String::from("a"))),
+            v_str("a").cmp(&v_str("a")),
             Ordering::Equal
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .cmp(&Var::List(vec![Var::Int(1), Var::Int(2)])),
+            v_list(vec![v_int(1), v_int(2)])
+                .cmp(&v_list(vec![v_int(1), v_int(2)])),
             Ordering::Equal
         );
-        assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(1))), Ordering::Equal);
+        assert_eq!(v_obj(1).cmp(&v_obj(1)), Ordering::Equal);
         assert_eq!(
-            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)),
+            v_err(E_TYPE).cmp(&v_err(E_TYPE)),
             Ordering::Equal
         );
 
-        assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
+        assert_eq!(v_int(1).cmp(&v_int(2)), Ordering::Less);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
         assert_eq!(
-            Var::Str(String::from("a")).cmp(&Var::Str(String::from("b"))),
+            v_str("a").cmp(&v_str("b")),
             Ordering::Less
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .cmp(&Var::List(vec![Var::Int(1), Var::Int(3)])),
+            v_list(vec![v_int(1), v_int(2)])
+                .cmp(&v_list(vec![v_int(1), v_int(3)])),
             Ordering::Less
         );
-        assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(2))), Ordering::Less);
+        assert_eq!(v_obj(1).cmp(&v_obj(2)), Ordering::Less);
         assert_eq!(
-            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)),
+            v_err(E_TYPE).cmp(&v_err(E_RANGE)),
             Ordering::Less
         );
 
-        assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
+        assert_eq!(v_int(2).cmp(&v_int(1)), Ordering::Greater);
         assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
         assert_eq!(
-            Var::Str(String::from("b")).cmp(&Var::Str(String::from("a"))),
+            v_str("b").cmp(&v_str("a")),
             Ordering::Greater
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(3)])
-                .cmp(&Var::List(vec![Var::Int(1), Var::Int(2)])),
+            v_list(vec![v_int(1), v_int(3)])
+                .cmp(&v_list(vec![v_int(1), v_int(2)])),
             Ordering::Greater
         );
         assert_eq!(
-            Var::Obj(Objid(2)).cmp(&Var::Obj(Objid(1))),
+            v_obj(2).cmp(&v_obj(1)),
             Ordering::Greater
         );
         assert_eq!(
-            Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)),
+            v_err(E_RANGE).cmp(&v_err(E_TYPE)),
             Ordering::Greater
         );
     }
@@ -830,7 +854,7 @@ mod tests {
     #[test]
     fn test_partial_ord() {
         assert_eq!(
-            Var::Int(1).partial_cmp(&Var::Int(1)).unwrap(),
+            v_int(1).partial_cmp(&v_int(1)).unwrap(),
             Ordering::Equal
         );
         assert_eq!(
@@ -838,30 +862,30 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(
-            Var::Str(String::from("a"))
-                .partial_cmp(&Var::Str(String::from("a")))
+            v_str("a")
+                .partial_cmp(&v_str("a"))
                 .unwrap(),
             Ordering::Equal
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .partial_cmp(&Var::List(vec![Var::Int(1), Var::Int(2)]))
+            v_list(vec![v_int(1), v_int(2)])
+                .partial_cmp(&v_list(vec![v_int(1), v_int(2)]))
                 .unwrap(),
             Ordering::Equal
         );
         assert_eq!(
-            Var::Obj(Objid(1)).partial_cmp(&Var::Obj(Objid(1))).unwrap(),
+            v_obj(1).partial_cmp(&v_obj(1)).unwrap(),
             Ordering::Equal
         );
         assert_eq!(
-            Var::Err(Error::E_TYPE)
-                .partial_cmp(&Var::Err(Error::E_TYPE))
+            v_err(E_TYPE)
+                .partial_cmp(&v_err(E_TYPE))
                 .unwrap(),
             Ordering::Equal
         );
 
         assert_eq!(
-            Var::Int(1).partial_cmp(&Var::Int(2)).unwrap(),
+            v_int(1).partial_cmp(&v_int(2)).unwrap(),
             Ordering::Less
         );
         assert_eq!(
@@ -869,30 +893,30 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(
-            Var::Str(String::from("a"))
-                .partial_cmp(&Var::Str(String::from("b")))
+            v_str("a")
+                .partial_cmp(&v_str("b"))
                 .unwrap(),
             Ordering::Less
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .partial_cmp(&Var::List(vec![Var::Int(1), Var::Int(3)]))
+            v_list(vec![v_int(1), v_int(2)])
+                .partial_cmp(&v_list(vec![v_int(1), v_int(3)]))
                 .unwrap(),
             Ordering::Less
         );
         assert_eq!(
-            Var::Obj(Objid(1)).partial_cmp(&Var::Obj(Objid(2))).unwrap(),
+            v_obj(1).partial_cmp(&v_obj(2)).unwrap(),
             Ordering::Less
         );
         assert_eq!(
-            Var::Err(Error::E_TYPE)
-                .partial_cmp(&Var::Err(Error::E_RANGE))
+            v_err(E_TYPE)
+                .partial_cmp(&v_err(E_RANGE))
                 .unwrap(),
             Ordering::Less
         );
 
         assert_eq!(
-            Var::Int(2).partial_cmp(&Var::Int(1)).unwrap(),
+            v_int(2).partial_cmp(&v_int(1)).unwrap(),
             Ordering::Greater
         );
         assert_eq!(
@@ -900,24 +924,24 @@ mod tests {
             Ordering::Greater
         );
         assert_eq!(
-            Var::Str(String::from("b"))
-                .partial_cmp(&Var::Str(String::from("a")))
+            v_str("b")
+                .partial_cmp(&v_str("a"))
                 .unwrap(),
             Ordering::Greater
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(3)])
-                .partial_cmp(&Var::List(vec![Var::Int(1), Var::Int(2)]))
+            v_list(vec![v_int(1), v_int(3)])
+                .partial_cmp(&v_list(vec![v_int(1), v_int(2)]))
                 .unwrap(),
             Ordering::Greater
         );
         assert_eq!(
-            Var::Obj(Objid(2)).partial_cmp(&Var::Obj(Objid(1))).unwrap(),
+            v_obj(2).partial_cmp(&v_obj(1)).unwrap(),
             Ordering::Greater
         );
         assert_eq!(
-            Var::Err(Error::E_RANGE)
-                .partial_cmp(&Var::Err(Error::E_TYPE))
+            v_err(E_RANGE)
+                .partial_cmp(&v_err(E_TYPE))
                 .unwrap(),
             Ordering::Greater
         );
@@ -925,107 +949,107 @@ mod tests {
 
     #[test]
     fn test_ord() {
-        assert_eq!(Var::Int(1).cmp(&Var::Int(1)), Ordering::Equal);
+        assert_eq!(v_int(1).cmp(&v_int(1)), Ordering::Equal);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(1.)), Ordering::Equal);
         assert_eq!(
-            Var::Str(String::from("a")).cmp(&Var::Str(String::from("a"))),
+            v_str("a").cmp(&v_str("a")),
             Ordering::Equal
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .cmp(&Var::List(vec![Var::Int(1), Var::Int(2)])),
+            v_list(vec![v_int(1), v_int(2)])
+                .cmp(&v_list(vec![v_int(1), v_int(2)])),
             Ordering::Equal
         );
-        assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(1))), Ordering::Equal);
+        assert_eq!(v_obj(1).cmp(&v_obj(1)), Ordering::Equal);
         assert_eq!(
-            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_TYPE)),
+            v_err(E_TYPE).cmp(&v_err(E_TYPE)),
             Ordering::Equal
         );
 
-        assert_eq!(Var::Int(1).cmp(&Var::Int(2)), Ordering::Less);
+        assert_eq!(v_int(1).cmp(&v_int(2)), Ordering::Less);
         assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
         assert_eq!(
-            Var::Str(String::from("a")).cmp(&Var::Str(String::from("b"))),
+            v_str("a").cmp(&v_str("b")),
             Ordering::Less
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(2)])
-                .cmp(&Var::List(vec![Var::Int(1), Var::Int(3)])),
+            v_list(vec![v_int(1), v_int(2)])
+                .cmp(&v_list(vec![v_int(1), v_int(3)])),
             Ordering::Less
         );
-        assert_eq!(Var::Obj(Objid(1)).cmp(&Var::Obj(Objid(2))), Ordering::Less);
+        assert_eq!(v_obj(1).cmp(&v_obj(2)), Ordering::Less);
         assert_eq!(
-            Var::Err(Error::E_TYPE).cmp(&Var::Err(Error::E_RANGE)),
+            v_err(E_TYPE).cmp(&v_err(E_RANGE)),
             Ordering::Less
         );
 
-        assert_eq!(Var::Int(2).cmp(&Var::Int(1)), Ordering::Greater);
+        assert_eq!(v_int(2).cmp(&v_int(1)), Ordering::Greater);
         assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
         assert_eq!(
-            Var::Str(String::from("b")).cmp(&Var::Str(String::from("a"))),
+            v_str("b").cmp(&v_str("a")),
             Ordering::Greater
         );
         assert_eq!(
-            Var::List(vec![Var::Int(1), Var::Int(3)])
-                .cmp(&Var::List(vec![Var::Int(1), Var::Int(2)])),
+            v_list(vec![v_int(1), v_int(3)])
+                .cmp(&v_list(vec![v_int(1), v_int(2)])),
             Ordering::Greater
         );
         assert_eq!(
-            Var::Obj(Objid(2)).cmp(&Var::Obj(Objid(1))),
+            v_obj(2).cmp(&v_obj(1)),
             Ordering::Greater
         );
         assert_eq!(
-            Var::Err(Error::E_RANGE).cmp(&Var::Err(Error::E_TYPE)),
+            v_err(E_RANGE).cmp(&v_err(E_TYPE)),
             Ordering::Greater
         );
     }
 
     #[test]
     fn test_is_true() {
-        assert!(Var::Int(1).is_true());
+        assert!(v_int(1).is_true());
         assert!(Var::Float(1.).is_true());
-        assert!(Var::Str(String::from("a")).is_true());
-        assert!(Var::List(vec![Var::Int(1), Var::Int(2)]).is_true());
-        assert!(!Var::Obj(Objid(1)).is_true());
-        assert!(!Var::Err(Error::E_TYPE).is_true());
+        assert!(v_str("a").is_true());
+        assert!(v_list(vec![v_int(1), v_int(2)]).is_true());
+        assert!(!v_obj(1).is_true());
+        assert!(!v_err(E_TYPE).is_true());
     }
 
     #[test]
     fn test_listrangeset() {
-        let base = Var::List(vec![Var::Int(1), Var::Int(2), Var::Int(3), Var::Int(4)]);
+        let base = v_list(vec![v_int(1), v_int(2), v_int(3), v_int(4)]);
 
         // {1,2,3,4}[1..2] = {"a", "b", "c"} => {1, "a", "b", "c", 4}
-        let value = Var::List(vec![
-            Var::Str("a".to_string()),
-            Var::Str("b".to_string()),
-            Var::Str("c".to_string()),
+        let value = v_list(vec![
+            v_str("a"),
+            v_str("b"),
+            v_str("c"),
         ]);
-        let expected = Var::List(vec![
-            Var::Int(1),
-            Var::Str("a".to_string()),
-            Var::Str("b".to_string()),
-            Var::Str("c".to_string()),
-            Var::Int(4),
+        let expected = v_list(vec![
+            v_int(1),
+            v_str("a"),
+            v_str("b"),
+            v_str("c"),
+            v_int(4),
         ]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a"} => {1, "a", 4}
-        let value = Var::List(vec![Var::Str("a".to_string())]);
-        let expected = Var::List(vec![Var::Int(1), Var::Str("a".to_string()), Var::Int(4)]);
+        let value = v_list(vec![v_str("a")]);
+        let expected = v_list(vec![v_int(1), v_str("a"), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {} => {1,4}
-        let value = Var::List(vec![]);
-        let expected = Var::List(vec![Var::Int(1), Var::Int(4)]);
+        let value = v_list(vec![]);
+        let expected = v_list(vec![v_int(1), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a", "b"} => {1, "a", "b", 4}
-        let value = Var::List(vec![Var::Str("a".to_string()), Var::Str("b".to_string())]);
-        let expected = Var::List(vec![
-            Var::Int(1),
-            Var::Str("a".to_string()),
-            Var::Str("b".to_string()),
-            Var::Int(4),
+        let value = v_list(vec![v_str("a"), v_str("b")]);
+        let expected = v_list(vec![
+            v_int(1),
+            v_str("a"),
+            v_str("b"),
+            v_int(4),
         ]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
     }
@@ -1033,30 +1057,30 @@ mod tests {
     #[test]
     fn test_strrangeset() {
         // Test interior insertion
-        let base = Var::Str("12345".to_string());
-        let value = Var::Str("abc".to_string());
-        let expected = Var::Str("1abc45".to_string());
+        let base = v_str("12345");
+        let value = v_str("abc");
+        let expected = v_str("1abc45");
         let result = base.rangeset(value, 2, 3);
         assert_eq!(result, Ok(expected));
 
         // Test interior replacement
-        let base = Var::Str("12345".to_string());
-        let value = Var::Str("ab".to_string());
-        let expected = Var::Str("1ab45".to_string());
+        let base = v_str("12345");
+        let value = v_str("ab");
+        let expected = v_str("1ab45");
         let result = base.rangeset(value, 2, 3);
         assert_eq!(result, Ok(expected));
 
         // Test interior deletion
-        let base = Var::Str("12345".to_string());
+        let base = v_str("12345");
         let value = Var::Str("".to_string());
-        let expected = Var::Str("145".to_string());
+        let expected = v_str("145");
         let result = base.rangeset(value, 2, 3);
         assert_eq!(result, Ok(expected));
 
         // Test interior subtraction
-        let base = Var::Str("12345".to_string());
-        let value = Var::Str("z".to_string());
-        let expected = Var::Str("1z45".to_string());
+        let base = v_str("12345");
+        let value = v_str("z");
+        let expected = v_str("1z45");
         let result = base.rangeset(value, 2, 3);
         assert_eq!(result, Ok(expected));
     }
@@ -1064,46 +1088,44 @@ mod tests {
     #[test]
     fn test_rangeset_check_negative() {
         // Test negative cases for strings
-        let base = Var::Str("abcdef".to_string());
-        let instr = Var::Str("ghi".to_string());
-        assert_eq!(base.rangeset(instr.clone(), 1, 0), Err(Error::E_RANGE));
-        assert_eq!(base.rangeset(instr.clone(), 0, 3), Err(Error::E_RANGE));
-        assert_eq!(base.rangeset(instr.clone(), 2, 7), Err(Error::E_RANGE));
-        assert_eq!(base.rangeset(instr, 1, 100), Err(Error::E_RANGE));
+        let base = v_str("abcdef");
+        let instr = v_str("ghi");
+        assert_eq!(base.rangeset(instr.clone(), 1, 0), Ok(v_err(E_RANGE)));
+        assert_eq!(base.rangeset(instr.clone(), 0, 3), Ok(v_err(E_RANGE)));
+        assert_eq!(base.rangeset(instr.clone(), 2, 7), Ok(v_err(E_RANGE)));
+        assert_eq!(base.rangeset(instr, 1, 100), Ok(v_err(E_RANGE)));
 
         // Test negative cases for lists
-        let base = Var::List(vec![Var::Int(1), Var::Int(2), Var::Int(3), Var::Int(4)]);
-        let instr = Var::List(vec![Var::Int(5), Var::Int(6), Var::Int(7)]);
-        assert_eq!(base.rangeset(instr.clone(), 0, 2), Err(Error::E_RANGE));
-        assert_eq!(base.rangeset(instr.clone(), 1, 5), Err(Error::E_RANGE));
-        assert_eq!(base.rangeset(instr.clone(), 2, 7), Err(Error::E_RANGE));
-        assert_eq!(base.rangeset(instr, 1, 100), Err(Error::E_RANGE));
+        let base = v_list(vec![v_int(1), v_int(2), v_int(3), v_int(4)]);
+        let instr = v_list(vec![v_int(5), v_int(6), v_int(7)]);
+        assert_eq!(base.rangeset(instr.clone(), 0, 2), Ok(v_err(E_RANGE)));
+        assert_eq!(base.rangeset(instr.clone(), 1, 5), Ok(v_err(E_RANGE)));
+        assert_eq!(base.rangeset(instr.clone(), 2, 7), Ok(v_err(E_RANGE)));
+        assert_eq!(base.rangeset(instr, 1, 100), Ok(v_err(E_RANGE)));
     }
 
     #[test]
     fn test_range() -> Result<(), Error> {
         // test on integer list
-        let int_list = Var::List(vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
+        let int_list = v_list(vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
         assert_eq!(
             int_list.range(2, 4)?,
-            Var::List(vec![2.into(), 3.into(), 4.into()])
+            v_list(vec![2.into(), 3.into(), 4.into()])
         );
 
         // test on string
-        let string = Var::Str("hello world".to_string());
-        assert_eq!(string.range(2, 7)?, Var::Str("ello w".to_string()));
+        let string = v_str("hello world");
+        assert_eq!(string.range(2, 7)?, v_str("ello w"));
 
         // test on empty list
-        let empty_list = Var::List(vec![]);
-        assert_eq!(empty_list.range(1, 0), Err(Error::E_RANGE));
-
+        let empty_list = v_list(vec![]);
+        assert_eq!(empty_list.range(1, 0), Ok(v_err(E_RANGE)));
         // test on out of range
-        let int_list = Var::List(vec![1.into(), 2.into(), 3.into()]);
-        assert_eq!(int_list.range(2, 4), Err(Error::E_RANGE));
-
+        let int_list = v_list(vec![1.into(), 2.into(), 3.into()]);
+        assert_eq!(int_list.range(2, 4), Ok(v_err(E_RANGE)));
         // test on type mismatch
-        let var_int = Var::Int(10);
-        assert_eq!(var_int.range(1, 5), Err(Error::E_TYPE));
+        let var_int = v_int(10);
+        assert_eq!(var_int.range(1, 5), Ok(v_err(E_TYPE)));
 
         Ok(())
     }

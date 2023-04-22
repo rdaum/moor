@@ -7,7 +7,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_RANGE, E_TYPE};
-use crate::model::var::Var;
+use crate::model::var::{v_err, v_int, Var, v_list};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -19,16 +19,16 @@ async fn bf_is_member(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (value, list) = (&args[0], &args[1]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     if list.contains(value) {
-        Ok(Var::Int(1))
+        Ok(v_int(1))
     } else {
-        Ok(Var::Int(0))
+        Ok(v_int(0))
     }
 }
 bf_declare!(is_member, bf_is_member);
@@ -40,11 +40,11 @@ async fn bf_listinsert(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() < 2 || args.len() > 3 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (list, value) = (&args[0], &args[1]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
     if args.len() == 2 {
@@ -52,12 +52,12 @@ async fn bf_listinsert(
     } else {
         let index = &args[2];
         let Var::Int(index) = index else {
-            return Ok(Var::Err(E_TYPE));
+            return Ok(v_err(E_TYPE));
         };
         let index = index - 1;
         new_list.insert(index as usize, value.clone());
     }
-    Ok(Var::List(new_list))
+    Ok(v_list(new_list))
 }
 bf_declare!(listinsert, bf_listinsert);
 
@@ -68,11 +68,11 @@ async fn bf_listappend(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() < 2 || args.len() > 3 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (list, value) = (&args[0], &args[1]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
     if args.len() == 2 {
@@ -80,12 +80,12 @@ async fn bf_listappend(
     } else {
         let index = &args[2];
         let Var::Int(index) = index else {
-            return Ok(Var::Err(E_TYPE));
+            return Ok(v_err(E_TYPE));
         };
         let index = index - 1;
         new_list.insert(index as usize + 1, value.clone());
     }
-    Ok(Var::List(new_list))
+    Ok(v_list(new_list))
 }
 bf_declare!(listappend, bf_listappend);
 
@@ -96,22 +96,22 @@ async fn bf_listdelete(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (list, index) = (&args[0], &args[1]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let Var::Int(index) = index else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     if *index < 1 || *index > list.len() as i64 {
-        return Ok(Var::Err(E_RANGE));
+        return Ok(v_err(E_RANGE));
     }
     let index = index - 1;
     let mut new_list = list.clone();
     new_list.remove(index as usize);
-    Ok(Var::List(new_list))
+    Ok(v_list(new_list))
 }
 bf_declare!(listdelete, bf_listdelete);
 
@@ -122,22 +122,22 @@ async fn bf_listset(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 3 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (list, value, index) = (&args[0], &args[1], &args[2]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let Var::Int(index) = index else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     if *index < 1 || *index > list.len() as i64 {
-        return Ok(Var::Err(E_RANGE));
+        return Ok(v_err(E_RANGE));
     }
     let index = index - 1;
     let mut new_list = list.clone();
     new_list[index as usize] = value.clone();
-    Ok(Var::List(new_list))
+    Ok(v_list(new_list))
 }
 bf_declare!(listset, bf_listset);
 
@@ -148,17 +148,17 @@ async fn bf_setadd(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (list, value) = (&args[0], &args[1]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
     if !new_list.contains(value) {
         new_list.push(value.clone());
     }
-    Ok(Var::List(new_list))
+    Ok(v_list(new_list))
 }
 bf_declare!(setadd, bf_setadd);
 
@@ -169,17 +169,17 @@ async fn bf_setremove(
     args: Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
-        return Ok(Var::Err(E_INVARG));
+        return Ok(v_err(E_INVARG));
     }
     let (list, value) = (&args[0], &args[1]);
     let Var::List(list) = list else {
-        return Ok(Var::Err(E_TYPE));
+        return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
     if let Some(index) = new_list.iter().position(|x| x == value) {
         new_list.remove(index);
     }
-    Ok(Var::List(new_list))
+    Ok(v_list(new_list))
 }
 bf_declare!(setremove, bf_setremove);
 
