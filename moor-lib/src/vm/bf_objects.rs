@@ -7,7 +7,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
-use crate::model::var::{v_err, Var, v_int, v_list};
+use crate::model::var::{v_err, Var, v_list, v_bool};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -44,7 +44,7 @@ async fn bf_valid(
         return Ok(v_err(E_TYPE));
     };
     let is_valid = ws.valid(*obj)?;
-    Ok(v_int(if is_valid { 1 } else { 0 }))
+    Ok(v_bool(is_valid))
 }
 bf_declare!(valid, bf_valid);
 /*

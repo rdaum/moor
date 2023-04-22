@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
-use crate::model::var::{v_err, v_int, v_obj, Objid, Var, v_float, v_str};
+use crate::model::var::{v_err, v_int, v_obj, Objid, Var, v_float, v_str, v_bool};
 use crate::model::var::Error::{E_INVARG, E_TYPE};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
@@ -156,7 +156,7 @@ async fn bf_equal(
         (Var::Str(s1), Var::Str(s2)) => s1.to_lowercase() == s2.to_lowercase(),
         _ => args[0] == args[1],
     };
-    Ok(v_int(if result { 1 } else { 0 }))
+    Ok(v_bool(result))
 }
 bf_declare!(equal, bf_equal);
 

@@ -8,7 +8,7 @@ use crate::compiler::labels::{Label, Offset};
 use crate::db::state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Error, ErrorPack, v_int, v_list, v_str, NOTHING, Objid, Var};
+use crate::model::var::{Error, ErrorPack, v_int, v_list, v_str, NOTHING, Objid, Var, v_bool};
 use crate::model::var::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
@@ -783,7 +783,7 @@ impl VM {
             }
             Op::Not => {
                 let v = !self.pop().is_true();
-                self.push(&Var::Int(if v { 1 } else { 0 }));
+                self.push(&v_bool(v));
             }
             Op::UnaryMinus => {
                 let v = self.pop();

@@ -18,7 +18,7 @@ use crate::model::props::{
     Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
 };
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{NOTHING, Objid, Var, v_int, v_list};
+use crate::model::var::{NOTHING, Objid, Var, v_list, v_bool};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::tasks::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
@@ -347,23 +347,23 @@ impl WorldState for MoorDbTx {
         }
         if property_name == "wizard" {
             let is_wizard = player_flags.contains(ObjFlag::Wizard);
-            return Ok(v_int(if is_wizard { 1 } else { 0 }));
+            return Ok(v_bool(is_wizard));
         }
         if property_name == "programmer" {
             let is_programmer = player_flags.contains(ObjFlag::Programmer);
-            return Ok(v_int(if is_programmer { 1 } else { 0 }));
+            return Ok(v_bool(is_programmer));
         }
         if property_name == "r" {
             let readable = player_flags.contains(ObjFlag::Read);
-            return Ok(v_int(if readable { 1 } else { 0 }));
+            return Ok(v_bool(readable));
         }
         if property_name == "w" {
             let writable = player_flags.contains(ObjFlag::Write);
-            return Ok(v_int(if writable { 1 } else { 0 }));
+            return Ok(v_bool(writable));
         }
         if property_name == "f" {
             let forceable = player_flags.contains(ObjFlag::Fertile);
-            return Ok(v_int(if forceable { 1 } else { 0 }));
+            return Ok(v_bool(forceable));
         }
 
         let find = self.find_property(

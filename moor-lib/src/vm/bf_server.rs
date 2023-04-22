@@ -9,7 +9,7 @@ use crate::db::state::WorldState;
 use crate::model::ObjectError;
 use crate::model::objects::ObjFlag;
 use crate::model::var::Error::{E_INVARG, E_PERM, E_TYPE};
-use crate::model::var::{v_err, Var, v_int, v_list};
+use crate::model::var::{v_err, Var, v_int, v_list, v_objid, v_string, v_bool};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -90,7 +90,7 @@ async fn bf_is_player(
         Err(ObjectError::ObjectNotFound(_)) => return Ok(v_err(E_INVARG)),
         Err(e) => return Err(e.into()),
     };
-    Ok(v_int(if is_player { 1 } else { 0 }))
+    Ok(v_bool(is_player))
 }
 bf_declare!(is_player, bf_is_player);
 
@@ -146,12 +146,12 @@ async fn bf_callers(
             .iter()
             .map(|c| {
                 let callers = vec![
-                    Var::Obj(c.this),
-                    Var::Str(c.verb_name.clone()),
-                    Var::Obj(c.programmer),
-                    Var::Obj(c.verb_loc),
-                    Var::Obj(c.player),
-                    Var::Int(c.line_number as i64),
+                    v_objid(c.this),
+                    v_string(c.verb_name.clone()),
+                    v_objid(c.programmer),
+                    v_objid(c.verb_loc),
+                    v_objid(c.player),
+                    v_int(c.line_number as i64),
                 ];
                 Var::List(callers)
             })

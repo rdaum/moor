@@ -159,6 +159,9 @@ pub enum Var {
     _Label(Label),
 }
 
+pub fn v_bool(b: bool) -> Var {
+    Var::Int(if b { 1 } else { 0 })
+}
 pub fn v_int(i: i64) -> Var {
     Var::Int(i)
 }
@@ -167,6 +170,9 @@ pub fn v_float(f: f64) -> Var {
 }
 pub fn v_str(s: &str) -> Var {
     Var::Str(s.to_string())
+}
+pub fn v_string(s: String) -> Var {
+    Var::Str(s)
 }
 pub fn v_objid(o: Objid) -> Var {
     Var::Obj(o)
@@ -372,7 +378,7 @@ impl Var {
             return v_err(E_TYPE);
         };
 
-        Var::Int(if l.contains(v) { 1 } else { 0 })
+        v_bool(l.contains(v))
     }
 
     binary_numeric_coercion_op!(mul);
@@ -557,9 +563,9 @@ mod tests {
     #[test]
     fn test_add() {
         assert_eq!(v_int(1).add(&v_int(2)), Ok(v_int(3)));
-        assert_eq!(v_int(1).add(&Var::Float(2.0)), Ok(v_float(3.0)));
-        assert_eq!(Var::Float(1.).add(&v_int(2)), Ok(v_float(3.)));
-        assert_eq!(Var::Float(1.).add(&Var::Float(2.)), Ok(v_float(3.)));
+        assert_eq!(v_int(1).add(&v_float(2.0)), Ok(v_float(3.0)));
+        assert_eq!(v_float(1.).add(&v_int(2)), Ok(v_float(3.)));
+        assert_eq!(v_float(1.).add(&v_float(2.)), Ok(v_float(3.)));
         assert_eq!(
             v_str("a").add(&v_str("b")),
             Ok(v_str("ab"))
@@ -569,36 +575,36 @@ mod tests {
     #[test]
     fn test_sub() -> Result<(), Error> {
         assert_eq!(v_int(1).sub(&v_int(2))?, Var::Int(-1));
-        assert_eq!(v_int(1).sub(&Var::Float(2.))?, Var::Float(-1.));
-        assert_eq!(Var::Float(1.).sub(&v_int(2))?, Var::Float(-1.));
-        assert_eq!(Var::Float(1.).sub(&Var::Float(2.))?, Var::Float(-1.));
+        assert_eq!(v_int(1).sub(&v_float(2.))?, v_float(-1.));
+        assert_eq!(v_float(1.).sub(&v_int(2))?, v_float(-1.));
+        assert_eq!(v_float(1.).sub(&v_float(2.))?, v_float(-1.));
         Ok(())
     }
 
     #[test]
     fn test_mul() -> Result<(), Error> {
         assert_eq!(v_int(1).mul(&v_int(2))?, v_int(2));
-        assert_eq!(v_int(1).mul(&Var::Float(2.))?, Var::Float(2.));
-        assert_eq!(Var::Float(1.).mul(&v_int(2))?, Var::Float(2.));
-        assert_eq!(Var::Float(1.).mul(&Var::Float(2.))?, Var::Float(2.));
+        assert_eq!(v_int(1).mul(&v_float(2.))?, v_float(2.));
+        assert_eq!(v_float(1.).mul(&v_int(2))?, v_float(2.));
+        assert_eq!(v_float(1.).mul(&v_float(2.))?, v_float(2.));
         Ok(())
     }
 
     #[test]
     fn test_div() -> Result<(), Error> {
         assert_eq!(v_int(1).div(&v_int(2))?, v_int(0));
-        assert_eq!(v_int(1).div(&Var::Float(2.))?, Var::Float(0.5));
-        assert_eq!(Var::Float(1.).div(&v_int(2))?, Var::Float(0.5));
-        assert_eq!(Var::Float(1.).div(&Var::Float(2.))?, Var::Float(0.5));
+        assert_eq!(v_int(1).div(&v_float(2.))?, v_float(0.5));
+        assert_eq!(v_float(1.).div(&v_int(2))?, v_float(0.5));
+        assert_eq!(v_float(1.).div(&v_float(2.))?, v_float(0.5));
         Ok(())
     }
 
     #[test]
     fn test_modulus() {
         assert_eq!(v_int(1).modulus(&v_int(2)), Ok(v_int(1)));
-        assert_eq!(v_int(1).modulus(&Var::Float(2.)), Ok(v_float(1.)));
-        assert_eq!(Var::Float(1.).modulus(&v_int(2)), Ok(v_float(1.)));
-        assert_eq!(Var::Float(1.).modulus(&Var::Float(2.)), Ok(v_float(1.)));
+        assert_eq!(v_int(1).modulus(&v_float(2.)), Ok(v_float(1.)));
+        assert_eq!(v_float(1.).modulus(&v_int(2)), Ok(v_float(1.)));
+        assert_eq!(v_float(1.).modulus(&v_float(2.)), Ok(v_float(1.)));
         assert_eq!(
             Var::Str("moop".into()).modulus(&v_int(2)),
             Ok(v_err(E_TYPE))
@@ -609,15 +615,15 @@ mod tests {
     fn test_pow() {
         assert_eq!(v_int(1).pow(&v_int(2)), Ok(v_int(1)));
         assert_eq!(v_int(2).pow(&v_int(2)), Ok(v_int(4)));
-        assert_eq!(v_int(2).pow(&Var::Float(2.)), Ok(v_float(4.)));
-        assert_eq!(Var::Float(2.).pow(&v_int(2)), Ok(v_float(4.)));
-        assert_eq!(Var::Float(2.).pow(&Var::Float(2.)), Ok(v_float(4.)));
+        assert_eq!(v_int(2).pow(&v_float(2.)), Ok(v_float(4.)));
+        assert_eq!(v_float(2.).pow(&v_int(2)), Ok(v_float(4.)));
+        assert_eq!(v_float(2.).pow(&v_float(2.)), Ok(v_float(4.)));
     }
 
     #[test]
     fn test_negative() {
         assert_eq!(v_int(1).negative(), Ok(v_int(-1)));
-        assert_eq!(Var::Float(1.).negative(), Ok(v_float(-1.0)));
+        assert_eq!(v_float(1.).negative(), Ok(v_float(-1.0)));
     }
 
     #[test]
@@ -648,7 +654,7 @@ mod tests {
     #[test]
     fn test_eq() {
         assert_eq!(v_int(1), v_int(1));
-        assert_eq!(Var::Float(1.), Var::Float(1.));
+        assert_eq!(v_float(1.), v_float(1.));
         assert_eq!(v_str("a"), v_str("a"));
         assert_eq!(
             v_list(vec![v_int(1), v_int(2)]),
@@ -661,7 +667,7 @@ mod tests {
     #[test]
     fn test_ne() {
         assert_ne!(v_int(1), v_int(2));
-        assert_ne!(Var::Float(1.), Var::Float(2.));
+        assert_ne!(v_float(1.), v_float(2.));
         assert_ne!(v_str("a"), v_str("b"));
         assert_ne!(
             v_list(vec![v_int(1), v_int(2)]),
@@ -674,7 +680,7 @@ mod tests {
     #[test]
     fn test_lt() {
         assert!(v_int(1) < v_int(2));
-        assert!(Var::Float(1.) < Var::Float(2.));
+        assert!(v_float(1.) < v_float(2.));
         assert!(v_str("a") < v_str("b"));
         assert!(
             v_list(vec![v_int(1), v_int(2)]) < v_list(vec![v_int(1), v_int(3)])
@@ -686,7 +692,7 @@ mod tests {
     #[test]
     fn test_le() {
         assert!(v_int(1) <= v_int(2));
-        assert!(Var::Float(1.) <= Var::Float(2.));
+        assert!(v_float(1.) <= v_float(2.));
         assert!(v_str("a") <= v_str("b"));
         assert!(
             v_list(vec![v_int(1), v_int(2)]) <= v_list(vec![v_int(1), v_int(3)])
@@ -698,7 +704,7 @@ mod tests {
     #[test]
     fn test_gt() {
         assert!(v_int(2) > v_int(1));
-        assert!(Var::Float(2.) > Var::Float(1.));
+        assert!(v_float(2.) > v_float(1.));
         assert!(v_str("b") > v_str("a"));
         assert!(
             v_list(vec![v_int(1), v_int(3)]) > v_list(vec![v_int(1), v_int(2)])
@@ -710,7 +716,7 @@ mod tests {
     #[test]
     fn test_ge() {
         assert!(v_int(2) >= v_int(1));
-        assert!(Var::Float(2.) >= Var::Float(1.));
+        assert!(v_float(2.) >= v_float(1.));
         assert!(v_str("b") >= v_str("a"));
         assert!(
             v_list(vec![v_int(1), v_int(3)]) >= v_list(vec![v_int(1), v_int(2)])
@@ -723,7 +729,7 @@ mod tests {
     fn test_partial_cmp() {
         assert_eq!(v_int(1).partial_cmp(&v_int(1)), Some(Ordering::Equal));
         assert_eq!(
-            Var::Float(1.).partial_cmp(&Var::Float(1.)),
+            v_float(1.).partial_cmp(&v_float(1.)),
             Some(Ordering::Equal)
         );
         assert_eq!(
@@ -746,7 +752,7 @@ mod tests {
 
         assert_eq!(v_int(1).partial_cmp(&v_int(2)), Some(Ordering::Less));
         assert_eq!(
-            Var::Float(1.).partial_cmp(&Var::Float(2.)),
+            v_float(1.).partial_cmp(&v_float(2.)),
             Some(Ordering::Less)
         );
         assert_eq!(
@@ -772,7 +778,7 @@ mod tests {
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Var::Float(2.).partial_cmp(&Var::Float(1.)),
+            v_float(2.).partial_cmp(&v_float(1.)),
             Some(Ordering::Greater)
         );
         assert_eq!(
@@ -797,7 +803,7 @@ mod tests {
     #[test]
     fn test_cmp() {
         assert_eq!(v_int(1).cmp(&v_int(1)), Ordering::Equal);
-        assert_eq!(Var::Float(1.).cmp(&Var::Float(1.)), Ordering::Equal);
+        assert_eq!(v_float(1.).cmp(&v_float(1.)), Ordering::Equal);
         assert_eq!(
             v_str("a").cmp(&v_str("a")),
             Ordering::Equal
@@ -814,7 +820,7 @@ mod tests {
         );
 
         assert_eq!(v_int(1).cmp(&v_int(2)), Ordering::Less);
-        assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
+        assert_eq!(v_float(1.).cmp(&v_float(2.)), Ordering::Less);
         assert_eq!(
             v_str("a").cmp(&v_str("b")),
             Ordering::Less
@@ -831,7 +837,7 @@ mod tests {
         );
 
         assert_eq!(v_int(2).cmp(&v_int(1)), Ordering::Greater);
-        assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
+        assert_eq!(v_float(2.).cmp(&v_float(1.)), Ordering::Greater);
         assert_eq!(
             v_str("b").cmp(&v_str("a")),
             Ordering::Greater
@@ -858,7 +864,7 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(
-            Var::Float(1.).partial_cmp(&Var::Float(1.)).unwrap(),
+            v_float(1.).partial_cmp(&v_float(1.)).unwrap(),
             Ordering::Equal
         );
         assert_eq!(
@@ -889,7 +895,7 @@ mod tests {
             Ordering::Less
         );
         assert_eq!(
-            Var::Float(1.).partial_cmp(&Var::Float(2.)).unwrap(),
+            v_float(1.).partial_cmp(&v_float(2.)).unwrap(),
             Ordering::Less
         );
         assert_eq!(
@@ -920,7 +926,7 @@ mod tests {
             Ordering::Greater
         );
         assert_eq!(
-            Var::Float(2.).partial_cmp(&Var::Float(1.)).unwrap(),
+            v_float(2.).partial_cmp(&v_float(1.)).unwrap(),
             Ordering::Greater
         );
         assert_eq!(
@@ -950,7 +956,7 @@ mod tests {
     #[test]
     fn test_ord() {
         assert_eq!(v_int(1).cmp(&v_int(1)), Ordering::Equal);
-        assert_eq!(Var::Float(1.).cmp(&Var::Float(1.)), Ordering::Equal);
+        assert_eq!(v_float(1.).cmp(&v_float(1.)), Ordering::Equal);
         assert_eq!(
             v_str("a").cmp(&v_str("a")),
             Ordering::Equal
@@ -967,7 +973,7 @@ mod tests {
         );
 
         assert_eq!(v_int(1).cmp(&v_int(2)), Ordering::Less);
-        assert_eq!(Var::Float(1.).cmp(&Var::Float(2.)), Ordering::Less);
+        assert_eq!(v_float(1.).cmp(&v_float(2.)), Ordering::Less);
         assert_eq!(
             v_str("a").cmp(&v_str("b")),
             Ordering::Less
@@ -984,7 +990,7 @@ mod tests {
         );
 
         assert_eq!(v_int(2).cmp(&v_int(1)), Ordering::Greater);
-        assert_eq!(Var::Float(2.).cmp(&Var::Float(1.)), Ordering::Greater);
+        assert_eq!(v_float(2.).cmp(&v_float(1.)), Ordering::Greater);
         assert_eq!(
             v_str("b").cmp(&v_str("a")),
             Ordering::Greater
@@ -1007,7 +1013,7 @@ mod tests {
     #[test]
     fn test_is_true() {
         assert!(v_int(1).is_true());
-        assert!(Var::Float(1.).is_true());
+        assert!(v_float(1.).is_true());
         assert!(v_str("a").is_true());
         assert!(v_list(vec![v_int(1), v_int(2)]).is_true());
         assert!(!v_obj(1).is_true());
