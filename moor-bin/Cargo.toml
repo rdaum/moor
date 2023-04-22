@@ -1,0 +1,25 @@
+[package]
+name = "moor-bin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+moor-lib = { path = "../moor-lib" }
+
+## Command line arguments parsing.
+clap = "4.0.29"
+clap_derive = "4.0.21"
+
+#
+anyhow = "1.0.70"
+futures-util = "0.3.28"
+async-trait = "0.1.68"
+
+## Asynchronous transaction processing & networking
+tokio = { version = "1.27.0", features = ["full"] }
+tungstenite = "*"           # Websockets
+tokio-tungstenite = "*"
+
+## Logging & tracing
+tracing = "0.1.29"
+tracing-subscriber = "0.3"

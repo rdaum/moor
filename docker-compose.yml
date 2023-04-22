@@ -9,7 +9,7 @@ services:
       - .:/moor:cached
     environment:
       - CARGO_TARGET_DIR=/root/target
-    command: sh -c "cargo watch -w Cargo.toml -w src -x 'run --release -- out.db JHCore-DEV-2.db 0.0.0.0:8080'"
+    command: sh -c "cargo watch -w moor-lib -w moor-bin -w  -x 'run --release -- out.db JHCore-DEV-2.db 0.0.0.0:8080'"
     ports:
       - "8080:8080"
 

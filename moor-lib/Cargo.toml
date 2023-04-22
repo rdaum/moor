@@ -1,0 +1,46 @@
+[package]
+name = "moor-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tuplebox = { path = "../tuplebox" }
+
+## General usefullness
+itertools = "0.10.5"
+lazy_static = "1.4.0"
+enum-primitive-derive = "0.2.2"
+async-trait = "0.1.68"
+decorum = "0.3.1"  # For ordering & comparing our floats
+num-traits = "0.2.15"  # Needed for my BitEnum
+text_io = "0.1.12" # Used for reading text dumps.
+int-enum = "0.5.0"
+
+## Required for MOO builtins.
+magic-crypt = "3.1.12"  # For MOO's hokey 'crypt' builtin
+md5 = "0.7.0" # For MOO's "string_hash"
+rand = "0.8.5"
+
+## Compiler grammar/parser
+pest = "2.5.7"
+pest_derive = "2.5.7"
+
+## Error declaration/ handling
+anyhow = "1.0.66"
+thiserror = "1.0.37"
+
+## For macro-ing
+paste = "1.0.12"
+snailquote = "0.3.1"
+
+## Support to assist a generally more lovely concurrency story.
+hybrid-lock = "0.1.0" # Used for now inside Relations/Tx. Other places tend to use tokio::sync::Mutex/RwLock.
+dashmap = "5.4.0" # Fast foncurrent hash hash
+fast-counter = "1.0.0" # Concurrent thread local counters.
+
+## Asynchronous transaction processing & networking
+tokio = { version = "1.27.0", features = ["full"] }
+tokio-test = "0.4.2"
+
+## Logging & tracing
+tracing = "0.1.29"
