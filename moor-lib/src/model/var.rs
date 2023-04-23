@@ -28,6 +28,9 @@ pub const NOTHING: Objid = Objid(-1);
 pub const AMBIGUOUS: Objid = Objid(-2);
 pub const FAILED_MATCH: Objid = Objid(-3);
 
+pub const VAR_NONE: Var = Var{value: Variant::None};
+pub const VAR_CLEAR: Var = Var{value: Variant::Clear};
+
 #[repr(u8)]
 #[derive(
     Clone,
@@ -121,7 +124,7 @@ impl Error {
         ErrorPack {
             code: *self,
             msg: msg.unwrap_or(self.message().to_string()),
-            value: Var::None,
+            value: VAR_NONE,
         }
     }
 }
@@ -142,7 +145,12 @@ pub enum VarType {
 }
 
 #[derive(Clone)]
-pub enum Var {
+pub struct Var {
+    value : Variant,
+}
+
+#[derive(Clone)]
+pub enum Variant {
     Clear,
     None,
     Str(String),
@@ -160,58 +168,71 @@ pub enum Var {
 }
 
 pub fn v_bool(b: bool) -> Var {
-    Var::Int(if b { 1 } else { 0 })
+    Var{value:Variant::Int(if b { 1 } else { 0 })}
 }
 pub fn v_int(i: i64) -> Var {
-    Var::Int(i)
+    Var{value:Variant::Int(i)}
 }
 pub fn v_float(f: f64) -> Var {
-    Var::Float(f)
+    Var{value:Variant::Float(f)}
 }
 pub fn v_str(s: &str) -> Var {
-    Var::Str(s.to_string())
+    Var{value:Variant::Str(s.to_string())}
 }
 pub fn v_string(s: String) -> Var {
-    Var::Str(s)
+    Var{value:Variant::Str(s)}
 }
 pub fn v_objid(o: Objid) -> Var {
-    Var::Obj(o)
+    Var{value:Variant::Obj(o)}
 }
 pub fn v_obj(o : i64) -> Var {
-    Var::Obj(Objid(o))
+    Var{value:Variant::Obj(Objid(o))}
 }
 pub fn v_err(e: Error) -> Var {
-    Var::Err(e)
+    Var{value:Variant::Err(e)}
 }
 pub fn v_list(l: Vec<Var>) -> Var {
-    Var::List(l)
+    Var{value:Variant::List(l)}
+}
+pub fn v_label(l: Label) -> Var {
+    Var{value:Variant::_Label(l)}
+}
+pub fn v_catch(l: Label) -> Var {
+    Var{value:Variant::_Catch(l)}
+}
+pub fn v_finally(l: Label) -> Var {
+    Var{value:Variant::_Finally(l)}
 }
 
 impl Var {
+    pub fn v(&self) -> &Variant {
+        self.v()
+    }
+
     pub fn type_id(&self) -> VarType {
-        match self {
-            Var::Clear => VarType::TYPE_CLEAR,
-            Var::None => VarType::TYPE_NONE,
-            Var::Str(_) => VarType::TYPE_STR,
-            Var::Obj(_) => VarType::TYPE_OBJ,
-            Var::Int(_) => VarType::TYPE_INT,
-            Var::Float(_) => VarType::TYPE_FLOAT,
-            Var::Err(_) => VarType::TYPE_ERR,
-            Var::List(_) => VarType::TYPE_LIST,
-            Var::_Catch(_) => VarType::TYPE_CATCH,
-            Var::_Finally(_) => VarType::TYPE_FINALLY,
-            Var::_Label(_) => VarType::TYPE_CATCH,
+        match self.v() {
+            Variant::Clear => VarType::TYPE_CLEAR,
+            Variant::None => VarType::TYPE_NONE,
+            Variant::Str(_) => VarType::TYPE_STR,
+            Variant::Obj(_) => VarType::TYPE_OBJ,
+            Variant::Int(_) => VarType::TYPE_INT,
+            Variant::Float(_) => VarType::TYPE_FLOAT,
+            Variant::Err(_) => VarType::TYPE_ERR,
+            Variant::List(_) => VarType::TYPE_LIST,
+            Variant::_Catch(_) => VarType::TYPE_CATCH,
+            Variant::_Finally(_) => VarType::TYPE_FINALLY,
+            Variant::_Label(_) => VarType::TYPE_CATCH,
         }
     }
 
     pub fn to_literal(&self) -> String {
-        match self {
-            Var::None => "None".to_string(),
-            Var::Int(i) => i.to_string(),
-            Var::Float(f) => f.to_string(),
-            Var::Str(s) => format!("\"{}\"", s),
-            Var::Obj(o) => format!("{}", o),
-            Var::List(l) => {
+        match self.v() {
+            Variant::None => "None".to_string(),
+            Variant::Int(i) => i.to_string(),
+            Variant::Float(f) => f.to_string(),
+            Variant::Str(s) => format!("\"{}\"", s),
+            Variant::Obj(o) => format!("{}", o),
+            Variant::List(l) => {
                 let mut result = String::new();
                 result.push('{');
                 for (i, v) in l.iter().enumerate() {
@@ -223,7 +244,7 @@ impl Var {
                 result.push('}');
                 result
             }
-            Var::Err(e) => e.name().to_string(),
+            Variant::Err(e) => e.name().to_string(),
             _ => "".to_string(),
         }
     }
@@ -243,87 +264,87 @@ impl Debug for Var {
 
 impl PartialEq<Self> for Var {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Var::Clear, Var::Clear) => true,
-            (Var::None, Var::None) => true,
-            (Var::Str(l), Var::Str(r)) => l == r,
-            (Var::Obj(l), Var::Obj(r)) => l == r,
-            (Var::Int(l), Var::Int(r)) => l == r,
-            (Var::Float(l), Var::Float(r)) => l == r,
-            (Var::Err(l), Var::Err(r)) => l == r,
-            (Var::List(l), Var::List(r)) => l == r,
-            (Var::Clear, _) => false,
-            (Var::None, _) => false,
-            (Var::Str(_), _) => false,
-            (Var::Obj(_), _) => false,
-            (Var::Int(_), _) => false,
-            (Var::Float(_), _) => false,
-            (Var::Err(_), _) => false,
-            (Var::List(_), _) => false,
-            (Var::_Catch(a), Var::_Catch(b)) => a == b,
-            (Var::_Finally(a), Var::_Finally(b)) => a == b,
-            (Var::_Label(a), Var::_Label(b)) => a == b,
-            (Var::_Catch(_a), _) => false,
-            (Var::_Label(_a), _) => false,
-            (Var::_Finally(_a), _) => false,
+        match (self.v(), other.v()) {
+            (Variant::Clear, Variant::Clear) => true,
+            (Variant::None, Variant::None) => true,
+            (Variant::Str(l), Variant::Str(r)) => l == r,
+            (Variant::Obj(l), Variant::Obj(r)) => l == r,
+            (Variant::Int(l), Variant::Int(r)) => l == r,
+            (Variant::Float(l), Variant::Float(r)) => l == r,
+            (Variant::Err(l), Variant::Err(r)) => l == r,
+            (Variant::List(l), Variant::List(r)) => l == r,
+            (Variant::Clear, _) => false,
+            (Variant::None, _) => false,
+            (Variant::Str(_), _) => false,
+            (Variant::Obj(_), _) => false,
+            (Variant::Int(_), _) => false,
+            (Variant::Float(_), _) => false,
+            (Variant::Err(_), _) => false,
+            (Variant::List(_), _) => false,
+            (Variant::_Catch(a), Variant::_Catch(b)) => a == b,
+            (Variant::_Finally(a), Variant::_Finally(b)) => a == b,
+            (Variant::_Label(a), Variant::_Label(b)) => a == b,
+            (Variant::_Catch(_a), _) => false,
+            (Variant::_Label(_a), _) => false,
+            (Variant::_Finally(_a), _) => false,
         }
     }
 }
 
 impl PartialOrd<Self> for Var {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (Var::Clear, Var::Clear) => Some(Ordering::Equal),
-            (Var::None, Var::None) => Some(Ordering::Equal),
-            (Var::Str(l), Var::Str(r)) => l.partial_cmp(r),
-            (Var::Obj(l), Var::Obj(r)) => l.partial_cmp(r),
-            (Var::Int(l), Var::Int(r)) => l.partial_cmp(r),
-            (Var::Float(l), Var::Float(r)) => R64::from(*l).partial_cmp(&R64::from(*r)),
-            (Var::Err(l), Var::Err(r)) => l.partial_cmp(r),
-            (Var::List(l), Var::List(r)) => l.partial_cmp(r),
-            (Var::Clear, _) => Some(Ordering::Less),
-            (Var::None, _) => Some(Ordering::Less),
-            (Var::Str(_), _) => Some(Ordering::Less),
-            (Var::Obj(_), _) => Some(Ordering::Less),
-            (Var::Int(_), _) => Some(Ordering::Less),
-            (Var::Float(_), _) => Some(Ordering::Less),
-            (Var::Err(_), _) => Some(Ordering::Less),
-            (Var::List(_), _) => Some(Ordering::Less),
-            (Var::_Catch(a), Var::_Catch(b)) => a.partial_cmp(b),
-            (Var::_Finally(a), Var::_Finally(b)) => a.partial_cmp(b),
-            (Var::_Label(a), Var::_Label(b)) => a.partial_cmp(b),
-            (Var::_Catch(_a), _) => Some(Ordering::Less),
-            (Var::_Label(_a), _) => Some(Ordering::Less),
-            (Var::_Finally(_a), _) => Some(Ordering::Less),
+        match (self.v(), other.v()) {
+            (Variant::Clear, Variant::Clear) => Some(Ordering::Equal),
+            (Variant::None, Variant::None) => Some(Ordering::Equal),
+            (Variant::Str(l), Variant::Str(r)) => l.partial_cmp(r),
+            (Variant::Obj(l), Variant::Obj(r)) => l.partial_cmp(r),
+            (Variant::Int(l), Variant::Int(r)) => l.partial_cmp(r),
+            (Variant::Float(l), Variant::Float(r)) => R64::from(*l).partial_cmp(&R64::from(*r)),
+            (Variant::Err(l), Variant::Err(r)) => l.partial_cmp(r),
+            (Variant::List(l), Variant::List(r)) => l.partial_cmp(r),
+            (Variant::Clear, _) => Some(Ordering::Less),
+            (Variant::None, _) => Some(Ordering::Less),
+            (Variant::Str(_), _) => Some(Ordering::Less),
+            (Variant::Obj(_), _) => Some(Ordering::Less),
+            (Variant::Int(_), _) => Some(Ordering::Less),
+            (Variant::Float(_), _) => Some(Ordering::Less),
+            (Variant::Err(_), _) => Some(Ordering::Less),
+            (Variant::List(_), _) => Some(Ordering::Less),
+            (Variant::_Catch(a), Variant::_Catch(b)) => a.partial_cmp(b),
+            (Variant::_Finally(a), Variant::_Finally(b)) => a.partial_cmp(b),
+            (Variant::_Label(a), Variant::_Label(b)) => a.partial_cmp(b),
+            (Variant::_Catch(_a), _) => Some(Ordering::Less),
+            (Variant::_Label(_a), _) => Some(Ordering::Less),
+            (Variant::_Finally(_a), _) => Some(Ordering::Less),
         }
     }
 }
 
 impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Var::Clear, Var::Clear) => Ordering::Equal,
-            (Var::None, Var::None) => Ordering::Equal,
-            (Var::Str(l), Var::Str(r)) => l.cmp(r),
-            (Var::Obj(l), Var::Obj(r)) => l.cmp(r),
-            (Var::Int(l), Var::Int(r)) => l.cmp(r),
-            (Var::Float(l), Var::Float(r)) => R64::from(*l).cmp(&R64::from(*r)),
-            (Var::Err(l), Var::Err(r)) => l.cmp(r),
-            (Var::List(l), Var::List(r)) => l.cmp(r),
-            (Var::Clear, _) => Ordering::Less,
-            (Var::None, _) => Ordering::Less,
-            (Var::Str(_), _) => Ordering::Less,
-            (Var::Obj(_), _) => Ordering::Less,
-            (Var::Int(_), _) => Ordering::Less,
-            (Var::Float(_), _) => Ordering::Less,
-            (Var::Err(_), _) => Ordering::Less,
-            (Var::List(_), _) => Ordering::Less,
-            (Var::_Catch(a), Var::_Catch(b)) => a.cmp(b),
-            (Var::_Finally(a), Var::_Finally(b)) => a.cmp(b),
-            (Var::_Label(a), Var::_Label(b)) => a.cmp(b),
-            (Var::_Catch(_a), _) => Ordering::Less,
-            (Var::_Label(_a), _) => Ordering::Less,
-            (Var::_Finally(_a), _) => Ordering::Less,
+        match (self.v(), other.v()) {
+            (Variant::Clear, Variant::Clear) => Ordering::Equal,
+            (Variant::None, Variant::None) => Ordering::Equal,
+            (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
+            (Variant::Obj(l), Variant::Obj(r)) => l.cmp(r),
+            (Variant::Int(l), Variant::Int(r)) => l.cmp(r),
+            (Variant::Float(l), Variant::Float(r)) => R64::from(*l).cmp(&R64::from(*r)),
+            (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
+            (Variant::List(l), Variant::List(r)) => l.cmp(r),
+            (Variant::Clear, _) => Ordering::Less,
+            (Variant::None, _) => Ordering::Less,
+            (Variant::Str(_), _) => Ordering::Less,
+            (Variant::Obj(_), _) => Ordering::Less,
+            (Variant::Int(_), _) => Ordering::Less,
+            (Variant::Float(_), _) => Ordering::Less,
+            (Variant::Err(_), _) => Ordering::Less,
+            (Variant::List(_), _) => Ordering::Less,
+            (Variant::_Catch(a), Variant::_Catch(b)) => a.cmp(b),
+            (Variant::_Finally(a), Variant::_Finally(b)) => a.cmp(b),
+            (Variant::_Label(a), Variant::_Label(b)) => a.cmp(b),
+            (Variant::_Catch(_a), _) => Ordering::Less,
+            (Variant::_Label(_a), _) => Ordering::Less,
+            (Variant::_Finally(_a), _) => Ordering::Less,
         }
     }
 }
@@ -331,18 +352,18 @@ impl Hash for Var {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let t = self.type_id() as u8;
         t.hash(state);
-        match self {
-            Var::Clear => {}
-            Var::None => {}
-            Var::Str(s) => s.hash(state),
-            Var::Obj(o) => o.hash(state),
-            Var::Int(i) => i.hash(state),
-            Var::Float(f) => R64::from(*f).hash(state),
-            Var::Err(e) => e.hash(state),
-            Var::List(l) => l.hash(state),
-            Var::_Catch(l) => l.hash(state),
-            Var::_Finally(l) => l.hash(state),
-            Var::_Label(l) => l.hash(state),
+        match self.v() {
+            Variant::Clear => {}
+            Variant::None => {}
+            Variant::Str(s) => s.hash(state),
+            Variant::Obj(o) => o.hash(state),
+            Variant::Int(i) => i.hash(state),
+            Variant::Float(f) => R64::from(*f).hash(state),
+            Variant::Err(e) => e.hash(state),
+            Variant::List(l) => l.hash(state),
+            Variant::_Catch(l) => l.hash(state),
+            Variant::_Finally(l) => l.hash(state),
+            Variant::_Label(l) => l.hash(state),
         }
     }
 }
@@ -351,11 +372,11 @@ impl Eq for Var {}
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
-            match (self, v) {
-                (Var::Float(l), Var::Float(r)) => Ok(v_float(l.$op(*r))),
-                (Var::Int(l), Var::Int(r)) => Ok(v_int(l.$op(*r))),
-                (Var::Float(l), Var::Int(r)) => Ok(v_float(l.$op(*r as f64))),
-                (Var::Int(l), Var::Float(r)) => Ok(v_float((*l as f64).$op(*r))),
+            match (self.v(), v.v()) {
+                (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.$op(*r))),
+                (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.$op(*r))),
+                (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.$op(*r as f64))),
+                (Variant::Int(l), Variant::Float(r)) => Ok(v_float((*l as f64).$op(*r))),
                 (_, _) => Ok(v_err(E_TYPE)),
             }
         }
@@ -364,17 +385,17 @@ macro_rules! binary_numeric_coercion_op {
 
 impl Var {
     pub fn is_true(&self) -> bool {
-        match self {
-            Var::Str(s) => !s.is_empty(),
-            Var::Int(i) => *i != 0,
-            Var::Float(f) => !f.is_zero(),
-            Var::List(l) => !l.is_empty(),
+        match self.v() {
+            Variant::Str(s) => !s.is_empty(),
+            Variant::Int(i) => *i != 0,
+            Variant::Float(f) => !f.is_zero(),
+            Variant::List(l) => !l.is_empty(),
             _ => false,
         }
     }
 
     pub fn has_member(&self, v: &Var) -> Var {
-        let Var::List(l) = self else {
+        let Variant::List(l) = self.v() else {
             return v_err(E_TYPE);
         };
 
@@ -386,12 +407,12 @@ impl Var {
     binary_numeric_coercion_op!(sub);
 
     pub fn add(&self, v: &Var) -> Result<Var, Error> {
-        match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Ok(v_float(*l + *r)),
-            (Var::Int(l), Var::Int(r)) => Ok(v_int(l + r)),
-            (Var::Float(l), Var::Int(r)) => Ok(v_float(*l + (*r as f64))),
-            (Var::Int(l), Var::Float(r)) => Ok(v_float(*l as f64 + *r)),
-            (Var::Str(s), Var::Str(r)) => {
+        match (self.v(), v.v()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l + *r)),
+            (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l + r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l + (*r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + *r)),
+            (Variant::Str(s), Variant::Str(r)) => {
                 let mut c = s.clone();
                 c.push_str(r);
                 Ok(v_str(c.as_str()))
@@ -401,40 +422,40 @@ impl Var {
     }
 
     pub fn negative(&self) -> Result<Var, Error> {
-        match self {
-            Var::Int(l) => Ok(v_int(-*l)),
-            Var::Float(f) => Ok(v_float(f.neg())),
+        match self.v() {
+            Variant::Int(l) => Ok(v_int(-*l)),
+            Variant::Float(f) => Ok(v_float(f.neg())),
             _ => Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn modulus(&self, v: &Var) -> Result<Var, Error> {
-        match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Ok(v_float(*l % *r)),
-            (Var::Int(l), Var::Int(r)) => Ok(v_int(l % r)),
-            (Var::Float(l), Var::Int(r)) => Ok(v_float(*l % (*r as f64))),
-            (Var::Int(l), Var::Float(r)) => Ok(v_float(*l as f64 % (*r))),
+        match (self.v(), v.v()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l % *r)),
+            (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l % r)),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l % (*r as f64))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 % (*r))),
             (_, _) =>Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn pow(&self, v: &Var) -> Result<Var, Error> {
-        match (self, v) {
-            (Var::Float(l), Var::Float(r)) => Ok(v_float(l.powf(*r))),
-            (Var::Int(l), Var::Int(r)) => Ok(v_int(l.pow(*r as u32))),
-            (Var::Float(l), Var::Int(r)) => Ok(v_float(l.powi(*r as i32))),
-            (Var::Int(l), Var::Float(r)) => Ok(v_float((*l as f64).powf(*r))),
+        match (self.v(), v.v()) {
+            (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
+            (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.pow(*r as u32))),
+            (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(*r as i32))),
+            (Variant::Int(l), Variant::Float(r)) => Ok(v_float((*l as f64).powf(*r))),
             (_, _) =>Ok(v_err(E_TYPE)),
         }
     }
 
     pub fn index(&self, idx: usize) -> Result<Var, Error> {
-        match self {
-            Var::List(l) => match l.get(idx) {
+        match self.v() {
+            Variant::List(l) => match l.get(idx) {
                 None => Ok(v_err(E_RANGE)),
                 Some(v) => Ok(v.clone()),
             },
-            Var::Str(s) => match s.get(idx..idx + 1) {
+            Variant::Str(s) => match s.get(idx..idx + 1) {
                 None => Ok(v_err(E_RANGE)),
                 Some(v) => Ok(v_str(v)),
             },
@@ -443,8 +464,8 @@ impl Var {
     }
 
     pub fn range(&self, from: i64, to: i64) -> Result<Var, Error> {
-        match self {
-            Var::Str(s) => {
+        match self.v() {
+            Variant::Str(s) => {
                 let len = s.len() as i64;
                 if from <= 0 || from > len + 1 || to < 1 || to > len {
                     return Ok(v_err(E_RANGE));
@@ -452,7 +473,7 @@ impl Var {
                 let (from, to) = (from as usize, to as usize);
                 Ok(v_str(&s[from - 1..to]))
             }
-            Var::List(l) => {
+            Variant::List(l) => {
                 let len = l.len() as i64;
                 if from <= 0 || from > len + 1 || to < 1 || to > len {
                     return Ok(v_err(E_RANGE));
@@ -469,11 +490,11 @@ impl Var {
     }
 
     pub fn rangeset(&self, value: Var, from: i64, to: i64) -> Result<Var, Error> {
-        let (base_len, val_len) = match (self, &value) {
-            (Var::Str(base_str), Var::Str(val_str)) => {
+        let (base_len, val_len) = match (self.v(), value.v()) {
+            (Variant::Str(base_str), Variant::Str(val_str)) => {
                 (base_str.len() as i64, val_str.len() as i64)
             }
-            (Var::List(base_list), Var::List(val_list)) => {
+            (Variant::List(base_list), Variant::List(val_list)) => {
                 (base_list.len() as i64, val_list.len() as i64)
             }
             _ => return Ok(v_err(E_TYPE)),
@@ -489,74 +510,73 @@ impl Var {
         let newsize = lenleft + lenmiddle + lenright;
 
         let (from, to) = (from as usize, to as usize);
-        let ans = match (self, &value) {
-            (Var::Str(base_str), Var::Str(value_str)) => {
+        let ans = match (self.v(), value.v()) {
+            (Variant::Str(base_str), Variant::Str(value_str)) => {
                 let mut ans = String::with_capacity(newsize as usize);
                 ans.push_str(&base_str[..from - 1]);
                 ans.push_str(value_str);
                 ans.push_str(&base_str[to..]);
-                Var::Str(ans)
+                Variant::Str(ans)
             }
-            (Var::List(base_list), Var::List(value_list)) => {
+            (Variant::List(base_list), Variant::List(value_list)) => {
                 let mut ans: Vec<Var> = Vec::with_capacity(newsize as usize);
                 ans.extend_from_slice(&base_list[..from - 1]);
                 ans.extend(value_list.iter().cloned());
                 ans.extend_from_slice(&base_list[to..]);
-                Var::List(ans)
+                Variant::List(ans)
             }
             _ => unreachable!(),
         };
 
-        Ok(ans)
+        Ok(Var{value:ans})
     }
 }
 
 impl<'a> From<&'a str> for Var {
     fn from(s: &'a str) -> Self {
-        Self::Str(s.to_string())
+        v_str(s)
     }
 }
 
 impl From<String> for Var {
     fn from(s: String) -> Self {
-        Self::Str(s)
+        v_str(&s)
     }
 }
 
 impl From<i64> for Var {
     fn from(i: i64) -> Self {
-        Self::Int(i)
+        v_int(i)
     }
 }
 
 impl From<f64> for Var {
     fn from(f: f64) -> Self {
-        Self::Float(f)
+        v_float(f)
     }
 }
 
 impl From<Objid> for Var {
     fn from(o: Objid) -> Self {
-        Self::Obj(o)
+        v_objid(o)
     }
 }
 
 impl From<Vec<Var>> for Var {
     fn from(l: Vec<Var>) -> Self {
-        Self::List(l)
+        v_list(l)
     }
 }
 
 impl From<Error> for Var {
     fn from(e: Error) -> Self {
-        Self::Err(e)
+        v_err(e)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
-    use crate::model::var::Error::E_RANGE;
 
     use super::*;
 
@@ -574,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_sub() -> Result<(), Error> {
-        assert_eq!(v_int(1).sub(&v_int(2))?, Var::Int(-1));
+        assert_eq!(v_int(1).sub(&v_int(2))?, v_int(-1));
         assert_eq!(v_int(1).sub(&v_float(2.))?, v_float(-1.));
         assert_eq!(v_float(1.).sub(&v_int(2))?, v_float(-1.));
         assert_eq!(v_float(1.).sub(&v_float(2.))?, v_float(-1.));
@@ -606,7 +626,7 @@ mod tests {
         assert_eq!(v_float(1.).modulus(&v_int(2)), Ok(v_float(1.)));
         assert_eq!(v_float(1.).modulus(&v_float(2.)), Ok(v_float(1.)));
         assert_eq!(
-            Var::Str("moop".into()).modulus(&v_int(2)),
+            v_str("moop").modulus(&v_int(2)),
             Ok(v_err(E_TYPE))
         );
     }
@@ -1078,7 +1098,7 @@ mod tests {
 
         // Test interior deletion
         let base = v_str("12345");
-        let value = Var::Str("".to_string());
+        let value = v_str("");
         let expected = v_str("145");
         let result = base.rangeset(value, 2, 3);
         assert_eq!(result, Ok(expected));

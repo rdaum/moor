@@ -3,6 +3,7 @@ use std::rc::Rc;
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
 use std::str::FromStr;
+use num_traits::Num;
 
 pub use pest::Parser as PestParser;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
@@ -13,7 +14,7 @@ use crate::compiler::ast::{
 use crate::compiler::labels::Names;
 use crate::compiler::Parse;
 use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::model::var::{v_err, Objid, SYSTEM_OBJECT, Var};
+use crate::model::var::{v_err, Objid, SYSTEM_OBJECT, v_objid, v_float, v_int, v_str};
 use crate::model::var::Error::{E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF};
 
 pub mod moo {
@@ -35,25 +36,25 @@ fn parse_atom(
             let ostr = &pairs.as_str()[1..];
             let oid = i64::from_str(ostr).unwrap();
             let objid = Objid(oid);
-            Ok(Expr::VarExpr(Var::Obj(objid)))
+            Ok(Expr::VarExpr(v_objid(objid)))
         }
         Rule::integer => {
             let int = pairs.as_str().parse::<i64>().unwrap();
-            Ok(Expr::VarExpr(Var::Int(int)))
+            Ok(Expr::VarExpr(v_int(int)))
         }
         Rule::hex => {
             let int = i64::from_str_radix(&pairs.as_str()[2..], 16).unwrap();
-            Ok(Expr::VarExpr(Var::Int(int)))
+            Ok(Expr::VarExpr(v_int(int)))
         }
         Rule::float => {
             let float = pairs.as_str().parse::<f64>().unwrap();
-            Ok(Expr::VarExpr(Var::Float(float)))
+            Ok(Expr::VarExpr(v_float(float)))
         }
         Rule::string => {
             let string = pairs.as_str();
             // Note we don't trim the start and end quotes, because snailquote is expecting them.
             let parsed = snailquote::unescape(string).unwrap();
-            Ok(Expr::VarExpr(Var::Str(parsed)))
+            Ok(Expr::VarExpr(v_str(&parsed)))
         }
         Rule::err => {
             let e = pairs.as_str();
@@ -185,8 +186,8 @@ fn parse_expr(
                 let mut inner = primary.into_inner();
                 let property = inner.next().unwrap().as_str();
                 Ok(Expr::Prop {
-                    location: Box::new(Expr::VarExpr(Var::Obj(SYSTEM_OBJECT))),
-                    property: Box::new(Expr::VarExpr(Var::Str(property.to_string()))),
+                    location: Box::new(Expr::VarExpr(v_objid(SYSTEM_OBJECT))),
+                    property: Box::new(Expr::VarExpr(v_str(property))),
                 })
             }
             Rule::sysprop_call => {
@@ -194,8 +195,8 @@ fn parse_expr(
                 let verb = inner.next().unwrap().as_str();
                 let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(Expr::Verb {
-                    location: Box::new(Expr::VarExpr(Var::Obj(SYSTEM_OBJECT))),
-                    verb: Box::new(Expr::VarExpr(Var::Str(verb.to_string()))),
+                    location: Box::new(Expr::VarExpr(v_objid(SYSTEM_OBJECT))),
+                    verb: Box::new(Expr::VarExpr(v_str(verb))),
                     args,
                 })
             }
@@ -370,7 +371,7 @@ fn parse_expr(
                 let args = parse_arglist(names.clone(), args_expr.into_inner())?;
                 Ok(Expr::Verb {
                     location: Box::new(lhs?),
-                    verb: Box::new(Expr::VarExpr(Var::Str(ident.to_string()))),
+                    verb: Box::new(Expr::VarExpr(v_str(ident))),
                     args,
                 })
             }
@@ -390,7 +391,7 @@ fn parse_expr(
                 let ident = parts.next().unwrap().as_str();
                 Ok(Expr::Prop {
                     location: Box::new(lhs?),
-                    property: Box::new(Expr::VarExpr(Var::Str(ident.to_string()))),
+                    property: Box::new(Expr::VarExpr(v_str(ident))),
                 })
             }
             Rule::prop_expr => {
@@ -725,9 +726,8 @@ mod tests {
     use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::model::var::{v_err, v_int, v_obj, v_str, Var};
+    use crate::model::var::{v_err, v_float, v_int, v_obj, v_str};
     use crate::model::var::Error::{E_PROPNF, E_VARNF};
-    use crate::model::var::Var::Str;
 
     #[test]
     fn test_call_verb() {
@@ -780,7 +780,7 @@ mod tests {
             parse.stmts[0],
             Stmt::Expr(Expr::Call {
                 function: "notify".to_string(),
-                args: vec![Normal(VarExpr(Str("test".into())))],
+                args: vec![Normal(VarExpr(v_str("test")))],
             })
         );
     }
@@ -992,7 +992,7 @@ mod tests {
             vec![Stmt::Expr(Expr::Verb {
                 location: Box::new(Prop {
                     location: Box::new(VarExpr(v_obj(0))),
-                    property: Box::new(VarExpr(Str("string_utils".to_string()))),
+                    property: Box::new(VarExpr(v_str("string_utils"))),
                 }),
                 verb: Box::new(VarExpr(v_str("from_list"))),
                 args: vec![Arg::Normal(Id(test_string))],
@@ -1030,7 +1030,7 @@ mod tests {
                 left: Box::new(Expr::Index(
                     Box::new(Prop {
                         location: Box::new(Id(this)),
-                        property: Box::new(VarExpr(Str("stack".to_string()))),
+                        property: Box::new(VarExpr(v_str("stack"))),
                     }),
                     Box::new(VarExpr(v_int(5))),
                 )),
@@ -1135,8 +1135,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::VarExpr(Var::Str(
-                "\n \t \r \" \\ ".to_string()
+            vec![Stmt::Expr(Expr::VarExpr(v_str(
+                "\n \t \r \" \\ "
             )))]
         );
     }
@@ -1312,7 +1312,7 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::VarExpr(Var::Float(10000.0)))]
+            vec![Stmt::Expr(Expr::VarExpr(v_float(10000.0)))]
         );
     }
 
@@ -1350,7 +1350,7 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Verb {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
-                verb: Box::new(VarExpr(Str("verb".to_string()))),
+                verb: Box::new(VarExpr(v_str("verb"))),
                 args: vec![
                     Arg::Normal(VarExpr(v_int(1))),
                     Arg::Normal(VarExpr(v_int(2))),
@@ -1368,7 +1368,7 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Prop {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
-                property: Box::new(VarExpr(Str("prop".to_string()))),
+                property: Box::new(VarExpr(v_str("prop"))),
             })]
         );
     }
@@ -1514,12 +1514,12 @@ mod tests {
                 trye: Box::new(Verb {
                     location: Box::new(Expr::Prop {
                         location: Box::new(VarExpr(v_obj(0))),
-                        property: Box::new(VarExpr(Str("ftp_client".to_string()))),
+                        property: Box::new(VarExpr(v_str("ftp_client"))),
                     }),
-                    verb: Box::new(VarExpr(Str("finish_get".to_string()))),
+                    verb: Box::new(VarExpr(v_str("finish_get"))),
                     args: vec![Arg::Normal(Expr::Prop {
                         location: Box::new(Id(parse.names.find_name("this").unwrap())),
-                        property: Box::new(VarExpr(Str("connection".to_string()))),
+                        property: Box::new(VarExpr(v_str("connection"))),
                     })],
                 }),
                 codes: CatchCodes::Any,

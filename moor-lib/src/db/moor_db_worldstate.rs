@@ -18,7 +18,7 @@ use crate::model::props::{
     Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
 };
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{NOTHING, Objid, Var, v_list, v_bool};
+use crate::model::var::{NOTHING, Objid, Var, v_list, v_bool, v_str, v_objid};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::tasks::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;
@@ -330,10 +330,10 @@ impl WorldState for MoorDbTx {
         if let Some(builtin) = builtin_propname_to_objattr(property_name) {
             let attrs = self.object_get_attrs(obj, BitEnum::new_with(builtin))?;
             return Ok(match builtin {
-                ObjAttr::Name => Var::Str(attrs.name.unwrap()),
-                ObjAttr::Location => Var::Obj(attrs.location.unwrap()),
-                ObjAttr::Owner => Var::Obj(attrs.owner.unwrap()),
-                ObjAttr::Parent => Var::Obj(attrs.parent.unwrap()),
+                ObjAttr::Name => v_str(&attrs.name.unwrap()),
+                ObjAttr::Location => v_objid(attrs.location.unwrap()),
+                ObjAttr::Owner => v_objid(attrs.owner.unwrap()),
+                ObjAttr::Parent => v_objid(attrs.parent.unwrap()),
                 _ => unreachable!(),
             });
         }
@@ -341,7 +341,7 @@ impl WorldState for MoorDbTx {
             return Ok(v_list(
                 self.object_contents(obj)?
                     .into_iter()
-                    .map(Var::Obj)
+                    .map(v_objid)
                     .collect(),
             ));
         }

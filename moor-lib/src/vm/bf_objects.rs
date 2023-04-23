@@ -7,7 +7,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
-use crate::model::var::{v_err, Var, v_list, v_bool};
+use crate::model::var::{v_err, Var, v_list, v_bool, Variant, v_str};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -16,7 +16,7 @@ async fn bf_create(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    _args: Vec<Var>,
+    _args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     unimplemented!("create")
 }
@@ -35,12 +35,12 @@ async fn bf_valid(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Var::Obj(obj) = &args[0] else {
+    let Variant::Obj(obj) = args[0].v() else {
         return Ok(v_err(E_TYPE));
     };
     let is_valid = ws.valid(*obj)?;
@@ -77,18 +77,18 @@ async fn bf_verbs(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Var::Obj(obj) = &args[0] else {
+    let Variant::Obj(obj) = args[0].v() else {
         return Ok(v_err(E_TYPE));
     };
     let verbs = ws.verbs(*obj)?;
     let verbs = verbs
         .iter()
-        .map(|v| Var::Str(v.names.first().unwrap().clone()))
+        .map(|v| v_str(v.names.first().unwrap()))
         .collect();
     Ok(v_list(verbs))
 }
@@ -102,16 +102,16 @@ async fn bf_properties(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Var::Obj(obj) = &args[0] else {
+    let Variant::Obj(obj) = args[0].v() else {
         return Ok(v_err(E_TYPE));
     };
     let props = ws.properties(*obj)?;
-    let props = props.iter().map(|p| Var::Str(p.0.clone())).collect();
+    let props = props.iter().map(|p| v_str(&p.0)).collect();
     Ok(v_list(props))
 }
 bf_declare!(properties, bf_properties);

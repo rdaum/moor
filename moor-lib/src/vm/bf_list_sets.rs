@@ -7,7 +7,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_RANGE, E_TYPE};
-use crate::model::var::{v_err, v_int, Var, v_list};
+use crate::model::var::{v_err, v_int, Var, v_list, Variant};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -16,13 +16,13 @@ async fn bf_is_member(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
     let (value, list) = (&args[0], &args[1]);
-    let Var::List(list) = list else {
+    let Variant::List(list) = list.v() else {
         return Ok(v_err(E_TYPE));
     };
     if list.contains(value) {
@@ -37,21 +37,21 @@ async fn bf_listinsert(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() < 2 || args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }
     let (list, value) = (&args[0], &args[1]);
-    let Var::List(list) = list else {
+    let Variant::List(list) = list.v() else {
         return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
     if args.len() == 2 {
         new_list.push(value.clone());
     } else {
-        let index = &args[2];
-        let Var::Int(index) = index else {
+        let index = args[2].v();
+        let Variant::Int(index) = index else {
             return Ok(v_err(E_TYPE));
         };
         let index = index - 1;
@@ -65,21 +65,21 @@ async fn bf_listappend(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() < 2 || args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }
     let (list, value) = (&args[0], &args[1]);
-    let Var::List(list) = list else {
+    let Variant::List(list) = list.v() else {
         return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
     if args.len() == 2 {
         new_list.push(value.clone());
     } else {
-        let index = &args[2];
-        let Var::Int(index) = index else {
+        let index = args[2].v();
+        let Variant::Int(index) = index else {
             return Ok(v_err(E_TYPE));
         };
         let index = index - 1;
@@ -93,16 +93,16 @@ async fn bf_listdelete(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let (list, index) = (&args[0], &args[1]);
-    let Var::List(list) = list else {
+    let (list, index) = (args[0].v(), args[1].v());
+    let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
-    let Var::Int(index) = index else {
+    let Variant::Int(index) = index else {
         return Ok(v_err(E_TYPE));
     };
     if *index < 1 || *index > list.len() as i64 {
@@ -119,16 +119,16 @@ async fn bf_listset(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 3 {
         return Ok(v_err(E_INVARG));
     }
-    let (list, value, index) = (&args[0], &args[1], &args[2]);
-    let Var::List(list) = list else {
+    let (list, value, index) = (args[0].v(), &args[1], args[2].v());
+    let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
-    let Var::Int(index) = index else {
+    let Variant::Int(index) = index else {
         return Ok(v_err(E_TYPE));
     };
     if *index < 1 || *index > list.len() as i64 {
@@ -145,13 +145,13 @@ async fn bf_setadd(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let (list, value) = (&args[0], &args[1]);
-    let Var::List(list) = list else {
+    let (list, value) = (args[0].v(), &args[1]);
+    let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();
@@ -166,13 +166,13 @@ async fn bf_setremove(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let (list, value) = (&args[0], &args[1]);
-    let Var::List(list) = list else {
+    let (list, value) = (args[0].v(), &args[1]);
+    let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
     let mut new_list = list.clone();

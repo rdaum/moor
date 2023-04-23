@@ -10,7 +10,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
-use crate::model::var::{v_err, Var, v_int, v_str};
+use crate::model::var::{v_err, Var, v_int, v_str, Variant};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -44,21 +44,21 @@ async fn bf_strsub(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     let case_matters = if args.len() == 3 {
         false
     } else if args.len() == 4 {
-        let Some(Var::Int(case_matters)) = args.get(3) else {
+        let Variant::Int(case_matters) = args[3].v() else {
             return Ok(v_err(E_TYPE));
         };
         *case_matters == 1
     } else {
         return Ok(v_err(E_INVARG));
     };
-    let (subject, what, with) = (&args[0], &args[1], &args[2]);
+    let (subject, what, with) = (args[0].v(), args[1].v(), args[2].v());
     match (subject, what, with) {
-        (Var::Str(subject), Var::Str(what), Var::Str(with)) => {
+        (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => {
             Ok(v_str(strsub(subject, what, with, case_matters).as_str()))
         }
         _ => Ok(v_err(E_TYPE)),
@@ -94,12 +94,12 @@ async fn bf_index(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     let case_matters = if args.len() == 2 {
         false
     } else if args.len() == 3 {
-        let Some(Var::Int(case_matters)) = args.get(2) else {
+        let Variant::Int(case_matters) = args[2].v() else {
             return Ok(v_err(E_TYPE));
         };
         *case_matters == 1
@@ -107,9 +107,9 @@ async fn bf_index(
         return Ok(v_err(E_INVARG));
     };
 
-    let (subject, what) = (&args[0], &args[1]);
+    let (subject, what) = (args[0].v(), args[1].v());
     match (subject, what) {
-        (Var::Str(subject), Var::Str(what)) => Ok(v_int(str_index(subject, what, case_matters))),
+        (Variant::Str(subject), Variant::Str(what)) => Ok(v_int(str_index(subject, what, case_matters))),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -119,12 +119,12 @@ async fn bf_rindex(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     let case_matters = if args.len() == 2 {
         false
     } else if args.len() == 3 {
-        let Some(Var::Int(case_matters)) = args.get(2) else {
+        let Variant::Int(case_matters) = args[2].v() else {
             return Ok(v_err(E_TYPE));
         };
         *case_matters == 1
@@ -132,9 +132,9 @@ async fn bf_rindex(
         return Ok(v_err(E_INVARG));
     };
 
-    let (subject, what) = (&args[0], &args[1]);
+    let (subject, what) = (args[0].v(), args[1].v());
     match (subject, what) {
-        (Var::Str(subject), Var::Str(what)) => {
+        (Variant::Str(subject), Variant::Str(what)) => {
             Ok(v_int(str_rindex(subject, what, case_matters)))
         }
         _ => Ok(v_err(E_TYPE)),
@@ -146,14 +146,14 @@ async fn bf_strcmp(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let (str1, str2) = (&args[0], &args[1]);
+    let (str1, str2) = (args[0].v(), args[1].v());
     match (str1, str2) {
-        (Var::Str(str1), Var::Str(str2)) => Ok(v_int(str1.cmp(str2) as i64)),
+        (Variant::Str(str1), Variant::Str(str2)) => Ok(v_int(str1.cmp(str2) as i64)),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -180,7 +180,7 @@ async fn bf_crypt(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.is_empty() || args.len() > 2 {
         return Ok(v_err(E_INVARG));
@@ -193,12 +193,12 @@ async fn bf_crypt(
         salt.push(char::from(rng.sample(Alphanumeric)));
         salt
     } else {
-        let Var::Str(salt) = &args[1] else {
+        let Variant::Str(salt) = args[1].v() else {
             return Ok(v_err(E_TYPE));
         };
         salt.clone()
     };
-    if let Var::Str(text) = &args[0] {
+    if let Variant::Str(text) = args[0].v() {
         Ok(v_str(des_crypt(text, salt.as_str()).as_str()))
     } else {
         Ok(v_err(E_TYPE))
@@ -210,13 +210,13 @@ async fn bf_string_hash(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match &args[0] {
-        Var::Str(s) => {
+    match args[0].v() {
+        Variant::Str(s) => {
             let hash_digest = md5::compute(s.as_bytes());
             Ok(v_str(format!("{:x}", hash_digest).as_str()))
         }
@@ -229,7 +229,7 @@ async fn bf_binary_hash(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    _args: Vec<Var>,
+    _args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     unimplemented!("binary_hash")
 }

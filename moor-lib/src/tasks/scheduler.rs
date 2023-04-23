@@ -13,7 +13,7 @@ use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{NOTHING, Objid, Var};
+use crate::model::var::{NOTHING, Objid, Var, Variant};
 use crate::tasks::parse_cmd::{parse_command, ParsedCommand};
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
@@ -342,7 +342,7 @@ impl Task {
                             player,
                             BitEnum::new_with(ObjFlag::Wizard),
                             player,
-                            command.args,
+                            &command.args,
                         )
                         .expect("Could not set up VM for command execution");
                     running_method = true;
@@ -367,7 +367,7 @@ impl Task {
                             player,
                             BitEnum::new_with(ObjFlag::Wizard),
                             player,
-                            args,
+                            &args,
                         )
                         .expect("Could not set up VM for command execution");
                     running_method = true;
@@ -430,7 +430,7 @@ impl Task {
                             // Compose a string out of the backtrace
                             let mut traceback = vec![];
                             for frame in backtrace.iter() {
-                                let Var::Str(s) = frame else {
+                                let Variant::Str(s) = frame.v() else {
                                     continue;
                                 };
                                 traceback.push(format!("{:}\n", s));

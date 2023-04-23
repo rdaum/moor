@@ -1,6 +1,6 @@
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
-use crate::model::var::{v_int, v_list, v_str, Objid, Var, v_objid, NOTHING};
+use crate::model::var::{v_int, v_list, v_str, Objid, Var, v_objid, NOTHING, VAR_NONE};
 use crate::model::var::Error;
 use crate::model::var::Error::E_VARNF;
 use crate::model::verbs::VerbInfo;
@@ -43,10 +43,10 @@ impl Activation {
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
         verb_info: VerbInfo,
-        args: Vec<Var>,
+        args: &Vec<Var>,
         callers: Vec<Caller>,
     ) -> Result<Self, anyhow::Error> {
-        let environment = vec![Var::None; binary.var_names.width()];
+        let environment = vec![VAR_NONE; binary.var_names.width()];
 
         // Take a copy of the verb name because we're going to move verb_info.
         let verb_name = verb_info.names.first().unwrap().clone();
@@ -57,7 +57,7 @@ impl Activation {
             environment,
             valstack: vec![],
             pc: 0,
-            temp: Var::None,
+            temp: VAR_NONE,
             caller_perms: caller,
             this,
             player,
@@ -79,7 +79,7 @@ impl Activation {
 
         a.set_var("verb", v_str(verb_name.as_str())).unwrap();
         a.set_var("argstr", v_str("")).unwrap();
-        a.set_var("args", v_list(args)).unwrap();
+        a.set_var("args", v_list(args.clone())).unwrap();
         a.set_var("iobjstr", v_str("")).unwrap();
         a.set_var("iobj", v_objid(NOTHING)).unwrap();
         a.set_var("dobjstr", v_str("")).unwrap();

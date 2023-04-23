@@ -9,7 +9,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::model::var::Error::{E_INVARG, E_TYPE};
-use crate::model::var::{v_err, Var, v_int, v_float, v_str};
+use crate::model::var::{v_err, Var, v_int, v_float, v_str, Variant};
 use crate::tasks::Sessions;
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
@@ -18,15 +18,15 @@ async fn bf_abs(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    match args[0] {
-        Var::Int(i) => Ok(v_int(i.abs())),
-        Var::Float(f) => Ok(v_float(f.abs())),
+    match args[0].v() {
+        Variant::Int(i) => Ok(v_int(i.abs())),
+        Variant::Float(f) => Ok(v_float(f.abs())),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -36,15 +36,15 @@ async fn bf_min(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
 
-    match (&args[0], &args[1]) {
-        (Var::Int(a), Var::Int(b)) => Ok(v_int(*a.max(b))),
-        (Var::Float(a), Var::Float(b)) => {
+    match (args[0].v(), args[1].v()) {
+        (Variant::Int(a), Variant::Int(b)) => Ok(v_int(*a.max(b))),
+        (Variant::Float(a), Variant::Float(b)) => {
             let m = R64::from(*a).min(R64::from(*b));
             Ok(v_float(m.into()))
         }
@@ -57,15 +57,15 @@ async fn bf_max(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
 
-    match (&args[0], &args[1]) {
-        (Var::Int(a), Var::Int(b)) => Ok(v_int(*a.max(b))),
-        (Var::Float(a), Var::Float(b)) => {
+    match (args[0].v(), args[1].v()) {
+        (Variant::Int(a), Variant::Int(b)) => Ok(v_int(*a.max(b))),
+        (Variant::Float(a), Variant::Float(b)) => {
             let m = R64::from(*a).max(R64::from(*b));
             Ok(v_float(m.into()))
         }
@@ -79,17 +79,16 @@ async fn bf_random(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() > 1 {
         return Ok(v_err(E_INVARG));
     }
 
     let mut rng = rand::thread_rng();
-    match args.get(0) {
-        Some(Var::Int(i)) => Ok(v_int(rng.gen_range(0..*i))),
-        Some(Var::Float(f)) => Ok(v_float(rng.gen_range(0.0..*f))),
-        None => Ok(v_int(rng.gen())),
+    match args[0].v() {
+        Variant::Int(i) => Ok(v_int(rng.gen_range(0..*i))),
+        Variant::Float(f) => Ok(v_float(rng.gen_range(0.0..*f))),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -99,26 +98,25 @@ async fn bf_floatstr(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() < 2 || args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    let precision = match args[1] {
-        Var::Int(i) if i > 0 => i as usize,
+    let precision = match args[1].v() {
+        Variant::Int(i) if *i > 0 => *i as usize,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    let scientific = match args.get(2) {
-        Some(Var::Int(b)) => *b == 1,
-        Some(_) => return Ok(v_err(E_TYPE)),
-        None => false,
+    let scientific = match args[2].v() {
+        Variant::Int(b) => *b == 1,
+        _ => return Ok(v_err(E_TYPE)),
     };
 
     let mut s = format!("{:.*}", precision, x);
@@ -134,14 +132,14 @@ async fn bf_sin(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -153,14 +151,14 @@ async fn bf_cos(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -172,14 +170,14 @@ async fn bf_tan(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -191,18 +189,18 @@ async fn bf_sqrt(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    if x < 0.0 {
+    if *x < 0.0 {
         return Ok(v_err(E_INVARG));
     }
 
@@ -214,18 +212,18 @@ async fn bf_asin(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    if !(-1.0..=1.0).contains(&x) {
+    if !(-1.0..=1.0).contains(x) {
         return Ok(v_err(E_INVARG));
     }
 
@@ -237,18 +235,18 @@ async fn bf_acos(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    if !(-1.0..=1.0).contains(&x) {
+    if !(-1.0..=1.0).contains(x) {
         return Ok(v_err(E_INVARG));
     }
 
@@ -260,21 +258,20 @@ async fn bf_atan(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.is_empty() || args.len() > 2 {
         return Ok(v_err(E_INVARG));
     }
 
-    let y = match args[0] {
-        Var::Float(f) => f,
+    let y = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    let x = match args.get(1) {
-        Some(Var::Float(f)) => *f,
-        Some(_) => return Ok(v_err(E_TYPE)),
-        None => 1.0,
+    let x = match args[1].v() {
+        Variant::Float(f) => *f,
+        _ => return Ok(v_err(E_TYPE)),
     };
 
     Ok(v_float(y.atan2(x)))
@@ -285,14 +282,14 @@ async fn bf_sinh(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -304,14 +301,14 @@ async fn bf_cosh(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -323,14 +320,14 @@ async fn bf_tanh(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -342,14 +339,14 @@ async fn bf_exp(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -361,18 +358,18 @@ async fn bf_log(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    if x <= 0.0 {
+    if *x <= 0.0 {
         return Ok(v_err(E_INVARG));
     }
 
@@ -384,18 +381,18 @@ async fn bf_log10(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
-    if x <= 0.0 {
+    if *x <= 0.0 {
         return Ok(v_err(E_INVARG));
     }
 
@@ -407,14 +404,14 @@ async fn bf_ceil(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -426,14 +423,14 @@ async fn bf_floor(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 
@@ -445,14 +442,14 @@ async fn bf_trunc(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: Vec<Var>,
+    args: &Vec<Var>,
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    let x = match args[0] {
-        Var::Float(f) => f,
+    let x = match args[0].v() {
+        Variant::Float(f) => f,
         _ => return Ok(v_err(E_TYPE)),
     };
 

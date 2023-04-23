@@ -2,7 +2,7 @@ use std::string::ToString;
 use std::sync::Once;
 
 use crate::model::r#match::PrepSpec;
-use crate::model::var::{Objid, Var};
+use crate::model::var::{Objid, v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
@@ -213,7 +213,7 @@ where
     }
 
     // Build and return ParsedCommand
-    let args: Vec<Var> = words.iter().map(|w| Var::Str(w.to_string())).collect();
+    let args: Vec<Var> = words.iter().map(|w| v_str(w)).collect();
 
     ParsedCommand {
         verb,

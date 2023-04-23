@@ -7,7 +7,7 @@ use text_io::scan;
 use tracing::info;
 
 use crate::compiler::labels::Label;
-use crate::model::var::{Error, Objid, Var, VarType};
+use crate::model::var::{Error, Objid, v_catch, v_err, v_finally, v_float, v_int, v_list, v_objid, v_str, Var, VAR_CLEAR, VAR_NONE, VarType};
 use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
 
 impl<R: Read> TextdumpReader<R> {
@@ -51,24 +51,24 @@ impl<R: Read> TextdumpReader<R> {
         let t_num = self.read_num()?;
         let vtype: VarType = VarType::from_int(t_num as u8)?;
         let v = match vtype {
-            VarType::TYPE_INT => Var::Int(self.read_num()?),
-            VarType::TYPE_OBJ => Var::Obj(self.read_objid()?),
-            VarType::TYPE_STR => Var::Str(self.read_string()?),
+            VarType::TYPE_INT => v_int(self.read_num()?),
+            VarType::TYPE_OBJ => v_objid(self.read_objid()?),
+            VarType::TYPE_STR => v_str(&self.read_string()?),
             VarType::TYPE_ERR => {
                 let e_num = self.read_num()?;
                 let etype: Error = Error::from_int(e_num as u8)?;
-                Var::Err(etype)
+                v_err(etype)
             }
             VarType::TYPE_LIST => {
                 let l_size = self.read_num()?;
                 let v: Vec<Var> = (0..l_size).map(|_l| self.read_var().unwrap()).collect();
-                Var::List(v)
+                v_list(v)
             }
-            VarType::TYPE_CLEAR => Var::Clear,
-            VarType::TYPE_NONE => Var::None,
-            VarType::TYPE_CATCH => Var::_Catch(Label(self.read_num()? as u32)),
-            VarType::TYPE_FINALLY => Var::_Finally(Label(self.read_num()? as u32)),
-            VarType::TYPE_FLOAT => Var::Float(self.read_float()?),
+            VarType::TYPE_CLEAR => VAR_CLEAR,
+            VarType::TYPE_NONE => VAR_NONE,
+            VarType::TYPE_CATCH => v_catch(Label(self.read_num()? as u32)),
+            VarType::TYPE_FINALLY => v_finally(Label(self.read_num()? as u32)),
+            VarType::TYPE_FLOAT => v_float(self.read_float()?),
         };
         Ok(v)
     }
