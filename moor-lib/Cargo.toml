@@ -15,6 +15,8 @@ decorum = "0.3.1"  # For ordering & comparing our floats
 num-traits = "0.2.15"  # Needed for my BitEnum
 text_io = "0.1.12" # Used for reading text dumps.
 int-enum = "0.5.0"
+bytes = "1.4.0"
+smallvec = "1.10.0"
 
 ## Required for MOO builtins.
 magic-crypt = "3.1.12"  # For MOO's hokey 'crypt' builtin

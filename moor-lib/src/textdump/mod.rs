@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
 
-use crate::model::var::{Objid, Var};
+use crate::var::{Objid, Var};
 
 pub mod load_db;
 pub mod read;

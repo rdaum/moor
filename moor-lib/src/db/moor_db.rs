@@ -15,7 +15,7 @@ use crate::model::ObjectError::{
 use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
 use crate::model::props::{Pid, PropAttr, PropAttrs, Propdef, PropertyInfo, PropFlag};
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{NOTHING, Objid, Var};
+use crate::var::{NOTHING, Objid, Var};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Vid};
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
@@ -857,7 +857,7 @@ mod tests {
     use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
     use crate::model::props::{PropAttr, Propdef, PropFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{v_int, v_str, Objid};
+    use crate::var::{v_int, v_str, Objid};
     use crate::model::verbs::{VerbAttr, VerbFlag};
     use crate::util::bitenum::BitEnum;
     use crate::vm::opcode::Binary;

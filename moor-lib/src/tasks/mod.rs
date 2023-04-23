@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::model::var::Objid;
+use crate::var::Objid;
 
 pub mod parse_cmd;
 pub mod scheduler;

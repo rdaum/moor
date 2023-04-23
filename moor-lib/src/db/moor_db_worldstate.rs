@@ -18,7 +18,7 @@ use crate::model::props::{
     Pid, PropAttr, PropAttrs, Propdef, PropDefs, Properties, PropertyInfo, PropFlag,
 };
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{NOTHING, Objid, Var, v_list, v_bool, v_str, v_objid};
+use crate::var::{NOTHING, Objid, Var, v_list, v_bool, v_str, v_objid};
 use crate::model::verbs::{VerbAttr, VerbAttrs, VerbFlag, VerbInfo, Verbs, Vid};
 use crate::tasks::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;

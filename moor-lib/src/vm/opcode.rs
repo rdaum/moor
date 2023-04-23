@@ -1,5 +1,5 @@
 use crate::compiler::labels::{JumpLabel, Label, Names, Offset};
-use crate::model::var::Var;
+use crate::var::Var;
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum ScatterLabel {

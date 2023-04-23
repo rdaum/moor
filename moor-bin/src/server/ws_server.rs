@@ -12,9 +12,9 @@ use tokio_tungstenite::{accept_async, WebSocketStream};
 use tracing::{debug, error, info, instrument};
 use tungstenite::{Error, Message};
 
-use moor_lib::model::var::Objid;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
+use moor_lib::var::Objid;
 
 struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,

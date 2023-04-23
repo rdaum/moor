@@ -9,7 +9,7 @@ use crate::db::moor_db::MoorDB;
 use crate::model::objects::{ObjAttrs, ObjFlag};
 use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::{Objid, Var};
+use crate::var::{Objid, Var};
 use crate::model::verbs::VerbFlag;
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;

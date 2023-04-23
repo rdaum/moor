@@ -14,9 +14,9 @@ use tracing::info;
 use moor_lib::db::moor_db::MoorDB;
 use moor_lib::db::moor_db_worldstate::MoorDbWorldStateSource;
 use moor_lib::model::objects::ObjAttrs;
-use moor_lib::model::var::Objid;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
+use moor_lib::var::Objid;
 
 use crate::server::ws_server::{WebSocketServer, ws_server_start};
 

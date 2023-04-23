@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use enum_primitive_derive::Primitive;
 
 use crate::model::ObjectError;
-use crate::model::var::Objid;
+use crate::var::Objid;
 use crate::util::bitenum::BitEnum;
 
 #[derive(

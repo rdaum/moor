@@ -8,13 +8,14 @@ use crate::compiler::labels::{Label, Offset};
 use crate::db::state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{Error, ErrorPack, v_int, v_list, v_str, NOTHING, Objid, Var, v_bool, Variant, v_err, v_obj, v_objid, VAR_NONE, v_label, v_finally, v_catch};
-use crate::model::var::Error::{
+use crate::var::{v_int, v_list, v_str, NOTHING, Objid, Var, v_bool, Variant, v_err, v_obj, v_objid, VAR_NONE, v_label, v_finally, v_catch};
+use crate::var::error::Error::{
     E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use crate::tasks::scheduler::TaskId;
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
+use crate::var::error::{Error, ErrorPack};
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -1106,7 +1107,7 @@ mod tests {
     use crate::model::objects::ObjFlag;
     use crate::model::props::{PropAttrs, PropFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
+    use crate::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
     use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
     use crate::tasks::parse_cmd::ParsedCommand;
     use crate::tasks::Sessions;

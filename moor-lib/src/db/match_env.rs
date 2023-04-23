@@ -2,7 +2,7 @@ use anyhow::anyhow;
 
 use crate::db::matching::MatchEnvironment;
 use crate::db::state::WorldState;
-use crate::model::var::Objid;
+use crate::var::Objid;
 
 pub struct DBMatchEnvironment<'a> {
     pub(crate) ws: &'a mut dyn WorldState,

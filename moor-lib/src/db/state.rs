@@ -2,7 +2,7 @@ use crate::db::CommitResult;
 use crate::model::ObjectError;
 use crate::model::objects::ObjFlag;
 use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::var::{Objid, Var};
+use crate::var::{Objid, Var};
 use crate::model::verbs::VerbInfo;
 use crate::tasks::parse_cmd::ParsedCommand;
 use crate::util::bitenum::BitEnum;

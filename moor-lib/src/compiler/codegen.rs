@@ -12,7 +12,7 @@ use crate::compiler::ast::{
 use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
-use crate::model::var::{v_int, Var};
+use crate::var::{v_int, Var};
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
 use crate::vm::opcode::Op::Jump;
 
@@ -773,8 +773,8 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::var::Error::{E_INVARG, E_PERM, E_PROPNF};
-    use crate::model::var::{v_obj, Objid};
+    use crate::var::error::Error::{E_INVARG, E_PERM, E_PROPNF};
+    use crate::var::{v_obj, Objid};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::ScatterLabel;
 

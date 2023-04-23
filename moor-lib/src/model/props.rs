@@ -1,7 +1,7 @@
 use enum_primitive_derive::Primitive;
 
 use crate::model::ObjectError;
-use crate::model::var::{Objid, Var};
+use crate::var::{Objid, Var};
 use crate::util::bitenum::BitEnum;
 
 #[derive(

@@ -1,14 +1,13 @@
 use thiserror::Error;
 
 use crate::model::objects::ObjAttr;
-use crate::model::var::Objid;
+use crate::var::Objid;
 use crate::model::verbs::Vid;
 
 pub mod r#match;
 pub mod objects;
 pub mod permissions;
 pub mod props;
-pub mod var;
 pub mod verbs;
 
 #[derive(Error, Debug)]

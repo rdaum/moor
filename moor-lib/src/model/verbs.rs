@@ -2,7 +2,7 @@ use enum_primitive_derive::Primitive;
 
 use crate::model::ObjectError;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::var::Objid;
+use crate::var::Objid;
 use crate::util::bitenum::BitEnum;
 use crate::vm::opcode::Binary;
 

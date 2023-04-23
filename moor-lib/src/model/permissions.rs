@@ -1,6 +1,6 @@
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
-use crate::model::var::Objid;
+use crate::var::Objid;
 use crate::util::bitenum::BitEnum;
 
 pub trait Permissions {

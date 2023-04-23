@@ -13,8 +13,8 @@ use crate::compiler::ast::{
 use crate::compiler::labels::Names;
 use crate::compiler::Parse;
 use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::model::var::{v_err, Objid, SYSTEM_OBJECT, v_objid, v_float, v_int, v_str};
-use crate::model::var::Error::{E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF};
+use crate::var::{v_err, Objid, SYSTEM_OBJECT, v_objid, v_float, v_int, v_str};
+use crate::var::error::Error::{E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF};
 
 pub mod moo {
     #[derive(Parser)]
@@ -725,8 +725,8 @@ mod tests {
     use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::model::var::{v_err, v_float, v_int, v_obj, v_str};
-    use crate::model::var::Error::{E_PROPNF, E_VARNF};
+    use crate::var::{v_err, v_float, v_int, v_obj, v_str};
+    use crate::var::error::Error::{E_PROPNF, E_VARNF};
 
     #[test]
     fn test_call_verb() {

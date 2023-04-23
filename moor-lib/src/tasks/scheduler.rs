@@ -13,7 +13,7 @@ use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
-use crate::model::var::{NOTHING, Objid, Var, Variant};
+use crate::var::{NOTHING, Objid, Var, Variant};
 use crate::tasks::parse_cmd::{parse_command, ParsedCommand};
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
@@ -489,7 +489,7 @@ mod tests {
     use crate::db::moor_db_worldstate::MoorDbWorldStateSource;
     use crate::model::objects::{ObjAttrs, ObjFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::var::{NOTHING, Objid};
+    use crate::var::{NOTHING, Objid};
     use crate::model::verbs::VerbFlag;
     use crate::tasks::scheduler::Scheduler;
     use crate::tasks::Sessions;
