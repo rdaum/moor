@@ -87,7 +87,7 @@ pub(crate) trait BfFunction: Sync + Send {
         world_state: &mut dyn WorldState,
         frame: &mut Activation,
         sessions: Arc<RwLock<dyn Sessions>>,
-        args: &Vec<Var>,
+        args: &[Var],
     ) -> Result<Var, anyhow::Error>;
 }
 
@@ -158,13 +158,13 @@ impl VM {
         for a in self.stack.iter().rev() {
             let mut i = a.valstack.len();
             while i > 0 {
-                if let Variant::_Catch(cnt) = a.valstack[i - 1].v() {
+                if let Variant::_Catch(cnt) = a.valstack[i - 1].variant() {
                     // Found one, now scan forwards from 'cnt' backwards looking for either the first
                     // non-list value, or a list containing the error code.
                     // TODO check for 'cnt' being too large. not sure how to handle, tho
                     // TODO this actually i think is wrong, it needs to pull two values off the stack
                     for j in (i - cnt.0 as usize)..i {
-                        if let Variant::List(codes) = &a.valstack[j].v() {
+                        if let Variant::List(codes) = &a.valstack[j].variant() {
                             if codes.contains(&v_err(raise_code)) {
                                 return Some((i, a));
                             }
@@ -277,7 +277,7 @@ impl VM {
         while let Some(a) = self.stack.last_mut() {
             // Pop the value stack seeking finally/catch handler values.
             while let Some(v) = a.valstack.pop() {
-                match v.v() {
+                match v.variant() {
                     Variant::_Finally(label) => {
                         /* FINALLY handler */
                         let why_num = why.code();
@@ -298,7 +298,7 @@ impl VM {
                         let mut found = false;
                         if a.valstack.len() >= 2 {
                             if let (Some(pushed_label), Some(error_codes)) = (a.valstack.pop(), a.valstack.pop()) {
-                                if let (Variant::_Label(pushed_label), Variant::List(error_codes)) = (pushed_label.v(), error_codes.v()) {
+                                if let (Variant::_Label(pushed_label), Variant::List(error_codes)) = (pushed_label.variant(), error_codes.variant()) {
                                     if error_codes.contains(&v_err(*code)) {
                                         a.jump(*pushed_label);
                                         found = true;
@@ -413,11 +413,11 @@ impl VM {
         propname: Var,
         obj: Var,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let Variant::Str(propname) = propname.v() else {
+        let Variant::Str(propname) = propname.variant() else {
             return self.push_error(E_TYPE);
         };
 
-        let Variant::Obj(obj) = obj.v() else {
+        let Variant::Obj(obj) = obj.variant() else {
             return self.push_error(E_INVIND);
         };
 
@@ -441,7 +441,7 @@ impl VM {
         state: &mut dyn WorldState,
         this: Objid,
         verb: String,
-        args: &Vec<Var>,
+        args: &[Var],
         do_pass: bool,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let this = if do_pass {
@@ -505,7 +505,7 @@ impl VM {
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
         _caller: Objid,
-        args: &Vec<Var>,
+        args: &[Var],
     ) -> Result<(), anyhow::Error> {
         let (binary, vi) = state.retrieve_verb(obj, verb_name)?;
 
@@ -558,7 +558,7 @@ impl VM {
                 // But I had some difficulty getting stack values right, so will do this simpler
                 // for now and revisit later.
                 let (count, list) = (&self.pop(), &self.pop());
-                let Variant::Int(count) = count.v() else {
+                let Variant::Int(count) = count.variant() else {
                     return self.raise_error(E_TYPE);
 
                     // LambdaMOO had a raise followed by jump. Not clear how that would work.
@@ -566,7 +566,7 @@ impl VM {
                     // self.jump(label);
                 };
                 let count = *count as usize;
-                let Variant::List(l) = list.v() else {
+                let Variant::List(l) = list.variant() else {
                     return self.raise_error(E_TYPE);
                     // self.jump(label);
                 };
@@ -595,7 +595,7 @@ impl VM {
                 // Given we're 64-bit this is highly unlikely to ever be a concern for us, but
                 // we also don't want to *crash* on obscene values, so impl that here.
 
-                let next_val = match (to.v(), from.v()) {
+                let next_val = match (to.variant(), from.variant()) {
                     (Variant::Int(to_i), Variant::Int(from_i)) => {
                         if from_i > to_i {
                             self.jump(label);
@@ -644,7 +644,7 @@ impl VM {
             Op::ListAddTail => {
                 let tail = self.pop();
                 let list = self.pop();
-                let Variant::List(list) = list.v() else {
+                let Variant::List(list) = list.variant() else {
                     return self.push_error(E_TYPE);
                 };
 
@@ -657,11 +657,11 @@ impl VM {
             Op::ListAppend => {
                 let tail = self.pop();
                 let list = self.pop();
-                let Variant::List(list) = list.v() else {
+                let Variant::List(list) = list.variant() else {
                     return self.push_error(E_TYPE);
                 };
 
-                let Variant::List(tail) = tail.v() else {
+                let Variant::List(tail) = tail.variant() else {
                     return self.push_error(E_TYPE);
                 };
 
@@ -675,7 +675,7 @@ impl VM {
                 let index = self.pop(); /* index, must be int */
                 let list = self.pop(); /* lhs except last index, should be list or str */
 
-                let nval = match (list.v(), index.v()) {
+                let nval = match (list.variant(), index.variant()) {
                     (Variant::List(l), Variant::Int(i)) => {
                         if *i < 0 || !*i < l.len() as i64 {
                             return self.push_error(E_RANGE);
@@ -690,7 +690,7 @@ impl VM {
                             return self.push_error(E_RANGE);
                         }
 
-                        let Variant::Str(value) = value.v() else {
+                        let Variant::Str(value) = value.variant() else {
                             return self.push_error(E_INVARG);
                         };
 
@@ -744,7 +744,7 @@ impl VM {
                 let lhs = self.pop();
                 let rhs = self.pop();
                 let r = lhs.has_member(&rhs);
-                if let Variant::Err(e) = r.v() {
+                if let Variant::Err(e) = r.variant() {
                     return self.push_error(*e);
                 }
                 self.push(&r);
@@ -794,7 +794,7 @@ impl VM {
             }
             Op::Push(ident) => {
                 let v = self.get_env(ident);
-                match v.v() {
+                match v.variant() {
                     Variant::None => return self.push_error(E_VARNF),
                     _ => self.push(&v),
                 }
@@ -806,7 +806,7 @@ impl VM {
             Op::PushRef => {
                 let peek = self.peek(2);
                 let (index, list) = (peek[1].clone(), peek[0].clone());
-                let v = match (index.v(), list.v()) {
+                let v = match (index.variant(), list.variant()) {
                     (Variant::Int(index), Variant::List(list)) => {
                         if *index <= 0 || !*index < list.len() as i64 {
                             return self.push_error(E_RANGE);
@@ -821,7 +821,7 @@ impl VM {
             Op::Ref => {
                 let index = self.pop();
                 let l = self.pop();
-                let Variant::Int(index) = index.v() else {
+                let Variant::Int(index) = index.variant() else {
                     return self.push_error(E_TYPE);
                 };
                 // MOO is 1-indexed.
@@ -833,7 +833,7 @@ impl VM {
             }
             Op::RangeRef => {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
-                match (to.v(), from.v()) {
+                match (to.variant(), from.variant()) {
                     (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
                         Err(e) => return self.push_error(e),
                         Ok(v) => self.push(&v),
@@ -843,7 +843,7 @@ impl VM {
             }
             Op::RangeSet => {
                 let (value, to, from, base) = (self.pop(), self.pop(), self.pop(), self.pop());
-                match (to.v(), from.v()) {
+                match (to.variant(), from.variant()) {
                     (Variant::Int(to), Variant::Int(from)) => match base.rangeset(value, *from, *to) {
                         Err(e) => return self.push_error(e),
                         Ok(v) => self.push(&v),
@@ -858,7 +858,7 @@ impl VM {
             }
             Op::GPush { id } => {
                 let v = self.get_env(id);
-                match v.v() {
+                match v.variant() {
                     Variant::None => return self.push_error(E_VARNF),
                     _ => {
                         self.push(&v);
@@ -867,7 +867,7 @@ impl VM {
             }
             Op::Length(offset) => {
                 let v = self.top().valstack[offset.0 as usize].clone();
-                match v.v() {
+                match v.variant() {
                     Variant::Str(s) => self.push(&v_int(s.len() as i64)),
                     Variant::List(l) => self.push(&v_int(l.len() as i64)),
                     _ => {
@@ -886,7 +886,7 @@ impl VM {
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
-                let (propname, obj) = match (propname.v(), obj.v()) {
+                let (propname, obj) = match (propname.variant(), obj.variant()) {
                     (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
                     (_, _) => {
                         return self.push_error(E_TYPE);
@@ -919,7 +919,7 @@ impl VM {
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
-                let (args, verb, obj) = match (args.v(), verb.v(), obj.v()) {
+                let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
                     (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l, s, o),
                     _ => {
                         return self.push_error(E_TYPE);
@@ -942,7 +942,7 @@ impl VM {
             Op::FuncCall { id } => {
                 // Pop arguments, should be a list.
                 let args = self.pop();
-                let Variant::List(args) = args.v() else {
+                let Variant::List(args) = args.variant() else {
                     return self.push_error(E_ARGS);
                 };
                 if id.0 as usize >= self.bf_funcs.len() {
@@ -970,7 +970,7 @@ impl VM {
                 let is_catch = op == Op::EndCatch(label);
                 let v = if is_catch { self.pop() } else { VAR_NONE };
                 let marker = self.pop();
-                let Variant::_Catch(marker) = marker.v() else {
+                let Variant::_Catch(marker) = marker.variant() else {
                     panic!("Stack marker is not type Catch");
                 };
                 for _i in 0..marker.0 {
@@ -984,7 +984,7 @@ impl VM {
             }
             Op::EndFinally => {
                 let v = self.pop();
-                let Variant::_Finally(_marker) = v.v() else {
+                let Variant::_Finally(_marker) = v.variant() else {
                     panic!("Stack marker is not type Finally");
                 };
                 self.push(&v_int(0) /* fallthrough */);
@@ -992,7 +992,7 @@ impl VM {
             }
             Op::Continue => {
                 let why = self.pop();
-                let Variant::Int(why) = why.v() else {
+                let Variant::Int(why) = why.variant() else {
                     panic!("'why' is not an integer representing a FinallyReason");
                 };
                 let why = FinallyReason::from_code(*why as usize);
@@ -1027,7 +1027,7 @@ impl VM {
                 ..
             } => {
                 let list = self.peek_top();
-                let Variant::List(list) = list.v() else {
+                let Variant::List(list) = list.variant() else {
                     self.pop();
                     return self.push_error(E_TYPE);
                 };
@@ -1078,7 +1078,7 @@ impl VM {
                 }
             }
             Op::CheckListForSplice => {
-                let Variant::List(_) = self.peek_top().v() else {
+                let Variant::List(_) = self.peek_top().variant() else {
                     self.pop();
                     return self.push_error(E_TYPE);
                 };
@@ -1216,7 +1216,7 @@ mod tests {
                 o,
                 BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
                 o,
-                &vec![],
+                &[],
             )
             .is_ok());
     }
@@ -1353,7 +1353,7 @@ mod tests {
             o,
             BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
             o,
-            &vec![],
+            &[],
         ) {
             Err(e) => match e.downcast::<ObjectError>() {
                 Ok(VerbNotFound(vo, vs)) => {

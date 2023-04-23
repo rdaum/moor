@@ -43,7 +43,7 @@ impl Activation {
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
         verb_info: VerbInfo,
-        args: &Vec<Var>,
+        args: &[Var],
         callers: Vec<Caller>,
     ) -> Result<Self, anyhow::Error> {
         let environment = vec![VAR_NONE; binary.var_names.width()];
@@ -79,7 +79,7 @@ impl Activation {
 
         a.set_var("verb", v_str(verb_name.as_str())).unwrap();
         a.set_var("argstr", v_str("")).unwrap();
-        a.set_var("args", v_list(args.clone())).unwrap();
+        a.set_var("args", v_list(args.into())).unwrap();
         a.set_var("iobjstr", v_str("")).unwrap();
         a.set_var("iobj", v_objid(NOTHING)).unwrap();
         a.set_var("dobjstr", v_str("")).unwrap();

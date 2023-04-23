@@ -25,7 +25,7 @@ macro_rules! bf_declare {
                     ws: &mut dyn WorldState,
                     frame: &mut Activation,
                     sess: Arc<RwLock<dyn Sessions>>,
-                    args: &Vec<Var>,
+                    args: &[Var],
                 ) -> Result<Var, anyhow::Error> {
                     $action(ws, frame, sess, args).await
                 }

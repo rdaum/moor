@@ -16,7 +16,7 @@ async fn bf_create(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    _args: &Vec<Var>,
+    _args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     unimplemented!("create")
 }
@@ -35,12 +35,12 @@ async fn bf_valid(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].v() else {
+    let Variant::Obj(obj) = args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
     let is_valid = ws.valid(*obj)?;
@@ -77,12 +77,12 @@ async fn bf_verbs(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].v() else {
+    let Variant::Obj(obj) = args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
     let verbs = ws.verbs(*obj)?;
@@ -102,12 +102,12 @@ async fn bf_properties(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].v() else {
+    let Variant::Obj(obj) = args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
     let props = ws.properties(*obj)?;

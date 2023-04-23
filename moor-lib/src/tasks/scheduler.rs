@@ -430,7 +430,7 @@ impl Task {
                             // Compose a string out of the backtrace
                             let mut traceback = vec![];
                             for frame in backtrace.iter() {
-                                let Variant::Str(s) = frame.v() else {
+                                let Variant::Str(s) = frame.variant() else {
                                     continue;
                                 };
                                 traceback.push(format!("{:}\n", s));

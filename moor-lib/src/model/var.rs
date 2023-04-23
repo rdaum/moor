@@ -205,12 +205,16 @@ pub fn v_finally(l: Label) -> Var {
 }
 
 impl Var {
-    pub fn v(&self) -> &Variant {
-        self.v()
+    pub fn variant(&self) -> &Variant {
+        // TODO: We can produce this however we want, instead of actually holding "value" in the
+        // the struct.  For 64-bit primitive values, we could just hold the value directly, but for
+        // lists and strings this can be composed out of a byte buffer...
+        // In this way we can do zero-copy for strings and lists direct from the DB.
+        &self.value
     }
 
     pub fn type_id(&self) -> VarType {
-        match self.v() {
+        match self.variant() {
             Variant::Clear => VarType::TYPE_CLEAR,
             Variant::None => VarType::TYPE_NONE,
             Variant::Str(_) => VarType::TYPE_STR,
@@ -226,7 +230,7 @@ impl Var {
     }
 
     pub fn to_literal(&self) -> String {
-        match self.v() {
+        match self.variant() {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
             Variant::Float(f) => f.to_string(),
@@ -264,7 +268,7 @@ impl Debug for Var {
 
 impl PartialEq<Self> for Var {
     fn eq(&self, other: &Self) -> bool {
-        match (self.v(), other.v()) {
+        match (self.variant(), other.variant()) {
             (Variant::Clear, Variant::Clear) => true,
             (Variant::None, Variant::None) => true,
             (Variant::Str(l), Variant::Str(r)) => l == r,
@@ -293,7 +297,7 @@ impl PartialEq<Self> for Var {
 
 impl PartialOrd<Self> for Var {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self.v(), other.v()) {
+        match (self.variant(), other.variant()) {
             (Variant::Clear, Variant::Clear) => Some(Ordering::Equal),
             (Variant::None, Variant::None) => Some(Ordering::Equal),
             (Variant::Str(l), Variant::Str(r)) => l.partial_cmp(r),
@@ -322,7 +326,7 @@ impl PartialOrd<Self> for Var {
 
 impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.v(), other.v()) {
+        match (self.variant(), other.variant()) {
             (Variant::Clear, Variant::Clear) => Ordering::Equal,
             (Variant::None, Variant::None) => Ordering::Equal,
             (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
@@ -352,7 +356,7 @@ impl Hash for Var {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let t = self.type_id() as u8;
         t.hash(state);
-        match self.v() {
+        match self.variant() {
             Variant::Clear => {}
             Variant::None => {}
             Variant::Str(s) => s.hash(state),
@@ -372,7 +376,7 @@ impl Eq for Var {}
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
-            match (self.v(), v.v()) {
+            match (self.variant(), v.variant()) {
                 (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.$op(*r))),
                 (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.$op(*r))),
                 (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.$op(*r as f64))),
@@ -385,7 +389,7 @@ macro_rules! binary_numeric_coercion_op {
 
 impl Var {
     pub fn is_true(&self) -> bool {
-        match self.v() {
+        match self.variant() {
             Variant::Str(s) => !s.is_empty(),
             Variant::Int(i) => *i != 0,
             Variant::Float(f) => !f.is_zero(),
@@ -395,7 +399,7 @@ impl Var {
     }
 
     pub fn has_member(&self, v: &Var) -> Var {
-        let Variant::List(l) = self.v() else {
+        let Variant::List(l) = self.variant() else {
             return v_err(E_TYPE);
         };
 
@@ -407,7 +411,7 @@ impl Var {
     binary_numeric_coercion_op!(sub);
 
     pub fn add(&self, v: &Var) -> Result<Var, Error> {
-        match (self.v(), v.v()) {
+        match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l + *r)),
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l + r)),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l + (*r as f64))),
@@ -422,7 +426,7 @@ impl Var {
     }
 
     pub fn negative(&self) -> Result<Var, Error> {
-        match self.v() {
+        match self.variant() {
             Variant::Int(l) => Ok(v_int(-*l)),
             Variant::Float(f) => Ok(v_float(f.neg())),
             _ => Ok(v_err(E_TYPE)),
@@ -430,7 +434,7 @@ impl Var {
     }
 
     pub fn modulus(&self, v: &Var) -> Result<Var, Error> {
-        match (self.v(), v.v()) {
+        match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l % *r)),
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l % r)),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l % (*r as f64))),
@@ -440,7 +444,7 @@ impl Var {
     }
 
     pub fn pow(&self, v: &Var) -> Result<Var, Error> {
-        match (self.v(), v.v()) {
+        match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.pow(*r as u32))),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(*r as i32))),
@@ -450,7 +454,7 @@ impl Var {
     }
 
     pub fn index(&self, idx: usize) -> Result<Var, Error> {
-        match self.v() {
+        match self.variant() {
             Variant::List(l) => match l.get(idx) {
                 None => Ok(v_err(E_RANGE)),
                 Some(v) => Ok(v.clone()),
@@ -464,7 +468,7 @@ impl Var {
     }
 
     pub fn range(&self, from: i64, to: i64) -> Result<Var, Error> {
-        match self.v() {
+        match self.variant() {
             Variant::Str(s) => {
                 let len = s.len() as i64;
                 if from <= 0 || from > len + 1 || to < 1 || to > len {
@@ -490,7 +494,7 @@ impl Var {
     }
 
     pub fn rangeset(&self, value: Var, from: i64, to: i64) -> Result<Var, Error> {
-        let (base_len, val_len) = match (self.v(), value.v()) {
+        let (base_len, val_len) = match (self.variant(), value.variant()) {
             (Variant::Str(base_str), Variant::Str(val_str)) => {
                 (base_str.len() as i64, val_str.len() as i64)
             }
@@ -510,7 +514,7 @@ impl Var {
         let newsize = lenleft + lenmiddle + lenright;
 
         let (from, to) = (from as usize, to as usize);
-        let ans = match (self.v(), value.v()) {
+        let ans = match (self.variant(), value.variant()) {
             (Variant::Str(base_str), Variant::Str(value_str)) => {
                 let mut ans = String::with_capacity(newsize as usize);
                 ans.push_str(&base_str[..from - 1]);

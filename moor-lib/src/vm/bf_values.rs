@@ -18,7 +18,7 @@ async fn bf_typeof(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     let arg = &args[0];
     Ok(v_int(arg.type_id() as i64))
@@ -29,11 +29,11 @@ async fn bf_tostr(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     let mut result = String::new();
     for arg in args {
-        match arg.v() {
+        match arg.variant() {
             Variant::None => result.push_str("None"),
             Variant::Int(i) => result.push_str(&i.to_string()),
             Variant::Float(f) => result.push_str(&f.to_string()),
@@ -52,7 +52,7 @@ async fn bf_toliteral(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
@@ -66,12 +66,12 @@ async fn bf_toint(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match args[0].v() {
+    match args[0].variant() {
         Variant::Int(i) => Ok(v_int(*i)),
         Variant::Float(f) => Ok(v_int(*f as i64)),
         Variant::Str(s) => {
@@ -91,12 +91,12 @@ async fn bf_toobj(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match args[0].v() {
+    match args[0].variant() {
         Variant::Int(i) => Ok(v_obj(*i)),
         Variant::Float(f) => Ok(v_obj(*f as i64)),
         Variant::Str(s) if s.starts_with('#') => {
@@ -122,12 +122,12 @@ async fn bf_tofloat(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match args[0].v() {
+    match args[0].variant() {
         Variant::Int(i) => Ok(v_float(*i as f64)),
         Variant::Float(f) => Ok(v_float(*f)),
         Variant::Str(s) => {
@@ -147,12 +147,12 @@ async fn bf_equal(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let result = match (args[0].v(), args[1].v()) {
+    let result = match (args[0].variant(), args[1].variant()) {
         (Variant::Str(s1), Variant::Str(s2)) => s1.to_lowercase() == s2.to_lowercase(),
         _ => args[0] == args[1],
     };
@@ -164,7 +164,7 @@ async fn bf_value_bytes(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
@@ -177,7 +177,7 @@ async fn bf_value_hash(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
@@ -192,13 +192,13 @@ async fn bf_length(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    match args[0].v() {
+    match args[0].variant() {
         Variant::Str(s) => Ok(v_int(s.len() as i64)),
         Variant::List(l) => Ok(v_int(l.len() as i64)),
         _ => Ok(v_err(E_TYPE)),

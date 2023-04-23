@@ -18,7 +18,7 @@ async fn bf_noop(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    _args: &Vec<Var>,
+    _args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     unimplemented!("BF is not implemented");
 }
@@ -28,16 +28,16 @@ async fn bf_notify(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let player = args[0].v();
+    let player = args[0].variant();
     let Variant::Obj(player) = player else {
         return Ok(v_err(E_TYPE));
     };
-    let msg = args[1].v();
+    let msg = args[1].variant();
     let Variant::Str(msg) = msg else {
         return Ok(v_err(E_TYPE));
     };
@@ -52,7 +52,7 @@ async fn bf_connected_players(
     _ws: &mut dyn WorldState,
     _frame: &mut Activation,
     sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
         return Ok(v_err(E_INVARG));
@@ -75,12 +75,12 @@ async fn bf_is_player(
     ws: &mut dyn WorldState,
     _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let player = args[0].v();
+    let player = args[0].variant();
     let Variant::Obj(player) = player else {
         return Ok(v_err(E_TYPE));
     };
@@ -98,7 +98,7 @@ async fn bf_caller_perms(
     _ws: &mut dyn WorldState,
     frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
         return Ok(v_err(E_INVARG));
@@ -112,12 +112,12 @@ async fn bf_set_task_perms(
     _ws: &mut dyn WorldState,
     frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(player) = args[0].v() else {
+    let Variant::Obj(player) = args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
 
@@ -134,7 +134,7 @@ async fn bf_callers(
     _ws: &mut dyn WorldState,
     frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
         return Ok(v_err(E_INVARG));
@@ -164,7 +164,7 @@ async fn bf_task_id(
     _ws: &mut dyn WorldState,
     frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
-    args: &Vec<Var>,
+    args: &[Var],
 ) -> Result<Var, anyhow::Error> {
     if !args.is_empty() {
         return Ok(v_err(E_INVARG));

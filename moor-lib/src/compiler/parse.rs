@@ -3,7 +3,6 @@ use std::rc::Rc;
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
 use std::str::FromStr;
-use num_traits::Num;
 
 pub use pest::Parser as PestParser;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
