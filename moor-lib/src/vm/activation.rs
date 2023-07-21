@@ -1,11 +1,11 @@
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
-use crate::var::{v_int, v_list, v_str, Objid, Var, v_objid, NOTHING, VAR_NONE};
-use crate::var::error::Error;
-use crate::var::error::Error::E_VARNF;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::scheduler::TaskId;
 use crate::util::bitenum::BitEnum;
+use crate::var::error::Error;
+use crate::var::error::Error::E_VARNF;
+use crate::var::{v_int, v_list, v_objid, v_str, Objid, Var, NOTHING, VAR_NONE};
 use crate::vm::opcode::{Binary, Op};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}

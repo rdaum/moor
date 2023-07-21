@@ -7,6 +7,5 @@ pub mod model;
 pub mod tasks;
 pub mod textdump;
 pub mod util;
-pub mod vm;
 pub mod var;
-
+pub mod vm;

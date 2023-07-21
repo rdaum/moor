@@ -1,12 +1,11 @@
 use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
 
+use bincode::{Decode, Encode};
 /// A barebones minimal custom bitset enum, to replace use of EnumSet crate which was not rkyv'able.
 use num_traits::ToPrimitive;
 
-#[derive(
-    Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash,
-)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Encode, Decode)]
 pub struct BitEnum<T: ToPrimitive> {
     value: u64,
     phantom: PhantomData<T>,
@@ -19,7 +18,6 @@ impl<T: ToPrimitive> BitEnum<T> {
             phantom: PhantomData,
         }
     }
-
     pub fn to_u64(&self) -> u64 {
         self.value
     }

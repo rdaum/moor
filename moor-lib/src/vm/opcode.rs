@@ -1,14 +1,16 @@
+use bincode::{Decode, Encode};
+
 use crate::compiler::labels::{JumpLabel, Label, Names, Offset};
 use crate::var::Var;
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum ScatterLabel {
     Required(Label),
     Rest(Label),
     Optional(Label, Option<Label>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum Op {
     If(Label),
     Eif(Label),
@@ -107,7 +109,7 @@ pub enum Op {
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Binary {
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,

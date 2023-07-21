@@ -1,3 +1,4 @@
+use anyhow::bail;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,16 +7,20 @@ use tokio::sync::RwLock;
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
 use crate::db::state::WorldState;
-use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::model::objects::ObjFlag;
-use crate::var::{v_int, v_list, v_str, NOTHING, Objid, Var, v_bool, Variant, v_err, v_obj, v_objid, VAR_NONE, v_label, v_finally, v_catch};
-use crate::var::error::Error::{
-    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
-};
+use crate::model::verbs::VerbInfo;
+use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied, VerbNotFound};
 use crate::tasks::scheduler::TaskId;
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
+use crate::var::error::Error::{
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF, E_VERBNF,
+};
 use crate::var::error::{Error, ErrorPack};
+use crate::var::{
+    v_bool, v_catch, v_err, v_finally, v_int, v_label, v_list, v_obj, v_objid, v_str, Objid, Var,
+    Variant, NOTHING, VAR_NONE,
+};
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -298,8 +303,12 @@ impl VM {
                         // we will match on.
                         let mut found = false;
                         if a.valstack.len() >= 2 {
-                            if let (Some(pushed_label), Some(error_codes)) = (a.valstack.pop(), a.valstack.pop()) {
-                                if let (Variant::_Label(pushed_label), Variant::List(error_codes)) = (pushed_label.variant(), error_codes.variant()) {
+                            if let (Some(pushed_label), Some(error_codes)) =
+                                (a.valstack.pop(), a.valstack.pop())
+                            {
+                                if let (Variant::_Label(pushed_label), Variant::List(error_codes)) =
+                                    (pushed_label.variant(), error_codes.variant())
+                                {
                                     if error_codes.contains(&v_err(*code)) {
                                         a.jump(*pushed_label);
                                         found = true;
@@ -461,11 +470,16 @@ impl VM {
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let result = state.retrieve_verb(this, verb.as_str());
-
-        let Ok((binary, verbinfo)) = result else {
+        let Ok(verbinfo) = state.find_method_verb_on(this, verb.as_str()) else {
             return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb));
         };
+        let Some(binary) = verbinfo.attrs.program.clone() else {
+            return self.push_error_msg(
+                E_VERBNF,
+                format!("Verb \"{}\" is not a program", verb),
+            );
+        };
+
         let top = self.top();
         let mut callers = top.callers.to_vec();
         let task_id = top.task_id;
@@ -495,6 +509,40 @@ impl VM {
         Ok(ExecutionResult::More)
     }
 
+    pub fn do_method_cmd(
+        &mut self,
+        task_id: TaskId,
+        vi: VerbInfo,
+        obj: Objid,
+        verb_name: &str,
+        _do_pass: bool,
+        this: Objid,
+        player: Objid,
+        player_flags: BitEnum<ObjFlag>,
+        _caller: Objid,
+        args: &[Var],
+    ) -> Result<(), anyhow::Error> {
+        let Some(binary) = vi.attrs.program.clone() else {
+            bail!(VerbNotFound(obj, verb_name.to_string()))
+        };
+
+        let a = Activation::new_for_method(
+            task_id,
+            binary,
+            NOTHING,
+            this,
+            player,
+            player_flags,
+            vi,
+            args,
+            vec![],
+        )?;
+
+        self.stack.push(a);
+
+        Ok(())
+    }
+
     pub fn do_method_verb(
         &mut self,
         task_id: TaskId,
@@ -508,7 +556,11 @@ impl VM {
         _caller: Objid,
         args: &[Var],
     ) -> Result<(), anyhow::Error> {
-        let (binary, vi) = state.retrieve_verb(obj, verb_name)?;
+        let vi = state.find_method_verb_on(obj, verb_name)?;
+
+        let Some(binary) = vi.attrs.program.clone() else {
+            bail!(VerbNotFound(obj, verb_name.to_string()))
+        };
 
         let a = Activation::new_for_method(
             task_id,
@@ -845,10 +897,12 @@ impl VM {
             Op::RangeSet => {
                 let (value, to, from, base) = (self.pop(), self.pop(), self.pop(), self.pop());
                 match (to.variant(), from.variant()) {
-                    (Variant::Int(to), Variant::Int(from)) => match base.rangeset(value, *from, *to) {
-                        Err(e) => return self.push_error(e),
-                        Ok(v) => self.push(&v),
-                    },
+                    (Variant::Int(to), Variant::Int(from)) => {
+                        match base.rangeset(value, *from, *to) {
+                            Err(e) => return self.push_error(e),
+                            Ok(v) => self.push(&v),
+                        }
+                    }
                     _ => {
                         return self.push_error(E_TYPE);
                     }
@@ -1091,7 +1145,7 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+
     use std::sync::Arc;
 
     use anyhow::Error;
@@ -1100,21 +1154,21 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::CommitResult;
-    use crate::db::state::WorldState;
-    use crate::model::ObjectError;
-    use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
+    use crate::db::mock_world_state::MockWorldStateSource;
+    use crate::db::state::{WorldState, WorldStateSource};
+
     use crate::model::objects::ObjFlag;
-    use crate::model::props::{PropAttrs, PropFlag};
-    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
-    use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo, Vid};
-    use crate::tasks::parse_cmd::ParsedCommand;
+    use crate::model::props::PropFlag;
+
+    use crate::model::ObjectError;
+    use crate::model::ObjectError::VerbNotFound;
+
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
+    use crate::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
     use crate::vm::execute::{ExecutionResult, VM};
-    use crate::vm::opcode::{Binary, Op};
     use crate::vm::opcode::Op::*;
+    use crate::vm::opcode::{Binary, Op};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -1131,65 +1185,6 @@ mod tests {
 
         async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
             Ok(vec![])
-        }
-    }
-
-    struct MockState {
-        verbs: HashMap<(Objid, String), (Binary, VerbInfo)>,
-        properties: HashMap<(Objid, String), Var>,
-    }
-
-    impl MockState {
-        fn new() -> Box<Self> {
-            let ws = Self {
-                verbs: Default::default(),
-                properties: Default::default(),
-            };
-            Box::new(ws)
-        }
-
-        pub fn new_with_verb(name: &str, binary: &Binary) -> Box<dyn WorldState> {
-            let mut ws = Self {
-                verbs: Default::default(),
-                properties: Default::default(),
-            };
-            ws.set_verb(Objid(0), name, binary);
-            Box::new(ws)
-        }
-
-        pub fn new_with_verbs(verbs: Vec<(&str, &Binary)>) -> Box<dyn WorldState> {
-            let mut ws = Self {
-                verbs: Default::default(),
-                properties: Default::default(),
-            };
-            for (v, b) in verbs {
-                ws.set_verb(Objid(0), v, b);
-            }
-            Box::new(ws)
-        }
-
-        fn set_verb(&mut self, o: Objid, name: &str, binary: &Binary) {
-            self.verbs.insert(
-                (o, name.to_string()),
-                (
-                    binary.clone(),
-                    VerbInfo {
-                        vid: Vid(0),
-                        names: vec![name.to_string()],
-                        attrs: VerbAttrs {
-                            definer: Some(o),
-                            owner: Some(o),
-                            flags: Some(BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read),
-                            args_spec: Some(VerbArgsSpec {
-                                dobj: ArgSpec::This,
-                                prep: PrepSpec::None,
-                                iobj: ArgSpec::This,
-                            }),
-                            program: None,
-                        },
-                    },
-                ),
-            );
         }
     }
 
@@ -1222,105 +1217,6 @@ mod tests {
             .is_ok());
     }
 
-    impl WorldState for MockState {
-        fn location_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-            unimplemented!()
-        }
-
-        fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
-            unimplemented!()
-        }
-
-        fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-            Ok(BitEnum::all())
-        }
-
-        fn verbs(&mut self, _obj: Objid) -> Result<Vec<VerbInfo>, ObjectError> {
-            unimplemented!()
-        }
-
-        fn properties(&mut self, _obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
-            unimplemented!()
-        }
-
-        fn retrieve_verb(
-            &mut self,
-            obj: Objid,
-            vname: &str,
-        ) -> Result<(Binary, VerbInfo), ObjectError> {
-            let v = self.verbs.get(&(obj, vname.to_string()));
-            match v {
-                None => Err(VerbNotFound(obj, vname.to_string())),
-                Some(v) => Ok(v.clone()),
-            }
-        }
-
-        fn retrieve_property(
-            &mut self,
-            obj: Objid,
-            pname: &str,
-            _player_flags: BitEnum<ObjFlag>,
-        ) -> Result<Var, ObjectError> {
-            let p = self.properties.get(&(obj, pname.to_string()));
-            match p {
-                None => Err(PropertyNotFound(obj, pname.to_string())),
-                Some(p) => Ok(p.clone()),
-            }
-        }
-
-        fn update_property(
-            &mut self,
-            obj: Objid,
-            pname: &str,
-            _player_flags: BitEnum<ObjFlag>,
-            value: &Var,
-        ) -> Result<(), ObjectError> {
-            self.properties
-                .insert((obj, pname.to_string()), value.clone());
-            Ok(())
-        }
-
-        fn add_property(
-            &mut self,
-            obj: Objid,
-            pname: &str,
-            _owner: Objid,
-            _prop_flags: BitEnum<PropFlag>,
-            initial_value: Option<Var>,
-        ) -> Result<(), ObjectError> {
-            self.properties
-                .insert((obj, pname.to_string()), initial_value.unwrap_or(VAR_NONE));
-            Ok(())
-        }
-        fn find_command_verb_on(
-            &mut self,
-            _oid: Objid,
-            _pc: &ParsedCommand,
-        ) -> Result<Option<VerbInfo>, ObjectError> {
-            unimplemented!()
-        }
-
-        fn parent_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-            Ok(Objid(-1))
-        }
-
-        fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
-            Ok(true)
-        }
-
-        fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
-            unimplemented!()
-        }
-
-        fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
-            Ok(CommitResult::Success)
-        }
-
-        fn rollback(&mut self) -> Result<(), anyhow::Error> {
-            Ok(())
-        }
-    }
-
     fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
         tokio_test::block_on(async {
             let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
@@ -1340,7 +1236,8 @@ mod tests {
 
     #[test]
     fn test_verbnf() {
-        let mut state = MockState::new();
+        let mut state_src = MockWorldStateSource::new();
+        let mut state = state_src.new_world_state().unwrap();
         let mut vm = VM::new();
         let o = Objid(0);
 
@@ -1372,7 +1269,8 @@ mod tests {
     #[test]
     fn test_simple_vm_execute() {
         let binary = mk_binary(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state_src = MockWorldStateSource::new_with_verb("test", &binary);
+        let mut state = state_src.new_world_state().unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1382,14 +1280,16 @@ mod tests {
 
     #[test]
     fn test_string_value_simple_indexing() {
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![v_str("hello"), 2.into()],
                 Names::new(),
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1399,7 +1299,7 @@ mod tests {
 
     #[test]
     fn test_string_value_range_indexing() {
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1413,7 +1313,9 @@ mod tests {
                 vec![v_str("hello"), 2.into(), 4.into()],
                 Names::new(),
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
@@ -1422,17 +1324,16 @@ mod tests {
 
     #[test]
     fn test_list_value_simple_indexing() {
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
-                vec![
-                    v_list(vec![111.into(), 222.into(), 333.into()]),
-                    2.into(),
-                ],
+                vec![v_list(vec![111.into(), 222.into(), 333.into()]), 2.into()],
                 Names::new(),
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1442,7 +1343,7 @@ mod tests {
 
     #[test]
     fn test_list_value_range_indexing() {
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1460,7 +1361,9 @@ mod tests {
                 ],
                 Names::new(),
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1472,7 +1375,7 @@ mod tests {
     fn test_list_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1501,7 +1404,9 @@ mod tests {
                 ],
                 var_names,
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1513,7 +1418,9 @@ mod tests {
     fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = MockWorldStateSource::new_with_verb("test", &binary)
+            .new_world_state()
+            .unwrap();
         let mut vm = VM::new();
         let _args = binary.find_var("args");
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1524,7 +1431,9 @@ mod tests {
     #[test]
     fn test_list_range_length() {
         let program = "return {{1,2,3}[2..$], {1}[$]};";
-        let mut state = MockState::new_with_verb("test", &compile(program).unwrap());
+        let mut state = MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
+            .new_world_state()
+            .unwrap();
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
@@ -1537,7 +1446,9 @@ mod tests {
     #[test]
     fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
-        let mut state = MockState::new_with_verb("test", &compile(program).unwrap());
+        let mut state = MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
+            .new_world_state()
+            .unwrap();
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
@@ -1549,7 +1460,7 @@ mod tests {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
 
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![
@@ -1570,15 +1481,12 @@ mod tests {
                     Return,
                     Done,
                 ],
-                vec![
-                    v_str("mandalorian"),
-                    4.into(),
-                    7.into(),
-                    v_str("bozo"),
-                ],
+                vec![v_str("mandalorian"), 4.into(), 7.into(), v_str("bozo")],
                 var_names,
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1588,14 +1496,16 @@ mod tests {
 
     #[test]
     fn test_property_retrieval() {
-        let mut state = MockState::new_with_verb(
+        let mut state = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
                 vec![v_obj(0), v_str("test_prop")],
                 Names::new(),
             ),
-        );
+        )
+        .new_world_state()
+        .unwrap();
         {
             state
                 .add_property(
@@ -1635,17 +1545,15 @@ mod tests {
                 Return,
                 Done,
             ],
-            vec![
-                v_obj(0),
-                v_str("test_return_verb"),
-                v_list(vec![]),
-            ],
+            vec![v_obj(0), v_str("test_return_verb"), v_list(vec![])],
             Names::new(),
         );
-        let mut state = MockState::new_with_verbs(vec![
+        let mut state = MockWorldStateSource::new_with_verbs(vec![
             ("test_return_verb", &return_verb_binary),
             ("test_call_verb", &call_verb_binary),
-        ]);
+        ])
+        .new_world_state()
+        .unwrap();
         let mut vm = VM::new();
 
         // Invoke the second verb
@@ -1656,11 +1564,18 @@ mod tests {
         assert_eq!(result, v_int(666));
     }
 
+    fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
+        let binary = compile(program).unwrap();
+        let state = MockWorldStateSource::new_with_verb("test", &binary)
+            .new_world_state()
+            .unwrap();
+        state
+    }
+
     #[test]
     fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
@@ -1671,8 +1586,7 @@ mod tests {
     fn test_while_loop() {
         let program =
             "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1683,8 +1597,8 @@ mod tests {
     #[test]
     fn test_while_labelled_loop() {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1695,8 +1609,8 @@ mod tests {
     #[test]
     fn test_while_breaks() {
         let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1707,8 +1621,8 @@ mod tests {
     #[test]
     fn test_for_list_loop() {
         let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1719,8 +1633,8 @@ mod tests {
     #[test]
     fn test_for_range_loop() {
         let program = "z = 0; for i in [1..4] z = z + i; endfor return {i,z};";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1731,23 +1645,20 @@ mod tests {
     #[test]
     fn test_basic_scatter_assign() {
         let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(
-            result,
-            v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)])
-        );
+        assert_eq!(result, v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)]));
     }
 
     #[test]
     fn test_more_scatter_assign() {
         let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1768,8 +1679,8 @@ mod tests {
     #[test]
     fn test_conditional_expr() {
         let program = "return 1 ? 2 | 3;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1780,8 +1691,8 @@ mod tests {
     #[test]
     fn test_catch_expr() {
         let program = "return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1792,8 +1703,8 @@ mod tests {
     #[test]
     fn test_try_except_stmt() {
         let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1804,8 +1715,8 @@ mod tests {
     #[test]
     fn test_try_finally_stmt() {
         let program = "try a; finally return 666; endtry return 333;";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1854,8 +1765,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_builtin() {
         let program = "return notify(#1, \"test\");";
-        let binary = compile(program).unwrap();
-        let mut state = MockState::new_with_verb("test", &binary);
+        let mut state = world_with_test_program(program);
+
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);

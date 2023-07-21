@@ -1,8 +1,8 @@
 use thiserror::Error;
 
 use crate::model::objects::ObjAttr;
-use crate::var::Objid;
 use crate::model::verbs::Vid;
+use crate::var::Objid;
 
 pub mod r#match;
 pub mod objects;
@@ -10,30 +10,30 @@ pub mod permissions;
 pub mod props;
 pub mod verbs;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, PartialEq)]
 pub enum ObjectError {
-    #[error("Object not found: #{0}")]
+    #[error("Object not found: {0}")]
     ObjectNotFound(Objid),
-    #[error("Object already exists: #{0}")]
+    #[error("Object already exists: {0}")]
     ObjectAlreadyExists(Objid),
-    #[error("Could not set/get object attribute; #{0} on #{1}")]
+    #[error("Could not set/get object attribute; {0} on #{1}")]
     ObjectAttributeError(ObjAttr, Objid),
 
-    #[error("Property not found: #{0}.{1}")]
+    #[error("Property not found: {0}.{1}")]
     PropertyNotFound(Objid, String),
-    #[error("Property permission denied: #{0:?}.{1}")]
+    #[error("Property permission denied: {0}.{1}")]
     PropertyPermissionDenied(Objid, String),
-    #[error("Property definition not found: #{0}.{1}")]
+    #[error("Property definition not found: {0}.{1}")]
     PropertyDefinitionNotFound(Objid, String),
 
-    #[error("Verb not found: #{0}:{1}")]
+    #[error("Verb not found: {0}:{1}")]
     VerbNotFound(Objid, String),
-    #[error("Verb definition not #{0:?}")]
+    #[error("Verb definition not {0:?}")]
     InvalidVerb(Vid),
 
-    #[error("Invalid verb, decode error: #{0:?}:{1}")]
+    #[error("Invalid verb, decode error: {0}:{1}")]
     VerbDecodeError(Objid, String),
-    #[error("Verb permission denied: #{0:?}:{1}")]
+    #[error("Verb permission denied: {0}:{1}")]
     VerbPermissionDenied(Objid, String),
 
     #[error("Failed object match: {0}")]
@@ -42,10 +42,10 @@ pub enum ObjectError {
     AmbiguousMatch(String),
 
     // Catch-alls for system level object DB errors.
-    #[error("Object DB error for #{0}: {1}")]
+    #[error("Object DB error for {0}: {1}")]
     ObjectDbError(Objid, String),
-    #[error("Object DB error for #{0}.{1}: {2}")]
+    #[error("Object DB error for {0}.{1}: {2}")]
     PropertyDbError(Objid, String, String),
-    #[error("Object DB error for #{0}:{1}: {2}")]
+    #[error("Object DB error for {0}:{1}: {2}")]
     VerbDbError(Objid, String, String),
 }

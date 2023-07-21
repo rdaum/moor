@@ -1,21 +1,22 @@
 #![allow(non_camel_case_types, non_snake_case)]
 
-pub mod error;
-
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
+use bincode::{Decode, Encode};
 use decorum::R64;
 use int_enum::IntEnum;
 use num_traits::identities::Zero;
 
 use crate::compiler::labels::Label;
-use crate::var::error::Error::{E_RANGE, E_TYPE};
 use crate::var::error::Error;
+use crate::var::error::Error::{E_RANGE, E_TYPE};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub mod error;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
 pub struct Objid(pub i64);
 
 impl Display for Objid {
@@ -36,7 +37,6 @@ pub const VAR_CLEAR: Var = Var {
     value: Variant::Clear,
 };
 
-
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
 pub enum VarType {
@@ -52,12 +52,12 @@ pub enum VarType {
     TYPE_FLOAT = 9,   /* floating-point number; user-visible */
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
 pub struct Var {
     value: Variant,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
 pub enum Variant {
     Clear,
     None,

@@ -1,12 +1,11 @@
 use crate::db::CommitResult;
-use crate::model::ObjectError;
 use crate::model::objects::ObjFlag;
 use crate::model::props::{PropAttrs, PropFlag};
-use crate::var::{Objid, Var};
 use crate::model::verbs::VerbInfo;
-use crate::tasks::parse_cmd::ParsedCommand;
+use crate::model::ObjectError;
+use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::vm::opcode::Binary;
+use crate::var::{Objid, Var};
 
 pub trait WorldState: Send + Sync {
     /// Get the location of the given object.
@@ -18,16 +17,12 @@ pub trait WorldState: Send + Sync {
     /// Flags of an object.
     fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError>;
 
-    /// Get all the verbs on the given object.
+    /// Get the names of all the verbs on the given object.
     fn verbs(&mut self, obj: Objid) -> Result<Vec<VerbInfo>, ObjectError>;
 
     /// Gets a list of the names of the properties defined directly on the given object, not
     /// inherited from its parent.
     fn properties(&mut self, obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError>;
-
-    /// Retrieve a verb/method from the given object.
-    fn retrieve_verb(&mut self, obj: Objid, vname: &str)
-        -> Result<(Binary, VerbInfo), ObjectError>;
 
     /// Retrieve a property from the given object, walking transitively up its inheritance chain.
     fn retrieve_property(
@@ -55,6 +50,9 @@ pub trait WorldState: Send + Sync {
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), ObjectError>;
+
+    /// Retrieve a verb/method from the given object (or its parents).
+    fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError>;
 
     /// Seek the verb referenced by the given command on the given object.
     fn find_command_verb_on(

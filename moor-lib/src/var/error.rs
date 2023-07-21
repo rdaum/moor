@@ -1,8 +1,10 @@
+use bincode::{Decode, Encode};
 use int_enum::IntEnum;
+
 use crate::var::{Var, VAR_NONE};
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Hash, Encode, Decode)]
 #[allow(non_camel_case_types)]
 pub enum Error {
     E_NONE = 0,

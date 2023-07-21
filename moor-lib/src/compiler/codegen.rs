@@ -13,8 +13,8 @@ use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
 use crate::var::{v_int, Var};
-use crate::vm::opcode::{Binary, Op, ScatterLabel};
 use crate::vm::opcode::Op::Jump;
+use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Error, Debug)]
 pub enum CompileError {

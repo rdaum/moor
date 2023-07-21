@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::var::Objid;
 
-pub mod parse_cmd;
+pub mod command_parse;
 pub mod scheduler;
 
 #[async_trait]

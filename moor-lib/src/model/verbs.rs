@@ -1,22 +1,12 @@
+use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
-use crate::model::ObjectError;
-use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::var::Objid;
+use crate::model::r#match::VerbArgsSpec;
 use crate::util::bitenum::BitEnum;
+use crate::var::Objid;
 use crate::vm::opcode::Binary;
 
-#[derive(
-    Debug,
-    Ord,
-    PartialOrd,
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Hash,
-    Primitive,
-)]
+#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum VerbFlag {
     Read = 0,
     Write = 1,
@@ -24,9 +14,7 @@ pub enum VerbFlag {
     Debug = 3,
 }
 
-#[derive(
-    Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Encode, Decode)]
 pub struct Vid(pub i64);
 
 #[derive(Clone, Copy, Debug, Primitive)]
@@ -38,7 +26,7 @@ pub enum VerbAttr {
     Program = 4,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
     pub owner: Option<Objid>,
@@ -47,59 +35,8 @@ pub struct VerbAttrs {
     pub program: Option<Binary>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct VerbInfo {
-    pub vid: Vid,
     pub names: Vec<String>,
     pub attrs: VerbAttrs,
-}
-
-/// Trait for the management of verbs; creating finding counting
-pub trait Verbs {
-    fn add_verb(
-        &mut self,
-        oid: Objid,
-        names: Vec<&str>,
-        owner: Objid,
-        flags: BitEnum<VerbFlag>,
-        arg_spec: VerbArgsSpec,
-        program: Binary,
-    ) -> Result<VerbInfo, ObjectError>;
-
-    /// Get all verbs attached to the given object.
-    fn get_verbs(
-        &mut self,
-        oid: Objid,
-        attrs: BitEnum<VerbAttr>,
-    ) -> Result<Vec<VerbInfo>, ObjectError>;
-
-    fn get_verb(&mut self, vid: Vid, attrs: BitEnum<VerbAttr>) -> Result<VerbInfo, ObjectError>;
-
-    fn update_verb(&mut self, vid: Vid, attrs: VerbAttrs) -> Result<(), ObjectError>;
-
-    /// Match verbs using prepositional pieces.
-    fn find_command_verb(
-        &mut self,
-        obj: Objid,
-        verb: &str,
-        dobj: ArgSpec,
-        prep: PrepSpec,
-        iobj: ArgSpec,
-    ) -> Result<Option<VerbInfo>, ObjectError>;
-
-    /// Find the verbs that match based on the provided name-stem.
-    fn find_callable_verb(
-        &mut self,
-        oid: Objid,
-        verb: &str,
-        attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, ObjectError>;
-
-    /// Find the verb that is the Nth verb in insertion order for the object.
-    fn find_indexed_verb(
-        &mut self,
-        oid: Objid,
-        index: usize,
-        attrs: BitEnum<VerbAttr>,
-    ) -> Result<Option<VerbInfo>, ObjectError>;
 }

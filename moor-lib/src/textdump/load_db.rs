@@ -5,14 +5,15 @@ use std::io::BufReader;
 use tracing::{debug, info, span, warn};
 
 use crate::compiler::codegen::compile;
-use crate::db::moor_db::MoorDB;
+use crate::db::rocksdb::server::RocksDbServer;
+use crate::db::rocksdb::LoaderInterface;
 use crate::model::objects::{ObjAttrs, ObjFlag};
 use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::var::{Objid, Var};
 use crate::model::verbs::VerbFlag;
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;
+use crate::var::{Objid, Var};
 
 struct RProp {
     definer: Objid,
@@ -75,7 +76,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 
-pub fn textdump_load(s: &mut MoorDB, path: &str) -> Result<(), anyhow::Error> {
+pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Error> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
 
@@ -84,15 +85,15 @@ pub fn textdump_load(s: &mut MoorDB, path: &str) -> Result<(), anyhow::Error> {
     let mut tdr = TextdumpReader::new(br);
     let td = tdr.read_textdump()?;
 
-    let mut tx = s.do_begin_tx().expect("Unable to start transaction");
+    let tx = s.start_transaction().expect("Unable to start transaction");
 
     // Pass 1 Create objects
     info!("Instantiating objects...");
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
-        s.create_object(
-            &mut tx,
+        info!("Creating object: #{} ({})", objid.0, o.name);
+        tx.create_object(
             Some(*objid),
             ObjAttrs::new()
                 .owner(o.owner)
@@ -107,18 +108,17 @@ pub fn textdump_load(s: &mut MoorDB, path: &str) -> Result<(), anyhow::Error> {
 
     // Pass 2 define props
     for (objid, o) in &td.objects {
-        for (pnum, _) in o.propvals.iter().enumerate() {
+        for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                debug!("Defining prop: #{}.{}", objid.0, resolved.name);
-                let res = s.add_propdef(
-                    &mut tx,
-                    *objid,
+                info!("Defining prop: #{}.{}", objid.0, resolved.name);
+                let res = tx.define_property(
+                    resolved.definer,
                     resolved.name.as_str(),
                     resolved.owner,
                     flags,
-                    None,
+                    Some(p.value.clone()),
                 );
                 if res.is_err() {
                     warn!(
@@ -126,37 +126,6 @@ pub fn textdump_load(s: &mut MoorDB, path: &str) -> Result<(), anyhow::Error> {
                         objid.0, resolved.name, res
                     );
                 }
-            }
-        }
-    }
-
-    info!("Defined props");
-    info!("Setting props...");
-    // Pass 3 set props
-    for (objid, o) in &td.objects {
-        for (pnum, p) in o.propvals.iter().enumerate() {
-            let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
-            let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
-            debug!("Setting prop: #{}.{}", objid.0, resolved.name);
-
-            let result = s.get_propdef(&mut tx, resolved.definer, resolved.name.as_str());
-            let Ok(pdf) = result else {
-                warn!("Unable to find property {}.{}: {:?}", objid.0, resolved.name, result);
-                continue;
-            };
-            let result = s.set_property(
-                &mut tx,
-                pdf.pid,
-                *objid,
-                p.value.clone(),
-                resolved.owner,
-                flags,
-            );
-            if result.is_err() {
-                warn!(
-                    "Unable to set property {}.{}: {:?}",
-                    objid.0, resolved.name, result
-                );
             }
         }
     }
@@ -211,15 +180,7 @@ pub fn textdump_load(s: &mut MoorDB, path: &str) -> Result<(), anyhow::Error> {
                 }
             };
 
-            let av = s.add_verb(
-                &mut tx,
-                *objid,
-                names.clone(),
-                v.owner,
-                flags,
-                argspec,
-                binary,
-            );
+            let av = tx.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary);
             if av.is_err() {
                 warn!(
                     "Unable to add verb: #{}:{}: {:?}",
@@ -227,13 +188,16 @@ pub fn textdump_load(s: &mut MoorDB, path: &str) -> Result<(), anyhow::Error> {
                     names.first().unwrap(),
                     av
                 );
+            } else {
+                info!("Added verb: #{}:{}", objid.0, names.first().unwrap());
             }
         }
     }
     info!("Verbs defined.");
-    info!("Import complete.");
 
-    s.do_commit_tx(&mut tx)?;
+    tx.commit()?;
+
+    info!("Import complete.");
 
     Ok(())
 }

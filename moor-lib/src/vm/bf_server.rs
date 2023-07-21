@@ -6,11 +6,11 @@ use tokio::sync::RwLock;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
-use crate::model::ObjectError;
 use crate::model::objects::ObjFlag;
-use crate::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
-use crate::var::{v_err, Var, v_int, v_list, v_objid, v_string, v_bool, Variant, VAR_NONE};
+use crate::model::ObjectError;
 use crate::tasks::Sessions;
+use crate::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
+use crate::var::{v_bool, v_err, v_int, v_list, v_objid, v_string, Var, Variant, VAR_NONE};
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
 
@@ -42,7 +42,11 @@ async fn bf_notify(
         return Ok(v_err(E_TYPE));
     };
 
-    sess.write().await.send_text(*player, msg.clone()).await.unwrap();
+    sess.write()
+        .await
+        .send_text(*player, msg.clone())
+        .await
+        .unwrap();
 
     Ok(VAR_NONE)
 }

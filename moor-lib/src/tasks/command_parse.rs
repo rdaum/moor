@@ -2,7 +2,7 @@ use std::string::ToString;
 use std::sync::Once;
 
 use crate::model::r#match::PrepSpec;
-use crate::var::{Objid, v_str, Var};
+use crate::var::{v_str, Objid, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
@@ -232,7 +232,7 @@ where
 mod tests {
     use crate::db::matching::world_environment_match_object;
     use crate::db::mock_matching_env::{
-        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
+        setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
     use crate::var::{v_str, NOTHING};
 
@@ -302,11 +302,7 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
         assert_eq!(
             parsed.args,
-            vec![
-                v_str("arg1"),
-                v_str("arg2"),
-                v_str("arg3")
-            ]
+            vec![v_str("arg1"), v_str("arg2"), v_str("arg3")]
         );
         assert_eq!(parsed.argstr, "arg1 arg2 arg3");
     }
@@ -325,11 +321,7 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(2));
         assert_eq!(
             parsed.args,
-            vec![
-                v_str("obj"),
-                v_str("to"),
-                v_str("player")
-            ]
+            vec![v_str("obj"), v_str("to"), v_str("player")]
         );
         assert_eq!(parsed.argstr, "obj to player");
     }
@@ -343,13 +335,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "hello, world!");
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
-        assert_eq!(
-            parsed.args,
-            vec![
-                v_str("hello,"),
-                v_str("world!")
-            ]
-        );
+        assert_eq!(parsed.args, vec![v_str("hello,"), v_str("world!")]);
         assert_eq!(parsed.argstr, "hello, world!");
         assert_eq!(parsed.dobj, Objid(-1));
         assert_eq!(parsed.iobj, Objid(-1));
@@ -364,13 +350,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "waves happily.");
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
-        assert_eq!(
-            parsed.args,
-            vec![
-                v_str("waves"),
-                v_str("happily.")
-            ]
-        );
+        assert_eq!(parsed.args, vec![v_str("waves"), v_str("happily.")]);
         assert_eq!(parsed.argstr, "waves happily.");
         assert_eq!(parsed.dobj, Objid(-1));
         assert_eq!(parsed.iobj, Objid(-1));
@@ -385,13 +365,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "waves happily.");
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
-        assert_eq!(
-            parsed.args,
-            vec![
-                v_str("waves"),
-                v_str("happily.")
-            ]
-        );
+        assert_eq!(parsed.args, vec![v_str("waves"), v_str("happily.")]);
         assert_eq!(parsed.argstr, "waves happily.");
         assert_eq!(parsed.dobj, Objid(-1));
         assert_eq!(parsed.iobj, Objid(-1));
@@ -406,14 +380,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "1 + 1");
         assert_eq!(parsed.prepstr, "");
         assert_eq!(parsed.iobjstr, "");
-        assert_eq!(
-            parsed.args,
-            vec![
-                v_str("1"),
-                v_str("+"),
-                v_str("1")
-            ]
-        );
+        assert_eq!(parsed.args, vec![v_str("1"), v_str("+"), v_str("1")]);
         assert_eq!(parsed.argstr, "1 + 1");
         assert_eq!(parsed.dobj, Objid(-1));
         assert_eq!(parsed.iobj, Objid(-1));
@@ -476,14 +443,7 @@ mod tests {
         let result = parse_command("put thing1 in t2", match_object_fn);
         assert_eq!(result.verb, "put".to_string());
         assert_eq!(result.argstr, "thing1 in t2".to_string());
-        assert_eq!(
-            result.args,
-            vec![
-                v_str("thing1"),
-                v_str("in"),
-                v_str("t2")
-            ]
-        );
+        assert_eq!(result.args, vec![v_str("thing1"), v_str("in"), v_str("t2")]);
         assert_eq!(result.dobjstr, "thing1".to_string());
         assert_eq!(result.dobj, MOCK_THING1);
         assert_eq!(result.prepstr, "in".to_string());
@@ -501,10 +461,7 @@ mod tests {
         let result = parse_command("look at here", match_object_fn);
         assert_eq!(result.verb, "look".to_string());
         assert_eq!(result.argstr, "at here".to_string());
-        assert_eq!(
-            result.args,
-            vec![v_str("at"), v_str("here"),]
-        );
+        assert_eq!(result.args, vec![v_str("at"), v_str("here"),]);
         assert_eq!(result.dobjstr, "".to_string());
         assert_eq!(result.dobj, NOTHING);
         assert_eq!(result.prepstr, "at".to_string());

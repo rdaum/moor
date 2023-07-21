@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt};
 use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tokio_tungstenite::{accept_async, WebSocketStream};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 use tungstenite::{Error, Message};
 
 use moor_lib::tasks::scheduler::Scheduler;
@@ -99,10 +99,10 @@ async fn ws_handle_connection(
             SplitSink::send(&mut old.sink, "Reconnecting".into())
                 .await
                 .unwrap();
-            old.sink
-                .close()
-                .await
-                .expect("Could not close old connection");
+            let result = old.sink.close().await;
+            if let Err(e) = result {
+                error!("{:?}", e);
+            }
         }
     }
 
@@ -123,8 +123,6 @@ async fn ws_handle_connection(
                     .setup_command_task(player, cmd, server.sessions.clone())
                     .await
             };
-            debug!("Submitted task: {:?}", task_id);
-
             let task_id = match task_id {
                 Ok(task_id) => task_id,
                 Err(e) => {
@@ -132,14 +130,13 @@ async fn ws_handle_connection(
                     ws_send_error(
                         server.clone(),
                         player,
-                        format!("Unable to parse command ({}): {:?}", cmd, e),
+                        format!("Unable to parse command ({}): {}", cmd, e),
                     )
                     .await?;
 
                     continue;
                 }
             };
-            debug!("Task started: {:?}", task_id);
             {
                 let server = server.write().await;
                 let mut scheduler = server.scheduler.write().await;

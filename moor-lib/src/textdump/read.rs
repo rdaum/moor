@@ -7,9 +7,12 @@ use text_io::scan;
 use tracing::info;
 
 use crate::compiler::labels::Label;
-use crate::var::{Objid, v_catch, v_err, v_finally, v_float, v_int, v_list, v_objid, v_str, Var, VAR_CLEAR, VAR_NONE, VarType};
 use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
 use crate::var::error::Error;
+use crate::var::{
+    v_catch, v_err, v_finally, v_float, v_int, v_list, v_objid, v_str, Objid, Var, VarType,
+    VAR_CLEAR, VAR_NONE,
+};
 
 impl<R: Read> TextdumpReader<R> {
     fn read_num(&mut self) -> Result<i64, anyhow::Error> {

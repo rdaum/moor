@@ -1,11 +1,12 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 use dashmap::DashMap;
 use fast_counter::ConcurrentCounter;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace};
 
@@ -13,10 +14,11 @@ use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
-use crate::var::{NOTHING, Objid, Var, Variant};
-use crate::tasks::parse_cmd::{parse_command, ParsedCommand};
+use crate::model::verbs::VerbInfo;
+use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
+use crate::var::{Objid, Var, Variant};
 use crate::vm::execute::{ExecutionResult, FinallyReason, VM};
 
 pub type TaskId = usize;
@@ -26,6 +28,7 @@ enum TaskControlMsg {
     StartCommandVerb {
         player: Objid,
         vloc: Objid,
+        verbinfo: VerbInfo,
         command: ParsedCommand,
     },
     StartVerb {
@@ -76,6 +79,12 @@ pub struct Scheduler {
     num_excepted_tasks: ConcurrentCounter,
 }
 
+#[derive(Debug, Eq, PartialEq, Error)]
+pub enum SchedulerError {
+    #[error("Could not find match for command '{0}': {1:?}")]
+    NoCommandMatch(String, ParsedCommand),
+}
+
 impl Scheduler {
     pub fn new(state_source: Arc<RwLock<dyn WorldStateSource + Sync + Send>>) -> Self {
         let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -102,31 +111,34 @@ impl Scheduler {
         command: &str,
         sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
     ) -> Result<TaskId, anyhow::Error> {
-        let (vloc, command) = {
+        let (vloc, vi, command) = {
             let mut ss = self.state_source.write().await;
-            let mut ws = ss.new_world_state().unwrap();
+            let mut ws = ss.new_world_state()?;
             let mut me = DBMatchEnvironment { ws: ws.as_mut() };
             let match_object_fn =
                 |name: &str| world_environment_match_object(&mut me, player, name).unwrap();
             let pc = parse_command(command, match_object_fn);
 
             let loc = ws.location_of(player)?;
-            let mut vloc = NOTHING;
-            if let Some(_vh) = ws.find_command_verb_on(player, &pc)? {
-                vloc = player;
-            } else if let Some(_vh) = ws.find_command_verb_on(loc, &pc)? {
-                vloc = loc;
-            } else if let Some(_vh) = ws.find_command_verb_on(pc.dobj, &pc)? {
-                vloc = pc.dobj;
-            } else if let Some(_vh) = ws.find_command_verb_on(pc.iobj, &pc)? {
-                vloc = pc.iobj;
-            }
 
-            if vloc == NOTHING {
-                return Err(anyhow!("Could not parse command: {:?}", pc));
+            match ws.find_command_verb_on(player, &pc)? {
+                Some(vi) => (player, vi, pc),
+                None => match ws.find_command_verb_on(loc, &pc)? {
+                    Some(vi) => (loc, vi, pc),
+                    None => match ws.find_command_verb_on(pc.dobj, &pc)? {
+                        Some(vi) => (pc.dobj, vi, pc),
+                        None => match ws.find_command_verb_on(pc.iobj, &pc)? {
+                            Some(vi) => (pc.iobj, vi, pc),
+                            None => {
+                                return Err(anyhow!(SchedulerError::NoCommandMatch(
+                                    command.to_string(),
+                                    pc
+                                )));
+                            }
+                        },
+                    },
+                },
             }
-
-            (vloc, pc)
         };
         let task_id = self
             .new_task(player, self.state_source.clone(), sessions)
@@ -142,6 +154,7 @@ impl Scheduler {
             .send(TaskControlMsg::StartCommandVerb {
                 player,
                 vloc,
+                verbinfo: vi,
                 command,
             })?;
 
@@ -327,14 +340,15 @@ impl Task {
                 Some(TaskControlMsg::StartCommandVerb {
                     player,
                     vloc,
+                    verbinfo,
                     command,
                 }) => {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     self.vm
-                        .do_method_verb(
+                        .do_method_cmd(
                             self.task_id,
-                            self.state.as_mut(),
+                            verbinfo,
                             vloc,
                             command.verb.as_str(),
                             false,
@@ -485,15 +499,16 @@ mod tests {
     use tokio::sync::RwLock;
 
     use crate::compiler::codegen::compile;
-    use crate::db::moor_db::MoorDB;
-    use crate::db::moor_db_worldstate::MoorDbWorldStateSource;
+    use crate::db::mock_world_state::MockWorldStateSource;
+    use crate::db::rocksdb::LoaderInterface;
+
     use crate::model::objects::{ObjAttrs, ObjFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::var::{NOTHING, Objid};
     use crate::model::verbs::VerbFlag;
     use crate::tasks::scheduler::Scheduler;
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
+    use crate::var::{Objid, NOTHING};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -513,14 +528,13 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    // Disabled until mock state is more full featured. This test used to use a full in-mem DB.
+    // #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_scheduler_loop() {
-        let mut db = MoorDB::new();
+        let src = MockWorldStateSource::new();
 
-        let mut tx = db.do_begin_tx().unwrap();
-        let sys_obj = db
+        let sys_obj = src
             .create_object(
-                &mut tx,
                 None,
                 ObjAttrs::new()
                     .location(NOTHING)
@@ -529,8 +543,7 @@ mod tests {
                     .flags(BitEnum::new_with(ObjFlag::Read)),
             )
             .unwrap();
-        db.add_verb(
-            &mut tx,
+        src.add_verb(
             sys_obj,
             vec!["test"],
             sys_obj,
@@ -543,10 +556,6 @@ mod tests {
             compile("return {1,2,3,4};").unwrap(),
         )
         .unwrap();
-
-        db.do_commit_tx(&mut tx).expect("Commit of test data");
-
-        let src = MoorDbWorldStateSource::new(db);
 
         let mut sched = Scheduler::new(Arc::new(RwLock::new(src)));
         let task = sched

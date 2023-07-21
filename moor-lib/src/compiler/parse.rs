@@ -4,17 +4,20 @@ use std::rc::Rc;
 /// This is the main entry point for parsing.
 use std::str::FromStr;
 
-pub use pest::Parser as PestParser;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
+pub use pest::Parser as PestParser;
 
 use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
 use crate::compiler::labels::Names;
-use crate::compiler::Parse;
 use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::var::{v_err, Objid, SYSTEM_OBJECT, v_objid, v_float, v_int, v_str};
-use crate::var::error::Error::{E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF};
+use crate::compiler::Parse;
+use crate::var::error::Error::{
+    E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA,
+    E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
+};
+use crate::var::{v_err, v_float, v_int, v_objid, v_str, Objid, SYSTEM_OBJECT};
 
 pub mod moo {
     #[derive(Parser)]
@@ -717,16 +720,16 @@ pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::Arg::Normal;
+    use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
     use crate::compiler::ast::{
         Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         UnaryOp,
     };
-    use crate::compiler::ast::Arg::Normal;
-    use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::var::{v_err, v_float, v_int, v_obj, v_str};
     use crate::var::error::Error::{E_PROPNF, E_VARNF};
+    use crate::var::{v_err, v_float, v_int, v_obj, v_str};
 
     #[test]
     fn test_call_verb() {
@@ -1134,9 +1137,7 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::VarExpr(v_str(
-                "\n \t \r \" \\ "
-            )))]
+            vec![Stmt::Expr(Expr::VarExpr(v_str("\n \t \r \" \\ ")))]
         );
     }
 

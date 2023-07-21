@@ -1,7 +1,6 @@
 [workspace]
 
 members = [
-  "tuplebox",
   "moor-lib",
   "moor-bin",
 ]

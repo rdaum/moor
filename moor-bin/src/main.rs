@@ -1,24 +1,24 @@
 extern crate core;
 
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
+use moor_lib::db::rocksdb::LoaderInterface;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::RwLock;
 use tracing::info;
 
-use moor_lib::db::moor_db::MoorDB;
-use moor_lib::db::moor_db_worldstate::MoorDbWorldStateSource;
-use moor_lib::model::objects::ObjAttrs;
+use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::var::Objid;
 
-use crate::server::ws_server::{WebSocketServer, ws_server_start};
+use crate::server::ws_server::{ws_server_start, WebSocketServer};
 
 mod server;
 
@@ -42,7 +42,7 @@ async fn main() -> Result<(), io::Error> {
 
     info!("Moor");
 
-    let mut src = MoorDB::new();
+    let mut src = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
@@ -51,25 +51,14 @@ async fn main() -> Result<(), io::Error> {
         info!("Loaded textdump in {:?}", duration);
     }
 
-    let mut tx = src.do_begin_tx().unwrap();
+    let tx = src.start_transaction().unwrap();
 
     // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
     // match against.
-    src.object_set_attrs(
-        &mut tx,
-        Objid(2),
-        ObjAttrs {
-            owner: None,
-            name: None,
-            parent: None,
-            location: Some(Objid(70)),
-            flags: None,
-        },
-    )
-    .unwrap();
-    src.do_commit_tx(&mut tx).unwrap();
+    tx.set_object_location(Objid(2), Objid(70)).unwrap();
+    tx.commit().unwrap();
 
-    let state_src = Arc::new(RwLock::new(MoorDbWorldStateSource::new(src)));
+    let state_src = Arc::new(RwLock::new(src));
     let scheduler = Arc::new(RwLock::new(Scheduler::new(state_src.clone())));
 
     let addr = args

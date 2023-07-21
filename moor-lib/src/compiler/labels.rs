@@ -1,5 +1,7 @@
+use bincode::{Decode, Encode};
+
 // Fixup for a jump label
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct JumpLabel {
     // The unique id for the jump label, which is also its offset in the jump vector.
     pub(crate) id: Label,
@@ -11,9 +13,7 @@ pub struct JumpLabel {
     pub(crate) position: Offset,
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
 pub struct Label(pub u32);
 
 impl From<usize> for Label {
@@ -28,10 +28,10 @@ impl From<i32> for Label {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Name(pub Label);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Names {
     pub names: Vec<String>,
 }
@@ -42,7 +42,7 @@ impl Default for Names {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Offset(pub u32);
 
 impl From<i32> for Offset {

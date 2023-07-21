@@ -8,9 +8,9 @@ use tokio::sync::RwLock;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
-use crate::var::{v_err, v_int, v_obj, Var, v_float, v_str, v_bool, Variant};
-use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::tasks::Sessions;
+use crate::var::error::Error::{E_INVARG, E_TYPE};
+use crate::var::{v_bool, v_err, v_float, v_int, v_obj, v_str, Var, Variant};
 use crate::vm::activation::Activation;
 use crate::vm::execute::{BfFunction, VM};
 

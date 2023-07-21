@@ -1,22 +1,12 @@
 use std::fmt::{Display, Formatter};
 
+use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
-use crate::model::ObjectError;
-use crate::var::Objid;
 use crate::util::bitenum::BitEnum;
+use crate::var::Objid;
 
-#[derive(
-    Debug,
-    Ord,
-    PartialOrd,
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Hash,
-    Primitive,
-)]
+#[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum ObjFlag {
     User = 0,
     Programmer = 1,
@@ -29,7 +19,7 @@ pub enum ObjFlag {
 }
 
 // The set of built-in object attributes
-#[derive(Clone, Copy, Debug, Hash, Primitive)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, Primitive)]
 pub enum ObjAttr {
     Owner = 0,
     Name = 1,
@@ -87,35 +77,11 @@ impl ObjAttrs {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct ObjAttrs {
     pub owner: Option<Objid>,
     pub name: Option<String>,
     pub parent: Option<Objid>,
     pub location: Option<Objid>,
     pub flags: Option<BitEnum<ObjFlag>>,
-}
-
-pub trait Objects {
-    fn create_object(&mut self, oid: Option<Objid>, attrs: &ObjAttrs)
-        -> Result<Objid, ObjectError>;
-    fn destroy_object(&mut self, oid: Objid) -> Result<(), ObjectError>;
-    fn object_valid(&mut self, oid: Objid) -> Result<bool, ObjectError>;
-
-    fn object_get_attrs(
-        &mut self,
-        oid: Objid,
-        attributes: BitEnum<ObjAttr>,
-    ) -> Result<ObjAttrs, ObjectError>;
-    fn object_set_attrs(&mut self, oid: Objid, attributes: ObjAttrs) -> Result<(), ObjectError>;
-
-    fn object_children(&mut self, oid: Objid) -> Result<Vec<Objid>, ObjectError>;
-    fn object_contents(&mut self, oid: Objid) -> Result<Vec<Objid>, ObjectError>;
-}
-
-trait Player {
-    fn is_object_wizard(&self, oid: Objid) -> Result<bool, anyhow::Error>;
-    fn is_object_programmer(&self, oid: Objid) -> Result<bool, anyhow::Error>;
-    fn is_object_player(&self, oid: Objid) -> Result<bool, anyhow::Error>;
-    fn all_users(&self) -> Result<Vec<Objid>, anyhow::Error>;
 }
