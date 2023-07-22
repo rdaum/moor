@@ -1109,7 +1109,10 @@ impl VM {
                         ScatterLabel::Rest(id) => {
                             let mut v = vec![];
                             for _ in 1..nargs.0 {
-                                v.push(args_iter.next().unwrap().clone());
+                                let Some(rest) = args_iter.next() else {
+                                    break;
+                                };
+                                v.push(rest.clone());
                             }
                             let rest = v_list(v);
                             self.set_env(*id, &rest);
@@ -1119,7 +1122,7 @@ impl VM {
                                 if jump_where.is_none() && jump_to.is_some() {
                                     jump_where = *jump_to;
                                 }
-                                break;
+                                // break;
                             }
                             Some(v) => {
                                 self.set_env(*id, v);
@@ -1676,6 +1679,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_scatter_multi_optional() {
+        let program = "{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};";
+        let mut state = world_with_test_program(program);
+
+        let mut vm = VM::new();
+
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(
+            result,
+            v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_list(vec![])])
+        );
+    }
     #[test]
     fn test_conditional_expr() {
         let program = "return 1 ? 2 | 3;";
