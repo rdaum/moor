@@ -491,6 +491,8 @@ impl VM {
             );
         };
 
+        let caller = self.top().this;
+
         let top = self.top();
         let mut callers = top.callers.to_vec();
         let task_id = top.task_id;
@@ -507,7 +509,7 @@ impl VM {
         let a = Activation::new_for_method(
             task_id,
             binary,
-            top.verb_definer(),
+            caller,
             this,
             top.player,
             top.player_flags,
