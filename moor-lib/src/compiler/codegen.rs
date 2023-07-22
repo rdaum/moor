@@ -248,7 +248,7 @@ impl CodegenState {
         self.emit(Op::Scatter {
             nargs: nargs.into(),
             nreq: nreq.into(),
-            nrest: nrest.into(),
+            rest: nrest.into(),
             labels: labels.iter().map(|(_, l)| l.clone()).collect(),
             done,
         });
@@ -1717,14 +1717,17 @@ mod tests {
         */
         let raise_num = BUILTINS.iter().position(|b| b == &"raise").unwrap();
         let e_invarg = binary.find_literal(E_INVARG.into());
-        assert_eq!(binary.main_vector,
+        assert_eq!(
+            binary.main_vector,
             vec![
                 Val(0.into()),
                 PushLabel(0.into()),
                 Catch,
                 Imm(e_invarg),
                 MakeSingletonList,
-                FuncCall { id: raise_num.into()},
+                FuncCall {
+                    id: raise_num.into()
+                },
                 EndCatch(1.into()),
                 Val(v_int(1)),
                 Ref,
@@ -1732,7 +1735,7 @@ mod tests {
                 Done
             ]
         )
-     }
+    }
 
     #[test]
     fn test_sysobjref() {
@@ -1789,9 +1792,9 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 3.into(),
-                    nreq: 3.into(),
-                    nrest: 4.into(),
+                    nargs: 3,
+                    nreq: 3,
+                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
@@ -1828,9 +1831,9 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 3.into(),
-                    nreq: 2.into(),
-                    nrest: 4.into(),
+                    nargs: 3,
+                    nreq: 2,
+                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(first),
                         ScatterLabel::Required(second),
@@ -1873,9 +1876,9 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 4.into(),
-                    nreq: 2.into(),
-                    nrest: 4.into(),
+                    nargs: 4,
+                    nreq: 2,
+                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
@@ -1924,9 +1927,9 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter {
-                    nargs: 6.into(),
-                    nreq: 2.into(),
-                    nrest: 4.into(),
+                    nargs: 6,
+                    nreq: 2,
+                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Optional(b, None),
@@ -1944,6 +1947,74 @@ mod tests {
                 Put(binary.find_var("e")),
                 Pop,
                 Pop,
+                Done
+            ]
+        )
+    }
+
+    #[test]
+    fn test_scatter_precedence() {
+        let program = "{a,b,c} = {{1,2,3}}[1]; return {a,b,c};";
+        let binary = compile(program).unwrap();
+        let (a, b, c) = (
+            binary.find_var("a"),
+            binary.find_var("b"),
+            binary.find_var("c"),
+        );
+        /*
+         0: 124                   NUM 1
+         1: 016                 * MAKE_SINGLETON_LIST
+         2: 125                   NUM 2
+         3: 102                   LIST_ADD_TAIL
+         4: 126                   NUM 3
+         5: 102                   LIST_ADD_TAIL
+         6: 016                 * MAKE_SINGLETON_LIST
+         7: 124                   NUM 1
+         8: 014                 * INDEX
+         9: 112 013 003 003 004
+            018 000 019 000 020
+            000 021             * SCATTER 3/3/4: a/0 b/0 c/0 21
+        21: 111                   POP
+        22: 085                   PUSH a
+        23: 016                 * MAKE_SINGLETON_LIST
+        24: 086                   PUSH b
+        25: 102                   LIST_ADD_TAIL
+        26: 087                   PUSH c
+        27: 102                   LIST_ADD_TAIL
+        28: 108                   RETURN
+        */
+
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(0.into()),
+                MakeSingletonList,
+                Imm(1.into()),
+                ListAddTail,
+                Imm(2.into()),
+                ListAddTail,
+                MakeSingletonList,
+                Imm(0.into()),
+                Ref,
+                Scatter {
+                    nargs: 3,
+                    nreq: 3,
+                    rest: 4,
+                    labels: vec![
+                        ScatterLabel::Required(a),
+                        ScatterLabel::Required(b),
+                        ScatterLabel::Required(c),
+                    ],
+                    done: 0.into(),
+                },
+                Pop,
+                Push(a),
+                MakeSingletonList,
+                Push(b),
+                ListAddTail,
+                Push(c),
+                ListAddTail,
+                Return,
                 Done
             ]
         )

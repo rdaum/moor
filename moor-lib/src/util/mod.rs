@@ -3,7 +3,6 @@ pub mod bitenum;
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'
 pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
-
     let mut vname_iter = vname.chars();
     let mut candidate_iter = candidate.chars();
 

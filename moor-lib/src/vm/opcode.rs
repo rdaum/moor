@@ -83,9 +83,9 @@ pub enum Op {
     Length(Offset),
     Exp,
     Scatter {
-        nargs: Offset,
-        nreq: Offset,
-        nrest: Offset,
+        nargs: usize,
+        nreq: usize,
+        rest: usize,
         labels: Vec<ScatterLabel>,
         done: Label,
     },

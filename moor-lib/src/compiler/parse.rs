@@ -157,6 +157,7 @@ fn parse_expr(
         // CondExpr is right-associative in C-ish languages, and should sit above all the infix rules
         // to make Pratt happy, it seems.
         .op(Op::postfix(Rule::assign))
+        .op(Op::prefix(Rule::scatter_assign))
         .op(Op::postfix(Rule::cond_expr))
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
         .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
@@ -173,7 +174,6 @@ fn parse_expr(
         .op(Op::postfix(Rule::verb_expr_call))
         .op(Op::postfix(Rule::prop))
         .op(Op::postfix(Rule::prop_expr))
-        .op(Op::prefix(Rule::scatter_assign))
         .op(Op::prefix(Rule::neg))
         .op(Op::prefix(Rule::not));
 
@@ -1022,6 +1022,72 @@ mod tests {
     }
 
     #[test]
+    fn test_scatter_index_precedence() {
+        // Regression test for a bug where the precedence of the right hand side of a scatter
+        // assignment was incorrect.
+        let program = "{connection} = args[1];";
+        let parse = parse_program(program).unwrap();
+        let connection = parse.names.find_name("connection").unwrap();
+        let args = parse.names.find_name("args").unwrap();
+
+        let scatter_items = vec![ScatterItem {
+            kind: ScatterKind::Required,
+            id: connection,
+            expr: None,
+        }];
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Scatter(
+                scatter_items,
+                Box::new(Expr::Index(Box::new(Id(args)), Box::new(VarExpr(v_int(1))),))
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_indexed_list() {
+        let program = "{a,b,c}[1];";
+        let parse = parse_program(program).unwrap();
+        let a = parse.names.find_name("a").unwrap();
+        let b = parse.names.find_name("b").unwrap();
+        let c = parse.names.find_name("c").unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Index(
+                Box::new(Expr::List(vec![
+                    Arg::Normal(Id(a)),
+                    Arg::Normal(Id(b)),
+                    Arg::Normal(Id(c)),
+                ])),
+                Box::new(VarExpr(v_int(1))),
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_assigned_indexed_list() {
+        let program = "a = {a,b,c}[1];";
+        let parse = parse_program(program).unwrap();
+        let a = parse.names.find_name("a").unwrap();
+        let b = parse.names.find_name("b").unwrap();
+        let c = parse.names.find_name("c").unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Assign {
+                left: Box::new(Id(a)),
+                right: Box::new(Expr::Index(
+                    Box::new(Expr::List(vec![
+                        Arg::Normal(Id(a)),
+                        Arg::Normal(Id(b)),
+                        Arg::Normal(Id(c)),
+                    ])),
+                    Box::new(VarExpr(v_int(1))),
+                )),
+            },)]
+        );
+    }
+
+    #[test]
     fn test_indexed_assign() {
         let program = "this.stack[5] = 5;";
         let parse = parse_program(program).unwrap();
@@ -1505,21 +1571,21 @@ mod tests {
 
     #[test]
     fn try_catch_any_expr() {
-        let program ="`raise(E_INVARG) ! ANY';";
+        let program = "`raise(E_INVARG) ! ANY';";
         let parse = parse_program(program).unwrap();
         let invarg = Arg::Normal(VarExpr(v_err(E_INVARG)));
 
-        assert_eq!(parse.stmts,
-        vec![
-            Stmt::Expr(Expr::Catch {
+        assert_eq!(
+            parse.stmts,
+            vec![Stmt::Expr(Expr::Catch {
                 trye: Box::new(Call {
                     function: "raise".to_string(),
                     args: vec![invarg]
                 }),
                 codes: CatchCodes::Any,
                 except: None,
-            })
-        ]);
+            })]
+        );
     }
 
     #[test]

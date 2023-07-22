@@ -1,10 +1,8 @@
 use std::sync::Arc;
 use std::time::SystemTime;
-use anyhow::anyhow;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
-use tracing::info;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -229,7 +227,7 @@ async fn bf_raise(
         return Ok(v_err(E_INVARG));
     }
 
-    let Variant::Err(e) = args[0].variant() else {
+    let Variant::Err(_) = args[0].variant() else {
         return Ok(v_err(E_INVARG));
     };
 

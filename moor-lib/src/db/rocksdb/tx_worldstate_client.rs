@@ -10,7 +10,7 @@ use crate::model::verbs::{VerbAttrs, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var, Variant, NOTHING, v_objid};
+use crate::var::{v_objid, Objid, Var, Variant, NOTHING};
 use crate::vm::opcode::Binary;
 use anyhow::Error;
 
@@ -101,20 +101,19 @@ impl WorldState for RocksDbTransaction {
 
         // Special properties like name, location, and contents get treated specially.
         if pname == "name" {
-            return self.names_of(obj)
-                .map(|(name, _)| Var::from(name))
-                .map_err(|e| e.into())
-        } else if pname == "location" {
-            return self.location_of(obj).map(Var::from).map_err(|e| e.into())
-        } else if pname == "contents" {
-            return self.contents_of(obj)
-                .map(|c| v_objid(obj))
-                .map_err(|e| e.into())
-        } else if pname == "owner" {
             return self
-                .owner_of(obj)
-                .map(|o| v_objid(o))
-                .map_err(|e| e.into())
+                .names_of(obj)
+                .map(|(name, _)| Var::from(name))
+                .map_err(|e| e.into());
+        } else if pname == "location" {
+            return self.location_of(obj).map(Var::from).map_err(|e| e.into());
+        } else if pname == "contents" {
+            return self
+                .contents_of(obj)
+                .map(|c| v_objid(obj))
+                .map_err(|e| e.into());
+        } else if pname == "owner" {
+            return self.owner_of(obj).map(|o| v_objid(o)).map_err(|e| e.into());
         }
 
         let (send, receive) = crossbeam_channel::bounded(1);

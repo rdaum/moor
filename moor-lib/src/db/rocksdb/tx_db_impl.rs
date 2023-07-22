@@ -103,7 +103,10 @@ pub(crate) struct RocksDbTx<'a> {
 }
 
 fn verbname_matches(verb_names: &[String], candidate: &str) -> Option<String> {
-    verb_names.iter().find(|&v| verbname_cmp(v, candidate)).cloned()
+    verb_names
+        .iter()
+        .find(|&v| verbname_cmp(v, candidate))
+        .cloned()
 }
 
 impl<'a> RocksDbTx<'a> {
@@ -466,7 +469,9 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             }
         };
         // TODO: wildcard search
-        let verb = verbs.iter().find(|vh| verbname_matches(&vh.names, &n).is_some());
+        let verb = verbs
+            .iter()
+            .find(|vh| verbname_matches(&vh.names, &n).is_some());
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, n).into());
         };
@@ -526,7 +531,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                         a.matches(&a)
                     } else {
                         vh.args == VerbArgsSpec::this_none_this()
-                    }
+                    };
                 }
                 false
             });
@@ -558,7 +563,9 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 verbs
             }
         };
-        let verb = verbs.iter().find(|vh| verbname_matches(&vh.names, &v).is_some());
+        let verb = verbs
+            .iter()
+            .find(|vh| verbname_matches(&vh.names, &v).is_some());
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, v.clone()).into())
         };
@@ -1107,7 +1114,7 @@ mod tests {
             BitEnum::new(),
             VerbArgsSpec::this_none_this(),
         )
-            .unwrap();
+        .unwrap();
 
         assert_eq!(
             tx.resolve_verb(a, "dname".into(), None).unwrap().names,

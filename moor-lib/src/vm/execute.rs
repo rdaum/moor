@@ -311,9 +311,7 @@ impl VM {
                             if let (Some(pushed_label), Some(error_codes)) =
                                 (a.valstack.pop(), a.valstack.pop())
                             {
-
-                                if let Variant::_Label(pushed_label) = pushed_label.variant()
-                                {
+                                if let Variant::_Label(pushed_label) = pushed_label.variant() {
                                     if let Variant::List(error_codes) = error_codes.variant() {
                                         if error_codes.contains(&v_err(*code)) {
                                             a.jump(*pushed_label);
@@ -323,7 +321,6 @@ impl VM {
                                         a.jump(*pushed_label);
                                         found = true;
                                     }
-
                                 }
                             }
                         }
@@ -1095,38 +1092,34 @@ impl VM {
             Op::Scatter {
                 nargs,
                 nreq,
+                rest,
                 labels,
                 done,
                 ..
             } => {
-                let list = self.peek_top();
-                let Variant::List(list) = list.variant() else {
+                let have_rest = rest <= nargs;
+                let rhs = self.peek_top();
+                let Variant::List(rhs_values) = rhs.variant() else {
                     self.pop();
                     return self.push_error(E_TYPE);
                 };
 
-                let len = list.len();
-                if len < nreq.0 as usize {
+                let len = rhs_values.len();
+                if len < nreq || !have_rest && len > nargs {
                     self.pop();
                     return self.push_error(E_ARGS);
                 }
 
-                assert_eq!(nargs.0 as usize, labels.len());
+                assert_eq!(nargs, labels.len());
+                let mut nopt_avail = len - nreq;
 
                 let mut jump_where = None;
-                let mut args_iter = list.iter();
+                let mut args_iter = rhs_values.iter();
                 for label in labels.iter() {
                     match label {
-                        ScatterLabel::Required(id) => {
-                            let Some(arg) = args_iter.next() else {
-                                return self.push_error(E_ARGS);
-                            };
-
-                            self.set_env(*id, arg);
-                        }
                         ScatterLabel::Rest(id) => {
                             let mut v = vec![];
-                            for _ in 1..nargs.0 {
+                            for _ in 1..nargs {
                                 let Some(rest) = args_iter.next() else {
                                     break;
                                 };
@@ -1135,17 +1128,26 @@ impl VM {
                             let rest = v_list(v);
                             self.set_env(*id, &rest);
                         }
-                        ScatterLabel::Optional(id, jump_to) => match args_iter.next() {
-                            None => {
+                        ScatterLabel::Required(id) => {
+                            let Some(arg) = args_iter.next() else {
+                                return self.push_error(E_ARGS);
+                            };
+
+                            self.set_env(*id, arg);
+                        }
+                        ScatterLabel::Optional(id, jump_to) => {
+                            if nopt_avail > 0 {
+                                nopt_avail -= 1;
+                                let Some(arg) = args_iter.next() else {
+                                    return self.push_error(E_ARGS);
+                                };
+                                self.set_env(*id, arg);
+                            } else {
                                 if jump_where.is_none() && jump_to.is_some() {
                                     jump_where = *jump_to;
                                 }
-                                // break;
                             }
-                            Some(v) => {
-                                self.set_env(*id, v);
-                            }
-                        },
+                        }
                     }
                 }
                 match jump_where {
@@ -1187,8 +1189,8 @@ mod tests {
 
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
-    use crate::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE, v_err};
     use crate::var::error::Error::E_VERBNF;
+    use crate::var::{v_err, v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
@@ -1703,7 +1705,6 @@ mod tests {
     fn test_scatter_multi_optional() {
         let program = "{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};";
         let mut state = world_with_test_program(program);
-
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm);
@@ -1713,6 +1714,50 @@ mod tests {
             v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_list(vec![])])
         );
     }
+
+    #[test]
+    fn test_scatter_regression() {
+        // Wherein I discovered that precedence order for scatter assign was wrong wrong wrong.
+        let program = r#"
+        a = {{#2, #70, #70, #-1, #-1}, #70};
+        thing = a[2];
+        {?who = player, ?what = thing, ?where = 666, ?dobj, ?iobj, @other} = a[1];
+        return {who, what, where, dobj, iobj, other};
+        "#;
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        // MOO has  {#2, #70, #70, #-1, #-1, {}} for this equiv in JHCore parse_parties, and does not
+        // actually invoke `_locations` (where i've subbed 666) for these values.
+        // So something is wonky about our scatter evaluation, looks like on the first arg.
+        assert_eq!(
+            result,
+            v_list(vec![
+                v_obj(2),
+                v_obj(70),
+                v_obj(70),
+                v_obj(-1),
+                v_obj(-1),
+                v_list(vec![])
+            ])
+        );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_scatter_precedence() {
+        // Simplified case of operator precedence fix.
+        let program = "{a,b,c} = {{1,2,3}}[1]; return {a,b,c};";
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_list(vec![v_int(1), v_int(2), v_int(3)]));
+    }
+
     #[test]
     fn test_conditional_expr() {
         let program = "return 1 ? 2 | 3;";
