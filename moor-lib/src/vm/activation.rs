@@ -5,7 +5,7 @@ use crate::tasks::scheduler::TaskId;
 use crate::util::bitenum::BitEnum;
 use crate::var::error::Error;
 use crate::var::error::Error::E_VARNF;
-use crate::var::{v_int, v_list, v_objid, v_str, Objid, Var, NOTHING, VAR_NONE};
+use crate::var::{v_int, v_list, v_objid, v_str, Objid, Var, VarType, NOTHING, VAR_NONE};
 use crate::vm::opcode::{Binary, Op};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
@@ -69,13 +69,14 @@ impl Activation {
         a.set_var("this", v_objid(this)).unwrap();
         a.set_var("player", v_objid(player)).unwrap();
         a.set_var("caller", v_objid(caller)).unwrap();
-        a.set_var("NUM", v_int(0)).unwrap();
-        a.set_var("OBJ", v_int(1)).unwrap();
-        a.set_var("STR", v_int(2)).unwrap();
-        a.set_var("ERR", v_int(3)).unwrap();
-        a.set_var("LIST", v_int(4)).unwrap();
-        a.set_var("INT", v_int(0)).unwrap();
-        a.set_var("FLOAT", v_int(9)).unwrap();
+        a.set_var("NUM", v_int(VarType::TYPE_INT as i64)).unwrap();
+        a.set_var("OBJ", v_int(VarType::TYPE_OBJ as i64)).unwrap();
+        a.set_var("STR", v_int(VarType::TYPE_STR as i64)).unwrap();
+        a.set_var("ERR", v_int(VarType::TYPE_ERR as i64)).unwrap();
+        a.set_var("LIST", v_int(VarType::TYPE_LIST as i64)).unwrap();
+        a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
+        a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
+            .unwrap();
 
         a.set_var("verb", v_str(verb_name.as_str())).unwrap();
         a.set_var("argstr", v_str("")).unwrap();
