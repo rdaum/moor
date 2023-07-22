@@ -35,8 +35,15 @@ struct Args {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), io::Error> {
-    tracing_subscriber::fmt::init();
+async fn main() -> Result<(), anyhow::Error> {
+    let subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_file(true)
+        .with_line_number(true)
+        .with_thread_ids(true)
+        .with_target(false)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
 
     let args: Args = Args::parse();
 
