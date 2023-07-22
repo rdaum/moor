@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
+use tracing::info;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -178,6 +180,39 @@ async fn bf_task_id(
 }
 bf_declare!(task_id, bf_task_id);
 
+async fn bf_idle_seconds(
+    _ws: &mut dyn WorldState,
+    frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    if !args.is_empty() {
+        return Ok(v_err(E_INVARG));
+    }
+
+    // TODO: This is a placeholder for now.
+    Ok(v_int(0))
+}
+bf_declare!(idle_seconds, bf_idle_seconds);
+
+async fn bf_time(
+    _ws: &mut dyn WorldState,
+    frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    if !args.is_empty() {
+        return Ok(v_err(E_INVARG));
+    }
+    Ok(v_int(
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64,
+    ))
+}
+bf_declare!(time, bf_time);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -188,6 +223,8 @@ impl VM {
         self.bf_funcs[offset_for_builtin("set_task_perms")] = Arc::new(Box::new(BfSetTaskPerms {}));
         self.bf_funcs[offset_for_builtin("callers")] = Arc::new(Box::new(BfCallers {}));
         self.bf_funcs[offset_for_builtin("task_id")] = Arc::new(Box::new(BfTaskId {}));
+        self.bf_funcs[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
+        self.bf_funcs[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
 
         Ok(())
     }
