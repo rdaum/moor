@@ -10,7 +10,7 @@ use crate::model::verbs::{VerbAttrs, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var, Variant, NOTHING};
+use crate::var::{Objid, Var, Variant, NOTHING, v_objid};
 use crate::vm::opcode::Binary;
 use anyhow::Error;
 
@@ -99,6 +99,24 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<Var, ObjectError> {
         // TODO: use player_flags to check permissions
 
+        // Special properties like name, location, and contents get treated specially.
+        if pname == "name" {
+            return self.names_of(obj)
+                .map(|(name, _)| Var::from(name))
+                .map_err(|e| e.into())
+        } else if pname == "location" {
+            return self.location_of(obj).map(Var::from).map_err(|e| e.into())
+        } else if pname == "contents" {
+            return self.contents_of(obj)
+                .map(|c| v_objid(obj))
+                .map_err(|e| e.into())
+        } else if pname == "owner" {
+            return self
+                .owner_of(obj)
+                .map(|o| v_objid(o))
+                .map_err(|e| e.into())
+        }
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::ResolveProperty(obj, pname.into(), send))
@@ -120,6 +138,7 @@ impl WorldState for RocksDbTransaction {
         value: &Var,
     ) -> Result<(), ObjectError> {
         // TODO: use player_flags to check permissions
+        // TODO: special property updates
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -151,6 +170,8 @@ impl WorldState for RocksDbTransaction {
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), ObjectError> {
+        // TODO: prevent special property adds
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::DefineProperty {
@@ -169,7 +190,7 @@ impl WorldState for RocksDbTransaction {
     fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
-            .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .send(Message::ResolveVerb(obj, vname.to_string(), None, send))
             .expect("Error sending message");
         let vh = receive.recv().expect("Error receiving message")?;
 
@@ -280,6 +301,15 @@ impl WorldState for RocksDbTransaction {
         };
 
         Ok((name, aliases))
+    }
+
+    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetObjectOwner(obj, send))
+            .expect("Error sending message");
+        let oid = receive.recv().expect("Error receiving message")?;
+        Ok(oid)
     }
 
     fn commit(&mut self) -> Result<CommitResult, Error> {

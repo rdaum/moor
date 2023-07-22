@@ -92,7 +92,7 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
-        info!("Creating object: #{} ({})", objid.0, o.name);
+        debug!("Creating object: #{} ({})", objid.0, o.name);
         tx.create_object(
             Some(*objid),
             ObjAttrs::new()
@@ -112,7 +112,7 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                info!("Defining prop: #{}.{}", objid.0, resolved.name);
+                debug!("Defining prop: #{}.{}", objid.0, resolved.name);
                 let res = tx.define_property(
                     resolved.definer,
                     resolved.name.as_str(),
@@ -168,11 +168,6 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
                 Some(v) => v,
             };
 
-            debug!(
-                "Compiling #{}:{} (#{}:{})...",
-                objid.0, names[0], objid.0, vn
-            );
-
             let binary = match compile(verb.program.as_str()) {
                 Ok(b) => b,
                 Err(e) => {
@@ -189,7 +184,7 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
                     av
                 );
             } else {
-                info!("Added verb: #{}:{}", objid.0, names.first().unwrap());
+                debug!("Added verb: #{}:{}", objid.0, names.join(", "));
             }
         }
     }

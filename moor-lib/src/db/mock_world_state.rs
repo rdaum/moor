@@ -132,6 +132,10 @@ impl WorldState for MockState {
         unimplemented!()
     }
 
+    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+        unimplemented!()
+    }
+
     fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
         Ok(CommitResult::Success)
     }

@@ -70,6 +70,9 @@ pub trait WorldState: Send + Sync {
     /// Get the name & aliases of an object.
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), ObjectError>;
 
+    /// Get the owner of an object
+    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError>;
+
     /// Commit all modifications made to the state of this world since the start of its transaction.
     fn commit(&mut self) -> Result<CommitResult, anyhow::Error>;
 
