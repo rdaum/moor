@@ -11,7 +11,7 @@ use moor_lib::db::rocksdb::LoaderInterface;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::tasks::scheduler::Scheduler;
@@ -42,6 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
+        .with_max_level(tracing::Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 

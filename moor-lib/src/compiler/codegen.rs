@@ -314,7 +314,7 @@ impl CodegenState {
                 self.generate_arg_list(codes)?;
             }
             CatchCodes::Any => {
-                self.emit(Op::Push(Label(0)));
+                self.emit(Op::Val(v_int(0)));
                 self.push_stack(1);
             }
         }
@@ -448,7 +448,8 @@ impl CodegenState {
                 trye,
             } => {
                 self.generate_codes(codes)?;
-                // Is this push-label necessary, if the Catch op could just be modified to hold it?
+                // TODO Is this push-label necessary, if the Catch op could just be modified to
+                // hold it?
                 let handler_label = self.make_label(None);
                 self.emit(Op::PushLabel(handler_label));
                 self.push_stack(1);
@@ -773,6 +774,7 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::builtins::BUILTINS;
     use crate::var::error::Error::{E_INVARG, E_PERM, E_PROPNF};
     use crate::var::{v_obj, Objid};
     use crate::vm::opcode::Op::*;
@@ -1652,7 +1654,7 @@ mod tests {
         let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
         let binary = compile(program).unwrap();
         /*
-          0: 100 000               PUSH_LITERAL E_PROPNF
+         0: 100 000               PUSH_LITERAL E_PROPNF
          2: 016                 * MAKE_SINGLETON_LIST
          3: 100 001               PUSH_LITERAL E_PERM
          5: 102                   LIST_ADD_TAIL
@@ -1695,6 +1697,42 @@ mod tests {
             ]
         )
     }
+
+    #[test]
+    fn test_catch_any_expr() {
+        let program = "return `raise(E_INVARG) ! ANY';";
+        let binary = compile(program).unwrap();
+
+        /*
+          0: 123                   NUM 0
+          1: 112 002 014           PUSH_LABEL 14
+          4: 112 007             * CATCH
+          6: 100 000               PUSH_LITERAL E_INVARG
+          8: 016                 * MAKE_SINGLETON_LIST
+          9: 012 004             * CALL_FUNC raise
+         11: 112 003 016           END_CATCH 16
+         14: 124                   NUM 1
+         15: 014                 * INDEX
+         16: 108                   RETURN
+        */
+        let raise_num = BUILTINS.iter().position(|b| b == &"raise").unwrap();
+        let e_invarg = binary.find_literal(E_INVARG.into());
+        assert_eq!(binary.main_vector,
+            vec![
+                Val(0.into()),
+                PushLabel(0.into()),
+                Catch,
+                Imm(e_invarg),
+                MakeSingletonList,
+                FuncCall { id: raise_num.into()},
+                EndCatch(1.into()),
+                Val(v_int(1)),
+                Ref,
+                Return,
+                Done
+            ]
+        )
+     }
 
     #[test]
     fn test_sysobjref() {

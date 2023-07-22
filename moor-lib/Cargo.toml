@@ -48,6 +48,7 @@ tokio-test = "0.4.2"
 
 ## Logging & tracing
 tracing = "0.1.37"
+tracing-test = "0.2.4"
 
 rocksdb = "0.21.0"
 crossbeam-channel = "0.5.8"

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
+use tracing::{debug, trace};
 
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
@@ -261,6 +262,7 @@ impl VM {
     }
 
     fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+        trace!("push_error: {:?}", code);
         self.push(&v_err(code));
         self.raise_error_pack(code.make_error_pack(None))
     }
@@ -270,15 +272,18 @@ impl VM {
         code: Error,
         msg: String,
     ) -> Result<ExecutionResult, anyhow::Error> {
+        trace!("push_error_msg: {:?} {:?}", code, msg);
         self.push(&v_err(code));
         self.raise_error_pack(code.make_error_pack(Some(msg)))
     }
 
     fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+        trace!("raise_error: {:?}", code);
         self.raise_error_pack(code.make_error_pack(None))
     }
 
     fn unwind_stack(&mut self, why: FinallyReason) -> Result<ExecutionResult, anyhow::Error> {
+        trace!("unwind_stack: {:?}", why);
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             // Pop the value stack seeking finally/catch handler values.
@@ -299,20 +304,26 @@ impl VM {
                         let FinallyReason::Raise{code, value, ..} = &why else {
                             continue
                         };
-                        // Jump further back the value stack looking for an list of errors + labels
+                        // Jump further back the value stack looking for a list of errors + labels
                         // we will match on.
                         let mut found = false;
                         if a.valstack.len() >= 2 {
                             if let (Some(pushed_label), Some(error_codes)) =
                                 (a.valstack.pop(), a.valstack.pop())
                             {
-                                if let (Variant::_Label(pushed_label), Variant::List(error_codes)) =
-                                    (pushed_label.variant(), error_codes.variant())
+
+                                if let Variant::_Label(pushed_label) = pushed_label.variant()
                                 {
-                                    if error_codes.contains(&v_err(*code)) {
+                                    if let Variant::List(error_codes) = error_codes.variant() {
+                                        if error_codes.contains(&v_err(*code)) {
+                                            a.jump(*pushed_label);
+                                            found = true;
+                                        }
+                                    } else {
                                         a.jump(*pushed_label);
                                         found = true;
                                     }
+
                                 }
                             }
                         }
@@ -506,6 +517,7 @@ impl VM {
         )?;
 
         self.stack.push(a);
+        debug!("call_verb: {}:{}({:?})", this, verb, args);
         Ok(ExecutionResult::More)
     }
 
@@ -539,6 +551,7 @@ impl VM {
         )?;
 
         self.stack.push(a);
+        debug!("do_method_cmd: {}:{}({:?})", this, verb_name, args);
 
         Ok(())
     }
@@ -576,6 +589,8 @@ impl VM {
 
         self.stack.push(a);
 
+        debug!("do_method_verb: {}:{}({:?})", this, verb_name, args);
+
         Ok(())
     }
 
@@ -588,6 +603,7 @@ impl VM {
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
 
+        trace!("exec: {:?}", op);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -1154,6 +1170,7 @@ mod tests {
     use anyhow::Error;
     use async_trait::async_trait;
     use tokio::sync::RwLock;
+    use tracing_test::traced_test;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
@@ -1168,7 +1185,8 @@ mod tests {
 
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
-    use crate::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
+    use crate::var::{v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE, v_err};
+    use crate::var::error::Error::E_VERBNF;
     use crate::vm::execute::{ExecutionResult, VM};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
@@ -1715,6 +1733,18 @@ mod tests {
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
+    }
+
+    #[test]
+    fn test_catch_expr_any() {
+        let program = "return `raise(E_VERBNF) ! ANY';";
+        let mut state = world_with_test_program(program);
+
+        let mut vm = VM::new();
+
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_err(E_VERBNF));
     }
 
     #[test]

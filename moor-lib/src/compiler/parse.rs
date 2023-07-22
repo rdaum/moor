@@ -721,14 +721,14 @@ pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use crate::compiler::ast::Arg::Normal;
-    use crate::compiler::ast::Expr::{Id, Prop, VarExpr, Verb};
+    use crate::compiler::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
     use crate::compiler::ast::{
         Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         UnaryOp,
     };
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use crate::var::error::Error::{E_PROPNF, E_VARNF};
+    use crate::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
     use crate::var::{v_err, v_float, v_int, v_obj, v_str};
 
     #[test]
@@ -1501,6 +1501,25 @@ mod tests {
                 })],))
             }]
         )
+    }
+
+    #[test]
+    fn try_catch_any_expr() {
+        let program ="`raise(E_INVARG) ! ANY';";
+        let parse = parse_program(program).unwrap();
+        let invarg = Arg::Normal(VarExpr(v_err(E_INVARG)));
+
+        assert_eq!(parse.stmts,
+        vec![
+            Stmt::Expr(Expr::Catch {
+                trye: Box::new(Call {
+                    function: "raise".to_string(),
+                    args: vec![invarg]
+                }),
+                codes: CatchCodes::Any,
+                except: None,
+            })
+        ]);
     }
 
     #[test]
