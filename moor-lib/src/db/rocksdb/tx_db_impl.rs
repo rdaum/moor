@@ -13,6 +13,7 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
 use crate::util::bitenum::BitEnum;
+use crate::util::verbname_cmp;
 use crate::var::{Objid, Var, NOTHING};
 use crate::vm::opcode::Binary;
 
@@ -99,6 +100,10 @@ pub(crate) struct RocksDbTx<'a> {
     pub(crate) tx: rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     pub(crate) cf_handles: Vec<&'a ColumnFamily>,
     pub(crate) bincode_cfg: Configuration,
+}
+
+fn verbname_matches(verb_names: &[String], candidate: &str) -> Option<String> {
+    verb_names.iter().find(|&v| verbname_cmp(v, candidate)).cloned()
 }
 
 impl<'a> RocksDbTx<'a> {
@@ -461,7 +466,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             }
         };
         // TODO: wildcard search
-        let verb = verbs.iter().find(|vh| vh.names.contains(&n));
+        let verb = verbs.iter().find(|vh| verbname_matches(&vh.names, &n).is_some());
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, n).into());
         };
@@ -516,11 +521,11 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 }
             };
             let verb = verbs.iter().find(|vh| {
-                if vh.names.contains(&n) {
-                    if let Some(a) = a {
-                        return a.matches(&a);
+                if verbname_matches(&vh.names, &n).is_some() {
+                    return if let Some(a) = a {
+                        a.matches(&a)
                     } else {
-                        return vh.args == VerbArgsSpec::this_none_this();
+                        vh.args == VerbArgsSpec::this_none_this()
                     }
                 }
                 false
@@ -553,7 +558,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 verbs
             }
         };
-        let verb = verbs.iter().find(|vh| vh.names.contains(&v));
+        let verb = verbs.iter().find(|vh| verbname_matches(&vh.names, &v).is_some());
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, v.clone()).into())
         };
@@ -1072,6 +1077,56 @@ mod tests {
             tx.get_program(a, tx.resolve_verb(a, "test".into(), None).unwrap().uuid)
                 .unwrap(),
             program
+        );
+    }
+
+    #[test]
+    fn test_verb_resolve_wildcard() {
+        let db = mk_test_db();
+        let tx = db.tx();
+        let a = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        let program = compile("return 5;").unwrap();
+        let verb_names = vec!["dname*c".into(), "iname*c".into()];
+        tx.add_object_verb(
+            a,
+            a,
+            verb_names.clone(),
+            program.clone(),
+            BitEnum::new(),
+            VerbArgsSpec::this_none_this(),
+        )
+            .unwrap();
+
+        assert_eq!(
+            tx.resolve_verb(a, "dname".into(), None).unwrap().names,
+            verb_names
+        );
+
+        assert_eq!(
+            tx.resolve_verb(a, "dnamec".into(), None).unwrap().names,
+            verb_names
+        );
+
+        assert_eq!(
+            tx.resolve_verb(a, "iname".into(), None).unwrap().names,
+            verb_names
+        );
+
+        assert_eq!(
+            tx.resolve_verb(a, "inamec".into(), None).unwrap().names,
+            verb_names
         );
     }
 }
