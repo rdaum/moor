@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::time::SystemTime;
+use anyhow::anyhow;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
@@ -182,7 +183,7 @@ bf_declare!(task_id, bf_task_id);
 
 async fn bf_idle_seconds(
     _ws: &mut dyn WorldState,
-    frame: &mut Activation,
+    _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
     args: &[Var],
 ) -> Result<Var, anyhow::Error> {
@@ -197,7 +198,7 @@ bf_declare!(idle_seconds, bf_idle_seconds);
 
 async fn bf_time(
     _ws: &mut dyn WorldState,
-    frame: &mut Activation,
+    _frame: &mut Activation,
     _sess: Arc<RwLock<dyn Sessions>>,
     args: &[Var],
 ) -> Result<Var, anyhow::Error> {
@@ -213,6 +214,33 @@ async fn bf_time(
 }
 bf_declare!(time, bf_time);
 
+async fn bf_raise(
+    _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
+    //
+    // Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.  <Message>, which defaults to the value of `tostr(<code>)',
+    // and <value>, which defaults to zero, are made available to any `try'-`except' statements that catch the error.  If the error is not caught, then <message> will
+    // appear on the first line of the traceback printed to the user.
+    if args.is_empty() || args.len() > 3 {
+        return Ok(v_err(E_INVARG));
+    }
+
+    let Variant::Err(e) = args[0].variant() else {
+        return Ok(v_err(E_INVARG));
+    };
+
+    // TODO implement message & value params, can't do that with the existing bf interface for
+    // returning errors right now :-(
+    // probably need to change the result type here to not use anyhow::Error, and pack in some
+    // more useful stuff
+    Ok(args[0].clone())
+}
+bf_declare!(raise, bf_raise);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -225,7 +253,7 @@ impl VM {
         self.bf_funcs[offset_for_builtin("task_id")] = Arc::new(Box::new(BfTaskId {}));
         self.bf_funcs[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
         self.bf_funcs[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
-
+        self.bf_funcs[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
         Ok(())
     }
 }
