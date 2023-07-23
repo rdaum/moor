@@ -10,7 +10,7 @@ use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::{v_err, v_int, v_list, Var, Variant};
 use crate::vm::activation::Activation;
-use crate::vm::execute::{BfFunction, VM};
+use crate::vm::vm::{BfFunction, VM};
 
 async fn bf_is_member(
     _ws: &mut dyn WorldState,

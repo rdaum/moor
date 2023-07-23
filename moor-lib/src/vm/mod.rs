@@ -9,6 +9,7 @@ mod bf_objects;
 mod bf_server;
 mod bf_strings;
 mod bf_values;
+pub(crate) mod vm;
 
 #[macro_export]
 macro_rules! bf_declare {

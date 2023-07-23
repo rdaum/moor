@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn test_verb_match() {
         assert!(verbname_cmp("foo", "foo"));
-        assert_eq!(verbname_cmp("foo", "foof"), false);
+        assert!(!verbname_cmp("foo", "foof"));
         assert!(verbname_cmp("foo*d", "foo"));
         assert!(verbname_cmp("foo*d", "food"));
     }

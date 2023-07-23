@@ -137,13 +137,6 @@ impl Activation {
         self.valstack.push(v)
     }
 
-    pub fn peek_at(&self, i: usize) -> Option<Var> {
-        if !i < self.valstack.len() {
-            return None;
-        }
-        Some(self.valstack[self.valstack.len() - i].clone())
-    }
-
     pub fn peek_top(&self) -> Option<Var> {
         self.valstack.last().cloned()
     }

@@ -13,7 +13,7 @@ use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use crate::var::{v_bool, v_err, v_int, v_list, v_objid, v_string, Var, Variant, VAR_NONE};
 use crate::vm::activation::Activation;
-use crate::vm::execute::{BfFunction, VM};
+use crate::vm::vm::{BfFunction, VM};
 
 async fn bf_noop(
     _ws: &mut dyn WorldState,

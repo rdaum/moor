@@ -246,9 +246,9 @@ impl CodegenState {
             .collect();
         let done = self.make_label(None);
         self.emit(Op::Scatter {
-            nargs: nargs.into(),
-            nreq: nreq.into(),
-            rest: nrest.into(),
+            nargs,
+            nreq,
+            rest: nrest,
             labels: labels.iter().map(|(_, l)| l.clone()).collect(),
             done,
         });

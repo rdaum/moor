@@ -10,7 +10,7 @@ use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_bool, v_err, v_list, v_str, Var, Variant};
 use crate::vm::activation::Activation;
-use crate::vm::execute::{BfFunction, VM};
+use crate::vm::vm::{BfFunction, VM};
 
 async fn bf_create(
     _ws: &mut dyn WorldState,

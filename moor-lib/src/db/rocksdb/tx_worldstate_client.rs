@@ -101,17 +101,14 @@ impl WorldState for RocksDbTransaction {
 
         // Special properties like name, location, and contents get treated specially.
         if pname == "name" {
-            return self
-                .names_of(obj)
-                .map(|(name, _)| Var::from(name))
-                .map_err(|e| e.into());
+            return self.names_of(obj).map(|(name, _)| Var::from(name));
         } else if pname == "location" {
-            return self.location_of(obj).map(Var::from).map_err(|e| e.into());
+            return self.location_of(obj).map(Var::from);
         } else if pname == "contents" {
             let contents = self.contents_of(obj)?.iter().map(|o| v_objid(*o)).collect();
             return Ok(v_list(contents));
         } else if pname == "owner" {
-            return self.owner_of(obj).map(Var::from).map_err(|e| e.into());
+            return self.owner_of(obj).map(Var::from);
         }
 
         let (send, receive) = crossbeam_channel::bounded(1);

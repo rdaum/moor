@@ -19,7 +19,7 @@ use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::var::{Objid, Var, Variant};
-use crate::vm::execute::{ExecutionResult, FinallyReason, VM};
+use crate::vm::vm::{ExecutionResult, FinallyReason, VM};
 
 pub type TaskId = usize;
 
