@@ -159,6 +159,8 @@ fn parse_expr(
         .op(Op::postfix(Rule::assign))
         .op(Op::prefix(Rule::scatter_assign))
         .op(Op::postfix(Rule::cond_expr))
+        .op(Op::prefix(Rule::neg))
+        .op(Op::prefix(Rule::not))
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
         .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
         .op(Op::infix(Rule::gt, Assoc::Left) | Op::infix(Rule::lt, Assoc::Left))
@@ -173,9 +175,7 @@ fn parse_expr(
         .op(Op::postfix(Rule::verb_call))
         .op(Op::postfix(Rule::verb_expr_call))
         .op(Op::postfix(Rule::prop))
-        .op(Op::postfix(Rule::prop_expr))
-        .op(Op::prefix(Rule::neg))
-        .op(Op::prefix(Rule::not));
+        .op(Op::postfix(Rule::prop_expr));
 
     return pratt
         .map_primary(|primary| match primary.as_rule() {
@@ -879,6 +879,58 @@ mod tests {
                 otherwise: vec![Stmt::Return {
                     expr: Some(VarExpr(v_int(6))),
                 }],
+            }
+        );
+    }
+
+    #[test]
+    fn test_not_precedence() {
+        let program = "return !(#2:move(5));";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::Return {
+                expr: Some(Expr::Unary(
+                    UnaryOp::Not,
+                    Box::new(Expr::Verb {
+                        location: Box::new(Expr::VarExpr(v_obj(2))),
+                        verb: Box::new(Expr::VarExpr(v_str("move"))),
+                        args: vec![Normal(Expr::VarExpr(v_int(5)))],
+                    })
+                )),
+            }
+        );
+    }
+
+    #[test]
+    fn test_sys_obj_verb_regression() {
+        // Precedence was wrong here, the not was being placed inside the verb call arguments.
+        let program = r#"
+            if (!$network:is_connected(this))
+                return;
+            endif
+        "#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::Cond {
+                arms: vec![CondArm {
+                    condition: Expr::Unary(
+                        UnaryOp::Not,
+                        Box::new(Expr::Verb {
+                            location: Box::new(Expr::Prop {
+                                location: Box::new(Expr::VarExpr(v_obj(0))),
+                                property: Box::new(Expr::VarExpr(v_str("network"))),
+                            }),
+                            verb: Box::new(VarExpr(v_str("is_connected"))),
+                            args: vec![Normal(Id(parse.names.find_name("this").unwrap())),],
+                        })
+                    ),
+                    statements: vec![Stmt::Return { expr: None }],
+                }],
+                otherwise: vec![],
             }
         );
     }
