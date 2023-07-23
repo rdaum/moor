@@ -111,7 +111,7 @@ impl<R: Read> TextdumpReader<R> {
         let oid = Objid(oid);
         let name = self.read_string()?;
         let _ohandles_string = self.read_string()?;
-        let _flags = self.read_num()?;
+        let flags = self.read_num()? as u8;
         let owner = self.read_objid()?;
         let location = self.read_objid()?;
         let contents = self.read_objid()?;
@@ -145,7 +145,7 @@ impl<R: Read> TextdumpReader<R> {
             child,
             sibling,
             name,
-            flags: 0,
+            flags,
             verbdefs,
             propdefs,
             propvals,

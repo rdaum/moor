@@ -10,7 +10,7 @@ use crate::model::verbs::{VerbAttrs, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{v_list, v_objid, Objid, Var, Variant, NOTHING};
+use crate::var::{v_list, v_objid, Objid, Var, Variant, NOTHING, v_int};
 use crate::vm::opcode::Binary;
 use anyhow::Error;
 
@@ -109,6 +109,21 @@ impl WorldState for RocksDbTransaction {
             return Ok(v_list(contents));
         } else if pname == "owner" {
             return self.owner_of(obj).map(Var::from);
+        } else if pname == "programmer" {
+            // TODO these can be set, too.
+            let flags = self.flags_of(obj)?;
+            return if flags.contains(ObjFlag::Programmer) {
+                Ok(v_int(1))
+            } else {
+                Ok(v_int(0))
+            }
+        } else if pname == "wizard" {
+            let flags = self.flags_of(obj)?;
+            return if flags.contains(ObjFlag::Wizard) {
+                Ok(v_int(1))
+            } else {
+                Ok(v_int(0))
+            }
         }
 
         let (send, receive) = crossbeam_channel::bounded(1);
