@@ -432,19 +432,7 @@ impl VM {
         this: Objid,
         verb: String,
         args: &[Var],
-        do_pass: bool,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let this = if do_pass {
-            let valid_definer = state.valid(self.top().verb_definer())?;
-
-            if !valid_definer {
-                return self.push_error(E_INVIND);
-            }
-            state.parent_of(this)?
-        } else {
-            this
-        };
-
         let self_valid = state.valid(this)?;
         if !self_valid {
             return self.push_error(E_INVIND);

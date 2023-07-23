@@ -51,7 +51,7 @@ impl VM {
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
 
-        trace!("exec: {:?} stack: {:?}", op, self.top().valstack);
+        trace!("exec: {:?} this: {:?} player: {:?} stack: {:?}", op, self.top().this, self.top().player, self.top().valstack);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -456,24 +456,26 @@ impl VM {
                     return self.push_error(E_TYPE);
                 };
                 // get parent of verb definer object & current verb name.
-                let this = self.top().verb_info.attrs.definer.unwrap();
-                let parent = state.parent_of(this)?;
+                // TODO probably need verb definer right on Activation, this is gross.
+                let definer = self.top().verb_info.attrs.definer.unwrap();
+                let parent = state.parent_of(definer)?;
                 let verb = self.top().verb_name().to_string();
 
                 // call verb on parent, but with our current 'this'
                 let task_id = self.top().task_id;
                 trace!(
-                    "Pass: task_id: {:?} verb: {:?} this: {:?}",
+                    "Pass: task_id: {:?} verb: {:?} definer: {:?} parent: {:?}",
                     task_id,
                     verb,
-                    this
+                    definer,
+                    parent
                 );
                 self.do_method_verb(
                     task_id,
                     state,
                     parent,
                     verb.as_str(),
-                    this,
+                    self.top().this,
                     self.top().player,
                     self.top().player_flags,
                     &args,
@@ -489,7 +491,7 @@ impl VM {
                 };
                 // TODO: check obj for validity, return E_INVIND if not
 
-                return self.call_verb(state, *obj, verb.clone(), args, false);
+                return self.call_verb(state, *obj, verb.clone(), args);
             }
             Op::Return => {
                 let ret_val = self.pop();
