@@ -185,7 +185,7 @@ async fn bf_idle_seconds(
     _sess: Arc<RwLock<dyn Sessions>>,
     args: &[Var],
 ) -> Result<Var, anyhow::Error> {
-    if !args.is_empty() {
+    if args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 

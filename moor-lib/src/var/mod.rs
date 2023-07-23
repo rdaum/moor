@@ -344,7 +344,7 @@ impl Var {
         };
 
         match l.iter().position(|x| x == v) {
-            None =>  v_int(0),
+            None => v_int(0),
             Some(i) => v_int(i as i64 + 1),
         }
     }
@@ -425,7 +425,7 @@ impl Var {
                 if to < from {
                     return Ok(v_list(Vec::new()));
                 }
-                if from <= 0 || from > len + 1 || to < 1 || to > len  {
+                if from <= 0 || from > len + 1 || to < 1 || to > len {
                     return Ok(v_err(E_RANGE));
                 }
                 let mut res = Vec::with_capacity((to - from + 1) as usize);

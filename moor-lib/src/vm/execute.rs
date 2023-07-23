@@ -370,8 +370,11 @@ impl VM {
             // above)
             if let FinallyReason::Return(value) = why {
                 self.push(&value);
-                trace!("Unwinding stack, pushing return value: {} back to verb {}",
-                          value, self.top().verb_name());
+                trace!(
+                    "Unwinding stack, pushing return value: {} back to verb {}",
+                    value,
+                    self.top().verb_name()
+                );
                 return Ok(ExecutionResult::More);
             }
         }
@@ -918,12 +921,10 @@ impl VM {
                     (Variant::Int(to), Variant::Int(from)) => {
                         // MOO is 1-indexed. Adjust.
                         match base.range(*from, *to) {
-                            Err(e) => {
-                                return self.push_error(e)
-                            },
+                            Err(e) => return self.push_error(e),
                             Ok(v) => self.push(&v),
                         }
-                    },
+                    }
                     (_, _) => return self.push_error(E_TYPE),
                 };
             }
@@ -932,9 +933,7 @@ impl VM {
                 match (to.variant(), from.variant()) {
                     (Variant::Int(to), Variant::Int(from)) => {
                         match base.rangeset(value, *from, *to) {
-                            Err(e) => {
-                                return self.push_error(e)
-                            },
+                            Err(e) => return self.push_error(e),
                             Ok(v) => self.push(&v),
                         }
                     }

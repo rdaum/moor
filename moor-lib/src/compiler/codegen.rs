@@ -692,7 +692,7 @@ impl CodegenState {
                     self.pop_stack(1);
                 }
                 None => {
-                    self.emit(Op::Return);
+                    self.emit(Op::Return0);
                 }
             },
             Stmt::Expr(e) => {
@@ -2149,5 +2149,12 @@ mod tests {
                 Done
             ]
         )
+    }
+
+    #[test]
+    fn test_0_arg_return() {
+        let program = r#"return;"#;
+        let binary = compile(program).unwrap();
+        assert_eq!(binary.main_vector, vec![Return0, Done])
     }
 }
