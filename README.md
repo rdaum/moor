@@ -42,23 +42,29 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
 
    * I've converted the full LambdaMOO 1.8.x grammar into an Pest PEG grammar. And it works to compile existing MOO
      source. 
-   * Implementation of custom transactional (MVCC) in-memory DB for the MOO object model. 
+   * Implementation of the object database, with a transactional disk-based storage engine based over RocksDB.
    * Capability of full import of an existing textdump into said DB.
    * Complete compilation from parse tree to abstract syntax tree and then to opcode stream which looks mostly like LambdaMOO's.
-   * Completed 99% of the virtual machine 'bytecode' execution, including a whole bunch of tests. 
+   * Completed 99% of the virtual machine 'bytecode' execution, including a bunch of tests. 
    * Implemented the LambdaMOO command parser, complete with environment (contents, location, etc.) matching.
+   * A separate REPL binary for testing the parser and command execution.
+
+At this point connecting to the system bootstrapped with a JHCore database will drop you into a command loop as a wziard
+in a default room, where you can attempt to execute commands. Almost nothing will work, but they almost do... `say` runs
+to completion without error, but doesn't print the right thing.
 
 ### Next steps
 
    * Refinement and completion of the task scheduler...
    * ... + `fork` opcode & friends for above. The only remaining unimplemented opcode.
    * More work on the of websocket listener loop, to add the auth/connect phase.
-   * Implementation of all (or most) built-ins.
+   * Implementation of built-ins. A chart of the built-ins and their status is at [bf_functions_status.md](bf_functions_status.md)
    * Decompilation of MOO verbs + proper handling of line numbers in error messages, etc.
    * Non-stubbed implementation of ACL/permission checks. 
    * Some kind of RPC interface in addition to websockets and/or telnet.
+   * Dump to textdump format.
 
-#
+
 Contributions are welcome and encouraged. 
 
 Ryan (ryan.daum@gmail.com)
