@@ -3,4 +3,5 @@
 members = [
   "moor-lib",
   "moor-bin",
+  "regexpr-binding",
 ]

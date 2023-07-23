@@ -3,6 +3,7 @@ use std::time::SystemTime;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -43,11 +44,12 @@ async fn bf_notify(
         return Ok(v_err(E_TYPE));
     };
 
-    sess.write()
-        .await
-        .send_text(*player, msg.clone())
-        .await
-        .unwrap();
+    if let Err(send_error) = sess.write().await.send_text(*player, msg.clone()).await {
+        warn!(
+            "Unable to send message to player: #{}: {}",
+            player.0, send_error
+        );
+    }
 
     Ok(VAR_NONE)
 }

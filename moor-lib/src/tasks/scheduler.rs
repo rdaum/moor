@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, error, instrument, trace, warn};
 
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
@@ -419,16 +419,22 @@ impl Task {
                     match &fr {
                         FinallyReason::Abort => {
                             error!("Task {} aborted", task_id);
-                            self.sessions
+                            if let Err(send_error) = self
+                                .sessions
                                 .write()
                                 .await
                                 .send_text(self.player, format!("Aborted: {:?}", fr).to_string())
                                 .await
-                                .unwrap();
+                            {
+                                warn!("Could not send abort message to player: {:?}", send_error);
+                            };
 
-                            self.response_sender
+                            if let Err(send_error) = self
+                                .response_sender
                                 .send((self.task_id, TaskControlResponse::AbortCancelled))
-                                .expect("Could not send exception response");
+                            {
+                                warn!("Could not send abort cancelled response: {:?}", send_error);
+                            }
                         }
                         FinallyReason::Uncaught {
                             code: _,
@@ -447,17 +453,23 @@ impl Task {
                             }
 
                             for l in traceback.iter() {
-                                self.sessions
+                                if let Err(send_error) = self
+                                    .sessions
                                     .write()
                                     .await
                                     .send_text(self.player, l.to_string())
                                     .await
-                                    .unwrap();
+                                {
+                                    warn!("Could not send traceback to player: {:?}", send_error);
+                                }
                             }
 
-                            self.response_sender
+                            if let Err(send_error) = self
+                                .response_sender
                                 .send((self.task_id, TaskControlResponse::Exception(fr)))
-                                .expect("Could not send exception response");
+                            {
+                                warn!("Could not send exception response: {:?}", send_error);
+                            }
                         }
                         _ => {
                             self.response_sender

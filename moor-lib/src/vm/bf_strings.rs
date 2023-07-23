@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
+use regexpr_binding::Pattern;
 use tokio::sync::RwLock;
 
 use crate::bf_declare;
@@ -11,7 +12,7 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
-use crate::var::{v_err, v_int, v_str, Var, Variant};
+use crate::var::{v_err, v_int, v_list, v_str, Var, Variant};
 use crate::vm::activation::Activation;
 use crate::vm::vm::{BfFunction, VM};
 
@@ -237,6 +238,53 @@ async fn bf_binary_hash(
 }
 bf_declare!(binary_hash, bf_binary_hash);
 
+#[no_mangle]
+#[used]
+// TODO: This is not thread safe. If we actually want to use this flag, we will want to put the
+// whole 'legacy' regex engine in a mutex.
+pub static mut task_timed_out: u64 = 0;
+
+async fn bf_match(
+    _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    if args.len() < 3 || args.len() > 3 {
+        return Ok(v_err(E_INVARG));
+    }
+    let (subject, pattern) = match (args[0].variant(), args[1].variant()) {
+        (Variant::Str(subject), Variant::Str(pattern)) => (subject, pattern),
+        _ => return Ok(v_err(E_TYPE)),
+    };
+
+    let case_matters = if args.len() == 3 {
+        let Variant::Int(case_matters) = args[2].variant() else {
+            return Ok(v_err(E_TYPE));
+        };
+        *case_matters == 1
+    } else {
+        false
+    };
+
+    // TODO: pattern cache?
+    let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
+        return  Ok(v_err(E_INVARG));
+    };
+
+    let Ok(match_vec) = pattern.match_pattern(subject.as_str()) else {
+        return  Ok(v_err(E_INVARG));
+    };
+
+    Ok(v_list(
+        match_vec
+            .iter()
+            .map(|(start, end)| v_list(vec![v_int(*start as i64), v_int(*end as i64)]))
+            .collect(),
+    ))
+}
+bf_declare!(match, bf_match);
+
 impl VM {
     pub(crate) fn register_bf_strings(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("strsub")] = Arc::new(Box::new(BfStrsub {}));
@@ -246,6 +294,7 @@ impl VM {
         self.bf_funcs[offset_for_builtin("crypt")] = Arc::new(Box::new(BfCrypt {}));
         self.bf_funcs[offset_for_builtin("string_hash")] = Arc::new(Box::new(BfStringHash {}));
         self.bf_funcs[offset_for_builtin("binary_hash")] = Arc::new(Box::new(BfBinaryHash {}));
+        self.bf_funcs[offset_for_builtin("match")] = Arc::new(Box::new(BfMatch {}));
 
         Ok(())
     }
