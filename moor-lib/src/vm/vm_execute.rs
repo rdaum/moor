@@ -51,7 +51,13 @@ impl VM {
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
 
-        trace!("exec: {:?} this: {:?} player: {:?} stack: {:?}", op, self.top().this, self.top().player, self.top().valstack);
+        trace!(
+            "exec: {:?} this: {:?} player: {:?} stack: {:?}",
+            op,
+            self.top().this,
+            self.top().player,
+            self.top().valstack
+        );
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -478,7 +484,7 @@ impl VM {
                     self.top().this,
                     self.top().player,
                     self.top().player_flags,
-                    &args,
+                    args,
                 )?;
             }
             Op::CallVerb => {

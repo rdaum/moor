@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use crate::compiler::codegen::compile;
 use anyhow::{anyhow, Error};
 use dashmap::DashMap;
 use fast_counter::ConcurrentCounter;
@@ -9,16 +10,19 @@ use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace, warn};
+use uuid::{uuid, Uuid};
 
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::model::objects::ObjFlag;
-use crate::model::verbs::VerbInfo;
+use crate::model::r#match::VerbArgsSpec;
+use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::var::{Objid, Var, Variant};
+use crate::vm::opcode::Binary;
 use crate::vm::vm::{ExecutionResult, FinallyReason, VM};
 
 pub type TaskId = usize;
@@ -36,6 +40,10 @@ enum TaskControlMsg {
         vloc: Objid,
         verb: String,
         args: Vec<Var>,
+    },
+    StartEval {
+        player: Objid,
+        binary: Binary,
     },
     Abort,
 }
@@ -189,6 +197,30 @@ impl Scheduler {
         Ok(task_id)
     }
 
+    pub async fn setup_eval_task(
+        &mut self,
+        player: Objid,
+        code: String,
+        sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
+    ) -> Result<TaskId, anyhow::Error> {
+        // Compile the text into a verb.
+        let binary = compile(code.as_str())?;
+
+        let task_id = self
+            .new_task(player, self.state_source.clone(), sessions)
+            .await?;
+
+        let Some(task_ref) = self.tasks.get_mut(&task_id) else {
+            return Err(anyhow!("Could not find task with id {:?}", task_id));
+        };
+
+        // This gets enqueued as the first thing the task sees when it is started.
+        task_ref
+            .control_sender
+            .send(TaskControlMsg::StartEval { player, binary })?;
+
+        Ok(task_id)
+    }
     #[instrument(skip(self))]
     pub async fn do_process(&mut self) -> Result<(), anyhow::Error> {
         let msg = match self.response_receiver.try_recv() {
@@ -333,6 +365,8 @@ impl Task {
             } else {
                 self.control_receiver.recv().await
             };
+            // Special flag for 'eval' to get it to rollback on completion instead of commit.
+            let mut rollback_on_complete = false;
             // Check for control messages.
             match msg {
                 // We've been asked to start a command.
@@ -382,6 +416,39 @@ impl Task {
                         .expect("Could not set up VM for command execution");
                     running_method = true;
                 }
+                Some(TaskControlMsg::StartEval { player, binary }) => {
+                    assert!(!running_method);
+                    // Stick the binary into the player object under a temp name.
+                    let tmp_name = Uuid::new_v4().to_string();
+                    // TODO: these will accumulate in the database, need to find a way to clean
+                    // them up, or make sure that this task somehow rollsback at completion, which
+                    // would involve some special flags to the VM.
+                    self.state
+                        .add_verb(
+                            player,
+                            vec![tmp_name.clone()],
+                            player,
+                            BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec,
+                            VerbArgsSpec::this_none_this(),
+                            binary.clone(),
+                        )
+                        .expect("Could not add temp verb");
+                    // Now execute it.
+                    self.vm
+                        .do_method_verb(
+                            self.task_id,
+                            self.state.as_mut(),
+                            player,
+                            tmp_name.as_str(),
+                            player,
+                            player,
+                            BitEnum::new_with(ObjFlag::Wizard),
+                            &[],
+                        )
+                        .expect("Could not set up VM for command execution");
+                    running_method = true;
+                    rollback_on_complete = true;
+                }
                 // We've been asked to die.
                 Some(TaskControlMsg::Abort) => {
                     self.state.rollback().unwrap();
@@ -391,7 +458,13 @@ impl Task {
                         .expect("Could not send abort response");
                     return;
                 }
-                _ => {}
+                None => {
+                    // No control message, so we're probably done.
+                    if !running_method {
+                        warn!("Task {} finished with no control message", task_id);
+                        return;
+                    }
+                }
             }
 
             if !running_method {
@@ -404,7 +477,11 @@ impl Task {
             match result {
                 Ok(ExecutionResult::More) => {}
                 Ok(ExecutionResult::Complete(a)) => {
-                    self.state.commit().unwrap();
+                    if rollback_on_complete {
+                        self.state.rollback().unwrap();
+                    } else {
+                        self.state.commit().unwrap();
+                    }
 
                     debug!("Task {} complete with result: {:?}", task_id, a);
 

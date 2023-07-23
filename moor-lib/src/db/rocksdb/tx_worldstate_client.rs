@@ -6,11 +6,11 @@ use crate::db::CommitResult;
 use crate::model::objects::ObjFlag;
 use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::r#match::{ArgSpec, VerbArgsSpec};
-use crate::model::verbs::{VerbAttrs, VerbInfo};
+use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{v_list, v_objid, Objid, Var, Variant, NOTHING, v_int};
+use crate::var::{v_int, v_list, v_objid, Objid, Var, Variant, NOTHING};
 use crate::vm::opcode::Binary;
 use anyhow::Error;
 
@@ -116,14 +116,14 @@ impl WorldState for RocksDbTransaction {
                 Ok(v_int(1))
             } else {
                 Ok(v_int(0))
-            }
+            };
         } else if pname == "wizard" {
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Wizard) {
                 Ok(v_int(1))
             } else {
                 Ok(v_int(0))
-            }
+            };
         }
 
         let (send, receive) = crossbeam_channel::bounded(1);
@@ -189,6 +189,31 @@ impl WorldState for RocksDbTransaction {
                 owner,
                 perms: prop_flags,
                 value: initial_value,
+                reply: send,
+            })
+            .expect("Error sending message");
+        receive.recv().expect("Error receiving message")?;
+        Ok(())
+    }
+
+    fn add_verb(
+        &mut self,
+        obj: Objid,
+        names: Vec<String>,
+        owner: Objid,
+        flags: BitEnum<VerbFlag>,
+        args: VerbArgsSpec,
+        program: Binary,
+    ) -> Result<(), ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::AddVerb {
+                location: obj,
+                owner,
+                names,
+                program,
+                flags,
+                args,
                 reply: send,
             })
             .expect("Error sending message");

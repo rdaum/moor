@@ -92,7 +92,10 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
-        debug!("Creating object: #{} ({}) with flags {:?}", objid.0, o.name, flags);
+        debug!(
+            "Creating object: #{} ({}) with flags {:?}",
+            objid.0, o.name, flags
+        );
         tx.create_object(
             Some(*objid),
             ObjAttrs::new()

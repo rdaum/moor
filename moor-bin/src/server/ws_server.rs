@@ -9,7 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tokio_tungstenite::{accept_async, WebSocketStream};
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use tungstenite::{Error, Message};
 
 use moor_lib::tasks::scheduler::Scheduler;

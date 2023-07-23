@@ -1,11 +1,13 @@
 use crate::db::CommitResult;
 use crate::model::objects::ObjFlag;
 use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::verbs::VerbInfo;
+use crate::model::r#match::VerbArgsSpec;
+use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::var::{Objid, Var};
+use crate::vm::opcode::Binary;
 
 pub trait WorldState: Send + Sync {
     /// Get the location of the given object.
@@ -49,6 +51,16 @@ pub trait WorldState: Send + Sync {
         owner: Objid,
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
+    ) -> Result<(), ObjectError>;
+
+    fn add_verb(
+        &mut self,
+        obj: Objid,
+        names: Vec<String>,
+        owner: Objid,
+        flags: BitEnum<VerbFlag>,
+        args: VerbArgsSpec,
+        code: Binary,
     ) -> Result<(), ObjectError>;
 
     /// Retrieve a verb/method from the given object (or its parents).

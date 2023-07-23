@@ -2175,7 +2175,7 @@ mod tests {
         let result = binary.find_var("result");
         let pass = binary.find_var("pass");
         let args = binary.find_var("args");
-        let blop = binary.find_var("blop".into());
+        let blop = binary.find_var("blop");
         assert_eq!(
             binary.main_vector,
             vec![
