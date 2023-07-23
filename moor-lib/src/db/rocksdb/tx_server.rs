@@ -1,6 +1,7 @@
 use bincode::{Decode, Encode};
 use crossbeam_channel::{Receiver, RecvError, Sender};
 use rocksdb::ColumnFamily;
+use tracing::warn;
 
 use crate::db::rocksdb::tx_db_impl::RocksDbTx;
 use crate::db::rocksdb::tx_message::Message;
@@ -190,6 +191,7 @@ pub(crate) fn run_tx_server<'a>(
                 break (commit_r, r);
             }
             Message::Rollback(r) => {
+                warn!("Rolling back transaction");
                 tx.rollback()?;
                 r.send(())?;
                 return Ok(());

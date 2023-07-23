@@ -355,6 +355,9 @@ impl Task {
     pub async fn run(&mut self, task_id: TaskId) {
         trace!("Entering task loop...");
         let mut running_method = false;
+
+        // Special flag for 'eval' to get it to rollback on completion instead of commit.
+        let mut rollback_on_complete = false;
         loop {
             let msg = if running_method {
                 match self.control_receiver.try_recv() {
@@ -365,8 +368,7 @@ impl Task {
             } else {
                 self.control_receiver.recv().await
             };
-            // Special flag for 'eval' to get it to rollback on completion instead of commit.
-            let mut rollback_on_complete = false;
+
             // Check for control messages.
             match msg {
                 // We've been asked to start a command.
@@ -433,6 +435,9 @@ impl Task {
                             binary.clone(),
                         )
                         .expect("Could not add temp verb");
+                    rollback_on_complete = true;
+                    running_method = true;
+
                     // Now execute it.
                     self.vm
                         .do_method_verb(
@@ -446,8 +451,6 @@ impl Task {
                             &[],
                         )
                         .expect("Could not set up VM for command execution");
-                    running_method = true;
-                    rollback_on_complete = true;
                 }
                 // We've been asked to die.
                 Some(TaskControlMsg::Abort) => {
@@ -483,7 +486,10 @@ impl Task {
                         self.state.commit().unwrap();
                     }
 
-                    debug!("Task {} complete with result: {:?}", task_id, a);
+                    debug!(
+                        "Task {} complete with result: {:?}; rollback? {}",
+                        task_id, a, rollback_on_complete
+                    );
 
                     self.response_sender
                         .send((self.task_id, TaskControlResponse::Success(a)))

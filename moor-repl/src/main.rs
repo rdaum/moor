@@ -68,7 +68,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::TRACE)
         .with_writer(Mutex::new(stdout_clone))
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
