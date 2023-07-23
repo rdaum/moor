@@ -602,7 +602,7 @@ impl VM {
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
 
-        trace!("exec: {:?}", op);
+        trace!("exec: {:?} stack: {:?}", op, self.top().valstack);
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                 let cond = self.pop();
@@ -811,7 +811,7 @@ impl VM {
             Op::In => {
                 let lhs = self.pop();
                 let rhs = self.pop();
-                let r = lhs.has_member(&rhs);
+                let r = lhs.index_in(&rhs);
                 if let Variant::Err(e) = r.variant() {
                     return self.push_error(*e);
                 }
@@ -836,9 +836,11 @@ impl VM {
                 binary_var_op!(self, modulus);
             }
             Op::And(label) => {
-                let v = self.pop().is_true();
+                let v = self.peek_top().is_true();
                 if !v {
                     self.jump(label)
+                } else {
+                    self.pop();
                 }
             }
             Op::Or(label) => {
@@ -1716,13 +1718,14 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_scatter_regression() {
         // Wherein I discovered that precedence order for scatter assign was wrong wrong wrong.
         let program = r#"
         a = {{#2, #70, #70, #-1, #-1}, #70};
         thing = a[2];
-        {?who = player, ?what = thing, ?where = 666, ?dobj, ?iobj, @other} = a[1];
-        return {who, what, where, dobj, iobj, other};
+        {?who = player, ?what = thing, ?where = this:_locations(who), ?dobj, ?iobj, @other} = a[1];
+        return {who, what, where, dobj, iobj, @other};
         "#;
         let mut state = world_with_test_program(program);
         let mut vm = VM::new();
@@ -1734,14 +1737,7 @@ mod tests {
         // So something is wonky about our scatter evaluation, looks like on the first arg.
         assert_eq!(
             result,
-            v_list(vec![
-                v_obj(2),
-                v_obj(70),
-                v_obj(70),
-                v_obj(-1),
-                v_obj(-1),
-                v_list(vec![])
-            ])
+            v_list(vec![v_obj(2), v_obj(70), v_obj(70), v_obj(-1), v_obj(-1)])
         );
     }
 
@@ -1816,6 +1812,49 @@ mod tests {
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, v_int(666));
+    }
+
+    #[test]
+    fn test_if_elseif_else_chain() {
+        let program = r#"
+            ret = {};
+            for a in ({1,2,3})
+                if (a == 1)
+                    ret = {1, @ret};
+                elseif (a == 2)
+                    ret = {2, @ret};
+                else
+                    ret = {3, @ret};
+                endif
+            endfor
+            return ret;
+        "#;
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_list(vec![v_int(3), v_int(2), v_int(1)]));
+    }
+
+    #[test]
+    fn test_if_elseif_elseif_chains() {
+        let program = r#"
+            if (1 == 2)
+                return 5;
+            elseif (2 == 3)
+                return 3;
+            elseif (3 == 4)
+                return 4;
+            else
+                return 6;
+            endif
+        "#;
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_int(6));
     }
 
     struct MockClientConnection {

@@ -336,6 +336,19 @@ impl Var {
         v_bool(l.contains(v))
     }
 
+    /// 1-indexed position of the first occurrence of `v` in `self`, or `E_TYPE` if `self` is not a
+    /// list.
+    pub fn index_in(&self, v: &Var) -> Var {
+        let Variant::List(l) = self.variant() else {
+            return v_err(E_TYPE);
+        };
+
+        match l.iter().position(|x| x == v) {
+            None => v_err(E_TYPE),
+            Some(i) => v_int(i as i64 + 1),
+        }
+    }
+
     binary_numeric_coercion_op!(mul);
     binary_numeric_coercion_op!(div);
     binary_numeric_coercion_op!(sub);

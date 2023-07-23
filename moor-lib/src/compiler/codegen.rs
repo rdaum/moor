@@ -491,7 +491,7 @@ impl CodegenState {
     pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
         match stmt {
             Stmt::Cond { arms, otherwise } => {
-                let mut end_label = None;
+                let end_label = self.make_label(None);
                 for arm in arms {
                     self.generate_expr(&arm.condition)?;
                     let else_label = self.make_label(None);
@@ -500,10 +500,7 @@ impl CodegenState {
                     for stmt in &arm.statements {
                         self.generate_stmt(stmt)?;
                     }
-                    end_label = Some(self.make_label(None));
-                    self.emit(Op::Jump {
-                        label: end_label.unwrap(),
-                    });
+                    self.emit(Op::Jump { label: end_label });
                     self.commit_label(else_label);
                 }
                 if !otherwise.is_empty() {
@@ -511,9 +508,7 @@ impl CodegenState {
                         self.generate_stmt(stmt)?;
                     }
                 }
-                if let Some(end_label) = end_label {
-                    self.commit_label(end_label);
-                }
+                self.commit_label(end_label);
             }
             Stmt::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
@@ -865,17 +860,17 @@ mod tests {
                 Imm(one),
                 Imm(two),
                 Eq,
-                If(0.into()),
+                If(1.into()),
                 Imm(five),
                 Return,
-                Jump { label: 1.into() },
+                Jump { label: 0.into() },
                 Imm(two),
                 Imm(three),
                 Eq,
                 If(2.into()),
                 Imm(three),
                 Return,
-                Jump { label: 3.into() },
+                Jump { label: 0.into() },
                 Imm(six),
                 Return,
                 Done
@@ -961,9 +956,9 @@ mod tests {
                 Push(x),
                 Imm(five),
                 Gt,
-                If(2.into()),
+                If(3.into()),
                 ExitId(0.into()),
-                Jump { label: 3.into() },
+                Jump { label: 2.into() },
                 Jump { label: 0.into() },
                 Done,
             ]
@@ -1010,12 +1005,12 @@ mod tests {
                 Push(x),
                 Imm(five),
                 Eq,
-                If(2.into()),
+                If(3.into()),
                 Exit {
                     stack: 0.into(),
                     label: 1.into()
                 },
-                Jump { label: 3.into() },
+                Jump { label: 2.into() },
                 Exit {
                     stack: 0.into(),
                     label: 1.into()
@@ -1954,35 +1949,40 @@ mod tests {
 
     #[test]
     fn test_scatter_precedence() {
-        let program = "{a,b,c} = {{1,2,3}}[1]; return {a,b,c};";
+        let program = "{a,b,?c, @d} = {{1,2,player:kill(b)}}[1]; return {a,b,c};";
         let binary = compile(program).unwrap();
-        let (a, b, c) = (
+        let (a, b, c, d) = (
             binary.find_var("a"),
             binary.find_var("b"),
             binary.find_var("c"),
+            binary.find_var("d"),
         );
         /*
          0: 124                   NUM 1
          1: 016                 * MAKE_SINGLETON_LIST
          2: 125                   NUM 2
          3: 102                   LIST_ADD_TAIL
-         4: 126                   NUM 3
-         5: 102                   LIST_ADD_TAIL
-         6: 016                 * MAKE_SINGLETON_LIST
-         7: 124                   NUM 1
-         8: 014                 * INDEX
-         9: 112 013 003 003 004
+         4: 072                   PUSH player
+         5: 100 000               PUSH_LITERAL "kill"
+         7: 086                   PUSH b
+         8: 016                 * MAKE_SINGLETON_LIST
+         9: 010                 * CALL_VERB
+        10: 102                   LIST_ADD_TAIL
+        11: 016                 * MAKE_SINGLETON_LIST
+        12: 124                   NUM 1
+        13: 014                 * INDEX
+        14: 112 013 004 002 004
             018 000 019 000 020
-            000 021             * SCATTER 3/3/4: a/0 b/0 c/0 21
-        21: 111                   POP
-        22: 085                   PUSH a
-        23: 016                 * MAKE_SINGLETON_LIST
-        24: 086                   PUSH b
-        25: 102                   LIST_ADD_TAIL
-        26: 087                   PUSH c
-        27: 102                   LIST_ADD_TAIL
-        28: 108                   RETURN
-        */
+            001 021 000 028     * SCATTER 4/2/4: a/0 b/0 c/1 d/0 28
+        28: 111                   POP
+        29: 085                   PUSH a
+        30: 016                 * MAKE_SINGLETON_LIST
+        31: 086                   PUSH b
+        32: 102                   LIST_ADD_TAIL
+        33: 087                   PUSH c
+        34: 102                   LIST_ADD_TAIL
+        35: 108                   RETURN
+               */
 
         assert_eq!(
             binary.main_vector,
@@ -1991,19 +1991,24 @@ mod tests {
                 MakeSingletonList,
                 Imm(1.into()),
                 ListAddTail,
-                Imm(2.into()),
+                Push(binary.find_var("player")),
+                Imm(binary.find_literal("kill".into())),
+                Push(b),
+                MakeSingletonList,
+                CallVerb,
                 ListAddTail,
                 MakeSingletonList,
                 Imm(0.into()),
                 Ref,
                 Scatter {
-                    nargs: 3,
-                    nreq: 3,
+                    nargs: 4,
+                    nreq: 2,
                     rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
-                        ScatterLabel::Required(c),
+                        ScatterLabel::Optional(c, None),
+                        ScatterLabel::Rest(d),
                     ],
                     done: 0.into(),
                 },

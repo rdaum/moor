@@ -132,7 +132,7 @@ impl WorldState for MockState {
         unimplemented!()
     }
 
-    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+    fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
         unimplemented!()
     }
 

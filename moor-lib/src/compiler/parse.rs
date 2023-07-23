@@ -826,6 +826,64 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_if_elseif_chain() {
+        let program = r#"
+            if (1 == 2)
+                return 5;
+            elseif (2 == 3)
+                return 3;
+            elseif (3 == 4)
+                return 4;
+            else
+                return 6;
+            endif
+        "#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            parse.stmts[0],
+            Stmt::Cond {
+                arms: vec![
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(VarExpr(v_int(1))),
+                            Box::new(VarExpr(v_int(2))),
+                        ),
+                        statements: vec![Stmt::Return {
+                            expr: Some(VarExpr(v_int(5))),
+                        }],
+                    },
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(VarExpr(v_int(2))),
+                            Box::new(VarExpr(v_int(3))),
+                        ),
+                        statements: vec![Stmt::Return {
+                            expr: Some(VarExpr(v_int(3))),
+                        }],
+                    },
+                    CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(VarExpr(v_int(3))),
+                            Box::new(VarExpr(v_int(4))),
+                        ),
+                        statements: vec![Stmt::Return {
+                            expr: Some(VarExpr(v_int(4))),
+                        }],
+                    },
+                ],
+
+                otherwise: vec![Stmt::Return {
+                    expr: Some(VarExpr(v_int(6))),
+                }],
+            }
+        );
+    }
+
+    #[test]
     fn test_parse_for_loop() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
         let parse = parse_program(program).unwrap();
