@@ -940,9 +940,9 @@ mod tests {
         let string = v_str("hello world");
         assert_eq!(string.range(2, 7)?, v_str("ello w"));
 
-        // test on empty list
+        // range with upper higher than lower, moo returns empty list for this (!)
         let empty_list = v_list(vec![]);
-        assert_eq!(empty_list.range(1, 0), Ok(v_err(E_RANGE)));
+        assert_eq!(empty_list.range(1, 0), Ok(v_list(vec![])));
         // test on out of range
         let int_list = v_list(vec![1.into(), 2.into(), 3.into()]);
         assert_eq!(int_list.range(2, 4), Ok(v_err(E_RANGE)));
