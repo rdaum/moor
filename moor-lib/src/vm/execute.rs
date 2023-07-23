@@ -370,6 +370,8 @@ impl VM {
             // above)
             if let FinallyReason::Return(value) = why {
                 self.push(&value);
+                trace!("Unwinding stack, pushing return value: {} back to verb {}",
+                          value, self.top().verb_name());
                 return Ok(ExecutionResult::More);
             }
         }
@@ -745,16 +747,20 @@ impl VM {
 
                 let nval = match (list.variant(), index.variant()) {
                     (Variant::List(l), Variant::Int(i)) => {
-                        if *i < 0 || !*i < l.len() as i64 {
+                        // Adjust for 1 indexing.
+                        let i = *i - 1;
+                        if i < 0 || i >= l.len() as i64 {
                             return self.push_error(E_RANGE);
                         }
 
                         let mut nval = l.clone();
-                        nval[*i as usize] = value;
+                        nval[i as usize] = value;
                         v_list(nval)
                     }
                     (Variant::Str(s), Variant::Int(i)) => {
-                        if *i < 0 || !*i < s.len() as i64 {
+                        // Adjust for 1 indexing.
+                        let i = *i - 1;
+                        if i < 0 || i >= s.len() as i64 {
                             return self.push_error(E_RANGE);
                         }
 
@@ -766,7 +772,7 @@ impl VM {
                             return self.push_error(E_INVARG);
                         }
 
-                        let i = *i as usize;
+                        let i = i as usize;
                         let (mut head, tail) = (String::from(&s[0..i]), &s[i + 1..]);
                         head.push_str(&value[0..1]);
                         head.push_str(tail);
@@ -878,10 +884,15 @@ impl VM {
                 let (index, list) = (peek[1].clone(), peek[0].clone());
                 let v = match (index.variant(), list.variant()) {
                     (Variant::Int(index), Variant::List(list)) => {
-                        if *index <= 0 || !*index < list.len() as i64 {
+                        // MOO is 1-indexed, it's easier if we adjust in advance.
+                        if *index < 1 {
+                            return self.push_error(E_RANGE);
+                        }
+                        let index = ((*index) - 1) as usize;
+                        if index >= list.len() {
                             return self.push_error(E_RANGE);
                         } else {
-                            list[*index as usize].clone()
+                            list[index].clone()
                         }
                     }
                     (_, _) => return self.push_error(E_TYPE),
@@ -904,9 +915,14 @@ impl VM {
             Op::RangeRef => {
                 let (to, from, base) = (self.pop(), self.pop(), self.pop());
                 match (to.variant(), from.variant()) {
-                    (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
-                        Err(e) => return self.push_error(e),
-                        Ok(v) => self.push(&v),
+                    (Variant::Int(to), Variant::Int(from)) => {
+                        // MOO is 1-indexed. Adjust.
+                        match base.range(*from, *to) {
+                            Err(e) => {
+                                return self.push_error(e)
+                            },
+                            Ok(v) => self.push(&v),
+                        }
                     },
                     (_, _) => return self.push_error(E_TYPE),
                 };
@@ -916,7 +932,9 @@ impl VM {
                 match (to.variant(), from.variant()) {
                     (Variant::Int(to), Variant::Int(from)) => {
                         match base.rangeset(value, *from, *to) {
-                            Err(e) => return self.push_error(e),
+                            Err(e) => {
+                                return self.push_error(e)
+                            },
                             Ok(v) => self.push(&v),
                         }
                     }

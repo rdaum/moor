@@ -422,13 +422,15 @@ impl Var {
             }
             Variant::List(l) => {
                 let len = l.len() as i64;
-                if from <= 0 || from > len + 1 || to < 1 || to > len {
+                if to < from {
+                    return Ok(v_list(Vec::new()));
+                }
+                if from <= 0 || from > len + 1 || to < 1 || to > len  {
                     return Ok(v_err(E_RANGE));
                 }
-                let (from, to) = (from as usize, to as usize);
-                let mut res = Vec::with_capacity(to - from + 1);
+                let mut res = Vec::with_capacity((to - from + 1) as usize);
                 for i in from..=to {
-                    res.push(l[i - 1].clone());
+                    res.push(l[(i - 1) as usize].clone());
                 }
                 Ok(v_list(res))
             }
