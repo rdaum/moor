@@ -344,7 +344,7 @@ impl Var {
         };
 
         match l.iter().position(|x| x == v) {
-            None => v_err(E_TYPE),
+            None =>  v_int(0),
             Some(i) => v_int(i as i64 + 1),
         }
     }
