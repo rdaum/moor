@@ -1,5 +1,5 @@
-pub mod execute;
 pub mod opcode;
+pub mod vm_execute;
 
 mod activation;
 
@@ -10,6 +10,9 @@ mod bf_server;
 mod bf_strings;
 mod bf_values;
 pub(crate) mod vm;
+
+#[cfg(test)]
+mod vm_test;
 
 #[macro_export]
 macro_rules! bf_declare {
