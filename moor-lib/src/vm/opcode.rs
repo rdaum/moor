@@ -79,6 +79,7 @@ pub enum Op {
     FuncCall {
         id: Label,
     },
+    Pass,
     RangeSet,
     Length(Offset),
     Exp,

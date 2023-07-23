@@ -404,6 +404,10 @@ impl CodegenState {
                 self.emit(Op::GetProp);
                 self.pop_stack(1);
             }
+            Expr::Pass { args } => {
+                self.generate_arg_list(args)?;
+                self.emit(Op::Pass);
+            }
             Expr::Call { function, args } => {
                 // Lookup builtin.
                 let Some(builtin) = self.builtins.get(function) else {
@@ -2156,5 +2160,52 @@ mod tests {
         let program = r#"return;"#;
         let binary = compile(program).unwrap();
         assert_eq!(binary.main_vector, vec![Return0, Done])
+    }
+
+    #[test]
+    fn test_pass() {
+        let program = r#"
+            result = pass(@args);
+            result = pass();
+            result = pass(1,2,3,4);
+            pass = blop;
+            return pass;
+        "#;
+        let binary = compile(program).unwrap();
+        let result = binary.find_var("result");
+        let pass = binary.find_var("pass");
+        let args = binary.find_var("args");
+        let blop = binary.find_var("blop".into());
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Push(args),
+                CheckListForSplice,
+                Pass,
+                Put(result),
+                Pop,
+                MkEmptyList,
+                Pass,
+                Put(result),
+                Pop,
+                Imm(0.into()),
+                MakeSingletonList,
+                Imm(1.into()),
+                ListAddTail,
+                Imm(2.into()),
+                ListAddTail,
+                Imm(3.into()),
+                ListAddTail,
+                Pass,
+                Put(result),
+                Pop,
+                Push(blop),
+                Put(pass),
+                Pop,
+                Push(pass),
+                Return,
+                Done
+            ]
+        )
     }
 }

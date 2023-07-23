@@ -351,11 +351,9 @@ impl Task {
                             verbinfo,
                             vloc,
                             command.verb.as_str(),
-                            false,
                             vloc,
                             player,
                             BitEnum::new_with(ObjFlag::Wizard),
-                            player,
                             &command.args,
                         )
                         .expect("Could not set up VM for command execution");
@@ -376,11 +374,9 @@ impl Task {
                             self.state.as_mut(),
                             vloc,
                             verb.as_str(),
-                            false,
                             vloc,
                             player,
                             BitEnum::new_with(ObjFlag::Wizard),
-                            player,
                             &args,
                         )
                         .expect("Could not set up VM for command execution");

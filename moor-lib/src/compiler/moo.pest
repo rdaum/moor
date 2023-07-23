@@ -73,6 +73,7 @@ scatter_rest = {"@" ~ ident}
 postfix  =  _{ index_range | index_single | verb_call | verb_expr_call | prop | prop_expr | cond_expr | assign }
 index_range    =   { "[" ~ expr ~ ".." ~ expr ~ "]" }
 index_single = {"[" ~ expr ~ "]"}
+pass_expr = {^"pass" ~ "(" ~ (exprlist)? ~ ")"}
 verb_call = {":" ~ ident ~ arglist}
 verb_expr_call = {":" ~ expr ~ arglist}
 prop = {"." ~ ident}
@@ -80,7 +81,7 @@ prop_expr = {"." ~ "(" ~ expr ~ ")"}
 assign = {"=" ~ expr}
 cond_expr = {"?" ~ expr ~ "|" ~ expr}
 
-primary  =  _{ builtin_call | paren_expr | sysprop_call |
+primary  =  _{ pass_expr | builtin_call | paren_expr | sysprop_call |
                sysprop | try_expr | list | atom | range_end}
 paren_expr = { "(" ~ expr ~ ")" }
 

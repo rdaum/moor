@@ -220,6 +220,15 @@ fn parse_expr(
                     args,
                 })
             }
+            Rule::pass_expr => {
+                let mut inner = primary.into_inner();
+                let args = if let Some(arglist) = inner.next() {
+                    parse_exprlist(names.clone(), arglist.into_inner())?
+                } else {
+                    vec![]
+                };
+                Ok(Expr::Pass { args })
+            }
             Rule::range_end => Ok(Expr::Length),
             Rule::try_expr => {
                 let mut inner = primary.into_inner();
@@ -1287,7 +1296,7 @@ mod tests {
 
     #[test]
     fn test_arg_splice() {
-        let program = "return {@results, pass(@args)};";
+        let program = "return {@results, frozzbozz(@args)};";
         let parse = parse_program(program).unwrap();
         let results = parse.names.find_name("results").unwrap();
         let args = parse.names.find_name("args").unwrap();
@@ -1297,7 +1306,7 @@ mod tests {
                 expr: Some(Expr::List(vec![
                     Arg::Splice(Id(results)),
                     Arg::Normal(Expr::Call {
-                        function: "pass".to_string(),
+                        function: "frozzbozz".to_string(),
                         args: vec![Arg::Splice(Id(args))],
                     }),
                 ])),
@@ -1721,5 +1730,52 @@ mod tests {
                 except: None,
             })]
         )
+    }
+
+    #[test]
+    fn test_pass_exprs() {
+        let program = r#"
+            result = pass(@args);
+            result = pass();
+            result = pass(1,2,3,4);
+            pass = blop;
+            return pass;
+        "#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            parse.stmts,
+            vec![
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Id(parse.names.find_name("result").unwrap())),
+                    right: Box::new(Expr::Pass {
+                        args: vec![Arg::Splice(Expr::Id(
+                            parse.names.find_name("args").unwrap()
+                        ))],
+                    }),
+                }),
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Id(parse.names.find_name("result").unwrap())),
+                    right: Box::new(Expr::Pass { args: vec![] }),
+                }),
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Id(parse.names.find_name("result").unwrap())),
+                    right: Box::new(Expr::Pass {
+                        args: vec![
+                            Arg::Normal(VarExpr(v_int(1))),
+                            Arg::Normal(VarExpr(v_int(2))),
+                            Arg::Normal(VarExpr(v_int(3))),
+                            Arg::Normal(VarExpr(v_int(4))),
+                        ],
+                    }),
+                }),
+                Stmt::Expr(Expr::Assign {
+                    left: Box::new(Id(parse.names.find_name("pass").unwrap())),
+                    right: Box::new(Id(parse.names.find_name("blop").unwrap())),
+                }),
+                Stmt::Return {
+                    expr: Some(Id(parse.names.find_name("pass").unwrap())),
+                },
+            ]
+        );
     }
 }

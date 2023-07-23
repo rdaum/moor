@@ -11,6 +11,8 @@ use crate::tasks::Sessions;
 
 use crate::var::error::Error::{E_ARGS, E_INVARG, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
 
+use crate::compiler::builtins::BUILTINS;
+
 use crate::var::{
     v_bool, v_catch, v_finally, v_int, v_label, v_list, v_obj, v_str, Variant, VAR_NONE,
 };
@@ -448,6 +450,35 @@ impl VM {
             Op::Fork { id: _, f_index: _ } => {
                 unimplemented!("fork")
             }
+            Op::Pass => {
+                let args = self.pop();
+                let Variant::List(args) = args.variant() else {
+                    return self.push_error(E_TYPE);
+                };
+                // get parent of verb definer object & current verb name.
+                let this = self.top().verb_info.attrs.definer.unwrap();
+                let parent = state.parent_of(this)?;
+                let verb = self.top().verb_name().to_string();
+
+                // call verb on parent, but with our current 'this'
+                let task_id = self.top().task_id;
+                trace!(
+                    "Pass: task_id: {:?} verb: {:?} this: {:?}",
+                    task_id,
+                    verb,
+                    this
+                );
+                self.do_method_verb(
+                    task_id,
+                    state,
+                    parent,
+                    verb.as_str(),
+                    this,
+                    self.top().player,
+                    self.top().player_flags,
+                    &args,
+                )?;
+            }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
                 let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
@@ -476,10 +507,12 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_ARGS);
                 };
-                if id.0 as usize >= self.bf_funcs.len() {
+                let bf_func_num = id.0 as usize;
+                if bf_func_num >= self.bf_funcs.len() {
                     return self.push_error(E_VARNF);
                 }
-                let bf = self.bf_funcs[id.0 as usize].clone();
+                let bf = self.bf_funcs[bf_func_num].clone();
+                trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
                 let result = bf
                     .call(state, self.top_mut(), client_connection, args)
                     .await?;

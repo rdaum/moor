@@ -498,11 +498,9 @@ impl VM {
         vi: VerbInfo,
         obj: Objid,
         verb_name: &str,
-        _do_pass: bool,
         this: Objid,
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
-        _caller: Objid,
         args: &[Var],
     ) -> Result<(), anyhow::Error> {
         let Some(binary) = vi.attrs.program.clone() else {
@@ -533,11 +531,9 @@ impl VM {
         state: &mut dyn WorldState,
         obj: Objid,
         verb_name: &str,
-        _do_pass: bool,
         this: Objid,
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
-        _caller: Objid,
         args: &[Var],
     ) -> Result<(), anyhow::Error> {
         let vi = state.find_method_verb_on(obj, verb_name)?;

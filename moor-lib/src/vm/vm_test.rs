@@ -64,11 +64,9 @@ mod tests {
                 state,
                 o,
                 verb_name,
-                false,
                 o,
                 o,
                 BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
-                o,
                 &[],
             )
             .is_ok());
@@ -103,11 +101,9 @@ mod tests {
             state.as_mut(),
             o,
             "test",
-            false,
             o,
             o,
             BitEnum::new_with(ObjFlag::Wizard) | ObjFlag::Programmer,
-            o,
             &[],
         ) {
             Err(e) => match e.downcast::<ObjectError>() {

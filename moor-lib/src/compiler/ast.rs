@@ -57,7 +57,9 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
-
+    Pass {
+        args: Vec<Arg>,
+    },
     VarExpr(Var),
     Id(Name),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
