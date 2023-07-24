@@ -71,8 +71,8 @@ The following is a table of the status of various builtin-functions, to keep an 
 | create          |          |       |
 | recycle         |          |       |
 | valid           | &check;  |       |
-| parent          |          |       |
-| children        |          |       |
+| parent          | &check;  |       |
+| children        | &check;  |       |
 | chparent        |          |       |
 | max_object      |          |       |
 | players         |          |       |

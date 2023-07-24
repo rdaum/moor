@@ -8,7 +8,7 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::db::state::WorldState;
 use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
-use crate::var::{v_bool, v_err, v_list, v_str, Var, Variant};
+use crate::var::{v_bool, v_err, v_list, v_objid, v_str, Var, Variant};
 use crate::vm::activation::Activation;
 use crate::vm::vm::{BfFunction, VM};
 
@@ -47,11 +47,44 @@ async fn bf_valid(
     Ok(v_bool(is_valid))
 }
 bf_declare!(valid, bf_valid);
-/*
-Function: obj parent (obj object)
-Function: list children (obj object)
-These functions return the parent and a list of the children of object, respectively. If object is not valid, then E_INVARG is raised.
- */
+
+async fn bf_parent(
+    ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    if args.len() != 1 {
+        return Ok(v_err(E_INVARG));
+    }
+    let Variant::Obj(obj) = args[0].variant() else {
+        return Ok(v_err(E_TYPE));
+    };
+    let parent = ws.parent_of(*obj)?;
+    Ok(v_objid(parent))
+}
+bf_declare!(parent, bf_parent);
+
+async fn bf_children(
+    ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    if args.len() != 1 {
+        return Ok(v_err(E_INVARG));
+    }
+    let Variant::Obj(obj) = args[0].variant() else {
+        return Ok(v_err(E_TYPE));
+    };
+    let children = ws.children_of(*obj)?;
+    let children = children
+        .iter()
+        .map(|c| v_objid(*c))
+        .collect::<Vec<_>>();
+    Ok(v_list(children))
+}
+bf_declare!(children, bf_children);
 
 /*
 Function: none recycle (obj object)
@@ -122,6 +155,8 @@ impl VM {
         self.bf_funcs[offset_for_builtin("valid")] = Arc::new(Box::new(BfValid {}));
         self.bf_funcs[offset_for_builtin("verbs")] = Arc::new(Box::new(BfVerbs {}));
         self.bf_funcs[offset_for_builtin("properties")] = Arc::new(Box::new(BfProperties {}));
+        self.bf_funcs[offset_for_builtin("parent")] = Arc::new(Box::new(BfParent {}));
+        self.bf_funcs[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
 
         Ok(())
     }

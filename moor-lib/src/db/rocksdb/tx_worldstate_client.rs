@@ -302,6 +302,15 @@ impl WorldState for RocksDbTransaction {
         Ok(oid)
     }
 
+    fn children_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetChildrenOf(obj, send))
+            .expect("Error sending message");
+        let children = receive.recv().expect("Error receiving message")?;
+        Ok(children)
+    }
+
     fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox

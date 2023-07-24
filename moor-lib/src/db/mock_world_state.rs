@@ -136,6 +136,10 @@ impl WorldState for MockState {
         Ok(Objid(-1))
     }
 
+    fn children_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
+        todo!()
+    }
+
     fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
         Ok(true)
     }

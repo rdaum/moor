@@ -76,6 +76,9 @@ pub trait WorldState: Send + Sync {
     /// Get the object that is the parent of the given object.
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, ObjectError>;
 
+    /// Get the children of the given object.
+    fn children_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError>;
+
     /// Check the validity of an object.
     fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError>;
 

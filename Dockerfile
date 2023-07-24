@@ -1,7 +1,7 @@
 # Using official rust base image
-FROM rust:1.68.2-alpine3.17
+FROM rust:1.71-bullseye
 WORKDIR /moor
-RUN apk add --no-cache musl-dev
+RUN apt install libclang-dev
 RUN cargo install cargo-watch
 EXPOSE 8080
 COPY ./ ./

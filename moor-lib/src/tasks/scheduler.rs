@@ -10,7 +10,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace, warn};
-use uuid::{uuid, Uuid};
+use uuid::Uuid;
 
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
@@ -603,7 +603,7 @@ mod tests {
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
-        pub fn new() -> Self {
+        fn new() -> Self {
             Self {}
         }
     }
