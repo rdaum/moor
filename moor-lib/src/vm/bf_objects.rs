@@ -78,10 +78,7 @@ async fn bf_children(
         return Ok(v_err(E_TYPE));
     };
     let children = ws.children_of(*obj)?;
-    let children = children
-        .iter()
-        .map(|c| v_objid(*c))
-        .collect::<Vec<_>>();
+    let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
     Ok(v_list(children))
 }
 bf_declare!(children, bf_children);

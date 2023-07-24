@@ -97,7 +97,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | Name          | Complete | Notes                                    |
 |---------------|----------|------------------------------------------|
 | verbs         | &check;  |                                          |
-| verb_info     |          |                                          |
+| verb_info     | &check;  |                                          |
 | set_verb_info |          |                                          |
 | verb_args     |          |                                          |
 | set_verb_args |          |                                          |

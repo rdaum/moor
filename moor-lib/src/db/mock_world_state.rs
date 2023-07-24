@@ -116,6 +116,10 @@ impl WorldState for MockState {
         todo!()
     }
 
+    fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
+        todo!()
+    }
+
     fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
         let store = self.0.lock().unwrap();
         let v = store.verbs.get(&(obj, vname.to_string()));

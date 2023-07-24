@@ -11,6 +11,7 @@ mod bf_strings;
 mod bf_values;
 pub(crate) mod vm;
 
+mod bf_verbs;
 #[cfg(test)]
 mod vm_test;
 

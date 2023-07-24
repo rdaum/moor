@@ -221,6 +221,21 @@ impl WorldState for RocksDbTransaction {
         Ok(())
     }
 
+    fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .expect("Error sending message");
+        let vh = receive.recv().expect("Error receiving message")?;
+
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetProgram(vh.definer, vh.uuid, send))
+            .expect("Error sending message");
+        let program = receive.recv().expect("Error receiving message")?;
+        Ok(verbhandle_to_verbinfo(&vh, Some(program)))
+    }
+
     fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox

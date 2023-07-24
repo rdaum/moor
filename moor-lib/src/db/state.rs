@@ -63,6 +63,9 @@ pub trait WorldState: Send + Sync {
         code: Binary,
     ) -> Result<(), ObjectError>;
 
+    /// Get the verb with the given name on the given object.
+    fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError>;
+
     /// Retrieve a verb/method from the given object (or its parents).
     fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError>;
 

@@ -124,6 +124,7 @@ impl VM {
         vm.register_bf_strings().unwrap();
         vm.register_bf_list_sets().unwrap();
         vm.register_bf_objects().unwrap();
+        vm.register_bf_verbs().unwrap();
 
         vm
     }
