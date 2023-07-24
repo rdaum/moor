@@ -33,6 +33,7 @@
 #include "regexpr.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define MACRO_BEGIN do {
 #define MACRO_END } while (0)

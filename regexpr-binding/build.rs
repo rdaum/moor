@@ -5,6 +5,9 @@ fn main() {
     // first compile the C library
     cc::Build::new()
         .file("c_src/regexpr.c")
+        .flag("-Wno-sign-compare")
+        .flag("-Wno-implicit-function-declaration")
+        .flag("-Wno-implicit-fallthrough")
         .include("c_src")
         .compile("regexpr");
 
