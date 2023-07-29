@@ -1,12 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, Stmt, UnaryOp};
+use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
 use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{LabelNotFound, MalformedProgram};
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
 use crate::var::{Var, Variant};
-use crate::vm::opcode::{Binary, Op};
+use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -392,15 +392,46 @@ impl Decompile {
                 };
                 self.push_expr(Expr::Pass { args });
             }
-
             Op::Scatter {
                 nargs: _,
                 nreq: _,
-                labels: _,
+                labels,
                 rest: _,
                 done: _,
             } => {
-                unimplemented!("decompile scatter");
+                let mut scatter_items = vec![];
+                for scatter_label in labels.iter() {
+                    let scatter_item = match scatter_label {
+                        ScatterLabel::Required(label) => ScatterItem {
+                            kind: ScatterKind::Required,
+                            id: self.find_var(label)?,
+                            expr: None,
+                        },
+                        ScatterLabel::Rest(label) => ScatterItem {
+                            kind: ScatterKind::Rest,
+                            id: self.find_var(label)?,
+                            expr: None,
+                        },
+                        ScatterLabel::Optional(label_a, label_b) => {
+                            let opt_assign = if let Some(_label_b) = label_b {
+                                let Expr::Assign {left: _, right} = self.pop_expr()? else {
+                                    return Err(MalformedProgram("expected assign for optional scatter assignment".to_string()));
+                                };
+                                Some(*right)
+                            } else {
+                                None
+                            };
+                            ScatterItem {
+                                kind: ScatterKind::Optional,
+                                id: self.find_var(label_a)?,
+                                expr: opt_assign,
+                            }
+                        }
+                    };
+                    scatter_items.push(scatter_item);
+                }
+                let e = self.pop_expr()?;
+                self.push_expr(Expr::Scatter(scatter_items, Box::new(e)));
             }
             _ => {
                 todo!("decompile for {:?}", opcode);
@@ -626,13 +657,44 @@ mod tests {
             binary
         );
     }
-    // #[test]
-    // fn test_simple_scatter() {
-    //     let (parse, decompiled, binary) = parse_decompile("{connection} = args;");
-    //     assert_eq!(
-    //         parse.stmts, decompiled.stmts,
-    //         "Decompile mismatch for {}",
-    //         binary
-    //     );
-    // }
+
+    #[test]
+    fn test_call_verb_expr() {
+        let (parse, decompiled, binary) = parse_decompile(r#"return x:("y")(1,2,3);"#);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_simple_scatter() {
+        let (parse, decompiled, binary) = parse_decompile("{connection} = args;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_scatter_required() {
+        let (parse, decompiled, binary) = parse_decompile("{a,b,c} = args;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_scatter_mixed() {
+        let (parse, decompiled, binary) = parse_decompile("{a,b,?c,@d} = args;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
 }
