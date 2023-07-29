@@ -1,6 +1,7 @@
 /// The abstract syntax tree produced by the parser and converted by codgen into opcodes.
 use crate::compiler::labels::Name;
 use crate::var::Var;
+use crate::vm::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Arg {
@@ -37,6 +38,27 @@ pub enum BinaryOp {
     LtE,
     Exp,
     In,
+}
+
+impl BinaryOp {
+    pub fn from_binary_opcode(opcode: Op) -> Self {
+        match opcode {
+            Op::Add => Self::Add,
+            Op::Sub => Self::Sub,
+            Op::Mul => Self::Mul,
+            Op::Div => Self::Div,
+            Op::Mod => Self::Mod,
+            Op::Eq => Self::Eq,
+            Op::Ne => Self::NEq,
+            Op::Gt => Self::Gt,
+            Op::Ge => Self::GtE,
+            Op::Lt => Self::Lt,
+            Op::Le => Self::LtE,
+            Op::Exp => Self::Exp,
+            Op::In => Self::In,
+            _ => panic!("Invalid binary opcode: {:?}", opcode),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

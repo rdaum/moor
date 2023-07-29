@@ -496,16 +496,25 @@ impl CodegenState {
         match stmt {
             Stmt::Cond { arms, otherwise } => {
                 let end_label = self.make_label(None);
+                let mut is_else = false;
                 for arm in arms {
                     self.generate_expr(&arm.condition)?;
-                    let else_label = self.make_label(None);
-                    self.emit(Op::If(else_label));
+                    let otherwise_label = self.make_label(None);
+                    self.emit(if !is_else {
+                        Op::If(otherwise_label)
+                    } else {
+                        Op::Eif(otherwise_label)
+                    });
+                    is_else = true;
                     self.pop_stack(1);
                     for stmt in &arm.statements {
                         self.generate_stmt(stmt)?;
                     }
                     self.emit(Op::Jump { label: end_label });
-                    self.commit_label(else_label);
+
+                    // This is where we jump to if the condition is false; either the end of the
+                    // if statement, or the start of the next ('else or elseif') arm.
+                    self.commit_label(otherwise_label);
                 }
                 if !otherwise.is_empty() {
                     for stmt in otherwise {
@@ -527,7 +536,7 @@ impl CodegenState {
                 // TODO self.enter_loop/exit_loop needed?
                 self.emit(Op::ForList {
                     id: id.0,
-                    label: end_label,
+                    end_label,
                 });
                 self.loops.push(Loop {
                     top_label: loop_top,
@@ -549,7 +558,7 @@ impl CodegenState {
                 let end_label = self.make_label(None);
                 self.emit(Op::ForRange {
                     id: id.0,
-                    label: end_label,
+                    end_label,
                 });
                 self.loops.push(Loop {
                     top_label: loop_top,
@@ -576,7 +585,7 @@ impl CodegenState {
                     None => self.emit(Op::While(loop_end_label)),
                     Some(id) => self.emit(Op::WhileId {
                         id: id.0,
-                        label: loop_end_label,
+                        end_label: loop_end_label,
                     }),
                 }
                 self.pop_stack(1);
@@ -871,7 +880,7 @@ mod tests {
                 Imm(two),
                 Imm(three),
                 Eq,
-                If(2.into()),
+                Eif(2.into()),
                 Imm(three),
                 Return,
                 Jump { label: 0.into() },
@@ -950,7 +959,7 @@ mod tests {
                 Imm(one),
                 WhileId {
                     id: chuckles,
-                    label: 1.into()
+                    end_label: 1.into()
                 },
                 Push(x),
                 Imm(one),
@@ -1067,7 +1076,7 @@ mod tests {
                 Val(v_int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
                 ForList {
                     id: x,
-                    label: 1.into()
+                    end_label: 1.into()
                 },
                 Push(x),
                 Imm(five),
@@ -1113,7 +1122,7 @@ mod tests {
                 Imm(five),
                 ForRange {
                     id: n,
-                    label: 1.into()
+                    end_label: 1.into()
                 },
                 Push(player),
                 Imm(tell),

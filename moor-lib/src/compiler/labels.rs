@@ -96,6 +96,12 @@ impl Names {
             Some(n) => Name(n.into()),
         }
     }
+    pub fn find_label(&self, label: &Label) -> Option<Name> {
+        if label.0 as usize >= self.names.len() {
+            return None;
+        }
+        Some(Name(*label))
+    }
 
     pub fn find_name(&self, name: &str) -> Option<Name> {
         self.find_name_offset(name).map(|x| Name(x.into()))
@@ -108,5 +114,12 @@ impl Names {
     }
     pub fn width(&self) -> usize {
         self.names.len()
+    }
+
+    pub fn name_of(&self, name: &Name) -> Option<&str> {
+        if name.0 .0 as usize >= self.names.len() {
+            return None;
+        }
+        Some(&self.names[name.0 .0 as usize])
     }
 }

@@ -116,7 +116,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
+    fn get_verb(&mut self, _obj: Objid, _vname: &str) -> Result<VerbInfo, ObjectError> {
         todo!()
     }
 

@@ -153,6 +153,14 @@ pub fn make_builtin_labels() -> HashMap<String, Label> {
 
     b
 }
+pub fn make_labels_builtins() -> HashMap<Label, String> {
+    let mut b = HashMap::new();
+    for (i, builtin) in BUILTINS.iter().enumerate() {
+        b.insert(Label(i as u32), builtin.to_string());
+    }
+
+    b
+}
 
 pub fn offset_for_builtin(bf_name: &str) -> usize {
     BUILTINS.iter().position(|b| *b == bf_name).unwrap()

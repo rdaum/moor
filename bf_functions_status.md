@@ -135,7 +135,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | connected_seconds   |          | Will need hooks to Session                 |
 | idle_seconds        |          | " (Hardcoded to 0 to make some tests pass) |
 | connection_name     |          |                                            |
-| notify              |          |                                            |
+| notify              | &check;  |                                            |
 | boot_player         |          |                                            |
 | server_log          |          |                                            |
 | load_server_options |          |                                            |
@@ -159,19 +159,18 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Execution
 
-| Name           | Complete | Notes              |
-|----------------|----------|--------------------|
-| call_function  |          |                    |
-| raise          |          |                    |
-| suspend        |          |                    |
-| read           |          |                    |
-| seconds_left   |          |                    |
-| ticks_left     |          |                    |
-| pass           | &check;  | Is an opcode       |
-| set_task_perms | &check;  | Check correctness  |
-| caller_perms   | &check;  | Check correctness. |
-| callers        | &check;  |                    |
-| task_stack     |          |                    |
+| Name           | Complete | Notes                                        |
+|----------------|----------|----------------------------------------------|
+| call_function  |          |                                              |
+| raise          | &check;  | Does not support message / value parameters. |
+| suspend        |          |                                              |
+| seconds_left   |          |                                              |
+| ticks_left     |          |                                              |
+| pass           | &check;  | Is an opcode                                 |
+| set_task_perms | &check;  | Check correctness                            |
+| caller_perms   | &check;  | Check correctness.                           |
+| callers        | &check;  |                                              |
+| task_stack     |          |                                              |
 
 ### Network connections
 
@@ -185,5 +184,6 @@ These will likely never be implemented.
 | open_network_connection |          |       |
 | listen                  |          |       |
 | unlisten                |          |       |
+| read                    |          |       |
 | listeners               |          |       |
 | buffered_output_length  |          |       |

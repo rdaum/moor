@@ -68,14 +68,20 @@ impl VM {
             Op::Jump { label } => {
                 self.jump(label);
             }
-            Op::WhileId { id, label } => {
+            Op::WhileId {
+                id,
+                end_label: label,
+            } => {
                 self.set_env(id, &self.peek_top());
                 let cond = self.pop();
                 if !cond.is_true() {
                     self.jump(label);
                 }
             }
-            Op::ForList { label, id } => {
+            Op::ForList {
+                end_label: label,
+                id,
+            } => {
                 // Pop the count and list off the stack. We push back later when we re-enter.
                 // TODO LambdaMOO had optimization here where it would only peek and update.
                 // But I had some difficulty getting stack values right, so will do this simpler
@@ -107,7 +113,10 @@ impl VM {
                 self.push(list);
                 self.push(&v_int((count + 1) as i64));
             }
-            Op::ForRange { label, id } => {
+            Op::ForRange {
+                end_label: label,
+                id,
+            } => {
                 // Pull the range ends off the stack.
                 // TODO LambdaMOO had optimization here where it would only peek and update.
                 // But I had some difficulty getting stack values right, so will do this simpler
