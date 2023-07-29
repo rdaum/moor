@@ -689,7 +689,7 @@ impl CodegenState {
                 } else if let Stmt::Continue { .. } = stmt {
                     self.emit(Op::Exit {
                         stack: l.top_stack,
-                        label: l.bottom_label,
+                        label: l.top_label,
                     })
                 } else {
                     self.emit(Op::Exit {
@@ -1026,7 +1026,7 @@ mod tests {
                 Jump { label: 2.into() },
                 Exit {
                     stack: 0.into(),
-                    label: 1.into()
+                    label: 0.into()
                 },
                 Jump { label: 0.into() },
                 Done

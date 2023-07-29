@@ -58,7 +58,8 @@ impl Decompile {
     pub fn find_literal(&self, label: &Label) -> Result<Var, DecompileError> {
         self.program
             .literals
-            .get(label.0 as usize).cloned()
+            .get(label.0 as usize)
+            .cloned()
             .ok_or(DecompileError::LabelNotFound(*label))
     }
     pub fn find_var(&self, label: &Label) -> Result<Name, DecompileError> {
@@ -231,6 +232,14 @@ impl Decompile {
                     body,
                 });
             }
+            Op::Exit { stack: _, label } => {
+                let position = self.find_jump(&label)?.position;
+                if position.0 < self.position as u32 {
+                    self.s.push(Stmt::Continue { exit: None });
+                } else {
+                    self.s.push(Stmt::Break { exit: None });
+                }
+            }
             Op::Fork { .. } => {
                 unimplemented!("decompile fork");
             }
@@ -258,6 +267,13 @@ impl Decompile {
             }
             Op::Val(value) => {
                 self.push_expr(Expr::VarExpr(value));
+            }
+            Op::Put(label) => {
+                let expr = self.pop_expr()?;
+                self.push_expr(Expr::Assign {
+                    left: Box::new(Expr::Id(self.find_var(&label)?)),
+                    right: Box::new(expr),
+                });
             }
             Op::And(label) | Op::Or(label) => {
                 let left = self.pop_expr()?;
@@ -354,6 +370,15 @@ impl Decompile {
                 list.push(arg);
                 self.push_expr(Expr::List(list));
             }
+            Op::Scatter {
+                nargs: _,
+                nreq: _,
+                labels: _,
+                rest: _,
+                done: _,
+            } => {
+                unimplemented!("decompile scatter");
+            }
             _ => {
                 todo!("decompile for {:?}", opcode);
             }
@@ -439,6 +464,17 @@ mod tests {
     }
 
     #[test]
+    fn test_while_break_continue() {
+        let (parse, decompiled, binary) =
+            parse_decompile("while (1) if (1 == 2) break; else continue; endif endwhile");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
     fn test_while_labelled() {
         let (parse, decompiled, binary) = parse_decompile("while chuckles (1) return 2; endwhile");
         assert_eq!(
@@ -497,4 +533,64 @@ mod tests {
             binary
         );
     }
+
+    #[test]
+    fn test_arithmetic_expression() {
+        let (parse, decompiled, binary) = parse_decompile("return -(1 + 2 * (3 - 4) / 5 % 6);");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_equality_inequality_relational() {
+        let (parse, decompiled, binary) = parse_decompile("return 1 == 2 != 3 < 4 <= 5 > 6 >= 7;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_assignment() {
+        let (parse, decompiled, binary) = parse_decompile("x = 1; return x;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_index() {
+        let (parse, decompiled, binary) = parse_decompile("return x[1];");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_range() {
+        let (parse, decompiled, binary) = parse_decompile("return x[1..2];");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    // #[test]
+    // fn test_simple_scatter() {
+    //     let (parse, decompiled, binary) = parse_decompile("{connection} = args;");
+    //     assert_eq!(
+    //         parse.stmts, decompiled.stmts,
+    //         "Decompile mismatch for {}",
+    //         binary
+    //     );
+    // }
 }

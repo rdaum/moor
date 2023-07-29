@@ -472,6 +472,29 @@ mod tests {
     }
 
     #[test]
+    fn test_while_continue() {
+        // Verify that continue works as expected vs break.
+        let program = r#"
+        x = 0;
+        while (1)
+            x = x + 1;
+            if (x == 50)
+                break;
+            else
+                continue;
+            endif
+            continue;
+        endwhile
+        return x;
+        "#;
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_int(50));
+    }
+
+    #[test]
     fn test_for_list_loop() {
         let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
         let mut state = world_with_test_program(program);
