@@ -275,15 +275,17 @@ impl Decompile {
                     right: Box::new(expr),
                 });
             }
-            Op::And(label) | Op::Or(label) => {
+            Op::And(label) => {
                 let left = self.pop_expr()?;
-                // read forward til we hit label position, only then can we read `right`
-                while self.position < label.0 as usize {
-                    // This should push into the expression stack...
-                    self.decompile()?;
-                }
+                self.decompile_statements_until(&label)?;
                 let right = self.pop_expr()?;
                 self.push_expr(Expr::And(Box::new(left), Box::new(right)));
+            }
+            Op::Or(label) => {
+                let left = self.pop_expr()?;
+                self.decompile_statements_until(&label)?;
+                let right = self.pop_expr()?;
+                self.push_expr(Expr::Or(Box::new(left), Box::new(right)));
             }
             Op::UnaryMinus => {
                 let expr = self.pop_expr()?;
@@ -349,6 +351,19 @@ impl Decompile {
                     args,
                 })
             }
+            Op::CallVerb => {
+                let args = self.pop_expr()?;
+                let verb = self.pop_expr()?;
+                let obj = self.pop_expr()?;
+                let Expr::List(args) = args else {
+                    return Err(MalformedProgram("expected list of args".to_string()));
+                };
+                self.push_expr(Expr::Verb {
+                    location: Box::new(obj),
+                    verb: Box::new(verb),
+                    args,
+                })
+            }
             Op::MkEmptyList => {
                 self.push_expr(Expr::List(vec![]));
             }
@@ -370,6 +385,14 @@ impl Decompile {
                 list.push(arg);
                 self.push_expr(Expr::List(list));
             }
+            Op::Pass => {
+                let args = self.pop_expr()?;
+                let Expr::List(args) = args else {
+                    return Err(MalformedProgram("expected list of args".to_string()));
+                };
+                self.push_expr(Expr::Pass { args });
+            }
+
             Op::Scatter {
                 nargs: _,
                 nreq: _,
@@ -555,6 +578,16 @@ mod tests {
     }
 
     #[test]
+    fn test_logical_and_or() {
+        let (parse, decompiled, binary) = parse_decompile("return 1 && 2 || 3 && 4;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
     fn test_assignment() {
         let (parse, decompiled, binary) = parse_decompile("x = 1; return x;");
         assert_eq!(
@@ -584,6 +617,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_call_verb() {
+        let (parse, decompiled, binary) = parse_decompile("return x:y(1,2,3);");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
     // #[test]
     // fn test_simple_scatter() {
     //     let (parse, decompiled, binary) = parse_decompile("{connection} = args;");
