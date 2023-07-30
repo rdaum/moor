@@ -6,7 +6,6 @@ use tracing::warn;
 use crate::db::rocksdb::tx_db_impl::RocksDbTx;
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::DbStorage;
-
 use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;

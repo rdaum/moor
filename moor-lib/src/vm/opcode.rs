@@ -1,5 +1,6 @@
-use bincode::{Decode, Encode};
 use std::fmt::{Display, Formatter};
+
+use bincode::{Decode, Encode};
 
 use crate::compiler::labels::{JumpLabel, Label, Names, Offset};
 use crate::var::Var;

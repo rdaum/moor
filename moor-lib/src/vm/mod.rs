@@ -1,5 +1,6 @@
 pub mod opcode;
 pub mod vm_execute;
+pub mod vm_unwind;
 
 mod activation;
 

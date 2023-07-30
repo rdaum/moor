@@ -1,5 +1,6 @@
-use crossbeam_channel::Sender;
 use std::thread;
+
+use crossbeam_channel::Sender;
 use strum::{EnumString, EnumVariantNames};
 
 use crate::db::rocksdb::tx_message::Message;

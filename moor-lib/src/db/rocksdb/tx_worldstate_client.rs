@@ -1,3 +1,5 @@
+use anyhow::Error;
+
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
 use crate::db::rocksdb::RocksDbTransaction;
@@ -12,7 +14,6 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::var::{v_int, v_list, v_objid, Objid, Var, Variant, NOTHING};
 use crate::vm::opcode::Binary;
-use anyhow::Error;
 
 fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Binary>) -> VerbInfo {
     VerbInfo {

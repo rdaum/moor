@@ -1,7 +1,6 @@
 use anyhow::bail;
 use bincode::config::Configuration;
 use rocksdb::{ColumnFamily, ErrorKind};
-
 use uuid::Uuid;
 
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
@@ -771,6 +770,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use rocksdb::OptimisticTransactionDB;
+    use strum::VariantNames;
+    use tempdir::TempDir;
+
     use crate::compiler::codegen::compile;
     use crate::db::rocksdb::tx_db_impl::RocksDbTx;
     use crate::db::rocksdb::{ColumnFamilies, DbStorage};
@@ -779,10 +784,6 @@ mod tests {
     use crate::model::ObjectError;
     use crate::util::bitenum::BitEnum;
     use crate::var::{v_str, Objid, NOTHING};
-    use rocksdb::OptimisticTransactionDB;
-    use std::sync::Arc;
-    use strum::VariantNames;
-    use tempdir::TempDir;
 
     struct TestDb {
         db: Arc<OptimisticTransactionDB>,

@@ -1,7 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::compiler::codegen::compile;
 use anyhow::{anyhow, Error};
 use dashmap::DashMap;
 use fast_counter::ConcurrentCounter;
@@ -12,6 +11,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 
+use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
 use crate::db::state::{WorldState, WorldStateSource};
@@ -23,7 +23,8 @@ use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::var::{Objid, Var, Variant};
 use crate::vm::opcode::Binary;
-use crate::vm::vm::{ExecutionResult, FinallyReason, VM};
+use crate::vm::vm::{ExecutionResult, VM};
+use crate::vm::vm_unwind::FinallyReason;
 
 pub type TaskId = usize;
 
@@ -382,15 +383,14 @@ impl Task {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     self.vm
-                        .do_method_cmd(
+                        .setup_verb_command(
                             self.task_id,
                             verbinfo,
                             vloc,
-                            command.verb.as_str(),
                             vloc,
                             player,
                             BitEnum::new_with(ObjFlag::Wizard),
-                            &command.args,
+                            &command,
                         )
                         .expect("Could not set up VM for command execution");
                     running_method = true;
@@ -405,7 +405,7 @@ impl Task {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
                     self.vm
-                        .do_method_verb(
+                        .setup_verb_method_call(
                             self.task_id,
                             self.state.as_mut(),
                             vloc,
@@ -440,7 +440,7 @@ impl Task {
 
                     // Now execute it.
                     self.vm
-                        .do_method_verb(
+                        .setup_verb_method_call(
                             self.task_id,
                             self.state.as_mut(),
                             player,
@@ -592,7 +592,6 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::db::mock_world_state::MockWorldStateSource;
     use crate::db::rocksdb::LoaderInterface;
-
     use crate::model::objects::{ObjAttrs, ObjFlag};
     use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
     use crate::model::verbs::VerbFlag;

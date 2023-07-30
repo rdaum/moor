@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-
     use std::sync::Arc;
 
     use anyhow::Error;
@@ -12,13 +11,10 @@ mod tests {
     use crate::compiler::labels::Names;
     use crate::db::mock_world_state::MockWorldStateSource;
     use crate::db::state::{WorldState, WorldStateSource};
-
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
-
     use crate::model::ObjectError;
     use crate::model::ObjectError::VerbNotFound;
-
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
     use crate::var::error::Error::E_VERBNF;
@@ -59,7 +55,7 @@ mod tests {
         let o = Objid(0);
 
         assert!(vm
-            .do_method_verb(
+            .setup_verb_method_call(
                 0,
                 state,
                 o,
@@ -96,7 +92,7 @@ mod tests {
         let mut vm = VM::new();
         let o = Objid(0);
 
-        match vm.do_method_verb(
+        match vm.setup_verb_method_call(
             0,
             state.as_mut(),
             o,

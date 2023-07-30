@@ -4,8 +4,9 @@ use async_trait::async_trait;
 use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-use regexpr_binding::Pattern;
 use tokio::sync::RwLock;
+
+use regexpr_binding::Pattern;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;

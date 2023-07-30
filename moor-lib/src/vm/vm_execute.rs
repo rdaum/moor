@@ -3,22 +3,17 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use crate::db::state::WorldState;
-
-use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
-
-use crate::tasks::Sessions;
-
-use crate::var::error::Error::{E_ARGS, E_INVARG, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
-
 use crate::compiler::builtins::BUILTINS;
-
+use crate::db::state::WorldState;
+use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
+use crate::tasks::Sessions;
+use crate::var::error::Error::{E_ARGS, E_INVARG, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
 use crate::var::{
     v_bool, v_catch, v_finally, v_int, v_label, v_list, v_obj, v_str, Variant, VAR_NONE,
 };
-
 use crate::vm::opcode::{Op, ScatterLabel};
-use crate::vm::vm::{ExecutionResult, FinallyReason, VM};
+use crate::vm::vm::{ExecutionResult, VM};
+use crate::vm::vm_unwind::FinallyReason;
 
 macro_rules! binary_bool_op {
     ( $self:ident, $op:tt ) => {
@@ -485,7 +480,7 @@ impl VM {
                     definer,
                     parent
                 );
-                self.do_method_verb(
+                self.setup_verb_method_call(
                     task_id,
                     state,
                     parent,

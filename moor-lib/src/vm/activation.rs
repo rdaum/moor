@@ -5,7 +5,7 @@ use crate::tasks::scheduler::TaskId;
 use crate::util::bitenum::BitEnum;
 use crate::var::error::Error;
 use crate::var::error::Error::E_VARNF;
-use crate::var::{v_int, v_list, v_objid, v_str, Objid, Var, VarType, NOTHING, VAR_NONE};
+use crate::var::{v_int, v_list, v_objid, v_str, Objid, Var, VarType, VAR_NONE};
 use crate::vm::opcode::{Binary, Op};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
@@ -66,6 +66,7 @@ impl Activation {
             callers,
         };
 
+        // TODO use pre-set constant offsets for these like LambdaMOO does.
         a.set_var("this", v_objid(this)).unwrap();
         a.set_var("player", v_objid(player)).unwrap();
         a.set_var("caller", v_objid(caller)).unwrap();
@@ -77,15 +78,8 @@ impl Activation {
         a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
         a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
             .unwrap();
-
         a.set_var("verb", v_str(verb_name.as_str())).unwrap();
-        a.set_var("argstr", v_str("")).unwrap();
         a.set_var("args", v_list(args.into())).unwrap();
-        a.set_var("iobjstr", v_str("")).unwrap();
-        a.set_var("iobj", v_objid(NOTHING)).unwrap();
-        a.set_var("dobjstr", v_str("")).unwrap();
-        a.set_var("dobj", v_objid(NOTHING)).unwrap();
-        a.set_var("prepstr", v_str("")).unwrap();
 
         Ok(a)
     }
@@ -107,6 +101,15 @@ impl Activation {
         if let Some(n) = n {
             self.environment[n] = value;
             Ok(())
+        } else {
+            Err(E_VARNF)
+        }
+    }
+
+    pub fn get_var(&self, name: &str) -> Result<Var, Error> {
+        let n = self.binary.var_names.find_name_offset(name);
+        if let Some(n) = n {
+            Ok(self.environment[n].clone())
         } else {
             Err(E_VARNF)
         }

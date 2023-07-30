@@ -1,3 +1,8 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use anyhow::Error;
+
 use crate::db::rocksdb::LoaderInterface;
 use crate::db::state::{WorldState, WorldStateSource};
 use crate::db::CommitResult;
@@ -11,9 +16,6 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::var::{Objid, Var, VAR_NONE};
 use crate::vm::opcode::Binary;
-use anyhow::Error;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 struct MockStore {
     verbs: HashMap<(Objid, String), VerbInfo>,
