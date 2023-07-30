@@ -380,6 +380,44 @@ impl Decompile {
                     to: Box::new(e1),
                 });
             }
+            Op::PutTemp => {}
+            Op::IndexSet => {
+                let rval = self.pop_expr()?;
+                let index = self.pop_expr()?;
+                let base = self.pop_expr()?;
+                self.push_expr(Expr::Assign {
+                    left: Box::new(Expr::Index(Box::new(base), Box::new(index))),
+                    right: Box::new(rval),
+                });
+
+                // skip forward to and beyond PushTemp
+                while self.position < self.program.main_vector.len() {
+                    let op = self.next()?;
+                    if let Op::PushTemp = op {
+                        break;
+                    }
+                }
+            }
+            Op::RangeSet => {
+                let rval = self.pop_expr()?;
+                let (to, from, base) = (self.pop_expr()?, self.pop_expr()?, self.pop_expr()?);
+                self.push_expr(Expr::Assign {
+                    left: Box::new(Expr::Range {
+                        base: Box::new(base),
+                        from: Box::new(from),
+                        to: Box::new(to),
+                    }),
+                    right: Box::new(rval),
+                });
+
+                // skip forward to and beyond PushTemp
+                while self.position < self.program.main_vector.len() {
+                    let op = self.next()?;
+                    if let Op::PushTemp = op {
+                        break;
+                    }
+                }
+            }
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
                 let Some(builtin) = self.builtins.get(&id) else {
@@ -623,6 +661,9 @@ impl Decompile {
                     codes: catch_codes,
                     except,
                 });
+            }
+            Op::Length(_) => {
+                self.push_expr(Expr::Length);
             }
             _ => {
                 todo!("decompile for {:?}", opcode);
@@ -914,6 +955,28 @@ mod tests {
     #[test]
     fn test_catch_expr() {
         let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_range_set() {
+        let program = "a[1..2] = {3,4};";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_index_set() {
+        let program = "a[1] = {3,4};";
         let (parse, decompiled, binary) = parse_decompile(program);
         assert_eq!(
             parse.stmts, decompiled.stmts,

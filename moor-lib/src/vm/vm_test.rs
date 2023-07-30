@@ -706,6 +706,16 @@ mod tests {
         assert_eq!(result, v_int(6));
     }
 
+    #[test]
+    fn test_range_set() {
+        let program = "a={1,2,3,4}; a[1..2] = {3,4}; return a;";
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]));
+    }
+
     struct MockClientConnection {
         received: Vec<String>,
     }
