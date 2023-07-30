@@ -175,10 +175,10 @@ bf_declare!(set_verb_args, bf_set_verb_args);
 
 impl VM {
     pub(crate) fn register_bf_verbs(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("verb_info")] = Arc::new(Box::new(BfVerbInfo {}));
-        self.bf_funcs[offset_for_builtin("set_verb_info")] = Arc::new(Box::new(BfSetVerbInfo {}));
-        self.bf_funcs[offset_for_builtin("verb_args")] = Arc::new(Box::new(BfVerbArgs {}));
-        self.bf_funcs[offset_for_builtin("set_verb_args")] = Arc::new(Box::new(BfSetVerbArgs {}));
+        self.builtins[offset_for_builtin("verb_info")] = Arc::new(Box::new(BfVerbInfo {}));
+        self.builtins[offset_for_builtin("set_verb_info")] = Arc::new(Box::new(BfSetVerbInfo {}));
+        self.builtins[offset_for_builtin("verb_args")] = Arc::new(Box::new(BfVerbArgs {}));
+        self.builtins[offset_for_builtin("set_verb_args")] = Arc::new(Box::new(BfSetVerbArgs {}));
 
         Ok(())
     }

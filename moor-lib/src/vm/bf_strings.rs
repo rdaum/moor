@@ -249,14 +249,14 @@ bf_declare!(match, bf_match);
 
 impl VM {
     pub(crate) fn register_bf_strings(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("strsub")] = Arc::new(Box::new(BfStrsub {}));
-        self.bf_funcs[offset_for_builtin("index")] = Arc::new(Box::new(BfIndex {}));
-        self.bf_funcs[offset_for_builtin("rindex")] = Arc::new(Box::new(BfRindex {}));
-        self.bf_funcs[offset_for_builtin("strcmp")] = Arc::new(Box::new(BfStrcmp {}));
-        self.bf_funcs[offset_for_builtin("crypt")] = Arc::new(Box::new(BfCrypt {}));
-        self.bf_funcs[offset_for_builtin("string_hash")] = Arc::new(Box::new(BfStringHash {}));
-        self.bf_funcs[offset_for_builtin("binary_hash")] = Arc::new(Box::new(BfBinaryHash {}));
-        self.bf_funcs[offset_for_builtin("match")] = Arc::new(Box::new(BfMatch {}));
+        self.builtins[offset_for_builtin("strsub")] = Arc::new(Box::new(BfStrsub {}));
+        self.builtins[offset_for_builtin("index")] = Arc::new(Box::new(BfIndex {}));
+        self.builtins[offset_for_builtin("rindex")] = Arc::new(Box::new(BfRindex {}));
+        self.builtins[offset_for_builtin("strcmp")] = Arc::new(Box::new(BfStrcmp {}));
+        self.builtins[offset_for_builtin("crypt")] = Arc::new(Box::new(BfCrypt {}));
+        self.builtins[offset_for_builtin("string_hash")] = Arc::new(Box::new(BfStringHash {}));
+        self.builtins[offset_for_builtin("binary_hash")] = Arc::new(Box::new(BfBinaryHash {}));
+        self.builtins[offset_for_builtin("match")] = Arc::new(Box::new(BfMatch {}));
 
         Ok(())
     }

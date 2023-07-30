@@ -155,18 +155,18 @@ bf_declare!(length, bf_length);
 
 impl VM {
     pub(crate) fn register_bf_values(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("typeof")] = Arc::new(Box::new(BfTypeof {}));
-        self.bf_funcs[offset_for_builtin("tostr")] = Arc::new(Box::new(BfTostr {}));
-        self.bf_funcs[offset_for_builtin("toliteral")] = Arc::new(Box::new(BfToliteral {}));
-        self.bf_funcs[offset_for_builtin("toint")] = Arc::new(Box::new(BfToint {}));
-        self.bf_funcs[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
-        self.bf_funcs[offset_for_builtin("toobj")] = Arc::new(Box::new(BfToobj {}));
-        self.bf_funcs[offset_for_builtin("tofloat")] = Arc::new(Box::new(BfTofloat {}));
-        self.bf_funcs[offset_for_builtin("equal")] = Arc::new(Box::new(BfEqual {}));
-        self.bf_funcs[offset_for_builtin("value_bytes")] = Arc::new(Box::new(BfValueBytes {}));
-        self.bf_funcs[offset_for_builtin("value_hash")] = Arc::new(Box::new(BfValueHash {}));
+        self.builtins[offset_for_builtin("typeof")] = Arc::new(Box::new(BfTypeof {}));
+        self.builtins[offset_for_builtin("tostr")] = Arc::new(Box::new(BfTostr {}));
+        self.builtins[offset_for_builtin("toliteral")] = Arc::new(Box::new(BfToliteral {}));
+        self.builtins[offset_for_builtin("toint")] = Arc::new(Box::new(BfToint {}));
+        self.builtins[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
+        self.builtins[offset_for_builtin("toobj")] = Arc::new(Box::new(BfToobj {}));
+        self.builtins[offset_for_builtin("tofloat")] = Arc::new(Box::new(BfTofloat {}));
+        self.builtins[offset_for_builtin("equal")] = Arc::new(Box::new(BfEqual {}));
+        self.builtins[offset_for_builtin("value_bytes")] = Arc::new(Box::new(BfValueBytes {}));
+        self.builtins[offset_for_builtin("value_hash")] = Arc::new(Box::new(BfValueHash {}));
 
-        self.bf_funcs[offset_for_builtin("length")] = Arc::new(Box::new(BfLength {}));
+        self.builtins[offset_for_builtin("length")] = Arc::new(Box::new(BfLength {}));
         Ok(())
     }
 }

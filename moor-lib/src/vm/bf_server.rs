@@ -205,18 +205,18 @@ bf_declare!(server_version, bf_server_version);
 
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
-        self.bf_funcs[offset_for_builtin("connected_players")] =
+        self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
+        self.builtins[offset_for_builtin("connected_players")] =
             Arc::new(Box::new(BfConnectedPlayers {}));
-        self.bf_funcs[offset_for_builtin("is_player")] = Arc::new(Box::new(BfIsPlayer {}));
-        self.bf_funcs[offset_for_builtin("caller_perms")] = Arc::new(Box::new(BfCallerPerms {}));
-        self.bf_funcs[offset_for_builtin("set_task_perms")] = Arc::new(Box::new(BfSetTaskPerms {}));
-        self.bf_funcs[offset_for_builtin("callers")] = Arc::new(Box::new(BfCallers {}));
-        self.bf_funcs[offset_for_builtin("task_id")] = Arc::new(Box::new(BfTaskId {}));
-        self.bf_funcs[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
-        self.bf_funcs[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
-        self.bf_funcs[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
-        self.bf_funcs[offset_for_builtin("server_version")] =
+        self.builtins[offset_for_builtin("is_player")] = Arc::new(Box::new(BfIsPlayer {}));
+        self.builtins[offset_for_builtin("caller_perms")] = Arc::new(Box::new(BfCallerPerms {}));
+        self.builtins[offset_for_builtin("set_task_perms")] = Arc::new(Box::new(BfSetTaskPerms {}));
+        self.builtins[offset_for_builtin("callers")] = Arc::new(Box::new(BfCallers {}));
+        self.builtins[offset_for_builtin("task_id")] = Arc::new(Box::new(BfTaskId {}));
+        self.builtins[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
+        self.builtins[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
+        self.builtins[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
+        self.builtins[offset_for_builtin("server_version")] =
             Arc::new(Box::new(BfServerVersion {}));
         Ok(())
     }

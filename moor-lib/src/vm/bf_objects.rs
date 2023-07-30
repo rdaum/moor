@@ -115,12 +115,12 @@ bf_declare!(properties, bf_properties);
 
 impl VM {
     pub(crate) fn register_bf_objects(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("create")] = Arc::new(Box::new(BfCreate {}));
-        self.bf_funcs[offset_for_builtin("valid")] = Arc::new(Box::new(BfValid {}));
-        self.bf_funcs[offset_for_builtin("verbs")] = Arc::new(Box::new(BfVerbs {}));
-        self.bf_funcs[offset_for_builtin("properties")] = Arc::new(Box::new(BfProperties {}));
-        self.bf_funcs[offset_for_builtin("parent")] = Arc::new(Box::new(BfParent {}));
-        self.bf_funcs[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
+        self.builtins[offset_for_builtin("create")] = Arc::new(Box::new(BfCreate {}));
+        self.builtins[offset_for_builtin("valid")] = Arc::new(Box::new(BfValid {}));
+        self.builtins[offset_for_builtin("verbs")] = Arc::new(Box::new(BfVerbs {}));
+        self.builtins[offset_for_builtin("properties")] = Arc::new(Box::new(BfProperties {}));
+        self.builtins[offset_for_builtin("parent")] = Arc::new(Box::new(BfParent {}));
+        self.builtins[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
 
         Ok(())
     }

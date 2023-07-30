@@ -39,7 +39,7 @@ pub(crate) trait BuiltinFunction: Sync + Send {
 pub struct VM {
     // Activation stack.
     pub(crate) stack: Vec<Activation>,
-    pub(crate) bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>>,
+    pub(crate) builtins: Vec<Arc<Box<dyn BuiltinFunction>>>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -64,7 +64,7 @@ impl VM {
         let _bf_noop = Box::new(BfNoop {});
         let mut vm = Self {
             stack: vec![],
-            bf_funcs,
+            builtins: bf_funcs,
         };
 
         vm.register_bf_server().unwrap();
@@ -250,10 +250,10 @@ impl VM {
         state: &mut dyn WorldState,
         client_connection: Arc<RwLock<dyn Sessions>>,
     ) -> Result<Var, anyhow::Error> {
-        if bf_func_num >= self.bf_funcs.len() {
+        if bf_func_num >= self.builtins.len() {
             return Ok(v_err(E_VARNF));
         }
-        let bf = self.bf_funcs[bf_func_num].clone();
+        let bf = self.builtins[bf_func_num].clone();
         trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
         let mut bf_args = BfCallState {
             world_state: state,

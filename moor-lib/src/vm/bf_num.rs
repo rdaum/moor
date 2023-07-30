@@ -350,27 +350,27 @@ bf_declare!(trunc, bf_trunc);
 
 impl VM {
     pub(crate) fn register_bf_num(&mut self) -> Result<(), anyhow::Error> {
-        self.bf_funcs[offset_for_builtin("abs")] = Arc::new(Box::new(BfAbs {}));
-        self.bf_funcs[offset_for_builtin("min")] = Arc::new(Box::new(BfMin {}));
-        self.bf_funcs[offset_for_builtin("max")] = Arc::new(Box::new(BfMax {}));
-        self.bf_funcs[offset_for_builtin("random")] = Arc::new(Box::new(BfRandom {}));
-        self.bf_funcs[offset_for_builtin("floatstr")] = Arc::new(Box::new(BfFloatstr {}));
-        self.bf_funcs[offset_for_builtin("sqrt")] = Arc::new(Box::new(BfSqrt {}));
-        self.bf_funcs[offset_for_builtin("sin")] = Arc::new(Box::new(BfSin {}));
-        self.bf_funcs[offset_for_builtin("cos")] = Arc::new(Box::new(BfCos {}));
-        self.bf_funcs[offset_for_builtin("tan")] = Arc::new(Box::new(BfTan {}));
-        self.bf_funcs[offset_for_builtin("asin")] = Arc::new(Box::new(BfAsin {}));
-        self.bf_funcs[offset_for_builtin("acos")] = Arc::new(Box::new(BfAcos {}));
-        self.bf_funcs[offset_for_builtin("atan")] = Arc::new(Box::new(BfAtan {}));
-        self.bf_funcs[offset_for_builtin("sinh")] = Arc::new(Box::new(BfSinh {}));
-        self.bf_funcs[offset_for_builtin("cosh")] = Arc::new(Box::new(BfCosh {}));
-        self.bf_funcs[offset_for_builtin("tanh")] = Arc::new(Box::new(BfTanh {}));
-        self.bf_funcs[offset_for_builtin("exp")] = Arc::new(Box::new(BfExp {}));
-        self.bf_funcs[offset_for_builtin("log")] = Arc::new(Box::new(BfLog {}));
-        self.bf_funcs[offset_for_builtin("log10")] = Arc::new(Box::new(BfLog10 {}));
-        self.bf_funcs[offset_for_builtin("ceil")] = Arc::new(Box::new(BfCeil {}));
-        self.bf_funcs[offset_for_builtin("floor")] = Arc::new(Box::new(BfFloor {}));
-        self.bf_funcs[offset_for_builtin("trunc")] = Arc::new(Box::new(BfTrunc {}));
+        self.builtins[offset_for_builtin("abs")] = Arc::new(Box::new(BfAbs {}));
+        self.builtins[offset_for_builtin("min")] = Arc::new(Box::new(BfMin {}));
+        self.builtins[offset_for_builtin("max")] = Arc::new(Box::new(BfMax {}));
+        self.builtins[offset_for_builtin("random")] = Arc::new(Box::new(BfRandom {}));
+        self.builtins[offset_for_builtin("floatstr")] = Arc::new(Box::new(BfFloatstr {}));
+        self.builtins[offset_for_builtin("sqrt")] = Arc::new(Box::new(BfSqrt {}));
+        self.builtins[offset_for_builtin("sin")] = Arc::new(Box::new(BfSin {}));
+        self.builtins[offset_for_builtin("cos")] = Arc::new(Box::new(BfCos {}));
+        self.builtins[offset_for_builtin("tan")] = Arc::new(Box::new(BfTan {}));
+        self.builtins[offset_for_builtin("asin")] = Arc::new(Box::new(BfAsin {}));
+        self.builtins[offset_for_builtin("acos")] = Arc::new(Box::new(BfAcos {}));
+        self.builtins[offset_for_builtin("atan")] = Arc::new(Box::new(BfAtan {}));
+        self.builtins[offset_for_builtin("sinh")] = Arc::new(Box::new(BfSinh {}));
+        self.builtins[offset_for_builtin("cosh")] = Arc::new(Box::new(BfCosh {}));
+        self.builtins[offset_for_builtin("tanh")] = Arc::new(Box::new(BfTanh {}));
+        self.builtins[offset_for_builtin("exp")] = Arc::new(Box::new(BfExp {}));
+        self.builtins[offset_for_builtin("log")] = Arc::new(Box::new(BfLog {}));
+        self.builtins[offset_for_builtin("log10")] = Arc::new(Box::new(BfLog10 {}));
+        self.builtins[offset_for_builtin("ceil")] = Arc::new(Box::new(BfCeil {}));
+        self.builtins[offset_for_builtin("floor")] = Arc::new(Box::new(BfFloor {}));
+        self.builtins[offset_for_builtin("trunc")] = Arc::new(Box::new(BfTrunc {}));
 
         Ok(())
     }
