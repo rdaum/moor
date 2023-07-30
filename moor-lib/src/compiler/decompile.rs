@@ -1,11 +1,14 @@
 use std::collections::{HashMap, VecDeque};
+use tracing::trace;
 
-use crate::compiler::ast::{Arg, BinaryOp, CondArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp};
+use crate::compiler::ast::{
+    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+};
 use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{LabelNotFound, MalformedProgram};
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
-use crate::var::{Var, Variant};
+use crate::var::{v_label, Var, Variant};
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Debug, thiserror::Error)]
@@ -69,17 +72,38 @@ impl Decompile {
             .ok_or(DecompileError::LabelNotFound(*label))
     }
 
+    fn decompile_statements_until_match<F: Fn(usize, &Op) -> bool>(
+        &mut self,
+        predicate: F,
+    ) -> Result<(Vec<Stmt>, Op), DecompileError> {
+        let old_len = self.s.len();
+        while self.position < self.program.main_vector.len() {
+            let op = &self.program.main_vector[self.position];
+            if predicate(self.position, op) {
+                // We'll need a copy of the matching opcode we terminated at.
+                let final_op = self.next()?;
+                if self.s.len() > old_len {
+                    return Ok((self.s.split_off(old_len), final_op));
+                } else {
+                    return Ok((vec![], final_op));
+                };
+            }
+            self.decompile()?;
+        }
+        return Err(DecompileError::UnexpectedProgramEnd);
+    }
+
     /// Scan forward until we hit the label's position, decompiling as we go and returning the
     /// new statements produced.
     fn decompile_statements_until(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.s.len();
 
-        eprintln!("seek up to pos {}", jump_label.position.0);
+        trace!("seek up to pos {}", jump_label.position.0);
         while self.position < jump_label.position.0 as usize {
             self.decompile()?;
         }
-        eprintln!(
+        trace!(
             "seek done @ pos {}: {} stmts",
             self.position,
             self.s.len() - old_len
@@ -98,7 +122,7 @@ impl Decompile {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.s.len();
 
-        eprintln!("seek up to pos {}", jump_label.position.0);
+        trace!("seek up to pos {}", jump_label.position.0);
         while self.position + 1 < jump_label.position.0 as usize {
             self.decompile()?;
         }
@@ -107,7 +131,7 @@ impl Decompile {
         let Op::Jump {label} = opcode else {
             return Err(MalformedProgram("expected jump opcode at branch end".to_string()));
         };
-        eprintln!(
+        trace!(
             "seek done @ pos {}: {} stmts",
             self.position,
             self.s.len() - old_len
@@ -121,10 +145,10 @@ impl Decompile {
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
-        eprintln!("decompile @ pos {}: {:?}", self.position, opcode);
+        trace!("decompile @ pos {}: {:?}", self.position, opcode);
         match opcode {
             Op::If(otherwise_label) => {
-                eprintln!("Begin if statement @ pos {}", self.position);
+                trace!("Begin if statement @ pos {}", self.position);
                 let cond = self.pop_expr()?;
 
                 // decompile statements until the position marked in `label`, which is the
@@ -146,13 +170,13 @@ impl Decompile {
                 // otherwise branch.
                 let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
                 let Some(Stmt::Cond{arms:_, otherwise}) = self.s.last_mut() else {
-                    eprintln!("s: {:?}", self.s);
+                    trace!("s: {:?}", self.s);
                     return Err(MalformedProgram("expected Cond as working tree".to_string()));
                 };
                 *otherwise = otherwise_stmts;
             }
             Op::Eif(end_label) => {
-                eprintln!("Begin elseif branch @ pos {}", self.position);
+                trace!("Begin elseif branch @ pos {}", self.position);
 
                 let cond = self.pop_expr()?;
                 // decompile statements until the position marked in `label`, which is the
@@ -164,7 +188,7 @@ impl Decompile {
                 };
                 // Add the arm
                 let Some(Stmt::Cond{arms, otherwise: _}) = self.s.last_mut() else {
-                    eprintln!("s: {:?}", self.s);
+                    trace!("s: {:?}", self.s);
                     return Err(MalformedProgram("expected Cond as working tree".to_string()));
                 };
                 arms.push(cond_arm);
@@ -259,8 +283,8 @@ impl Decompile {
                     return Err(MalformedProgram("expected end of program".to_string()));
                 }
             }
-            Op::Imm(label) => {
-                self.push_expr(Expr::VarExpr(self.find_literal(&label)?));
+            Op::Imm(literal_label) => {
+                self.push_expr(Expr::VarExpr(self.find_literal(&literal_label)?));
             }
             Op::Push(label) => {
                 self.push_expr(Expr::Id(self.find_var(&label)?));
@@ -432,6 +456,90 @@ impl Decompile {
                 }
                 let e = self.pop_expr()?;
                 self.push_expr(Expr::Scatter(scatter_items, Box::new(e)));
+            }
+            Op::PushLabel(label) => {
+                self.push_expr(Expr::VarExpr(v_label(label)));
+            }
+            Op::TryExcept { num_excepts } => {
+                let mut except_arms = Vec::with_capacity(num_excepts);
+                for _ in 0..num_excepts {
+                    // Inverse of generate_codes. Jump label first.
+                    let Expr::VarExpr(label) = self.pop_expr()? else {
+                        return Err(MalformedProgram("missing try/except jump label".to_string()));
+                    };
+                    let Variant::_Label(_) = label.variant() else {
+                        return Err(MalformedProgram("invalid try/except jump label".to_string()));
+                    };
+
+                    let codes_expr = self.pop_expr()?;
+                    let catch_codes = match codes_expr {
+                        Expr::VarExpr(_) => CatchCodes::Any,
+                        Expr::List(codes) => CatchCodes::Codes(codes),
+                        _ => {
+                            return Err(MalformedProgram("invalid try/except codes".to_string()));
+                        }
+                    };
+
+                    // Each arm has a statement, but we will get to that later.
+                    except_arms.push(ExceptArm {
+                        id: None,
+                        codes: catch_codes,
+                        statements: vec![],
+                    });
+                }
+                // Decompile the body.
+                // Means decompiling until we hit EndExcept, so scan forward for that.
+                // TODO: make sure that this doesn't fail with nested try/excepts?
+                let (body, end_except) = self.decompile_statements_until_match(|_, o| {
+                    if let Op::EndExcept(_) = o {
+                        true
+                    } else {
+                        false
+                    }
+                })?;
+                let Op::EndExcept(end_label) = end_except else {
+                    return Err(MalformedProgram("expected EndExcept".to_string()));
+                };
+
+                // Order of except arms is reversed in the program, so reverse it back before we
+                // decompile the except arm statements.
+                except_arms.reverse();
+
+                // Now each of the arms has a statement potentially with an assignment label.
+                // So it can look like:  Put, Pop, Statements, Jump (end_except), ...
+                // or   Pop, Statements, Jump (end_except).
+                // So first look for the Put
+                for arm in &mut except_arms {
+                    let mut next_opcode = self.next()?;
+                    if let Op::Put(put_label) = next_opcode {
+                        arm.id = Some(self.find_var(&put_label)?);
+                        next_opcode = self.next()?;
+                    }
+                    let Op::Pop = next_opcode else {
+                        return Err(MalformedProgram("expected Pop".to_string()));
+                    };
+
+                    // Scan forward until the jump, decompiling as we go.
+                    trace!("Decompiling except arm @ pos {}", self.position);
+                    let end_label_position = self.find_jump(&end_label)?.position.0 as usize;
+                    let (statements, _) =
+                        self.decompile_statements_until_match(|position, o| {
+                            if position == end_label_position {
+                                return true;
+                            }
+                            if let Op::Jump { label } = o {
+                                label == &end_label
+                            } else {
+                                false
+                            }
+                        })?;
+                    arm.statements = statements;
+                }
+
+                self.s.push(Stmt::TryExcept {
+                    body,
+                    excepts: except_arms,
+                });
             }
             _ => {
                 todo!("decompile for {:?}", opcode);
@@ -691,6 +799,17 @@ mod tests {
     #[test]
     fn test_scatter_mixed() {
         let (parse, decompiled, binary) = parse_decompile("{a,b,?c,@d} = args;");
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_try_except() {
+        let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
+        let (parse, decompiled, binary) = parse_decompile(program);
         assert_eq!(
             parse.stmts, decompiled.stmts,
             "Decompile mismatch for {}",

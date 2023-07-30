@@ -629,15 +629,15 @@ impl CodegenState {
                     labels.push(push_label);
                     self.push_stack(1);
                 }
-                let arm_count = excepts.len();
-                self.emit(Op::TryExcept(Label(arm_count as u32)));
+                let num_excepts = excepts.len();
+                self.emit(Op::TryExcept { num_excepts });
                 self.push_stack(1);
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
                 let end_label = self.make_label(None);
                 self.emit(Op::EndExcept(end_label));
-                self.pop_stack(2 * arm_count + 1);
+                self.pop_stack(2 * num_excepts + 1);
                 for (i, ex) in excepts.iter().enumerate() {
                     self.commit_label(labels[i]);
                     self.push_stack(1);
@@ -650,11 +650,7 @@ impl CodegenState {
                         self.generate_stmt(stmt)?;
                     }
                     if i + 1 < excepts.len() {
-                        let arm_end_label = self.make_label(None);
-                        self.emit(Op::Jump {
-                            label: arm_end_label,
-                        });
-                        self.commit_label(arm_end_label);
+                        self.emit(Op::Jump { label: end_label });
                     }
                 }
                 self.commit_label(end_label);
@@ -1636,7 +1632,7 @@ mod tests {
                 Imm(e_propnf),
                 MakeSingletonList,
                 PushLabel(1.into()),
-                TryExcept(2.into()),
+                TryExcept { num_excepts: 2 },
                 Imm(one),
                 Put(a),
                 Pop,
@@ -1646,7 +1642,7 @@ mod tests {
                 Imm(two),
                 Put(a),
                 Pop,
-                Jump { label: 3.into() },
+                Jump { label: 2.into() },
                 Put(b),
                 Pop,
                 Imm(three),

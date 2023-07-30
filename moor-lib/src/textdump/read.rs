@@ -70,7 +70,7 @@ impl<R: Read> TextdumpReader<R> {
             }
             VarType::TYPE_CLEAR => VAR_CLEAR,
             VarType::TYPE_NONE => VAR_NONE,
-            VarType::TYPE_CATCH => v_catch(Label(self.read_num()? as u32)),
+            VarType::TYPE_CATCH => v_catch(self.read_num()? as usize),
             VarType::TYPE_FINALLY => v_finally(Label(self.read_num()? as u32)),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),
         };

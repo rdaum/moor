@@ -139,7 +139,7 @@ impl VM {
                     // non-list value, or a list containing the error code.
                     // TODO check for 'cnt' being too large. not sure how to handle, tho
                     // TODO this actually i think is wrong, it needs to pull two values off the stack
-                    for j in (i - cnt.0 as usize)..i {
+                    for j in (i - *cnt)..i {
                         if let Variant::List(codes) = &a.valstack[j].variant() {
                             if codes.contains(&v_err(raise_code)) {
                                 return Some((i, a));

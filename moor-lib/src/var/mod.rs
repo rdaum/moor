@@ -68,7 +68,7 @@ pub enum Variant {
     Err(Error),
     List(Vec<Var>),
     // Special for exception handling
-    _Catch(Label),
+    _Catch(usize),
     _Finally(Label),
     _Label(Label),
 }
@@ -123,9 +123,9 @@ pub fn v_label(l: Label) -> Var {
         value: Variant::_Label(l),
     }
 }
-pub fn v_catch(l: Label) -> Var {
+pub fn v_catch(count: usize) -> Var {
     Var {
-        value: Variant::_Catch(l),
+        value: Variant::_Catch(count),
     }
 }
 pub fn v_finally(l: Label) -> Var {

@@ -542,19 +542,19 @@ impl VM {
                 self.push(&v_finally(label));
             }
             Op::Catch => {
-                self.push(&v_catch(1.into()));
+                self.push(&v_catch(1));
             }
-            Op::TryExcept(label) => {
-                self.push(&v_catch(label));
+            Op::TryExcept { num_excepts } => {
+                self.push(&v_catch(num_excepts));
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = op == Op::EndCatch(label);
                 let v = if is_catch { self.pop() } else { VAR_NONE };
                 let marker = self.pop();
-                let Variant::_Catch(marker) = marker.variant() else {
+                let Variant::_Catch(num_excepts) = marker.variant() else {
                     panic!("Stack marker is not type Catch");
                 };
-                for _i in 0..marker.0 {
+                for _i in 0..*num_excepts {
                     self.pop(); /* handler PC */
                     self.pop(); /* code list */
                 }
