@@ -41,12 +41,12 @@ pub struct CodegenState {
     pub(crate) saved_stack: Option<Offset>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
-    pub(crate) builtins: HashMap<String, Label>,
+    pub(crate) builtins: HashMap<String, Name>,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
 impl CodegenState {
-    pub fn new(var_names: Names, builtins: HashMap<String, Label>) -> Self {
+    pub fn new(var_names: Names, builtins: HashMap<String, Name>) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
@@ -67,7 +67,7 @@ impl CodegenState {
         let position = (self.ops.len()).into();
         self.jumps.push(JumpLabel {
             id,
-            label: name,
+            name: name,
             position,
         });
         id
@@ -75,7 +75,7 @@ impl CodegenState {
 
     fn find_label(&self, name: &Name) -> Option<&JumpLabel> {
         self.jumps.iter().find(|j| {
-            if let Some(label) = &j.label {
+            if let Some(label) = &j.name {
                 label.eq(name)
             } else {
                 false
@@ -114,13 +114,13 @@ impl CodegenState {
     fn find_loop(&self, loop_label: &Name) -> Result<&Loop, anyhow::Error> {
         match self.find_label(loop_label) {
             None => {
-                let loop_name = self.var_names.names[loop_label.0 .0 as usize].clone();
+                let loop_name = self.var_names.names[loop_label.0 as usize].clone();
                 Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)))
             }
             Some(label) => {
                 let l = self.loops.iter().find(|l| l.top_label == label.id);
                 let Some(l) = l else {
-                      return Err(anyhow!(CompileError::UnknownLoopLabel(loop_label.0.0.to_string())));
+                      return Err(anyhow!(CompileError::UnknownLoopLabel(loop_label.0.to_string())));
                     };
                 Ok(l)
             }
@@ -187,7 +187,7 @@ impl CodegenState {
                     continue;
                 }
                 Expr::Id(name) => {
-                    self.emit(Op::Put(name.0));
+                    self.emit(Op::Put(*name));
                     break;
                 }
                 Expr::Prop {
@@ -234,12 +234,12 @@ impl CodegenState {
             .iter()
             .map(|s| {
                 let kind_label = match s.kind {
-                    ScatterKind::Required => ScatterLabel::Required(s.id.0),
+                    ScatterKind::Required => ScatterLabel::Required(s.id),
                     ScatterKind::Optional if s.expr.is_some() => {
-                        ScatterLabel::Optional(s.id.0, Some(self.make_label(None)))
+                        ScatterLabel::Optional(s.id, Some(self.make_label(None)))
                     }
-                    ScatterKind::Optional => ScatterLabel::Optional(s.id.0, None),
-                    ScatterKind::Rest => ScatterLabel::Rest(s.id.0),
+                    ScatterKind::Optional => ScatterLabel::Optional(s.id, None),
+                    ScatterKind::Rest => ScatterLabel::Rest(s.id),
                 };
                 (s, kind_label)
             })
@@ -259,7 +259,7 @@ impl CodegenState {
                 }
                 self.commit_label(label);
                 self.generate_expr(s.expr.as_ref().unwrap())?;
-                self.emit(Op::Put(s.id.0));
+                self.emit(Op::Put(s.id));
                 self.emit(Op::Pop);
                 self.pop_stack(1);
             }
@@ -289,7 +289,7 @@ impl CodegenState {
             }
             Expr::Id(id) => {
                 if indexed_above {
-                    self.emit(Op::Push(id.0));
+                    self.emit(Op::Push(*id));
                     self.push_stack(1);
                 }
             }
@@ -329,7 +329,7 @@ impl CodegenState {
                 self.push_stack(1);
             }
             Expr::Id(ident) => {
-                self.emit(Op::Push(ident.0));
+                self.emit(Op::Push(*ident));
                 self.push_stack(1);
             }
             Expr::And(left, right) => {
@@ -534,10 +534,7 @@ impl CodegenState {
                 self.commit_label(loop_top);
                 let end_label = self.make_label(None);
                 // TODO self.enter_loop/exit_loop needed?
-                self.emit(Op::ForList {
-                    id: id.0,
-                    end_label,
-                });
+                self.emit(Op::ForList { id: *id, end_label });
                 self.loops.push(Loop {
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
@@ -556,10 +553,7 @@ impl CodegenState {
                 self.generate_expr(to)?;
                 let loop_top = self.make_label(Some(*id));
                 let end_label = self.make_label(None);
-                self.emit(Op::ForRange {
-                    id: id.0,
-                    end_label,
-                });
+                self.emit(Op::ForRange { id: *id, end_label });
                 self.loops.push(Loop {
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
@@ -584,7 +578,7 @@ impl CodegenState {
                 match id {
                     None => self.emit(Op::While(loop_end_label)),
                     Some(id) => self.emit(Op::WhileId {
-                        id: id.0,
+                        id: *id,
                         end_label: loop_end_label,
                     }),
                 }
@@ -615,7 +609,7 @@ impl CodegenState {
                 let fv_id = self.add_fork_vector(forked_ops);
                 self.ops = stashed_ops;
                 self.emit(Op::Fork {
-                    id: id.as_ref().map(|i| i.0),
+                    id: *id,
                     f_index: fv_id,
                 });
                 self.pop_stack(1);
@@ -642,7 +636,7 @@ impl CodegenState {
                     self.commit_label(labels[i]);
                     self.push_stack(1);
                     if ex.id.is_some() {
-                        self.emit(Op::Put(ex.id.as_ref().unwrap().0));
+                        self.emit(Op::Put(ex.id.unwrap()));
                     }
                     self.emit(Op::Pop);
                     self.pop_stack(1);
@@ -1276,7 +1270,7 @@ mod tests {
                 MakeSingletonList,
                 Imm(test),
                 ListAddTail,
-                FuncCall { id: 0.into() },
+                FuncCall { id: Name(0) },
                 Pop,
                 Done
             ]
@@ -1731,7 +1725,7 @@ mod tests {
                 Imm(e_invarg),
                 MakeSingletonList,
                 FuncCall {
-                    id: raise_num.into()
+                    id: Name(raise_num as u32)
                 },
                 EndCatch(1.into()),
                 Val(v_int(1)),

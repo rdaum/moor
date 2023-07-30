@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::compiler::builtins::BUILTINS;
-use crate::compiler::labels::Label;
+use crate::compiler::labels::{Label, Name};
 use crate::db::state::WorldState;
 use crate::model::objects::ObjFlag;
 use crate::model::verbs::VerbInfo;
@@ -398,11 +398,11 @@ impl VM {
         self.top_mut().jump(label)
     }
 
-    pub(crate) fn get_env(&mut self, id: Label) -> Var {
+    pub(crate) fn get_env(&mut self, id: Name) -> Var {
         self.top().environment[id.0 as usize].clone()
     }
 
-    pub(crate) fn set_env(&mut self, id: Label, v: &Var) {
+    pub(crate) fn set_env(&mut self, id: Name, v: &Var) {
         self.top_mut().environment[id.0 as usize] = v.clone();
     }
 

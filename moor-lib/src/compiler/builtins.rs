@@ -1,7 +1,7 @@
 /// Global registry of built-in function names.
 use std::collections::HashMap;
 
-use crate::compiler::labels::Label;
+use crate::compiler::labels::Name;
 
 pub const BUILTINS: &[&str] = &[
     // disassemble
@@ -145,18 +145,18 @@ pub const BUILTINS: &[&str] = &[
     "task_stack",
 ];
 
-pub fn make_builtin_labels() -> HashMap<String, Label> {
+pub fn make_builtin_labels() -> HashMap<String, Name> {
     let mut b = HashMap::new();
     for (i, builtin) in BUILTINS.iter().enumerate() {
-        b.insert(builtin.to_string(), Label(i as u32));
+        b.insert(builtin.to_string(), Name(i as u32));
     }
 
     b
 }
-pub fn make_labels_builtins() -> HashMap<Label, String> {
+pub fn make_labels_builtins() -> HashMap<Name, String> {
     let mut b = HashMap::new();
     for (i, builtin) in BUILTINS.iter().enumerate() {
-        b.insert(Label(i as u32), builtin.to_string());
+        b.insert(Name(i as u32), builtin.to_string());
     }
 
     b

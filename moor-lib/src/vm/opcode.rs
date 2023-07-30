@@ -2,14 +2,14 @@ use std::fmt::{Display, Formatter};
 
 use bincode::{Decode, Encode};
 
-use crate::compiler::labels::{JumpLabel, Label, Names, Offset};
+use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::values::var::Var;
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum ScatterLabel {
-    Required(Label),
-    Rest(Label),
-    Optional(Label, Option<Label>),
+    Required(Name),
+    Rest(Name),
+    Optional(Name, Option<Label>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
@@ -22,11 +22,11 @@ pub enum Op {
         label: Label,
     },
     ForList {
-        id: Label,
+        id: Name,
         end_label: Label,
     },
     ForRange {
-        id: Label,
+        id: Name,
         end_label: Label,
     },
     Pop,
@@ -57,29 +57,29 @@ pub enum Op {
     Not,
     UnaryMinus,
     Ref,
-    Push(Label),
+    Push(Name),
     PushRef,
-    Put(Label),
+    Put(Name),
     RangeRef,
     GPut {
-        id: Label,
+        id: Name,
     },
     GPush {
-        id: Label,
+        id: Name,
     },
     GetProp,
     PushGetProp,
     PutProp,
     Fork {
         f_index: Label,
-        id: Option<Label>,
+        id: Option<Name>,
     },
     CallVerb,
     Return,
     Return0,
     Done,
     FuncCall {
-        id: Label,
+        id: Name,
     },
     Pass,
     RangeSet,
@@ -102,7 +102,7 @@ pub enum Op {
     EndExcept(Label),
     EndFinally,
     WhileId {
-        id: Label,
+        id: Name,
         end_label: Label,
     },
     Continue,
@@ -134,11 +134,10 @@ impl Binary {
         }
     }
 
-    pub fn find_var(&self, v: &str) -> Label {
+    pub fn find_var(&self, v: &str) -> Name {
         self.var_names
             .find_name(v)
             .unwrap_or_else(|| panic!("variable not found: {}", v))
-            .0
     }
 
     pub fn find_literal(&self, l: Var) -> Label {
@@ -167,7 +166,7 @@ impl Display for Binary {
         // Write jump labels indexed by their offset & showing position & optional name
         for (i, l) in self.jump_labels.iter().enumerate() {
             write!(f, "J{}: {}", i, l.position.0)?;
-            if let Some(name) = &l.label {
+            if let Some(name) = &l.name {
                 write!(f, " ({})", self.var_names.name_of(name).unwrap())?;
             }
             writeln!(f)?;

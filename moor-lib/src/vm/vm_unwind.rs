@@ -214,11 +214,12 @@ impl VM {
             while let Some(v) = a.valstack.pop() {
                 match v.variant() {
                     Variant::_Finally(label) => {
-                        /* FINALLY handler */
                         let why_num = why.code();
                         if why_num == FinallyReason::Abort.code() {
                             continue;
                         }
+                        // Jump to the label pointed to by the finally label and then continue on
+                        // executing.
                         a.jump(*label);
                         a.push(v_int(why_num as i64));
                         return Ok(ExecutionResult::More);

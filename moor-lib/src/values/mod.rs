@@ -2,8 +2,6 @@
 
 use int_enum::IntEnum;
 
-use crate::values::error::Error;
-
 pub mod error;
 pub mod objid;
 pub mod var;
@@ -28,10 +26,9 @@ pub enum VarType {
 mod tests {
     use std::cmp::Ordering;
 
+    use crate::values::error::Error;
     use crate::values::error::Error::{E_RANGE, E_TYPE};
     use crate::values::var::{v_err, v_float, v_int, v_list, v_obj, v_str};
-
-    use super::*;
 
     #[test]
     fn test_add() {

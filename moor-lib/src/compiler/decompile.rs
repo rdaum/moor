@@ -5,7 +5,7 @@ use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
 use crate::compiler::builtins::make_labels_builtins;
-use crate::compiler::decompile::DecompileError::{LabelNotFound, MalformedProgram};
+use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound};
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
 use crate::values::var::{v_label, Var};
@@ -16,6 +16,8 @@ use crate::vm::opcode::{Binary, Op, ScatterLabel};
 pub enum DecompileError {
     #[error("unexpected program end")]
     UnexpectedProgramEnd,
+    #[error("name not found: {0:?}")]
+    NameNotFound(Name),
     #[error("label not found: {0:?}")]
     LabelNotFound(Label),
     #[error("malformed program: {0}")]
@@ -28,7 +30,7 @@ struct Decompile {
     program: Binary,
     position: usize,
     expr_stack: VecDeque<Expr>,
-    builtins: HashMap<Label, String>,
+    builtins: HashMap<Name, String>,
     s: Vec<Stmt>,
 }
 
@@ -64,12 +66,6 @@ impl Decompile {
             .literals
             .get(label.0 as usize)
             .cloned()
-            .ok_or(DecompileError::LabelNotFound(*label))
-    }
-    pub fn find_var(&self, label: &Label) -> Result<Name, DecompileError> {
-        self.program
-            .var_names
-            .find_label(label)
             .ok_or(DecompileError::LabelNotFound(*label))
     }
 
@@ -228,7 +224,7 @@ impl Decompile {
                 let list = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&label)?;
                 self.s.push(Stmt::ForList {
-                    id: self.find_var(&id)?,
+                    id,
                     expr: list,
                     body,
                 });
@@ -237,12 +233,7 @@ impl Decompile {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&end_label)?;
-                self.s.push(Stmt::ForRange {
-                    id: self.find_var(&id)?,
-                    from,
-                    to,
-                    body,
-                });
+                self.s.push(Stmt::ForRange { id, from, to, body });
             }
             Op::While(loop_end_label) => {
                 // A "while" is actually a:
@@ -272,7 +263,7 @@ impl Decompile {
                 let cond = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
                 self.s.push(Stmt::While {
-                    id: Some(self.find_var(&id)?),
+                    id: Some(id),
                     condition: cond,
                     body,
                 });
@@ -307,16 +298,16 @@ impl Decompile {
             Op::Imm(literal_label) => {
                 self.push_expr(Expr::VarExpr(self.find_literal(&literal_label)?));
             }
-            Op::Push(label) => {
-                self.push_expr(Expr::Id(self.find_var(&label)?));
+            Op::Push(varname) => {
+                self.push_expr(Expr::Id(varname));
             }
             Op::Val(value) => {
                 self.push_expr(Expr::VarExpr(value));
             }
-            Op::Put(label) => {
+            Op::Put(varname) => {
                 let expr = self.pop_expr()?;
                 self.push_expr(Expr::Assign {
-                    left: Box::new(Expr::Id(self.find_var(&label)?)),
+                    left: Box::new(Expr::Id(varname)),
                     right: Box::new(expr),
                 });
             }
@@ -422,7 +413,7 @@ impl Decompile {
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
                 let Some(builtin) = self.builtins.get(&id) else {
-                    return Err(LabelNotFound(id));
+                    return Err(NameNotFound(id));
                 };
 
                 // Have to reconstruct arg list ...
@@ -485,18 +476,18 @@ impl Decompile {
                 let mut scatter_items = vec![];
                 for scatter_label in labels.iter() {
                     let scatter_item = match scatter_label {
-                        ScatterLabel::Required(label) => ScatterItem {
+                        ScatterLabel::Required(id) => ScatterItem {
                             kind: ScatterKind::Required,
-                            id: self.find_var(label)?,
+                            id: *id,
                             expr: None,
                         },
-                        ScatterLabel::Rest(label) => ScatterItem {
+                        ScatterLabel::Rest(id) => ScatterItem {
                             kind: ScatterKind::Rest,
-                            id: self.find_var(label)?,
+                            id: *id,
                             expr: None,
                         },
-                        ScatterLabel::Optional(label_a, label_b) => {
-                            let opt_assign = if let Some(_label_b) = label_b {
+                        ScatterLabel::Optional(id, assign_id) => {
+                            let opt_assign = if let Some(_label_b) = assign_id {
                                 let Expr::Assign {left: _, right} = self.pop_expr()? else {
                                     return Err(MalformedProgram("expected assign for optional scatter assignment".to_string()));
                                 };
@@ -506,7 +497,7 @@ impl Decompile {
                             };
                             ScatterItem {
                                 kind: ScatterKind::Optional,
-                                id: self.find_var(label_a)?,
+                                id: *id,
                                 expr: opt_assign,
                             }
                         }
@@ -570,8 +561,8 @@ impl Decompile {
                 // So first look for the Put
                 for arm in &mut except_arms {
                     let mut next_opcode = self.next()?;
-                    if let Op::Put(put_label) = next_opcode {
-                        arm.id = Some(self.find_var(&put_label)?);
+                    if let Op::Put(varname) = next_opcode {
+                        arm.id = Some(varname);
                         next_opcode = self.next()?;
                     }
                     let Op::Pop = next_opcode else {
