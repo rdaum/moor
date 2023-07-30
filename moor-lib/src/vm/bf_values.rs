@@ -3,36 +3,23 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::db::state::WorldState;
-use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_bool, v_err, v_float, v_int, v_obj, v_str, Var, Variant};
-use crate::vm::activation::Activation;
+use crate::vm::vm::BfFunctionArguments;
 use crate::vm::vm::{BfFunction, VM};
 
-async fn bf_typeof(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    let arg = &args[0];
+async fn bf_typeof<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    let arg = &bf_args.args[0];
     Ok(v_int(arg.type_id() as i64))
 }
 bf_declare!(typeof, bf_typeof);
 
-async fn bf_tostr(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
+async fn bf_tostr<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
     let mut result = String::new();
-    for arg in args {
+    for arg in &bf_args.args {
         match arg.variant() {
             Variant::None => result.push_str("None"),
             Variant::Int(i) => result.push_str(&i.to_string()),
@@ -48,30 +35,20 @@ async fn bf_tostr(
 }
 bf_declare!(tostr, bf_tostr);
 
-async fn bf_toliteral(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_toliteral<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let literal = args[0].to_literal();
+    let literal = bf_args.args[0].to_literal();
     Ok(v_str(literal.as_str()))
 }
 bf_declare!(toliteral, bf_toliteral);
 
-async fn bf_toint(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_toint<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match args[0].variant() {
+    match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(v_int(*i)),
         Variant::Float(f) => Ok(v_int(*f as i64)),
         Variant::Str(s) => {
@@ -87,16 +64,11 @@ async fn bf_toint(
 }
 bf_declare!(toint, bf_toint);
 
-async fn bf_toobj(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_toobj<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match args[0].variant() {
+    match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(v_obj(*i)),
         Variant::Float(f) => Ok(v_obj(*f as i64)),
         Variant::Str(s) if s.starts_with('#') => {
@@ -118,16 +90,11 @@ async fn bf_toobj(
 }
 bf_declare!(toobj, bf_toobj);
 
-async fn bf_tofloat(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_tofloat<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    match args[0].variant() {
+    match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(v_float(*i as f64)),
         Variant::Float(f) => Ok(v_float(*f)),
         Variant::Str(s) => {
@@ -143,62 +110,42 @@ async fn bf_tofloat(
 }
 bf_declare!(tofloat, bf_tofloat);
 
-async fn bf_equal(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 2 {
+async fn bf_equal<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
-    let result = match (args[0].variant(), args[1].variant()) {
+    let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
         (Variant::Str(s1), Variant::Str(s2)) => s1.to_lowercase() == s2.to_lowercase(),
-        _ => args[0] == args[1],
+        _ => bf_args.args[0] == bf_args.args[1],
     };
     Ok(v_bool(result))
 }
 bf_declare!(equal, bf_equal);
 
-async fn bf_value_bytes(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_value_bytes<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
     unimplemented!("value_bytes");
 }
 bf_declare!(value_bytes, bf_value_bytes);
 
-async fn bf_value_hash(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_value_hash<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
     let mut s = DefaultHasher::new();
-    args[0].hash(&mut s);
+    bf_args.args[0].hash(&mut s);
     Ok(v_int(s.finish() as i64))
 }
 bf_declare!(value_hash, bf_value_hash);
 
-async fn bf_length(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_length<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
 
-    match args[0].variant() {
+    match bf_args.args[0].variant() {
         Variant::Str(s) => Ok(v_int(s.len() as i64)),
         Variant::List(l) => Ok(v_int(l.len() as i64)),
         _ => Ok(v_err(E_TYPE)),

@@ -120,12 +120,12 @@ impl WorldState for MockState {
 
     fn update_verb_info(
         &mut self,
-        obj: Objid,
-        vname: &str,
-        owner: Option<Objid>,
-        names: Option<Vec<String>>,
-        flags: Option<BitEnum<VerbFlag>>,
-        args: Option<VerbArgsSpec>,
+        _obj: Objid,
+        _vname: &str,
+        _owner: Option<Objid>,
+        _names: Option<Vec<String>>,
+        _flags: Option<BitEnum<VerbFlag>>,
+        _args: Option<VerbArgsSpec>,
     ) -> Result<(), ObjectError> {
         todo!()
     }

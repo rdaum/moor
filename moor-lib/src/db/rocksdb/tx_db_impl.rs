@@ -1,7 +1,7 @@
 use anyhow::{bail, Error};
 use bincode::config::Configuration;
 use rocksdb::{ColumnFamily, ErrorKind};
-use tracing::debug;
+
 use uuid::Uuid;
 
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};

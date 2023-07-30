@@ -26,14 +26,11 @@ macro_rules! bf_declare {
                 fn name(&self) -> &str {
                     return stringify!($name)
                 }
-                async fn call(
+                async fn call<'a>(
                     &self,
-                    ws: &mut dyn WorldState,
-                    frame: &mut Activation,
-                    sess: Arc<RwLock<dyn Sessions>>,
-                    args: &[Var],
+                    bf_args: &mut BfFunctionArguments<'a>
                 ) -> Result<Var, anyhow::Error> {
-                    $action(ws, frame, sess, args).await
+                    $action(bf_args).await
                 }
             }
         }

@@ -15,23 +15,24 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::TaskId;
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
-use crate::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE, E_VERBNF};
-use crate::var::{v_objid, v_str, v_string, Objid, Var, Variant, NOTHING};
+use crate::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE, E_VARNF, E_VERBNF};
+use crate::var::{v_err, v_objid, v_str, v_string, Objid, Var, Variant, NOTHING};
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::Op;
 use crate::vm::vm_unwind::FinallyReason;
 
+pub(crate) struct BfFunctionArguments<'a> {
+    pub(crate) world_state: &'a mut dyn WorldState,
+    pub(crate) frame: &'a mut Activation,
+    pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    pub(crate) args: Vec<Var>,
+}
+
 #[async_trait]
 pub(crate) trait BfFunction: Sync + Send {
     fn name(&self) -> &str;
-    async fn call(
-        &self,
-        world_state: &mut dyn WorldState,
-        frame: &mut Activation,
-        sessions: Arc<RwLock<dyn Sessions>>,
-        args: &[Var],
-    ) -> Result<Var, anyhow::Error>;
+    async fn call<'a>(&self, bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error>;
 }
 
 pub struct VM {
@@ -239,6 +240,27 @@ impl VM {
         self.stack.push(a);
         trace!("call_verb: {}:{}({:?})", this, verb, args);
         Ok(ExecutionResult::More)
+    }
+
+    pub(crate) async fn call_builtin_function(
+        &mut self,
+        bf_func_num: usize,
+        args: &[Var],
+        state: &mut dyn WorldState,
+        client_connection: Arc<RwLock<dyn Sessions>>,
+    ) -> Result<Var, anyhow::Error> {
+        if bf_func_num >= self.bf_funcs.len() {
+            return Ok(v_err(E_VARNF));
+        }
+        let bf = self.bf_funcs[bf_func_num].clone();
+        trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
+        let mut bf_args = BfFunctionArguments {
+            world_state: state,
+            frame: self.top_mut(),
+            sessions: client_connection,
+            args: args.to_vec(),
+        };
+        bf.call(&mut bf_args).await
     }
 
     pub(crate) fn top_mut(&mut self) -> &mut Activation {

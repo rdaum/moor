@@ -1,23 +1,15 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::db::state::WorldState;
-use crate::tasks::Sessions;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_bool, v_err, v_list, v_objid, v_str, Var, Variant};
-use crate::vm::activation::Activation;
+use crate::vm::vm::BfFunctionArguments;
 use crate::vm::vm::{BfFunction, VM};
 
-async fn bf_create(
-    _ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    _args: &[Var],
-) -> Result<Var, anyhow::Error> {
+async fn bf_create<'a>(_bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
     unimplemented!("create")
 }
 bf_declare!(create, bf_create);
@@ -31,53 +23,38 @@ Changes the parent of object to be new-parent. If object is not valid, or if new
 Function: int valid (obj object)
 Returns a non-zero integer (i.e., a true value) if object is a valid object (one that has been created and not yet recycled) and zero (i.e., a false value) otherwise.
 */
-async fn bf_valid(
-    ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_valid<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].variant() else {
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let is_valid = ws.valid(*obj)?;
+    let is_valid = bf_args.world_state.valid(*obj)?;
     Ok(v_bool(is_valid))
 }
 bf_declare!(valid, bf_valid);
 
-async fn bf_parent(
-    ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_parent<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].variant() else {
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let parent = ws.parent_of(*obj)?;
+    let parent = bf_args.world_state.parent_of(*obj)?;
     Ok(v_objid(parent))
 }
 bf_declare!(parent, bf_parent);
 
-async fn bf_children(
-    ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_children<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].variant() else {
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let children = ws.children_of(*obj)?;
+    let children = bf_args.world_state.children_of(*obj)?;
     let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
     Ok(v_list(children))
 }
@@ -103,19 +80,14 @@ Function: none move (obj what, obj where)
 Changes what's location to be where. This is a complex process because a number of permissions checks and notifications must be performed. The actual movement takes place as described in the following paragraphs.
  */
 
-async fn bf_verbs(
-    ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_verbs<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].variant() else {
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let verbs = ws.verbs(*obj)?;
+    let verbs = bf_args.world_state.verbs(*obj)?;
     let verbs = verbs
         .iter()
         .map(|v| v_str(v.names.first().unwrap()))
@@ -128,19 +100,14 @@ bf_declare!(verbs, bf_verbs);
 Function: list properties (obj object)
 Returns a list of the names of the properties defined directly on the given object, not inherited from its parent. If object is not valid, then E_INVARG is raised. If the programmer does not have read permission on object, then E_PERM is raised.
  */
-async fn bf_properties(
-    ws: &mut dyn WorldState,
-    _frame: &mut Activation,
-    _sess: Arc<RwLock<dyn Sessions>>,
-    args: &[Var],
-) -> Result<Var, anyhow::Error> {
-    if args.len() != 1 {
+async fn bf_properties<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(obj) = args[0].variant() else {
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let props = ws.properties(*obj)?;
+    let props = bf_args.world_state.properties(*obj)?;
     let props = props.iter().map(|p| v_str(&p.0)).collect();
     Ok(v_list(props))
 }

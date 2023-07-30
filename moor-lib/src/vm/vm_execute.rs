@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use crate::compiler::builtins::BUILTINS;
 use crate::db::state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::tasks::Sessions;
@@ -519,14 +518,8 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_ARGS);
                 };
-                let bf_func_num = id.0 as usize;
-                if bf_func_num >= self.bf_funcs.len() {
-                    return self.push_error(E_VARNF);
-                }
-                let bf = self.bf_funcs[bf_func_num].clone();
-                trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
-                let result = bf
-                    .call(state, self.top_mut(), client_connection, args)
+                let result = self
+                    .call_builtin_function(id.0 as usize, args, state, client_connection)
                     .await?;
                 self.push(&result);
             }
