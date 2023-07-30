@@ -4,9 +4,8 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::db::state::WorldState;
-use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::tasks::Sessions;
-use crate::var::error::Error::{E_ARGS, E_INVARG, E_PERM, E_PROPNF, E_RANGE, E_TYPE, E_VARNF};
+use crate::var::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
 use crate::var::{
     v_bool, v_catch, v_finally, v_int, v_label, v_list, v_obj, v_str, Variant, VAR_NONE,
 };
@@ -419,42 +418,16 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                return self.get_prop(state, self.top().player_flags, propname, obj);
+                return self.resolve_property(state, self.top().player_flags, propname, obj);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                return self.get_prop(state, self.top().player_flags, propname, obj);
+                return self.resolve_property(state, self.top().player_flags, propname, obj);
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
-                let (propname, obj) = match (propname.variant(), obj.variant()) {
-                    (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
-                    (_, _) => {
-                        return self.push_error(E_TYPE);
-                    }
-                };
-
-                let update_result =
-                    state.update_property(*obj, propname, self.top().player_flags, &rhs);
-
-                match update_result {
-                    Ok(()) => {
-                        self.push(&VAR_NONE);
-                    }
-                    Err(e) => match e {
-                        PropertyNotFound(_, _) => {
-                            return self.push_error(E_PROPNF);
-                        }
-                        PropertyPermissionDenied(_, _) => {
-                            return self.push_error(E_PERM);
-                        }
-                        _ => {
-                            panic!("Unexpected error in property update: {:?}", e);
-                        }
-                    },
-                }
-                return Ok(ExecutionResult::More);
+                return self.set_property(state, self.top().player_flags, propname, obj, rhs);
             }
             Op::Fork { id: _, f_index: _ } => {
                 unimplemented!("fork")
@@ -464,31 +437,7 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_TYPE);
                 };
-                // get parent of verb definer object & current verb name.
-                // TODO probably need verb definer right on Activation, this is gross.
-                let definer = self.top().verb_info.attrs.definer.unwrap();
-                let parent = state.parent_of(definer)?;
-                let verb = self.top().verb_name().to_string();
-
-                // call verb on parent, but with our current 'this'
-                let task_id = self.top().task_id;
-                trace!(
-                    "Pass: task_id: {:?} verb: {:?} definer: {:?} parent: {:?}",
-                    task_id,
-                    verb,
-                    definer,
-                    parent
-                );
-                self.setup_verb_method_call(
-                    task_id,
-                    state,
-                    parent,
-                    verb.as_str(),
-                    self.top().this,
-                    self.top().player,
-                    self.top().player_flags,
-                    args,
-                )?;
+                self.pass_verb(state, args)?;
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
@@ -518,10 +467,9 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_ARGS);
                 };
-                let result = self
+                return self
                     .call_builtin_function(id.0 as usize, args, state, client_connection)
-                    .await?;
-                self.push(&result);
+                    .await;
             }
             Op::PushLabel(label) => {
                 self.push(&v_label(label));

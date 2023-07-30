@@ -16,7 +16,7 @@ use crate::tasks::scheduler::TaskId;
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
 use crate::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE, E_VARNF, E_VERBNF};
-use crate::var::{v_err, v_objid, v_str, v_string, Objid, Var, Variant, NOTHING};
+use crate::var::{v_objid, v_str, v_string, Objid, Var, Variant, NOTHING, VAR_NONE};
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::Op;
@@ -243,15 +243,82 @@ impl VM {
         Ok(ExecutionResult::More)
     }
 
+    /// Setup the VM to execute the verb of the same current name, but using the parent's
+    /// version.
+    pub(crate) fn pass_verb(
+        &mut self,
+        state: &mut dyn WorldState,
+        args: &[Var],
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        // get parent of verb definer object & current verb name.
+        // TODO probably need verb definer right on Activation, this is gross.
+        let definer = self.top().verb_definer();
+        let parent = state.parent_of(definer)?;
+        let verb = self.top().verb_name().to_string();
+
+        // call verb on parent, but with our current 'this'
+        let task_id = self.top().task_id;
+        trace!(
+            "Pass: task_id: {:?} verb: {:?} definer: {:?} parent: {:?}",
+            task_id,
+            verb,
+            definer,
+            parent
+        );
+        self.setup_verb_method_call(
+            task_id,
+            state,
+            parent,
+            verb.as_str(),
+            self.top().this,
+            self.top().player,
+            self.top().player_flags,
+            args,
+        )?;
+        Ok(ExecutionResult::More)
+    }
+
+    /// VM-level property resolution.
+    pub(crate) fn resolve_property(
+        &mut self,
+        state: &mut dyn WorldState,
+        player_flags: BitEnum<ObjFlag>,
+        propname: Var,
+        obj: Var,
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        let Variant::Str(propname) = propname.variant() else {
+            return self.push_error(E_TYPE);
+        };
+
+        let Variant::Obj(obj) = obj.variant() else {
+            return self.push_error(E_INVIND);
+        };
+
+        let result = state.retrieve_property(*obj, propname.as_str(), player_flags);
+        let v = match result {
+            Ok(v) => v,
+            Err(e) => match e {
+                PropertyPermissionDenied(_, _) => return self.push_error(E_PERM),
+                PropertyNotFound(_, _) => return self.push_error(E_PROPNF),
+                _ => {
+                    panic!("Unexpected error in property retrieval: {:?}", e);
+                }
+            },
+        };
+        self.push(&v);
+        Ok(ExecutionResult::More)
+    }
+
+    /// Call into a builtin function.
     pub(crate) async fn call_builtin_function(
         &mut self,
         bf_func_num: usize,
         args: &[Var],
         state: &mut dyn WorldState,
         client_connection: Arc<RwLock<dyn Sessions>>,
-    ) -> Result<Var, anyhow::Error> {
+    ) -> Result<ExecutionResult, anyhow::Error> {
         if bf_func_num >= self.builtins.len() {
-            return Ok(v_err(E_VARNF));
+            return self.raise_error(E_VARNF);
         }
         let bf = self.builtins[bf_func_num].clone();
         trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
@@ -261,7 +328,46 @@ impl VM {
             sessions: client_connection,
             args: args.to_vec(),
         };
-        bf.call(&mut bf_args).await
+        let result = bf.call(&mut bf_args).await?;
+        self.push(&result);
+        return Ok(ExecutionResult::More);
+    }
+
+    /// VM-level property assignment
+    pub(crate) fn set_property(
+        &mut self,
+        state: &mut dyn WorldState,
+        _player_flags: BitEnum<ObjFlag>,
+        propname: Var,
+        obj: Var,
+        value: Var,
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        let (propname, obj) = match (propname.variant(), obj.variant()) {
+            (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
+            (_, _) => {
+                return self.push_error(E_TYPE);
+            }
+        };
+
+        let update_result = state.update_property(*obj, propname, self.top().player_flags, &value);
+
+        match update_result {
+            Ok(()) => {
+                self.push(&VAR_NONE);
+            }
+            Err(e) => match e {
+                PropertyNotFound(_, _) => {
+                    return self.push_error(E_PROPNF);
+                }
+                PropertyPermissionDenied(_, _) => {
+                    return self.push_error(E_PERM);
+                }
+                _ => {
+                    panic!("Unexpected error in property update: {:?}", e);
+                }
+            },
+        }
+        return Ok(ExecutionResult::More);
     }
 
     pub(crate) fn top_mut(&mut self) -> &mut Activation {
@@ -304,35 +410,5 @@ impl VM {
 
     pub(crate) fn peek_top(&self) -> Var {
         self.top().peek_top().expect("stack underflow")
-    }
-
-    pub(crate) fn get_prop(
-        &mut self,
-        state: &mut dyn WorldState,
-        player_flags: BitEnum<ObjFlag>,
-        propname: Var,
-        obj: Var,
-    ) -> Result<ExecutionResult, anyhow::Error> {
-        let Variant::Str(propname) = propname.variant() else {
-            return self.push_error(E_TYPE);
-        };
-
-        let Variant::Obj(obj) = obj.variant() else {
-            return self.push_error(E_INVIND);
-        };
-
-        let result = state.retrieve_property(*obj, propname.as_str(), player_flags);
-        let v = match result {
-            Ok(v) => v,
-            Err(e) => match e {
-                PropertyPermissionDenied(_, _) => return self.push_error(E_PERM),
-                PropertyNotFound(_, _) => return self.push_error(E_PROPNF),
-                _ => {
-                    panic!("Unexpected error in property retrieval: {:?}", e);
-                }
-            },
-        };
-        self.push(&v);
-        Ok(ExecutionResult::More)
     }
 }
