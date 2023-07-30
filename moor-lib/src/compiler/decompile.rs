@@ -90,7 +90,27 @@ impl Decompile {
             }
             self.decompile()?;
         }
-        return Err(DecompileError::UnexpectedProgramEnd);
+        Err(DecompileError::UnexpectedProgramEnd)
+    }
+
+    fn decompile_statements_up_to(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
+        let jump_label = self.find_jump(label)?; // check that the label exists
+        let old_len = self.s.len();
+
+        trace!("seek up to pos {}", jump_label.position.0);
+        while self.position + 1 < jump_label.position.0 as usize {
+            self.decompile()?;
+        }
+        trace!(
+            "seek done @ pos {}: {} stmts",
+            self.position,
+            self.s.len() - old_len
+        );
+        if self.s.len() > old_len {
+            Ok(self.s.split_off(old_len))
+        } else {
+            Ok(vec![])
+        }
     }
 
     /// Scan forward until we hit the label's position, decompiling as we go and returning the
@@ -541,6 +561,69 @@ impl Decompile {
                     excepts: except_arms,
                 });
             }
+            Op::TryFinally(_label) => {
+                // decompile body up until the EndFinally
+                let (body, _) = self.decompile_statements_until_match(|_, op| {
+                    if let Op::EndFinally = op {
+                        true
+                    } else {
+                        false
+                    }
+                })?;
+                let (handler, _) = self.decompile_statements_until_match(|_, op| {
+                    if let Op::Continue = op {
+                        true
+                    } else {
+                        false
+                    }
+                })?;
+                self.s.push(Stmt::TryFinally { body, handler });
+            }
+            Op::Catch => {
+                let Expr::VarExpr(label) = self.pop_expr()? else {
+                    return Err(MalformedProgram("missing catch jump label".to_string()));
+                };
+                let Variant::_Label(label) = label.variant() else {
+                    return Err(MalformedProgram("invalid catch jump label".to_string()));
+                };
+
+                let codes_expr = self.pop_expr()?;
+                let catch_codes = match codes_expr {
+                    Expr::VarExpr(_) => CatchCodes::Any,
+                    Expr::List(codes) => CatchCodes::Codes(codes),
+                    _ => {
+                        return Err(MalformedProgram("invalid try/except codes".to_string()));
+                    }
+                };
+                // decompile forward to the EndCatch
+                let _handler = self.decompile_statements_up_to(label)?;
+                let Op::EndCatch(end_label) = self.next()? else {
+                    return Err(MalformedProgram("expected EndCatch".to_string()));
+                };
+                let try_expr = self.pop_expr()?;
+
+                // There's either an except (Pop, then expr) or not (Val, Ref).
+                let except = match self.next()? {
+                    Op::Pop => {
+                        self.decompile_statements_until(&end_label)?;
+                        Some(Box::new(self.pop_expr()?))
+                    }
+                    Op::Ref => {
+                        let Op::Ref = self.next()? else {
+                            return Err(MalformedProgram("expected Ref".to_string()));
+                        };
+                        None
+                    }
+                    _ => {
+                        return Err(MalformedProgram("bad end to catch expr".to_string()));
+                    }
+                };
+                self.push_expr(Expr::Catch {
+                    trye: Box::new(try_expr),
+                    codes: catch_codes,
+                    except,
+                });
+            }
             _ => {
                 todo!("decompile for {:?}", opcode);
             }
@@ -809,6 +892,28 @@ mod tests {
     #[test]
     fn test_try_except() {
         let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_try_finally() {
+        let program = "try a=1; finally a=2; endtry";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_catch_expr() {
+        let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
         let (parse, decompiled, binary) = parse_decompile(program);
         assert_eq!(
             parse.stmts, decompiled.stmts,
