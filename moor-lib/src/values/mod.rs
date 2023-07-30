@@ -14,12 +14,11 @@ pub enum VarType {
     TYPE_OBJ = 1,
     TYPE_STR = 2,
     TYPE_ERR = 3,
-    TYPE_LIST = 4,    /* user-visible */
-    TYPE_CLEAR = 5,   /* in clear properties' value slot */
-    TYPE_NONE = 6,    /* in uninitialized MOO variables */
-    TYPE_CATCH = 7,   /* on-stack marker for an exception handler */
-    TYPE_FINALLY = 8, /* on-stack marker for a TRY-FINALLY clause */
-    TYPE_FLOAT = 9,   /* floating-point number; user-visible */
+    TYPE_LIST = 4,  /* user-visible */
+    TYPE_CLEAR = 5, /* in clear properties' value slot */
+    TYPE_NONE = 6,  /* in uninitialized MOO variables */
+    TYPE_LABEL = 7,
+    TYPE_FLOAT = 9, /* floating-point number; user-visible */
 }
 
 #[cfg(test)]

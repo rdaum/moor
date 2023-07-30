@@ -8,7 +8,7 @@ use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound};
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
-use crate::values::var::{v_label, Var};
+use crate::values::var::Var;
 use crate::values::variant::Variant;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
@@ -507,20 +507,12 @@ impl Decompile {
                 let e = self.pop_expr()?;
                 self.push_expr(Expr::Scatter(scatter_items, Box::new(e)));
             }
-            Op::PushLabel(label) => {
-                self.push_expr(Expr::VarExpr(v_label(label)));
+            Op::PushLabel(_) => {
+                // ignore and consume, we don't need it.
             }
             Op::TryExcept { num_excepts } => {
                 let mut except_arms = Vec::with_capacity(num_excepts);
                 for _ in 0..num_excepts {
-                    // Inverse of generate_codes. Jump label first.
-                    let Expr::VarExpr(label) = self.pop_expr()? else {
-                        return Err(MalformedProgram("missing try/except jump label".to_string()));
-                    };
-                    let Variant::_Label(_) = label.variant() else {
-                        return Err(MalformedProgram("invalid try/except jump label".to_string()));
-                    };
-
                     let codes_expr = self.pop_expr()?;
                     let catch_codes = match codes_expr {
                         Expr::VarExpr(_) => CatchCodes::Any,
@@ -609,14 +601,7 @@ impl Decompile {
                 })?;
                 self.s.push(Stmt::TryFinally { body, handler });
             }
-            Op::Catch => {
-                let Expr::VarExpr(label) = self.pop_expr()? else {
-                    return Err(MalformedProgram("missing catch jump label".to_string()));
-                };
-                let Variant::_Label(label) = label.variant() else {
-                    return Err(MalformedProgram("invalid catch jump label".to_string()));
-                };
-
+            Op::Catch(label) => {
                 let codes_expr = self.pop_expr()?;
                 let catch_codes = match codes_expr {
                     Expr::VarExpr(_) => CatchCodes::Any,
@@ -626,7 +611,7 @@ impl Decompile {
                     }
                 };
                 // decompile forward to the EndCatch
-                let _handler = self.decompile_statements_up_to(label)?;
+                let _handler = self.decompile_statements_up_to(&label)?;
                 let Op::EndCatch(end_label) = self.next()? else {
                     return Err(MalformedProgram("expected EndCatch".to_string()));
                 };

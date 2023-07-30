@@ -94,7 +94,7 @@ pub enum Op {
     },
     PushLabel(Label),
     TryFinally(Label),
-    Catch,
+    Catch(Label),
     TryExcept {
         num_excepts: usize,
     },

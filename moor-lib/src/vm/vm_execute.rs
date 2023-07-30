@@ -7,8 +7,9 @@ use crate::db::state::WorldState;
 use crate::tasks::Sessions;
 use crate::values::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
 use crate::values::var::VAR_NONE;
-use crate::values::var::{v_bool, v_catch, v_finally, v_int, v_label, v_list, v_obj, v_str};
+use crate::values::var::{v_bool, v_int, v_list, v_obj, v_str};
 use crate::values::variant::Variant;
+use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm::{ExecutionResult, VM};
 use crate::vm::vm_unwind::FinallyReason;
@@ -45,7 +46,8 @@ impl VM {
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
 
         trace!(
-            "exec: {:?} this: {:?} player: {:?} stack: {:?}",
+            "exec: {}: {:?} this: {:?} player: {:?} stack: {:?}",
+            self.top().pc,
             op,
             self.top().this,
             self.top().player,
@@ -472,26 +474,35 @@ impl VM {
                     .await;
             }
             Op::PushLabel(label) => {
-                self.push(&v_label(label));
+                self.top_mut()
+                    .push_handler_label(HandlerType::CatchLabel(label));
             }
             Op::TryFinally(label) => {
-                self.push(&v_finally(label));
+                self.top_mut()
+                    .push_handler_label(HandlerType::Finally(label));
             }
-            Op::Catch => {
-                self.push(&v_catch(1));
+            Op::Catch(_) => {
+                self.top_mut().push_handler_label(HandlerType::Catch(1));
             }
             Op::TryExcept { num_excepts } => {
-                self.push(&v_catch(num_excepts));
+                self.top_mut()
+                    .push_handler_label(HandlerType::Catch(num_excepts));
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = op == Op::EndCatch(label);
                 let v = if is_catch { self.pop() } else { VAR_NONE };
-                let marker = self.pop();
-                let Variant::_Catch(num_excepts) = marker.variant() else {
-                    panic!("Stack marker is not type Catch");
+                let num_excepts = match self.top_mut().pop_applicable_handler() {
+                    None => {
+                        panic!("Missing handler for try/catch/except");
+                    }
+                    Some(handler) => {
+                        let HandlerType::Catch(num_excepts) = handler.handler_type else {
+                            panic!("Handler is not a catch handler")
+                        };
+                        num_excepts
+                    }
                 };
-                for _i in 0..*num_excepts {
-                    self.pop(); /* handler PC */
+                for _i in 0..num_excepts {
                     self.pop(); /* code list */
                 }
                 if is_catch {
@@ -500,9 +511,11 @@ impl VM {
                 self.jump(label);
             }
             Op::EndFinally => {
-                let v = self.pop();
-                let Variant::_Finally(_marker) = v.variant() else {
-                    panic!("Stack marker is not type Finally");
+                let Some(finally_handler) = self.top_mut().pop_applicable_handler() else {
+                    panic!("Missing handler for try/finally")
+                };
+                let HandlerType::Finally(_) = finally_handler.handler_type else {
+                    panic!("Handler is not a finally handler")
                 };
                 self.push(&v_int(0) /* fallthrough */);
                 self.push(&v_int(0));

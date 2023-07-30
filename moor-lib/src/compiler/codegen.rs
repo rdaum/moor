@@ -452,12 +452,10 @@ impl CodegenState {
                 trye,
             } => {
                 self.generate_codes(codes)?;
-                // TODO Is this push-label necessary, if the Catch op could just be modified to
-                // hold it?
                 let handler_label = self.make_label(None);
                 self.emit(Op::PushLabel(handler_label));
                 self.push_stack(1);
-                self.emit(Op::Catch);
+                self.emit(Op::Catch(handler_label));
                 self.push_stack(1);
                 self.generate_expr(trye.as_ref())?;
                 let end_label = self.make_label(None);
@@ -1683,7 +1681,7 @@ mod tests {
                 Imm(e_perm),
                 ListAddTail,
                 PushLabel(0.into()),
-                Catch,
+                Catch(0.into()),
                 Push(x),
                 Imm(one),
                 Add,
@@ -1721,7 +1719,7 @@ mod tests {
             vec![
                 Val(0.into()),
                 PushLabel(0.into()),
-                Catch,
+                Catch(0.into()),
                 Imm(e_invarg),
                 MakeSingletonList,
                 FuncCall {

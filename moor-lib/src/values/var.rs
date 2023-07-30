@@ -7,7 +7,6 @@ use bincode::{Decode, Encode};
 use decorum::R64;
 use num_traits::Zero;
 
-use crate::compiler::labels::Label;
 use crate::values::error::Error;
 use crate::values::error::Error::{E_RANGE, E_TYPE};
 use crate::values::objid::Objid;
@@ -73,24 +72,6 @@ pub fn v_list(l: Vec<Var>) -> Var {
     }
 }
 
-pub fn v_label(l: Label) -> Var {
-    Var {
-        value: Variant::_Label(l),
-    }
-}
-
-pub fn v_catch(count: usize) -> Var {
-    Var {
-        value: Variant::_Catch(count),
-    }
-}
-
-pub fn v_finally(l: Label) -> Var {
-    Var {
-        value: Variant::_Finally(l),
-    }
-}
-
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
@@ -124,9 +105,6 @@ impl Var {
             Variant::Float(_) => VarType::TYPE_FLOAT,
             Variant::Err(_) => VarType::TYPE_ERR,
             Variant::List(_) => VarType::TYPE_LIST,
-            Variant::_Catch(_) => VarType::TYPE_CATCH,
-            Variant::_Finally(_) => VarType::TYPE_FINALLY,
-            Variant::_Label(_) => VarType::TYPE_CATCH,
         }
     }
 
@@ -186,12 +164,6 @@ impl PartialEq<Self> for Var {
             (Variant::Float(_), _) => false,
             (Variant::Err(_), _) => false,
             (Variant::List(_), _) => false,
-            (Variant::_Catch(a), Variant::_Catch(b)) => a == b,
-            (Variant::_Finally(a), Variant::_Finally(b)) => a == b,
-            (Variant::_Label(a), Variant::_Label(b)) => a == b,
-            (Variant::_Catch(_a), _) => false,
-            (Variant::_Label(_a), _) => false,
-            (Variant::_Finally(_a), _) => false,
         }
     }
 }
@@ -215,12 +187,6 @@ impl PartialOrd<Self> for Var {
             (Variant::Float(_), _) => Some(Ordering::Less),
             (Variant::Err(_), _) => Some(Ordering::Less),
             (Variant::List(_), _) => Some(Ordering::Less),
-            (Variant::_Catch(a), Variant::_Catch(b)) => a.partial_cmp(b),
-            (Variant::_Finally(a), Variant::_Finally(b)) => a.partial_cmp(b),
-            (Variant::_Label(a), Variant::_Label(b)) => a.partial_cmp(b),
-            (Variant::_Catch(_a), _) => Some(Ordering::Less),
-            (Variant::_Label(_a), _) => Some(Ordering::Less),
-            (Variant::_Finally(_a), _) => Some(Ordering::Less),
         }
     }
 }
@@ -244,12 +210,6 @@ impl Ord for Var {
             (Variant::Float(_), _) => Ordering::Less,
             (Variant::Err(_), _) => Ordering::Less,
             (Variant::List(_), _) => Ordering::Less,
-            (Variant::_Catch(a), Variant::_Catch(b)) => a.cmp(b),
-            (Variant::_Finally(a), Variant::_Finally(b)) => a.cmp(b),
-            (Variant::_Label(a), Variant::_Label(b)) => a.cmp(b),
-            (Variant::_Catch(_a), _) => Ordering::Less,
-            (Variant::_Label(_a), _) => Ordering::Less,
-            (Variant::_Finally(_a), _) => Ordering::Less,
         }
     }
 }
@@ -267,9 +227,6 @@ impl Hash for Var {
             Variant::Float(f) => R64::from(*f).hash(state),
             Variant::Err(e) => e.hash(state),
             Variant::List(l) => l.hash(state),
-            Variant::_Catch(l) => l.hash(state),
-            Variant::_Finally(l) => l.hash(state),
-            Variant::_Label(l) => l.hash(state),
         }
     }
 }

@@ -5,7 +5,7 @@ use crate::values::error::{Error, ErrorPack};
 use crate::values::var::VAR_NONE;
 use crate::values::var::{v_err, v_int, v_list, v_objid, v_str, Var};
 use crate::values::variant::Variant;
-use crate::vm::activation::Activation;
+use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm::{ExecutionResult, VM};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -64,29 +64,37 @@ impl FinallyReason {
 
 impl VM {
     /// Find the currently active catch handler for a given error code, if any.
-    /// Returns the offset of the handler in the value stack, and the activation frame it's in.
-    fn find_handler_active(&mut self, raise_code: Error) -> Option<(usize, &Activation)> {
+    /// Then return the stack offset (from now) of the activation frame containing the handler.
+    fn find_handler_active(&self, raise_code: Error) -> Option<usize> {
         // Scan activation frames and their stacks, looking for the first _Catch we can find.
-        for a in self.stack.iter().rev() {
-            let mut i = a.valstack.len();
-            while i > 0 {
-                if let Variant::_Catch(cnt) = a.valstack[i - 1].variant() {
-                    // Found one, now scan forwards from 'cnt' backwards looking for either the first
-                    // non-list value, or a list containing the error code.
-                    // TODO check for 'cnt' being too large. not sure how to handle, tho
-                    // TODO this actually i think is wrong, it needs to pull two values off the stack
-                    for j in (i - *cnt)..i {
-                        if let Variant::List(codes) = &a.valstack[j].variant() {
-                            if codes.contains(&v_err(raise_code)) {
-                                return Some((i, a));
+        let mut frame = self.stack.len() - 1;
+        loop {
+            let activation = &self.stack.get(frame)?;
+            for handler in &activation.handler_stack {
+                match handler.handler_type {
+                    HandlerType::Catch(cnt) => {
+                        // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
+                        // non-list value, or a list containing the error code.
+                        // TODO check for 'cnt' being too large. not sure how to handle, tho
+                        // TODO this actually i think is wrong, it needs to pull two values off the stack
+                        let i = handler.valstack_pos;
+                        for j in (i - cnt)..i {
+                            if let Variant::List(codes) = &activation.valstack[j].variant() {
+                                if codes.contains(&v_err(raise_code)) {
+                                    return Some(frame);
+                                }
+                            } else {
+                                return Some(frame);
                             }
-                        } else {
-                            return Some((i, a));
                         }
                     }
+                    _ => {}
                 }
-                i -= 1;
             }
+            if frame == 0 {
+                break;
+            }
+            frame -= 1;
         }
         None
     }
@@ -152,7 +160,7 @@ impl VM {
         // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
         let handler_activ = self.find_handler_active(p.code);
 
-        let why = if let Some((handler_active_num, _)) = handler_activ {
+        let why = if let Some(handler_active_num) = handler_activ {
             FinallyReason::Raise {
                 code: p.code,
                 msg: p.msg,
@@ -208,53 +216,61 @@ impl VM {
         trace!("unwind_stack: {:?}", why);
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
-            // Pop the value stack seeking finally/catch handler values along the way.
-            // TODO: there seems to be some overlap here with find_handler_active logic, could
-            // probably be cleaned up.
-            while let Some(v) = a.valstack.pop() {
-                match v.variant() {
-                    Variant::_Finally(label) => {
+            while a.valstack.pop().is_some() {
+                // Check the handler stack to see if we've hit a finally or catch handler that
+                // was registered for this position in the value stack.
+                let Some(handler) = a.pop_applicable_handler() else {
+                    continue
+                };
+
+                match handler.handler_type {
+                    HandlerType::Finally(label) => {
                         let why_num = why.code();
                         if why_num == FinallyReason::Abort.code() {
                             continue;
                         }
                         // Jump to the label pointed to by the finally label and then continue on
                         // executing.
-                        a.jump(*label);
+                        a.jump(label);
                         a.push(v_int(why_num as i64));
                         return Ok(ExecutionResult::More);
                     }
-                    Variant::_Catch(_label) => {
-                        /* TRY-EXCEPT or `expr ! ...' handler */
-                        let FinallyReason::Raise{code, value, ..} = &why else {
+                    HandlerType::Catch(_) => {
+                        let FinallyReason::Raise { code, value, .. } = &why else {
                             continue
                         };
-                        // Jump further back the value stack looking for a list of errors + labels
-                        // we will match on.
+
                         let mut found = false;
-                        if a.valstack.len() >= 2 {
-                            if let (Some(pushed_label), Some(error_codes)) =
-                                (a.valstack.pop(), a.valstack.pop())
-                            {
-                                if let Variant::_Label(pushed_label) = pushed_label.variant() {
-                                    if let Variant::List(error_codes) = error_codes.variant() {
-                                        if error_codes.contains(&v_err(*code)) {
-                                            a.jump(*pushed_label);
-                                            found = true;
-                                        }
-                                    } else {
-                                        a.jump(*pushed_label);
-                                        found = true;
-                                    }
-                                }
+
+                        let Some(handler) = a.pop_applicable_handler() else {
+                            continue;
+                        };
+                        let HandlerType::CatchLabel(pushed_label) = handler.handler_type else {
+                            panic!("Expected CatchLabel");
+                        };
+
+                        // The value at the top of the stack could be the error codes list.
+                        let v = a.pop().expect("Stack underflow");
+                        if let Variant::List(error_codes) = v.variant() {
+                            if error_codes.contains(&v_err(*code)) {
+                                trace!("Matched handler for {:?}", code);
+                                a.jump(pushed_label);
+                                found = true;
                             }
+                        } else {
+                            trace!("No match, but jump: {:?}", v);
+                            a.jump(pushed_label);
+                            found = true;
                         }
+
                         if found {
                             a.push(value.clone());
                             return Ok(ExecutionResult::More);
                         }
                     }
-                    _ => continue,
+                    HandlerType::CatchLabel(_) => {
+                        panic!("TODO: CatchLabel where we didn't expect it...")
+                    }
                 }
             }
             if let FinallyReason::Exit { label, .. } = why {

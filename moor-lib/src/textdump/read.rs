@@ -10,9 +10,7 @@ use crate::compiler::labels::Label;
 use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
 use crate::values::error::Error;
 use crate::values::objid::Objid;
-use crate::values::var::{
-    v_catch, v_err, v_finally, v_float, v_int, v_list, v_objid, v_str, Var, VAR_CLEAR, VAR_NONE,
-};
+use crate::values::var::{v_err, v_float, v_int, v_list, v_objid, v_str, Var, VAR_CLEAR, VAR_NONE};
 use crate::values::VarType;
 
 impl<R: Read> TextdumpReader<R> {
@@ -71,9 +69,12 @@ impl<R: Read> TextdumpReader<R> {
             }
             VarType::TYPE_CLEAR => VAR_CLEAR,
             VarType::TYPE_NONE => VAR_NONE,
-            VarType::TYPE_CATCH => v_catch(self.read_num()? as usize),
-            VarType::TYPE_FINALLY => v_finally(Label(self.read_num()? as u32)),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),
+            VarType::TYPE_LABEL => {
+                let l_num = self.read_num()?;
+                let l = Label(l_num as u32);
+                v_int(l.0 as i64)
+            }
         };
         Ok(v)
     }

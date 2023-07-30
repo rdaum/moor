@@ -14,8 +14,8 @@ pub struct JumpLabel {
 }
 
 /// A Label is a unique identifier for a jump position in the program.
-/// A committed, compiled, Label can be resolved to a program offset by looking it up in the
-/// jump vector.
+/// A committed, compiled, Label can be resolved to a program offset by looking it up in program's
+/// jump vector at runtime.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
 pub struct Label(pub u32);
 

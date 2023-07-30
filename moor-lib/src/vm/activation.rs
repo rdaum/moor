@@ -9,6 +9,7 @@ use crate::values::objid::Objid;
 use crate::values::var::{v_int, v_list, v_objid, v_str, Var, VAR_NONE};
 use crate::values::VarType;
 use crate::vm::opcode::{Binary, Op};
+use tracing::trace;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -21,11 +22,27 @@ pub struct Caller {
     pub line_number: usize,
 }
 
+// A Label that exists in a separate stack but is *relevant* only for the `valstack_pos`
+// That is:
+//   when created, the stack's current size is stored in `valstack_pos`
+//   when popped off in unwind, the valstack's size is eaten back to pos.
+pub(crate) enum HandlerType {
+    Catch(usize),
+    CatchLabel(Label),
+    Finally(Label),
+}
+
+pub(crate) struct HandlerLabel {
+    pub(crate) handler_type: HandlerType,
+    pub(crate) valstack_pos: usize,
+}
+
 pub(crate) struct Activation {
     pub(crate) task_id: TaskId,
     pub(crate) binary: Binary,
     pub(crate) environment: Vec<Var>,
     pub(crate) valstack: Vec<Var>,
+    pub(crate) handler_stack: Vec<HandlerLabel>,
     pub(crate) pc: usize,
     pub(crate) temp: Var,
     pub(crate) caller_perms: Objid,
@@ -58,6 +75,7 @@ impl Activation {
             binary,
             environment,
             valstack: vec![],
+            handler_stack: vec![],
             pc: 0,
             temp: VAR_NONE,
             caller_perms: caller,
@@ -142,6 +160,23 @@ impl Activation {
         self.valstack.push(v)
     }
 
+    pub fn push_handler_label(&mut self, handler_type: HandlerType) {
+        self.handler_stack.push(HandlerLabel {
+            handler_type,
+            valstack_pos: self.valstack.len(),
+        });
+    }
+
+    pub fn pop_applicable_handler(&mut self) -> Option<HandlerLabel> {
+        if self.handler_stack.is_empty() {
+            return None;
+        }
+        if self.handler_stack[self.handler_stack.len() - 1].valstack_pos != self.valstack.len() {
+            return None;
+        }
+        self.handler_stack.pop()
+    }
+
     pub fn peek_top(&self) -> Option<Var> {
         self.valstack.last().cloned()
     }
@@ -153,6 +188,7 @@ impl Activation {
 
     pub fn jump(&mut self, label_id: Label) {
         let label = &self.binary.jump_labels[label_id.0 as usize];
+        trace!("Jump to {}", label.position.0);
         self.pc = label.position.0 as usize;
     }
 }
