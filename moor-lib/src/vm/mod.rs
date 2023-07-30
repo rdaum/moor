@@ -22,13 +22,13 @@ macro_rules! bf_declare {
         paste::item! {
             pub struct [<Bf $name:camel >] {}
             #[async_trait]
-            impl BfFunction for [<Bf $name:camel >] {
+            impl BuiltinFunction for [<Bf $name:camel >] {
                 fn name(&self) -> &str {
                     return stringify!($name)
                 }
                 async fn call<'a>(
                     &self,
-                    bf_args: &mut BfFunctionArguments<'a>
+                    bf_args: &mut BfCallState<'a>
                 ) -> Result<Var, anyhow::Error> {
                     $action(bf_args).await
                 }

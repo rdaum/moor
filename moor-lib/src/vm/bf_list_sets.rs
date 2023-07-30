@@ -6,10 +6,10 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::{v_err, v_int, v_list, Var, Variant};
-use crate::vm::vm::BfFunctionArguments;
-use crate::vm::vm::{BfFunction, VM};
+use crate::vm::vm::BfCallState;
+use crate::vm::vm::{BuiltinFunction, VM};
 
-async fn bf_is_member<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_is_member<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -25,7 +25,7 @@ async fn bf_is_member<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, 
 }
 bf_declare!(is_member, bf_is_member);
 
-async fn bf_listinsert<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_listinsert<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }
@@ -48,7 +48,7 @@ async fn bf_listinsert<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var,
 }
 bf_declare!(listinsert, bf_listinsert);
 
-async fn bf_listappend<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_listappend<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }
@@ -71,7 +71,7 @@ async fn bf_listappend<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var,
 }
 bf_declare!(listappend, bf_listappend);
 
-async fn bf_listdelete<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_listdelete<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -92,7 +92,7 @@ async fn bf_listdelete<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var,
 }
 bf_declare!(listdelete, bf_listdelete);
 
-async fn bf_listset<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_listset<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 3 {
         return Ok(v_err(E_INVARG));
     }
@@ -117,7 +117,7 @@ async fn bf_listset<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, an
 }
 bf_declare!(listset, bf_listset);
 
-async fn bf_setadd<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_setadd<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -133,7 +133,7 @@ async fn bf_setadd<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, any
 }
 bf_declare!(setadd, bf_setadd);
 
-async fn bf_setremove<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_setremove<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }

@@ -22,7 +22,8 @@ use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::Op;
 use crate::vm::vm_unwind::FinallyReason;
 
-pub(crate) struct BfFunctionArguments<'a> {
+/// The arguments and other state passed to a built-in function.
+pub(crate) struct BfCallState<'a> {
     pub(crate) world_state: &'a mut dyn WorldState,
     pub(crate) frame: &'a mut Activation,
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
@@ -30,15 +31,15 @@ pub(crate) struct BfFunctionArguments<'a> {
 }
 
 #[async_trait]
-pub(crate) trait BfFunction: Sync + Send {
+pub(crate) trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
-    async fn call<'a>(&self, bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error>;
+    async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error>;
 }
 
 pub struct VM {
     // Activation stack.
     pub(crate) stack: Vec<Activation>,
-    pub(crate) bf_funcs: Vec<Arc<Box<dyn BfFunction>>>,
+    pub(crate) bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -56,7 +57,7 @@ impl Default for VM {
 
 impl VM {
     pub fn new() -> Self {
-        let mut bf_funcs: Vec<Arc<Box<dyn BfFunction>>> = Vec::with_capacity(BUILTINS.len());
+        let mut bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>> = Vec::with_capacity(BUILTINS.len());
         for _ in 0..BUILTINS.len() {
             bf_funcs.push(Arc::new(Box::new(BfNoop {})))
         }
@@ -254,7 +255,7 @@ impl VM {
         }
         let bf = self.bf_funcs[bf_func_num].clone();
         trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
-        let mut bf_args = BfFunctionArguments {
+        let mut bf_args = BfCallState {
             world_state: state,
             frame: self.top_mut(),
             sessions: client_connection,

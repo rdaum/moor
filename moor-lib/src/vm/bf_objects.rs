@@ -6,10 +6,10 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_bool, v_err, v_list, v_objid, v_str, Var, Variant};
-use crate::vm::vm::BfFunctionArguments;
-use crate::vm::vm::{BfFunction, VM};
+use crate::vm::vm::BfCallState;
+use crate::vm::vm::{BuiltinFunction, VM};
 
-async fn bf_create<'a>(_bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_create<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     unimplemented!("create")
 }
 bf_declare!(create, bf_create);
@@ -23,7 +23,7 @@ Changes the parent of object to be new-parent. If object is not valid, or if new
 Function: int valid (obj object)
 Returns a non-zero integer (i.e., a true value) if object is a valid object (one that has been created and not yet recycled) and zero (i.e., a false value) otherwise.
 */
-async fn bf_valid<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_valid<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -35,7 +35,7 @@ async fn bf_valid<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(valid, bf_valid);
 
-async fn bf_parent<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -47,7 +47,7 @@ async fn bf_parent<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, any
 }
 bf_declare!(parent, bf_parent);
 
-async fn bf_children<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -80,7 +80,7 @@ Function: none move (obj what, obj where)
 Changes what's location to be where. This is a complex process because a number of permissions checks and notifications must be performed. The actual movement takes place as described in the following paragraphs.
  */
 
-async fn bf_verbs<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -100,7 +100,7 @@ bf_declare!(verbs, bf_verbs);
 Function: list properties (obj object)
 Returns a list of the names of the properties defined directly on the given object, not inherited from its parent. If object is not valid, then E_INVARG is raised. If the programmer does not have read permission on object, then E_PERM is raised.
  */
-async fn bf_properties<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }

@@ -10,11 +10,11 @@ use crate::model::verbs::VerbFlag;
 use crate::util::bitenum::BitEnum;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_err, v_list, v_objid, v_str, v_string, Var, Variant, VAR_NONE};
-use crate::vm::vm::BfFunctionArguments;
-use crate::vm::vm::{BfFunction, VM};
+use crate::vm::vm::BfCallState;
+use crate::vm::vm::{BuiltinFunction, VM};
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
-async fn bf_verb_info<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -53,7 +53,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, 
 bf_declare!(verb_info, bf_verb_info);
 
 // set_verb_info (obj <object>, str <verb-desc>, list <info>) => none
-async fn bf_set_verb_info<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 3 {
         return Ok(v_err(E_INVARG));
     }
@@ -105,7 +105,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<V
 }
 bf_declare!(set_verb_info, bf_set_verb_info);
 
-async fn bf_verb_args<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -130,7 +130,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, 
 bf_declare!(verb_args, bf_verb_args);
 
 // set_verb_args (obj <object>, str <verb-desc>, list <args>) => none
-async fn bf_set_verb_args<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 3 {
         return Ok(v_err(E_INVARG));
     }

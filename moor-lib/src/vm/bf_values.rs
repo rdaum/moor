@@ -8,16 +8,16 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_bool, v_err, v_float, v_int, v_obj, v_str, Var, Variant};
-use crate::vm::vm::BfFunctionArguments;
-use crate::vm::vm::{BfFunction, VM};
+use crate::vm::vm::BfCallState;
+use crate::vm::vm::{BuiltinFunction, VM};
 
-async fn bf_typeof<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_typeof<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     let arg = &bf_args.args[0];
     Ok(v_int(arg.type_id() as i64))
 }
 bf_declare!(typeof, bf_typeof);
 
-async fn bf_tostr<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     let mut result = String::new();
     for arg in &bf_args.args {
         match arg.variant() {
@@ -35,7 +35,7 @@ async fn bf_tostr<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(tostr, bf_tostr);
 
-async fn bf_toliteral<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_toliteral<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -44,7 +44,7 @@ async fn bf_toliteral<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, 
 }
 bf_declare!(toliteral, bf_toliteral);
 
-async fn bf_toint<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -64,7 +64,7 @@ async fn bf_toint<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(toint, bf_toint);
 
-async fn bf_toobj<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -90,7 +90,7 @@ async fn bf_toobj<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(toobj, bf_toobj);
 
-async fn bf_tofloat<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -110,7 +110,7 @@ async fn bf_tofloat<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, an
 }
 bf_declare!(tofloat, bf_tofloat);
 
-async fn bf_equal<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -122,7 +122,7 @@ async fn bf_equal<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(equal, bf_equal);
 
-async fn bf_value_bytes<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_value_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -130,7 +130,7 @@ async fn bf_value_bytes<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var
 }
 bf_declare!(value_bytes, bf_value_bytes);
 
-async fn bf_value_hash<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_value_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -140,7 +140,7 @@ async fn bf_value_hash<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var,
 }
 bf_declare!(value_hash, bf_value_hash);
 
-async fn bf_length<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }

@@ -11,8 +11,8 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::var::error::Error::{E_INVARG, E_TYPE};
 use crate::var::{v_err, v_int, v_list, v_str, Var, Variant};
-use crate::vm::vm::BfFunctionArguments;
-use crate::vm::vm::{BfFunction, VM};
+use crate::vm::vm::BfCallState;
+use crate::vm::vm::{BuiltinFunction, VM};
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
@@ -39,7 +39,7 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
 }
 
 //Function: str strsub (str subject, str what, str with [, case-matters])
-async fn bf_strsub<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
@@ -88,7 +88,7 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
-async fn bf_index<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
@@ -110,7 +110,7 @@ async fn bf_index<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(index, bf_index);
 
-async fn bf_rindex<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
@@ -132,7 +132,7 @@ async fn bf_rindex<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, any
 }
 bf_declare!(rindex, bf_rindex);
 
-async fn bf_strcmp<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -161,7 +161,7 @@ fn des_crypt(text: &str, salt: &str) -> String {
     crypted.iter().map(|i| char::from(*i)).collect()
 }
 
-async fn bf_crypt<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -186,7 +186,7 @@ async fn bf_crypt<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(crypt, bf_crypt);
 
-async fn bf_string_hash<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -200,7 +200,7 @@ async fn bf_string_hash<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var
 }
 bf_declare!(string_hash, bf_string_hash);
 
-async fn bf_binary_hash<'a>(_bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     unimplemented!("binary_hash")
 }
 bf_declare!(binary_hash, bf_binary_hash);
@@ -211,7 +211,7 @@ bf_declare!(binary_hash, bf_binary_hash);
 // whole 'legacy' regex engine in a mutex.
 pub static mut task_timed_out: u64 = 0;
 
-async fn bf_match<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() < 3 || bf_args.args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }

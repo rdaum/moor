@@ -10,15 +10,15 @@ use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
 use crate::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use crate::var::{v_bool, v_err, v_int, v_list, v_objid, v_string, Var, Variant, VAR_NONE};
-use crate::vm::vm::BfFunctionArguments;
-use crate::vm::vm::{BfFunction, VM};
+use crate::vm::vm::BfCallState;
+use crate::vm::vm::{BuiltinFunction, VM};
 
-async fn bf_noop<'a>(_bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_noop<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     unimplemented!("BF is not implemented");
 }
 bf_declare!(noop, bf_noop);
 
-async fn bf_notify<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {
         return Ok(v_err(E_INVARG));
     }
@@ -48,9 +48,7 @@ async fn bf_notify<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, any
 }
 bf_declare!(notify, bf_notify);
 
-async fn bf_connected_players<'a>(
-    bf_args: &mut BfFunctionArguments<'a>,
-) -> Result<Var, anyhow::Error> {
+async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
     }
@@ -70,7 +68,7 @@ async fn bf_connected_players<'a>(
 }
 bf_declare!(connected_players, bf_connected_players);
 
-async fn bf_is_player<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -88,7 +86,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, 
 }
 bf_declare!(is_player, bf_is_player);
 
-async fn bf_caller_perms<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
     }
@@ -97,9 +95,7 @@ async fn bf_caller_perms<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Va
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
-async fn bf_set_task_perms<'a>(
-    bf_args: &mut BfFunctionArguments<'a>,
-) -> Result<Var, anyhow::Error> {
+async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -116,7 +112,7 @@ async fn bf_set_task_perms<'a>(
 }
 bf_declare!(set_task_perms, bf_set_task_perms);
 
-async fn bf_callers<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
     }
@@ -142,7 +138,7 @@ async fn bf_callers<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, an
 }
 bf_declare!(callers, bf_callers);
 
-async fn bf_task_id<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
     }
@@ -151,7 +147,7 @@ async fn bf_task_id<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, an
 }
 bf_declare!(task_id, bf_task_id);
 
-async fn bf_idle_seconds<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
@@ -161,7 +157,7 @@ async fn bf_idle_seconds<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Va
 }
 bf_declare!(idle_seconds, bf_idle_seconds);
 
-async fn bf_time<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
     }
@@ -174,7 +170,7 @@ async fn bf_time<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyho
 }
 bf_declare!(time, bf_time);
 
-async fn bf_raise<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
     //
     // Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.  <Message>, which defaults to the value of `tostr(<code>)',
@@ -196,9 +192,7 @@ async fn bf_raise<'a>(bf_args: &mut BfFunctionArguments<'a>) -> Result<Var, anyh
 }
 bf_declare!(raise, bf_raise);
 
-async fn bf_server_version<'a>(
-    bf_args: &mut BfFunctionArguments<'a>,
-) -> Result<Var, anyhow::Error> {
+async fn bf_server_version<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
     }
