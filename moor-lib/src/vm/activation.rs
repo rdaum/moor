@@ -1,7 +1,7 @@
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
 use crate::model::verbs::VerbInfo;
-use crate::tasks::scheduler::TaskId;
+use crate::tasks::TaskId;
 use crate::util::bitenum::BitEnum;
 use crate::values::error::Error;
 use crate::values::error::Error::E_VARNF;
