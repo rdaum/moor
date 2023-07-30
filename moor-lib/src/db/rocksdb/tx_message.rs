@@ -46,6 +46,16 @@ pub(crate) enum Message {
         Option<VerbArgsSpec>,
         Sender<Result<VerbHandle, ObjectError>>,
     ),
+    // Update (non-program) data about a verb.
+    SetVerbInfo {
+        obj: Objid,
+        uuid: u128,
+        owner: Option<Objid>,
+        names: Option<Vec<String>>,
+        flags: Option<BitEnum<VerbFlag>>,
+        args: Option<VerbArgsSpec>,
+        reply: Sender<Result<(), ObjectError>>,
+    },
 
     // Add a verb on an object
     AddVerb {

@@ -153,6 +153,20 @@ pub(crate) fn run_tx_server<'a>(
             Message::RetrieveProperty(o, u, r) => {
                 respond(r, tx.retrieve_property(o, u))?;
             }
+            Message::SetVerbInfo {
+                obj,
+                uuid,
+                names,
+                owner,
+                args,
+                flags,
+                reply,
+            } => {
+                respond(
+                    reply,
+                    tx.set_verb_info(obj, uuid, owner, flags, names, args),
+                )?;
+            }
             Message::SetProperty(o, u, v, r) => {
                 respond(r, tx.set_property_value(o, u, v))?;
             }

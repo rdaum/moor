@@ -1,6 +1,7 @@
-use anyhow::bail;
+use anyhow::{bail, Error};
 use bincode::config::Configuration;
 use rocksdb::{ColumnFamily, ErrorKind};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
@@ -526,11 +527,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             };
             let verb = verbs.iter().find(|vh| {
                 if verbname_matches(&vh.names, &n).is_some() {
-                    return if let Some(a) = a {
-                        a.matches(&a)
-                    } else {
-                        vh.args == VerbArgsSpec::this_none_this()
-                    };
+                    return if let Some(a) = a { a.matches(&a) } else { true };
                 }
                 false
             });
@@ -578,6 +575,54 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let (program, _) = bincode::decode_from_slice(&prg_bytes, self.bincode_cfg)?;
         Ok((program, verb.clone()))
     }
+
+    fn set_verb_info(
+        &self,
+        o: Objid,
+        v: u128,
+        new_owner: Option<Objid>,
+        new_perms: Option<BitEnum<VerbFlag>>,
+        new_names: Option<Vec<String>>,
+        new_args: Option<VerbArgsSpec>,
+    ) -> Result<(), Error> {
+        let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
+        let ok = object_key(o);
+        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
+        let mut verbs: Vec<VerbHandle> = match verbs_bytes {
+            None => vec![],
+            Some(verb_bytes) => {
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                verbs
+            }
+        };
+        let mut found = false;
+        for verb in verbs.iter_mut() {
+            if verb.uuid == v {
+                found = true;
+                if let Some(new_owner) = new_owner {
+                    verb.owner = new_owner;
+                }
+                if let Some(new_perms) = new_perms {
+                    verb.flags = new_perms;
+                }
+                if let Some(new_names) = new_names {
+                    verb.names = new_names;
+                }
+                if let Some(new_args) = new_args {
+                    verb.args = new_args;
+                }
+                break;
+            }
+        }
+        if !found {
+            let v_uuid_str = Uuid::from_u128(v).to_string();
+            return Err(ObjectError::VerbNotFound(o, v_uuid_str).into());
+        }
+        let verbs_v = bincode::encode_to_vec(&verbs, self.bincode_cfg)?;
+        self.tx.put_cf(cf, ok, verbs_v)?;
+        Ok(())
+    }
+
     fn get_properties(&self, o: Objid) -> Result<Vec<PropHandle>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
         let ok = object_key(o);

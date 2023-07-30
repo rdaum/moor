@@ -241,6 +241,22 @@ async fn bf_raise(
 }
 bf_declare!(raise, bf_raise);
 
+async fn bf_server_version(
+    _ws: &mut dyn WorldState,
+    _frame: &mut Activation,
+    _sess: Arc<RwLock<dyn Sessions>>,
+    args: &[Var],
+) -> Result<Var, anyhow::Error> {
+    if !args.is_empty() {
+        return Ok(v_err(E_INVARG));
+    }
+    // TODO: This is a placeholder for now, should be set by the server on startup. But right now
+    // there isn't a good place to stash this other than WorldState. I intend on refactoring the
+    // signature for BF invocations, and when I do this, I'll get additional metadata on there.
+    Ok(v_string("0.0.1".to_string()))
+}
+bf_declare!(server_version, bf_server_version);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.bf_funcs[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -254,6 +270,8 @@ impl VM {
         self.bf_funcs[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
         self.bf_funcs[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
         self.bf_funcs[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
+        self.bf_funcs[offset_for_builtin("server_version")] =
+            Arc::new(Box::new(BfServerVersion {}));
         Ok(())
     }
 }

@@ -382,6 +382,7 @@ impl Task {
                 }) => {
                     // We should never be asked to start a command while we're already running one.
                     assert!(!running_method);
+                    trace!("Starting command: {:?} on player {:?}", command, player);
                     self.vm
                         .setup_verb_command(
                             self.task_id,

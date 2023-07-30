@@ -1,3 +1,4 @@
+use crate::db::PREP_LIST;
 use std::string::ToString;
 use std::sync::Once;
 
@@ -22,27 +23,9 @@ pub struct ParsedCommand {
 
 #[derive(Clone)]
 pub struct Prep {
-    id: usize,
+    pub id: usize,
     phrases: Vec<&'static str>,
 }
-
-const PREP_LIST: [&str; 15] = [
-    "with/using",
-    "at/to",
-    "in front of",
-    "in/inside/into",
-    "on top of/on/onto/upon",
-    "out of/from inside/from",
-    "over",
-    "through",
-    "under/underneath/beneath",
-    "behind",
-    "beside",
-    "for/about",
-    "is",
-    "as",
-    "off/off of",
-];
 
 pub const PREPOSITION_WITH_USING: u16 = 0;
 pub const PREPOSITION_AT_TO: u16 = 1;

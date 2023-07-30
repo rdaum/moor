@@ -148,6 +148,15 @@ trait DbStorage {
         a: Option<VerbArgsSpec>,
     ) -> Result<VerbHandle, anyhow::Error>;
     fn retrieve_verb(&self, o: Objid, v: String) -> Result<(Binary, VerbHandle), anyhow::Error>;
+    fn set_verb_info(
+        &self,
+        o: Objid,
+        v: u128,
+        new_owner: Option<Objid>,
+        new_perms: Option<BitEnum<VerbFlag>>,
+        new_names: Option<Vec<String>>,
+        new_args: Option<VerbArgsSpec>,
+    ) -> Result<(), anyhow::Error>;
 
     fn get_properties(&self, o: Objid) -> Result<Vec<PropHandle>, anyhow::Error>;
     fn retrieve_property(&self, o: Objid, u: u128) -> Result<Var, anyhow::Error>;

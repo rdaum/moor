@@ -1,3 +1,5 @@
+use crate::db::PREP_LIST;
+use crate::tasks::command_parse::match_preposition;
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
@@ -9,13 +11,47 @@ pub enum ArgSpec {
     This = 2,
 }
 
+impl ArgSpec {
+    pub fn to_string(&self) -> &str {
+        match self {
+            ArgSpec::None => "none",
+            ArgSpec::Any => "any",
+            ArgSpec::This => "this",
+        }
+    }
+    pub fn from_string(repr: &str) -> Option<ArgSpec> {
+        match repr {
+            "none" => Some(ArgSpec::None),
+            "any" => Some(ArgSpec::Any),
+            "this" => Some(ArgSpec::This),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]
 pub enum PrepSpec {
     Any,
     None,
     Other(
-        u16, /* matches Prep 'id' as returned from match_preposition */
+        u16, /* matches Prep 'id' as returned from match_preposition, matching offset into PREP_LIST */
     ),
+}
+impl PrepSpec {
+    pub fn to_string(&self) -> &str {
+        match self {
+            PrepSpec::Any => "any",
+            PrepSpec::None => "none",
+            PrepSpec::Other(id) => PREP_LIST[*id as usize],
+        }
+    }
+    pub fn from_string(repr: &str) -> Option<PrepSpec> {
+        match repr {
+            "any" => Some(PrepSpec::Any),
+            "none" => Some(PrepSpec::None),
+            _ => match_preposition(repr).map(|p| PrepSpec::Other(p.id as u16)),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]

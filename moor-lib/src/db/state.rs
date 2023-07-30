@@ -63,6 +63,16 @@ pub trait WorldState: Send + Sync {
         code: Binary,
     ) -> Result<(), ObjectError>;
 
+    fn update_verb_info(
+        &mut self,
+        obj: Objid,
+        vname: &str,
+        owner: Option<Objid>,
+        names: Option<Vec<String>>,
+        flags: Option<BitEnum<VerbFlag>>,
+        args: Option<VerbArgsSpec>,
+    ) -> Result<(), ObjectError>;
+
     /// Get the verb with the given name on the given object.
     fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError>;
 

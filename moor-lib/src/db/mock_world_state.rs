@@ -118,6 +118,18 @@ impl WorldState for MockState {
         todo!()
     }
 
+    fn update_verb_info(
+        &mut self,
+        obj: Objid,
+        vname: &str,
+        owner: Option<Objid>,
+        names: Option<Vec<String>>,
+        flags: Option<BitEnum<VerbFlag>>,
+        args: Option<VerbArgsSpec>,
+    ) -> Result<(), ObjectError> {
+        todo!()
+    }
+
     fn get_verb(&mut self, _obj: Objid, _vname: &str) -> Result<VerbInfo, ObjectError> {
         todo!()
     }

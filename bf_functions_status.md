@@ -98,9 +98,9 @@ The following is a table of the status of various builtin-functions, to keep an 
 |---------------|----------|------------------------------------------|
 | verbs         | &check;  |                                          |
 | verb_info     | &check;  |                                          |
-| set_verb_info |          |                                          |
-| verb_args     |          |                                          |
-| set_verb_args |          |                                          |
+| set_verb_info | &check   |                                          |
+| verb_args     | &check;  |                                          |
+| set_verb_args | &check;  |                                          |
 | add_verb      |          |                                          |
 | delete_verb   |          |                                          |
 | verb_code     |          |                                          |
@@ -122,24 +122,24 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Server
 
-| Name                | Complete | Notes                                      |
-|---------------------|----------|--------------------------------------------|
-| server_version      | &check;  |                                            |
-| renumber            |          |                                            |
-| reset_max_object    |          |                                            |
-| memory_usage        |          |                                            |
-| shutdown            |          |                                            |
-| dump_database       |          |                                            |
-| db_disk_size        |          |                                            |
-| connected_players   | &check;  |                                            |
-| connected_seconds   |          | Will need hooks to Session                 |
-| idle_seconds        |          | " (Hardcoded to 0 to make some tests pass) |
-| connection_name     |          |                                            |
-| notify              | &check;  |                                            |
-| boot_player         |          |                                            |
-| server_log          |          |                                            |
-| load_server_options |          |                                            |
-| function_info       |          |                                            |
+| Name                | Complete | Notes                                         |
+|---------------------|----------|-----------------------------------------------|
+| server_version      | &check;  | Hardcoded value, should derive from bin crate |
+| renumber            |          |                                               |
+| reset_max_object    |          |                                               |
+| memory_usage        |          |                                               |
+| shutdown            |          |                                               |
+| dump_database       |          |                                               |
+| db_disk_size        |          |                                               |
+| connected_players   | &check;  |                                               |
+| connected_seconds   |          | Will need hooks to Session                    |
+| idle_seconds        |          | " (Hardcoded to 0 to make some tests pass)    |
+| connection_name     |          |                                               |
+| notify              | &check;  |                                               |
+| boot_player         |          |                                               |
+| server_log          |          |                                               |
+| load_server_options |          |                                               |
+| function_info       |          |                                               |
 
 
 
