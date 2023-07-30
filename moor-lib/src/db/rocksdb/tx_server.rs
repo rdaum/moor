@@ -11,7 +11,7 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
 use crate::util::bitenum::BitEnum;
-use crate::var::Objid;
+use crate::values::objid::Objid;
 
 // Internal storage for the verb information stored in the ObjectVerbs column family, basically
 // everything sans-program.

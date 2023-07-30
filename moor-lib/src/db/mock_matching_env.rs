@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 
 use crate::db::matching::MatchEnvironment;
-use crate::var::{Objid, NOTHING};
+use crate::values::objid::{Objid, NOTHING};
 
 pub const MOCK_PLAYER: Objid = Objid(3);
 pub const MOCK_ROOM1: Objid = Objid(1);

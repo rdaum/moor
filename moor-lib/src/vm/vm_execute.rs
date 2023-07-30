@@ -5,10 +5,10 @@ use tracing::trace;
 
 use crate::db::state::WorldState;
 use crate::tasks::Sessions;
-use crate::var::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
-use crate::var::{
-    v_bool, v_catch, v_finally, v_int, v_label, v_list, v_obj, v_str, Variant, VAR_NONE,
-};
+use crate::values::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
+use crate::values::var::VAR_NONE;
+use crate::values::var::{v_bool, v_catch, v_finally, v_int, v_label, v_list, v_obj, v_str};
+use crate::values::variant::Variant;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm::{ExecutionResult, VM};
 use crate::vm::vm_unwind::FinallyReason;

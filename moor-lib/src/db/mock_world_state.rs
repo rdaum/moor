@@ -14,7 +14,8 @@ use crate::model::ObjectError;
 use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var, VAR_NONE};
+use crate::values::objid::Objid;
+use crate::values::var::{Var, VAR_NONE};
 use crate::vm::opcode::Binary;
 
 struct MockStore {

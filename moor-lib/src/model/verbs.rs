@@ -3,7 +3,7 @@ use enum_primitive_derive::Primitive;
 
 use crate::model::r#match::VerbArgsSpec;
 use crate::util::bitenum::BitEnum;
-use crate::var::Objid;
+use crate::values::objid::Objid;
 use crate::vm::opcode::Binary;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]

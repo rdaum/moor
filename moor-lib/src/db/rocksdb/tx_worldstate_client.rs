@@ -12,7 +12,9 @@ use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{v_int, v_list, v_objid, Objid, Var, Variant, NOTHING};
+use crate::values::objid::{Objid, NOTHING};
+use crate::values::var::{v_int, v_list, v_objid, Var};
+use crate::values::variant::Variant;
 use crate::vm::opcode::Binary;
 
 fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Binary>) -> VerbInfo {

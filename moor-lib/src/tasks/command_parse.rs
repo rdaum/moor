@@ -3,7 +3,8 @@ use std::string::ToString;
 use std::sync::Once;
 
 use crate::model::r#match::PrepSpec;
-use crate::var::{v_str, Objid, Var};
+use crate::values::objid::Objid;
+use crate::values::var::{v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
@@ -217,7 +218,8 @@ mod tests {
     use crate::db::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
-    use crate::var::{v_str, NOTHING};
+    use crate::values::objid::NOTHING;
+    use crate::values::var::v_str;
 
     use super::*;
 

@@ -1,8 +1,10 @@
 use tracing::trace;
 
 use crate::compiler::labels::{Label, Offset};
-use crate::var::error::{Error, ErrorPack};
-use crate::var::{v_err, v_int, v_list, v_objid, v_str, Var, Variant, VAR_NONE};
+use crate::values::error::{Error, ErrorPack};
+use crate::values::var::VAR_NONE;
+use crate::values::var::{v_err, v_int, v_list, v_objid, v_str, Var};
+use crate::values::variant::Variant;
 use crate::vm::activation::Activation;
 use crate::vm::vm::{ExecutionResult, VM};
 

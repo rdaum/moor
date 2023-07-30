@@ -17,7 +17,7 @@ use moor_lib::db::rocksdb::LoaderInterface;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
 use moor_lib::textdump::load_db::textdump_load;
-use moor_lib::var::Objid;
+use moor_lib::values::objid::Objid;
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {

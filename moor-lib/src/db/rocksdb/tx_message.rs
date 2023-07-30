@@ -8,7 +8,8 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var};
+use crate::values::objid::Objid;
+use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 
 pub(crate) enum Message {

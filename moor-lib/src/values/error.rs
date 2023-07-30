@@ -1,7 +1,8 @@
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
-use crate::var::{Var, VAR_NONE};
+use crate::values::var::Var;
+use crate::values::var::VAR_NONE;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Hash, Encode, Decode)]

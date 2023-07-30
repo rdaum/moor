@@ -8,8 +8,10 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
-use crate::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
-use crate::var::{v_bool, v_err, v_int, v_list, v_objid, v_string, Var, Variant, VAR_NONE};
+use crate::values::error::Error::{E_INVARG, E_PERM, E_TYPE};
+use crate::values::var::VAR_NONE;
+use crate::values::var::{v_bool, v_err, v_int, v_list, v_objid, v_string, Var};
+use crate::values::variant::Variant;
 use crate::vm::vm::BfCallState;
 use crate::vm::vm::{BuiltinFunction, VM};
 

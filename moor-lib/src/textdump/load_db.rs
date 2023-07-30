@@ -13,7 +13,8 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
 use crate::textdump::{Object, TextdumpReader};
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var};
+use crate::values::objid::Objid;
+use crate::values::var::Var;
 
 struct RProp {
     definer: Objid,

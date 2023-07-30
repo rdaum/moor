@@ -8,8 +8,10 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
 use crate::util::bitenum::BitEnum;
-use crate::var::error::Error::{E_INVARG, E_TYPE};
-use crate::var::{v_err, v_list, v_objid, v_str, v_string, Var, Variant, VAR_NONE};
+use crate::values::error::Error::{E_INVARG, E_TYPE};
+use crate::values::var::VAR_NONE;
+use crate::values::var::{v_err, v_list, v_objid, v_str, v_string, Var};
+use crate::values::variant::Variant;
 use crate::vm::vm::BfCallState;
 use crate::vm::vm::{BuiltinFunction, VM};
 

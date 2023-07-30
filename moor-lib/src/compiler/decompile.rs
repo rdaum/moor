@@ -8,7 +8,8 @@ use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{LabelNotFound, MalformedProgram};
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
-use crate::var::{v_label, Var, Variant};
+use crate::values::var::{v_label, Var};
+use crate::values::variant::Variant;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
 
 #[derive(Debug, thiserror::Error)]

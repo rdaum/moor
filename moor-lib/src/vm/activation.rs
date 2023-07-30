@@ -3,9 +3,11 @@ use crate::model::objects::ObjFlag;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::scheduler::TaskId;
 use crate::util::bitenum::BitEnum;
-use crate::var::error::Error;
-use crate::var::error::Error::E_VARNF;
-use crate::var::{v_int, v_list, v_objid, v_str, Objid, Var, VarType, VAR_NONE};
+use crate::values::error::Error;
+use crate::values::error::Error::E_VARNF;
+use crate::values::objid::Objid;
+use crate::values::var::{v_int, v_list, v_objid, v_str, Var, VAR_NONE};
+use crate::values::VarType;
 use crate::vm::opcode::{Binary, Op};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}

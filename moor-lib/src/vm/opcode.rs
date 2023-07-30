@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use bincode::{Decode, Encode};
 
 use crate::compiler::labels::{JumpLabel, Label, Names, Offset};
-use crate::var::Var;
+use crate::values::var::Var;
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum ScatterLabel {

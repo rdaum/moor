@@ -2,7 +2,8 @@ use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var};
+use crate::values::objid::Objid;
+use crate::values::var::Var;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
 pub enum PropFlag {

@@ -17,8 +17,9 @@ mod tests {
     use crate::model::ObjectError::VerbNotFound;
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
-    use crate::var::error::Error::E_VERBNF;
-    use crate::var::{v_err, v_int, v_list, v_obj, v_str, Objid, Var, VAR_NONE};
+    use crate::values::error::Error::E_VERBNF;
+    use crate::values::objid::Objid;
+    use crate::values::var::{v_err, v_int, v_list, v_obj, v_str, Var, VAR_NONE};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
     use crate::vm::vm::{ExecutionResult, VM};

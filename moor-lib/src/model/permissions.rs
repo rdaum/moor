@@ -1,7 +1,7 @@
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::util::bitenum::BitEnum;
-use crate::var::Objid;
+use crate::values::objid::Objid;
 
 pub trait Permissions {
     fn property_allows(

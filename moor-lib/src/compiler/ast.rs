@@ -1,6 +1,6 @@
 /// The abstract syntax tree produced by the parser and converted by codgen into opcodes.
 use crate::compiler::labels::Name;
-use crate::var::Var;
+use crate::values::var::Var;
 use crate::vm::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq)]

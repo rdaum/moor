@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::model::objects::ObjAttr;
 use crate::model::verbs::Vid;
-use crate::var::Objid;
+use crate::values::objid::Objid;
 
 pub mod r#match;
 pub mod objects;

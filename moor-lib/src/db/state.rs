@@ -6,7 +6,8 @@ use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var};
+use crate::values::objid::Objid;
+use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 
 pub trait WorldState: Send + Sync {

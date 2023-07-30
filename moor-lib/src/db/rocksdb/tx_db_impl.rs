@@ -14,7 +14,8 @@ use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
 use crate::util::bitenum::BitEnum;
 use crate::util::verbname_cmp;
-use crate::var::{Objid, Var, NOTHING};
+use crate::values::objid::{Objid, NOTHING};
+use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 
 fn object_key(o: Objid) -> Vec<u8> {
@@ -828,7 +829,8 @@ mod tests {
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::ObjectError;
     use crate::util::bitenum::BitEnum;
-    use crate::var::{v_str, Objid, NOTHING};
+    use crate::values::objid::{Objid, NOTHING};
+    use crate::values::var::v_str;
 
     struct TestDb {
         db: Arc<OptimisticTransactionDB>,

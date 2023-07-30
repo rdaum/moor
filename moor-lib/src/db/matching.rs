@@ -1,7 +1,8 @@
 use anyhow::anyhow;
 
 use crate::model::ObjectError;
-use crate::var::{Objid, AMBIGUOUS, FAILED_MATCH, NOTHING};
+use crate::values::objid::FAILED_MATCH;
+use crate::values::objid::{Objid, AMBIGUOUS, NOTHING};
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
@@ -133,7 +134,8 @@ mod tests {
     use crate::db::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
-    use crate::var::{Objid, FAILED_MATCH, NOTHING};
+    use crate::values::objid::FAILED_MATCH;
+    use crate::values::objid::{Objid, NOTHING};
 
     #[test]
     fn test_match_object_names_fail() {

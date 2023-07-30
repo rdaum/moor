@@ -21,7 +21,9 @@ use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::Sessions;
 use crate::util::bitenum::BitEnum;
-use crate::var::{Objid, Var, Variant};
+use crate::values::objid::Objid;
+use crate::values::var::Var;
+use crate::values::variant::Variant;
 use crate::vm::opcode::Binary;
 use crate::vm::vm::{ExecutionResult, VM};
 use crate::vm::vm_unwind::FinallyReason;
@@ -599,7 +601,7 @@ mod tests {
     use crate::tasks::scheduler::Scheduler;
     use crate::tasks::Sessions;
     use crate::util::bitenum::BitEnum;
-    use crate::var::{Objid, NOTHING};
+    use crate::values::objid::{Objid, NOTHING};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
