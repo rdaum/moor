@@ -241,7 +241,7 @@ impl Task {
                                 .sessions
                                 .write()
                                 .await
-                                .send_text(self.player, format!("Aborted: {:?}", fr).to_string())
+                                .send_text(self.player, format!("Aborted: {:?}", fr).as_str())
                                 .await
                             {
                                 warn!("Could not send abort message to player: {:?}", send_error);
@@ -275,7 +275,7 @@ impl Task {
                                     .sessions
                                     .write()
                                     .await
-                                    .send_text(self.player, l.to_string())
+                                    .send_text(self.player, l.as_str())
                                     .await
                                 {
                                     warn!("Could not send traceback to player: {:?}", send_error);

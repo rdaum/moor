@@ -47,7 +47,7 @@ struct ReplSessions(Objid, SharedWriter);
 
 #[async_trait]
 impl Sessions for ReplSessions {
-    async fn send_text(&mut self, _player: Objid, msg: String) -> Result<(), Error> {
+    async fn send_text(&mut self, _player: Objid, msg: &str) -> Result<(), Error> {
         info!("NOTIFY: {}", msg);
         Ok(())
     }

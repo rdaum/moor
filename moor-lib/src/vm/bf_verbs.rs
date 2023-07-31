@@ -84,9 +84,9 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                 }
             }
             let mut name_strings = vec![];
-            for name in names {
+            for name in names.iter() {
                 if let Variant::Str(s) = name.variant() {
-                    name_strings.push(s.clone());
+                    name_strings.push(String::from(s.as_str()));
                 } else {
                     return Ok(v_err(E_TYPE));
                 }

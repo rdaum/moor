@@ -68,7 +68,7 @@ async fn ws_send_error(
         .clone()
         .write()
         .await
-        .send_text(player, msg)
+        .send_text(player, msg.as_str())
         .await
 }
 
@@ -184,7 +184,7 @@ pub async fn ws_server_start(
 
 #[async_trait]
 impl Sessions for WebSocketSessions {
-    async fn send_text(&mut self, player: Objid, msg: String) -> Result<(), anyhow::Error> {
+    async fn send_text(&mut self, player: Objid, msg: &str) -> Result<(), anyhow::Error> {
         let Some(conn) = self.connections.get_mut(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };

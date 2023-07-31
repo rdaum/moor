@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
+use std::sync::Arc;
 
 use bincode::{Decode, Encode};
 use decorum::R64;
@@ -38,13 +39,13 @@ pub fn v_float(f: f64) -> Var {
 
 pub fn v_str(s: &str) -> Var {
     Var {
-        value: Variant::Str(s.to_string()),
+        value: Variant::Str(Arc::new(s.to_string())),
     }
 }
 
 pub fn v_string(s: String) -> Var {
     Var {
-        value: Variant::Str(s),
+        value: Variant::Str(Arc::new(s)),
     }
 }
 
@@ -68,7 +69,7 @@ pub fn v_err(e: Error) -> Var {
 
 pub fn v_list(l: Vec<Var>) -> Var {
     Var {
-        value: Variant::List(l),
+        value: Variant::List(Arc::new(l)),
     }
 }
 
@@ -276,7 +277,7 @@ impl Var {
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l + (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + *r)),
             (Variant::Str(s), Variant::Str(r)) => {
-                let mut c = s.clone();
+                let mut c = String::from(s.as_str());
                 c.push_str(r);
                 Ok(v_str(c.as_str()))
             }
@@ -381,14 +382,14 @@ impl Var {
                 ans.push_str(&base_str[..from - 1]);
                 ans.push_str(value_str);
                 ans.push_str(&base_str[to..]);
-                Variant::Str(ans)
+                Variant::Str(Arc::new(ans))
             }
             (Variant::List(base_list), Variant::List(value_list)) => {
                 let mut ans: Vec<Var> = Vec::with_capacity(newsize as usize);
                 ans.extend_from_slice(&base_list[..from - 1]);
                 ans.extend(value_list.iter().cloned());
                 ans.extend_from_slice(&base_list[to..]);
-                Variant::List(ans)
+                Variant::List(Arc::new(ans))
             }
             _ => unreachable!(),
         };

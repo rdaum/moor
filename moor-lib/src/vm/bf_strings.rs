@@ -177,7 +177,7 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
         let Variant::Str(salt) = bf_args.args[1].variant() else {
             return Ok(v_err(E_TYPE));
         };
-        salt.clone()
+        String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
         Ok(v_str(des_crypt(text, salt.as_str()).as_str()))

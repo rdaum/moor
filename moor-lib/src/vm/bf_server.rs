@@ -37,7 +37,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
         .sessions
         .write()
         .await
-        .send_text(*player, msg.clone())
+        .send_text(*player, msg.as_str())
         .await
     {
         warn!(

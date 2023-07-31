@@ -328,7 +328,7 @@ mod tests {
 
     #[async_trait]
     impl Sessions for NoopClientConnection {
-        async fn send_text(&mut self, _player: Objid, _msg: String) -> Result<(), anyhow::Error> {
+        async fn send_text(&mut self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
             Ok(())
         }
 

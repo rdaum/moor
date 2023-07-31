@@ -176,10 +176,10 @@ impl VM {
                 };
 
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-
-                let mut new_list = list.clone();
-                new_list.push(tail);
-                self.push(&v_list(new_list))
+                let mut new_vec = Vec::with_capacity(list.len() + 1);
+                new_vec.extend(list.iter().cloned());
+                new_vec.push(tail);
+                self.push(&v_list(new_vec))
             }
             Op::ListAppend => {
                 let tail = self.pop();
@@ -210,7 +210,7 @@ impl VM {
                             return self.push_error(E_RANGE);
                         }
 
-                        let mut nval = l.clone();
+                        let mut nval = Vec::from(l.as_slice());
                         nval[i as usize] = value;
                         v_list(nval)
                     }
@@ -451,7 +451,7 @@ impl VM {
                 };
                 // TODO: check obj for validity, return E_INVIND if not
 
-                return self.call_verb(state, *obj, verb.clone(), args);
+                return self.call_verb(state, *obj, verb.as_str(), args);
             }
             Op::Return => {
                 let ret_val = self.pop();

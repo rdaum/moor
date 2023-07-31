@@ -34,7 +34,7 @@ async fn bf_listinsert<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
     let Variant::List(list) = list.variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = list.clone();
+    let mut new_list = Vec::from(list.as_slice());
     if bf_args.args.len() == 2 {
         new_list.push(value.clone());
     } else {
@@ -57,7 +57,7 @@ async fn bf_listappend<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
     let Variant::List(list) = list.variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = list.clone();
+    let mut new_list = Vec::from(list.as_slice());
     if bf_args.args.len() == 2 {
         new_list.push(value.clone());
     } else {
@@ -87,7 +87,7 @@ async fn bf_listdelete<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
         return Ok(v_err(E_RANGE));
     }
     let index = index - 1;
-    let mut new_list = list.clone();
+    let mut new_list = Vec::from(list.as_slice());
     new_list.remove(index as usize);
     Ok(v_list(new_list))
 }
@@ -112,7 +112,7 @@ async fn bf_listset<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
         return Ok(v_err(E_RANGE));
     }
     let index = index - 1;
-    let mut new_list = list.clone();
+    let mut new_list = Vec::from(list.as_slice());
     new_list[index as usize] = value.clone();
     Ok(v_list(new_list))
 }
@@ -126,7 +126,7 @@ async fn bf_setadd<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
     let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = list.clone();
+    let mut new_list = Vec::from(list.as_slice());
     if !new_list.contains(value) {
         new_list.push(value.clone());
     }
@@ -142,7 +142,7 @@ async fn bf_setremove<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = list.clone();
+    let mut new_list = Vec::from(list.as_slice());
     if let Some(index) = new_list.iter().position(|x| x == value) {
         new_list.remove(index);
     }

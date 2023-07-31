@@ -180,7 +180,7 @@ impl VM {
         &mut self,
         state: &mut dyn WorldState,
         this: Objid,
-        verb: String,
+        verb: &str,
         args: &[Var],
     ) -> Result<ExecutionResult, anyhow::Error> {
         let self_valid = state.valid(this)?;
@@ -188,7 +188,7 @@ impl VM {
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let Ok(verbinfo) = state.find_method_verb_on(this, verb.as_str()) else {
+        let Ok(verbinfo) = state.find_method_verb_on(this, verb) else {
             return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb));
         };
         let Some(binary) = verbinfo.attrs.program.clone() else {
