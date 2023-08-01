@@ -51,6 +51,7 @@ pub(crate) struct Activation {
     pub(crate) player_flags: BitEnum<ObjFlag>,
     pub(crate) verb_info: VerbInfo,
     pub(crate) callers: Vec<Caller>,
+    pub(crate) span_id: Option<tracing::span::Id>,
 }
 
 impl Activation {
@@ -64,6 +65,7 @@ impl Activation {
         verb_info: VerbInfo,
         args: &[Var],
         callers: Vec<Caller>,
+        span_id: Option<tracing::span::Id>,
     ) -> Result<Self, anyhow::Error> {
         let environment = vec![v_none(); binary.var_names.width()];
 
@@ -84,6 +86,7 @@ impl Activation {
             player_flags,
             verb_info,
             callers,
+            span_id,
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.

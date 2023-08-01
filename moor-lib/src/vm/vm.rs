@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::bail;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
-use tracing::trace;
+use tracing::{span, trace};
 
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Name};
@@ -23,6 +23,7 @@ use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
 use crate::vm::opcode::Op;
 use crate::vm::vm_unwind::FinallyReason;
+use tracing::Level;
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
@@ -95,6 +96,17 @@ impl VM {
             bail!(VerbNotFound(obj, command.verb.to_string()))
         };
 
+        let span = span!(
+            Level::TRACE,
+            "setup_verb_command",
+            task_id = task_id,
+            this = this.to_literal(),
+            verb = vi.names.first().unwrap().as_str(),
+            player = player.to_literal(),
+            args = format!("{:?}", &command.args),
+        );
+        let span_id = span.id();
+
         let mut a = Activation::new_for_method(
             task_id,
             binary,
@@ -105,6 +117,7 @@ impl VM {
             vi,
             &command.args,
             vec![],
+            span_id.clone(),
         )?;
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
@@ -121,13 +134,18 @@ impl VM {
 
         self.stack.push(a);
         trace!(
-            "do_method_cmd: {}:{}({:?}); argstr: {}",
+            "setup_verb_command: {}:{}({:?}); argstr: {}",
             this,
             command.verb,
             command.args,
             command.argstr
         );
 
+        if let Some(span_id) = &span_id {
+            tracing::dispatcher::get_default(|d| {
+                d.enter(span_id);
+            });
+        }
         Ok(())
     }
 
@@ -149,6 +167,17 @@ impl VM {
             bail!(VerbNotFound(obj, verb_name.to_string()))
         };
 
+        let span = span!(
+            Level::TRACE,
+            "setup_verb_method_call",
+            task_id = task_id,
+            this = this.to_literal(),
+            verb = vi.names.first().unwrap().as_str(),
+            player = player.to_literal(),
+            args = format!("{:?}", args),
+        );
+        let span_id = span.id();
+
         let mut a = Activation::new_for_method(
             task_id,
             binary,
@@ -159,6 +188,7 @@ impl VM {
             vi,
             args,
             vec![],
+            span_id.clone(),
         )?;
 
         a.set_var("argstr", v_str("")).unwrap();
@@ -170,7 +200,12 @@ impl VM {
 
         self.stack.push(a);
 
-        trace!("do_method_verb: {}:{}({:?})", this, verb_name, args);
+        trace!("setup_verb_method_call: {}:{}({:?})", this, verb_name, args);
+        if let Some(span_id) = &span_id {
+            tracing::dispatcher::get_default(|d| {
+                d.enter(span_id);
+            });
+        }
 
         Ok(())
     }
@@ -213,6 +248,17 @@ impl VM {
             line_number: 0,
         });
 
+        let span = span!(
+            Level::TRACE,
+            "VC",
+            task_id = task_id,
+            this = this.to_literal(),
+            verb = verb,
+            player = top.player.to_literal(),
+            args = format!("{:?}", args),
+        );
+        let span_id = span.id();
+
         let mut a = Activation::new_for_method(
             task_id,
             binary,
@@ -223,6 +269,7 @@ impl VM {
             verbinfo,
             args,
             callers,
+            span_id.clone(),
         )?;
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
@@ -242,6 +289,13 @@ impl VM {
 
         self.stack.push(a);
         trace!("call_verb: {}:{}({:?})", this, verb, args);
+
+        if let Some(span_id) = &span_id {
+            tracing::dispatcher::get_default(|d| {
+                d.enter(span_id);
+            });
+        }
+
         Ok(ExecutionResult::More)
     }
 
@@ -323,7 +377,13 @@ impl VM {
             return self.raise_error(E_VARNF);
         }
         let bf = self.builtins[bf_func_num].clone();
-        trace!("builtin invoke: {} args: {:?}", BUILTINS[bf_func_num], args);
+        span!(
+            Level::TRACE,
+            "BF",
+            bf_name = BUILTINS[bf_func_num],
+            bf_func_num = bf_func_num,
+            args = format!("{:?}", args)
+        );
         let mut bf_args = BfCallState {
             world_state: state,
             frame: self.top_mut(),

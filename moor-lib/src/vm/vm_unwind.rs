@@ -297,7 +297,12 @@ impl VM {
                 return Ok(ExecutionResult::Exception(why));
             }
 
-            self.stack.pop().expect("Stack underflow");
+            let last = self.stack.pop().expect("Stack underflow");
+            if let Some(span_id) = last.span_id {
+                tracing::dispatcher::get_default(|d| {
+                    d.exit(&span_id)
+                });
+            }
 
             if self.stack.is_empty() {
                 return Ok(ExecutionResult::Complete(v_none()));

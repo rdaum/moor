@@ -40,6 +40,7 @@ fn prophandle_to_propattrs(ph: &PropHandle, value: Option<Var>) -> PropAttrs {
 }
 
 impl WorldState for RocksDbTransaction {
+    #[tracing::instrument(skip(self))]
     fn location_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -49,6 +50,7 @@ impl WorldState for RocksDbTransaction {
         Ok(oid)
     }
 
+    #[tracing::instrument(skip(self))]
     fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -58,6 +60,7 @@ impl WorldState for RocksDbTransaction {
         Ok(contents)
     }
 
+    #[tracing::instrument(skip(self))]
     fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -67,6 +70,7 @@ impl WorldState for RocksDbTransaction {
         Ok(flags)
     }
 
+    #[tracing::instrument(skip(self))]
     fn verbs(&mut self, obj: Objid) -> Result<Vec<VerbInfo>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -82,6 +86,7 @@ impl WorldState for RocksDbTransaction {
             .collect())
     }
 
+    #[tracing::instrument(skip(self))]
     fn properties(&mut self, obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -94,6 +99,7 @@ impl WorldState for RocksDbTransaction {
             .collect())
     }
 
+    #[tracing::instrument(skip(self))]
     fn retrieve_property(
         &mut self,
         obj: Objid,
@@ -142,6 +148,7 @@ impl WorldState for RocksDbTransaction {
         Ok(value)
     }
 
+    #[tracing::instrument(skip(self))]
     fn update_property(
         &mut self,
         obj: Objid,
@@ -174,6 +181,7 @@ impl WorldState for RocksDbTransaction {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     fn add_property(
         &mut self,
         obj: Objid,
@@ -199,6 +207,7 @@ impl WorldState for RocksDbTransaction {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     fn add_verb(
         &mut self,
         obj: Objid,
@@ -224,6 +233,7 @@ impl WorldState for RocksDbTransaction {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     fn update_verb_info(
         &mut self,
         obj: Objid,
@@ -255,6 +265,7 @@ impl WorldState for RocksDbTransaction {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -270,6 +281,7 @@ impl WorldState for RocksDbTransaction {
         Ok(verbhandle_to_verbinfo(&vh, Some(program)))
     }
 
+    #[tracing::instrument(skip(self))]
     fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -285,7 +297,7 @@ impl WorldState for RocksDbTransaction {
         Ok(verbhandle_to_verbinfo(&vh, Some(program)))
     }
 
-    #[tracing::instrument(skip(self, obj, pc))]
+    #[tracing::instrument(skip(self))]
     fn find_command_verb_on(
         &mut self,
         obj: Objid,
@@ -342,6 +354,7 @@ impl WorldState for RocksDbTransaction {
         Ok(Some(verbhandle_to_verbinfo(&vh, Some(program))))
     }
 
+    #[tracing::instrument(skip(self))]
     fn parent_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -351,6 +364,7 @@ impl WorldState for RocksDbTransaction {
         Ok(oid)
     }
 
+    #[tracing::instrument(skip(self))]
     fn children_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -360,6 +374,7 @@ impl WorldState for RocksDbTransaction {
         Ok(children)
     }
 
+    #[tracing::instrument(skip(self))]
     fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -369,6 +384,7 @@ impl WorldState for RocksDbTransaction {
         Ok(valid)
     }
 
+    #[tracing::instrument(skip(self))]
     fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
 
@@ -395,6 +411,7 @@ impl WorldState for RocksDbTransaction {
         Ok((name, aliases))
     }
 
+    #[tracing::instrument(skip(self))]
     fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -404,6 +421,7 @@ impl WorldState for RocksDbTransaction {
         Ok(oid)
     }
 
+    #[tracing::instrument(skip(self))]
     fn commit(&mut self) -> Result<CommitResult, Error> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox.send(Message::Commit(send))?;
@@ -414,6 +432,7 @@ impl WorldState for RocksDbTransaction {
         Ok(cr)
     }
 
+    #[tracing::instrument(skip(self))]
     fn rollback(&mut self) -> Result<(), Error> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox.send(Message::Rollback(send))?;

@@ -10,14 +10,16 @@ use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::RwLock;
 use tracing::info;
+use tracing_chrome::ChromeLayerBuilder;
+use tracing_subscriber::layer::SubscriberExt;
 
-use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
+use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::values::objid::Objid;
 
-use crate::server::ws_server::{ws_server_start, WebSocketServer};
+use crate::server::ws_server::{WebSocketServer, ws_server_start};
 
 mod server;
 
@@ -26,16 +28,21 @@ struct Args {
     #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
     db: std::path::PathBuf,
 
-    #[arg(value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
+    #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
     textdump: Option<std::path::PathBuf>,
 
     #[arg(value_name = "listen", help = "Listen address")]
     listen_address: Option<String>,
+
+    #[arg(long, value_name = "perfetto_tracing", help = "Enable perfetto/chromium tracing output")]
+    perfetto_tracing: Option<bool>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), anyhow::Error> {
-    let subscriber = tracing_subscriber::fmt()
+    let args: Args = Args::parse();
+
+    let main_subscriber = tracing_subscriber::fmt()
         .compact()
         .with_file(true)
         .with_line_number(true)
@@ -43,9 +50,22 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_target(false)
         .with_max_level(tracing::Level::TRACE)
         .finish();
-    tracing::subscriber::set_global_default(subscriber)?;
+    let _perfetto_guard = match args.perfetto_tracing {
+        Some(true) => {
+            let (chrome_layer, _guard) = ChromeLayerBuilder::new()
+                .include_args(true)
+                .build();
 
-    let args: Args = Args::parse();
+            let with_chrome_tracing = main_subscriber.with(chrome_layer);
+            tracing::subscriber::set_global_default(with_chrome_tracing)?;
+            Some(_guard)
+        }
+        _ => {
+            tracing::subscriber::set_global_default(main_subscriber)?;
+            None
+        }
+    };
+
 
     info!("Moor Server starting...");
 

@@ -11,6 +11,11 @@ impl Display for Objid {
     }
 }
 
+impl Objid {
+    pub fn to_literal(&self) -> String {
+        format!("#{}", self.0)
+    }
+}
 pub const SYSTEM_OBJECT: Objid = Objid(0);
 pub const NOTHING: Objid = Objid(-1);
 pub const AMBIGUOUS: Objid = Objid(-2);

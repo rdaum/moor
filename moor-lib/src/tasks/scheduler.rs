@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, error, instrument, Level, span, trace};
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
@@ -253,6 +253,8 @@ impl Scheduler {
 
         // Spawn the task's thread.
         tokio::spawn(async move {
+            span!(Level::DEBUG, "spawn_task", task_id = task_id, player = player.to_literal());
+
             let vm = VM::new();
             let mut task = Task::new(
                 task_id,
