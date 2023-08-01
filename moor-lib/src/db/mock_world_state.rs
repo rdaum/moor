@@ -15,7 +15,7 @@ use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
 use crate::values::objid::Objid;
-use crate::values::var::{Var, VAR_NONE};
+use crate::values::var::{v_none, Var};
 use crate::vm::opcode::Binary;
 
 struct MockStore {
@@ -103,7 +103,7 @@ impl WorldState for MockState {
 
         store
             .properties
-            .insert((obj, pname.to_string()), initial_value.unwrap_or(VAR_NONE));
+            .insert((obj, pname.to_string()), initial_value.unwrap_or(v_none()));
         Ok(())
     }
 

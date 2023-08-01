@@ -57,9 +57,9 @@ async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
         bf_args.args[2].variant(),
     );
     match (subject, what, with) {
-        (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => {
-            Ok(v_str(strsub(subject, what, with, case_matters).as_str()))
-        }
+        (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => Ok(v_str(
+            strsub(subject.as_str(), what.as_str(), with.as_str(), case_matters).as_str(),
+        )),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -103,9 +103,11 @@ async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (subject, what) {
-        (Variant::Str(subject), Variant::Str(what)) => {
-            Ok(v_int(str_index(subject, what, case_matters)))
-        }
+        (Variant::Str(subject), Variant::Str(what)) => Ok(v_int(str_index(
+            subject.as_str(),
+            what.as_str(),
+            case_matters,
+        ))),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -125,9 +127,11 @@ async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (subject, what) {
-        (Variant::Str(subject), Variant::Str(what)) => {
-            Ok(v_int(str_rindex(subject, what, case_matters)))
-        }
+        (Variant::Str(subject), Variant::Str(what)) => Ok(v_int(str_rindex(
+            subject.as_str(),
+            what.as_str(),
+            case_matters,
+        ))),
         _ => Ok(v_err(E_TYPE)),
     }
 }
@@ -180,7 +184,7 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
         String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
-        Ok(v_str(des_crypt(text, salt.as_str()).as_str()))
+        Ok(v_str(des_crypt(text.as_str(), salt.as_str()).as_str()))
     } else {
         Ok(v_err(E_TYPE))
     }
@@ -193,7 +197,7 @@ async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
-            let hash_digest = md5::compute(s.as_bytes());
+            let hash_digest = md5::compute(s.as_str().as_bytes());
             Ok(v_str(format!("{:x}", hash_digest).as_str()))
         }
         _ => Ok(v_err(E_INVARG)),

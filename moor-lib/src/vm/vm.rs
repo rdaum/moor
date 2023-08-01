@@ -17,7 +17,7 @@ use crate::tasks::TaskId;
 use crate::util::bitenum::BitEnum;
 use crate::values::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE, E_VARNF, E_VERBNF};
 use crate::values::objid::{Objid, NOTHING};
-use crate::values::var::{v_objid, v_str, v_string, Var, VAR_NONE};
+use crate::values::var::{v_none, v_objid, v_str, v_string, Var};
 use crate::values::variant::Variant;
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::bf_server::BfNoop;
@@ -332,7 +332,7 @@ impl VM {
         };
         let result = bf.call(&mut bf_args).await?;
         self.push(&result);
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 
     /// VM-level property assignment
@@ -351,11 +351,12 @@ impl VM {
             }
         };
 
-        let update_result = state.update_property(*obj, propname, self.top().player_flags, &value);
+        let update_result =
+            state.update_property(*obj, propname.as_str(), self.top().player_flags, &value);
 
         match update_result {
             Ok(()) => {
-                self.push(&VAR_NONE);
+                self.push(&v_none());
             }
             Err(e) => match e {
                 PropertyNotFound(_, _) => {
@@ -369,7 +370,7 @@ impl VM {
                 }
             },
         }
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 
     pub(crate) fn top_mut(&mut self) -> &mut Activation {

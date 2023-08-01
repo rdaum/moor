@@ -19,7 +19,7 @@ mod tests {
     use crate::util::bitenum::BitEnum;
     use crate::values::error::Error::E_VERBNF;
     use crate::values::objid::Objid;
-    use crate::values::var::{v_err, v_int, v_list, v_obj, v_str, Var, VAR_NONE};
+    use crate::values::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
     use crate::vm::vm::{ExecutionResult, VM};
@@ -125,7 +125,7 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
-        assert_eq!(result, VAR_NONE);
+        assert_eq!(result, v_none());
     }
 
     #[test]
@@ -395,7 +395,7 @@ mod tests {
                 Return,
                 Done,
             ],
-            vec![v_obj(0), v_str("test_return_verb"), v_list(vec![])],
+            vec![v_obj(0), v_str("test_return_verb"), v_empty_list()],
             Names::new(),
         );
         let mut state = MockWorldStateSource::new_with_verbs(vec![
@@ -559,7 +559,7 @@ mod tests {
         let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(
             result,
-            v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_list(vec![])])
+            v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_empty_list()])
         );
     }
 
@@ -764,7 +764,7 @@ mod tests {
         let result =
             exec_vm_with_mock_client_connection(&mut vm, state.as_mut(), client_connection.clone())
                 .await;
-        assert_eq!(result, VAR_NONE);
+        assert_eq!(result, v_none());
 
         assert_eq!(
             client_connection.read().await.received,

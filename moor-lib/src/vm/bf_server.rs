@@ -9,8 +9,7 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
 use crate::values::error::Error::{E_INVARG, E_PERM, E_TYPE};
-use crate::values::var::VAR_NONE;
-use crate::values::var::{v_bool, v_err, v_int, v_list, v_objid, v_string, Var};
+use crate::values::var::{v_bool, v_err, v_int, v_list, v_none, v_objid, v_string, Var};
 use crate::values::variant::Variant;
 use crate::vm::vm::BfCallState;
 use crate::vm::vm::{BuiltinFunction, VM};
@@ -46,7 +45,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
         );
     }
 
-    Ok(VAR_NONE)
+    Ok(v_none())
 }
 bf_declare!(notify, bf_notify);
 
@@ -110,7 +109,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
     }
     bf_args.frame.caller_perms = *player;
 
-    Ok(VAR_NONE)
+    Ok(v_none())
 }
 bf_declare!(set_task_perms, bf_set_task_perms);
 

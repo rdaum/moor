@@ -1,8 +1,7 @@
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
-use crate::values::var::Var;
-use crate::values::var::VAR_NONE;
+use crate::values::var::{v_none, Var};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Hash, Encode, Decode)]
@@ -87,7 +86,7 @@ impl Error {
         ErrorPack {
             code: *self,
             msg: msg.unwrap_or(self.message().to_string()),
-            value: VAR_NONE,
+            value: v_none(),
         }
     }
 }

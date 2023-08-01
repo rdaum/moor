@@ -3,7 +3,9 @@
 use int_enum::IntEnum;
 
 pub mod error;
+pub mod list;
 pub mod objid;
+pub mod string;
 pub mod var;
 pub mod variant;
 
@@ -27,7 +29,7 @@ mod tests {
 
     use crate::values::error::Error;
     use crate::values::error::Error::{E_RANGE, E_TYPE};
-    use crate::values::var::{v_err, v_float, v_int, v_list, v_obj, v_str};
+    use crate::values::var::{v_empty_list, v_err, v_float, v_int, v_list, v_obj, v_str};
 
     #[test]
     fn test_add() {
@@ -367,7 +369,7 @@ mod tests {
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {} => {1,4}
-        let value = v_list(vec![]);
+        let value = v_empty_list();
         let expected = v_list(vec![v_int(1), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
@@ -441,8 +443,8 @@ mod tests {
         assert_eq!(string.range(2, 7)?, v_str("ello w"));
 
         // range with upper higher than lower, moo returns empty list for this (!)
-        let empty_list = v_list(vec![]);
-        assert_eq!(empty_list.range(1, 0), Ok(v_list(vec![])));
+        let empty_list = v_empty_list();
+        assert_eq!(empty_list.range(1, 0), Ok(v_empty_list()));
         // test on out of range
         let int_list = v_list(vec![1.into(), 2.into(), 3.into()]);
         assert_eq!(int_list.range(2, 4), Ok(v_err(E_RANGE)));

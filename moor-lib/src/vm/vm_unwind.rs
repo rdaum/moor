@@ -2,8 +2,7 @@ use tracing::trace;
 
 use crate::compiler::labels::{Label, Offset};
 use crate::values::error::{Error, ErrorPack};
-use crate::values::var::VAR_NONE;
-use crate::values::var::{v_err, v_int, v_list, v_objid, v_str, Var};
+use crate::values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use crate::values::variant::Variant;
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm::{ExecutionResult, VM};
@@ -301,7 +300,7 @@ impl VM {
             self.stack.pop().expect("Stack underflow");
 
             if self.stack.is_empty() {
-                return Ok(ExecutionResult::Complete(VAR_NONE));
+                return Ok(ExecutionResult::Complete(v_none()));
             }
             // TODO builtin function unwinding stuff
 

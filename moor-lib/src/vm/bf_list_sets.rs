@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::values::error::Error::{E_INVARG, E_RANGE, E_TYPE};
-use crate::values::var::{v_err, v_int, v_list, Var};
+use crate::values::var::{v_err, v_int, Var};
 use crate::values::variant::Variant;
 use crate::vm::vm::BfCallState;
 use crate::vm::vm::{BuiltinFunction, VM};
@@ -34,18 +34,17 @@ async fn bf_listinsert<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
     let Variant::List(list) = list.variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = Vec::from(list.as_slice());
-    if bf_args.args.len() == 2 {
-        new_list.push(value.clone());
+    let new_list = if bf_args.args.len() == 2 {
+        list.push(value)
     } else {
         let index = bf_args.args[2].variant();
         let Variant::Int(index) = index else {
             return Ok(v_err(E_TYPE));
         };
         let index = index - 1;
-        new_list.insert(index as usize, value.clone());
-    }
-    Ok(v_list(new_list))
+        list.insert(index as usize, value)
+    };
+    Ok(new_list)
 }
 bf_declare!(listinsert, bf_listinsert);
 
@@ -57,18 +56,17 @@ async fn bf_listappend<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
     let Variant::List(list) = list.variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = Vec::from(list.as_slice());
-    if bf_args.args.len() == 2 {
-        new_list.push(value.clone());
+    let new_list = if bf_args.args.len() == 2 {
+        list.push(value)
     } else {
         let index = bf_args.args[2].variant();
         let Variant::Int(index) = index else {
             return Ok(v_err(E_TYPE));
         };
         let index = index - 1;
-        new_list.insert(index as usize + 1, value.clone());
-    }
-    Ok(v_list(new_list))
+        list.insert(index as usize, value)
+    };
+    Ok(new_list)
 }
 bf_declare!(listappend, bf_listappend);
 
@@ -87,9 +85,7 @@ async fn bf_listdelete<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
         return Ok(v_err(E_RANGE));
     }
     let index = index - 1;
-    let mut new_list = Vec::from(list.as_slice());
-    new_list.remove(index as usize);
-    Ok(v_list(new_list))
+    Ok(list.remove_at(index as usize))
 }
 bf_declare!(listdelete, bf_listdelete);
 
@@ -112,9 +108,7 @@ async fn bf_listset<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
         return Ok(v_err(E_RANGE));
     }
     let index = index - 1;
-    let mut new_list = Vec::from(list.as_slice());
-    new_list[index as usize] = value.clone();
-    Ok(v_list(new_list))
+    Ok(list.set(index as usize, value))
 }
 bf_declare!(listset, bf_listset);
 
@@ -126,11 +120,10 @@ async fn bf_setadd<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
     let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = Vec::from(list.as_slice());
-    if !new_list.contains(value) {
-        new_list.push(value.clone());
+    if !list.contains(value) {
+        return Ok(list.push(value));
     }
-    Ok(v_list(new_list))
+    Ok(bf_args.args[0].clone())
 }
 bf_declare!(setadd, bf_setadd);
 
@@ -142,11 +135,7 @@ async fn bf_setremove<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     let Variant::List(list) = list else {
         return Ok(v_err(E_TYPE));
     };
-    let mut new_list = Vec::from(list.as_slice());
-    if let Some(index) = new_list.iter().position(|x| x == value) {
-        new_list.remove(index);
-    }
-    Ok(v_list(new_list))
+    Ok(list.setremove(value))
 }
 bf_declare!(setremove, bf_setremove);
 

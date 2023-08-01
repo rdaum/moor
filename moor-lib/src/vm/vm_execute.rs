@@ -6,8 +6,9 @@ use tracing::trace;
 use crate::db::state::WorldState;
 use crate::tasks::Sessions;
 use crate::values::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
-use crate::values::var::VAR_NONE;
-use crate::values::var::{v_bool, v_int, v_list, v_obj, v_str};
+use crate::values::var::{
+    v_bool, v_empty_list, v_empty_str, v_err, v_int, v_list, v_none, v_obj,
+};
 use crate::values::variant::Variant;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -167,7 +168,7 @@ impl VM {
                     }
                 }
             }
-            Op::MkEmptyList => self.push(&v_list(vec![])),
+            Op::MkEmptyList => self.push(&v_empty_list()),
             Op::ListAddTail => {
                 let tail = self.pop();
                 let list = self.pop();
@@ -210,9 +211,7 @@ impl VM {
                             return self.push_error(E_RANGE);
                         }
 
-                        let mut nval = Vec::from(l.as_slice());
-                        nval[i as usize] = value;
-                        v_list(nval)
+                        l.set(i as usize, &value)
                     }
                     (Variant::Str(s), Variant::Int(i)) => {
                         // Adjust for 1 indexing.
@@ -230,10 +229,14 @@ impl VM {
                         }
 
                         let i = i as usize;
-                        let (mut head, tail) = (String::from(&s[0..i]), &s[i + 1..]);
-                        head.push_str(&value[0..1]);
-                        head.push_str(tail);
-                        v_str(&head)
+                        let r = s
+                            .get_range(0..i)
+                            .unwrap_or_else(v_empty_str)
+                            .add(&s.get_range(i + 1..s.len()).unwrap_or_else(v_empty_str));
+                        match r {
+                            Ok(s) => s,
+                            Err(e) => v_err(e),
+                        }
                     }
                     (_, _) => {
                         return self.push_error(E_TYPE);
@@ -251,7 +254,7 @@ impl VM {
             Op::PushTemp => {
                 let tmp = self.top().temp.clone();
                 self.push(&tmp);
-                self.top_mut().temp = VAR_NONE;
+                self.top_mut().temp = v_none();
             }
             Op::Eq => {
                 binary_bool_op!(self, ==);
@@ -439,7 +442,7 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_TYPE);
                 };
-                self.pass_verb(state, args)?;
+                self.pass_verb(state, &args[..])?;
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
@@ -451,7 +454,7 @@ impl VM {
                 };
                 // TODO: check obj for validity, return E_INVIND if not
 
-                return self.call_verb(state, *obj, verb.as_str(), args);
+                return self.call_verb(state, *obj, verb.as_str(), &args[..]);
             }
             Op::Return => {
                 let ret_val = self.pop();
@@ -461,7 +464,7 @@ impl VM {
                 return self.unwind_stack(FinallyReason::Return(v_int(0)));
             }
             Op::Done => {
-                return self.unwind_stack(FinallyReason::Return(VAR_NONE));
+                return self.unwind_stack(FinallyReason::Return(v_none()));
             }
             Op::FuncCall { id } => {
                 // Pop arguments, should be a list.
@@ -470,7 +473,7 @@ impl VM {
                     return self.push_error(E_ARGS);
                 };
                 return self
-                    .call_builtin_function(id.0 as usize, args, state, client_connection)
+                    .call_builtin_function(id.0 as usize, &args[..], state, client_connection)
                     .await;
             }
             Op::PushLabel(label) => {
@@ -490,7 +493,7 @@ impl VM {
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = op == Op::EndCatch(label);
-                let v = if is_catch { self.pop() } else { VAR_NONE };
+                let v = if is_catch { self.pop() } else { v_none() };
                 let num_excepts = match self.top_mut().pop_applicable_handler() {
                     None => {
                         panic!("Missing handler for try/catch/except");

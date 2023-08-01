@@ -2,75 +2,122 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
-use std::sync::Arc;
 
-use bincode::{Decode, Encode};
+
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use decorum::R64;
+use lazy_static::lazy_static;
 use num_traits::Zero;
 
 use crate::values::error::Error;
 use crate::values::error::Error::{E_RANGE, E_TYPE};
+use crate::values::list::List;
 use crate::values::objid::Objid;
+use crate::values::string::Str;
 use crate::values::variant::Variant;
 use crate::values::VarType;
 
-#[derive(Clone, Encode, Decode)]
+lazy_static! {
+    static ref VAR_NONE: Var = Var::new(Variant::None);
+    static ref VAR_CLEAR: Var = Var::new(Variant::Clear);
+    static ref VAR_EMPTY_LIST: Var = Var::new(Variant::List(List::new()));
+    static ref VAR_EMPTY_STR: Var = Var::new(Variant::Str(Str::from_str("")));
+}
+
+#[derive(Clone)]
 pub struct Var {
     value: Variant,
 }
 
-pub fn v_bool(b: bool) -> Var {
-    Var {
-        value: Variant::Int(if b { 1 } else { 0 }),
+impl Var {
+    pub fn new(value: Variant) -> Self {
+        Self { value }
     }
+}
+
+impl Encode for Var {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let inner = self.variant();
+        inner.encode(encoder)
+    }
+}
+
+impl Decode for Var {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let inner = Variant::decode(decoder)?;
+        Ok(Var::new(inner))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for Var {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let inner = Variant::borrow_decode(decoder)?;
+        Ok(Var::new(inner))
+    }
+}
+
+pub fn v_bool(b: bool) -> Var {
+    Var::new(Variant::Int(if b { 1 } else { 0 }))
 }
 
 pub fn v_int(i: i64) -> Var {
-    Var {
-        value: Variant::Int(i),
-    }
+    Var::new(Variant::Int(i))
 }
 
 pub fn v_float(f: f64) -> Var {
-    Var {
-        value: Variant::Float(f),
-    }
+    Var::new(Variant::Float(f))
 }
 
 pub fn v_str(s: &str) -> Var {
-    Var {
-        value: Variant::Str(Arc::new(s.to_string())),
-    }
+    Var::new(Variant::Str(Str::from_str(s)))
 }
 
 pub fn v_string(s: String) -> Var {
-    Var {
-        value: Variant::Str(Arc::new(s)),
-    }
+    Var::new(Variant::Str(Str::from_string(s)))
 }
 
 pub fn v_objid(o: Objid) -> Var {
-    Var {
-        value: Variant::Obj(o),
-    }
+    Var::new(Variant::Obj(o))
 }
 
 pub fn v_obj(o: i64) -> Var {
-    Var {
-        value: Variant::Obj(Objid(o)),
-    }
+    Var::new(Variant::Obj(Objid(o)))
 }
 
 pub fn v_err(e: Error) -> Var {
-    Var {
-        value: Variant::Err(e),
-    }
+    Var::new(Variant::Err(e))
 }
 
 pub fn v_list(l: Vec<Var>) -> Var {
-    Var {
-        value: Variant::List(Arc::new(l)),
-    }
+    Var::new(Variant::List(List::from_vec(l)))
+}
+
+// Macro to call v_list with vector arguments to construct instead of having to do v_list(vec![...])
+macro_rules! v_lst {
+    () => (
+        $crate::values::var::v_empty_list()
+    );
+    ($($x:expr),+ $(,)?) => (
+        vec![$($x),+]
+    );
+}
+
+pub fn v_empty_list() -> Var {
+    VAR_EMPTY_LIST.clone()
+}
+
+pub fn v_empty_str() -> Var {
+    VAR_EMPTY_STR.clone()
+}
+pub fn v_clear() -> Var {
+    VAR_CLEAR.clone()
+}
+
+pub fn v_none() -> Var {
+    VAR_NONE.clone()
 }
 
 macro_rules! binary_numeric_coercion_op {
@@ -89,10 +136,6 @@ macro_rules! binary_numeric_coercion_op {
 
 impl Var {
     pub fn variant(&self) -> &Variant {
-        // TODO: We can produce this however we want, instead of actually holding "value" in the
-        // the struct.  For 64-bit primitive values, we could just hold the value directly, but for
-        // lists and strings this can be composed out of a byte buffer...
-        // In this way we can do zero-copy for strings and lists direct from the DB.
         &self.value
     }
 
@@ -276,11 +319,7 @@ impl Var {
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l + r)),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l + (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + *r)),
-            (Variant::Str(s), Variant::Str(r)) => {
-                let mut c = String::from(s.as_str());
-                c.push_str(r);
-                Ok(v_str(c.as_str()))
-            }
+            (Variant::Str(s), Variant::Str(r)) => Ok(s.append(r)),
             (_, _) => Ok(v_err(E_TYPE)),
         }
     }
@@ -319,9 +358,9 @@ impl Var {
                 None => Ok(v_err(E_RANGE)),
                 Some(v) => Ok(v.clone()),
             },
-            Variant::Str(s) => match s.get(idx..idx + 1) {
+            Variant::Str(s) => match s.get(idx) {
                 None => Ok(v_err(E_RANGE)),
-                Some(v) => Ok(v_str(v)),
+                Some(v) => Ok(v.clone()),
             },
             _ => Ok(v_err(E_TYPE)),
         }
@@ -335,12 +374,12 @@ impl Var {
                     return Ok(v_err(E_RANGE));
                 }
                 let (from, to) = (from as usize, to as usize);
-                Ok(v_str(&s[from - 1..to]))
+                Ok(s.get_range(from - 1..to).unwrap())
             }
             Variant::List(l) => {
                 let len = l.len() as i64;
                 if to < from {
-                    return Ok(v_list(Vec::new()));
+                    return Ok(v_empty_list());
                 }
                 if from <= 0 || from > len + 1 || to < 1 || to > len {
                     return Ok(v_err(E_RANGE));
@@ -377,24 +416,27 @@ impl Var {
 
         let (from, to) = (from as usize, to as usize);
         let ans = match (self.variant(), value.variant()) {
-            (Variant::Str(base_str), Variant::Str(value_str)) => {
-                let mut ans = String::with_capacity(newsize as usize);
-                ans.push_str(&base_str[..from - 1]);
-                ans.push_str(value_str);
-                ans.push_str(&base_str[to..]);
-                Variant::Str(Arc::new(ans))
+            (Variant::Str(base_str), Variant::Str(_value_str)) => {
+                let ans = base_str.get_range(0..from - 1).unwrap_or_else(v_empty_str);
+                let ans = ans.add(&value)?;
+                
+                ans.add(
+                    &base_str
+                        .get_range(to..base_str.len())
+                        .unwrap_or_else(v_empty_str),
+                )?
             }
             (Variant::List(base_list), Variant::List(value_list)) => {
                 let mut ans: Vec<Var> = Vec::with_capacity(newsize as usize);
                 ans.extend_from_slice(&base_list[..from - 1]);
                 ans.extend(value_list.iter().cloned());
                 ans.extend_from_slice(&base_list[to..]);
-                Variant::List(Arc::new(ans))
+                v_list(ans)
             }
             _ => unreachable!(),
         };
 
-        Ok(Var { value: ans })
+        Ok(ans)
     }
 }
 
@@ -439,10 +481,3 @@ impl From<Error> for Var {
         v_err(e)
     }
 }
-
-pub const VAR_NONE: Var = Var {
-    value: Variant::None,
-};
-pub const VAR_CLEAR: Var = Var {
-    value: Variant::Clear,
-};

@@ -65,11 +65,7 @@ impl CodegenState {
     fn make_label(&mut self, name: Option<Name>) -> Label {
         let id = Label(self.jumps.len() as u32);
         let position = (self.ops.len()).into();
-        self.jumps.push(JumpLabel {
-            id,
-            name: name,
-            position,
-        });
+        self.jumps.push(JumpLabel { id, name, position });
         id
     }
 

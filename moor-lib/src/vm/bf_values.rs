@@ -25,7 +25,7 @@ async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
             Variant::None => result.push_str("None"),
             Variant::Int(i) => result.push_str(&i.to_string()),
             Variant::Float(f) => result.push_str(&f.to_string()),
-            Variant::Str(s) => result.push_str(s),
+            Variant::Str(s) => result.push_str(s.as_str()),
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
             Variant::Err(e) => result.push_str(e.name()),
@@ -53,7 +53,7 @@ async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
         Variant::Int(i) => Ok(v_int(*i)),
         Variant::Float(f) => Ok(v_int(*f as i64)),
         Variant::Str(s) => {
-            let i = s.parse::<i64>();
+            let i = s.as_str().parse::<i64>();
             match i {
                 Ok(i) => Ok(v_int(i)),
                 Err(_) => Ok(v_int(0)),
@@ -72,15 +72,15 @@ async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(v_obj(*i)),
         Variant::Float(f) => Ok(v_obj(*f as i64)),
-        Variant::Str(s) if s.starts_with('#') => {
-            let i = s[1..].parse::<i64>();
+        Variant::Str(s) if s.as_str().starts_with('#') => {
+            let i = s.as_str()[1..].parse::<i64>();
             match i {
                 Ok(i) => Ok(v_obj(i)),
                 Err(_) => Ok(v_obj(0)),
             }
         }
         Variant::Str(s) => {
-            let i = s.parse::<i64>();
+            let i = s.as_str().parse::<i64>();
             match i {
                 Ok(i) => Ok(v_obj(i)),
                 Err(_) => Ok(v_obj(0)),
@@ -99,7 +99,7 @@ async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
         Variant::Int(i) => Ok(v_float(*i as f64)),
         Variant::Float(f) => Ok(v_float(*f)),
         Variant::Str(s) => {
-            let f = s.parse::<f64>();
+            let f = s.as_str().parse::<f64>();
             match f {
                 Ok(f) => Ok(v_float(f)),
                 Err(_) => Ok(v_float(0.0)),
@@ -116,7 +116,9 @@ async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
         return Ok(v_err(E_INVARG));
     }
     let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Str(s1), Variant::Str(s2)) => s1.to_lowercase() == s2.to_lowercase(),
+        (Variant::Str(s1), Variant::Str(s2)) => {
+            s1.as_str().to_lowercase() == s2.as_str().to_lowercase()
+        }
         _ => bf_args.args[0] == bf_args.args[1],
     };
     Ok(v_bool(result))

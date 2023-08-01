@@ -9,8 +9,7 @@ use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
 use crate::util::bitenum::BitEnum;
 use crate::values::error::Error::{E_INVARG, E_TYPE};
-use crate::values::var::VAR_NONE;
-use crate::values::var::{v_err, v_list, v_objid, v_str, v_string, Var};
+use crate::values::var::{v_err, v_list, v_none, v_objid, v_str, v_string, Var};
 use crate::values::variant::Variant;
 use crate::vm::vm::BfCallState;
 use crate::vm::vm::{BuiltinFunction, VM};
@@ -74,7 +73,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
     match (info[0].variant(), info[1].variant(), info[2].variant()) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::List(names)) => {
             let mut perms = BitEnum::new();
-            for c in perms_str.chars() {
+            for c in perms_str.as_str().chars() {
                 match c {
                     'r' => perms |= VerbFlag::Read,
                     'w' => perms |= VerbFlag::Write,
@@ -94,13 +93,13 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
 
             bf_args.world_state.update_verb_info(
                 *obj,
-                verb_name,
+                verb_name.as_str(),
                 Some(*owner),
                 Some(name_strings),
                 Some(perms),
                 None,
             )?;
-            Ok(VAR_NONE)
+            Ok(v_none())
         }
         _ => Ok(v_err(E_INVARG)),
     }
@@ -154,21 +153,26 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
         verbinfo[2].variant(),
     ) {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
-            let Some(dobj) = ArgSpec::from_string(dobj_str) else {
+            let Some(dobj) = ArgSpec::from_string(dobj_str.as_str()) else {
                 return Ok(v_err(E_INVARG));
             };
-            let Some(prep) = PrepSpec::from_string(prep_str) else {
+            let Some(prep) = PrepSpec::from_string(prep_str.as_str()) else {
                 return Ok(v_err(E_INVARG));
             };
-            let Some(iobj) = ArgSpec::from_string(iobj_str) else {
+            let Some(iobj) = ArgSpec::from_string(iobj_str.as_str()) else {
                 return Ok(v_err(E_INVARG));
             };
             let args = VerbArgsSpec { dobj, prep, iobj };
             debug!("Updating verb args for {} to {:?}", verb_name, args);
-            bf_args
-                .world_state
-                .update_verb_info(*obj, verb_name, None, None, None, Some(args))?;
-            Ok(VAR_NONE)
+            bf_args.world_state.update_verb_info(
+                *obj,
+                verb_name.as_str(),
+                None,
+                None,
+                None,
+                Some(args),
+            )?;
+            Ok(v_none())
         }
         _ => Ok(v_err(E_INVARG)),
     }

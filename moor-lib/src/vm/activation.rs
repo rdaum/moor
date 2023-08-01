@@ -6,7 +6,7 @@ use crate::util::bitenum::BitEnum;
 use crate::values::error::Error;
 use crate::values::error::Error::E_VARNF;
 use crate::values::objid::Objid;
-use crate::values::var::{v_int, v_list, v_objid, v_str, Var, VAR_NONE};
+use crate::values::var::{v_int, v_list, v_none, v_objid, v_str, Var};
 use crate::values::VarType;
 use crate::vm::opcode::{Binary, Op};
 use tracing::trace;
@@ -65,7 +65,7 @@ impl Activation {
         args: &[Var],
         callers: Vec<Caller>,
     ) -> Result<Self, anyhow::Error> {
-        let environment = vec![VAR_NONE; binary.var_names.width()];
+        let environment = vec![v_none(); binary.var_names.width()];
 
         // Take a copy of the verb name because we're going to move verb_info.
         let verb_name = verb_info.names.first().unwrap().clone();
@@ -77,7 +77,7 @@ impl Activation {
             valstack: vec![],
             handler_stack: vec![],
             pc: 0,
-            temp: VAR_NONE,
+            temp: v_none(),
             caller_perms: caller,
             this,
             player,

@@ -1,5 +1,6 @@
 use anyhow::{bail, Error};
 use bincode::config::Configuration;
+use lazy_static::lazy_static;
 use rocksdb::{ColumnFamily, ErrorKind};
 
 use uuid::Uuid;
@@ -18,6 +19,10 @@ use crate::values::objid::{Objid, NOTHING};
 use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 
+lazy_static! {
+    static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
+}
+
 fn object_key(o: Objid) -> Vec<u8> {
     o.0.to_be_bytes().to_vec()
 }
@@ -29,9 +34,7 @@ fn composite_key(o: Objid, uuid: u128) -> Vec<u8> {
 }
 
 fn object_vec(o: Vec<Objid>) -> Result<Vec<u8>, anyhow::Error> {
-    let bincode_cfg = bincode::config::standard();
-
-    let ov = bincode::encode_to_vec(o, bincode_cfg)?;
+    let ov = bincode::encode_to_vec(o, *BINCODE_CONFIG)?;
     Ok(ov)
 }
 
@@ -65,12 +68,10 @@ fn get_object_vec<'a>(
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
 ) -> Result<Vec<Objid>, anyhow::Error> {
-    let bincode_cfg = bincode::config::standard();
-
     let ok = object_key(o);
     let ov = tx.get_cf(cf, ok).unwrap();
     let ov = ov.ok_or(ObjectError::ObjectNotFound(o))?;
-    let (ov, _) = bincode::decode_from_slice(&ov, bincode_cfg).unwrap();
+    let (ov, _) = bincode::decode_from_slice(&ov, *BINCODE_CONFIG).unwrap();
     Ok(ov)
 }
 
@@ -248,44 +249,36 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         get_object_vec(cf, &self.tx, o)
     }
     fn get_object_name(&self, o: Objid) -> Result<String, anyhow::Error> {
-        let bincode_cfg = bincode::config::standard();
-
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = object_key(o);
         let name_bytes = self.tx.get_cf(cf, ok)?;
         let Some(name_bytes) = name_bytes else {
             return Err(ObjectError::ObjectNotFound(o).into());
         };
-        let (attrs, _) = bincode::decode_from_slice(&name_bytes, bincode_cfg)?;
+        let (attrs, _) = bincode::decode_from_slice(&name_bytes, *BINCODE_CONFIG)?;
         Ok(attrs)
     }
     fn set_object_name(&self, o: Objid, names: String) -> Result<(), anyhow::Error> {
-        let bincode_cfg = bincode::config::standard();
-
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = object_key(o);
-        let name_v = bincode::encode_to_vec(names, bincode_cfg)?;
+        let name_v = bincode::encode_to_vec(names, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, name_v)?;
         Ok(())
     }
     fn get_object_flags(&self, o: Objid) -> Result<BitEnum<ObjFlag>, anyhow::Error> {
-        let bincode_cfg = bincode::config::standard();
-
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = object_key(o);
         let flag_bytes = self.tx.get_cf(cf, ok)?;
         let Some(flag_bytes) = flag_bytes else {
             return Err(ObjectError::ObjectNotFound(o).into());
         };
-        let (flags, _) = bincode::decode_from_slice(&flag_bytes, bincode_cfg)?;
+        let (flags, _) = bincode::decode_from_slice(&flag_bytes, *BINCODE_CONFIG)?;
         Ok(flags)
     }
     fn set_object_flags(&self, o: Objid, flags: BitEnum<ObjFlag>) -> Result<(), anyhow::Error> {
-        let bincode_cfg = bincode::config::standard();
-
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = object_key(o);
-        let flag_v = bincode::encode_to_vec(flags, bincode_cfg)?;
+        let flag_v = bincode::encode_to_vec(flags, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, flag_v)?;
         Ok(())
     }
