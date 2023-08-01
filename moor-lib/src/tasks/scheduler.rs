@@ -373,10 +373,6 @@ mod tests {
             .expect("setup command task");
         assert_eq!(sched.tasks.len(), 1);
 
-        sched.start_task(task).await.unwrap();
-
-        assert_eq!(sched.tasks.len(), 1);
-
         while !sched.tasks.is_empty() {
             sched.do_process().await.unwrap();
         }
