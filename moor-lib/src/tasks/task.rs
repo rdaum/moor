@@ -56,12 +56,11 @@ pub(crate) struct Task {
     response_sender: UnboundedSender<(TaskId, TaskControlResponse)>,
     player: Objid,
     vm: VM,
-    sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
+    sessions: Arc<RwLock<dyn Sessions>>,
     state: Box<dyn WorldState>,
 }
 
 pub(crate) struct TaskControl {
-    pub(crate) task: Arc<RwLock<Task>>,
     pub(crate) control_sender: UnboundedSender<TaskControlMsg>,
 }
 
@@ -72,7 +71,7 @@ impl Task {
         response_sender: UnboundedSender<(TaskId, TaskControlResponse)>,
         player: Objid,
         vm: VM,
-        sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
         state: Box<dyn WorldState>,
     ) -> Self {
         Self {
@@ -103,6 +102,8 @@ impl Task {
             } else {
                 self.control_receiver.recv().await
             };
+
+            trace!("Task loop: {:?}", msg);
 
             // Check for control messages.
             match msg {

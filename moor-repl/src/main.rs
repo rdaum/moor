@@ -36,10 +36,9 @@ async fn do_eval(
 ) -> Result<(), anyhow::Error> {
     let task_id = {
         let mut scheduler = scheduler.write().await;
-        scheduler.setup_eval_task(player, program, sessions).await
+        scheduler.submit_eval_task(player, program, sessions).await
     }?;
-    let mut scheduler = scheduler.write().await;
-    scheduler.start_task(task_id).await?;
+    info!("Submitted task {}", task_id);
     Ok(())
 }
 

@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
-
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -419,7 +418,7 @@ impl Var {
             (Variant::Str(base_str), Variant::Str(_value_str)) => {
                 let ans = base_str.get_range(0..from - 1).unwrap_or_else(v_empty_str);
                 let ans = ans.add(&value)?;
-                
+
                 ans.add(
                     &base_str
                         .get_range(to..base_str.len())

@@ -120,30 +120,13 @@ async fn ws_handle_connection(
                 let server = server.read().await;
                 let mut scheduler = server.scheduler.write().await;
                 scheduler
-                    .setup_command_task(player, cmd, server.sessions.clone())
+                    .submit_command_task(player, cmd, server.sessions.clone())
                     .await
             };
-            let task_id = match task_id {
-                Ok(task_id) => task_id,
-                Err(e) => {
-                    error!("Unable to parse command ({}): {:?}", cmd, e);
-                    ws_send_error(
-                        server.clone(),
-                        player,
-                        format!("Unable to parse command ({}): {}", cmd, e),
-                    )
-                    .await?;
-
-                    continue;
-                }
-            };
-            {
-                let server = server.write().await;
-                let mut scheduler = server.scheduler.write().await;
-                if let Err(e) = scheduler.start_task(task_id).await {
-                    error!("Unable to execute: {}", e);
-                    continue;
-                };
+            if let Err(e) = task_id {
+                error!("Error submitting command ({}): {:?}", cmd, e);
+                ws_send_error(server.clone(), player, format!("{:?}", e)).await?;
+                continue;
             }
         }
     }

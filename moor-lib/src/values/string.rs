@@ -1,7 +1,7 @@
 use crate::values::var::{v_str, v_string, Var};
 use bincode::{Decode, Encode};
 use std::fmt::{Display, Formatter};
-use std::ops::{Range};
+use std::ops::Range;
 use std::sync::Arc;
 
 #[derive(Clone, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]

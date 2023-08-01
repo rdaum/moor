@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, trace};
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
@@ -29,7 +29,6 @@ pub struct Scheduler {
     response_sender: UnboundedSender<(TaskId, TaskControlResponse)>,
     response_receiver: UnboundedReceiver<(TaskId, TaskControlResponse)>,
 
-    num_scheduled_tasks: ConcurrentCounter,
     num_started_tasks: ConcurrentCounter,
     num_succeeded_tasks: ConcurrentCounter,
     num_aborted_tasks: ConcurrentCounter,
@@ -53,7 +52,6 @@ impl Scheduler {
             tasks: DashMap::new(),
             response_sender,
             response_receiver,
-            num_scheduled_tasks: ConcurrentCounter::new(0),
             num_started_tasks: ConcurrentCounter::new(0),
             num_succeeded_tasks: ConcurrentCounter::new(0),
             num_aborted_tasks: ConcurrentCounter::new(0),
@@ -63,11 +61,11 @@ impl Scheduler {
     }
 
     #[instrument(skip(self, sessions))]
-    pub async fn setup_command_task(
+    pub async fn submit_command_task(
         &mut self,
         player: Objid,
         command: &str,
-        sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
         let (vloc, vi, command) = {
             let mut ss = self.state_source.write().await;
@@ -106,6 +104,11 @@ impl Scheduler {
             return Err(anyhow!("Could not find task with id {:?}", task_id));
         };
 
+        trace!(
+            "Set up command task {:?} for {:?}, sending StartCommandVerb...",
+            task_id,
+            command
+        );
         // This gets enqueued as the first thing the task sees when it is started.
         task_ref
             .control_sender
@@ -120,13 +123,13 @@ impl Scheduler {
     }
 
     #[instrument(skip(self, sessions))]
-    pub async fn setup_verb_task(
+    pub async fn submit_verb_task(
         &mut self,
         player: Objid,
         vloc: Objid,
         verb: String,
         args: Vec<Var>,
-        sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
         let task_id = self
             .new_task(player, self.state_source.clone(), sessions)
@@ -147,11 +150,11 @@ impl Scheduler {
         Ok(task_id)
     }
 
-    pub async fn setup_eval_task(
+    pub async fn submit_eval_task(
         &mut self,
         player: Objid,
         code: String,
-        sessions: Arc<RwLock<dyn Sessions + Send + Sync>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
         // Compile the text into a verb.
         let binary = compile(code.as_str())?;
@@ -229,56 +232,45 @@ impl Scheduler {
         &mut self,
         player: Objid,
         state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
-        client_connection: Arc<RwLock<dyn Sessions + Send + Sync>>,
+        client_connection: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
-        let mut state_source = state_source.write().await;
-        let state = state_source.new_world_state()?;
-        let vm = VM::new();
+        let state = {
+            let mut state_source = state_source.write().await;
+            state_source.new_world_state()?
+        };
 
         let (tx_control, rx_control) = tokio::sync::mpsc::unbounded_channel();
 
         let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
-        let task = Task::new(
-            task_id,
-            rx_control,
-            self.response_sender.clone(),
-            player,
-            vm,
-            client_connection,
-            state,
-        );
-        let task_info = TaskControl {
-            task: Arc::new(RwLock::new(task)),
+
+        let task_control = TaskControl {
             control_sender: tx_control,
         };
 
-        self.num_scheduled_tasks.add(1);
+        self.tasks.insert(task_id, task_control);
 
-        self.tasks.insert(task_id, task_info);
-
-        Ok(task_id)
-    }
-
-    #[instrument(skip(self), name="scheduler_start_task", fields(task_id = task_id))]
-    pub async fn start_task(&mut self, task_id: TaskId) -> Result<(), anyhow::Error> {
-        let task = {
-            let Some(task_ref) = self.tasks.get_mut(&task_id) else {
-                return Err(anyhow!("Could not find task with id {:?}", task_id));
-            };
-            task_ref.task.clone()
-        };
+        let task_response_sender = self.response_sender.clone();
 
         // Spawn the task's thread.
         tokio::spawn(async move {
-            debug!("Starting up task: {:?}", task_id);
-            task.write().await.run(task_id).await;
+            let vm = VM::new();
+            let mut task = Task::new(
+                task_id,
+                rx_control,
+                task_response_sender,
+                player,
+                vm,
+                client_connection,
+                state,
+            );
 
+            debug!("Starting up task: {:?}", task_id);
+            task.run(task_id).await;
             debug!("Completed task: {:?}", task_id);
-        })
-        .await?;
+        });
 
         self.num_started_tasks.add(1);
-        Ok(())
+        Ok(task_id)
     }
 
     #[instrument(skip(self))]
@@ -368,7 +360,7 @@ mod tests {
 
         let mut sched = Scheduler::new(Arc::new(RwLock::new(src)));
         let task = sched
-            .setup_verb_task(
+            .submit_verb_task(
                 sys_obj,
                 sys_obj,
                 "test".to_string(),

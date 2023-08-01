@@ -6,9 +6,7 @@ use tracing::trace;
 use crate::db::state::WorldState;
 use crate::tasks::Sessions;
 use crate::values::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
-use crate::values::var::{
-    v_bool, v_empty_list, v_empty_str, v_err, v_int, v_list, v_none, v_obj,
-};
+use crate::values::var::{v_bool, v_empty_list, v_empty_str, v_err, v_int, v_list, v_none, v_obj};
 use crate::values::variant::Variant;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
