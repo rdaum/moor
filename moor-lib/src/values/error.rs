@@ -25,6 +25,7 @@ pub enum Error {
     E_FLOAT = 15,
 }
 
+#[derive(Debug)]
 pub struct ErrorPack {
     pub code: Error,
     pub msg: String,

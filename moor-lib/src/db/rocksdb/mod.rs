@@ -35,6 +35,7 @@ pub trait LoaderInterface {
         objid: Option<Objid>,
         attrs: &mut ObjAttrs,
     ) -> Result<Objid, anyhow::Error>;
+    fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error>;
 
     fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error>;
 

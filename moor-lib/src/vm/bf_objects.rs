@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use tracing::debug;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::values::error::Error::{E_INVARG, E_TYPE};
 use crate::values::var::{v_bool, v_err, v_list, v_objid, v_str, Var};
 use crate::values::variant::Variant;
-use crate::vm::vm::BfCallState;
-use crate::vm::vm::{BuiltinFunction, VM};
+use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::VM;
 
 async fn bf_create<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     unimplemented!("create")
@@ -56,7 +57,9 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::E
         return Ok(v_err(E_TYPE));
     };
     let children = bf_args.world_state.children_of(*obj)?;
+    debug!("Children: {:?} {:?}", obj, children);
     let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
+    debug!("Children: {:?} {:?}", obj, children);
     Ok(v_list(children))
 }
 bf_declare!(children, bf_children);

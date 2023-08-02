@@ -9,8 +9,8 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::values::error::Error::{E_INVARG, E_TYPE};
 use crate::values::var::{v_err, v_float, v_int, v_str, Var};
 use crate::values::variant::Variant;
-use crate::vm::vm::BfCallState;
-use crate::vm::vm::{BuiltinFunction, VM};
+use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::VM;
 
 async fn bf_abs<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 1 {

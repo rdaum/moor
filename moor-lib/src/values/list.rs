@@ -98,6 +98,12 @@ impl List {
     }
 }
 
+impl Default for List {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Index<usize> for List {
     type Output = Var;
 

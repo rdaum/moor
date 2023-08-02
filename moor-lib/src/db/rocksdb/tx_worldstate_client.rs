@@ -1,4 +1,5 @@
 use anyhow::Error;
+use tracing::debug;
 
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
@@ -371,6 +372,7 @@ impl WorldState for RocksDbTransaction {
             .send(Message::GetChildrenOf(obj, send))
             .expect("Error sending message");
         let children = receive.recv().expect("Error receiving message")?;
+        debug!("Children: {:?} {:?}", obj, children);
         Ok(children)
     }
 

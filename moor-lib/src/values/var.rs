@@ -10,6 +10,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use decorum::R64;
 use lazy_static::lazy_static;
 use num_traits::Zero;
+use std::str::FromStr;
 
 use crate::values::error::Error;
 use crate::values::error::Error::{E_RANGE, E_TYPE};
@@ -23,7 +24,7 @@ lazy_static! {
     static ref VAR_NONE: Var = Var::new(Variant::None);
     static ref VAR_CLEAR: Var = Var::new(Variant::Clear);
     static ref VAR_EMPTY_LIST: Var = Var::new(Variant::List(List::new()));
-    static ref VAR_EMPTY_STR: Var = Var::new(Variant::Str(Str::from_str("")));
+    static ref VAR_EMPTY_STR: Var = Var::new(Variant::Str(Str::from_str("").unwrap()));
 }
 
 #[derive(Clone)]
@@ -71,7 +72,7 @@ pub fn v_float(f: f64) -> Var {
 }
 
 pub fn v_str(s: &str) -> Var {
-    Var::new(Variant::Str(Str::from_str(s)))
+    Var::new(Variant::Str(Str::from_str(s).unwrap()))
 }
 
 pub fn v_string(s: String) -> Var {
@@ -95,6 +96,7 @@ pub fn v_list(l: Vec<Var>) -> Var {
 }
 
 // Macro to call v_list with vector arguments to construct instead of having to do v_list(vec![...])
+#[allow(unused_macros)]
 macro_rules! v_lst {
     () => (
         $crate::values::var::v_empty_list()
@@ -156,7 +158,7 @@ impl Var {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
             Variant::Float(f) => f.to_string(),
-            Variant::Str(s) => format!("\"{}\"", s),
+            Variant::Str(s) => format!("\"{}\"", snailquote::escape(s.as_str())),
             Variant::Obj(o) => format!("{}", o),
             Variant::List(l) => {
                 let mut result = String::new();

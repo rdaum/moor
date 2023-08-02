@@ -18,8 +18,8 @@ use crate::values::objid::Objid;
 use crate::values::var::Var;
 use crate::values::variant::Variant;
 use crate::vm::opcode::Binary;
-use crate::vm::vm::{ExecutionResult, VM};
 use crate::vm::vm_unwind::FinallyReason;
+use crate::vm::{ExecutionResult, VM};
 
 #[derive(Debug)]
 pub(crate) enum TaskControlMsg {
@@ -87,12 +87,13 @@ impl Task {
 
     #[instrument(skip(self), name="task_run", fields(task_id = task_id))]
     pub(crate) async fn run(&mut self, task_id: TaskId) {
-        trace!("Entering task loop...");
         let mut running_method = false;
 
         // Special flag for 'eval' to get it to rollback on completion instead of commit.
         let mut rollback_on_complete = false;
         loop {
+            // If not running a method, wait for a control message, otherwise continue to execute
+            // opcodes but pick up messages if we happen to have one.
             let msg = if running_method {
                 match self.control_receiver.try_recv() {
                     Ok(msg) => Some(msg),
@@ -103,108 +104,104 @@ impl Task {
                 self.control_receiver.recv().await
             };
 
-            trace!("Task loop: {:?}", msg);
+            if let Some(msg) = msg {
+                // Check for control messages.
+                match msg {
+                    // We've been asked to start a command.
+                    // We need to set up the VM and then execute it.
+                    TaskControlMsg::StartCommandVerb {
+                        player,
+                        vloc,
+                        verbinfo,
+                        command,
+                    } => {
+                        // We should never be asked to start a command while we're already running one.
+                        assert!(!running_method);
+                        trace!(?command, ?player, ?vloc, ?verbinfo, "Starting command");
+                        self.vm
+                            .setup_verb_command(
+                                self.task_id,
+                                verbinfo,
+                                vloc,
+                                vloc,
+                                player,
+                                BitEnum::new_with(ObjFlag::Wizard),
+                                &command,
+                            )
+                            .expect("Could not set up VM for command execution");
+                        running_method = true;
+                    }
 
-            // Check for control messages.
-            match msg {
-                // We've been asked to start a command.
-                // We need to set up the VM and then execute it.
-                Some(TaskControlMsg::StartCommandVerb {
-                    player,
-                    vloc,
-                    verbinfo,
-                    command,
-                }) => {
-                    // We should never be asked to start a command while we're already running one.
-                    assert!(!running_method);
-                    trace!("Starting command: {:?} on player {:?}", command, player);
-                    self.vm
-                        .setup_verb_command(
-                            self.task_id,
-                            verbinfo,
-                            vloc,
-                            vloc,
-                            player,
-                            BitEnum::new_with(ObjFlag::Wizard),
-                            &command,
-                        )
-                        .expect("Could not set up VM for command execution");
-                    running_method = true;
-                }
+                    TaskControlMsg::StartVerb {
+                        player,
+                        vloc,
+                        verb,
+                        args,
+                    } => {
+                        // We should never be asked to start a command while we're already running one.
+                        assert!(!running_method);
+                        trace!(?verb, ?player, ?vloc, ?args, "Starting verb");
+                        self.vm
+                            .setup_verb_method_call(
+                                self.task_id,
+                                self.state.as_mut(),
+                                vloc,
+                                verb.as_str(),
+                                vloc,
+                                player,
+                                BitEnum::new_with(ObjFlag::Wizard),
+                                &args,
+                            )
+                            .expect("Could not set up VM for command execution");
+                        running_method = true;
+                    }
+                    TaskControlMsg::StartEval { player, binary } => {
+                        assert!(!running_method);
+                        trace!(?player, ?binary, "Starting eval");
+                        // Stick the binary into the player object under a temp name.
+                        let tmp_name = Uuid::new_v4().to_string();
+                        // TODO: these will accumulate in the database, need to find a way to clean
+                        // them up, or make sure that this task somehow rollsback at completion, which
+                        // would involve some special flags to the VM.
+                        self.state
+                            .add_verb(
+                                player,
+                                vec![tmp_name.clone()],
+                                player,
+                                BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec,
+                                VerbArgsSpec::this_none_this(),
+                                binary.clone(),
+                            )
+                            .expect("Could not add temp verb");
+                        rollback_on_complete = true;
+                        running_method = true;
 
-                Some(TaskControlMsg::StartVerb {
-                    player,
-                    vloc,
-                    verb,
-                    args,
-                }) => {
-                    // We should never be asked to start a command while we're already running one.
-                    assert!(!running_method);
-                    self.vm
-                        .setup_verb_method_call(
-                            self.task_id,
-                            self.state.as_mut(),
-                            vloc,
-                            verb.as_str(),
-                            vloc,
-                            player,
-                            BitEnum::new_with(ObjFlag::Wizard),
-                            &args,
-                        )
-                        .expect("Could not set up VM for command execution");
-                    running_method = true;
-                }
-                Some(TaskControlMsg::StartEval { player, binary }) => {
-                    assert!(!running_method);
-                    // Stick the binary into the player object under a temp name.
-                    let tmp_name = Uuid::new_v4().to_string();
-                    // TODO: these will accumulate in the database, need to find a way to clean
-                    // them up, or make sure that this task somehow rollsback at completion, which
-                    // would involve some special flags to the VM.
-                    self.state
-                        .add_verb(
-                            player,
-                            vec![tmp_name.clone()],
-                            player,
-                            BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec,
-                            VerbArgsSpec::this_none_this(),
-                            binary.clone(),
-                        )
-                        .expect("Could not add temp verb");
-                    rollback_on_complete = true;
-                    running_method = true;
+                        // Now execute it.
+                        self.vm
+                            .setup_verb_method_call(
+                                self.task_id,
+                                self.state.as_mut(),
+                                player,
+                                tmp_name.as_str(),
+                                player,
+                                player,
+                                BitEnum::new_with(ObjFlag::Wizard),
+                                &[],
+                            )
+                            .expect("Could not set up VM for command execution");
+                    }
+                    // We've been asked to die.
+                    TaskControlMsg::Abort => {
+                        trace!("Aborting task");
+                        self.state.rollback().unwrap();
 
-                    // Now execute it.
-                    self.vm
-                        .setup_verb_method_call(
-                            self.task_id,
-                            self.state.as_mut(),
-                            player,
-                            tmp_name.as_str(),
-                            player,
-                            player,
-                            BitEnum::new_with(ObjFlag::Wizard),
-                            &[],
-                        )
-                        .expect("Could not set up VM for command execution");
-                }
-                // We've been asked to die.
-                Some(TaskControlMsg::Abort) => {
-                    self.state.rollback().unwrap();
-
-                    self.response_sender
-                        .send((self.task_id, TaskControlResponse::AbortCancelled))
-                        .expect("Could not send abort response");
-                    return;
-                }
-                None => {
-                    // No control message, so we're probably done.
-                    if !running_method {
-                        warn!("Task {} finished with no control message", task_id);
+                        self.response_sender
+                            .send((self.task_id, TaskControlResponse::AbortCancelled))
+                            .expect("Could not send abort response");
                         return;
                     }
                 }
-            }
+            };
 
             if !running_method {
                 continue;
@@ -216,6 +213,7 @@ impl Task {
             match result {
                 Ok(ExecutionResult::More) => {}
                 Ok(ExecutionResult::Complete(a)) => {
+                    trace!(task_id, result = ?a, "Task complete");
                     if rollback_on_complete {
                         self.state.rollback().unwrap();
                     } else {
@@ -233,6 +231,7 @@ impl Task {
                     return;
                 }
                 Ok(ExecutionResult::Exception(fr)) => {
+                    trace!(task_id, result = ?fr, "Task exception");
                     self.state.rollback().unwrap();
 
                     match &fr {
@@ -305,7 +304,7 @@ impl Task {
                 }
                 Err(e) => {
                     self.state.rollback().unwrap();
-                    error!("Task {} failed with error: {:?}", task_id, e);
+                    error!(task_id, error = ?e, "Task error");
 
                     self.response_sender
                         .send((self.task_id, TaskControlResponse::AbortError(e)))

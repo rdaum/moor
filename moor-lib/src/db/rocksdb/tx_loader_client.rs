@@ -22,6 +22,12 @@ impl LoaderInterface for RocksDbTransaction {
         let oid = receive.recv()??;
         Ok(oid)
     }
+    fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox.send(Message::SetParent(obj, parent, send))?;
+        receive.recv()??;
+        Ok(())
+    }
     fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox.send(Message::SetLocation(o, location, send))?;

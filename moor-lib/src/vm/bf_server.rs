@@ -11,8 +11,8 @@ use crate::model::ObjectError;
 use crate::values::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use crate::values::var::{v_bool, v_err, v_int, v_list, v_none, v_objid, v_string, Var};
 use crate::values::variant::Variant;
-use crate::vm::vm::BfCallState;
-use crate::vm::vm::{BuiltinFunction, VM};
+use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::VM;
 
 async fn bf_noop<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     unimplemented!("BF is not implemented");

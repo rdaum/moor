@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, Level, span, trace};
+use tracing::{debug, error, instrument, span, trace, Level};
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
@@ -19,7 +19,7 @@ use crate::tasks::task::{Task, TaskControl, TaskControlMsg, TaskControlResponse}
 use crate::tasks::{Sessions, TaskId};
 use crate::values::objid::Objid;
 use crate::values::var::Var;
-use crate::vm::vm::VM;
+use crate::vm::VM;
 
 pub struct Scheduler {
     running: AtomicBool,
@@ -150,6 +150,7 @@ impl Scheduler {
         Ok(task_id)
     }
 
+    #[instrument(skip(self, sessions))]
     pub async fn submit_eval_task(
         &mut self,
         player: Objid,
@@ -174,6 +175,7 @@ impl Scheduler {
 
         Ok(task_id)
     }
+
     #[instrument(skip(self))]
     pub async fn do_process(&mut self) -> Result<(), anyhow::Error> {
         let msg = match self.response_receiver.try_recv() {
@@ -253,7 +255,12 @@ impl Scheduler {
 
         // Spawn the task's thread.
         tokio::spawn(async move {
-            span!(Level::DEBUG, "spawn_task", task_id = task_id, player = player.to_literal());
+            span!(
+                Level::DEBUG,
+                "spawn_task",
+                task_id = task_id,
+                player = player.to_literal()
+            );
 
             let vm = VM::new();
             let mut task = Task::new(
@@ -321,6 +328,7 @@ mod tests {
     }
 
     #[async_trait]
+    #[allow(dead_code)]
     impl Sessions for NoopClientConnection {
         async fn send_text(&mut self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
             Ok(())
@@ -333,6 +341,7 @@ mod tests {
 
     // Disabled until mock state is more full featured. This test used to use a full in-mem DB.
     // #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[allow(dead_code)]
     async fn test_scheduler_loop() {
         let src = MockWorldStateSource::new();
 
@@ -361,7 +370,7 @@ mod tests {
         .unwrap();
 
         let mut sched = Scheduler::new(Arc::new(RwLock::new(src)));
-        let task = sched
+        let _task = sched
             .submit_verb_task(
                 sys_obj,
                 sys_obj,

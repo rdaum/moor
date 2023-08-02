@@ -10,8 +10,8 @@ use crate::values::var::{v_bool, v_empty_list, v_empty_str, v_err, v_int, v_list
 use crate::values::variant::Variant;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
-use crate::vm::vm::{ExecutionResult, VM};
 use crate::vm::vm_unwind::FinallyReason;
+use crate::vm::{ExecutionResult, VM};
 
 macro_rules! binary_bool_op {
     ( $self:ident, $op:tt ) => {
@@ -45,12 +45,12 @@ impl VM {
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
 
         trace!(
-            "exec: {}: {:?} this: {:?} player: {:?} stack: {:?}",
-            self.top().pc,
-            op,
-            self.top().this,
-            self.top().player,
-            self.top().valstack
+            pc = self.top().pc,
+            ?op,
+            this = ?self.top().this,
+            player = ?self.top().player,
+            stack = ?self.top().valstack,
+            "exec"
         );
         match op {
             Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
@@ -573,14 +573,18 @@ impl VM {
 
                 assert_eq!(nargs, labels.len());
                 let mut nopt_avail = len - nreq;
-
+                let nrest = if have_rest && len >= nargs {
+                    len - nargs + 1
+                } else {
+                    0
+                };
                 let mut jump_where = None;
                 let mut args_iter = rhs_values.iter();
                 for label in labels.iter() {
                     match label {
                         ScatterLabel::Rest(id) => {
                             let mut v = vec![];
-                            for _ in 1..nargs {
+                            for _ in 0..nrest {
                                 let Some(rest) = args_iter.next() else {
                                     break;
                                 };

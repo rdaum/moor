@@ -22,7 +22,7 @@ mod tests {
     use crate::values::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
-    use crate::vm::vm::{ExecutionResult, VM};
+    use crate::vm::{ExecutionResult, VM};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -564,7 +564,6 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_scatter_regression() {
         // Wherein I discovered that precedence order for scatter assign was wrong wrong wrong.
         let program = r#"
@@ -585,6 +584,17 @@ mod tests {
             result,
             v_list(vec![v_obj(2), v_obj(70), v_obj(70), v_obj(-1), v_obj(-1)])
         );
+    }
+
+    #[test]
+    fn test_new_scatter_regression() {
+        let program = "{a,b,@c}= {1,2,3,4,5}; return c;";
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(5)]));
     }
 
     #[test]

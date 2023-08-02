@@ -2,6 +2,7 @@ use crate::values::var::{v_str, v_string, Var};
 use bincode::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
+use std::str::FromStr;
 use std::sync::Arc;
 
 #[derive(Clone, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -10,12 +11,6 @@ pub struct Str {
 }
 
 impl Str {
-    pub fn from_str(s: &str) -> Self {
-        Self {
-            inner: Arc::new(s.to_string()),
-        }
-    }
-
     pub fn from_string(s: String) -> Self {
         Self { inner: Arc::new(s) }
     }
@@ -58,6 +53,16 @@ impl Str {
         Self {
             inner: Arc::new(self.inner[range].to_string()),
         }
+    }
+}
+
+impl FromStr for Str {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            inner: Arc::new(s.to_string()),
+        })
     }
 }
 

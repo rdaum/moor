@@ -11,8 +11,8 @@ use crate::util::bitenum::BitEnum;
 use crate::values::error::Error::{E_INVARG, E_TYPE};
 use crate::values::var::{v_err, v_list, v_none, v_objid, v_str, v_string, Var};
 use crate::values::variant::Variant;
-use crate::vm::vm::BfCallState;
-use crate::vm::vm::{BuiltinFunction, VM};
+use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::VM;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {

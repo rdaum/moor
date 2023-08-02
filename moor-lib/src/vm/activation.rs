@@ -1,3 +1,5 @@
+use tracing::trace;
+
 use crate::compiler::labels::Label;
 use crate::model::objects::ObjFlag;
 use crate::model::verbs::VerbInfo;
@@ -9,7 +11,6 @@ use crate::values::objid::Objid;
 use crate::values::var::{v_int, v_list, v_none, v_objid, v_str, Var};
 use crate::values::VarType;
 use crate::vm::opcode::{Binary, Op};
-use tracing::trace;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -49,6 +50,7 @@ pub(crate) struct Activation {
     pub(crate) this: Objid,
     pub(crate) player: Objid,
     pub(crate) player_flags: BitEnum<ObjFlag>,
+    pub(crate) verb_name: String,
     pub(crate) verb_info: VerbInfo,
     pub(crate) callers: Vec<Caller>,
     pub(crate) span_id: Option<tracing::span::Id>,
@@ -62,6 +64,7 @@ impl Activation {
         this: Objid,
         player: Objid,
         player_flags: BitEnum<ObjFlag>,
+        verb_name: &str,
         verb_info: VerbInfo,
         args: &[Var],
         callers: Vec<Caller>,
@@ -69,10 +72,7 @@ impl Activation {
     ) -> Result<Self, anyhow::Error> {
         let environment = vec![v_none(); binary.var_names.width()];
 
-        // Take a copy of the verb name because we're going to move verb_info.
-        let verb_name = verb_info.names.first().unwrap().clone();
-
-        let mut a = Activation {
+        let mut a = Self {
             task_id,
             binary,
             environment,
@@ -85,6 +85,7 @@ impl Activation {
             player,
             player_flags,
             verb_info,
+            verb_name: verb_name.to_string(),
             callers,
             span_id,
         };
@@ -101,14 +102,10 @@ impl Activation {
         a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
         a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
             .unwrap();
-        a.set_var("verb", v_str(verb_name.as_str())).unwrap();
+        a.set_var("verb", v_str(verb_name)).unwrap();
         a.set_var("args", v_list(args.into())).unwrap();
 
         Ok(a)
-    }
-
-    pub fn verb_name(&self) -> &str {
-        self.verb_info.names.first().unwrap()
     }
 
     pub fn verb_definer(&self) -> Objid {

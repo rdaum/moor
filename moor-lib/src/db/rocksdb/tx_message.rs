@@ -12,6 +12,7 @@ use crate::values::objid::Objid;
 use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 
+#[allow(dead_code)] // TODO Not all of these are used yet, but they will be. For now shut up the compiler.
 pub(crate) enum Message {
     // Objects
     CreateObject(Option<Objid>, ObjAttrs, Sender<Result<Objid, ObjectError>>),

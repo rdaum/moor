@@ -62,6 +62,7 @@ fn do_match_object_names(
     }
 }
 
+#[tracing::instrument(skip(env))]
 pub fn match_contents(
     env: &mut dyn MatchEnvironment,
     player: Objid,
@@ -91,6 +92,7 @@ pub fn match_contents(
     }
 }
 
+#[tracing::instrument(skip(env))]
 pub fn world_environment_match_object(
     env: &mut dyn MatchEnvironment,
     player: Objid,

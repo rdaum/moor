@@ -77,6 +77,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 
+#[tracing::instrument(skip(s))]
 pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Error> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
@@ -107,6 +108,7 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
                 .flags(flags),
         )?;
     }
+
     info!("Instantiated objects");
     info!("Defining props...");
 

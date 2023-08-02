@@ -13,13 +13,13 @@ use tracing::info;
 use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 
-use moor_lib::db::rocksdb::LoaderInterface;
 use moor_lib::db::rocksdb::server::RocksDbServer;
+use moor_lib::db::rocksdb::LoaderInterface;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::values::objid::Objid;
 
-use crate::server::ws_server::{WebSocketServer, ws_server_start};
+use crate::server::ws_server::{ws_server_start, WebSocketServer};
 
 mod server;
 
@@ -34,7 +34,11 @@ struct Args {
     #[arg(value_name = "listen", help = "Listen address")]
     listen_address: Option<String>,
 
-    #[arg(long, value_name = "perfetto_tracing", help = "Enable perfetto/chromium tracing output")]
+    #[arg(
+        long,
+        value_name = "perfetto_tracing",
+        help = "Enable perfetto/chromium tracing output"
+    )]
     perfetto_tracing: Option<bool>,
 }
 
@@ -52,9 +56,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .finish();
     let _perfetto_guard = match args.perfetto_tracing {
         Some(true) => {
-            let (chrome_layer, _guard) = ChromeLayerBuilder::new()
-                .include_args(true)
-                .build();
+            let (chrome_layer, _guard) = ChromeLayerBuilder::new().include_args(true).build();
 
             let with_chrome_tracing = main_subscriber.with(chrome_layer);
             tracing::subscriber::set_global_default(with_chrome_tracing)?;
@@ -65,7 +67,6 @@ async fn main() -> Result<(), anyhow::Error> {
             None
         }
     };
-
 
     info!("Moor Server starting...");
 

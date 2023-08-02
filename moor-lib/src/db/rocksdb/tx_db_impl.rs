@@ -2,6 +2,7 @@ use anyhow::{bail, Error};
 use bincode::config::Configuration;
 use lazy_static::lazy_static;
 use rocksdb::{ColumnFamily, ErrorKind};
+use tracing::trace;
 
 use uuid::Uuid;
 
@@ -104,11 +105,13 @@ pub(crate) struct RocksDbTx<'a> {
     pub(crate) bincode_cfg: Configuration,
 }
 
-fn verbname_matches(verb_names: &[String], candidate: &str) -> Option<String> {
-    verb_names
-        .iter()
-        .find(|&v| verbname_cmp(v, candidate))
-        .cloned()
+fn match_in_verb_names<'a>(verb_names: &'a [String], word: &str) -> Option<&'a String> {
+    for verb in verb_names {
+        if verbname_cmp(verb, word) {
+            return Some(verb);
+        }
+    }
+    return None;
 }
 
 impl<'a> RocksDbTx<'a> {
@@ -163,13 +166,14 @@ impl<'a> RocksDbTx<'a> {
 }
 
 impl<'a> DbStorage for RocksDbTx<'a> {
+    #[tracing::instrument(skip(self))]
     fn object_valid(&self, o: Objid) -> Result<bool, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = object_key(o);
         let ov = self.tx.get_cf(cf, ok)?;
         Ok(ov.is_some())
     }
-
+    #[tracing::instrument(skip(self))]
     fn create_object(&self, oid: Option<Objid>, attrs: ObjAttrs) -> Result<Objid, anyhow::Error> {
         let oid = match oid {
             None => self.next_object_id()?,
@@ -198,15 +202,20 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         set_object_vec(c_cf, &self.tx, oid, vec![])?;
         set_object_vec(ch_cf, &self.tx, oid, vec![])?;
 
-        self.set_object_parent(oid, attrs.parent.unwrap_or(NOTHING))?;
-        self.set_object_location(oid, attrs.location.unwrap_or(NOTHING))?;
+        if let Some(parent) = attrs.parent {
+            self.set_object_parent(oid, parent)?;
+        }
+
+        if let Some(location) = attrs.location {
+            self.set_object_location(oid, location)?;
+        }
 
         let default_object_flags = BitEnum::new();
         self.set_object_flags(oid, attrs.flags.unwrap_or(default_object_flags))?;
 
         Ok(oid)
     }
-
+    #[tracing::instrument(skip(self))]
     fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), anyhow::Error> {
         // Get o's parent, get its children, remove o from children, put children back
         // without it. Set new parent, get its children, add o to children, put children
@@ -244,10 +253,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         set_object_vec(c_cf, &self.tx, new_parent, new_children)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_children(&self, o: Objid) -> Result<Vec<Objid>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectChildren as u8) as usize];
         get_object_vec(cf, &self.tx, o)
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_name(&self, o: Objid) -> Result<String, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = object_key(o);
@@ -258,6 +269,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let (attrs, _) = bincode::decode_from_slice(&name_bytes, *BINCODE_CONFIG)?;
         Ok(attrs)
     }
+    #[tracing::instrument(skip(self))]
     fn set_object_name(&self, o: Objid, names: String) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = object_key(o);
@@ -265,6 +277,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         self.tx.put_cf(cf, ok, name_v)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_flags(&self, o: Objid) -> Result<BitEnum<ObjFlag>, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = object_key(o);
@@ -275,6 +288,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let (flags, _) = bincode::decode_from_slice(&flag_bytes, *BINCODE_CONFIG)?;
         Ok(flags)
     }
+    #[tracing::instrument(skip(self))]
     fn set_object_flags(&self, o: Objid, flags: BitEnum<ObjFlag>) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = object_key(o);
@@ -282,26 +296,32 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         self.tx.put_cf(cf, ok, flag_v)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_owner(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectOwner);
         get_object_value(cf, &self.tx, o)
     }
+    #[tracing::instrument(skip(self))]
     fn set_object_owner(&self, o: Objid, owner: Objid) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectOwner as u8) as usize];
         set_object_value(cf, &self.tx, o, owner)
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_parent(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         get_object_value(cf, &self.tx, o)
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_location(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectLocation as u8) as usize];
         get_object_value(cf, &self.tx, o)
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_contents(&self, o: Objid) -> Result<Vec<Objid>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectContents as u8) as usize];
         get_object_vec(cf, &self.tx, o)
     }
+    #[tracing::instrument(skip(self))]
     fn set_object_location(&self, o: Objid, new_location: Objid) -> Result<(), anyhow::Error> {
         // Get o's location, get its contents, remove o from old contents, put contents back
         // without it. Set new location, get its contents, add o to contents, put contents
@@ -343,6 +363,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         set_object_vec(c_cf, &self.tx, new_location, new_contents)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn get_object_verbs(&self, o: Objid) -> Result<Vec<VerbHandle>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = object_key(o);
@@ -356,6 +377,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         };
         Ok(verbs)
     }
+    #[tracing::instrument(skip(self))]
     fn add_object_verb(
         &self,
         oid: Objid,
@@ -399,6 +421,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         self.tx.put_cf(cf, vk, prg_bytes)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn delete_object_verb(&self, o: Objid, v: u128) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = object_key(o);
@@ -433,6 +456,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn get_verb(&self, o: Objid, v: u128) -> Result<VerbHandle, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = object_key(o);
@@ -451,6 +475,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         };
         Ok(verb.clone())
     }
+    #[tracing::instrument(skip(self))]
     fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbHandle, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = object_key(o);
@@ -465,12 +490,13 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         // TODO: wildcard search
         let verb = verbs
             .iter()
-            .find(|vh| verbname_matches(&vh.names, &n).is_some());
+            .find(|vh| match_in_verb_names(&vh.names, &n).is_some());
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, n).into());
         };
         Ok(verb.clone())
     }
+    #[tracing::instrument(skip(self))]
     fn get_verb_by_index(&self, o: Objid, i: usize) -> Result<VerbHandle, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = object_key(o);
@@ -488,6 +514,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         };
         Ok(verb.clone())
     }
+    #[tracing::instrument(skip(self))]
     fn get_program(&self, o: Objid, v: u128) -> Result<Binary, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let ok = composite_key(o, v);
@@ -506,6 +533,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         n: String,
         a: Option<VerbArgsSpec>,
     ) -> Result<VerbHandle, anyhow::Error> {
+        trace!("Resolving verb {} on object {}", n, o);
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         let ov_cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let mut search_o = o;
@@ -520,13 +548,14 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 }
             };
             let verb = verbs.iter().find(|vh| {
-                if verbname_matches(&vh.names, &n).is_some() {
+                if match_in_verb_names(&vh.names, &n).is_some() {
                     return if let Some(a) = a { a.matches(&a) } else { true };
                 }
                 false
             });
             // If we found the verb, return it.
             if let Some(verb) = verb {
+                trace!("Found verb {:?} on object {}", verb, search_o);
                 return Ok(verb.clone());
             }
 
@@ -542,6 +571,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         }
         Err(ObjectError::VerbNotFound(o, n).into())
     }
+    #[tracing::instrument(skip(self))]
     fn retrieve_verb(&self, o: Objid, v: String) -> Result<(Binary, VerbHandle), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = object_key(o);
@@ -555,7 +585,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         };
         let verb = verbs
             .iter()
-            .find(|vh| verbname_matches(&vh.names, &v).is_some());
+            .find(|vh| match_in_verb_names(&vh.names, &v).is_some());
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, v.clone()).into())
         };
@@ -569,7 +599,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let (program, _) = bincode::decode_from_slice(&prg_bytes, self.bincode_cfg)?;
         Ok((program, verb.clone()))
     }
-
+    #[tracing::instrument(skip(self))]
     fn set_verb_info(
         &self,
         o: Objid,
@@ -616,7 +646,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         self.tx.put_cf(cf, ok, verbs_v)?;
         Ok(())
     }
-
+    #[tracing::instrument(skip(self))]
     fn get_properties(&self, o: Objid) -> Result<Vec<PropHandle>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
         let ok = object_key(o);
@@ -630,6 +660,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         };
         Ok(props)
     }
+    #[tracing::instrument(skip(self))]
     fn retrieve_property(&self, o: Objid, u: u128) -> Result<Var, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let ok = composite_key(o, u);
@@ -641,6 +672,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let (var, _) = bincode::decode_from_slice(&var_bytes, self.bincode_cfg)?;
         Ok(var)
     }
+    #[tracing::instrument(skip(self))]
     fn set_property_value(&self, o: Objid, u: u128, v: Var) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let ok = composite_key(o, u);
@@ -648,6 +680,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         self.tx.put_cf(cf, ok, var_bytes)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn set_property_info(
         &self,
         o: Objid,
@@ -685,6 +718,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         self.tx.put_cf(p_cf, ok, props_bytes)?;
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn delete_property(&self, o: Objid, u: u128) -> Result<(), anyhow::Error> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
         let ok = object_key(o);
@@ -717,6 +751,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
         Ok(())
     }
+    #[tracing::instrument(skip(self))]
     fn add_property(
         &self,
         o: Objid,
@@ -792,6 +827,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         }
         Err(ObjectError::PropertyNotFound(obj, n).into())
     }
+    #[tracing::instrument(skip(self))]
     fn commit(self) -> Result<CommitResult, anyhow::Error> {
         match self.tx.commit() {
             Ok(()) => Ok(CommitResult::Success),
@@ -801,6 +837,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             Err(e) => bail!(e),
         }
     }
+    #[tracing::instrument(skip(self))]
     fn rollback(&self) -> Result<(), anyhow::Error> {
         self.tx.rollback()?;
         Ok(())
@@ -919,6 +956,8 @@ mod tests {
     fn test_parent_children() {
         let db = mk_test_db();
         let tx = db.tx();
+
+        // Single parent/child relationship.
         let a = tx
             .create_object(
                 None,
@@ -951,7 +990,28 @@ mod tests {
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).unwrap(), vec![]);
 
+        // Add a second child
         let c = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test2".into()),
+                    parent: Some(a),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(tx.get_object_parent(c).unwrap(), a);
+        assert_eq!(tx.get_object_children(a).unwrap(), vec![b, c]);
+
+        assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_children(b).unwrap(), vec![]);
+
+        // Reparent one child
+        let d = tx
             .create_object(
                 None,
                 ObjAttrs {
@@ -964,10 +1024,10 @@ mod tests {
             )
             .unwrap();
 
-        tx.set_object_parent(b, c).unwrap();
-        assert_eq!(tx.get_object_parent(b).unwrap(), c);
-        assert_eq!(tx.get_object_children(a).unwrap(), vec![]);
-        assert_eq!(tx.get_object_children(c).unwrap(), vec![b]);
+        tx.set_object_parent(b, d).unwrap();
+        assert_eq!(tx.get_object_parent(b).unwrap(), d);
+        assert_eq!(tx.get_object_children(a).unwrap(), vec![c]);
+        assert_eq!(tx.get_object_children(d).unwrap(), vec![b]);
     }
 
     #[test]

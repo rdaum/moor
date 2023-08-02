@@ -286,7 +286,7 @@ mod tests {
             if !compile_result.is_null() {
                 let c_str = std::ffi::CStr::from_ptr(compile_result);
                 let str_slice = c_str.to_str().unwrap();
-                assert!(false, "re_compile_pattern failed: {}", str_slice);
+                panic!("re_compile_pattern failed: {}", str_slice);
             }
             pattern.fastmap = fastmap.as_mut_ptr();
 

@@ -31,7 +31,7 @@ impl MockStore {
                 attrs: VerbAttrs {
                     definer: Some(o),
                     owner: Some(o),
-                    flags: Some(BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read),
+                    flags: Some(BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug),
                     args_spec: Some(VerbArgsSpec::this_none_this()),
                     program: Some(binary.clone()),
                 },
@@ -187,6 +187,10 @@ impl LoaderInterface for MockWorldStateSource {
         todo!()
     }
 
+    fn set_object_parent(&self, _obj: Objid, _parent: Objid) -> Result<(), Error> {
+        todo!()
+    }
+
     fn set_object_location(&self, _o: Objid, _location: Objid) -> Result<(), Error> {
         todo!()
     }
@@ -234,6 +238,7 @@ impl LoaderInterface for MockWorldStateSource {
     }
 }
 impl MockWorldStateSource {
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         let store = MockStore {
             verbs: Default::default(),

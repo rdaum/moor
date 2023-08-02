@@ -14,6 +14,7 @@ pub struct RocksDbServer {
 }
 
 impl RocksDbServer {
+    #[tracing::instrument()]
     pub fn new(path: PathBuf) -> Result<Self, anyhow::Error> {
         let mut options = rocksdb::Options::default();
         options.create_if_missing(true);
@@ -25,6 +26,7 @@ impl RocksDbServer {
         Ok(Self { db: Arc::new(db) })
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn start_transaction(&self) -> Result<RocksDbTransaction, anyhow::Error> {
         // Spawn a thread to handle the transaction, and return a mailbox to it.
         let (send, receive) = crossbeam_channel::unbounded();
@@ -50,6 +52,7 @@ impl RocksDbServer {
 }
 
 impl WorldStateSource for RocksDbServer {
+    #[tracing::instrument(skip(self))]
     fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, anyhow::Error> {
         // Return a transaction wrapped by the higher level RocksDbWorldState.
         let tx = self.start_transaction()?;

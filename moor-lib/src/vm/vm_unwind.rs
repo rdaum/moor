@@ -1,11 +1,13 @@
-use tracing::trace;
+use tracing::{error, trace};
 
 use crate::compiler::labels::{Label, Offset};
+use crate::model::verbs::VerbFlag;
 use crate::values::error::{Error, ErrorPack};
 use crate::values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use crate::values::variant::Variant;
 use crate::vm::activation::{Activation, HandlerType};
-use crate::vm::vm::{ExecutionResult, VM};
+use crate::vm::vm_call::tracing_exit_vm_span;
+use crate::vm::{ExecutionResult, VM};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FinallyReason {
@@ -70,24 +72,21 @@ impl VM {
         loop {
             let activation = &self.stack.get(frame)?;
             for handler in &activation.handler_stack {
-                match handler.handler_type {
-                    HandlerType::Catch(cnt) => {
-                        // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
-                        // non-list value, or a list containing the error code.
-                        // TODO check for 'cnt' being too large. not sure how to handle, tho
-                        // TODO this actually i think is wrong, it needs to pull two values off the stack
-                        let i = handler.valstack_pos;
-                        for j in (i - cnt)..i {
-                            if let Variant::List(codes) = &activation.valstack[j].variant() {
-                                if codes.contains(&v_err(raise_code)) {
-                                    return Some(frame);
-                                }
-                            } else {
+                if let HandlerType::Catch(cnt) = handler.handler_type {
+                    // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
+                    // non-list value, or a list containing the error code.
+                    // TODO check for 'cnt' being too large. not sure how to handle, tho
+                    // TODO this actually i think is wrong, it needs to pull two values off the stack
+                    let i = handler.valstack_pos;
+                    for j in (i - cnt)..i {
+                        if let Variant::List(codes) = &activation.valstack[j].variant() {
+                            if codes.contains(&v_err(raise_code)) {
                                 return Some(frame);
                             }
+                        } else {
+                            return Some(frame);
                         }
                     }
-                    _ => {}
                 }
             }
             if frame == 0 {
@@ -113,7 +112,7 @@ impl VM {
             // its definer, its location, and the current player, and 'this'.
             let traceback_entry = vec![
                 v_objid(a.this),
-                v_str(a.verb_name()),
+                v_str(a.verb_info.names.join(" ").as_str()),
                 v_objid(a.verb_definer()),
                 v_objid(a.verb_owner()),
                 v_objid(a.player),
@@ -135,7 +134,7 @@ impl VM {
             if i != 0 {
                 pieces.push("... called from ".to_string());
             }
-            pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name()));
+            pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == {})", a.this.0));
             }
@@ -156,6 +155,8 @@ impl VM {
     /// Finds the catch handler for the given error if there is one, and unwinds the stack to it.
     /// If there is no handler, creates an 'Uncaught' reason with backtrace, and unwinds with that.
     fn raise_error_pack(&mut self, p: ErrorPack) -> Result<ExecutionResult, anyhow::Error> {
+        trace!(error = ?p, "raising error");
+
         // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
         let handler_activ = self.find_handler_active(p.code);
 
@@ -181,9 +182,15 @@ impl VM {
 
     /// Push an error to the stack and raise it.
     pub(crate) fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
-        trace!("push_error: {:?}", code);
+        error!(?code, "push_error");
         self.push(&v_err(code));
-        self.raise_error_pack(code.make_error_pack(None))
+        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
+        if let Some(activation) = self.stack.last() {
+            if activation.verb_info.attrs.flags.unwrap().contains(VerbFlag::Debug) {
+                return self.raise_error_pack(code.make_error_pack(None));
+            }
+        }
+        return Ok(ExecutionResult::More);
     }
 
     /// Push an error to the stack with a description and raise it.
@@ -192,14 +199,21 @@ impl VM {
         code: Error,
         msg: String,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        trace!("push_error_msg: {:?} {:?}", code, msg);
+        error!(?code, msg, "push_error_msg");
         self.push(&v_err(code));
-        self.raise_error_pack(code.make_error_pack(Some(msg)))
+
+        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
+        if let Some(activation) = self.stack.last() {
+            if activation.verb_info.attrs.flags.unwrap().contains(VerbFlag::Debug) {
+                return self.raise_error_pack(code.make_error_pack(Some(msg)));
+            }
+        }
+        return Ok(ExecutionResult::More);
     }
 
     /// Raise an error (without pushing its value to stack)
     pub(crate) fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
-        trace!("raise_error: {:?}", code);
+        error!(?code, "raise_error");
         self.raise_error_pack(code.make_error_pack(None))
     }
 
@@ -212,7 +226,7 @@ impl VM {
         &mut self,
         why: FinallyReason,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        trace!("unwind_stack: {:?}", why);
+        trace!(?why, "unwind_stack");
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             while a.valstack.pop().is_some() {
@@ -232,6 +246,7 @@ impl VM {
                         // executing.
                         a.jump(label);
                         a.push(v_int(why_num as i64));
+                        trace!(jump = ?label, ?why, "matched finally handler");
                         return Ok(ExecutionResult::More);
                     }
                     HandlerType::Catch(_) => {
@@ -252,12 +267,12 @@ impl VM {
                         let v = a.pop().expect("Stack underflow");
                         if let Variant::List(error_codes) = v.variant() {
                             if error_codes.contains(&v_err(*code)) {
-                                trace!("Matched handler for {:?}", code);
+                                trace!(jump = ?pushed_label, ?code, ?value, "matched handler");
                                 a.jump(pushed_label);
                                 found = true;
                             }
                         } else {
-                            trace!("No match, but jump: {:?}", v);
+                            trace!(jump = ?pushed_label, ?code, ?value, "matched catch-all handler");
                             a.jump(pushed_label);
                             found = true;
                         }
@@ -272,18 +287,12 @@ impl VM {
                     }
                 }
             }
+
+            // Exit with a jump.. let's go...
             if let FinallyReason::Exit { label, .. } = why {
+                trace!("Exit with a jump");
                 a.jump(label);
                 return Ok(ExecutionResult::More);
-            }
-
-            // If we're doing a return, and this is the last activation, we're done and just pass
-            // the returned value up out of the interpreter loop.
-            // Otherwise pop off this activation, and continue unwinding.
-            if let FinallyReason::Return(value) = &why {
-                if self.stack.len() == 1 {
-                    return Ok(ExecutionResult::Complete(value.clone()));
-                }
             }
 
             if let FinallyReason::Uncaught {
@@ -294,37 +303,37 @@ impl VM {
                 backtrace: _,
             } = &why
             {
+                trace!("Uncaught error: {:?}", why);
+                // Walk back up the stack, closing out spans as we go.
+                while let Some(last) = self.stack.pop() {
+                    tracing_exit_vm_span(&last.span_id, &why, &v_none());
+                }
                 return Ok(ExecutionResult::Exception(why));
             }
 
+            let return_value = match &why {
+                FinallyReason::Return(value) => value.clone(),
+                _ => v_none(),
+            };
+
+            trace!(?return_value, "unwind_stack");
+
+            // Pop off our activation.
             let last = self.stack.pop().expect("Stack underflow");
-            if let Some(span_id) = last.span_id {
-                tracing::dispatcher::get_default(|d| {
-                    d.exit(&span_id)
-                });
-            }
+            tracing_exit_vm_span(&last.span_id, &why, &return_value);
 
-            if self.stack.is_empty() {
-                return Ok(ExecutionResult::Complete(v_none()));
-            }
-            // TODO builtin function unwinding stuff
+            // Last activation? Return the value ultimately back to the scheduler.
+            let Some(next) = self.stack.last_mut() else {
+                return Ok(ExecutionResult::Complete(return_value));
+            };
 
-            // If it was a return that brought us here, stick it onto the end of the next
-            // activation's value stack.
-            // (Unless we're the final activation, in which case that should have been handled
-            // above)
-            if let FinallyReason::Return(value) = why {
-                self.push(&value);
-                trace!(
-                    "Unwinding stack, pushing return value: {} back to verb {}",
-                    value,
-                    self.top().verb_name()
-                );
-                return Ok(ExecutionResult::More);
-            }
+            // Otherwise, shove it on the parent activation's stack.
+            next.push(return_value);
+
+            return Ok(ExecutionResult::More);
         }
 
-        // We realistically should not get here...
-        panic!("Unwound stack to empty, but no exit condition was hit");
+        // We realistically cannot get here...
+        unreachable!("Unwound stack to empty, but no exit condition was hit");
     }
 }

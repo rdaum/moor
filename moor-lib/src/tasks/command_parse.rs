@@ -116,6 +116,7 @@ fn parse_into_words(input: &str) -> Vec<String> {
     words.into_iter().filter(|w| !w.is_empty()).collect()
 }
 
+#[tracing::instrument(skip(match_object_fn))]
 pub fn parse_command<F>(input: &str, mut match_object_fn: F) -> ParsedCommand
 where
     F: FnMut(&str) -> Option<Objid>,

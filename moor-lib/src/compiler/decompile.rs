@@ -585,20 +585,10 @@ impl Decompile {
             }
             Op::TryFinally(_label) => {
                 // decompile body up until the EndFinally
-                let (body, _) = self.decompile_statements_until_match(|_, op| {
-                    if let Op::EndFinally = op {
-                        true
-                    } else {
-                        false
-                    }
-                })?;
-                let (handler, _) = self.decompile_statements_until_match(|_, op| {
-                    if let Op::Continue = op {
-                        true
-                    } else {
-                        false
-                    }
-                })?;
+                let (body, _) =
+                    self.decompile_statements_until_match(|_, op| matches!(op, Op::EndFinally))?;
+                let (handler, _) =
+                    self.decompile_statements_until_match(|_, op| matches!(op, Op::Continue))?;
                 self.s.push(Stmt::TryFinally { body, handler });
             }
             Op::Catch(label) => {

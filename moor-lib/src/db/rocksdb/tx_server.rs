@@ -55,6 +55,7 @@ fn respond<V: Send + Sync + 'static>(
     }
 }
 
+#[tracing::instrument(skip(mailbox, tx, cf_handles))]
 pub(crate) fn run_tx_server<'a>(
     mailbox: Receiver<Message>,
     tx: rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
