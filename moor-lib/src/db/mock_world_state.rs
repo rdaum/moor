@@ -63,7 +63,7 @@ impl WorldState for MockState {
     }
 
     fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-        todo!()
+        Ok(BitEnum::all())
     }
 
     fn verbs(
@@ -218,7 +218,7 @@ impl WorldState for MockState {
     }
 
     fn valid(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<bool, ObjectError> {
-        todo!()
+        Ok(true)
     }
 
     fn names_of(

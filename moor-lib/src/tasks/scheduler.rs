@@ -338,8 +338,16 @@ mod tests {
             Ok(())
         }
 
-        async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+        fn connected_players(&self) -> Result<Vec<Objid>, Error> {
             Ok(vec![])
+        }
+
+        fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
+            Ok(0.0)
+        }
+
+        fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
+            Ok(0.0)
         }
     }
 
