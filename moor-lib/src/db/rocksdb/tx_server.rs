@@ -173,8 +173,8 @@ pub(crate) fn run_tx_server<'a>(
             Message::SetPropertyInfo {
                 obj: o,
                 uuid: u,
-                owner,
-                perms,
+                new_owner: owner,
+                new_perms: perms,
                 new_name,
                 is_clear,
                 reply: r,

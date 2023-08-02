@@ -21,7 +21,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | Name       | Complete | Notes                                          |
 |------------|----------|------------------------------------------------|
 | tostr      | &check;  |                                                |
-| toliteral  |          | Combine with decompilation work?               |
+| toliteral  | &check;  |                                                |
 | match      | &check;  |                                                |
 | rmatch     |          | Just alter indices for the regexp match range. |
 | substitute | &check;  | Might need more testing.                       |
@@ -85,12 +85,12 @@ The following is a table of the status of various builtin-functions, to keep an 
 | Name              | Complete | Notes |
 |-------------------|----------|-------|
 | properties        | &check;  |       |
-| property_info     |          |       |
-| set_property_info |          |       |
+| property_info     | &check;  |       |
+| set_property_info | &check;  |       |
 | add_property      |          |       |
 | delete_property   |          |       |
-| clear_property    |          |       |
-| is_clear_property |          |       |
+| clear_property    | &check;  |       |
+| is_clear_property | &check;  |       |
 
 ### Verbs
 
@@ -174,7 +174,8 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Network connections
 
-These will likely never be implemented.
+These will likely never be implemented. But should return, e.g. E_PERM or similar
+to the caller if attempted.
 
 | Name                    | Complete | Notes |
 |-------------------------|----------|-------|

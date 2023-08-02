@@ -18,6 +18,24 @@ use crate::values::var::{v_int, v_list, v_objid, Var};
 use crate::values::variant::Variant;
 use crate::vm::opcode::Binary;
 
+// all of this right now is direct-talk to physical DB transaction, and should be fronted by a
+// cache.
+// the challenge is how to make the cache work with the transactional semantics of the DB and
+// runtime.
+// bare simple would be a rather inefficient cache that is flushed and re-read for each tx
+// better would be one that is long lived and shared with other transactions, but this is far more
+// challenging, esp if we want to support a distributed db back-end at some point. in that case,
+// the invalidation process would need to be distributed as well.
+// there's probably some optimistic scheme that could be done here, but here is my first thought
+//    * every tx has a cache
+//    * there's also a 'global' cache
+//    * the tx keeps track of which entities it has modified. when it goes to commit, those
+//      entities are locked.
+//    * when a tx commits successfully into the db, the committed changes are merged into the
+//      upstream cache, and the lock released
+//    * if a tx commit fails, the (local) changes are discarded, and, again, the lock released
+//    * likely something that should get run through Jepsen
+
 fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Binary>) -> VerbInfo {
     VerbInfo {
         names: vh.names.clone(),
@@ -33,10 +51,12 @@ fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Binary>) -> VerbInfo 
 
 fn prophandle_to_propattrs(ph: &PropHandle, value: Option<Var>) -> PropAttrs {
     PropAttrs {
+        name: Some(ph.name.clone()),
         value,
         location: Some(ph.location),
         owner: Some(ph.owner),
         flags: Some(ph.perms),
+        is_clear: Some(ph.is_clear),
     }
 }
 
@@ -151,6 +171,64 @@ impl WorldState for RocksDbTransaction {
         Ok(value)
     }
 
+    fn get_property_info(
+        &mut self,
+        obj: Objid,
+        pname: &str,
+        _player_flags: BitEnum<ObjFlag>,
+    ) -> Result<PropAttrs, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetProperties(obj, send))
+            .expect("Error sending message");
+        let properties = receive.recv().expect("Error receiving message")?;
+        let ph = properties
+            .iter()
+            .find(|ph| ph.name == pname)
+            .ok_or(ObjectError::PropertyNotFound(obj, pname.into()))?;
+        let attrs = prophandle_to_propattrs(ph, None);
+        Ok(attrs)
+    }
+
+    fn set_property_info(
+        &mut self,
+        obj: Objid,
+        pname: &str,
+        _player_perms: BitEnum<ObjFlag>,
+        attrs: PropAttrs,
+    ) -> Result<(), ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetProperties(obj, send))
+            .expect("Error sending message");
+        let properties = receive.recv().expect("Error receiving message")?;
+        let ph = properties
+            .iter()
+            .find(|ph| ph.name == pname)
+            .ok_or(ObjectError::PropertyNotFound(obj, pname.into()))?;
+
+        // TODO perms check
+        // Also keep a close eye on 'clear':
+        //  "raises `E_INVARG' if <owner> is not valid" & If <object> is the definer of the property
+        //   <prop-name>, as opposed to an inheritor of the property, then `clear_property()' raises
+        //   `E_INVARG'
+
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::SetPropertyInfo {
+                obj,
+                uuid: ph.uuid,
+                new_owner: attrs.owner,
+                new_perms: attrs.flags,
+                new_name: attrs.name,
+                is_clear: None,
+                reply: send,
+            })
+            .expect("Error sending message");
+        receive.recv().expect("Error receiving message")?;
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self))]
     fn update_property(
         &mut self,
@@ -171,6 +249,27 @@ impl WorldState for RocksDbTransaction {
             .iter()
             .find(|ph| ph.name == pname)
             .ok_or(ObjectError::PropertyNotFound(obj, pname.into()))?;
+
+        // If the property is marked 'clear' we need to remove that flag.
+        // TODO optimization -- we could do this in parallel with the value update.
+        // Alternatively, revisit putting the clear bit back in the value instead of the property
+        // info.
+        if ph.is_clear {
+            let (send, receive) = crossbeam_channel::bounded(1);
+            self.mailbox
+                .send(Message::SetPropertyInfo {
+                    obj,
+                    uuid: ph.uuid,
+                    new_owner: None,
+                    new_perms: None,
+                    new_name: None,
+                    is_clear: Some(false),
+                    reply: send,
+                })
+                .expect("Error sending message");
+            receive.recv().expect("Error receiving message")?;
+        }
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::SetProperty(
@@ -242,7 +341,7 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn update_verb_info(
+    fn set_verb_info(
         &mut self,
         obj: Objid,
         vname: &str,
@@ -274,12 +373,19 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
+    fn get_verb(
+        &mut self,
+        obj: Objid,
+        vname: &str,
+        _player_perms: BitEnum<ObjFlag>,
+    ) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetVerbByName(obj, vname.to_string(), send))
             .expect("Error sending message");
         let vh = receive.recv().expect("Error receiving message")?;
+
+        // TODO apply permissions check
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox

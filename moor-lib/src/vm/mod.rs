@@ -18,6 +18,7 @@ mod activation;
 mod bf_list_sets;
 mod bf_num;
 mod bf_objects;
+mod bf_properties;
 mod bf_server;
 mod bf_strings;
 mod bf_values;
@@ -66,6 +67,7 @@ impl VM {
         vm.register_bf_list_sets().unwrap();
         vm.register_bf_objects().unwrap();
         vm.register_bf_verbs().unwrap();
+        vm.register_bf_properties().unwrap();
 
         vm
     }

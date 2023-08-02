@@ -35,6 +35,22 @@ pub trait WorldState: Send + Sync {
         player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, ObjectError>;
 
+    /// Get information about a property, without walking the inheritance tree.
+    fn get_property_info(
+        &mut self,
+        obj: Objid,
+        pname: &str,
+        player_perms: BitEnum<ObjFlag>,
+    ) -> Result<PropAttrs, ObjectError>;
+
+    fn set_property_info(
+        &mut self,
+        obj: Objid,
+        pname: &str,
+        player_perms: BitEnum<ObjFlag>,
+        attrs: PropAttrs,
+    ) -> Result<(), ObjectError>;
+
     /// Update a property on the given object.
     fn update_property(
         &mut self,
@@ -65,7 +81,8 @@ pub trait WorldState: Send + Sync {
         code: Binary,
     ) -> Result<(), ObjectError>;
 
-    fn update_verb_info(
+    /// Update data about a verb on the given object.
+    fn set_verb_info(
         &mut self,
         obj: Objid,
         vname: &str,
@@ -75,8 +92,13 @@ pub trait WorldState: Send + Sync {
         args: Option<VerbArgsSpec>,
     ) -> Result<(), ObjectError>;
 
-    /// Get the verb with the given name on the given object.
-    fn get_verb(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError>;
+    /// Get the verb with the given name on the given object. Without doing inheritance resolution.
+    fn get_verb(
+        &mut self,
+        obj: Objid,
+        vname: &str,
+        player_perms: BitEnum<ObjFlag>,
+    ) -> Result<VerbInfo, ObjectError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
     fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError>;

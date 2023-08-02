@@ -161,8 +161,8 @@ trait DbStorage {
         &self,
         o: Objid,
         u: u128,
-        owner: Objid,
-        perms: BitEnum<PropFlag>,
+        new_owner: Option<Objid>,
+        new_perms: Option<BitEnum<PropFlag>>,
         new_name: Option<String>,
         is_clear: Option<bool>,
     ) -> Result<(), anyhow::Error>;

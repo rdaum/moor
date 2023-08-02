@@ -26,7 +26,9 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         return Ok(v_err(E_TYPE));
     };
     let verb_desc = verb_desc.as_str();
-    let verb_info = bf_args.world_state.get_verb(*obj, verb_desc)?;
+    let verb_info = bf_args
+        .world_state
+        .get_verb(*obj, verb_desc, bf_args.player_perms)?;
     let owner = verb_info.attrs.owner.unwrap();
     let perms = verb_info.attrs.flags.unwrap();
     let names = verb_info.names;
@@ -44,10 +46,14 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     if perms.contains(VerbFlag::Debug) {
         perms_string.push('d');
     }
+
+    // Join names into a single string, this is how MOO presents it.
+    let verb_names = names.join(" ");
+
     let result = v_list(vec![
         v_objid(owner),
         v_string(perms_string),
-        v_list(names.iter().map(|s| v_string(s.clone())).collect()),
+        v_string(verb_names),
     ]);
     Ok(result)
 }
@@ -71,7 +77,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
         return Ok(v_err(E_INVARG));
     }
     match (info[0].variant(), info[1].variant(), info[2].variant()) {
-        (Variant::Obj(owner), Variant::Str(perms_str), Variant::List(names)) => {
+        (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
             let mut perms = BitEnum::new();
             for c in perms_str.as_str().chars() {
                 match c {
@@ -82,16 +88,15 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                     _ => return Ok(v_err(E_INVARG)),
                 }
             }
-            let mut name_strings = vec![];
-            for name in names.iter() {
-                if let Variant::Str(s) = name.variant() {
-                    name_strings.push(String::from(s.as_str()));
-                } else {
-                    return Ok(v_err(E_TYPE));
-                }
-            }
 
-            bf_args.world_state.update_verb_info(
+            // Split the names string into a list of strings.
+            let name_strings = names
+                .as_str()
+                .split(' ')
+                .map(|s| s.into())
+                .collect::<Vec<_>>();
+
+            bf_args.world_state.set_verb_info(
                 *obj,
                 verb_name.as_str(),
                 Some(*owner),
@@ -117,7 +122,9 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         return Ok(v_err(E_TYPE));
     };
     let verb_desc = verb_desc.as_str();
-    let verb_info = bf_args.world_state.get_verb(*obj, verb_desc)?;
+    let verb_info = bf_args
+        .world_state
+        .get_verb(*obj, verb_desc, bf_args.player_perms)?;
     let args = verb_info.attrs.args_spec.unwrap();
 
     // Output is {dobj, prep, iobj} as strings
@@ -164,7 +171,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
             };
             let args = VerbArgsSpec { dobj, prep, iobj };
             debug!("Updating verb args for {} to {:?}", verb_name, args);
-            bf_args.world_state.update_verb_info(
+            bf_args.world_state.set_verb_info(
                 *obj,
                 verb_name.as_str(),
                 None,

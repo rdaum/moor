@@ -287,12 +287,15 @@ impl VM {
             ?args
         );
         span.follows_from(self.top().span_id.clone());
+
         let _guard = span.enter();
+        let player_perms = self.top().player_flags;
         let mut bf_args = BfCallState {
             world_state: state,
             frame: self.top_mut(),
             sessions: client_connection,
             args: args.to_vec(),
+            player_perms,
         };
         let result = bf.call(&mut bf_args).await?;
         self.push(&result);

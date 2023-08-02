@@ -77,8 +77,6 @@ pub(crate) enum Message {
         Sender<Result<(Binary, VerbHandle), ObjectError>>,
     ),
 
-    // TODO: ResolveVerb and/or GetProgram
-
     // Properties
 
     // Retrieve the list of properties defined on this object.
@@ -87,7 +85,6 @@ pub(crate) enum Message {
     RetrieveProperty(Objid, u128, Sender<Result<Var, ObjectError>>),
     // Set a property's value by its id.
     SetProperty(Objid, u128, Var, Sender<Result<(), ObjectError>>),
-    // Define a property on an object.
     DefineProperty {
         definer: Objid,
         obj: Objid,
@@ -101,8 +98,8 @@ pub(crate) enum Message {
     SetPropertyInfo {
         obj: Objid,
         uuid: u128,
-        owner: Objid,
-        perms: BitEnum<PropFlag>,
+        new_owner: Option<Objid>,
+        new_perms: Option<BitEnum<PropFlag>>,
         new_name: Option<String>,
         is_clear: Option<bool>,
         reply: Sender<Result<(), ObjectError>>,

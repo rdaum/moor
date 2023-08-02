@@ -79,6 +79,25 @@ impl WorldState for MockState {
         }
     }
 
+    fn get_property_info(
+        &mut self,
+        _obj: Objid,
+        _pname: &str,
+        _player_flags: BitEnum<ObjFlag>,
+    ) -> Result<PropAttrs, ObjectError> {
+        unimplemented!("describe_property")
+    }
+
+    fn set_property_info(
+        &mut self,
+        _obj: Objid,
+        _pname: &str,
+        _player_perms: BitEnum<ObjFlag>,
+        _attrs: PropAttrs,
+    ) -> Result<(), ObjectError> {
+        unimplemented!("set_property_info")
+    }
+
     fn update_property(
         &mut self,
         obj: Objid,
@@ -122,7 +141,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn update_verb_info(
+    fn set_verb_info(
         &mut self,
         _obj: Objid,
         _vname: &str,
@@ -134,7 +153,12 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn get_verb(&mut self, _obj: Objid, _vname: &str) -> Result<VerbInfo, ObjectError> {
+    fn get_verb(
+        &mut self,
+        _obj: Objid,
+        _vname: &str,
+        _player_perms: BitEnum<ObjFlag>,
+    ) -> Result<VerbInfo, ObjectError> {
         todo!()
     }
 

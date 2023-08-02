@@ -673,7 +673,9 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let v_uuid_str = Uuid::from_u128(v).to_string();
             return Err(ObjectError::VerbNotFound(o, v_uuid_str).into());
         }
+
         let verbs_v = bincode::encode_to_vec(&verbs, *BINCODE_CONFIG)?;
+
         self.tx.put_cf(cf, ok, verbs_v)?;
         Ok(())
     }
@@ -716,8 +718,8 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         &self,
         o: Objid,
         u: u128,
-        owner: Objid,
-        perms: BitEnum<PropFlag>,
+        new_owner: Option<Objid>,
+        new_perms: Option<BitEnum<PropFlag>>,
         new_name: Option<String>,
         is_clear: Option<bool>,
     ) -> Result<(), anyhow::Error> {
@@ -734,12 +736,18 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         for prop in props.iter_mut() {
             if prop.uuid == u {
                 found = true;
-                prop.owner = owner;
-                prop.perms = perms;
-                if let Some(new_name) = new_name {
-                    prop.name = new_name;
+                if let Some(new_owner) = new_owner {
+                    prop.owner = new_owner;
                 }
-                break;
+                if let Some(new_perms) = new_perms {
+                    prop.perms = new_perms;
+                }
+                if let Some(new_name) = &new_name {
+                    prop.name = new_name.clone();
+                }
+                if let Some(is_clear) = is_clear {
+                    prop.is_clear = is_clear;
+                }
             }
         }
         if !found {
