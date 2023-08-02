@@ -10,9 +10,9 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::mock_world_state::MockWorldStateSource;
-    use crate::db::state::{WorldState, WorldStateSource};
     use crate::model::objects::ObjFlag;
     use crate::model::props::PropFlag;
+    use crate::model::world_state::{WorldState, WorldStateSource};
     use crate::model::ObjectError;
     use crate::model::ObjectError::VerbNotFound;
     use crate::tasks::Sessions;

@@ -1,8 +1,9 @@
 use crate::compiler::labels::{Label, Name};
-use crate::db::state::WorldState;
-use crate::model::objects::ObjFlag;
+
+
+use crate::model::world_state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
-use crate::util::bitenum::BitEnum;
+
 use crate::values::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE};
 use crate::values::var::{v_none, Var};
 use crate::values::variant::Variant;
@@ -15,7 +16,6 @@ impl VM {
     pub(crate) fn resolve_property(
         &mut self,
         state: &mut dyn WorldState,
-        player_flags: BitEnum<ObjFlag>,
         propname: Var,
         obj: Var,
     ) -> Result<ExecutionResult, anyhow::Error> {
@@ -27,7 +27,8 @@ impl VM {
             return self.push_error(E_INVIND);
         };
 
-        let result = state.retrieve_property(*obj, propname.as_str(), player_flags);
+        let result =
+            state.retrieve_property(self.top().permissions.clone(), *obj, propname.as_str());
         let v = match result {
             Ok(v) => v,
             Err(e) => match e {
@@ -46,7 +47,6 @@ impl VM {
     pub(crate) fn set_property(
         &mut self,
         state: &mut dyn WorldState,
-        _player_flags: BitEnum<ObjFlag>,
         propname: Var,
         obj: Var,
         value: Var,
@@ -58,8 +58,12 @@ impl VM {
             }
         };
 
-        let update_result =
-            state.update_property(*obj, propname.as_str(), self.top().player_flags, &value);
+        let update_result = state.update_property(
+            self.top().permissions.clone(),
+            *obj,
+            propname.as_str(),
+            &value,
+        );
 
         match update_result {
             Ok(()) => {

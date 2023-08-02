@@ -27,7 +27,7 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
     let property_info =
         bf_args
             .world_state
-            .get_property_info(*obj, prop_name.as_str(), bf_args.player_perms)?;
+            .get_property_info(bf_args.perms(), *obj, prop_name.as_str())?;
     let owner = property_info.owner.unwrap();
     let flags = property_info.flags.unwrap();
     let name = property_info.name.unwrap();
@@ -84,9 +84,9 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
         }
     }
     bf_args.world_state.set_property_info(
+        bf_args.perms(),
         *obj,
         prop_name.as_str(),
-        bf_args.player_perms,
         PropAttrs {
             name: Some(name.to_string()),
             value: None,
@@ -113,7 +113,7 @@ async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
     let property_info =
         bf_args
             .world_state
-            .get_property_info(*obj, prop_name.as_str(), bf_args.player_perms)?;
+            .get_property_info(bf_args.perms(), *obj, prop_name.as_str())?;
     let is_clear = if property_info.is_clear.unwrap() {
         1
     } else {
@@ -134,9 +134,9 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
         return Ok(v_err(E_TYPE));
     };
     bf_args.world_state.set_property_info(
+        bf_args.perms(),
         *obj,
         prop_name.as_str(),
-        bf_args.player_perms,
         PropAttrs {
             name: None,
             value: None,

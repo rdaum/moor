@@ -28,7 +28,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     let verb_desc = verb_desc.as_str();
     let verb_info = bf_args
         .world_state
-        .get_verb(*obj, verb_desc, bf_args.player_perms)?;
+        .get_verb(bf_args.perms(), *obj, verb_desc)?;
     let owner = verb_info.attrs.owner.unwrap();
     let perms = verb_info.attrs.flags.unwrap();
     let names = verb_info.names;
@@ -97,6 +97,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                 .collect::<Vec<_>>();
 
             bf_args.world_state.set_verb_info(
+                bf_args.perms(),
                 *obj,
                 verb_name.as_str(),
                 Some(*owner),
@@ -124,7 +125,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     let verb_desc = verb_desc.as_str();
     let verb_info = bf_args
         .world_state
-        .get_verb(*obj, verb_desc, bf_args.player_perms)?;
+        .get_verb(bf_args.perms(), *obj, verb_desc)?;
     let args = verb_info.attrs.args_spec.unwrap();
 
     // Output is {dobj, prep, iobj} as strings
@@ -172,6 +173,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
             let args = VerbArgsSpec { dobj, prep, iobj };
             debug!("Updating verb args for {} to {:?}", verb_name, args);
             bf_args.world_state.set_verb_info(
+                bf_args.perms(),
                 *obj,
                 verb_name.as_str(),
                 None,

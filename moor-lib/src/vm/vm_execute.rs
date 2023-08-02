@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use crate::db::state::WorldState;
+use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;
 use crate::values::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
 use crate::values::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
@@ -413,16 +413,16 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                return self.resolve_property(state, self.top().player_flags, propname, obj);
+                return self.resolve_property(state, propname, obj);
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                return self.resolve_property(state, self.top().player_flags, propname, obj);
+                return self.resolve_property(state, propname, obj);
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
-                return self.set_property(state, self.top().player_flags, propname, obj, rhs);
+                return self.set_property(state, propname, obj, rhs);
             }
             Op::Fork { id: _, f_index: _ } => {
                 unimplemented!("fork")

@@ -4,12 +4,13 @@ use std::sync::{Arc, Mutex};
 use anyhow::Error;
 
 use crate::db::rocksdb::LoaderInterface;
-use crate::db::state::{WorldState, WorldStateSource};
 use crate::db::CommitResult;
 use crate::model::objects::{ObjAttrs, ObjFlag};
+use crate::model::permissions::PermissionsContext;
 use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
+use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::model::ObjectError;
 use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
 use crate::tasks::command_parse::ParsedCommand;
@@ -45,31 +46,46 @@ impl MockStore {
 pub struct MockState(Arc<Mutex<MockStore>>);
 
 impl WorldState for MockState {
-    fn location_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-        unimplemented!()
+    fn location_of(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<Objid, ObjectError> {
+        todo!()
     }
 
-    fn contents_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
-        unimplemented!()
+    fn contents_of(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<Vec<Objid>, ObjectError> {
+        todo!()
     }
 
-    fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-        Ok(BitEnum::all())
+    fn flags_of(
+        &mut self,
+        _obj: Objid,
+    ) -> Result<BitEnum<ObjFlag>, ObjectError> {
+        todo!()
     }
 
-    fn verbs(&mut self, _obj: Objid) -> Result<Vec<VerbInfo>, ObjectError> {
-        unimplemented!()
+    fn verbs(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<Vec<VerbInfo>, ObjectError> {
+        todo!()
     }
 
-    fn properties(&mut self, _obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
-        unimplemented!()
+    fn properties(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
+        todo!()
     }
 
     fn retrieve_property(
         &mut self,
+        _perms: PermissionsContext,
         obj: Objid,
         pname: &str,
-        _player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, ObjectError> {
         let store = self.0.lock().unwrap();
         let p = store.properties.get(&(obj, pname.to_string()));
@@ -81,28 +97,28 @@ impl WorldState for MockState {
 
     fn get_property_info(
         &mut self,
+        _perms: PermissionsContext,
         _obj: Objid,
         _pname: &str,
-        _player_flags: BitEnum<ObjFlag>,
     ) -> Result<PropAttrs, ObjectError> {
-        unimplemented!("describe_property")
+        todo!()
     }
 
     fn set_property_info(
         &mut self,
+        _perms: PermissionsContext,
         _obj: Objid,
         _pname: &str,
-        _player_perms: BitEnum<ObjFlag>,
         _attrs: PropAttrs,
     ) -> Result<(), ObjectError> {
-        unimplemented!("set_property_info")
+        todo!()
     }
 
     fn update_property(
         &mut self,
+        _perms: PermissionsContext,
         obj: Objid,
         pname: &str,
-        _player_flags: BitEnum<ObjFlag>,
         value: &Var,
     ) -> Result<(), ObjectError> {
         let mut store = self.0.lock().unwrap();
@@ -114,6 +130,7 @@ impl WorldState for MockState {
 
     fn add_property(
         &mut self,
+        _perms: PermissionsContext,
         _definer: Objid,
         obj: Objid,
         pname: &str,
@@ -131,6 +148,7 @@ impl WorldState for MockState {
 
     fn add_verb(
         &mut self,
+        _perms: PermissionsContext,
         _obj: Objid,
         _names: Vec<String>,
         _owner: Objid,
@@ -143,6 +161,7 @@ impl WorldState for MockState {
 
     fn set_verb_info(
         &mut self,
+        _perms: PermissionsContext,
         _obj: Objid,
         _vname: &str,
         _owner: Option<Objid>,
@@ -155,14 +174,19 @@ impl WorldState for MockState {
 
     fn get_verb(
         &mut self,
+        _perms: PermissionsContext,
         _obj: Objid,
         _vname: &str,
-        _player_perms: BitEnum<ObjFlag>,
     ) -> Result<VerbInfo, ObjectError> {
         todo!()
     }
 
-    fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
+    fn find_method_verb_on(
+        &mut self,
+        _perms: PermissionsContext,
+        obj: Objid,
+        vname: &str,
+    ) -> Result<VerbInfo, ObjectError> {
         let store = self.0.lock().unwrap();
         let v = store.verbs.get(&(obj, vname.to_string()));
         match v {
@@ -170,32 +194,42 @@ impl WorldState for MockState {
             Some(v) => Ok(v.clone()),
         }
     }
+
     fn find_command_verb_on(
         &mut self,
+        _perms: PermissionsContext,
         _oid: Objid,
         _pc: &ParsedCommand,
     ) -> Result<Option<VerbInfo>, ObjectError> {
-        unimplemented!()
-    }
-
-    fn parent_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-        Ok(Objid(-1))
-    }
-
-    fn children_of(&mut self, _obj: Objid) -> Result<Vec<Objid>, ObjectError> {
         todo!()
     }
 
-    fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
-        Ok(true)
+    fn parent_of(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<Objid, ObjectError> {
+        todo!()
     }
 
-    fn names_of(&mut self, _obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
-        unimplemented!()
+    fn children_of(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<Vec<Objid>, ObjectError> {
+        todo!()
     }
 
-    fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-        unimplemented!()
+    fn valid(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<bool, ObjectError> {
+        todo!()
+    }
+
+    fn names_of(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<(String, Vec<String>), ObjectError> {
+        todo!()
+    }
+
+    fn owner_of(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<Objid, ObjectError> {
+        todo!()
     }
 
     fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
@@ -287,7 +321,14 @@ impl MockWorldStateSource {
 }
 
 impl WorldStateSource for MockWorldStateSource {
-    fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, Error> {
-        Ok(Box::new(MockState(self.0.clone())))
+    fn new_world_state(
+        &mut self,
+        player: Objid,
+    ) -> Result<(Box<dyn WorldState>, PermissionsContext), Error> {
+        let permissions_context = PermissionsContext::root_for(
+            player,
+            BitEnum::new() | ObjFlag::Wizard | ObjFlag::Programmer,
+        );
+        Ok((Box::new(MockState(self.0.clone())), permissions_context))
     }
 }

@@ -1,5 +1,4 @@
 pub mod matching;
-pub mod state;
 
 pub mod match_env;
 #[doc(hidden)]

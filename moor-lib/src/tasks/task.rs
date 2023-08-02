@@ -7,10 +7,11 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 
-use crate::db::state::WorldState;
-use crate::model::objects::ObjFlag;
+
+use crate::model::permissions::PermissionsContext;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbFlag, VerbInfo};
+use crate::model::world_state::WorldState;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
 use crate::util::bitenum::BitEnum;
@@ -58,6 +59,7 @@ pub(crate) struct Task {
     vm: VM,
     sessions: Arc<RwLock<dyn Sessions>>,
     state: Box<dyn WorldState>,
+    perms: PermissionsContext,
 }
 
 pub(crate) struct TaskControl {
@@ -73,6 +75,7 @@ impl Task {
         vm: VM,
         sessions: Arc<RwLock<dyn Sessions>>,
         state: Box<dyn WorldState>,
+        perms: PermissionsContext,
     ) -> Self {
         Self {
             task_id,
@@ -82,6 +85,7 @@ impl Task {
             vm,
             sessions,
             state,
+            perms,
         }
     }
 
@@ -125,7 +129,7 @@ impl Task {
                                 vloc,
                                 vloc,
                                 player,
-                                BitEnum::new_with(ObjFlag::Wizard),
+                                self.perms.clone(),
                                 &command,
                             )
                             .expect("Could not set up VM for command execution");
@@ -145,11 +149,11 @@ impl Task {
                             .setup_verb_method_call(
                                 self.task_id,
                                 self.state.as_mut(),
+                                self.perms.clone(),
                                 vloc,
                                 verb.as_str(),
                                 vloc,
                                 player,
-                                BitEnum::new_with(ObjFlag::Wizard),
                                 &args,
                             )
                             .expect("Could not set up VM for command execution");
@@ -162,6 +166,7 @@ impl Task {
                         let tmp_name = Uuid::new_v4().to_string();
                         self.state
                             .add_verb(
+                                self.perms.clone(),
                                 player,
                                 vec![tmp_name.clone()],
                                 player,
@@ -180,11 +185,11 @@ impl Task {
                             .setup_verb_method_call(
                                 self.task_id,
                                 self.state.as_mut(),
+                                self.perms.clone(),
                                 player,
                                 tmp_name.as_str(),
                                 player,
                                 player,
-                                BitEnum::new_with(ObjFlag::Wizard),
                                 &[],
                             )
                             .expect("Could not set up VM for command execution");

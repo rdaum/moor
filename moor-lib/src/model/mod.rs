@@ -9,6 +9,7 @@ pub mod objects;
 pub mod permissions;
 pub mod props;
 pub mod verbs;
+pub mod world_state;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ObjectError {

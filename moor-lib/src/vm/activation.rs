@@ -1,10 +1,11 @@
 use tracing::trace;
 
 use crate::compiler::labels::Label;
-use crate::model::objects::ObjFlag;
+
+use crate::model::permissions::PermissionsContext;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::TaskId;
-use crate::util::bitenum::BitEnum;
+
 use crate::values::error::Error;
 use crate::values::error::Error::E_VARNF;
 use crate::values::objid::Objid;
@@ -17,7 +18,7 @@ use crate::vm::opcode::{Binary, Op};
 pub struct Caller {
     pub this: Objid,
     pub verb_name: String,
-    pub programmer: Objid,
+    pub perms: PermissionsContext,
     pub verb_loc: Objid,
     pub player: Objid,
     pub line_number: usize,
@@ -46,10 +47,9 @@ pub(crate) struct Activation {
     pub(crate) handler_stack: Vec<HandlerLabel>,
     pub(crate) pc: usize,
     pub(crate) temp: Var,
-    pub(crate) caller_perms: Objid,
     pub(crate) this: Objid,
     pub(crate) player: Objid,
-    pub(crate) player_flags: BitEnum<ObjFlag>,
+    pub(crate) permissions: PermissionsContext,
     pub(crate) verb_name: String,
     pub(crate) verb_info: VerbInfo,
     pub(crate) callers: Vec<Caller>,
@@ -63,7 +63,7 @@ impl Activation {
         caller: Objid,
         this: Objid,
         player: Objid,
-        player_flags: BitEnum<ObjFlag>,
+        permissions: PermissionsContext,
         verb_name: &str,
         verb_info: VerbInfo,
         args: &[Var],
@@ -80,10 +80,9 @@ impl Activation {
             handler_stack: vec![],
             pc: 0,
             temp: v_none(),
-            caller_perms: caller,
             this,
             player,
-            player_flags,
+            permissions,
             verb_info,
             verb_name: verb_name.to_string(),
             callers,

@@ -3,10 +3,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use crate::db::state::WorldState;
-use crate::model::objects::ObjFlag;
+
+use crate::model::permissions::PermissionsContext;
+use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;
-use crate::util::bitenum::BitEnum;
+
 use crate::values::var::Var;
 use crate::vm::activation::Activation;
 
@@ -16,7 +17,12 @@ pub(crate) struct BfCallState<'a> {
     pub(crate) frame: &'a mut Activation,
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
     pub(crate) args: Vec<Var>,
-    pub(crate) player_perms: BitEnum<ObjFlag>,
+}
+
+impl<'a> BfCallState<'a> {
+    pub fn perms(&self) -> PermissionsContext {
+        self.frame.permissions.clone()
+    }
 }
 
 #[async_trait]

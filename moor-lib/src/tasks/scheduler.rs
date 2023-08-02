@@ -13,7 +13,7 @@ use tracing::{debug, error, instrument, span, trace, Level};
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::world_environment_match_object;
-use crate::db::state::WorldStateSource;
+use crate::model::world_state::WorldStateSource;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::task::{Task, TaskControl, TaskControlMsg, TaskControlResponse};
 use crate::tasks::{Sessions, TaskId};
@@ -69,21 +69,23 @@ impl Scheduler {
     ) -> Result<TaskId, anyhow::Error> {
         let (vloc, vi, command) = {
             let mut ss = self.state_source.write().await;
-            let mut ws = ss.new_world_state()?;
-            let mut me = DBMatchEnvironment { ws: ws.as_mut() };
+            let (mut ws, perms) = ss.new_world_state(player)?;
+            let mut me = DBMatchEnvironment {
+                ws: ws.as_mut(),
+                perms: perms.clone(),
+            };
             let match_object_fn =
                 |name: &str| world_environment_match_object(&mut me, player, name).unwrap();
             let pc = parse_command(command, match_object_fn);
+            let loc = ws.location_of(perms.clone(), player)?;
 
-            let loc = ws.location_of(player)?;
-
-            match ws.find_command_verb_on(player, &pc)? {
+            match ws.find_command_verb_on(perms.clone(), player, &pc)? {
                 Some(vi) => (player, vi, pc),
-                None => match ws.find_command_verb_on(loc, &pc)? {
+                None => match ws.find_command_verb_on(perms.clone(), loc, &pc)? {
                     Some(vi) => (loc, vi, pc),
-                    None => match ws.find_command_verb_on(pc.dobj, &pc)? {
+                    None => match ws.find_command_verb_on(perms.clone(), pc.dobj, &pc)? {
                         Some(vi) => (pc.dobj, vi, pc),
-                        None => match ws.find_command_verb_on(pc.iobj, &pc)? {
+                        None => match ws.find_command_verb_on(perms.clone(), pc.iobj, &pc)? {
                             Some(vi) => (pc.iobj, vi, pc),
                             None => {
                                 return Err(anyhow!(SchedulerError::NoCommandMatch(
@@ -237,9 +239,9 @@ impl Scheduler {
         state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
         client_connection: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
-        let state = {
+        let (state, perms) = {
             let mut state_source = state_source.write().await;
-            state_source.new_world_state()?
+            state_source.new_world_state(player)?
         };
 
         let (tx_control, rx_control) = tokio::sync::mpsc::unbounded_channel();
@@ -272,6 +274,7 @@ impl Scheduler {
                 vm,
                 client_connection,
                 state,
+                perms,
             );
 
             debug!("Starting up task: {:?}", task_id);

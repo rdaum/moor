@@ -4,12 +4,13 @@ use tracing::debug;
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
 use crate::db::rocksdb::RocksDbTransaction;
-use crate::db::state::WorldState;
 use crate::db::CommitResult;
 use crate::model::objects::ObjFlag;
+use crate::model::permissions::PermissionsContext;
 use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::r#match::{ArgSpec, VerbArgsSpec};
 use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
+use crate::model::world_state::WorldState;
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::util::bitenum::BitEnum;
@@ -62,7 +63,7 @@ fn prophandle_to_propattrs(ph: &PropHandle, value: Option<Var>) -> PropAttrs {
 
 impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
-    fn location_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+    fn location_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetLocationOf(obj, send))
@@ -72,7 +73,11 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn contents_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
+    fn contents_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<Vec<Objid>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetContentsOf(obj, send))
@@ -82,7 +87,10 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+    fn flags_of(
+        &mut self,
+        obj: Objid,
+    ) -> Result<BitEnum<ObjFlag>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetFlagsOf(obj, send))
@@ -92,7 +100,11 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn verbs(&mut self, obj: Objid) -> Result<Vec<VerbInfo>, ObjectError> {
+    fn verbs(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<Vec<VerbInfo>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetVerbs(obj, send))
@@ -108,7 +120,11 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn properties(&mut self, obj: Objid) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
+    fn properties(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetProperties(obj, send))
@@ -129,20 +145,25 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn retrieve_property(
         &mut self,
+        perms: PermissionsContext,
+
         obj: Objid,
         pname: &str,
-        _player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, ObjectError> {
         // Special properties like name, location, and contents get treated specially.
         if pname == "name" {
-            return self.names_of(obj).map(|(name, _)| Var::from(name));
+            return self.names_of(perms, obj).map(|(name, _)| Var::from(name));
         } else if pname == "location" {
-            return self.location_of(obj).map(Var::from);
+            return self.location_of(perms, obj).map(Var::from);
         } else if pname == "contents" {
-            let contents = self.contents_of(obj)?.iter().map(|o| v_objid(*o)).collect();
+            let contents = self
+                .contents_of(perms, obj)?
+                .iter()
+                .map(|o| v_objid(*o))
+                .collect();
             return Ok(v_list(contents));
         } else if pname == "owner" {
-            return self.owner_of(obj).map(Var::from);
+            return self.owner_of(perms, obj).map(Var::from);
         } else if pname == "programmer" {
             // TODO these can be set, too.
             let flags = self.flags_of(obj)?;
@@ -152,7 +173,7 @@ impl WorldState for RocksDbTransaction {
                 Ok(v_int(0))
             };
         } else if pname == "wizard" {
-            let flags = self.flags_of(obj)?;
+            let flags = self.flags_of( obj)?;
             return if flags.contains(ObjFlag::Wizard) {
                 Ok(v_int(1))
             } else {
@@ -173,9 +194,10 @@ impl WorldState for RocksDbTransaction {
 
     fn get_property_info(
         &mut self,
+        _perms: PermissionsContext,
+
         obj: Objid,
         pname: &str,
-        _player_flags: BitEnum<ObjFlag>,
     ) -> Result<PropAttrs, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -192,9 +214,10 @@ impl WorldState for RocksDbTransaction {
 
     fn set_property_info(
         &mut self,
+        _perms: PermissionsContext,
+
         obj: Objid,
         pname: &str,
-        _player_perms: BitEnum<ObjFlag>,
         attrs: PropAttrs,
     ) -> Result<(), ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
@@ -232,9 +255,10 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn update_property(
         &mut self,
+        perms: PermissionsContext,
+
         obj: Objid,
         pname: &str,
-        _player_flags: BitEnum<ObjFlag>,
         value: &Var,
     ) -> Result<(), ObjectError> {
         // TODO: use player_flags to check permissions
@@ -286,6 +310,8 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn add_property(
         &mut self,
+        perms: PermissionsContext,
+
         definer: Objid,
         obj: Objid,
         pname: &str,
@@ -317,6 +343,8 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn add_verb(
         &mut self,
+        perms: PermissionsContext,
+
         obj: Objid,
         names: Vec<String>,
         owner: Objid,
@@ -343,6 +371,8 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn set_verb_info(
         &mut self,
+        perms: PermissionsContext,
+
         obj: Objid,
         vname: &str,
         owner: Option<Objid>,
@@ -375,9 +405,10 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn get_verb(
         &mut self,
+        perms: PermissionsContext,
+
         obj: Objid,
         vname: &str,
-        _player_perms: BitEnum<ObjFlag>,
     ) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -396,7 +427,12 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn find_method_verb_on(&mut self, obj: Objid, vname: &str) -> Result<VerbInfo, ObjectError> {
+    fn find_method_verb_on(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vname: &str,
+    ) -> Result<VerbInfo, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::ResolveVerb(obj, vname.to_string(), None, send))
@@ -414,10 +450,12 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn find_command_verb_on(
         &mut self,
+        perms: PermissionsContext,
+
         obj: Objid,
         pc: &ParsedCommand,
     ) -> Result<Option<VerbInfo>, ObjectError> {
-        if !self.valid(obj)? {
+        if !self.valid(perms, obj)? {
             return Ok(None);
         }
 
@@ -469,7 +507,7 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn parent_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+    fn parent_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetParentOf(obj, send))
@@ -479,7 +517,11 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn children_of(&mut self, obj: Objid) -> Result<Vec<Objid>, ObjectError> {
+    fn children_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<Vec<Objid>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetChildrenOf(obj, send))
@@ -490,7 +532,7 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError> {
+    fn valid(&mut self, perms: PermissionsContext, obj: Objid) -> Result<bool, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::Valid(obj, send))
@@ -500,7 +542,11 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn names_of(&mut self, obj: Objid) -> Result<(String, Vec<String>), ObjectError> {
+    fn names_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<(String, Vec<String>), ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
 
         // First get name
@@ -510,8 +556,7 @@ impl WorldState for RocksDbTransaction {
         let name = receive.recv().expect("Error receiving message")?;
 
         // Then grab aliases property.
-        let aliases = match self.retrieve_property(obj, "aliases", BitEnum::new_with(ObjFlag::Read))
-        {
+        let aliases = match self.retrieve_property(perms, obj, "aliases") {
             Ok(a) => match a.variant() {
                 Variant::List(a) => a.iter().map(|v| v.to_string()).collect(),
                 _ => {
@@ -527,7 +572,7 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+    fn owner_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetObjectOwner(obj, send))

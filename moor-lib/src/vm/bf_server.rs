@@ -78,7 +78,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         return Ok(v_err(E_TYPE));
     };
 
-    let is_player = match bf_args.world_state.flags_of(*player) {
+    let is_player = match bf_args.world_state.flags_of( *player) {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(ObjectError::ObjectNotFound(_)) => return Ok(v_err(E_INVARG)),
         Err(e) => return Err(e.into()),
@@ -92,7 +92,7 @@ async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyho
         return Ok(v_err(E_INVARG));
     }
 
-    Ok(v_objid(bf_args.frame.caller_perms))
+    Ok(v_objid(bf_args.frame.permissions.caller_perms().obj))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
@@ -100,14 +100,19 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
-    let Variant::Obj(player) = bf_args.args[0].variant() else {
+    let Variant::Obj(perms_for) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
 
-    if !bf_args.frame.player_flags.contains(ObjFlag::Wizard) {
+    if !bf_args.frame.permissions.has_flag(ObjFlag::Wizard) {
         return Ok(v_err(E_PERM));
     }
-    bf_args.frame.caller_perms = *player;
+    bf_args.frame.permissions.set_task_perms(
+        *perms_for,
+        bf_args
+            .world_state
+            .flags_of(*perms_for)?,
+    );
 
     Ok(v_none())
 }
@@ -127,7 +132,7 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
                 let callers = vec![
                     v_objid(c.this),
                     v_string(c.verb_name.clone()),
-                    v_objid(c.programmer),
+                    v_objid(c.perms.task_perms().obj),
                     v_objid(c.verb_loc),
                     v_objid(c.player),
                     v_int(c.line_number as i64),

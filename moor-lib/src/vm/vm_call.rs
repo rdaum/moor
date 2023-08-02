@@ -5,13 +5,14 @@ use tokio::sync::RwLock;
 use tracing::{span, trace, Level};
 
 use crate::compiler::builtins::BUILTINS;
-use crate::db::state::WorldState;
-use crate::model::objects::ObjFlag;
+
+use crate::model::permissions::{PermissionsContext, Perms};
 use crate::model::verbs::VerbInfo;
+use crate::model::world_state::WorldState;
 use crate::model::ObjectError::VerbNotFound;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
-use crate::util::bitenum::BitEnum;
+
 use crate::values::error::Error::{E_INVIND, E_VARNF, E_VERBNF};
 use crate::values::objid::{Objid, NOTHING};
 use crate::values::var::{v_objid, v_str, v_string, Var};
@@ -29,7 +30,7 @@ impl VM {
         obj: Objid,
         this: Objid,
         player: Objid,
-        player_flags: BitEnum<ObjFlag>,
+        permissions: PermissionsContext,
         command: &ParsedCommand,
     ) -> Result<(), anyhow::Error> {
         let Some(binary) = vi.attrs.program.clone() else {
@@ -41,9 +42,11 @@ impl VM {
             "setup_verb_command",
             task_id,
             ?this,
-            verb = vi.names.first().unwrap().as_str(),
+            verb = command.verb,
+            verb_aliases = ?vi.names,
             ?player,
             args = ?command.args,
+            permission = ?permissions,
         );
         let span_id = span.id();
 
@@ -53,7 +56,7 @@ impl VM {
             NOTHING,
             this,
             player,
-            player_flags,
+            permissions,
             command.verb.as_str(),
             vi,
             &command.args,
@@ -96,14 +99,14 @@ impl VM {
         &mut self,
         task_id: TaskId,
         state: &mut dyn WorldState,
+        permissions: PermissionsContext,
         obj: Objid,
         verb_name: &str,
         this: Objid,
         player: Objid,
-        player_flags: BitEnum<ObjFlag>,
         args: &[Var],
     ) -> Result<(), anyhow::Error> {
-        let vi = state.find_method_verb_on(obj, verb_name)?;
+        let vi = state.find_method_verb_on(permissions.clone(), obj, verb_name)?;
 
         let Some(binary) = vi.attrs.program.clone() else {
             bail!(VerbNotFound(obj, verb_name.to_string()))
@@ -114,9 +117,11 @@ impl VM {
             "setup_verb_method_call",
             task_id,
             ?this,
-            verb = vi.names.first().unwrap().as_str(),
+            verb = verb_name,
+            verb_aliases = ?vi.names,
             ?player,
             ?args,
+            permissions = ?permissions,
         );
         let span_id = span.id();
 
@@ -126,7 +131,7 @@ impl VM {
             NOTHING,
             this,
             player,
-            player_flags,
+            permissions,
             verb_name,
             vi,
             args,
@@ -157,12 +162,12 @@ impl VM {
         verb_name: &str,
         args: &[Var],
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let self_valid = state.valid(this)?;
+        let self_valid = state.valid(self.top().permissions.clone(), this)?;
         if !self_valid {
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let Ok(verbinfo) = state.find_method_verb_on(this, verb_name) else {
+        let Ok(verbinfo) = state.find_method_verb_on(self.top().permissions.clone(), this, verb_name) else {
             return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
         };
         let Some(binary) = verbinfo.attrs.program.clone() else {
@@ -180,14 +185,21 @@ impl VM {
 
         let follows_span = self.top().span_id.clone();
 
+        // Should this be necessary? Can't we just walk the stack?
         callers.push(Caller {
             this,
             verb_name: verb_name.to_string(),
-            programmer: top.verb_owner(),
+            perms: top.permissions.clone(),
             verb_loc: top.verb_definer(),
             player: top.player,
             line_number: 0,
         });
+
+        // Derive permissions for the new activation from the current one + the verb's owner
+        // permissions.
+        let verb_owner = verbinfo.attrs.owner.unwrap();
+        let next_task_perms = state.flags_of(verb_owner)?;
+        let new_perms = top.permissions.mk_child_perms(Perms::new(verb_owner, next_task_perms));
 
         let span = span!(
             Level::TRACE,
@@ -195,8 +207,10 @@ impl VM {
             task_id,
             ?this,
             verb_name,
+            verb_aliases = ?verbinfo.names,
             player = ?top.player,
             ?args,
+            permissions = ?new_perms,
         );
         let span_id = span.id();
 
@@ -206,7 +220,7 @@ impl VM {
             caller,
             this,
             top.player,
-            top.player_flags,
+            new_perms,
             verb_name,
             verbinfo,
             args,
@@ -247,7 +261,7 @@ impl VM {
         // get parent of verb definer object & current verb name.
         // TODO probably need verb definer right on Activation, this is gross.
         let definer = self.top().verb_definer();
-        let parent = state.parent_of(definer)?;
+        let parent = state.parent_of(self.top().permissions.clone(), definer)?;
         let verb = self.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
@@ -256,11 +270,11 @@ impl VM {
         self.setup_verb_method_call(
             task_id,
             state,
+            self.top().permissions.clone(),
             parent,
             verb.as_str(),
             self.top().this,
             self.top().player,
-            self.top().player_flags,
             args,
         )?;
         Ok(ExecutionResult::More)
@@ -289,13 +303,12 @@ impl VM {
         span.follows_from(self.top().span_id.clone());
 
         let _guard = span.enter();
-        let player_perms = self.top().player_flags;
+        // this is clearly wrong and we need to be passing in a reference...
         let mut bf_args = BfCallState {
             world_state: state,
             frame: self.top_mut(),
             sessions: client_connection,
             args: args.to_vec(),
-            player_perms,
         };
         let result = bf.call(&mut bf_args).await?;
         self.push(&result);

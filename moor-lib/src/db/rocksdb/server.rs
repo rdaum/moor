@@ -7,7 +7,9 @@ use tracing::error;
 
 use crate::db::rocksdb::tx_server::run_tx_server;
 use crate::db::rocksdb::{ColumnFamilies, RocksDbTransaction};
-use crate::db::state::{WorldState, WorldStateSource};
+use crate::model::permissions::PermissionsContext;
+use crate::model::world_state::{WorldState, WorldStateSource};
+use crate::values::objid::Objid;
 
 pub struct RocksDbServer {
     db: Arc<rocksdb::OptimisticTransactionDB>,
@@ -53,9 +55,14 @@ impl RocksDbServer {
 
 impl WorldStateSource for RocksDbServer {
     #[tracing::instrument(skip(self))]
-    fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, anyhow::Error> {
+    fn new_world_state(
+        &mut self,
+        player: Objid,
+    ) -> Result<(Box<dyn WorldState>, PermissionsContext), anyhow::Error> {
         // Return a transaction wrapped by the higher level RocksDbWorldState.
-        let tx = self.start_transaction()?;
-        Ok(Box::new(tx))
+        let mut tx = self.start_transaction()?;
+        let player_flags = tx.flags_of(player)?;
+        let player_permissions = PermissionsContext::root_for(player, player_flags);
+        Ok((Box::new(tx), player_permissions))
     }
 }
