@@ -199,7 +199,9 @@ impl VM {
         // permissions.
         let verb_owner = verbinfo.attrs.owner.unwrap();
         let next_task_perms = state.flags_of(verb_owner)?;
-        let new_perms = top.permissions.mk_child_perms(Perms::new(verb_owner, next_task_perms));
+        let new_perms = top
+            .permissions
+            .mk_child_perms(Perms::new(verb_owner, next_task_perms));
 
         let span = span!(
             Level::TRACE,

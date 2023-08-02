@@ -46,7 +46,11 @@ impl MockStore {
 pub struct MockState(Arc<Mutex<MockStore>>);
 
 impl WorldState for MockState {
-    fn location_of(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<Objid, ObjectError> {
+    fn location_of(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<Objid, ObjectError> {
         todo!()
     }
 
@@ -58,10 +62,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn flags_of(
-        &mut self,
-        _obj: Objid,
-    ) -> Result<BitEnum<ObjFlag>, ObjectError> {
+    fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
         todo!()
     }
 

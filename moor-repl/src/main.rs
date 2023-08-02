@@ -10,7 +10,7 @@ use clap_derive::Parser;
 use rustyline_async::{Readline, ReadlineError, SharedWriter};
 
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
@@ -32,7 +32,7 @@ async fn do_eval(
     player: Objid,
     scheduler: Arc<RwLock<Scheduler>>,
     program: String,
-    sessions: Arc<RwLock<ReplSessions>>,
+    sessions: Arc<RwLock<ReplSession>>,
 ) -> Result<(), anyhow::Error> {
     let task_id = {
         let mut scheduler = scheduler.write().await;
@@ -42,17 +42,34 @@ async fn do_eval(
     Ok(())
 }
 
-struct ReplSessions(Objid, SharedWriter);
+struct ReplSession {
+    player: Objid,
+    _console_writer: SharedWriter,
+    connect_time: std::time::Instant,
+    last_activity: std::time::Instant,
+}
 
 #[async_trait]
-impl Sessions for ReplSessions {
+impl Sessions for ReplSession {
     async fn send_text(&mut self, _player: Objid, msg: &str) -> Result<(), Error> {
-        info!("NOTIFY: {}", msg);
+        warn!(msg, "NOTIFY");
         Ok(())
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-        Ok(vec![self.0])
+    fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+        Ok(vec![self.player])
+    }
+
+    fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
+        let now = std::time::Instant::now();
+        let duration = now.duration_since(self.connect_time);
+        Ok(duration.as_secs_f64())
+    }
+
+    fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
+        let now = std::time::Instant::now();
+        let duration = now.duration_since(self.last_activity);
+        Ok(duration.as_secs_f64())
     }
 }
 
@@ -67,7 +84,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::INFO)
         .with_writer(Mutex::new(stdout_clone))
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
@@ -98,7 +115,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut scheduler_process_interval =
         tokio::time::interval(std::time::Duration::from_millis(100));
 
-    let eval_sessions = Arc::new(RwLock::new(ReplSessions(Objid(2), stdout.clone())));
+    let eval_sessions = Arc::new(RwLock::new(ReplSession {
+        player: Objid(2),
+        _console_writer: stdout.clone(),
+        connect_time: std::time::Instant::now(),
+        last_activity: std::time::Instant::now(),
+    }));
     loop {
         tokio::select! {
             _ = scheduler_process_interval.tick() => {
@@ -107,6 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
             cmd = rl.readline() => match cmd {
                 Ok(line) => {
                     rl.add_history_entry(line.clone());
+                    eval_sessions.write().await.last_activity = std::time::Instant::now();
                     if let Err(e) = do_eval(Objid(2), scheduler.clone(), line, eval_sessions.clone()).await {
                         writeln!(stdout, "Error: {:?}", e)?;
                     }

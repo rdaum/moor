@@ -87,10 +87,7 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn flags_of(
-        &mut self,
-        obj: Objid,
-    ) -> Result<BitEnum<ObjFlag>, ObjectError> {
+    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetFlagsOf(obj, send))
@@ -173,7 +170,7 @@ impl WorldState for RocksDbTransaction {
                 Ok(v_int(0))
             };
         } else if pname == "wizard" {
-            let flags = self.flags_of( obj)?;
+            let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Wizard) {
                 Ok(v_int(1))
             } else {

@@ -1,6 +1,5 @@
 use crate::compiler::labels::{Label, Name};
 
-
 use crate::model::world_state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 

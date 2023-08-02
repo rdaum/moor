@@ -58,7 +58,7 @@ impl PermissionsContext {
                 obj: NOTHING,
                 flags: BitEnum::new(),
             },
-            player_perms
+            player_perms,
         }
     }
 

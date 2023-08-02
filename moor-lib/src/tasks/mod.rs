@@ -9,7 +9,9 @@ mod task;
 #[async_trait]
 pub trait Sessions: Send + Sync {
     async fn send_text(&mut self, player: Objid, msg: &str) -> Result<(), anyhow::Error>;
-    async fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error>;
+    fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error>;
+    fn connected_seconds(&self, player: Objid) -> Result<f64, anyhow::Error>;
+    fn idle_seconds(&self, player: Objid) -> Result<f64, anyhow::Error>;
 }
 
 pub type TaskId = usize;

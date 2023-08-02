@@ -7,7 +7,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 
-
 use crate::model::permissions::PermissionsContext;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbFlag, VerbInfo};

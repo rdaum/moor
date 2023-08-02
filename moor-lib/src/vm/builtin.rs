@@ -3,7 +3,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-
 use crate::model::permissions::PermissionsContext;
 use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;

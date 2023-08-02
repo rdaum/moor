@@ -132,8 +132,8 @@ The following is a table of the status of various builtin-functions, to keep an 
 | dump_database       |          |                                               |
 | db_disk_size        |          |                                               |
 | connected_players   | &check;  |                                               |
-| connected_seconds   |          | Will need hooks to Session                    |
-| idle_seconds        |          | " (Hardcoded to 0 to make some tests pass)    |
+| connected_seconds   | &check   |                                               |
+| idle_seconds        | &check   |                                               |
 | connection_name     |          |                                               |
 | notify              | &check;  |                                               |
 | boot_player         |          |                                               |

@@ -24,10 +24,7 @@ pub trait WorldState: Send + Sync {
     /// Note this call does not take a permission context, because it is used to *determine*
     /// permissions. It is the caller's responsibility to ensure that the program is using this
     /// call appropriately.
-    fn flags_of(
-        &mut self,
-        obj: Objid,
-    ) -> Result<BitEnum<ObjFlag>, ObjectError>;
+    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError>;
 
     /// Get the location of the given object.
     fn location_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError>;

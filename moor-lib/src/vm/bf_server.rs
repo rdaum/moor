@@ -60,7 +60,6 @@ async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
             .read()
             .await
             .connected_players()
-            .await
             .unwrap()
             .iter()
             .map(|p| v_objid(*p))
@@ -78,7 +77,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         return Ok(v_err(E_TYPE));
     };
 
-    let is_player = match bf_args.world_state.flags_of( *player) {
+    let is_player = match bf_args.world_state.flags_of(*player) {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(ObjectError::ObjectNotFound(_)) => return Ok(v_err(E_INVARG)),
         Err(e) => return Err(e.into()),
@@ -107,12 +106,10 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
     if !bf_args.frame.permissions.has_flag(ObjFlag::Wizard) {
         return Ok(v_err(E_PERM));
     }
-    bf_args.frame.permissions.set_task_perms(
-        *perms_for,
-        bf_args
-            .world_state
-            .flags_of(*perms_for)?,
-    );
+    bf_args
+        .frame
+        .permissions
+        .set_task_perms(*perms_for, bf_args.world_state.flags_of(*perms_for)?);
 
     Ok(v_none())
 }
@@ -157,11 +154,29 @@ async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyho
     if bf_args.args.len() != 1 {
         return Ok(v_err(E_INVARG));
     }
+    let Variant::Obj(who) = bf_args.args[0].variant() else {
+        return Ok(v_err(E_TYPE));
+    };
+    let sessions = bf_args.sessions.read().await;
+    let idle_seconds = sessions.idle_seconds(*who)?;
 
-    // TODO: This is a placeholder for now.
-    Ok(v_int(0))
+    Ok(v_int(idle_seconds as i64))
 }
 bf_declare!(idle_seconds, bf_idle_seconds);
+
+async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() != 1 {
+        return Ok(v_err(E_INVARG));
+    }
+    let Variant::Obj(who) = bf_args.args[0].variant() else {
+        return Ok(v_err(E_TYPE));
+    };
+    let sessions = bf_args.sessions.read().await;
+    let connected_seconds = sessions.connected_seconds(*who)?;
+
+    Ok(v_int(connected_seconds as i64))
+}
+bf_declare!(connected_seconds, bf_connected_seconds);
 
 async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
@@ -220,6 +235,8 @@ impl VM {
         self.builtins[offset_for_builtin("callers")] = Arc::new(Box::new(BfCallers {}));
         self.builtins[offset_for_builtin("task_id")] = Arc::new(Box::new(BfTaskId {}));
         self.builtins[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
+        self.builtins[offset_for_builtin("connected_seconds")] =
+            Arc::new(Box::new(BfConnectedSeconds {}));
         self.builtins[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
         self.builtins[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
         self.builtins[offset_for_builtin("server_version")] =

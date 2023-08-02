@@ -23,6 +23,8 @@ struct WebSocketSessions {
 struct WsConnection {
     player: Objid,
     sink: SplitSink<WebSocketStream<TcpStream>, Message>,
+    connected_time: std::time::Instant,
+    last_activity: std::time::Instant,
 }
 
 pub struct WebSocketServer {
@@ -85,13 +87,16 @@ async fn ws_handle_connection(
     info!("New inbound websocket connection: {}", peer);
     let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
 
+    let client_connection = WsConnection {
+        player,
+        sink: ws_sender,
+        connected_time: std::time::Instant::now(),
+        last_activity: std::time::Instant::now(),
+    };
+
     // Register connection with player.
     {
         let server = server.write().await;
-        let client_connection = WsConnection {
-            player,
-            sink: ws_sender,
-        };
         let connections = &mut server.sessions.write().await.connections;
 
         let mut old = connections.insert(player, client_connection);
@@ -116,6 +121,13 @@ async fn ws_handle_connection(
             let cmd = msg.into_text().unwrap();
             let cmd = cmd.as_str().trim();
 
+            // Record activity on the connection, to compute idle_seconds.
+            {
+                let server = server.write().await;
+                let mut sessions = server.sessions.write().await;
+                let connection = sessions.connections.get_mut(&player).unwrap();
+                connection.last_activity = std::time::Instant::now();
+            }
             let task_id = {
                 let server = server.read().await;
                 let mut scheduler = server.scheduler.write().await;
@@ -183,7 +195,25 @@ impl Sessions for WebSocketSessions {
         Ok(())
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error> {
+    fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error> {
         Ok(self.connections.keys().cloned().collect())
+    }
+
+    fn connected_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {
+        let Some(conn) = self.connections.get(&player) else {
+            return Err(anyhow!("no known connection for objid: #{}", player.0));
+        };
+        let now = std::time::Instant::now();
+        let duration = now - conn.connected_time;
+        Ok(duration.as_secs_f64())
+    }
+
+    fn idle_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {
+        let Some(conn) = self.connections.get(&player) else {
+            return Err(anyhow!("no known connection for objid: #{}", player.0));
+        };
+        let now = std::time::Instant::now();
+        let duration = now - conn.last_activity;
+        Ok(duration.as_secs_f64())
     }
 }
