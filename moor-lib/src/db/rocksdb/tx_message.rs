@@ -89,11 +89,13 @@ pub(crate) enum Message {
     SetProperty(Objid, u128, Var, Sender<Result<(), ObjectError>>),
     // Define a property on an object.
     DefineProperty {
+        definer: Objid,
         obj: Objid,
         name: String,
         owner: Objid,
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
+        is_clear: bool,
         reply: Sender<Result<PropHandle, ObjectError>>,
     },
     SetPropertyInfo {
@@ -102,10 +104,15 @@ pub(crate) enum Message {
         owner: Objid,
         perms: BitEnum<PropFlag>,
         new_name: Option<String>,
+        is_clear: Option<bool>,
         reply: Sender<Result<(), ObjectError>>,
     },
     DeleteProperty(Objid, u128, Sender<Result<(), ObjectError>>),
-    ResolveProperty(Objid, String, Sender<Result<PropHandle, ObjectError>>),
+    ResolveProperty(
+        Objid,
+        String,
+        Sender<Result<(PropHandle, Var), ObjectError>>,
+    ),
     Valid(Objid, Sender<bool>),
     Commit(Sender<CommitResult>),
     Rollback(Sender<()>),

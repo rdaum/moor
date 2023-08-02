@@ -360,6 +360,7 @@ mod tests {
             state
                 .add_property(
                     Objid(0),
+                    Objid(0),
                     "test_prop",
                     Objid(0),
                     BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
@@ -721,6 +722,17 @@ mod tests {
         call_verb(state.as_mut(), "test", &mut vm);
         let result = exec_vm(state.as_mut(), &mut vm);
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]));
+    }
+
+    #[test]
+    fn test_str_index_assignment() {
+        // There was a regression here where the value was being dropped instead of replaced.
+        let program = r#"a = "you"; a[1] = "Y"; return a;"#;
+        let mut state = world_with_test_program(program);
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm);
+        assert_eq!(result, v_str("You"));
     }
 
     struct MockClientConnection {

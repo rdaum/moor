@@ -186,11 +186,17 @@ impl VM {
         self.push(&v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
-            if activation.verb_info.attrs.flags.unwrap().contains(VerbFlag::Debug) {
+            if activation
+                .verb_info
+                .attrs
+                .flags
+                .unwrap()
+                .contains(VerbFlag::Debug)
+            {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 
     /// Push an error to the stack with a description and raise it.
@@ -204,11 +210,17 @@ impl VM {
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
-            if activation.verb_info.attrs.flags.unwrap().contains(VerbFlag::Debug) {
+            if activation
+                .verb_info
+                .attrs
+                .flags
+                .unwrap()
+                .contains(VerbFlag::Debug)
+            {
                 return self.raise_error_pack(code.make_error_pack(Some(msg)));
             }
         }
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 
     /// Raise an error (without pushing its value to stack)

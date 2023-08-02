@@ -7,7 +7,6 @@ use crate::values::string::Str;
 
 #[derive(Clone, Encode, Decode)]
 pub enum Variant {
-    Clear,
     None,
     Str(Str),
     Obj(Objid),

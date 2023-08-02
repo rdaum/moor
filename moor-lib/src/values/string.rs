@@ -1,4 +1,5 @@
-use crate::values::var::{v_str, v_string, Var};
+use crate::values::error::Error;
+use crate::values::var::{v_err, v_str, v_string, Var};
 use bincode::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
@@ -18,6 +19,18 @@ impl Str {
     pub fn get(&self, offset: usize) -> Option<Var> {
         let r = self.inner.get(offset..offset + 1);
         r.map(v_str)
+    }
+
+    pub fn set(&self, offset: usize, r: &Str) -> Var {
+        if r.len() != 1 {
+            return v_err(Error::E_RANGE);
+        }
+        if offset >= self.inner.len() {
+            return v_err(Error::E_RANGE);
+        }
+        let mut s = self.inner.as_str().to_string();
+        s.replace_range(offset..offset + 1, r.as_str());
+        v_string(s)
     }
 
     pub fn get_range(&self, range: Range<usize>) -> Option<Var> {

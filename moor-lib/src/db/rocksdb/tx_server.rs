@@ -20,7 +20,7 @@ use crate::values::objid::Objid;
 #[derive(Debug, Encode, Decode, Clone)]
 pub(crate) struct VerbHandle {
     pub(crate) uuid: u128,
-    pub(crate) definer: Objid,
+    pub(crate) location: Objid,
     pub(crate) owner: Objid,
     pub(crate) names: Vec<String>,
     pub(crate) flags: BitEnum<VerbFlag>,
@@ -30,10 +30,11 @@ pub(crate) struct VerbHandle {
 #[derive(Debug, Encode, Decode, Clone)]
 pub(crate) struct PropHandle {
     pub(crate) uuid: u128,
-    pub(crate) definer: Objid,
+    pub(crate) location: Objid,
     pub(crate) name: String,
     pub(crate) perms: BitEnum<PropFlag>,
     pub(crate) owner: Objid,
+    pub(crate) is_clear: bool,
 }
 
 fn respond<V: Send + Sync + 'static>(
@@ -61,11 +62,9 @@ pub(crate) fn run_tx_server<'a>(
     tx: rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     cf_handles: Vec<&'a ColumnFamily>,
 ) -> Result<(), anyhow::Error> {
-    let bincode_cfg = bincode::config::standard();
     let tx = RocksDbTx {
         tx,
         cf_handles: cf_handles.clone(),
-        bincode_cfg,
     };
     let (commit_result, send_c) = loop {
         let msg = match mailbox.recv() {
@@ -177,22 +176,30 @@ pub(crate) fn run_tx_server<'a>(
                 owner,
                 perms,
                 new_name,
+                is_clear,
                 reply: r,
             } => {
-                respond(r, tx.set_property_info(o, u, owner, perms, new_name))?;
+                respond(
+                    r,
+                    tx.set_property_info(o, u, owner, perms, new_name, is_clear),
+                )?;
             }
             Message::DeleteProperty(o, u, r) => {
                 respond(r, tx.delete_property(o, u))?;
             }
             Message::DefineProperty {
+                definer: _definer,
                 obj: o,
                 name,
                 owner,
                 perms,
                 value,
+                is_clear,
                 reply: r,
             } => {
-                respond(r, tx.add_property(o, name, owner, perms, value))?;
+                // Note: in our current impl we don't use 'definer'. The property is defined where
+                // it lives.
+                respond(r, tx.add_property(o, name, owner, perms, value, is_clear))?;
             }
             Message::ResolveProperty(o, n, r) => {
                 respond(r, tx.resolve_property(o, n))?;

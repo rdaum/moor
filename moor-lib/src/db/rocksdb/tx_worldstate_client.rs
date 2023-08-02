@@ -22,7 +22,7 @@ fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Binary>) -> VerbInfo 
     VerbInfo {
         names: vh.names.clone(),
         attrs: VerbAttrs {
-            definer: Some(vh.definer),
+            definer: Some(vh.location),
             owner: Some(vh.owner),
             flags: Some(vh.flags),
             args_spec: Some(vh.args),
@@ -34,7 +34,7 @@ fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Binary>) -> VerbInfo 
 fn prophandle_to_propattrs(ph: &PropHandle, value: Option<Var>) -> PropAttrs {
     PropAttrs {
         value,
-        location: Some(ph.definer),
+        location: Some(ph.location),
         owner: Some(ph.owner),
         flags: Some(ph.perms),
     }
@@ -96,7 +96,13 @@ impl WorldState for RocksDbTransaction {
         let properties = receive.recv().expect("Error receiving message")?;
         Ok(properties
             .iter()
-            .map(|ph| (ph.name.clone(), prophandle_to_propattrs(ph, None)))
+            .filter_map(|ph| {
+                // Filter out anything that isn't directly defined on us.
+                if ph.location != obj {
+                    return None;
+                }
+                Some((ph.name.clone(), prophandle_to_propattrs(ph, None)))
+            })
             .collect())
     }
 
@@ -107,8 +113,6 @@ impl WorldState for RocksDbTransaction {
         pname: &str,
         _player_flags: BitEnum<ObjFlag>,
     ) -> Result<Var, ObjectError> {
-        // TODO: use player_flags to check permissions
-
         // Special properties like name, location, and contents get treated specially.
         if pname == "name" {
             return self.names_of(obj).map(|(name, _)| Var::from(name));
@@ -140,12 +144,10 @@ impl WorldState for RocksDbTransaction {
         self.mailbox
             .send(Message::ResolveProperty(obj, pname.into(), send))
             .expect("Error sending message");
-        let ph = receive.recv().expect("Error receiving message")?;
-        let (send, receive) = crossbeam_channel::bounded(1);
-        self.mailbox
-            .send(Message::RetrieveProperty(ph.definer, ph.uuid, send))
-            .expect("Error sending message");
-        let value = receive.recv().expect("Error receiving message")?;
+        let (_ph, value) = receive.recv().expect("Error receiving message")?;
+
+        // TODO: use player_flags to check permissions against handle.
+
         Ok(value)
     }
 
@@ -172,7 +174,7 @@ impl WorldState for RocksDbTransaction {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::SetProperty(
-                ph.definer,
+                ph.location,
                 ph.uuid,
                 value.clone(),
                 send,
@@ -185,6 +187,7 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     fn add_property(
         &mut self,
+        definer: Objid,
         obj: Objid,
         pname: &str,
         owner: Objid,
@@ -196,11 +199,15 @@ impl WorldState for RocksDbTransaction {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::DefineProperty {
+                definer,
                 obj,
                 name: pname.into(),
                 owner,
                 perms: prop_flags,
                 value: initial_value,
+                // to update & query clear status, there are expected to be separate operation
+                // operations?
+                is_clear: false,
                 reply: send,
             })
             .expect("Error sending message");
@@ -276,7 +283,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
-            .send(Message::GetProgram(vh.definer, vh.uuid, send))
+            .send(Message::GetProgram(vh.location, vh.uuid, send))
             .expect("Error sending message");
         let program = receive.recv().expect("Error receiving message")?;
         Ok(verbhandle_to_verbinfo(&vh, Some(program)))
@@ -292,7 +299,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
-            .send(Message::GetProgram(vh.definer, vh.uuid, send))
+            .send(Message::GetProgram(vh.location, vh.uuid, send))
             .expect("Error sending message");
         let program = receive.recv().expect("Error receiving message")?;
         Ok(verbhandle_to_verbinfo(&vh, Some(program)))
@@ -349,7 +356,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
-            .send(Message::GetProgram(vh.definer, vh.uuid, send))
+            .send(Message::GetProgram(vh.location, vh.uuid, send))
             .expect("Error sending message");
         let program = receive.recv().expect("Error receiving message")?;
         Ok(Some(verbhandle_to_verbinfo(&vh, Some(program))))

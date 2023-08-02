@@ -19,9 +19,9 @@ use crate::values::var::Var;
 struct RProp {
     definer: Objid,
     name: String,
-    owner: Objid,
-    flags: u8,
-    _val: Var,
+    _owner: Objid,
+    _flags: u8,
+    _value: Var,
 }
 
 fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Option<RProp> {
@@ -32,9 +32,9 @@ fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Opt
         return Some(RProp {
             definer: o.id,
             name,
-            owner: pval.owner,
-            flags: pval.flags,
-            _val: pval.value.clone(),
+            _owner: pval.owner,
+            _flags: pval.flags,
+            _value: pval.value.clone(),
         });
     }
 
@@ -116,22 +116,25 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
-            let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
-            if resolved.definer == *objid {
-                debug!("Defining prop: #{}.{}", objid.0, resolved.name);
-                let res = tx.define_property(
-                    resolved.definer,
-                    resolved.name.as_str(),
-                    resolved.owner,
-                    flags,
-                    Some(p.value.clone()),
+            let flags: BitEnum<PropFlag> = BitEnum::from_u8(p.flags);
+            debug!(
+                "Setting property: #{}.{} Clear?: {}",
+                objid.0, resolved.name, p.is_clear
+            );
+            let res = tx.define_property(
+                resolved.definer,
+                *objid,
+                resolved.name.as_str(),
+                p.owner,
+                flags,
+                Some(p.value.clone()),
+                p.is_clear,
+            );
+            if res.is_err() {
+                warn!(
+                    "Unable to define property {}.{}: {:?}",
+                    objid.0, resolved.name, res
                 );
-                if res.is_err() {
-                    warn!(
-                        "Unable to define property {}.{}: {:?}",
-                        objid.0, resolved.name, res
-                    );
-                }
             }
         }
     }

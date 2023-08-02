@@ -31,7 +31,9 @@ impl MockStore {
                 attrs: VerbAttrs {
                     definer: Some(o),
                     owner: Some(o),
-                    flags: Some(BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug),
+                    flags: Some(
+                        BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug,
+                    ),
                     args_spec: Some(VerbArgsSpec::this_none_this()),
                     program: Some(binary.clone()),
                 },
@@ -93,6 +95,7 @@ impl WorldState for MockState {
 
     fn add_property(
         &mut self,
+        _definer: Objid,
         obj: Objid,
         pname: &str,
         _owner: Objid,
@@ -213,22 +216,13 @@ impl LoaderInterface for MockWorldStateSource {
 
     fn define_property(
         &self,
+        _definer: Objid,
         _objid: Objid,
         _propname: &str,
         _owner: Objid,
         _flags: BitEnum<PropFlag>,
         _value: Option<Var>,
-    ) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn set_property(
-        &self,
-        _objid: Objid,
-        _uuid: u128,
-        _value: Var,
-        _owner: Objid,
-        _flags: BitEnum<PropFlag>,
+        _is_clear: bool,
     ) -> Result<(), Error> {
         todo!()
     }

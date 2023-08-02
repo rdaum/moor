@@ -10,8 +10,10 @@ use crate::compiler::labels::Label;
 use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
 use crate::values::error::Error;
 use crate::values::objid::Objid;
-use crate::values::var::{v_clear, v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var};
+use crate::values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var};
 use crate::values::VarType;
+
+const TYPE_CLEAR: i64 = 5;
 
 impl<R: Read> TextdumpReader<R> {
     fn read_num(&mut self) -> Result<i64, anyhow::Error> {
@@ -35,7 +37,7 @@ impl<R: Read> TextdumpReader<R> {
     fn read_string(&mut self) -> Result<String, anyhow::Error> {
         let mut buf = String::new();
         let _r = self.reader.read_line(&mut buf)?;
-        let buf = String::from(buf.trim());
+        let buf = String::from(buf.trim_matches('\n'));
         Ok(buf)
     }
     fn read_verbdef(&mut self) -> Result<Verbdef, anyhow::Error> {
@@ -50,8 +52,7 @@ impl<R: Read> TextdumpReader<R> {
             prep,
         })
     }
-    fn read_var(&mut self) -> Result<Var, anyhow::Error> {
-        let t_num = self.read_num()?;
+    fn read_var_value(&mut self, t_num: i64) -> Result<Var, anyhow::Error> {
         let vtype: VarType = VarType::from_int(t_num as u8)?;
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
@@ -67,7 +68,6 @@ impl<R: Read> TextdumpReader<R> {
                 let v: Vec<Var> = (0..l_size).map(|_l| self.read_var().unwrap()).collect();
                 v_list(v)
             }
-            VarType::TYPE_CLEAR => v_clear(),
             VarType::TYPE_NONE => v_none(),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),
             VarType::TYPE_LABEL => {
@@ -79,11 +79,27 @@ impl<R: Read> TextdumpReader<R> {
         Ok(v)
     }
 
+    fn read_var(&mut self) -> Result<Var, anyhow::Error> {
+        let t_num = self.read_num()?;
+        self.read_var_value(t_num)
+    }
+
     fn read_propval(&mut self) -> Result<Propval, anyhow::Error> {
+        let t_num = self.read_num()?;
+        // Special handling for 'clear' properties, we convert them into a special attribute,
+        // because I really don't like the idea of having a special 'clear' Var type for for
+        // properties.
+        let is_clear = t_num == TYPE_CLEAR;
+        let value = if is_clear {
+            v_none()
+        } else {
+            self.read_var_value(t_num)?
+        };
         Ok(Propval {
-            value: self.read_var()?,
+            value,
             owner: self.read_objid()?,
             flags: self.read_num()? as u8,
+            is_clear,
         })
     }
     fn read_object(&mut self) -> Result<Option<Object>, anyhow::Error> {

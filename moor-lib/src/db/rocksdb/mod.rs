@@ -52,21 +52,15 @@ pub trait LoaderInterface {
     fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<u128>, anyhow::Error>;
     fn define_property(
         &self,
+        definer: Objid,
         objid: Objid,
         propname: &str,
         owner: Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
+        is_clear: bool,
     ) -> Result<(), anyhow::Error>;
 
-    fn set_property(
-        &self,
-        objid: Objid,
-        uuid: u128,
-        value: Var,
-        owner: Objid,
-        flags: BitEnum<PropFlag>,
-    ) -> Result<(), anyhow::Error>;
     fn commit(self) -> Result<CommitResult, anyhow::Error>;
 }
 
@@ -170,17 +164,19 @@ trait DbStorage {
         owner: Objid,
         perms: BitEnum<PropFlag>,
         new_name: Option<String>,
+        is_clear: Option<bool>,
     ) -> Result<(), anyhow::Error>;
     fn delete_property(&self, o: Objid, u: u128) -> Result<(), anyhow::Error>;
     fn add_property(
         &self,
-        o: Objid,
+        location: Objid,
         name: String,
         owner: Objid,
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
+        is_clear: bool,
     ) -> Result<PropHandle, anyhow::Error>;
-    fn resolve_property(&self, o: Objid, n: String) -> Result<PropHandle, anyhow::Error>;
+    fn resolve_property(&self, o: Objid, n: String) -> Result<(PropHandle, Var), anyhow::Error>;
 
     fn commit(self) -> Result<CommitResult, anyhow::Error>;
     fn rollback(&self) -> Result<(), anyhow::Error>;

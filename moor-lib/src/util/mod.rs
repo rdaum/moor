@@ -1,3 +1,5 @@
+use anyhow::bail;
+
 pub mod bitenum;
 
 /// Check `names` for matches with wildcard prefixes.
@@ -33,9 +35,75 @@ pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
     true
 }
 
+// Simple MOO quasi-C style string quoting.
+// In MOO, there's just \" and \\, no \n, \t, etc.
+// So no need to produce anything else.
+pub fn quote_str(s: &str) -> String {
+    let output = String::from("\"");
+    let mut output = s.chars().fold(output, |mut acc, c| {
+        match c {
+            '"' => acc.push_str("\\\""),
+            '\\' => acc.push_str("\\\\"),
+            _ => acc.push(c),
+        }
+        acc
+    });
+    output.push('"');
+    output
+}
+
+// Lex a simpe MOO string literal.  Expectation is:
+//   " and " at beginning and end
+//   \" is "
+//   \\ is \
+//   \n is just n
+// That's it. MOO has no tabs, newlines, etc. quoting.
+pub fn unquote_str(s: &str) -> Result<String, anyhow::Error> {
+    let mut output = String::new();
+    let mut chars = s.chars().peekable();
+    let Some('"') = chars.next() else {
+        bail!("Expected \" at beginning of string")
+    };
+    // Proceed until second-last. Last has to be '"'
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => match chars.next() {
+                Some('\\') => output.push('\\'),
+                Some('"') => output.push('"'),
+                Some(c) => output.push(c),
+                None => bail!("Unexpected end of string"),
+            },
+            '"' => {
+                if chars.peek().is_some() {
+                    bail!("Unexpected \" in string")
+                }
+                return Ok(output);
+            }
+            c => output.push(c),
+        }
+    }
+    bail!("Missing \" at end of string");
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::util::verbname_cmp;
+    use crate::util::{quote_str, unquote_str, verbname_cmp};
+
+    #[test]
+    fn test_string_quote() {
+        assert_eq!(quote_str("foo"), r#""foo""#);
+        assert_eq!(quote_str(r#"foo"bar"#), r#""foo\"bar""#);
+        assert_eq!(quote_str("foo\\bar"), r#""foo\\bar""#);
+    }
+
+    #[test]
+    fn test_string_unquote() {
+        assert_eq!(unquote_str(r#""foo""#).unwrap(), "foo");
+        assert_eq!(unquote_str(r#""foo\"bar""#).unwrap(), r#"foo"bar"#);
+        assert_eq!(unquote_str(r#""foo\\bar""#).unwrap(), r#"foo\bar"#);
+        // Does not support \t, \n, etc.  They just turn into n, t, etc.
+        assert_eq!(unquote_str(r#""foo\tbar""#).unwrap(), r#"footbar"#);
+    }
 
     #[test]
     fn test_verb_match() {

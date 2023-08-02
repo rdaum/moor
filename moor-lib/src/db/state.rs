@@ -47,6 +47,7 @@ pub trait WorldState: Send + Sync {
     /// Add a property for the given object.
     fn add_property(
         &mut self,
+        definer: Objid,
         obj: Objid,
         pname: &str,
         owner: Objid,

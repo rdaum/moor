@@ -1,5 +1,7 @@
 # 'moor'; lambdaMOO in Rust
 
+(note: name is provisional and awful)
+
 ## Intent
 Because I don't have enough incomplete projects ...
 
@@ -19,15 +21,28 @@ execute existing cores.
 transactionally safe database and full multithreaded concurrency, and replacing the classic `telnet` 
 client connectivity with websockets and such.
 
-Eventual new feature goals, after full MOO backwards compatibility has been achieved:
+### So far ...
 
-* Embedded JavaScript engine to allow implementation of MOO verbs in a more modern standard language.
-* Extended protocol support (WebSockets, HTTP, etc. inbound and outbound).
-* Incremental runtime changes:
-  * Remove object numbers and replace with obj-capability references.
-  * Lightweight transient object values in addition to rooted objects. (ala "WAIFs")
-  * New primitive types in the language / properties.
-   
+   * Successfully compiles and executes the full LambdaMOO 1.8.x language (sans `fork` support for now)
+   * Successfully imports a JaysHouseCore textdump.
+   * Accepts inbound web socket connections (in lieux of telnet), attaches them to a session, and executes commands.
+   * Some simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected.
+   * About half of builtins are supported.
+
+### Next steps
+
+   * Permissions support. This is stubbed out right now.
+   * Task management generally in addition to fork:
+      * timeouts / tick count management
+      * .. + `fork` opcode & friends (`suspend`) for above. The only remaining unimplemented opcode.
+      * `tasks` functions, etc.
+   * More work on the of websocket listener loop, to add the auth/connect phase, fix bugs, etc.
+   * More builtins. See [bf_functions_status.md](bf_functions_status.md) for chart of current status.
+   * Decompilation support; this is about half done.
+   * Dump to textdump format. (Requires above)
+   * Performance improvements. Specifically caching at the DB layer is missing and this thing will run dog slow 
+     without it
+
 ## LambdaMOO is 30+ years old, why remain compatible?
 
 * Because it's easy to go into the weeds creating new things, and never finishing. By having a concrete goal, and something
@@ -38,32 +53,18 @@ Eventual new feature goals, after full MOO backwards compatibility has been achi
   an object database, a virtual machine, a decompiler, and a network runtime all rolled into one. This, is, in some
   way... fun.
 
-### So far ...
+### Someday ...
 
-   * I've converted the full LambdaMOO 1.8.x grammar into an Pest PEG grammar. And it works to compile existing MOO
-     source. 
-   * Implementation of the object database, with a transactional disk-based storage engine based over RocksDB.
-   * Capability of full import of an existing textdump into said DB.
-   * Complete compilation from parse tree to abstract syntax tree and then to opcode stream which looks mostly like LambdaMOO's.
-   * Completed 99% of the virtual machine 'bytecode' execution, including a bunch of tests. 
-   * Implemented the LambdaMOO command parser, complete with environment (contents, location, etc.) matching.
-   * A separate REPL binary for testing the parser and command execution.
+Eventual new feature goals, after full MOO backwards compatibility has been achieved:
 
-At this point connecting to the system bootstrapped with a JHCore database will drop you into a command loop as a wziard
-in a default room, where you can attempt to execute commands. Almost nothing will work, but they almost do... `say` runs
-to completion without error, but doesn't print the right thing.
-
-### Next steps
-
-   * Refinement and completion of the task scheduler...
-   * ... + `fork` opcode & friends for above. The only remaining unimplemented opcode.
-   * More work on the of websocket listener loop, to add the auth/connect phase.
-   * Implementation of built-ins. A chart of the built-ins and their status is at [bf_functions_status.md](bf_functions_status.md)
-   * Decompilation of MOO verbs + proper handling of line numbers in error messages, etc.
-   * Non-stubbed implementation of ACL/permission checks. 
-   * Some kind of RPC interface in addition to websockets and/or telnet.
-   * Dump to textdump format.
-
+* Embedded JavaScript engine to allow implementation of MOO verbs in a more modern standard language.
+* Extended protocol support (WebSockets, HTTP, etc. inbound and outbound).
+* Distributed rather than local-only storage of objects.
+* Incremental runtime / model changes:
+  * Remove object numbers and replace with obj-capability references.
+  * Lightweight transient object values in addition to rooted objects. (ala "WAIFs")
+  * New primitive types in the language / properties.
+  * all that kinda fantasy stuff
 
 Contributions are welcome and encouraged. 
 

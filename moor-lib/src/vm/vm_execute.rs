@@ -6,7 +6,7 @@ use tracing::trace;
 use crate::db::state::WorldState;
 use crate::tasks::Sessions;
 use crate::values::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
-use crate::values::var::{v_bool, v_empty_list, v_empty_str, v_err, v_int, v_list, v_none, v_obj};
+use crate::values::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
 use crate::values::variant::Variant;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -199,9 +199,9 @@ impl VM {
                 // collection[index] = value
                 let value = self.pop(); /* rhs value */
                 let index = self.pop(); /* index, must be int */
-                let list = self.pop(); /* lhs except last index, should be list or str */
+                let lhs = self.pop(); /* lhs except last index, should be list or str */
 
-                let nval = match (list.variant(), index.variant()) {
+                let nval = match (lhs.variant(), index.variant()) {
                     (Variant::List(l), Variant::Int(i)) => {
                         // Adjust for 1 indexing.
                         let i = *i - 1;
@@ -226,15 +226,7 @@ impl VM {
                             return self.push_error(E_INVARG);
                         }
 
-                        let i = i as usize;
-                        let r = s
-                            .get_range(0..i)
-                            .unwrap_or_else(v_empty_str)
-                            .add(&s.get_range(i + 1..s.len()).unwrap_or_else(v_empty_str));
-                        match r {
-                            Ok(s) => s,
-                            Err(e) => v_err(e),
-                        }
+                        s.set(i as usize, value)
                     }
                     (_, _) => {
                         return self.push_error(E_TYPE);

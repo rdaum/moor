@@ -160,15 +160,14 @@ impl Task {
                         trace!(?player, ?binary, "Starting eval");
                         // Stick the binary into the player object under a temp name.
                         let tmp_name = Uuid::new_v4().to_string();
-                        // TODO: these will accumulate in the database, need to find a way to clean
-                        // them up, or make sure that this task somehow rollsback at completion, which
-                        // would involve some special flags to the VM.
                         self.state
                             .add_verb(
                                 player,
                                 vec![tmp_name.clone()],
                                 player,
-                                BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec,
+                                BitEnum::new_with(VerbFlag::Read)
+                                    | VerbFlag::Exec
+                                    | VerbFlag::Debug,
                                 VerbArgsSpec::this_none_this(),
                                 binary.clone(),
                             )

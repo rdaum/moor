@@ -213,8 +213,9 @@ impl Scheduler {
             (task_id, TaskControlResponse::Success(value)) => {
                 self.num_succeeded_tasks.add(1);
                 debug!(
-                    "Task {:?} completed successfully with return value: {:?}",
-                    task_id, value
+                    "Task {:?} completed successfully with return value: {}",
+                    task_id,
+                    value.to_literal()
                 );
                 self.remove_task(task_id)
                     .await

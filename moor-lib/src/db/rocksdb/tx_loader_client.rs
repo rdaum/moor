@@ -69,50 +69,25 @@ impl LoaderInterface for RocksDbTransaction {
     }
     fn define_property(
         &self,
+        definer: Objid,
         objid: Objid,
         propname: &str,
         owner: Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
+        is_clear: bool,
     ) -> Result<(), anyhow::Error> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox.send(Message::DefineProperty {
+            definer,
             obj: objid,
             name: propname.to_string(),
             owner,
             perms: flags,
             value,
+            is_clear,
             reply: send,
         })?;
-        receive.recv()??;
-        Ok(())
-    }
-    fn set_property(
-        &self,
-        objid: Objid,
-        uuid: u128,
-        value: Var,
-        owner: Objid,
-        flags: BitEnum<PropFlag>,
-    ) -> Result<(), anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
-
-        // set the value
-        self.mailbox
-            .send(Message::SetProperty(objid, uuid, value, send))?;
-        receive.recv()??;
-
-        // then update the property info
-        let (send, receive) = crossbeam_channel::bounded(1);
-        self.mailbox.send(Message::SetPropertyInfo {
-            obj: objid,
-            uuid,
-            owner,
-            perms: flags,
-            new_name: None,
-            reply: send,
-        })?;
-
         receive.recv()??;
         Ok(())
     }

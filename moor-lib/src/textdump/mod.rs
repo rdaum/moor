@@ -22,6 +22,7 @@ pub struct Propval {
     pub value: Var,
     pub owner: Objid,
     pub flags: u8,
+    pub is_clear: bool,
 }
 
 pub struct Object {

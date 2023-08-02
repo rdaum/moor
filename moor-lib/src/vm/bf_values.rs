@@ -29,7 +29,6 @@ async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
             Variant::Err(e) => result.push_str(e.name()),
-            _ => {}
         }
     }
     Ok(v_str(result.as_str()))

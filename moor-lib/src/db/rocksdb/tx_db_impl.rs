@@ -1,5 +1,4 @@
 use anyhow::{bail, Error};
-use bincode::config::Configuration;
 use lazy_static::lazy_static;
 use rocksdb::{ColumnFamily, ErrorKind};
 use tracing::trace;
@@ -17,34 +16,34 @@ use crate::model::ObjectError;
 use crate::util::bitenum::BitEnum;
 use crate::util::verbname_cmp;
 use crate::values::objid::{Objid, NOTHING};
-use crate::values::var::Var;
+use crate::values::var::{v_none, Var};
 use crate::vm::opcode::Binary;
 
 lazy_static! {
     static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 }
 
-fn object_key(o: Objid) -> Vec<u8> {
+fn oid_key(o: Objid) -> Vec<u8> {
     o.0.to_be_bytes().to_vec()
 }
 
 fn composite_key(o: Objid, uuid: u128) -> Vec<u8> {
-    let mut key = object_key(o);
+    let mut key = oid_key(o);
     key.extend_from_slice(&uuid.to_be_bytes());
     key
 }
 
-fn object_vec(o: Vec<Objid>) -> Result<Vec<u8>, anyhow::Error> {
+fn oid_vec(o: Vec<Objid>) -> Result<Vec<u8>, anyhow::Error> {
     let ov = bincode::encode_to_vec(o, *BINCODE_CONFIG)?;
     Ok(ov)
 }
 
-fn get_object_value<'a>(
+fn get_oid_value<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
 ) -> Result<Objid, anyhow::Error> {
-    let ok = object_key(o);
+    let ok = oid_key(o);
     let ov = tx.get_cf(cf, ok).unwrap();
     let ov = ov.ok_or(ObjectError::ObjectNotFound(o))?;
     let ov = u64::from_be_bytes(ov.try_into().unwrap());
@@ -52,38 +51,38 @@ fn get_object_value<'a>(
     Ok(ov)
 }
 
-fn set_object_value<'a>(
+fn set_oid_value<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
     v: Objid,
 ) -> Result<(), anyhow::Error> {
-    let ok = object_key(o);
-    let ov = object_key(v);
+    let ok = oid_key(o);
+    let ov = oid_key(v);
     tx.put_cf(cf, ok, ov).unwrap();
     Ok(())
 }
 
-fn get_object_vec<'a>(
+fn get_oid_vec<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
 ) -> Result<Vec<Objid>, anyhow::Error> {
-    let ok = object_key(o);
+    let ok = oid_key(o);
     let ov = tx.get_cf(cf, ok).unwrap();
     let ov = ov.ok_or(ObjectError::ObjectNotFound(o))?;
     let (ov, _) = bincode::decode_from_slice(&ov, *BINCODE_CONFIG).unwrap();
     Ok(ov)
 }
 
-fn set_object_vec<'a>(
+fn set_oid_vec<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
     v: Vec<Objid>,
 ) -> Result<(), ObjectError> {
-    let ok = object_key(o);
-    let ov = object_vec(v).unwrap();
+    let ok = oid_key(o);
+    let ov = oid_vec(v).unwrap();
     tx.put_cf(cf, ok, ov).unwrap();
     Ok(())
 }
@@ -102,16 +101,10 @@ fn err_is_objnjf(e: &anyhow::Error) -> bool {
 pub(crate) struct RocksDbTx<'a> {
     pub(crate) tx: rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     pub(crate) cf_handles: Vec<&'a ColumnFamily>,
-    pub(crate) bincode_cfg: Configuration,
 }
 
 fn match_in_verb_names<'a>(verb_names: &'a [String], word: &str) -> Option<&'a String> {
-    for verb in verb_names {
-        if verbname_cmp(verb, word) {
-            return Some(verb);
-        }
-    }
-    return None;
+    verb_names.iter().find(|&verb| verbname_cmp(verb, word))
 }
 
 impl<'a> RocksDbTx<'a> {
@@ -163,13 +156,52 @@ impl<'a> RocksDbTx<'a> {
         };
         Ok(())
     }
+
+    fn seek_property_handle(
+        &self,
+        obj: Objid,
+        n: String,
+    ) -> Result<Option<PropHandle>, anyhow::Error> {
+        trace!(?obj, name = ?n, "resolving property in inheritance hierarchy");
+        let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
+        let ov_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
+        let mut search_o = obj;
+        loop {
+            let ok = oid_key(search_o);
+
+            let props: Vec<PropHandle> = match self.tx.get_cf(ov_cf, ok.clone())? {
+                None => vec![],
+                Some(prop_bytes) => {
+                    let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
+                    props
+                }
+            };
+            let prop = props.iter().find(|vh| vh.name == n);
+
+            if let Some(prop) = prop {
+                trace!(?prop, parent = ?search_o, "found property");
+                return Ok(Some(prop.clone()));
+            }
+
+            // Otherwise, find our parent.  If it's, then set o to it and continue.
+            let Ok(parent) = get_oid_value(op_cf, &self.tx, search_o) else {
+                break;
+            };
+            if parent == NOTHING {
+                break;
+            }
+            search_o = parent;
+        }
+        trace!(termination_object= ?obj, property=?n, "property not found");
+        Ok(None)
+    }
 }
 
 impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn object_valid(&self, o: Objid) -> Result<bool, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let ov = self.tx.get_cf(cf, ok)?;
         Ok(ov.is_some())
     }
@@ -184,7 +216,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         };
 
         if let Some(owner) = attrs.owner {
-            set_object_value(
+            set_oid_value(
                 cf_for(&self.cf_handles, ColumnFamilies::ObjectOwner),
                 &self.tx,
                 oid,
@@ -199,8 +231,8 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         // Establish initial `contents` and `children` vectors, empty.
         let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
         let ch_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectChildren);
-        set_object_vec(c_cf, &self.tx, oid, vec![])?;
-        set_object_vec(ch_cf, &self.tx, oid, vec![])?;
+        set_oid_vec(c_cf, &self.tx, oid, vec![])?;
+        set_oid_vec(ch_cf, &self.tx, oid, vec![])?;
 
         if let Some(parent) = attrs.parent {
             self.set_object_parent(oid, parent)?;
@@ -225,15 +257,15 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
         // If this is a new object it won't have a parent, old parent this will come up not-found,
         // and if that's the case we can ignore that.
-        match get_object_value(p_cf, &self.tx, o) {
+        match get_oid_value(p_cf, &self.tx, o) {
             Ok(old_parent) => {
                 if old_parent == new_parent {
                     return Ok(());
                 }
                 if old_parent != NOTHING {
-                    let old_children = get_object_vec(c_cf, &self.tx, old_parent)?;
+                    let old_children = get_oid_vec(c_cf, &self.tx, old_parent)?;
                     let old_children = old_children.into_iter().filter(|&x| x != o).collect();
-                    set_object_vec(c_cf, &self.tx, old_parent, old_children)?;
+                    set_oid_vec(c_cf, &self.tx, old_parent, old_children)?;
                 }
             }
             Err(e) if !err_is_objnjf(&e) => {
@@ -242,26 +274,25 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             }
             Err(_) => {}
         }
-        set_object_value(p_cf, &self.tx, o, new_parent)?;
+        set_oid_value(p_cf, &self.tx, o, new_parent)?;
 
         if new_parent == NOTHING {
             return Ok(());
         }
-        let mut new_children =
-            get_object_vec(c_cf, &self.tx, new_parent).unwrap_or_else(|_| vec![]);
+        let mut new_children = get_oid_vec(c_cf, &self.tx, new_parent).unwrap_or_else(|_| vec![]);
         new_children.push(o);
-        set_object_vec(c_cf, &self.tx, new_parent, new_children)?;
+        set_oid_vec(c_cf, &self.tx, new_parent, new_children)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
     fn get_object_children(&self, o: Objid) -> Result<Vec<Objid>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectChildren as u8) as usize];
-        get_object_vec(cf, &self.tx, o)
+        get_oid_vec(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn get_object_name(&self, o: Objid) -> Result<String, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let name_bytes = self.tx.get_cf(cf, ok)?;
         let Some(name_bytes) = name_bytes else {
             return Err(ObjectError::ObjectNotFound(o).into());
@@ -272,7 +303,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn set_object_name(&self, o: Objid, names: String) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let name_v = bincode::encode_to_vec(names, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, name_v)?;
         Ok(())
@@ -280,7 +311,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_object_flags(&self, o: Objid) -> Result<BitEnum<ObjFlag>, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let flag_bytes = self.tx.get_cf(cf, ok)?;
         let Some(flag_bytes) = flag_bytes else {
             return Err(ObjectError::ObjectNotFound(o).into());
@@ -291,7 +322,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn set_object_flags(&self, o: Objid, flags: BitEnum<ObjFlag>) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let flag_v = bincode::encode_to_vec(flags, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, flag_v)?;
         Ok(())
@@ -299,27 +330,27 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_object_owner(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectOwner);
-        get_object_value(cf, &self.tx, o)
+        get_oid_value(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn set_object_owner(&self, o: Objid, owner: Objid) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectOwner as u8) as usize];
-        set_object_value(cf, &self.tx, o, owner)
+        set_oid_value(cf, &self.tx, o, owner)
     }
     #[tracing::instrument(skip(self))]
     fn get_object_parent(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
-        get_object_value(cf, &self.tx, o)
+        get_oid_value(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn get_object_location(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectLocation as u8) as usize];
-        get_object_value(cf, &self.tx, o)
+        get_oid_value(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn get_object_contents(&self, o: Objid) -> Result<Vec<Objid>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectContents as u8) as usize];
-        get_object_vec(cf, &self.tx, o)
+        get_oid_vec(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn set_object_location(&self, o: Objid, new_location: Objid) -> Result<(), anyhow::Error> {
@@ -331,16 +362,16 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
 
         // Get and remove from contents of old location, if we had any.
-        match get_object_value(l_cf, &self.tx, o) {
+        match get_oid_value(l_cf, &self.tx, o) {
             Ok(old_location) => {
                 if old_location == new_location {
                     return Ok(());
                 }
                 if old_location != NOTHING {
                     let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
-                    let old_contents = get_object_vec(c_cf, &self.tx, old_location)?;
+                    let old_contents = get_oid_vec(c_cf, &self.tx, old_location)?;
                     let old_contents = old_contents.into_iter().filter(|&x| x != o).collect();
-                    set_object_vec(c_cf, &self.tx, old_location, old_contents)?;
+                    set_oid_vec(c_cf, &self.tx, old_location, old_contents)?;
                 }
             }
             Err(e) if !err_is_objnjf(&e) => {
@@ -350,28 +381,27 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             Err(_) => {}
         }
         // Set new location.
-        set_object_value(l_cf, &self.tx, o, new_location)?;
+        set_oid_value(l_cf, &self.tx, o, new_location)?;
 
         if new_location == NOTHING {
             return Ok(());
         }
 
         // Get and add to contents of new location.
-        let mut new_contents =
-            get_object_vec(c_cf, &self.tx, new_location).unwrap_or_else(|_| vec![]);
+        let mut new_contents = get_oid_vec(c_cf, &self.tx, new_location).unwrap_or_else(|_| vec![]);
         new_contents.push(o);
-        set_object_vec(c_cf, &self.tx, new_location, new_contents)?;
+        set_oid_vec(c_cf, &self.tx, new_location, new_contents)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
     fn get_object_verbs(&self, o: Objid) -> Result<Vec<VerbHandle>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -391,12 +421,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
         // Get the old vector, add the new verb, put the new vector.
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(oid);
+        let ok = oid_key(oid);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let mut verbs = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -404,32 +434,32 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let vid = Uuid::new_v4();
         let verb = VerbHandle {
             uuid: vid.as_u128(),
-            definer: oid,
+            location: oid,
             owner,
             names,
             flags,
             args,
         };
         verbs.push(verb);
-        let verbs_v = bincode::encode_to_vec(&verbs, self.bincode_cfg)?;
+        let verbs_v = bincode::encode_to_vec(&verbs, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, verbs_v)?;
 
         // Now set the program.
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let vk = composite_key(oid, vid.as_u128());
-        let prg_bytes = bincode::encode_to_vec(program, self.bincode_cfg)?;
+        let prg_bytes = bincode::encode_to_vec(program, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, vk, prg_bytes)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
     fn delete_object_verb(&self, o: Objid, v: u128) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let mut verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -446,7 +476,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let v_uuid_str = Uuid::from_u128(v).to_string();
             return Err(ObjectError::VerbNotFound(o, v_uuid_str).into());
         }
-        let verbs_v = bincode::encode_to_vec(&verbs, self.bincode_cfg)?;
+        let verbs_v = bincode::encode_to_vec(&verbs, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, verbs_v)?;
 
         // Delete the program.
@@ -459,12 +489,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_verb(&self, o: Objid, v: u128) -> Result<VerbHandle, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -478,12 +508,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbHandle, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -499,12 +529,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_verb_by_index(&self, o: Objid, i: usize) -> Result<VerbHandle, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -523,7 +553,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let v_uuid_str = Uuid::from_u128(v).to_string();
             return Err(ObjectError::VerbNotFound(o, v_uuid_str).into());
         };
-        let (prg, _) = bincode::decode_from_slice(&prg_bytes, self.bincode_cfg)?;
+        let (prg, _) = bincode::decode_from_slice(&prg_bytes, *BINCODE_CONFIG)?;
         Ok(prg)
     }
     #[tracing::instrument(skip(self))]
@@ -533,17 +563,17 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         n: String,
         a: Option<VerbArgsSpec>,
     ) -> Result<VerbHandle, anyhow::Error> {
-        trace!("Resolving verb {} on object {}", n, o);
+        trace!(object = ?o, verb = %n, args = ?a, "Resolving verb");
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         let ov_cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let mut search_o = o;
         loop {
-            let ok = object_key(search_o);
+            let ok = oid_key(search_o);
 
             let verbs: Vec<VerbHandle> = match self.tx.get_cf(ov_cf, ok.clone())? {
                 None => vec![],
                 Some(verb_bytes) => {
-                    let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                    let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                     verbs
                 }
             };
@@ -555,13 +585,13 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             });
             // If we found the verb, return it.
             if let Some(verb) = verb {
-                trace!("Found verb {:?} on object {}", verb, search_o);
+                trace!(?verb, ?search_o, "resolved verb");
                 return Ok(verb.clone());
             }
 
             // Otherwise, find our parent.  If it's, then set o to it and continue unless we've
             // hit the end of the chain.
-            let Ok(parent) = get_object_value(op_cf, &self.tx, search_o) else {
+            let Ok(parent) = get_oid_value(op_cf, &self.tx, search_o) else {
                 break;
             };
             if parent == NOTHING {
@@ -569,17 +599,18 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             }
             search_o = parent;
         }
+        trace!(termination_object = ?search_o, verb = %n, "no verb found");
         Err(ObjectError::VerbNotFound(o, n).into())
     }
     #[tracing::instrument(skip(self))]
     fn retrieve_verb(&self, o: Objid, v: String) -> Result<(Binary, VerbHandle), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -596,7 +627,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let Some(prg_bytes) = prg_bytes else {
             return Err(ObjectError::VerbNotFound(o, v.clone()).into())
         };
-        let (program, _) = bincode::decode_from_slice(&prg_bytes, self.bincode_cfg)?;
+        let (program, _) = bincode::decode_from_slice(&prg_bytes, *BINCODE_CONFIG)?;
         Ok((program, verb.clone()))
     }
     #[tracing::instrument(skip(self))]
@@ -610,12 +641,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         new_args: Option<VerbArgsSpec>,
     ) -> Result<(), Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let mut verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, self.bincode_cfg)?;
+                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
@@ -642,19 +673,19 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let v_uuid_str = Uuid::from_u128(v).to_string();
             return Err(ObjectError::VerbNotFound(o, v_uuid_str).into());
         }
-        let verbs_v = bincode::encode_to_vec(&verbs, self.bincode_cfg)?;
+        let verbs_v = bincode::encode_to_vec(&verbs, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, verbs_v)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
     fn get_properties(&self, o: Objid) -> Result<Vec<PropHandle>, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let props_bytes = self.tx.get_cf(cf, ok)?;
         let props = match props_bytes {
             None => vec![],
             Some(prop_bytes) => {
-                let (props, _) = bincode::decode_from_slice(&prop_bytes, self.bincode_cfg)?;
+                let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
                 props
             }
         };
@@ -669,14 +700,14 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let u_uuid_str = Uuid::from_u128(u).to_string();
             return Err(ObjectError::PropertyNotFound(o, u_uuid_str).into());
         };
-        let (var, _) = bincode::decode_from_slice(&var_bytes, self.bincode_cfg)?;
+        let (var, _) = bincode::decode_from_slice(&var_bytes, *BINCODE_CONFIG)?;
         Ok(var)
     }
     #[tracing::instrument(skip(self))]
     fn set_property_value(&self, o: Objid, u: u128, v: Var) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let ok = composite_key(o, u);
-        let var_bytes = bincode::encode_to_vec(v, self.bincode_cfg)?;
+        let var_bytes = bincode::encode_to_vec(v, *BINCODE_CONFIG)?;
         self.tx.put_cf(cf, ok, var_bytes)?;
         Ok(())
     }
@@ -688,16 +719,17 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         owner: Objid,
         perms: BitEnum<PropFlag>,
         new_name: Option<String>,
+        is_clear: Option<bool>,
     ) -> Result<(), anyhow::Error> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
         let Some(props_bytes) = props_bytes else {
             let u_uuid_str = Uuid::from_u128(u).to_string();
             return Err(ObjectError::PropertyNotFound(o, u_uuid_str).into());
         };
         let (mut props, _): (Vec<PropHandle>, _) =
-            bincode::decode_from_slice(&props_bytes, self.bincode_cfg)?;
+            bincode::decode_from_slice(&props_bytes, *BINCODE_CONFIG)?;
         let mut found = false;
         for prop in props.iter_mut() {
             if prop.uuid == u {
@@ -714,20 +746,20 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let u_uuid_str = Uuid::from_u128(u).to_string();
             return Err(ObjectError::PropertyNotFound(o, u_uuid_str).into());
         }
-        let props_bytes = bincode::encode_to_vec(&props, self.bincode_cfg)?;
+        let props_bytes = bincode::encode_to_vec(&props, *BINCODE_CONFIG)?;
         self.tx.put_cf(p_cf, ok, props_bytes)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
     fn delete_property(&self, o: Objid, u: u128) -> Result<(), anyhow::Error> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(o);
         let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
         let Some(props_bytes) = props_bytes else {
             return Err(ObjectError::ObjectNotFound(o).into());
         };
         let (mut props, _): (Vec<PropHandle>, _) =
-            bincode::decode_from_slice(&props_bytes, self.bincode_cfg)?;
+            bincode::decode_from_slice(&props_bytes, *BINCODE_CONFIG)?;
         let mut found = false;
         props.retain(|prop| {
             if prop.uuid == u {
@@ -741,7 +773,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             let u_uuid_str = Uuid::from_u128(u).to_string();
             return Err(ObjectError::PropertyNotFound(o, u_uuid_str).into());
         }
-        let props_bytes = bincode::encode_to_vec(&props, self.bincode_cfg)?;
+        let props_bytes = bincode::encode_to_vec(&props, *BINCODE_CONFIG)?;
         self.tx.put_cf(p_cf, ok, props_bytes)?;
 
         // Need to also delete the property value.
@@ -754,21 +786,22 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn add_property(
         &self,
-        o: Objid,
+        location: Objid,
         name: String,
         owner: Objid,
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
+        is_clear: bool,
     ) -> Result<PropHandle, anyhow::Error> {
         // TODO check names for dupes and return error
 
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
-        let ok = object_key(o);
+        let ok = oid_key(location);
         let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
         let mut props = match props_bytes {
             None => vec![],
             Some(prop_bytes) => {
-                let (props, _) = bincode::decode_from_slice(&prop_bytes, self.bincode_cfg)?;
+                let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
                 props
             }
         };
@@ -776,57 +809,71 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let u = Uuid::new_v4();
         let prop = PropHandle {
             uuid: u.as_u128(),
-            definer: o,
+            location,
             name,
             owner,
             perms,
+            is_clear,
         };
         props.push(prop.clone());
-        let props_bytes = bincode::encode_to_vec(&props, self.bincode_cfg)?;
+        let props_bytes = bincode::encode_to_vec(&props, *BINCODE_CONFIG)?;
         self.tx.put_cf(p_cf, ok, props_bytes)?;
 
         // If we have an initial value, set it.
         if let Some(value) = value {
             let value_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-            let ok = composite_key(o, u.as_u128());
-            let prop_bytes = bincode::encode_to_vec(value, self.bincode_cfg)?;
-            self.tx.put_cf(value_cf, ok, prop_bytes)?;
+            let propkey = composite_key(location, u.as_u128());
+            let prop_bytes = bincode::encode_to_vec(value, *BINCODE_CONFIG)?;
+            self.tx.put_cf(value_cf, propkey, prop_bytes)?;
         }
 
         Ok(prop)
     }
     #[tracing::instrument(skip(self))]
-    fn resolve_property(&self, obj: Objid, n: String) -> Result<PropHandle, anyhow::Error> {
+    fn resolve_property(&self, obj: Objid, n: String) -> Result<(PropHandle, Var), anyhow::Error> {
+        trace!(?obj, name = ?n, "resolving property");
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
-        let ov_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
-        let mut search_o = obj;
-        loop {
-            let ok = object_key(search_o);
 
-            let props: Vec<PropHandle> = match self.tx.get_cf(ov_cf, ok.clone())? {
-                None => vec![],
-                Some(prop_bytes) => {
-                    let (props, _) = bincode::decode_from_slice(&prop_bytes, self.bincode_cfg)?;
-                    props
-                }
+        let mut search_obj = obj;
+        let mut og_handle = None;
+        let mut found_value = None;
+        loop {
+            let property_handle = self.seek_property_handle(search_obj, n.clone())?;
+            let Some(property_handle) = property_handle else {
+                return Err(ObjectError::PropertyNotFound(obj, n).into());
             };
-            let prop = props.iter().find(|vh| vh.name == n);
-            // If we found the property, return it.
-            if let Some(prop) = prop {
-                return Ok(prop.clone());
+            if og_handle.is_none() {
+                og_handle = Some(property_handle.clone());
             }
 
-            // Otherwise, find our parent.  If it's, then set o to it and continue.
-            let Ok(parent) = get_object_value(op_cf, &self.tx, search_o) else {
+            // Typical case: property is not marked 'clear', so we can return straight away.
+            if !property_handle.is_clear {
+                // Decode the value out of ObjectPropertyValue, but from property_handle, not og_handle
+                found_value =
+                    Some(self.retrieve_property(property_handle.location, property_handle.uuid)?);
+                break;
+            }
+
+            // But if it was clear, we have to continue up the inheritance hierarchy. (But we return
+            // the og handle we got, because this is what we want to return for information
+            // about permissions, etc.)
+            let Ok(parent) = get_oid_value(op_cf, &self.tx, search_obj) else {
                 break;
             };
             if parent == NOTHING {
+                // This is an odd one, clear all the way up. so our value will end up being
+                // NONE, I guess.
                 break;
             }
-            search_o = parent;
+            search_obj = parent;
         }
-        Err(ObjectError::PropertyNotFound(obj, n).into())
+        let Some(prop_handle) = og_handle else {
+            return Err(ObjectError::PropertyNotFound(obj, n).into());
+        };
+        let found_value = found_value.unwrap_or_else(v_none);
+        Ok((prop_handle, found_value))
     }
+
     #[tracing::instrument(skip(self))]
     fn commit(self) -> Result<CommitResult, anyhow::Error> {
         match self.tx.commit() {
@@ -878,7 +925,6 @@ mod tests {
             RocksDbTx {
                 tx: rtx,
                 cf_handles,
-                bincode_cfg: bincode::config::standard(),
             }
         }
     }
@@ -918,38 +964,6 @@ mod tests {
         assert_eq!(tx.get_object_parent(oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_location(oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(oid).unwrap(), "test");
-    }
-
-    #[test]
-    fn test_simple_property() {
-        let db = mk_test_db();
-        let tx = db.tx();
-        let oid = tx
-            .create_object(
-                None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
-            )
-            .unwrap();
-
-        tx.add_property(
-            oid,
-            "test".into(),
-            NOTHING,
-            BitEnum::new(),
-            Some(v_str("test")),
-        )
-        .unwrap();
-        let prop = tx.resolve_property(oid, "test".into()).unwrap();
-        assert_eq!(prop.name, "test");
-
-        let v = tx.retrieve_property(oid, prop.uuid).unwrap();
-        assert_eq!(v, v_str("test"));
     }
 
     #[test]
@@ -1086,6 +1100,37 @@ mod tests {
     }
 
     #[test]
+    fn test_simple_property() {
+        let db = mk_test_db();
+        let tx = db.tx();
+        let oid = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        tx.add_property(
+            oid,
+            "test".into(),
+            NOTHING,
+            BitEnum::new(),
+            Some(v_str("test")),
+            false,
+        )
+        .unwrap();
+        let (prop, v) = tx.resolve_property(oid, "test".into()).unwrap();
+        assert_eq!(prop.name, "test");
+        assert_eq!(v, v_str("test"));
+    }
+
+    #[test]
     fn test_transitive_property_resolution() {
         let db = mk_test_db();
         let tx = db.tx();
@@ -1115,11 +1160,20 @@ mod tests {
             )
             .unwrap();
 
-        tx.add_property(a, "test".into(), NOTHING, BitEnum::new(), None)
-            .unwrap();
-        let prop = tx.resolve_property(b, "test".into()).unwrap();
+        tx.add_property(
+            a,
+            "test".into(),
+            NOTHING,
+            BitEnum::new(),
+            Some(v_str("test_value")),
+            false,
+        )
+        .unwrap();
+        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
         assert_eq!(prop.name, "test");
+        assert_eq!(v, v_str("test_value"));
 
+        // Verify we *don't* get this property for an unrelated, unhinged object.
         let c = tx
             .create_object(
                 None,
@@ -1139,6 +1193,58 @@ mod tests {
             result.err().unwrap().downcast_ref::<ObjectError>().unwrap(),
             &ObjectError::PropertyNotFound(b, "test".into())
         );
+    }
+
+    #[test]
+    fn test_transitive_property_resolution_clear_property() {
+        let db = mk_test_db();
+        let tx = db.tx();
+        let a = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        let b = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test2".into()),
+                    parent: Some(a),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        tx.add_property(
+            a,
+            "test".into(),
+            NOTHING,
+            BitEnum::new(),
+            Some(v_str("test_value")),
+            false,
+        )
+        .unwrap();
+        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name, "test");
+        assert_eq!(v, v_str("test_value"));
+
+        // Define the property again, but on the object 'b', but set it to clear.
+        // We should then get b's *handle* but a's value when we query on b.
+        tx.add_property(b, "test".into(), NOTHING, BitEnum::new(), None, true)
+            .unwrap();
+        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name, "test");
+        assert_eq!(v, v_str("test_value"));
     }
 
     #[test]

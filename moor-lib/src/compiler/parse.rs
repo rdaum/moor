@@ -13,6 +13,7 @@ use crate::compiler::ast::{
 use crate::compiler::labels::Names;
 use crate::compiler::parse::moo::{MooParser, Rule};
 use crate::compiler::Parse;
+use crate::util::unquote_str;
 use crate::values::error::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA,
     E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
@@ -56,7 +57,7 @@ fn parse_atom(
         Rule::string => {
             let string = pairs.as_str();
             // Note we don't trim the start and end quotes, because snailquote is expecting them.
-            let parsed = snailquote::unescape(string).unwrap();
+            let parsed = unquote_str(string)?;
             Ok(Expr::VarExpr(v_str(&parsed)))
         }
         Rule::err => {
@@ -1317,13 +1318,15 @@ mod tests {
 
     #[test]
     fn test_string_escape_codes() {
+        // Just verify MOO's very limited string escape tokenizing, which does not support
+        // anything other than \" and \\. \n, \t etc just become "n" "t".
         let program = r#"
-            "\n \t \r \" \\ ";
+            "\n \t \r \" \\";
         "#;
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::VarExpr(v_str("\n \t \r \" \\ ")))]
+            vec![Stmt::Expr(Expr::VarExpr(v_str(r#"n t r " \"#)))]
         );
     }
 

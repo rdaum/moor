@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Div, Mul, Neg, Sub};
 
+use crate::util::quote_str;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -22,7 +23,6 @@ use crate::values::VarType;
 
 lazy_static! {
     static ref VAR_NONE: Var = Var::new(Variant::None);
-    static ref VAR_CLEAR: Var = Var::new(Variant::Clear);
     static ref VAR_EMPTY_LIST: Var = Var::new(Variant::List(List::new()));
     static ref VAR_EMPTY_STR: Var = Var::new(Variant::Str(Str::from_str("").unwrap()));
 }
@@ -113,9 +113,6 @@ pub fn v_empty_list() -> Var {
 pub fn v_empty_str() -> Var {
     VAR_EMPTY_STR.clone()
 }
-pub fn v_clear() -> Var {
-    VAR_CLEAR.clone()
-}
 
 pub fn v_none() -> Var {
     VAR_NONE.clone()
@@ -142,7 +139,6 @@ impl Var {
 
     pub fn type_id(&self) -> VarType {
         match self.variant() {
-            Variant::Clear => VarType::TYPE_CLEAR,
             Variant::None => VarType::TYPE_NONE,
             Variant::Str(_) => VarType::TYPE_STR,
             Variant::Obj(_) => VarType::TYPE_OBJ,
@@ -158,7 +154,7 @@ impl Var {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
             Variant::Float(f) => f.to_string(),
-            Variant::Str(s) => format!("\"{}\"", snailquote::escape(s.as_str())),
+            Variant::Str(s) => quote_str(s.as_str()),
             Variant::Obj(o) => format!("{}", o),
             Variant::List(l) => {
                 let mut result = String::new();
@@ -173,7 +169,6 @@ impl Var {
                 result
             }
             Variant::Err(e) => e.name().to_string(),
-            _ => "".to_string(),
         }
     }
 }
@@ -193,7 +188,6 @@ impl Debug for Var {
 impl PartialEq<Self> for Var {
     fn eq(&self, other: &Self) -> bool {
         match (self.variant(), other.variant()) {
-            (Variant::Clear, Variant::Clear) => true,
             (Variant::None, Variant::None) => true,
             (Variant::Str(l), Variant::Str(r)) => l == r,
             (Variant::Obj(l), Variant::Obj(r)) => l == r,
@@ -201,7 +195,6 @@ impl PartialEq<Self> for Var {
             (Variant::Float(l), Variant::Float(r)) => l == r,
             (Variant::Err(l), Variant::Err(r)) => l == r,
             (Variant::List(l), Variant::List(r)) => l == r,
-            (Variant::Clear, _) => false,
             (Variant::None, _) => false,
             (Variant::Str(_), _) => false,
             (Variant::Obj(_), _) => false,
@@ -216,7 +209,6 @@ impl PartialEq<Self> for Var {
 impl PartialOrd<Self> for Var {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.variant(), other.variant()) {
-            (Variant::Clear, Variant::Clear) => Some(Ordering::Equal),
             (Variant::None, Variant::None) => Some(Ordering::Equal),
             (Variant::Str(l), Variant::Str(r)) => l.partial_cmp(r),
             (Variant::Obj(l), Variant::Obj(r)) => l.partial_cmp(r),
@@ -224,7 +216,6 @@ impl PartialOrd<Self> for Var {
             (Variant::Float(l), Variant::Float(r)) => R64::from(*l).partial_cmp(&R64::from(*r)),
             (Variant::Err(l), Variant::Err(r)) => l.partial_cmp(r),
             (Variant::List(l), Variant::List(r)) => l.partial_cmp(r),
-            (Variant::Clear, _) => Some(Ordering::Less),
             (Variant::None, _) => Some(Ordering::Less),
             (Variant::Str(_), _) => Some(Ordering::Less),
             (Variant::Obj(_), _) => Some(Ordering::Less),
@@ -239,7 +230,6 @@ impl PartialOrd<Self> for Var {
 impl Ord for Var {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.variant(), other.variant()) {
-            (Variant::Clear, Variant::Clear) => Ordering::Equal,
             (Variant::None, Variant::None) => Ordering::Equal,
             (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
             (Variant::Obj(l), Variant::Obj(r)) => l.cmp(r),
@@ -247,7 +237,6 @@ impl Ord for Var {
             (Variant::Float(l), Variant::Float(r)) => R64::from(*l).cmp(&R64::from(*r)),
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
             (Variant::List(l), Variant::List(r)) => l.cmp(r),
-            (Variant::Clear, _) => Ordering::Less,
             (Variant::None, _) => Ordering::Less,
             (Variant::Str(_), _) => Ordering::Less,
             (Variant::Obj(_), _) => Ordering::Less,
@@ -264,7 +253,6 @@ impl Hash for Var {
         let t = self.type_id() as u8;
         t.hash(state);
         match self.variant() {
-            Variant::Clear => {}
             Variant::None => {}
             Variant::Str(s) => s.hash(state),
             Variant::Obj(o) => o.hash(state),

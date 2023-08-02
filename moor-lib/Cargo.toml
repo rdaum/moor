@@ -39,7 +39,6 @@ thiserror = "1.0.40"
 
 ## For macro-ing
 paste = "1.0.12"
-snailquote = "0.3.1"
 
 ## Support to assist a generally more lovely concurrency story.
 dashmap = "5.4.0" # Fast foncurrent hash hash
