@@ -12,6 +12,7 @@ use crate::vm::activation::Activation;
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
+    pub(crate) name: &'a str,
     pub(crate) world_state: &'a mut dyn WorldState,
     pub(crate) frame: &'a mut Activation,
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,

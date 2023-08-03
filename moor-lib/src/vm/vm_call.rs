@@ -322,6 +322,7 @@ impl VM {
         let _guard = span.enter();
         // this is clearly wrong and we need to be passing in a reference...
         let mut bf_args = BfCallState {
+            name: BUILTINS[bf_func_num],
             world_state: state,
             frame: self.top_mut(),
             sessions: client_connection,

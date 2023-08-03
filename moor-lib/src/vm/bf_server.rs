@@ -14,8 +14,10 @@ use crate::values::variant::Variant;
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
 
-async fn bf_noop<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
-    unimplemented!("BF is not implemented");
+async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+    // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
+    // instead. right now it just panics so we can find all the places that need to be updated.
+    unimplemented!("BF is not implemented: {}", bf_args.name);
 }
 bf_declare!(noop, bf_noop);
 
