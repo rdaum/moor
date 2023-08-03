@@ -1,5 +1,4 @@
-use crossbeam_channel::Sender;
-
+use tokio::sync::oneshot::Sender;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
 use crate::db::CommitResult;
 use crate::model::objects::{ObjAttrs, ObjFlag};

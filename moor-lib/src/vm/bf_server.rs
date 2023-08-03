@@ -85,7 +85,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         return Ok(v_err(E_TYPE));
     };
 
-    let is_player = match bf_args.world_state.flags_of(*player) {
+    let is_player = match bf_args.world_state.flags_of(*player).await {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(ObjectError::ObjectNotFound(_)) => return Ok(v_err(E_INVARG)),
         Err(e) => return Err(e.into()),
@@ -115,7 +115,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
     bf_args
         .frame
         .permissions
-        .set_task_perms(*perms_for, bf_args.world_state.flags_of(*perms_for)?);
+        .set_task_perms(*perms_for, bf_args.world_state.flags_of(*perms_for).await?);
 
     Ok(v_none())
 }

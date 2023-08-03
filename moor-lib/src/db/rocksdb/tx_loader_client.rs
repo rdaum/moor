@@ -9,32 +9,34 @@ use crate::util::bitenum::BitEnum;
 use crate::values::objid::Objid;
 use crate::values::var::Var;
 use crate::vm::opcode::Binary;
+use async_trait::async_trait;
 
+#[async_trait]
 impl LoaderInterface for RocksDbTransaction {
-    fn create_object(
+    async fn create_object(
         &self,
         objid: Option<Objid>,
         attrs: &mut ObjAttrs,
     ) -> Result<Objid, anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
             .send(Message::CreateObject(objid, attrs.clone(), send))?;
-        let oid = receive.recv()??;
+        let oid = receive.await??;
         Ok(oid)
     }
-    fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error> {
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::SetParent(obj, parent, send))?;
-        receive.recv()??;
+        receive.await??;
         Ok(())
     }
-    fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+    async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error> {
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::SetLocation(o, location, send))?;
-        receive.recv()??;
+        receive.await??;
         Ok(())
     }
-    fn add_verb(
+    async fn add_verb(
         &self,
         obj: Objid,
         names: Vec<&str>,
@@ -43,7 +45,7 @@ impl LoaderInterface for RocksDbTransaction {
         args: VerbArgsSpec,
         binary: Binary,
     ) -> Result<(), anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::AddVerb {
             location: obj,
             owner,
@@ -53,13 +55,13 @@ impl LoaderInterface for RocksDbTransaction {
             args,
             reply: send,
         })?;
-        receive.recv()??;
+        receive.await??;
         Ok(())
     }
-    fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<u128>, anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<u128>, anyhow::Error> {
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::GetProperties(obj, send))?;
-        let properties = receive.recv()??;
+        let properties = receive.await??;
         for vh in &properties {
             if vh.name == pname {
                 return Ok(Some(vh.uuid));
@@ -67,7 +69,7 @@ impl LoaderInterface for RocksDbTransaction {
         }
         Ok(None)
     }
-    fn define_property(
+    async fn define_property(
         &self,
         definer: Objid,
         objid: Objid,
@@ -77,7 +79,7 @@ impl LoaderInterface for RocksDbTransaction {
         value: Option<Var>,
         is_clear: bool,
     ) -> Result<(), anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::DefineProperty {
             definer,
             obj: objid,
@@ -88,16 +90,15 @@ impl LoaderInterface for RocksDbTransaction {
             is_clear,
             reply: send,
         })?;
-        receive.recv()??;
+        receive.await??;
         Ok(())
     }
 
-    fn commit(self) -> Result<CommitResult, anyhow::Error> {
-        let (send, receive) = crossbeam_channel::bounded(1);
+    async fn commit(self) -> Result<CommitResult, anyhow::Error> {
+        let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::Commit(send))?;
-        let cr = receive.recv()?;
-        self.join_handle
-            .join()
+        let cr = receive.await?;
+        self.join_handle.join()
             .expect("Error completing transaction");
         Ok(cr)
     }

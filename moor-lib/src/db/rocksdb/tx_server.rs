@@ -1,5 +1,6 @@
+use anyhow::bail;
 use bincode::{Decode, Encode};
-use crossbeam_channel::{Receiver, RecvError, Sender};
+use crossbeam_channel::{Receiver, RecvError};
 use rocksdb::ColumnFamily;
 use tracing::warn;
 
@@ -38,17 +39,21 @@ pub(crate) struct PropHandle {
 }
 
 fn respond<V: Send + Sync + 'static>(
-    r: Sender<Result<V, ObjectError>>,
+    r: tokio::sync::oneshot::Sender<Result<V, ObjectError>>,
     res: Result<V, anyhow::Error>,
 ) -> Result<(), anyhow::Error> {
     match res {
         Ok(v) => {
-            r.send(Ok(v))?;
+            let Ok(_) = r.send(Ok(v)) else {
+                bail!("Failed to send response to transaction server");
+            };
             Ok(())
         }
         Err(e) => match e.downcast::<ObjectError>() {
             Ok(e) => {
-                r.send(Err(e))?;
+                let Ok(_) = r.send(Err(e)) else {
+                    bail!("Failed to send response to transaction server");
+                };
                 Ok(())
             }
             Err(e) => Err(e.context("Error in transaction")),
@@ -66,7 +71,7 @@ pub(crate) fn run_tx_server<'a>(
         tx,
         cf_handles: cf_handles.clone(),
     };
-    let (commit_result, send_c) = loop {
+    let (commit_result, commit_response_send) = loop {
         let msg = match mailbox.recv() {
             Ok(msg) => msg,
             Err(e) => {
@@ -205,7 +210,9 @@ pub(crate) fn run_tx_server<'a>(
                 respond(r, tx.resolve_property(o, n))?;
             }
             Message::Valid(o, r) => {
-                r.send(tx.object_valid(o)?)?;
+                let Ok(_) = r.send(tx.object_valid(o)?) else {
+                    bail!("Could not send result")
+                };
             }
             Message::Commit(r) => {
                 let commit_r = tx.commit()?;
@@ -214,11 +221,15 @@ pub(crate) fn run_tx_server<'a>(
             Message::Rollback(r) => {
                 warn!("Rolling back transaction");
                 tx.rollback()?;
-                r.send(())?;
+                let Ok(_) = r.send(()) else {
+                    bail!("Could not send result")
+                };
                 return Ok(());
             }
         }
     };
-    send_c.send(commit_result)?;
+    let Ok(_) = commit_response_send.send(commit_result) else {
+        bail!("Could not send result")
+    };
     Ok(())
 }

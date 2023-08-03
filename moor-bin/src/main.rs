@@ -74,7 +74,9 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
-        textdump_load(&mut src, textdump.to_str().unwrap()).unwrap();
+        textdump_load(&mut src, textdump.to_str().unwrap())
+            .await
+            .unwrap();
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
     }
@@ -83,8 +85,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
     // match against.
-    tx.set_object_location(Objid(2), Objid(70)).unwrap();
-    tx.commit().unwrap();
+    tx.set_object_location(Objid(2), Objid(70)).await.unwrap();
+    tx.commit().await.unwrap();
 
     let state_src = Arc::new(RwLock::new(src));
     let scheduler = Arc::new(RwLock::new(Scheduler::new(state_src.clone())));
@@ -95,7 +97,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::mpsc::channel(1);
 
-    let ws_server = Arc::new(RwLock::new(WebSocketServer::new(scheduler.clone(), shutdown_sender)));
+    let ws_server = Arc::new(RwLock::new(WebSocketServer::new(
+        scheduler.clone(),
+        shutdown_sender,
+    )));
     let mut hup_signal =
         signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
     let mut stop_signal =
@@ -104,8 +109,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut scheduler_process_interval =
         tokio::time::interval(std::time::Duration::from_millis(100));
 
-
-    let ws_server_future = tokio::spawn(ws_server_start(ws_server.clone(), addr, shutdown_receiver));
+    let ws_server_future =
+        tokio::spawn(ws_server_start(ws_server.clone(), addr, shutdown_receiver));
 
     loop {
         select! {

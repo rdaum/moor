@@ -103,7 +103,9 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
-        textdump_load(&mut src, textdump.to_str().unwrap()).unwrap();
+        textdump_load(&mut src, textdump.to_str().unwrap())
+            .await
+            .unwrap();
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
     }
@@ -112,8 +114,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
     // match against.
-    tx.set_object_location(Objid(2), Objid(70)).unwrap();
-    tx.commit().unwrap();
+    tx.set_object_location(Objid(2), Objid(70)).await.unwrap();
+    tx.commit().await.unwrap();
 
     let state_src = Arc::new(RwLock::new(src));
     let scheduler = Arc::new(RwLock::new(Scheduler::new(state_src.clone())));

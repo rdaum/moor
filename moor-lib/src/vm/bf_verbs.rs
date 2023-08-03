@@ -26,7 +26,8 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         Variant::Str(verb_desc) => {
             bf_args
                 .world_state
-                .get_verb(bf_args.perms(), *obj, verb_desc.as_str())?
+                .get_verb(bf_args.perms(), *obj, verb_desc.as_str())
+                .await?
         }
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -36,7 +37,8 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
             let verb_index = (verb_index as usize) - 1;
             bf_args
                 .world_state
-                .get_verb_at_index(bf_args.perms(), *obj, verb_index)?
+                .get_verb_at_index(bf_args.perms(), *obj, verb_index)
+                .await?
         }
         _ => {
             return Ok(v_err(E_TYPE));
@@ -108,15 +110,18 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
 
             match bf_args.args[1].variant() {
                 Variant::Str(verb_name) => {
-                    bf_args.world_state.set_verb_info(
-                        bf_args.perms(),
-                        *obj,
-                        verb_name.as_str(),
-                        Some(*owner),
-                        Some(name_strings),
-                        Some(perms),
-                        None,
-                    )?;
+                    bf_args
+                        .world_state
+                        .set_verb_info(
+                            bf_args.perms(),
+                            *obj,
+                            verb_name.as_str(),
+                            Some(*owner),
+                            Some(name_strings),
+                            Some(perms),
+                            None,
+                        )
+                        .await?;
                 }
                 Variant::Int(verb_index) => {
                     let verb_index = *verb_index;
@@ -124,15 +129,18 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                         return Ok(v_err(E_INVARG));
                     }
                     let verb_index = (verb_index as usize) - 1;
-                    bf_args.world_state.set_verb_info_at_index(
-                        bf_args.perms(),
-                        *obj,
-                        verb_index,
-                        Some(*owner),
-                        Some(name_strings),
-                        Some(perms),
-                        None,
-                    )?;
+                    bf_args
+                        .world_state
+                        .set_verb_info_at_index(
+                            bf_args.perms(),
+                            *obj,
+                            verb_index,
+                            Some(*owner),
+                            Some(name_strings),
+                            Some(perms),
+                            None,
+                        )
+                        .await?;
                 }
                 _ => return Ok(v_err(E_TYPE)),
             }
@@ -156,7 +164,8 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
             let verb_desc = verb_desc.as_str();
             let verb_info = bf_args
                 .world_state
-                .get_verb(bf_args.perms(), *obj, verb_desc)?;
+                .get_verb(bf_args.perms(), *obj, verb_desc)
+                .await?;
             verb_info.attrs.args_spec.unwrap()
         }
         Variant::Int(verb_index) => {
@@ -165,10 +174,10 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
                 return Ok(v_err(E_INVARG));
             }
             let verb_index = (verb_index as usize) - 1;
-            let verb_info =
-                bf_args
-                    .world_state
-                    .get_verb_at_index(bf_args.perms(), *obj, verb_index)?;
+            let verb_info = bf_args
+                .world_state
+                .get_verb_at_index(bf_args.perms(), *obj, verb_index)
+                .await?;
             verb_info.attrs.args_spec.unwrap()
         }
         _ => return Ok(v_err(E_TYPE)),
@@ -215,15 +224,18 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
             let args = VerbArgsSpec { dobj, prep, iobj };
             match bf_args.args[1].variant() {
                 Variant::Str(verb_name) => {
-                    bf_args.world_state.set_verb_info(
-                        bf_args.perms(),
-                        *obj,
-                        verb_name.as_str(),
-                        None,
-                        None,
-                        None,
-                        Some(args),
-                    )?;
+                    bf_args
+                        .world_state
+                        .set_verb_info(
+                            bf_args.perms(),
+                            *obj,
+                            verb_name.as_str(),
+                            None,
+                            None,
+                            None,
+                            Some(args),
+                        )
+                        .await?;
                 }
                 Variant::Int(verb_index) => {
                     let verb_index = *verb_index;
@@ -231,15 +243,18 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                         return Ok(v_err(E_INVARG));
                     }
                     let verb_index = (verb_index as usize) - 1;
-                    bf_args.world_state.set_verb_info_at_index(
-                        bf_args.perms(),
-                        *obj,
-                        verb_index,
-                        None,
-                        None,
-                        None,
-                        Some(args),
-                    )?;
+                    bf_args
+                        .world_state
+                        .set_verb_info_at_index(
+                            bf_args.perms(),
+                            *obj,
+                            verb_index,
+                            None,
+                            None,
+                            None,
+                            Some(args),
+                        )
+                        .await?;
                 }
                 _ => return Ok(v_err(E_TYPE)),
             }

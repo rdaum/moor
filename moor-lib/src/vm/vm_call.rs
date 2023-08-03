@@ -97,7 +97,7 @@ impl VM {
     }
 
     /// Entry point from scheduler for setting up a method execution (non-command) in this VM.
-    pub fn setup_verb_method_call(
+    pub async fn setup_verb_method_call(
         &mut self,
         task_id: TaskId,
         state: &mut dyn WorldState,
@@ -108,7 +108,9 @@ impl VM {
         player: Objid,
         args: &[Var],
     ) -> Result<(), anyhow::Error> {
-        let vi = state.find_method_verb_on(permissions.clone(), obj, verb_name)?;
+        let vi = state
+            .find_method_verb_on(permissions.clone(), obj, verb_name)
+            .await?;
 
         let Some(binary) = vi.attrs.program.clone() else {
             bail!(VerbNotFound(obj, verb_name.to_string()))
@@ -157,34 +159,35 @@ impl VM {
     }
 
     /// Entry point for VM setting up a method call from the Op::CallVerb instruction.
-    pub(crate) fn call_verb(
+    pub(crate) async fn call_verb(
         &mut self,
         state: &mut dyn WorldState,
         this: Objid,
         verb_name: &str,
         args: &[Var],
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let self_valid = state.valid(this)?;
+        let self_valid = state.valid(this).await?;
         if !self_valid {
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let verbinfo =
-            match state.find_method_verb_on(self.top().permissions.clone(), this, verb_name) {
-                Ok(vi) => vi,
-                Err(ObjectError::ObjectPermissionDenied) => {
-                    return self.push_error(E_PERM);
-                }
-                Err(ObjectError::VerbNotFound(_, _)) => {
-                    return self
-                        .push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
-                }
-                Err(e) => {
-                    return Err(e).with_context(|| {
-                        format!("Error finding verb \"{}\" on object {}", verb_name, this)
-                    })?;
-                }
-            };
+        let verbinfo = match state
+            .find_method_verb_on(self.top().permissions.clone(), this, verb_name)
+            .await
+        {
+            Ok(vi) => vi,
+            Err(ObjectError::ObjectPermissionDenied) => {
+                return self.push_error(E_PERM);
+            }
+            Err(ObjectError::VerbNotFound(_, _)) => {
+                return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
+            }
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!("Error finding verb \"{}\" on object {}", verb_name, this)
+                })?;
+            }
+        };
         let Some(binary) = verbinfo.attrs.program.clone() else {
             return self.push_error_msg(
                 E_VERBNF,
@@ -213,7 +216,7 @@ impl VM {
         // Derive permissions for the new activation from the current one + the verb's owner
         // permissions.
         let verb_owner = verbinfo.attrs.owner.unwrap();
-        let next_task_perms = state.flags_of(verb_owner)?;
+        let next_task_perms = state.flags_of(verb_owner).await?;
         let new_perms = top
             .permissions
             .mk_child_perms(Perms::new(verb_owner, next_task_perms));
@@ -270,7 +273,7 @@ impl VM {
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
     /// version.
-    pub(crate) fn pass_verb(
+    pub(crate) async fn pass_verb(
         &mut self,
         state: &mut dyn WorldState,
         args: &[Var],
@@ -278,7 +281,9 @@ impl VM {
         // get parent of verb definer object & current verb name.
         // TODO probably need verb definer right on Activation, this is gross.
         let definer = self.top().verb_definer();
-        let parent = state.parent_of(self.top().permissions.clone(), definer)?;
+        let parent = state
+            .parent_of(self.top().permissions.clone(), definer)
+            .await?;
         let verb = self.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
@@ -293,7 +298,8 @@ impl VM {
             self.top().this,
             self.top().player,
             args,
-        )?;
+        )
+        .await?;
         Ok(ExecutionResult::More)
     }
 

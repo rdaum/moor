@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use  tracing::warn;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio_tungstenite::{accept_async, WebSocketStream};
+use tracing::warn;
 use tracing::{error, info, instrument};
 use tungstenite::{Error, Message};
 
@@ -19,7 +19,7 @@ use moor_lib::values::objid::Objid;
 
 struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,
-    shutdown_sender: Sender<Option<String>>
+    shutdown_sender: Sender<Option<String>>,
 }
 
 struct WsConnection {
@@ -89,8 +89,6 @@ async fn ws_handle_connection(
 
     info!("New inbound websocket connection: {}", peer);
     let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
-
-
 
     // Register connection with player.
     {

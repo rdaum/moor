@@ -64,7 +64,7 @@ mod tests {
         }
     }
 
-    fn call_verb(
+    async fn call_verb(
         state: &mut dyn WorldState,
         perms: PermissionsContext,
         verb_name: &str,
@@ -74,34 +74,36 @@ mod tests {
 
         assert!(vm
             .setup_verb_method_call(0, state, perms, o, verb_name, o, o, &[],)
+            .await
             .is_ok());
     }
 
-    fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
-        tokio_test::block_on(async {
-            let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
-            // Call repeatedly into exec until we ge either an error or Complete.
-            loop {
-                match vm.exec(state, client_connection.clone()).await {
-                    Ok(ExecutionResult::More) => continue,
-                    Ok(ExecutionResult::Complete(a)) => return a,
-                    Err(e) => panic!("error during execution: {:?}", e),
-                    Ok(ExecutionResult::Exception(e)) => {
-                        panic!("MOO exception {:?}", e);
-                    }
+    async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
+        let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
+        // Call repeatedly into exec until we ge either an error or Complete.
+        loop {
+            match vm.exec(state, client_connection.clone()).await {
+                Ok(ExecutionResult::More) => continue,
+                Ok(ExecutionResult::Complete(a)) => return a,
+                Err(e) => panic!("error during execution: {:?}", e),
+                Ok(ExecutionResult::Exception(e)) => {
+                    panic!("MOO exception {:?}", e);
                 }
             }
-        })
+        }
     }
 
-    #[test]
-    fn test_verbnf() {
+    #[tokio::test]
+    async fn test_verbnf() {
         let mut state_src = MockWorldStateSource::new();
-        let (mut state, perms) = state_src.new_world_state(Objid(0)).unwrap();
+        let (mut state, perms) = state_src.new_world_state(Objid(0)).await.unwrap();
         let mut vm = VM::new();
         let o = Objid(0);
 
-        match vm.setup_verb_method_call(0, state.as_mut(), perms, o, "test", o, o, &[]) {
+        match vm
+            .setup_verb_method_call(0, state.as_mut(), perms, o, "test", o, o, &[])
+            .await
+        {
             Err(e) => match e.downcast::<ObjectError>() {
                 Ok(VerbNotFound(vo, vs)) => {
                     assert_eq!(vo, o);
@@ -115,20 +117,20 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_simple_vm_execute() {
+    #[tokio::test]
+    async fn test_simple_vm_execute() {
         let binary = mk_binary(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
         let mut state_src = MockWorldStateSource::new_with_verb("test", &binary);
-        let (mut state, perms) = state_src.new_world_state(Objid(0)).unwrap();
+        let (mut state, perms) = state_src.new_world_state(Objid(0)).await.unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_none());
     }
 
-    #[test]
-    fn test_string_value_simple_indexing() {
+    #[tokio::test]
+    async fn test_string_value_simple_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
@@ -138,16 +140,17 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("e"));
     }
 
-    #[test]
-    fn test_string_value_range_indexing() {
+    #[tokio::test]
+    async fn test_string_value_range_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
@@ -164,15 +167,16 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("ell"));
     }
 
-    #[test]
-    fn test_list_value_simple_indexing() {
+    #[tokio::test]
+    async fn test_list_value_simple_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
@@ -182,16 +186,17 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(222));
     }
 
-    #[test]
-    fn test_list_value_range_indexing() {
+    #[tokio::test]
+    async fn test_list_value_range_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
@@ -212,16 +217,17 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![222.into(), 333.into()]));
     }
 
-    #[test]
-    fn test_list_set_range() {
+    #[tokio::test]
+    async fn test_list_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
@@ -255,59 +261,63 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![111.into(), 321.into(), 123.into()]));
     }
 
-    #[test]
-    fn test_list_splice() {
+    #[tokio::test]
+    async fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program).unwrap();
         let (mut state, perms) = MockWorldStateSource::new_with_verb("test", &binary)
             .new_world_state(Objid(0))
+            .await
             .unwrap();
         let mut vm = VM::new();
         let _args = binary.find_var("args");
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![2.into(), 3.into(), 4.into()]));
     }
 
-    #[test]
-    fn test_list_range_length() {
+    #[tokio::test]
+    async fn test_list_range_length() {
         let program = "return {{1,2,3}[2..$], {1}[$]};";
         let (mut state, perms) =
             MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
                 .new_world_state(Objid(0))
+                .await
                 .unwrap();
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
             v_list(vec![v_list(vec![2.into(), 3.into()]), v_int(1)])
         );
     }
 
-    #[test]
-    fn test_if_or_expr() {
+    #[tokio::test]
+    async fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
         let (mut state, perms) =
             MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
                 .new_world_state(Objid(0))
+                .await
                 .unwrap();
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(1));
     }
 
-    #[test]
-    fn test_string_set_range() {
+    #[tokio::test]
+    async fn test_string_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
 
@@ -337,16 +347,17 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("manbozorian"));
     }
 
-    #[test]
-    fn test_property_retrieval() {
+    #[tokio::test]
+    async fn test_property_retrieval() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
             &mk_binary(
@@ -356,6 +367,7 @@ mod tests {
             ),
         )
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         {
             state
@@ -368,17 +380,18 @@ mod tests {
                     BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
                     Some(v_int(666)),
                 )
+                .await
                 .unwrap();
         }
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
 
-    #[test]
-    fn test_call_verb() {
+    #[tokio::test]
+    async fn test_call_verb() {
         // Prepare two, chained, test verbs in our environment, with simple operations.
 
         // The first merely returns the value "666" immediately.
@@ -406,72 +419,74 @@ mod tests {
             ("test_call_verb", &call_verb_binary),
         ])
         .new_world_state(Objid(0))
+        .await
         .unwrap();
         let mut vm = VM::new();
 
         // Invoke the second verb
-        call_verb(state.as_mut(), perms, "test_call_verb", &mut vm);
+        call_verb(state.as_mut(), perms, "test_call_verb", &mut vm).await;
 
-        let result = exec_vm(state.as_mut(), &mut vm);
+        let result = exec_vm(state.as_mut(), &mut vm).await;
 
         assert_eq!(result, v_int(666));
     }
 
-    fn world_with_test_program(program: &str) -> (Box<dyn WorldState>, PermissionsContext) {
+    async fn world_with_test_program(program: &str) -> (Box<dyn WorldState>, PermissionsContext) {
         let binary = compile(program).unwrap();
         MockWorldStateSource::new_with_verb("test", &binary)
             .new_world_state(Objid(0))
+            .await
             .unwrap()
     }
 
-    #[test]
-    fn test_assignment_from_range() {
+    #[tokio::test]
+    async fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(3));
     }
 
-    #[test]
-    fn test_while_loop() {
+    #[tokio::test]
+    async fn test_while_loop() {
         let program =
             "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(75));
     }
 
-    #[test]
-    fn test_while_labelled_loop() {
+    #[tokio::test]
+    async fn test_while_labelled_loop() {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
 
-    #[test]
-    fn test_while_breaks() {
+    #[tokio::test]
+    async fn test_while_breaks() {
         let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
 
-    #[test]
-    fn test_while_continue() {
+    #[tokio::test]
+    async fn test_while_continue() {
         // Verify that continue works as expected vs break.
         let program = r#"
         x = 0;
@@ -486,58 +501,58 @@ mod tests {
         endwhile
         return x;
         "#;
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
 
-    #[test]
-    fn test_for_list_loop() {
+    #[tokio::test]
+    async fn test_for_list_loop() {
         let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
 
-    #[test]
-    fn test_for_range_loop() {
+    #[tokio::test]
+    async fn test_for_range_loop() {
         let program = "z = 0; for i in [1..4] z = z + i; endfor return {i,z};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
 
-    #[test]
-    fn test_basic_scatter_assign() {
+    #[tokio::test]
+    async fn test_basic_scatter_assign() {
         let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)]));
     }
 
-    #[test]
-    fn test_more_scatter_assign() {
+    #[tokio::test]
+    async fn test_more_scatter_assign() {
         let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
             v_list(vec![
@@ -551,22 +566,22 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_scatter_multi_optional() {
+    #[tokio::test]
+    async fn test_scatter_multi_optional() {
         let program = "{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
             v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_empty_list()])
         );
     }
 
-    #[test]
-    fn test_scatter_regression() {
+    #[tokio::test]
+    async fn test_scatter_regression() {
         // Wherein I discovered that precedence order for scatter assign was wrong wrong wrong.
         let program = r#"
         a = {{#2, #70, #70, #-1, #-1}, #70};
@@ -574,11 +589,11 @@ mod tests {
         {?who = player, ?what = thing, ?where = this:_locations(who), ?dobj, ?iobj, @other} = a[1];
         return {who, what, where, dobj, iobj, @other};
         "#;
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         // MOO has  {#2, #70, #70, #-1, #-1, {}} for this equiv in JHCore parse_parties, and does not
         // actually invoke `_locations` (where i've subbed 666) for these values.
         // So something is wonky about our scatter evaluation, looks like on the first arg.
@@ -588,93 +603,92 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_new_scatter_regression() {
+    #[tokio::test]
+    async fn test_new_scatter_regression() {
         let program = "{a,b,@c}= {1,2,3,4,5}; return c;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(5)]));
     }
 
-    #[test]
-    #[traced_test]
-    fn test_scatter_precedence() {
+    #[tokio::test]
+    async fn test_scatter_precedence() {
         // Simplified case of operator precedence fix.
         let program = "{a,b,c} = {{1,2,3}}[1]; return {a,b,c};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(1), v_int(2), v_int(3)]));
     }
 
-    #[test]
-    fn test_conditional_expr() {
+    #[tokio::test]
+    async fn test_conditional_expr() {
         let program = "return 1 ? 2 | 3;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(2));
     }
 
-    #[test]
-    fn test_catch_expr() {
+    #[tokio::test]
+    async fn test_catch_expr() {
         let program = "return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
     }
 
     #[traced_test]
-    #[test]
-    fn test_catch_expr_any() {
+    #[tokio::test]
+    async fn test_catch_expr_any() {
         let program = "return `raise(E_VERBNF) ! ANY';";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_err(E_VERBNF));
     }
 
-    #[test]
-    fn test_try_except_stmt() {
+    #[tokio::test]
+    async fn test_try_except_stmt() {
         let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
 
-    #[test]
-    fn test_try_finally_stmt() {
+    #[tokio::test]
+    async fn test_try_finally_stmt() {
         let program = "try a; finally return 666; endtry return 333;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
 
-    #[test]
-    fn test_if_elseif_else_chain() {
+    #[tokio::test]
+    async fn test_if_elseif_else_chain() {
         let program = r#"
             ret = {};
             for a in ({1,2,3})
@@ -688,16 +702,16 @@ mod tests {
             endfor
             return ret;
         "#;
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(2), v_int(1)]));
     }
 
-    #[test]
-    fn test_if_elseif_elseif_chains() {
+    #[tokio::test]
+    async fn test_if_elseif_elseif_chains() {
         let program = r#"
             if (1 == 2)
                 return 5;
@@ -709,31 +723,31 @@ mod tests {
                 return 6;
             endif
         "#;
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(6));
     }
 
-    #[test]
-    fn test_range_set() {
+    #[tokio::test]
+    async fn test_range_set() {
         let program = "a={1,2,3,4}; a[1..2] = {3,4}; return a;";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]));
     }
 
-    #[test]
-    fn test_str_index_assignment() {
+    #[tokio::test]
+    async fn test_str_index_assignment() {
         // There was a regression here where the value was being dropped instead of replaced.
         let program = r#"a = "you"; a[1] = "Y"; return a;"#;
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), perms, "test", &mut vm);
-        let result = exec_vm(state.as_mut(), &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("You"));
     }
 
@@ -790,11 +804,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_builtin() {
         let program = "return notify(#1, \"test\");";
-        let (mut state, perms) = world_with_test_program(program);
+        let (mut state, perms) = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), perms, "test", &mut vm);
+        call_verb(state.as_mut(), perms, "test", &mut vm).await;
 
         let client_connection = Arc::new(RwLock::new(MockClientConnection::new()));
         let result =

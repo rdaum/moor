@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::spawn;
@@ -53,15 +54,16 @@ impl RocksDbServer {
     }
 }
 
+#[async_trait]
 impl WorldStateSource for RocksDbServer {
     #[tracing::instrument(skip(self))]
-    fn new_world_state(
+    async fn new_world_state(
         &mut self,
         player: Objid,
     ) -> Result<(Box<dyn WorldState>, PermissionsContext), anyhow::Error> {
         // Return a transaction wrapped by the higher level RocksDbWorldState.
         let mut tx = self.start_transaction()?;
-        let player_flags = tx.flags_of(player)?;
+        let player_flags = tx.flags_of(player).await?;
         let player_permissions = PermissionsContext::root_for(player, player_flags);
         Ok((Box::new(tx), player_permissions))
     }

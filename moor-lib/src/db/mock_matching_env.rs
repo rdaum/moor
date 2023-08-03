@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 
 use crate::db::matching::MatchEnvironment;
 use crate::values::objid::{Objid, NOTHING};
@@ -29,19 +30,20 @@ impl MockMatchEnvironment {
     }
 }
 
+#[async_trait]
 impl MatchEnvironment for MockMatchEnvironment {
-    fn obj_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error> {
+    async fn obj_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error> {
         Ok(self.objects.contains_key(&oid))
     }
 
-    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, anyhow::Error> {
+    async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, anyhow::Error> {
         Ok(self
             .objects
             .get(&oid)
             .map_or_else(Vec::new, |o| o.names.clone()))
     }
 
-    fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, anyhow::Error> {
+    async fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, anyhow::Error> {
         let mut result = Vec::new();
         if let Some(player_obj) = self.objects.get(&player) {
             result.push(MOCK_PLAYER);
@@ -55,7 +57,7 @@ impl MatchEnvironment for MockMatchEnvironment {
         Ok(result)
     }
 
-    fn location_of(&mut self, oid: Objid) -> Result<Objid, anyhow::Error> {
+    async fn location_of(&mut self, oid: Objid) -> Result<Objid, anyhow::Error> {
         self.objects
             .get(&oid)
             .map(|o| o.location)

@@ -413,16 +413,16 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                return self.resolve_property(state, propname, obj);
+                return self.resolve_property(state, propname, obj).await;
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                return self.resolve_property(state, propname, obj);
+                return self.resolve_property(state, propname, obj).await;
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
-                return self.set_property(state, propname, obj, rhs);
+                return self.set_property(state, propname, obj, rhs).await;
             }
             Op::Fork { id: _, f_index: _ } => {
                 unimplemented!("fork")
@@ -432,7 +432,7 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_TYPE);
                 };
-                self.pass_verb(state, &args[..])?;
+                self.pass_verb(state, &args[..]).await?;
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
@@ -444,7 +444,7 @@ impl VM {
                 };
                 // TODO: check obj for validity, return E_INVIND if not
 
-                return self.call_verb(state, *obj, verb.as_str(), &args[..]);
+                return self.call_verb(state, *obj, verb.as_str(), &args[..]).await;
             }
             Op::Return => {
                 let ret_val = self.pop();

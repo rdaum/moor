@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::thread;
 
 use crossbeam_channel::Sender;
@@ -29,17 +30,18 @@ pub struct RocksDbTransaction {
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
 /// WorldState could provide, but potentiall different constraints/semantics.
+#[async_trait]
 pub trait LoaderInterface {
-    fn create_object(
+    async fn create_object(
         &self,
         objid: Option<Objid>,
         attrs: &mut ObjAttrs,
     ) -> Result<Objid, anyhow::Error>;
-    fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error>;
+    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error>;
 
-    fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error>;
+    async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error>;
 
-    fn add_verb(
+    async fn add_verb(
         &self,
         obj: Objid,
         names: Vec<&str>,
@@ -49,8 +51,8 @@ pub trait LoaderInterface {
         binary: Binary,
     ) -> Result<(), anyhow::Error>;
 
-    fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<u128>, anyhow::Error>;
-    fn define_property(
+    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<u128>, anyhow::Error>;
+    async fn define_property(
         &self,
         definer: Objid,
         objid: Objid,
@@ -61,7 +63,7 @@ pub trait LoaderInterface {
         is_clear: bool,
     ) -> Result<(), anyhow::Error>;
 
-    fn commit(self) -> Result<CommitResult, anyhow::Error>;
+    async fn commit(self) -> Result<CommitResult, anyhow::Error>;
 }
 
 #[derive(Debug, PartialEq, EnumString, EnumVariantNames)]

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
+use async_trait::async_trait;
 
 use crate::db::rocksdb::LoaderInterface;
 use crate::db::CommitResult;
@@ -45,8 +46,9 @@ impl MockStore {
 
 pub struct MockState(Arc<Mutex<MockStore>>);
 
+#[async_trait]
 impl WorldState for MockState {
-    fn location_of(
+    async fn location_of(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -54,7 +56,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn contents_of(
+    async fn contents_of(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -62,11 +64,11 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+    async fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
         Ok(BitEnum::all())
     }
 
-    fn verbs(
+    async fn verbs(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -74,7 +76,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn properties(
+    async fn properties(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -82,7 +84,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn retrieve_property(
+    async fn retrieve_property(
         &mut self,
         _perms: PermissionsContext,
         obj: Objid,
@@ -96,7 +98,7 @@ impl WorldState for MockState {
         }
     }
 
-    fn get_property_info(
+    async fn get_property_info(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -105,7 +107,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn set_property_info(
+    async fn set_property_info(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -115,7 +117,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn update_property(
+    async fn update_property(
         &mut self,
         _perms: PermissionsContext,
         obj: Objid,
@@ -129,7 +131,7 @@ impl WorldState for MockState {
         Ok(())
     }
 
-    fn add_property(
+    async fn add_property(
         &mut self,
         _perms: PermissionsContext,
         _definer: Objid,
@@ -147,7 +149,7 @@ impl WorldState for MockState {
         Ok(())
     }
 
-    fn add_verb(
+    async fn add_verb(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -160,7 +162,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn set_verb_info(
+    async fn set_verb_info(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -173,7 +175,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn get_verb(
+    async fn get_verb(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -182,7 +184,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn find_method_verb_on(
+    async fn find_method_verb_on(
         &mut self,
         _perms: PermissionsContext,
         obj: Objid,
@@ -196,7 +198,7 @@ impl WorldState for MockState {
         }
     }
 
-    fn find_command_verb_on(
+    async fn find_command_verb_on(
         &mut self,
         _perms: PermissionsContext,
         _oid: Objid,
@@ -205,11 +207,15 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn parent_of(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<Objid, ObjectError> {
+    async fn parent_of(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+    ) -> Result<Objid, ObjectError> {
         todo!()
     }
 
-    fn children_of(
+    async fn children_of(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -217,11 +223,11 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
+    async fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
         Ok(true)
     }
 
-    fn names_of(
+    async fn names_of(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -229,19 +235,19 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
+    async fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
         todo!()
     }
 
-    fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
+    async fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
         Ok(CommitResult::Success)
     }
 
-    fn rollback(&mut self) -> Result<(), anyhow::Error> {
+    async fn rollback(&mut self) -> Result<(), anyhow::Error> {
         Ok(())
     }
 
-    fn get_verb_at_index(
+    async fn get_verb_at_index(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -250,7 +256,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn set_verb_info_at_index(
+    async fn set_verb_info_at_index(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
@@ -266,20 +272,25 @@ impl WorldState for MockState {
 
 pub struct MockWorldStateSource(Arc<Mutex<MockStore>>);
 
+#[async_trait]
 impl LoaderInterface for MockWorldStateSource {
-    fn create_object(&self, _objid: Option<Objid>, _attrs: &mut ObjAttrs) -> Result<Objid, Error> {
+    async fn create_object(
+        &self,
+        _objid: Option<Objid>,
+        _attrs: &mut ObjAttrs,
+    ) -> Result<Objid, Error> {
         todo!()
     }
 
-    fn set_object_parent(&self, _obj: Objid, _parent: Objid) -> Result<(), Error> {
+    async fn set_object_parent(&self, _obj: Objid, _parent: Objid) -> Result<(), Error> {
         todo!()
     }
 
-    fn set_object_location(&self, _o: Objid, _location: Objid) -> Result<(), Error> {
+    async fn set_object_location(&self, _o: Objid, _location: Objid) -> Result<(), Error> {
         todo!()
     }
 
-    fn add_verb(
+    async fn add_verb(
         &self,
         _obj: Objid,
         _names: Vec<&str>,
@@ -291,11 +302,11 @@ impl LoaderInterface for MockWorldStateSource {
         todo!()
     }
 
-    fn get_property(&self, _obj: Objid, _pname: &str) -> Result<Option<u128>, Error> {
+    async fn get_property(&self, _obj: Objid, _pname: &str) -> Result<Option<u128>, Error> {
         todo!()
     }
 
-    fn define_property(
+    async fn define_property(
         &self,
         _definer: Objid,
         _objid: Objid,
@@ -308,7 +319,7 @@ impl LoaderInterface for MockWorldStateSource {
         todo!()
     }
 
-    fn commit(self) -> Result<CommitResult, Error> {
+    async fn commit(self) -> Result<CommitResult, Error> {
         todo!()
     }
 }
@@ -343,8 +354,9 @@ impl MockWorldStateSource {
     }
 }
 
+#[async_trait]
 impl WorldStateSource for MockWorldStateSource {
-    fn new_world_state(
+    async fn new_world_state(
         &mut self,
         player: Objid,
     ) -> Result<(Box<dyn WorldState>, PermissionsContext), Error> {

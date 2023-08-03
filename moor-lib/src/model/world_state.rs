@@ -10,6 +10,7 @@ use crate::util::bitenum::BitEnum;
 use crate::values::objid::Objid;
 use crate::values::var::Var;
 use crate::vm::opcode::Binary;
+use async_trait::async_trait;
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's
 /// environment during verb execution. This includes the location of objects, their contents,
@@ -19,30 +20,35 @@ use crate::vm::opcode::Binary;
 /// Each world state is expected to have a consistent shapshotted view of the world, and to
 /// commit any changes to the world at the end of the transaction, or be capable of rolling back
 /// on failure.
+#[async_trait]
 pub trait WorldState: Send + Sync {
     // TODO: combine owner & flags into one call, to make perms check more efficient
 
     /// Get the owner of an object
-    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError>;
+    async fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError>;
 
     /// Flags of an object.
     /// Note this call does not take a permission context, because it is used to *determine*
     /// permissions. It is the caller's responsibility to ensure that the program is using this
     /// call appropriately.
-    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError>;
+    async fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError>;
 
     /// Get the location of the given object.
-    fn location_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError>;
+    async fn location_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<Objid, ObjectError>;
 
     /// Get the contents of a given object.
-    fn contents_of(
+    async fn contents_of(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<Objid>, ObjectError>;
 
     /// Get the names of all the verbs on the given object.
-    fn verbs(
+    async fn verbs(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -50,14 +56,14 @@ pub trait WorldState: Send + Sync {
 
     /// Gets a list of the names of the properties defined directly on the given object, not
     /// inherited from its parent.
-    fn properties(
+    async fn properties(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<(String, PropAttrs)>, ObjectError>;
 
     /// Retrieve a property from the given object, walking transitively up its inheritance chain.
-    fn retrieve_property(
+    async fn retrieve_property(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -65,14 +71,14 @@ pub trait WorldState: Send + Sync {
     ) -> Result<Var, ObjectError>;
 
     /// Get information about a property, without walking the inheritance tree.
-    fn get_property_info(
+    async fn get_property_info(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
         pname: &str,
     ) -> Result<PropAttrs, ObjectError>;
 
-    fn set_property_info(
+    async fn set_property_info(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -81,7 +87,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), ObjectError>;
 
     /// Update a property on the given object.
-    fn update_property(
+    async fn update_property(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -90,7 +96,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), ObjectError>;
 
     /// Add a property for the given object.
-    fn add_property(
+    async fn add_property(
         &mut self,
         perms: PermissionsContext,
         definer: Objid,
@@ -101,7 +107,7 @@ pub trait WorldState: Send + Sync {
         initial_value: Option<Var>,
     ) -> Result<(), ObjectError>;
 
-    fn add_verb(
+    async fn add_verb(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -113,7 +119,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), ObjectError>;
 
     /// Update data about a verb on the given object.
-    fn set_verb_info(
+    async fn set_verb_info(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -125,7 +131,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), ObjectError>;
 
     /// Update data about a verb on the given object at a numbered offset.
-    fn set_verb_info_at_index(
+    async fn set_verb_info_at_index(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -137,7 +143,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), ObjectError>;
 
     /// Get the verb with the given name on the given object. Without doing inheritance resolution.
-    fn get_verb(
+    async fn get_verb(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -145,7 +151,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<VerbInfo, ObjectError>;
 
     /// Get the verb at numbered offset on the given object.
-    fn get_verb_at_index(
+    async fn get_verb_at_index(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -153,7 +159,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<VerbInfo, ObjectError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
-    fn find_method_verb_on(
+    async fn find_method_verb_on(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
@@ -161,7 +167,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<VerbInfo, ObjectError>;
 
     /// Seek the verb referenced by the given command on the given object.
-    fn find_command_verb_on(
+    async fn find_command_verb_on(
         &mut self,
         perms: PermissionsContext,
 
@@ -170,36 +176,41 @@ pub trait WorldState: Send + Sync {
     ) -> Result<Option<VerbInfo>, ObjectError>;
 
     /// Get the object that is the parent of the given object.
-    fn parent_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError>;
+    async fn parent_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+    ) -> Result<Objid, ObjectError>;
 
     /// Get the children of the given object.
-    fn children_of(
+    async fn children_of(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<Objid>, ObjectError>;
 
     /// Check the validity of an object.
-    fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError>;
+    async fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError>;
 
     /// Get the name & aliases of an object.
-    fn names_of(
+    async fn names_of(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<(String, Vec<String>), ObjectError>;
 
     /// Commit all modifications made to the state of this world since the start of its transaction.
-    fn commit(&mut self) -> Result<CommitResult, anyhow::Error>;
+    async fn commit(&mut self) -> Result<CommitResult, anyhow::Error>;
 
     /// Rollback all modifications made to the state of this world since the start of its transaction.
-    fn rollback(&mut self) -> Result<(), anyhow::Error>;
+    async fn rollback(&mut self) -> Result<(), anyhow::Error>;
 }
 
+#[async_trait]
 pub trait WorldStateSource {
     /// Create a new world state for the given player.
     /// Returns the world state, and a permissions context for the player.
-    fn new_world_state(
+    async fn new_world_state(
         &mut self,
         player: Objid,
     ) -> Result<(Box<dyn WorldState>, PermissionsContext), anyhow::Error>;

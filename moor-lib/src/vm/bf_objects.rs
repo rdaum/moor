@@ -32,7 +32,7 @@ async fn bf_valid<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let is_valid = bf_args.world_state.valid(*obj)?;
+    let is_valid = bf_args.world_state.valid(*obj).await?;
     Ok(v_bool(is_valid))
 }
 bf_declare!(valid, bf_valid);
@@ -44,7 +44,7 @@ async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let parent = bf_args.world_state.parent_of(bf_args.perms(), *obj)?;
+    let parent = bf_args.world_state.parent_of(bf_args.perms(), *obj).await?;
     Ok(v_objid(parent))
 }
 bf_declare!(parent, bf_parent);
@@ -56,7 +56,10 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::E
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let children = bf_args.world_state.children_of(bf_args.perms(), *obj)?;
+    let children = bf_args
+        .world_state
+        .children_of(bf_args.perms(), *obj)
+        .await?;
     debug!("Children: {:?} {:?}", obj, children);
     let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
     debug!("Children: {:?} {:?}", obj, children);
@@ -91,7 +94,7 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let verbs = bf_args.world_state.verbs(bf_args.perms(), *obj)?;
+    let verbs = bf_args.world_state.verbs(bf_args.perms(), *obj).await?;
     let verbs = verbs
         .iter()
         .map(|v| v_str(v.names.first().unwrap()))
@@ -111,7 +114,10 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow:
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let props = bf_args.world_state.properties(bf_args.perms(), *obj)?;
+    let props = bf_args
+        .world_state
+        .properties(bf_args.perms(), *obj)
+        .await?;
     let props = props.iter().map(|p| v_str(&p.0)).collect();
     Ok(v_list(props))
 }

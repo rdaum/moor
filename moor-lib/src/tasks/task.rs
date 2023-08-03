@@ -155,6 +155,7 @@ impl Task {
                                 player,
                                 &args,
                             )
+                            .await
                             .expect("Could not set up VM for command execution");
                         running_method = true;
                     }
@@ -175,6 +176,7 @@ impl Task {
                                 VerbArgsSpec::this_none_this(),
                                 binary.clone(),
                             )
+                            .await
                             .expect("Could not add temp verb");
                         rollback_on_complete = true;
                         running_method = true;
@@ -191,12 +193,13 @@ impl Task {
                                 player,
                                 &[],
                             )
+                            .await
                             .expect("Could not set up VM for command execution");
                     }
                     // We've been asked to die.
                     TaskControlMsg::Abort => {
                         trace!("Aborting task");
-                        self.state.rollback().unwrap();
+                        self.state.rollback().await.unwrap();
 
                         self.response_sender
                             .send((self.task_id, TaskControlResponse::AbortCancelled))
@@ -218,9 +221,9 @@ impl Task {
                 Ok(ExecutionResult::Complete(a)) => {
                     trace!(task_id, result = ?a, "Task complete");
                     if rollback_on_complete {
-                        self.state.rollback().unwrap();
+                        self.state.rollback().await.unwrap();
                     } else {
-                        self.state.commit().unwrap();
+                        self.state.commit().await.unwrap();
                     }
 
                     debug!(
@@ -235,7 +238,7 @@ impl Task {
                 }
                 Ok(ExecutionResult::Exception(fr)) => {
                     trace!(task_id, result = ?fr, "Task exception");
-                    self.state.rollback().unwrap();
+                    self.state.rollback().await.unwrap();
 
                     match &fr {
                         FinallyReason::Abort => {
@@ -306,7 +309,7 @@ impl Task {
                     return;
                 }
                 Err(e) => {
-                    self.state.rollback().unwrap();
+                    self.state.rollback().await.unwrap();
                     error!(task_id, error = ?e, "Task error");
 
                     self.response_sender

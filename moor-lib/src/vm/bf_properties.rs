@@ -24,10 +24,10 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let property_info =
-        bf_args
-            .world_state
-            .get_property_info(bf_args.perms(), *obj, prop_name.as_str())?;
+    let property_info = bf_args
+        .world_state
+        .get_property_info(bf_args.perms(), *obj, prop_name.as_str())
+        .await?;
     let owner = property_info.owner.unwrap();
     let flags = property_info.flags.unwrap();
     let name = property_info.name.unwrap();
@@ -83,19 +83,22 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
             _ => return Ok(v_err(E_INVARG)),
         }
     }
-    bf_args.world_state.set_property_info(
-        bf_args.perms(),
-        *obj,
-        prop_name.as_str(),
-        PropAttrs {
-            name: Some(name.to_string()),
-            value: None,
-            location: None,
-            owner: Some(*owner),
-            flags: Some(flags),
-            is_clear: None,
-        },
-    )?;
+    bf_args
+        .world_state
+        .set_property_info(
+            bf_args.perms(),
+            *obj,
+            prop_name.as_str(),
+            PropAttrs {
+                name: Some(name.to_string()),
+                value: None,
+                location: None,
+                owner: Some(*owner),
+                flags: Some(flags),
+                is_clear: None,
+            },
+        )
+        .await?;
     Ok(v_list(vec![]))
 }
 bf_declare!(set_property_info, bf_set_property_info);
@@ -110,10 +113,10 @@ async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let property_info =
-        bf_args
-            .world_state
-            .get_property_info(bf_args.perms(), *obj, prop_name.as_str())?;
+    let property_info = bf_args
+        .world_state
+        .get_property_info(bf_args.perms(), *obj, prop_name.as_str())
+        .await?;
     let is_clear = if property_info.is_clear.unwrap() {
         1
     } else {
@@ -133,19 +136,22 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    bf_args.world_state.set_property_info(
-        bf_args.perms(),
-        *obj,
-        prop_name.as_str(),
-        PropAttrs {
-            name: None,
-            value: None,
-            location: None,
-            owner: None,
-            flags: None,
-            is_clear: Some(true),
-        },
-    )?;
+    bf_args
+        .world_state
+        .set_property_info(
+            bf_args.perms(),
+            *obj,
+            prop_name.as_str(),
+            PropAttrs {
+                name: None,
+                value: None,
+                location: None,
+                owner: None,
+                flags: None,
+                is_clear: Some(true),
+            },
+        )
+        .await?;
     Ok(v_list(vec![]))
 }
 bf_declare!(set_clear_property, bf_clear_property);

@@ -78,7 +78,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 #[tracing::instrument(skip(s))]
-pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Error> {
+pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Error> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
 
@@ -106,7 +106,8 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
                 .name(o.name.as_str())
                 .parent(o.parent)
                 .flags(flags),
-        )?;
+        )
+        .await?;
     }
 
     info!("Instantiated objects");
@@ -121,15 +122,17 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
                 "Setting property: #{}.{} Clear?: {}",
                 objid.0, resolved.name, p.is_clear
             );
-            let res = tx.define_property(
-                resolved.definer,
-                *objid,
-                resolved.name.as_str(),
-                p.owner,
-                flags,
-                Some(p.value.clone()),
-                p.is_clear,
-            );
+            let res = tx
+                .define_property(
+                    resolved.definer,
+                    *objid,
+                    resolved.name.as_str(),
+                    p.owner,
+                    flags,
+                    Some(p.value.clone()),
+                    p.is_clear,
+                )
+                .await;
             if res.is_err() {
                 warn!(
                     "Unable to define property {}.{}: {:?}",
@@ -184,7 +187,9 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
                 }
             };
 
-            let av = tx.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary);
+            let av = tx
+                .add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
+                .await;
             if av.is_err() {
                 warn!(
                     "Unable to add verb: #{}:{}: {:?}",
@@ -199,7 +204,7 @@ pub fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Er
     }
     info!("Verbs defined.");
 
-    tx.commit()?;
+    tx.commit().await?;
 
     info!("Import complete.");
 

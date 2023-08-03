@@ -12,7 +12,7 @@ use tracing::{debug, error, instrument, span, trace, Level};
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
-use crate::db::matching::world_environment_match_object;
+use crate::db::matching::MatchEnvironmentParseMatcher;
 use crate::model::world_state::WorldStateSource;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::task::{Task, TaskControl, TaskControlMsg, TaskControlResponse};
@@ -69,23 +69,22 @@ impl Scheduler {
     ) -> Result<TaskId, anyhow::Error> {
         let (vloc, vi, command) = {
             let mut ss = self.state_source.write().await;
-            let (mut ws, perms) = ss.new_world_state(player)?;
-            let mut me = DBMatchEnvironment {
+            let (mut ws, perms) = ss.new_world_state(player).await?;
+            let me = DBMatchEnvironment {
                 ws: ws.as_mut(),
                 perms: perms.clone(),
             };
-            let match_object_fn =
-                |name: &str| world_environment_match_object(&mut me, player, name).unwrap();
-            let pc = parse_command(command, match_object_fn);
-            let loc = ws.location_of(perms.clone(), player)?;
+            let matcher = MatchEnvironmentParseMatcher { env: me, player };
+            let pc = parse_command(command, matcher).await?;
+            let loc = ws.location_of(perms.clone(), player).await?;
 
-            match ws.find_command_verb_on(perms.clone(), player, &pc)? {
+            match ws.find_command_verb_on(perms.clone(), player, &pc).await? {
                 Some(vi) => (player, vi, pc),
-                None => match ws.find_command_verb_on(perms.clone(), loc, &pc)? {
+                None => match ws.find_command_verb_on(perms.clone(), loc, &pc).await? {
                     Some(vi) => (loc, vi, pc),
-                    None => match ws.find_command_verb_on(perms.clone(), pc.dobj, &pc)? {
+                    None => match ws.find_command_verb_on(perms.clone(), pc.dobj, &pc).await? {
                         Some(vi) => (pc.dobj, vi, pc),
-                        None => match ws.find_command_verb_on(perms.clone(), pc.iobj, &pc)? {
+                        None => match ws.find_command_verb_on(perms.clone(), pc.iobj, &pc).await? {
                             Some(vi) => (pc.iobj, vi, pc),
                             None => {
                                 return Err(anyhow!(SchedulerError::NoCommandMatch(
@@ -241,7 +240,7 @@ impl Scheduler {
     ) -> Result<TaskId, anyhow::Error> {
         let (state, perms) = {
             let mut state_source = state_source.write().await;
-            state_source.new_world_state(player)?
+            state_source.new_world_state(player).await?
         };
 
         let (tx_control, rx_control) = tokio::sync::mpsc::unbounded_channel();
@@ -302,111 +301,5 @@ impl Scheduler {
             .remove(&id)
             .ok_or(anyhow::anyhow!("Task not found"))?;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use anyhow::Error;
-    use async_trait::async_trait;
-    use tokio::sync::RwLock;
-
-    use crate::compiler::codegen::compile;
-    use crate::db::mock_world_state::MockWorldStateSource;
-    use crate::db::rocksdb::LoaderInterface;
-    use crate::model::objects::{ObjAttrs, ObjFlag};
-    use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-    use crate::model::verbs::VerbFlag;
-    use crate::tasks::scheduler::Scheduler;
-    use crate::tasks::Sessions;
-    use crate::util::bitenum::BitEnum;
-    use crate::values::objid::{Objid, NOTHING};
-
-    struct NoopClientConnection {}
-    impl NoopClientConnection {
-        fn new() -> Self {
-            Self {}
-        }
-    }
-
-    #[async_trait]
-    #[allow(dead_code)]
-    impl Sessions for NoopClientConnection {
-        async fn send_text(&mut self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
-            Ok(())
-        }
-
-        async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
-            Ok(())
-        }
-
-        fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-            Ok(vec![])
-        }
-
-        fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
-            Ok(0.0)
-        }
-
-        fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
-            Ok(0.0)
-        }
-    }
-
-    // Disabled until mock state is more full featured. This test used to use a full in-mem DB.
-    // #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    #[allow(dead_code)]
-    async fn test_scheduler_loop() {
-        let src = MockWorldStateSource::new();
-
-        let sys_obj = src
-            .create_object(
-                None,
-                ObjAttrs::new()
-                    .location(NOTHING)
-                    .parent(NOTHING)
-                    .name("System")
-                    .flags(BitEnum::new_with(ObjFlag::Read)),
-            )
-            .unwrap();
-        src.add_verb(
-            sys_obj,
-            vec!["test"],
-            sys_obj,
-            BitEnum::new_with(VerbFlag::Read),
-            VerbArgsSpec {
-                dobj: ArgSpec::This,
-                prep: PrepSpec::None,
-                iobj: ArgSpec::This,
-            },
-            compile("return {1,2,3,4};").unwrap(),
-        )
-        .unwrap();
-
-        let mut sched = Scheduler::new(Arc::new(RwLock::new(src)));
-        let _task = sched
-            .submit_verb_task(
-                sys_obj,
-                sys_obj,
-                "test".to_string(),
-                vec![],
-                Arc::new(RwLock::new(NoopClientConnection::new())),
-            )
-            .await
-            .expect("setup command task");
-        assert_eq!(sched.tasks.len(), 1);
-
-        while !sched.tasks.is_empty() {
-            sched.do_process().await.unwrap();
-        }
-
-        assert_eq!(sched.tasks.len(), 0);
-        assert_eq!(sched.num_started_tasks.sum(), 1);
-        assert_eq!(sched.num_succeeded_tasks.sum(), 1);
-        assert_eq!(sched.num_errored_tasks.sum(), 0);
-        assert_eq!(sched.num_excepted_tasks.sum(), 0);
-        assert_eq!(sched.num_aborted_tasks.sum(), 0);
     }
 }
