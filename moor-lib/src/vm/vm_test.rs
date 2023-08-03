@@ -632,6 +632,7 @@ mod tests {
         assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
     }
 
+    #[traced_test]
     #[test]
     fn test_catch_expr_any() {
         let program = "return `raise(E_VERBNF) ! ANY';";

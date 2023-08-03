@@ -461,18 +461,12 @@ impl CodegenState {
 
                 /* After this label, we still have a value on the stack, but now,
                  * instead of it being the value of the main expression, we have
-                 * the exception tuple pushed before entering the handler.
+                 * the exception pushed before entering the handler.
                  */
-                match except {
-                    Some(except) => {
-                        self.emit(Op::Pop);
-                        self.pop_stack(1);
-                        self.generate_expr(except.as_ref())?;
-                    }
-                    None => {
-                        self.emit(Op::Val(v_int(1)));
-                        self.emit(Op::Ref);
-                    }
+                if let Some(except) = except {
+                    self.emit(Op::Pop);
+                    self.pop_stack(1);
+                    self.generate_expr(except.as_ref())?;
                 }
                 self.commit_label(end_label);
             }
@@ -1722,8 +1716,6 @@ mod tests {
                     id: Name(raise_num as u32)
                 },
                 EndCatch(1.into()),
-                Val(v_int(1)),
-                Ref,
                 Return,
                 Done
             ]

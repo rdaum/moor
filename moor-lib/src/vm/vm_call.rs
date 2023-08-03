@@ -14,9 +14,10 @@ use crate::model::ObjectError::VerbNotFound;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
 
-use crate::values::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
+use crate::values::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
 use crate::values::objid::{Objid, NOTHING};
 use crate::values::var::{v_objid, v_str, v_string, Var};
+use crate::values::variant::Variant;
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::builtin::BfCallState;
 use crate::vm::vm_unwind::FinallyReason;
@@ -326,10 +327,28 @@ impl VM {
             sessions: client_connection,
             args: args.to_vec(),
         };
-        // TODO: unwrap errors that translate to MOO error codes and handle them here.
-        let result = bf.call(&mut bf_args).await?;
-        self.push(&result);
-        Ok(ExecutionResult::More)
+        match bf.call(&mut bf_args).await {
+            Ok(result) => {
+                if let Variant::Err(e) = result.variant() {
+                    return self.push_error(*e);
+                }
+                self.push(&result);
+                Ok(ExecutionResult::More)
+            }
+            Err(e) => match e.downcast_ref() {
+                Some(ObjectError::ObjectNotFound(_)) => self.push_error(E_INVARG),
+                Some(ObjectError::ObjectPermissionDenied) => self.push_error(E_PERM),
+                Some(ObjectError::VerbNotFound(_, _)) => self.push_error(E_VERBNF),
+                Some(ObjectError::VerbPermissionDenied) => self.push_error(E_PERM),
+                Some(ObjectError::InvalidVerb(_)) => self.push_error(E_VERBNF),
+                Some(ObjectError::PropertyNotFound(_, _)) => self.push_error(E_PROPNF),
+                Some(ObjectError::PropertyPermissionDenied) => self.push_error(E_PERM),
+                Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_error(E_PROPNF),
+                _ => {
+                    return Err(e);
+                }
+            },
+        }
     }
 }
 

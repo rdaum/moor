@@ -15,7 +15,6 @@ pub enum FinallyReason {
     Raise {
         code: Error,
         msg: String,
-        value: Var,
         stack: Vec<Var>,
     },
     Uncaught {
@@ -164,7 +163,6 @@ impl VM {
             FinallyReason::Raise {
                 code: p.code,
                 msg: p.msg,
-                value: p.value,
                 stack: self.make_stack_list(&self.stack, handler_active_num),
             }
         } else {
@@ -262,7 +260,7 @@ impl VM {
                         return Ok(ExecutionResult::More);
                     }
                     HandlerType::Catch(_) => {
-                        let FinallyReason::Raise { code, value, .. } = &why else {
+                        let FinallyReason::Raise { code, .. } = &why else {
                             continue
                         };
 
@@ -279,18 +277,18 @@ impl VM {
                         let v = a.pop().expect("Stack underflow");
                         if let Variant::List(error_codes) = v.variant() {
                             if error_codes.contains(&v_err(*code)) {
-                                trace!(jump = ?pushed_label, ?code, ?value, "matched handler");
+                                trace!(jump = ?pushed_label, ?code, "matched handler");
                                 a.jump(pushed_label);
                                 found = true;
                             }
                         } else {
-                            trace!(jump = ?pushed_label, ?code, ?value, "matched catch-all handler");
+                            trace!(jump = ?pushed_label, ?code, "matched catch-all handler");
                             a.jump(pushed_label);
                             found = true;
                         }
 
                         if found {
-                            a.push(value.clone());
+                            a.push(v_err(*code));
                             return Ok(ExecutionResult::More);
                         }
                     }
