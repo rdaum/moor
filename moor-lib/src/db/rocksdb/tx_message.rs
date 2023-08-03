@@ -69,7 +69,11 @@ pub(crate) enum Message {
         reply: Sender<Result<(), ObjectError>>,
     },
     // Delete a verb from an object
-    DeleteVerb(Objid, u128, Sender<Result<(), ObjectError>>),
+    DeleteVerb {
+        location: Objid,
+        uuid: u128,
+        reply: Sender<Result<(), ObjectError>>,
+    },
     RetrieveVerb(
         Objid,
         String,

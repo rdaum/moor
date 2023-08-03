@@ -48,6 +48,14 @@ pub struct MockState(Arc<Mutex<MockStore>>);
 
 #[async_trait]
 impl WorldState for MockState {
+    async fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
+        todo!()
+    }
+
+    async fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+        Ok(BitEnum::all())
+    }
+
     async fn location_of(
         &mut self,
         _perms: PermissionsContext,
@@ -62,10 +70,6 @@ impl WorldState for MockState {
         _obj: Objid,
     ) -> Result<Vec<Objid>, ObjectError> {
         todo!()
-    }
-
-    async fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-        Ok(BitEnum::all())
     }
 
     async fn verbs(
@@ -162,6 +166,15 @@ impl WorldState for MockState {
         todo!()
     }
 
+    async fn remove_verb(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _vname: &str,
+    ) -> Result<(), ObjectError> {
+        todo!()
+    }
+
     async fn set_verb_info(
         &mut self,
         _perms: PermissionsContext,
@@ -175,11 +188,33 @@ impl WorldState for MockState {
         todo!()
     }
 
+    async fn set_verb_info_at_index(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _vidx: usize,
+        _owner: Option<Objid>,
+        _names: Option<Vec<String>>,
+        _flags: Option<BitEnum<VerbFlag>>,
+        _args: Option<VerbArgsSpec>,
+    ) -> Result<(), ObjectError> {
+        todo!()
+    }
+
     async fn get_verb(
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
         _vname: &str,
+    ) -> Result<VerbInfo, ObjectError> {
+        todo!()
+    }
+
+    async fn get_verb_at_index(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _vidx: usize,
     ) -> Result<VerbInfo, ObjectError> {
         todo!()
     }
@@ -235,38 +270,12 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
-        todo!()
-    }
-
     async fn commit(&mut self) -> Result<CommitResult, anyhow::Error> {
         Ok(CommitResult::Success)
     }
 
     async fn rollback(&mut self) -> Result<(), anyhow::Error> {
         Ok(())
-    }
-
-    async fn get_verb_at_index(
-        &mut self,
-        _perms: PermissionsContext,
-        _obj: Objid,
-        _vidx: usize,
-    ) -> Result<VerbInfo, ObjectError> {
-        todo!()
-    }
-
-    async fn set_verb_info_at_index(
-        &mut self,
-        _perms: PermissionsContext,
-        _obj: Objid,
-        _vidx: usize,
-        _owner: Option<Objid>,
-        _names: Option<Vec<String>>,
-        _flags: Option<BitEnum<VerbFlag>>,
-        _args: Option<VerbArgsSpec>,
-    ) -> Result<(), ObjectError> {
-        todo!()
     }
 }
 

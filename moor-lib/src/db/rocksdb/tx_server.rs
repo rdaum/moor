@@ -130,7 +130,11 @@ pub(crate) fn run_tx_server<'a>(
                     tx.add_object_verb(location, owner, names, program, flags, args),
                 )?;
             }
-            Message::DeleteVerb(o, v, r) => {
+            Message::DeleteVerb {
+                location: o,
+                uuid: v,
+                reply: r,
+            } => {
                 respond(r, tx.delete_object_verb(o, v))?;
             }
             // Get information about a specific verb by its unique verb ID.

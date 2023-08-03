@@ -425,10 +425,44 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
+    async fn remove_verb(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vname: &str,
+    ) -> Result<(), ObjectError> {
+        let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, objflags, ObjFlag::Write)?;
+
+        // Find the verb uuid & permissions.
+        let (send, receive) = tokio::sync::oneshot::channel();
+        self.mailbox
+            .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .expect("Error sending message");
+        let vh = receive.await.expect("Error receiving message")?;
+
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
+
+        let (send, receive) = tokio::sync::oneshot::channel();
+        self.mailbox
+            .send(Message::DeleteVerb {
+                location: obj,
+                uuid: vh.uuid,
+                reply: send,
+            })
+            .expect("Error sending message");
+        receive.await.expect("Error receiving message")?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn set_verb_info(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         vname: &str,
         owner: Option<Objid>,
@@ -503,7 +537,6 @@ impl WorldState for RocksDbTransaction {
     async fn get_verb(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, ObjectError> {

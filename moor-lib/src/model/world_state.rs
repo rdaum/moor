@@ -107,6 +107,7 @@ pub trait WorldState: Send + Sync {
         initial_value: Option<Var>,
     ) -> Result<(), ObjectError>;
 
+    /// Add a verb to the given object.
     async fn add_verb(
         &mut self,
         perms: PermissionsContext,
@@ -116,6 +117,14 @@ pub trait WorldState: Send + Sync {
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
         code: Binary,
+    ) -> Result<(), ObjectError>;
+
+    /// Remove a verb from the given object.
+    async fn remove_verb(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vname: &str,
     ) -> Result<(), ObjectError>;
 
     /// Update data about a verb on the given object.
