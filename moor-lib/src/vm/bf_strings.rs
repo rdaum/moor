@@ -10,7 +10,7 @@ use regexpr_binding::Pattern;
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::values::error::Error::{E_INVARG, E_TYPE};
-use crate::values::var::{v_err, v_int, v_list, v_str, Var};
+use crate::values::var::{v_empty_list, v_err, v_int, v_list, v_str, Var};
 use crate::values::variant::Variant;
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
@@ -217,7 +217,7 @@ bf_declare!(binary_hash, bf_binary_hash);
 pub static mut task_timed_out: u64 = 0;
 
 async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
-    if bf_args.args.len() < 3 || bf_args.args.len() > 3 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Ok(v_err(E_INVARG));
     }
     let (subject, pattern) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
@@ -240,7 +240,7 @@ async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
     };
 
     let Ok(match_vec) = pattern.match_pattern(subject.as_str()) else {
-        return  Ok(v_err(E_INVARG));
+        return  Ok(v_empty_list());
     };
 
     Ok(v_list(

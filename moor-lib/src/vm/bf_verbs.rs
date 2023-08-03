@@ -165,9 +165,10 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
                 return Ok(v_err(E_INVARG));
             }
             let verb_index = (verb_index as usize) - 1;
-            let verb_info = bf_args
-                .world_state
-                .get_verb_at_index(bf_args.perms(), *obj, verb_index)?;
+            let verb_info =
+                bf_args
+                    .world_state
+                    .get_verb_at_index(bf_args.perms(), *obj, verb_index)?;
             verb_info.attrs.args_spec.unwrap()
         }
         _ => return Ok(v_err(E_TYPE)),
