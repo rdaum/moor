@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
 
-use crate::values::objid::Objid;
-use crate::values::var::Var;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 pub mod load_db;
 pub mod read;

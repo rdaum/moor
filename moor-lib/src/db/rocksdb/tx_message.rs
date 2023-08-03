@@ -1,4 +1,3 @@
-use tokio::sync::oneshot::Sender;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
 use crate::db::CommitResult;
 use crate::model::objects::{ObjAttrs, ObjFlag};
@@ -6,10 +5,11 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::Var;
 use crate::vm::opcode::Binary;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
+use tokio::sync::oneshot::Sender;
 
 #[allow(dead_code)] // TODO Not all of these are used yet, but they will be. For now shut up the compiler.
 pub(crate) enum Message {

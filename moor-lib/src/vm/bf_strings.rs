@@ -9,11 +9,11 @@ use regexpr_binding::Pattern;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::values::error::Error::{E_INVARG, E_TYPE};
-use crate::values::var::{v_empty_list, v_err, v_int, v_list, v_str, Var};
-use crate::values::variant::Variant;
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
+use moor_value::var::error::Error::{E_INVARG, E_TYPE};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_str, Var};
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();

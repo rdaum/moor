@@ -5,11 +5,11 @@ use crate::model::objects::ObjAttrs;
 use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 use async_trait::async_trait;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 #[async_trait]
 impl LoaderInterface for RocksDbTransaction {
@@ -98,7 +98,8 @@ impl LoaderInterface for RocksDbTransaction {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox.send(Message::Commit(send))?;
         let cr = receive.await?;
-        self.join_handle.join()
+        self.join_handle
+            .join()
             .expect("Error completing transaction");
         Ok(cr)
     }

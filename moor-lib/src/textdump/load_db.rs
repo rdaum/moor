@@ -12,9 +12,9 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
 use crate::textdump::{Object, TextdumpReader};
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::Var;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 struct RProp {
     definer: Objid,

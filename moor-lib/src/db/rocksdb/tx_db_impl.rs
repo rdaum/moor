@@ -13,12 +13,11 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
-use crate::util::bitenum::BitEnum;
-use crate::util::verbname_cmp;
-use crate::values::objid::{Objid, NOTHING};
-use crate::values::var::{v_none, Var};
 use crate::vm::opcode::Binary;
-
+use moor_value::util::bitenum::BitEnum;
+use moor_value::util::verbname_cmp;
+use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::{v_none, Var};
 lazy_static! {
     static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 }
@@ -916,9 +915,9 @@ mod tests {
     use crate::model::objects::ObjAttrs;
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::ObjectError;
-    use crate::util::bitenum::BitEnum;
-    use crate::values::objid::{Objid, NOTHING};
-    use crate::values::var::v_str;
+    use moor_value::util::bitenum::BitEnum;
+    use moor_value::var::objid::{Objid, NOTHING};
+    use moor_value::var::v_str;
 
     struct TestDb {
         db: Arc<OptimisticTransactionDB>,

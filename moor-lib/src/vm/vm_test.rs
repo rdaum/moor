@@ -16,13 +16,13 @@ mod tests {
     use crate::model::ObjectError;
     use crate::model::ObjectError::VerbNotFound;
     use crate::tasks::Sessions;
-    use crate::util::bitenum::BitEnum;
-    use crate::values::error::Error::E_VERBNF;
-    use crate::values::objid::Objid;
-    use crate::values::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
     use crate::vm::{ExecutionResult, VM};
+    use moor_value::util::bitenum::BitEnum;
+    use moor_value::var::error::Error::E_VERBNF;
+    use moor_value::var::objid::Objid;
+    use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {

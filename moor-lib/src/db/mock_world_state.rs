@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
 use async_trait::async_trait;
+use moor_value::util::bitenum::BitEnum;
 
 use crate::db::rocksdb::LoaderInterface;
 use crate::db::CommitResult;
@@ -15,10 +16,9 @@ use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::model::ObjectError;
 use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
 use crate::tasks::command_parse::ParsedCommand;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::{v_none, Var};
 use crate::vm::opcode::Binary;
+use moor_value::var::objid::Objid;
+use moor_value::var::{v_none, Var};
 
 struct MockStore {
     verbs: HashMap<(Objid, String), VerbInfo>,

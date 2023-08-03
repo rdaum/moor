@@ -7,8 +7,8 @@ use crate::model::permissions::PermissionsContext;
 use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;
 
-use crate::values::var::Var;
 use crate::vm::activation::Activation;
+use moor_value::var::Var;
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {

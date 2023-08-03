@@ -8,10 +8,9 @@ use tracing::info;
 
 use crate::compiler::labels::Label;
 use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
-use crate::values::error::Error;
-use crate::values::objid::Objid;
-use crate::values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var};
-use crate::values::VarType;
+use moor_value::var::error::Error;
+use moor_value::var::objid::Objid;
+use moor_value::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var, VarType};
 
 const TYPE_CLEAR: i64 = 5;
 

@@ -3,8 +3,8 @@ use crate::model::props::PropFlag;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
 
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::{Objid, NOTHING};
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{Objid, NOTHING};
 
 /// Holder of all context relevant for permissions when passed through for WorldState calls.
 /// WorldState implementations are responsible for performing permission checks for individual

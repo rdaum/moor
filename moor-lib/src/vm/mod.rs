@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::compiler::builtins::BUILTINS;
-use crate::values::var::Var;
 use crate::vm::activation::Activation;
 use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
 use crate::vm::vm_unwind::FinallyReason;
+use moor_value::var::Var;
 
 pub(crate) mod opcode;
 pub(crate) mod vm_call;

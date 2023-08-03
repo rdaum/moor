@@ -2,12 +2,12 @@ use tracing::{error, trace};
 
 use crate::compiler::labels::{Label, Offset};
 use crate::model::verbs::VerbFlag;
-use crate::values::error::{Error, ErrorPack};
-use crate::values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
-use crate::values::variant::Variant;
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm_call::tracing_exit_vm_span;
 use crate::vm::{ExecutionResult, VM};
+use moor_value::var::error::{Error, ErrorPack};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FinallyReason {

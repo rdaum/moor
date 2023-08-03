@@ -13,13 +13,13 @@ use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::model::world_state::WorldState;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::Var;
-use crate::values::variant::Variant;
 use crate::vm::opcode::Binary;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, VM};
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::variant::Variant;
+use moor_value::var::Var;
 
 #[derive(Debug)]
 pub(crate) enum TaskControlMsg {

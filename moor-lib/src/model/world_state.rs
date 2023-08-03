@@ -6,11 +6,11 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::Var;
 use crate::vm::opcode::Binary;
 use async_trait::async_trait;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's
 /// environment during verb execution. This includes the location of objects, their contents,
@@ -170,7 +170,6 @@ pub trait WorldState: Send + Sync {
     async fn find_command_verb_on(
         &mut self,
         perms: PermissionsContext,
-
         oid: Objid,
         pc: &ParsedCommand,
     ) -> Result<Option<VerbInfo>, ObjectError>;

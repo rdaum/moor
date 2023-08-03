@@ -3,12 +3,12 @@ use crate::compiler::labels::{Label, Name};
 use crate::model::world_state::WorldState;
 use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 
-use crate::values::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE};
-use crate::values::var::{v_none, Var};
-use crate::values::variant::Variant;
 use crate::vm::activation::Activation;
 use crate::vm::opcode::Op;
 use crate::vm::{ExecutionResult, VM};
+use moor_value::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_none, Var};
 
 impl VM {
     /// VM-level property resolution.

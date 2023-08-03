@@ -2,9 +2,9 @@ use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
 use crate::model::r#match::VerbArgsSpec;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
 use crate::vm::opcode::Binary;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum VerbFlag {

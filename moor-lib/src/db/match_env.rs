@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use crate::db::matching::MatchEnvironment;
 use crate::model::permissions::PermissionsContext;
 use crate::model::world_state::WorldState;
-use crate::values::objid::Objid;
+use moor_value::var::objid::Objid;
 
 pub struct DBMatchEnvironment<'a> {
     pub(crate) ws: &'a mut dyn WorldState,

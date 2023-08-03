@@ -1,8 +1,7 @@
+use crate::var::{v_none, Var};
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 use std::fmt::{Display, Formatter};
-
-use crate::values::var::{v_none, Var};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Hash, Encode, Decode)]

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use std::thread;
 
 use crossbeam_channel::Sender;
+use moor_value::util::bitenum::BitEnum;
 use strum::{EnumString, EnumVariantNames};
 
 use crate::db::rocksdb::tx_message::Message;
@@ -11,10 +12,9 @@ use crate::model::objects::{ObjAttrs, ObjFlag};
 use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::Objid;
-use crate::values::var::Var;
 use crate::vm::opcode::Binary;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 pub mod server;
 mod tx_db_impl;

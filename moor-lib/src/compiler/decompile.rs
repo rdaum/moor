@@ -8,9 +8,9 @@ use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound};
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
-use crate::values::var::Var;
-use crate::values::variant::Variant;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
+use moor_value::var::variant::Variant;
+use moor_value::var::Var;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {

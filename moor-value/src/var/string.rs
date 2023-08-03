@@ -1,5 +1,5 @@
-use crate::values::error::Error;
-use crate::values::var::{v_err, v_str, v_string, Var};
+use crate::var::error::Error;
+use crate::var::{v_err, v_str, v_string, Var};
 use bincode::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 use std::ops::Range;

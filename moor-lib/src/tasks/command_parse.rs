@@ -4,8 +4,8 @@ use std::sync::Once;
 
 use crate::db::PREP_LIST;
 use crate::model::r#match::PrepSpec;
-use crate::values::objid::Objid;
-use crate::values::var::{v_str, Var};
+use moor_value::var::objid::Objid;
+use moor_value::var::{v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
@@ -47,6 +47,22 @@ pub const PREPOSITION_OFF_OF: u16 = 14;
 
 static mut PREPOSITIONS: Vec<Prep> = vec![];
 static INIT: Once = Once::new();
+
+pub fn parse_preposition_string(repr: &str) -> Option<PrepSpec> {
+    match repr {
+        "any" => Some(PrepSpec::Any),
+        "none" => Some(PrepSpec::None),
+        _ => match_preposition(repr).map(|p| PrepSpec::Other(p.id as u16)),
+    }
+}
+
+pub fn preposition_to_string(ps: &PrepSpec) -> &str {
+    match ps {
+        PrepSpec::Any => "any",
+        PrepSpec::None => "none",
+        PrepSpec::Other(id) => PREP_LIST[*id as usize],
+    }
+}
 
 pub fn match_preposition(prep: &str) -> Option<Prep> {
     INIT.call_once(|| unsafe {
@@ -228,8 +244,8 @@ mod tests {
     use crate::db::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
-    use crate::values::objid::NOTHING;
-    use crate::values::var::v_str;
+    use moor_value::var::objid::NOTHING;
+    use moor_value::var::v_str;
 
     use super::*;
 

@@ -4,14 +4,15 @@ use async_trait::async_trait;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+use crate::model::r#match::{ArgSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
-use crate::util::bitenum::BitEnum;
-use crate::values::error::Error::{E_INVARG, E_TYPE};
-use crate::values::var::{v_err, v_list, v_none, v_objid, v_str, v_string, Var};
-use crate::values::variant::Variant;
+use crate::tasks::command_parse::{parse_preposition_string, preposition_to_string};
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::error::Error::{E_INVARG, E_TYPE};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_err, v_list, v_none, v_objid, v_str, v_string, Var};
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
@@ -185,7 +186,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     // Output is {dobj, prep, iobj} as strings
     let result = v_list(vec![
         v_str(args.dobj.to_string()),
-        v_str(args.prep.to_string()),
+        v_str(preposition_to_string(&args.prep)),
         v_str(args.iobj.to_string()),
     ]);
     Ok(result)
@@ -215,7 +216,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
             let Some(dobj) = ArgSpec::from_string(dobj_str.as_str()) else {
                 return Ok(v_err(E_INVARG));
             };
-            let Some(prep) = PrepSpec::from_string(prep_str.as_str()) else {
+            let Some(prep) = parse_preposition_string(prep_str.as_str()) else {
                 return Ok(v_err(E_INVARG));
             };
             let Some(iobj) = ArgSpec::from_string(iobj_str.as_str()) else {

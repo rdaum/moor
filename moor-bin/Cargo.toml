@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 moor-lib = { path = "../moor-lib" }
+moor-value = { path = "../moor-value" }
 
 ## Command line arguments parsing.
 clap = "4.0.29"

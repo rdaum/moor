@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::values::objid::Objid;
+use moor_value::var::objid::Objid;
 
 pub mod command_parse;
 pub mod scheduler;

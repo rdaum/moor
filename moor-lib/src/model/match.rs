@@ -1,5 +1,3 @@
-use crate::db::PREP_LIST;
-use crate::tasks::command_parse::match_preposition;
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
@@ -36,22 +34,6 @@ pub enum PrepSpec {
     Other(
         u16, /* matches Prep 'id' as returned from match_preposition, matching offset into PREP_LIST */
     ),
-}
-impl PrepSpec {
-    pub fn to_string(&self) -> &str {
-        match self {
-            PrepSpec::Any => "any",
-            PrepSpec::None => "none",
-            PrepSpec::Other(id) => PREP_LIST[*id as usize],
-        }
-    }
-    pub fn from_string(repr: &str) -> Option<PrepSpec> {
-        match repr {
-            "any" => Some(PrepSpec::Any),
-            "none" => Some(PrepSpec::None),
-            _ => match_preposition(repr).map(|p| PrepSpec::Other(p.id as u16)),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]

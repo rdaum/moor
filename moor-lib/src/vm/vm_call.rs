@@ -14,14 +14,14 @@ use crate::model::ObjectError::VerbNotFound;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
 
-use crate::values::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
-use crate::values::objid::{Objid, NOTHING};
-use crate::values::var::{v_objid, v_str, v_string, Var};
-use crate::values::variant::Variant;
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::builtin::BfCallState;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, VM};
+use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
+use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_objid, v_str, v_string, Var};
 
 impl VM {
     /// Entry point from scheduler for setting up a command execution in this VM.

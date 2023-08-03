@@ -15,7 +15,7 @@ use tungstenite::{Error, Message};
 
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
-use moor_lib::values::objid::Objid;
+use moor_value::var::objid::Objid;
 
 struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,

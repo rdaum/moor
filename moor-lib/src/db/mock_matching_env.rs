@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
 use crate::db::matching::MatchEnvironment;
-use crate::values::objid::{Objid, NOTHING};
+use moor_value::var::objid::{Objid, NOTHING};
 
 pub const MOCK_PLAYER: Objid = Objid(3);
 pub const MOCK_ROOM1: Objid = Objid(1);

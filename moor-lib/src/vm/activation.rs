@@ -6,12 +6,11 @@ use crate::model::permissions::PermissionsContext;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::TaskId;
 
-use crate::values::error::Error;
-use crate::values::error::Error::E_VARNF;
-use crate::values::objid::Objid;
-use crate::values::var::{v_int, v_list, v_none, v_objid, v_str, Var};
-use crate::values::VarType;
 use crate::vm::opcode::{Binary, Op};
+use moor_value::var::error::Error;
+use moor_value::var::error::Error::E_VARNF;
+use moor_value::var::objid::Objid;
+use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, Var, VarType};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]

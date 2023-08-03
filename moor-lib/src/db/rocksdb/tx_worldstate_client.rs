@@ -14,11 +14,11 @@ use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
 use crate::model::world_state::WorldState;
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::util::bitenum::BitEnum;
-use crate::values::objid::{Objid, NOTHING};
-use crate::values::var::{v_int, v_list, v_objid, Var};
-use crate::values::variant::Variant;
 use crate::vm::opcode::Binary;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_int, v_list, v_objid, Var};
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.

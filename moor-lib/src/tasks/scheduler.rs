@@ -17,9 +17,9 @@ use crate::model::world_state::WorldStateSource;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::task::{Task, TaskControl, TaskControlMsg, TaskControlResponse};
 use crate::tasks::{Sessions, TaskId};
-use crate::values::objid::Objid;
-use crate::values::var::Var;
 use crate::vm::VM;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 pub struct Scheduler {
     running: AtomicBool,

@@ -1,7 +1,7 @@
 /// The abstract syntax tree produced by the parser and converted by codgen into opcodes.
 use crate::compiler::labels::Name;
-use crate::values::var::Var;
 use crate::vm::opcode::Op;
+use moor_value::var::Var;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Arg {

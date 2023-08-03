@@ -1,5 +1,5 @@
-use crate::values::var::Var;
-use crate::values::variant::Variant;
+use crate::var::variant::Variant;
+use crate::var::Var;
 use bincode::{Decode, Encode};
 use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
 use std::sync::Arc;
@@ -16,7 +16,7 @@ impl List {
         }
     }
 
-    pub(crate) fn from_vec(vec: Vec<Var>) -> Self {
+    pub fn from_vec(vec: Vec<Var>) -> Self {
         Self {
             inner: Arc::new(vec),
         }
