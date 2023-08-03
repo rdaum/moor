@@ -63,16 +63,6 @@ fn prophandle_to_propattrs(ph: &PropHandle, value: Option<Var>) -> PropAttrs {
 
 impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
-    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-        let (send, receive) = crossbeam_channel::bounded(1);
-        self.mailbox
-            .send(Message::GetFlagsOf(obj, send))
-            .expect("Error sending message");
-        let flags = receive.recv().expect("Error receiving message")?;
-        Ok(flags)
-    }
-
-    #[tracing::instrument(skip(self))]
     fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -80,6 +70,16 @@ impl WorldState for RocksDbTransaction {
             .expect("Error sending message");
         let oid = receive.recv().expect("Error receiving message")?;
         Ok(oid)
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetFlagsOf(obj, send))
+            .expect("Error sending message");
+        let flags = receive.recv().expect("Error receiving message")?;
+        Ok(flags)
     }
 
     #[tracing::instrument(skip(self))]
@@ -451,6 +451,44 @@ impl WorldState for RocksDbTransaction {
         Ok(())
     }
 
+    fn set_verb_info_at_index(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vidx: usize,
+        owner: Option<Objid>,
+        names: Option<Vec<String>>,
+        flags: Option<BitEnum<VerbFlag>>,
+        args: Option<VerbArgsSpec>,
+    ) -> Result<(), ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetVerbs(obj, send))
+            .expect("Error sending message");
+        let verbs = receive.recv().expect("Error receiving message")?;
+        if vidx >= verbs.len() {
+            return Err(ObjectError::VerbNotFound(obj, format!("{}", vidx)));
+        }
+        let vh = verbs[vidx].clone();
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::SetVerbInfo {
+                obj,
+                uuid: vh.uuid,
+                owner,
+                names,
+                flags,
+                args,
+                reply: send,
+            })
+            .expect("Error sending message");
+        receive.recv().expect("Error receiving message")?;
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self))]
     fn get_verb(
         &mut self,
@@ -462,6 +500,30 @@ impl WorldState for RocksDbTransaction {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .expect("Error sending message");
+        let vh = receive.recv().expect("Error receiving message")?;
+
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
+
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetProgram(vh.location, vh.uuid, send))
+            .expect("Error sending message");
+        let program = receive.recv().expect("Error receiving message")?;
+        Ok(verbhandle_to_verbinfo(&vh, Some(program)))
+    }
+
+    fn get_verb_at_index(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vidx: usize,
+    ) -> Result<VerbInfo, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetVerbByIndex(obj, vidx, send))
             .expect("Error sending message");
         let vh = receive.recv().expect("Error receiving message")?;
 

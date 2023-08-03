@@ -538,6 +538,9 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 verbs
             }
         };
+        if i >= verbs.len() {
+            return Err(ObjectError::VerbNotFound(o, format!("{}", i)).into());
+        }
         let verb = verbs.get(i);
         let Some(verb) = verb else {
             return Err(ObjectError::VerbNotFound(o, format!("{}", i)).into());

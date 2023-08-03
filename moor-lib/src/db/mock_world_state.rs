@@ -240,6 +240,28 @@ impl WorldState for MockState {
     fn rollback(&mut self) -> Result<(), anyhow::Error> {
         Ok(())
     }
+
+    fn get_verb_at_index(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _vidx: usize,
+    ) -> Result<VerbInfo, ObjectError> {
+        todo!()
+    }
+
+    fn set_verb_info_at_index(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _vidx: usize,
+        _owner: Option<Objid>,
+        _names: Option<Vec<String>>,
+        _flags: Option<BitEnum<VerbFlag>>,
+        _args: Option<VerbArgsSpec>,
+    ) -> Result<(), ObjectError> {
+        todo!()
+    }
 }
 
 pub struct MockWorldStateSource(Arc<Mutex<MockStore>>);

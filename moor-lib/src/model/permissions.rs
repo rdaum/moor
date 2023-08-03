@@ -66,7 +66,7 @@ impl Perms {
         if !property_flags.contains(allows) {
             return Err(ObjectError::PropertyPermissionDenied);
         }
-        return Ok(());
+        Ok(())
     }
 
     pub fn check_verb_allows(
@@ -84,7 +84,7 @@ impl Perms {
         if !verb_flags.contains(allows) {
             return Err(ObjectError::VerbPermissionDenied);
         }
-        return Ok(());
+        Ok(())
     }
 
     pub fn check_object_allows(
@@ -102,7 +102,7 @@ impl Perms {
         if !object_flags.contains(allows) {
             return Err(ObjectError::ObjectPermissionDenied);
         }
-        return Ok(());
+        Ok(())
     }
 
     pub fn check_obj_owner_perms(&self, object_owner: Objid) -> Result<(), ObjectError> {
@@ -112,14 +112,14 @@ impl Perms {
         if self.flags.contains(ObjFlag::Wizard) {
             return Ok(());
         }
-        return Err(ObjectError::ObjectPermissionDenied);
+        Err(ObjectError::ObjectPermissionDenied)
     }
 
     pub fn check_wizard(&self) -> Result<(), ObjectError> {
         if self.flags.contains(ObjFlag::Wizard) {
             return Ok(());
         }
-        return Err(ObjectError::ObjectPermissionDenied);
+        Err(ObjectError::ObjectPermissionDenied)
     }
 }
 

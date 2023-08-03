@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::debug;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -22,13 +21,27 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let Variant::Str(verb_desc) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
+
+    let verb_info = match bf_args.args[1].variant() {
+        Variant::Str(verb_desc) => {
+            bf_args
+                .world_state
+                .get_verb(bf_args.perms(), *obj, verb_desc.as_str())?
+        }
+        Variant::Int(verb_index) => {
+            let verb_index = *verb_index;
+            if verb_index < 1 {
+                return Ok(v_err(E_INVARG));
+            }
+            let verb_index = (verb_index as usize) - 1;
+            bf_args
+                .world_state
+                .get_verb_at_index(bf_args.perms(), *obj, verb_index)?
+        }
+        _ => {
+            return Ok(v_err(E_TYPE));
+        }
     };
-    let verb_desc = verb_desc.as_str();
-    let verb_info = bf_args
-        .world_state
-        .get_verb(bf_args.perms(), *obj, verb_desc)?;
     let owner = verb_info.attrs.owner.unwrap();
     let perms = verb_info.attrs.flags.unwrap();
     let names = verb_info.names;
@@ -67,9 +80,6 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let Variant::Str(verb_name) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
-    };
     let Variant::List(info) = bf_args.args[2].variant() else {
         return Ok(v_err(E_TYPE));
     };
@@ -96,15 +106,37 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                 .map(|s| s.into())
                 .collect::<Vec<_>>();
 
-            bf_args.world_state.set_verb_info(
-                bf_args.perms(),
-                *obj,
-                verb_name.as_str(),
-                Some(*owner),
-                Some(name_strings),
-                Some(perms),
-                None,
-            )?;
+            match bf_args.args[1].variant() {
+                Variant::Str(verb_name) => {
+                    bf_args.world_state.set_verb_info(
+                        bf_args.perms(),
+                        *obj,
+                        verb_name.as_str(),
+                        Some(*owner),
+                        Some(name_strings),
+                        Some(perms),
+                        None,
+                    )?;
+                }
+                Variant::Int(verb_index) => {
+                    let verb_index = *verb_index;
+                    if verb_index < 1 {
+                        return Ok(v_err(E_INVARG));
+                    }
+                    let verb_index = (verb_index as usize) - 1;
+                    bf_args.world_state.set_verb_info_at_index(
+                        bf_args.perms(),
+                        *obj,
+                        verb_index,
+                        Some(*owner),
+                        Some(name_strings),
+                        Some(perms),
+                        None,
+                    )?;
+                }
+                _ => return Ok(v_err(E_TYPE)),
+            }
+
             Ok(v_none())
         }
         _ => Ok(v_err(E_INVARG)),
@@ -119,15 +151,27 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let Variant::Str(verb_desc) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
+    let args = match bf_args.args[1].variant() {
+        Variant::Str(verb_desc) => {
+            let verb_desc = verb_desc.as_str();
+            let verb_info = bf_args
+                .world_state
+                .get_verb(bf_args.perms(), *obj, verb_desc)?;
+            verb_info.attrs.args_spec.unwrap()
+        }
+        Variant::Int(verb_index) => {
+            let verb_index = *verb_index;
+            if verb_index < 1 {
+                return Ok(v_err(E_INVARG));
+            }
+            let verb_index = (verb_index as usize) - 1;
+            let verb_info = bf_args
+                .world_state
+                .get_verb_at_index(bf_args.perms(), *obj, verb_index)?;
+            verb_info.attrs.args_spec.unwrap()
+        }
+        _ => return Ok(v_err(E_TYPE)),
     };
-    let verb_desc = verb_desc.as_str();
-    let verb_info = bf_args
-        .world_state
-        .get_verb(bf_args.perms(), *obj, verb_desc)?;
-    let args = verb_info.attrs.args_spec.unwrap();
-
     // Output is {dobj, prep, iobj} as strings
     let result = v_list(vec![
         v_str(args.dobj.to_string()),
@@ -144,9 +188,6 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
         return Ok(v_err(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
-    };
-    let Variant::Str(verb_name) = bf_args.args[1].variant() else {
         return Ok(v_err(E_TYPE));
     };
     let Variant::List(verbinfo) = bf_args.args[2].variant() else {
@@ -171,16 +212,36 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                 return Ok(v_err(E_INVARG));
             };
             let args = VerbArgsSpec { dobj, prep, iobj };
-            debug!("Updating verb args for {} to {:?}", verb_name, args);
-            bf_args.world_state.set_verb_info(
-                bf_args.perms(),
-                *obj,
-                verb_name.as_str(),
-                None,
-                None,
-                None,
-                Some(args),
-            )?;
+            match bf_args.args[1].variant() {
+                Variant::Str(verb_name) => {
+                    bf_args.world_state.set_verb_info(
+                        bf_args.perms(),
+                        *obj,
+                        verb_name.as_str(),
+                        None,
+                        None,
+                        None,
+                        Some(args),
+                    )?;
+                }
+                Variant::Int(verb_index) => {
+                    let verb_index = *verb_index;
+                    if verb_index < 1 {
+                        return Ok(v_err(E_INVARG));
+                    }
+                    let verb_index = (verb_index as usize) - 1;
+                    bf_args.world_state.set_verb_info_at_index(
+                        bf_args.perms(),
+                        *obj,
+                        verb_index,
+                        None,
+                        None,
+                        None,
+                        Some(args),
+                    )?;
+                }
+                _ => return Ok(v_err(E_TYPE)),
+            }
             Ok(v_none())
         }
         _ => Ok(v_err(E_INVARG)),

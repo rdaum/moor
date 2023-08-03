@@ -124,12 +124,32 @@ pub trait WorldState: Send + Sync {
         args: Option<VerbArgsSpec>,
     ) -> Result<(), ObjectError>;
 
+    /// Update data about a verb on the given object at a numbered offset.
+    fn set_verb_info_at_index(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vidx: usize,
+        owner: Option<Objid>,
+        names: Option<Vec<String>>,
+        flags: Option<BitEnum<VerbFlag>>,
+        args: Option<VerbArgsSpec>,
+    ) -> Result<(), ObjectError>;
+
     /// Get the verb with the given name on the given object. Without doing inheritance resolution.
     fn get_verb(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
         vname: &str,
+    ) -> Result<VerbInfo, ObjectError>;
+
+    /// Get the verb at numbered offset on the given object.
+    fn get_verb_at_index(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        vidx: usize,
     ) -> Result<VerbInfo, ObjectError>;
 
     /// Retrieve a verb/method from the given object (or its parents).

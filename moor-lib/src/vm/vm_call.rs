@@ -344,9 +344,7 @@ impl VM {
                 Some(ObjectError::PropertyNotFound(_, _)) => self.push_error(E_PROPNF),
                 Some(ObjectError::PropertyPermissionDenied) => self.push_error(E_PERM),
                 Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_error(E_PROPNF),
-                _ => {
-                    return Err(e);
-                }
+                _ => Err(e),
             },
         }
     }
