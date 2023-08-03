@@ -37,6 +37,10 @@ mod tests {
             Ok(())
         }
 
+        async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
+            Ok(())
+        }
+
         fn connected_players(&self) -> Result<Vec<Objid>, Error> {
             Ok(vec![])
         }
@@ -745,6 +749,10 @@ mod tests {
     impl Sessions for MockClientConnection {
         async fn send_text(&mut self, _player: Objid, msg: &str) -> Result<(), Error> {
             self.received.push(String::from(msg));
+            Ok(())
+        }
+
+        async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
             Ok(())
         }
 

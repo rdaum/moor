@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::exit;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
@@ -10,7 +11,7 @@ use clap_derive::Parser;
 use rustyline_async::{Readline, ReadlineError, SharedWriter};
 
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
@@ -54,6 +55,11 @@ impl Sessions for ReplSession {
     async fn send_text(&mut self, _player: Objid, msg: &str) -> Result<(), Error> {
         warn!(msg, "NOTIFY");
         Ok(())
+    }
+
+    async fn shutdown(&mut self, msg: Option<String>) -> Result<(), Error> {
+        error!(msg, "SHUTDOWN");
+        exit(0);
     }
 
     fn connected_players(&self) -> Result<Vec<Objid>, Error> {

@@ -338,6 +338,10 @@ mod tests {
             Ok(())
         }
 
+        async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
+            Ok(())
+        }
+
         fn connected_players(&self) -> Result<Vec<Objid>, Error> {
             Ok(vec![])
         }

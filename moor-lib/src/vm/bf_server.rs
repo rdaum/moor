@@ -184,6 +184,26 @@ async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
 }
 bf_declare!(connected_seconds, bf_connected_seconds);
 
+async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+    if bf_args.args.len() > 1 {
+        return Ok(v_err(E_INVARG));
+    }
+    let msg = if bf_args.args.is_empty() {
+        None
+    } else {
+        let Variant::Str(msg) = bf_args.args[0].variant() else {
+            return Ok(v_err(E_TYPE));
+        };
+        Some(msg.as_str().to_string())
+    };
+
+    bf_args.perms().task_perms().check_wizard()?;
+    bf_args.sessions.write().await.shutdown(msg).await.unwrap();
+
+    Ok(v_none())
+}
+bf_declare!(shutdown, bf_shutdown);
+
 async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if !bf_args.args.is_empty() {
         return Ok(v_err(E_INVARG));
@@ -247,6 +267,7 @@ impl VM {
         self.builtins[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
         self.builtins[offset_for_builtin("server_version")] =
             Arc::new(Box::new(BfServerVersion {}));
+        self.builtins[offset_for_builtin("shutdown")] = Arc::new(Box::new(BfShutdown {}));
         Ok(())
     }
 }

@@ -93,7 +93,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .listen_address
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
 
-    let ws_server = Arc::new(RwLock::new(WebSocketServer::new(scheduler.clone())));
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::mpsc::channel(1);
+
+    let ws_server = Arc::new(RwLock::new(WebSocketServer::new(scheduler.clone(), shutdown_sender)));
     let mut hup_signal =
         signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
     let mut stop_signal =
@@ -101,7 +103,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut scheduler_process_interval =
         tokio::time::interval(std::time::Duration::from_millis(100));
-    let ws_server_future = tokio::spawn(ws_server_start(ws_server.clone(), addr));
+
+
+    let ws_server_future = tokio::spawn(ws_server_start(ws_server.clone(), addr, shutdown_receiver));
 
     loop {
         select! {

@@ -128,7 +128,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | renumber            |          |                                               |
 | reset_max_object    |          |                                               |
 | memory_usage        |          |                                               |
-| shutdown            |          |                                               |
+| shutdown            | &check;  |                                               |
 | dump_database       |          |                                               |
 | db_disk_size        |          |                                               |
 | connected_players   | &check;  |                                               |

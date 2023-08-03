@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-
+use  tracing::warn;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 use tracing::{error, info, instrument};
@@ -18,6 +19,7 @@ use moor_lib::values::objid::Objid;
 
 struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,
+    shutdown_sender: Sender<Option<String>>
 }
 
 struct WsConnection {
@@ -33,9 +35,10 @@ pub struct WebSocketServer {
 }
 
 impl WebSocketServer {
-    pub fn new(scheduler: Arc<RwLock<Scheduler>>) -> Self {
+    pub fn new(scheduler: Arc<RwLock<Scheduler>>, shutdown_sender: Sender<Option<String>>) -> Self {
         let inner = WebSocketSessions {
             connections: Default::default(),
+            shutdown_sender,
         };
         Self {
             scheduler,
@@ -87,18 +90,19 @@ async fn ws_handle_connection(
     info!("New inbound websocket connection: {}", peer);
     let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
 
-    let client_connection = WsConnection {
-        player,
-        sink: ws_sender,
-        connected_time: std::time::Instant::now(),
-        last_activity: std::time::Instant::now(),
-    };
+
 
     // Register connection with player.
     {
         let server = server.write().await;
-        let connections = &mut server.sessions.write().await.connections;
-
+        let sessions = &mut server.sessions.write().await;
+        let connections = &mut sessions.connections;
+        let client_connection = WsConnection {
+            player,
+            sink: ws_sender,
+            connected_time: std::time::Instant::now(),
+            last_activity: std::time::Instant::now(),
+        };
         let mut old = connections.insert(player, client_connection);
         if let Some(ref mut old) = old {
             SplitSink::send(&mut old.sink, "Reconnecting".into())
@@ -157,20 +161,27 @@ async fn ws_handle_connection(
 pub async fn ws_server_start(
     server: Arc<RwLock<WebSocketServer>>,
     addr: String,
+    mut shutdown_receiver: Receiver<Option<String>>,
 ) -> Result<(), anyhow::Error> {
     // Create the event loop and TCP listener we'll accept connections on.
     let try_socket = TcpListener::bind(&addr).await;
     let listener = try_socket.expect("Failed to bind");
     info!("Listening on: {}", addr);
 
-    tokio::select! {
-        stream = listener.accept() => {
-            let stream = stream.unwrap().0;
-            let peer = stream
-                .peer_addr()
-                .expect("connected streams should have a peer address");
+    loop {
+        tokio::select! {
+            shutdown = shutdown_receiver.recv() => {
+                warn!("Shutting down websocket server: {:?}", shutdown);
+                break;
+            }
+            stream = listener.accept() => {
+                let stream = stream.unwrap().0;
+                let peer = stream
+                    .peer_addr()
+                    .expect("connected streams should have a peer address");
 
-            tokio::spawn(ws_accept_connection(server.clone(), peer, stream));
+                tokio::spawn(ws_accept_connection(server.clone(), peer, stream));
+            }
         }
     }
 
@@ -215,5 +226,10 @@ impl Sessions for WebSocketSessions {
         let now = std::time::Instant::now();
         let duration = now - conn.last_activity;
         Ok(duration.as_secs_f64())
+    }
+
+    async fn shutdown(&mut self, msg: Option<String>) -> Result<(), anyhow::Error> {
+        self.shutdown_sender.send(msg).await.unwrap();
+        Ok(())
     }
 }
