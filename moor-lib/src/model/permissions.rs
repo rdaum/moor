@@ -1,4 +1,7 @@
 use crate::model::objects::ObjFlag;
+use crate::model::props::PropFlag;
+use crate::model::verbs::VerbFlag;
+use crate::model::ObjectError;
 
 use crate::util::bitenum::BitEnum;
 use crate::values::objid::{Objid, NOTHING};
@@ -46,6 +49,77 @@ pub struct Perms {
 impl Perms {
     pub fn new(obj: Objid, flags: BitEnum<ObjFlag>) -> Self {
         Self { obj, flags }
+    }
+
+    pub fn check_property_allows(
+        &self,
+        property_owner: Objid,
+        property_flags: BitEnum<PropFlag>,
+        allows: PropFlag,
+    ) -> Result<(), ObjectError> {
+        if self.obj == property_owner {
+            return Ok(());
+        }
+        if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(());
+        }
+        if !property_flags.contains(allows) {
+            return Err(ObjectError::PropertyPermissionDenied);
+        }
+        return Ok(());
+    }
+
+    pub fn check_verb_allows(
+        &self,
+        verb_owner: Objid,
+        verb_flags: BitEnum<VerbFlag>,
+        allows: VerbFlag,
+    ) -> Result<(), ObjectError> {
+        if self.obj == verb_owner {
+            return Ok(());
+        }
+        if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(());
+        }
+        if !verb_flags.contains(allows) {
+            return Err(ObjectError::VerbPermissionDenied);
+        }
+        return Ok(());
+    }
+
+    pub fn check_object_allows(
+        &self,
+        object_owner: Objid,
+        object_flags: BitEnum<ObjFlag>,
+        allows: ObjFlag,
+    ) -> Result<(), ObjectError> {
+        if self.obj == object_owner {
+            return Ok(());
+        }
+        if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(());
+        }
+        if !object_flags.contains(allows) {
+            return Err(ObjectError::ObjectPermissionDenied);
+        }
+        return Ok(());
+    }
+
+    pub fn check_obj_owner_perms(&self, object_owner: Objid) -> Result<(), ObjectError> {
+        if self.obj == object_owner {
+            return Ok(());
+        }
+        if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(());
+        }
+        return Err(ObjectError::ObjectPermissionDenied);
+    }
+
+    pub fn check_wizard(&self) -> Result<(), ObjectError> {
+        if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(());
+        }
+        return Err(ObjectError::ObjectPermissionDenied);
     }
 }
 

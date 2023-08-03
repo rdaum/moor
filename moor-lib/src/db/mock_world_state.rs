@@ -217,7 +217,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn valid(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<bool, ObjectError> {
+    fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
         Ok(true)
     }
 
@@ -229,7 +229,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    fn owner_of(&mut self, _perms: PermissionsContext, _obj: Objid) -> Result<Objid, ObjectError> {
+    fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
         todo!()
     }
 

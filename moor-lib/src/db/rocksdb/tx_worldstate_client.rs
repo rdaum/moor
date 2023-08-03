@@ -63,7 +63,32 @@ fn prophandle_to_propattrs(ph: &PropHandle, value: Option<Var>) -> PropAttrs {
 
 impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
+    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetFlagsOf(obj, send))
+            .expect("Error sending message");
+        let flags = receive.recv().expect("Error receiving message")?;
+        Ok(flags)
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError> {
+        let (send, receive) = crossbeam_channel::bounded(1);
+        self.mailbox
+            .send(Message::GetObjectOwner(obj, send))
+            .expect("Error sending message");
+        let oid = receive.recv().expect("Error receiving message")?;
+        Ok(oid)
+    }
+
+    #[tracing::instrument(skip(self))]
     fn location_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetLocationOf(obj, send))
@@ -78,6 +103,11 @@ impl WorldState for RocksDbTransaction {
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<Objid>, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetContentsOf(obj, send))
@@ -87,21 +117,16 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
-        let (send, receive) = crossbeam_channel::bounded(1);
-        self.mailbox
-            .send(Message::GetFlagsOf(obj, send))
-            .expect("Error sending message");
-        let flags = receive.recv().expect("Error receiving message")?;
-        Ok(flags)
-    }
-
-    #[tracing::instrument(skip(self))]
     fn verbs(
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<VerbInfo>, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetVerbs(obj, send))
@@ -122,6 +147,11 @@ impl WorldState for RocksDbTransaction {
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetProperties(obj, send))
@@ -143,7 +173,6 @@ impl WorldState for RocksDbTransaction {
     fn retrieve_property(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         pname: &str,
     ) -> Result<Var, ObjectError> {
@@ -160,7 +189,7 @@ impl WorldState for RocksDbTransaction {
                 .collect();
             return Ok(v_list(contents));
         } else if pname == "owner" {
-            return self.owner_of(perms, obj).map(Var::from);
+            return self.owner_of(obj).map(Var::from);
         } else if pname == "programmer" {
             // TODO these can be set, too.
             let flags = self.flags_of(obj)?;
@@ -182,16 +211,18 @@ impl WorldState for RocksDbTransaction {
         self.mailbox
             .send(Message::ResolveProperty(obj, pname.into(), send))
             .expect("Error sending message");
-        let (_ph, value) = receive.recv().expect("Error receiving message")?;
+        let (ph, value) = receive.recv().expect("Error receiving message")?;
 
-        // TODO: use player_flags to check permissions against handle.
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
 
         Ok(value)
     }
 
     fn get_property_info(
         &mut self,
-        _perms: PermissionsContext,
+        perms: PermissionsContext,
 
         obj: Objid,
         pname: &str,
@@ -205,13 +236,18 @@ impl WorldState for RocksDbTransaction {
             .iter()
             .find(|ph| ph.name == pname)
             .ok_or(ObjectError::PropertyNotFound(obj, pname.into()))?;
+
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
+
         let attrs = prophandle_to_propattrs(ph, None);
         Ok(attrs)
     }
 
     fn set_property_info(
         &mut self,
-        _perms: PermissionsContext,
+        perms: PermissionsContext,
 
         obj: Objid,
         pname: &str,
@@ -227,7 +263,10 @@ impl WorldState for RocksDbTransaction {
             .find(|ph| ph.name == pname)
             .ok_or(ObjectError::PropertyNotFound(obj, pname.into()))?;
 
-        // TODO perms check
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
+
         // Also keep a close eye on 'clear':
         //  "raises `E_INVARG' if <owner> is not valid" & If <object> is the definer of the property
         //   <prop-name>, as opposed to an inheritor of the property, then `clear_property()' raises
@@ -258,7 +297,6 @@ impl WorldState for RocksDbTransaction {
         pname: &str,
         value: &Var,
     ) -> Result<(), ObjectError> {
-        // TODO: use player_flags to check permissions
         // TODO: special property updates
 
         let (send, receive) = crossbeam_channel::bounded(1);
@@ -270,6 +308,10 @@ impl WorldState for RocksDbTransaction {
             .iter()
             .find(|ph| ph.name == pname)
             .ok_or(ObjectError::PropertyNotFound(obj, pname.into()))?;
+
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
         // If the property is marked 'clear' we need to remove that flag.
         // TODO optimization -- we could do this in parallel with the value update.
@@ -316,7 +358,10 @@ impl WorldState for RocksDbTransaction {
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), ObjectError> {
-        // TODO: prevent special property adds
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Write)?;
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -341,7 +386,6 @@ impl WorldState for RocksDbTransaction {
     fn add_verb(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         names: Vec<String>,
         owner: Objid,
@@ -349,6 +393,11 @@ impl WorldState for RocksDbTransaction {
         args: VerbArgsSpec,
         program: Binary,
     ) -> Result<(), ObjectError> {
+        let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, objflags, ObjFlag::Write)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::AddVerb {
@@ -383,6 +432,9 @@ impl WorldState for RocksDbTransaction {
             .expect("Error sending message");
         let vh = receive.recv().expect("Error receiving message")?;
 
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::SetVerbInfo {
@@ -413,7 +465,9 @@ impl WorldState for RocksDbTransaction {
             .expect("Error sending message");
         let vh = receive.recv().expect("Error receiving message")?;
 
-        // TODO apply permissions check
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -430,11 +484,20 @@ impl WorldState for RocksDbTransaction {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::ResolveVerb(obj, vname.to_string(), None, send))
             .expect("Error sending message");
         let vh = receive.recv().expect("Error receiving message")?;
+
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
@@ -448,13 +511,17 @@ impl WorldState for RocksDbTransaction {
     fn find_command_verb_on(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         pc: &ParsedCommand,
     ) -> Result<Option<VerbInfo>, ObjectError> {
-        if !self.valid(perms, obj)? {
+        if !self.valid(obj)? {
             return Ok(None);
         }
+
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
 
         let spec_for_fn = |oid, pco| -> ArgSpec {
             if pco == oid {
@@ -495,6 +562,10 @@ impl WorldState for RocksDbTransaction {
             }
         };
 
+        perms
+            .task_perms()
+            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetProgram(vh.location, vh.uuid, send))
@@ -505,6 +576,11 @@ impl WorldState for RocksDbTransaction {
 
     #[tracing::instrument(skip(self))]
     fn parent_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetParentOf(obj, send))
@@ -519,6 +595,11 @@ impl WorldState for RocksDbTransaction {
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Vec<Objid>, ObjectError> {
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::GetChildrenOf(obj, send))
@@ -529,7 +610,7 @@ impl WorldState for RocksDbTransaction {
     }
 
     #[tracing::instrument(skip(self))]
-    fn valid(&mut self, perms: PermissionsContext, obj: Objid) -> Result<bool, ObjectError> {
+    fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError> {
         let (send, receive) = crossbeam_channel::bounded(1);
         self.mailbox
             .send(Message::Valid(obj, send))
@@ -544,6 +625,13 @@ impl WorldState for RocksDbTransaction {
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<(String, Vec<String>), ObjectError> {
+        // Not sure if we should actually be checking perms here.
+        // TODO: check to see if MOO makes names of unreadable objects available.
+        let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Read)?;
+
         let (send, receive) = crossbeam_channel::bounded(1);
 
         // First get name
@@ -566,16 +654,6 @@ impl WorldState for RocksDbTransaction {
         };
 
         Ok((name, aliases))
-    }
-
-    #[tracing::instrument(skip(self))]
-    fn owner_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError> {
-        let (send, receive) = crossbeam_channel::bounded(1);
-        self.mailbox
-            .send(Message::GetObjectOwner(obj, send))
-            .expect("Error sending message");
-        let oid = receive.recv().expect("Error receiving message")?;
-        Ok(oid)
     }
 
     #[tracing::instrument(skip(self))]

@@ -12,9 +12,7 @@ pub struct DBMatchEnvironment<'a> {
 
 impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
     fn obj_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error> {
-        self.ws
-            .valid(self.perms.clone(), oid)
-            .map_err(|e| anyhow!(e))
+        self.ws.valid(oid).map_err(|e| anyhow!(e))
     }
 
     fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, anyhow::Error> {

@@ -32,7 +32,7 @@ async fn bf_valid<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(v_err(E_TYPE));
     };
-    let is_valid = bf_args.world_state.valid(bf_args.perms(), *obj)?;
+    let is_valid = bf_args.world_state.valid(*obj)?;
     Ok(v_bool(is_valid))
 }
 bf_declare!(valid, bf_valid);

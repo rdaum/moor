@@ -1,5 +1,6 @@
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
+use std::fmt::{Display, Formatter};
 
 use crate::values::var::{v_none, Var};
 
@@ -25,6 +26,13 @@ pub enum Error {
     E_FLOAT = 15,
 }
 
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+
+impl std::error::Error for Error {}
 #[derive(Debug)]
 pub struct ErrorPack {
     pub code: Error,

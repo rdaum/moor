@@ -8,7 +8,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
-use crate::values::error::Error::{E_INVARG, E_PERM, E_TYPE};
+use crate::values::error::Error::{E_INVARG, E_TYPE};
 use crate::values::var::{v_bool, v_err, v_int, v_list, v_none, v_objid, v_string, Var};
 use crate::values::variant::Variant;
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
@@ -31,6 +31,12 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
     let Variant::Str(msg) = msg else {
         return Ok(v_err(E_TYPE));
     };
+
+    // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
+    bf_args
+        .perms()
+        .task_perms()
+        .check_obj_owner_perms(*player)?;
 
     if let Err(send_error) = bf_args
         .sessions
@@ -103,9 +109,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
         return Ok(v_err(E_TYPE));
     };
 
-    if !bf_args.frame.permissions.has_flag(ObjFlag::Wizard) {
-        return Ok(v_err(E_PERM));
-    }
+    bf_args.perms().task_perms().check_wizard()?;
     bf_args
         .frame
         .permissions

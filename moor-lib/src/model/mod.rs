@@ -11,6 +11,9 @@ pub mod props;
 pub mod verbs;
 pub mod world_state;
 
+// TODO ditch the bulk of these error codes and replace with MOO Error, except for the match
+// functions. We need to be able to translate back to MOO error codes and have them raised in the
+// VM, without a lot of hassle.
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ObjectError {
     #[error("Object not found: {0}")]
@@ -20,10 +23,13 @@ pub enum ObjectError {
     #[error("Could not set/get object attribute; {0} on #{1}")]
     ObjectAttributeError(ObjAttr, Objid),
 
+    #[error("Object permission denied")]
+    ObjectPermissionDenied,
+
     #[error("Property not found: {0}.{1}")]
     PropertyNotFound(Objid, String),
-    #[error("Property permission denied: {0}.{1}")]
-    PropertyPermissionDenied(Objid, String),
+    #[error("Property permission denied")]
+    PropertyPermissionDenied,
     #[error("Property definition not found: {0}.{1}")]
     PropertyDefinitionNotFound(Objid, String),
 
@@ -34,8 +40,8 @@ pub enum ObjectError {
 
     #[error("Invalid verb, decode error: {0}:{1}")]
     VerbDecodeError(Objid, String),
-    #[error("Verb permission denied: {0}:{1}")]
-    VerbPermissionDenied(Objid, String),
+    #[error("Verb permission denied")]
+    VerbPermissionDenied,
 
     #[error("Failed object match: {0}")]
     FailedMatch(String),

@@ -31,7 +31,7 @@ impl VM {
         let v = match result {
             Ok(v) => v,
             Err(e) => match e {
-                PropertyPermissionDenied(_, _) => return self.push_error(E_PERM),
+                PropertyPermissionDenied => return self.push_error(E_PERM),
                 PropertyNotFound(_, _) => return self.push_error(E_PROPNF),
                 _ => {
                     panic!("Unexpected error in property retrieval: {:?}", e);
@@ -72,7 +72,7 @@ impl VM {
                 PropertyNotFound(_, _) => {
                     return self.push_error(E_PROPNF);
                 }
-                PropertyPermissionDenied(_, _) => {
+                PropertyPermissionDenied => {
                     return self.push_error(E_PERM);
                 }
                 _ => {

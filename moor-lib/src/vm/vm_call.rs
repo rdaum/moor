@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use tokio::sync::RwLock;
 use tracing::{span, trace, Level};
 
 use crate::compiler::builtins::BUILTINS;
+use crate::model::ObjectError;
 
 use crate::model::permissions::{PermissionsContext, Perms};
 use crate::model::verbs::VerbInfo;
@@ -13,7 +14,7 @@ use crate::model::ObjectError::VerbNotFound;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
 
-use crate::values::error::Error::{E_INVIND, E_VARNF, E_VERBNF};
+use crate::values::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use crate::values::objid::{Objid, NOTHING};
 use crate::values::var::{v_objid, v_str, v_string, Var};
 use crate::vm::activation::{Activation, Caller};
@@ -162,14 +163,27 @@ impl VM {
         verb_name: &str,
         args: &[Var],
     ) -> Result<ExecutionResult, anyhow::Error> {
-        let self_valid = state.valid(self.top().permissions.clone(), this)?;
+        let self_valid = state.valid(this)?;
         if !self_valid {
             return self.push_error(E_INVIND);
         }
         // find callable verb
-        let Ok(verbinfo) = state.find_method_verb_on(self.top().permissions.clone(), this, verb_name) else {
-            return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
-        };
+        let verbinfo =
+            match state.find_method_verb_on(self.top().permissions.clone(), this, verb_name) {
+                Ok(vi) => vi,
+                Err(ObjectError::ObjectPermissionDenied) => {
+                    return self.push_error(E_PERM);
+                }
+                Err(ObjectError::VerbNotFound(_, _)) => {
+                    return self
+                        .push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
+                }
+                Err(e) => {
+                    return Err(e).with_context(|| {
+                        format!("Error finding verb \"{}\" on object {}", verb_name, this)
+                    })?;
+                }
+            };
         let Some(binary) = verbinfo.attrs.program.clone() else {
             return self.push_error_msg(
                 E_VERBNF,
@@ -312,6 +326,7 @@ impl VM {
             sessions: client_connection,
             args: args.to_vec(),
         };
+        // TODO: unwrap errors that translate to MOO error codes and handle them here.
         let result = bf.call(&mut bf_args).await?;
         self.push(&result);
         Ok(ExecutionResult::More)

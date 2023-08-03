@@ -20,6 +20,11 @@ use crate::vm::opcode::Binary;
 /// commit any changes to the world at the end of the transaction, or be capable of rolling back
 /// on failure.
 pub trait WorldState: Send + Sync {
+    // TODO: combine owner & flags into one call, to make perms check more efficient
+
+    /// Get the owner of an object
+    fn owner_of(&mut self, obj: Objid) -> Result<Objid, ObjectError>;
+
     /// Flags of an object.
     /// Note this call does not take a permission context, because it is used to *determine*
     /// permissions. It is the caller's responsibility to ensure that the program is using this
@@ -155,7 +160,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<Vec<Objid>, ObjectError>;
 
     /// Check the validity of an object.
-    fn valid(&mut self, perms: PermissionsContext, obj: Objid) -> Result<bool, ObjectError>;
+    fn valid(&mut self, obj: Objid) -> Result<bool, ObjectError>;
 
     /// Get the name & aliases of an object.
     fn names_of(
@@ -163,9 +168,6 @@ pub trait WorldState: Send + Sync {
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<(String, Vec<String>), ObjectError>;
-
-    /// Get the owner of an object
-    fn owner_of(&mut self, perms: PermissionsContext, obj: Objid) -> Result<Objid, ObjectError>;
 
     /// Commit all modifications made to the state of this world since the start of its transaction.
     fn commit(&mut self) -> Result<CommitResult, anyhow::Error>;
