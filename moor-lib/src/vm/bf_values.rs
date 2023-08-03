@@ -52,9 +52,9 @@ async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
         Variant::Int(i) => Ok(v_int(*i)),
         Variant::Float(f) => Ok(v_int(*f as i64)),
         Variant::Str(s) => {
-            let i = s.as_str().parse::<i64>();
+            let i = s.as_str().parse::<f64>();
             match i {
-                Ok(i) => Ok(v_int(i)),
+                Ok(i) => Ok(v_int(i as i64)),
                 Err(_) => Ok(v_int(0)),
             }
         }
@@ -161,6 +161,7 @@ impl VM {
         self.builtins[offset_for_builtin("tostr")] = Arc::new(Box::new(BfTostr {}));
         self.builtins[offset_for_builtin("toliteral")] = Arc::new(Box::new(BfToliteral {}));
         self.builtins[offset_for_builtin("toint")] = Arc::new(Box::new(BfToint {}));
+        self.builtins[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
         self.builtins[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
         self.builtins[offset_for_builtin("toobj")] = Arc::new(Box::new(BfToobj {}));
         self.builtins[offset_for_builtin("tofloat")] = Arc::new(Box::new(BfTofloat {}));

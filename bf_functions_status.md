@@ -36,7 +36,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | Name     | Complete | Notes |
 |----------|----------|-------|
 | toint    | &check;  |       |
-| tonum    |          |       |
+| tonum    | &check   |       |
 | tofloat  | &check;  |       |
 | min      | &check;  |       |
 | max      | &check;  |       |
