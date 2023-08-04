@@ -98,6 +98,12 @@ impl List {
     }
 }
 
+impl From<List> for Vec<Var> {
+    fn from(val: List) -> Self {
+        val.inner[..].to_vec()
+    }
+}
+
 impl Default for List {
     fn default() -> Self {
         Self::new()

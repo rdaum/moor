@@ -1,6 +1,10 @@
+use moor_value::var::objid::Objid;
 use std::sync::Arc;
 
 use crate::compiler::builtins::BUILTINS;
+use crate::model::permissions::PermissionsContext;
+use crate::model::verbs::VerbInfo;
+use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::activation::Activation;
 use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
@@ -34,11 +38,29 @@ pub struct VM {
     pub(crate) builtins: Vec<Arc<Box<dyn BuiltinFunction>>>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct VerbCallRequest {
+    pub verb_info: VerbInfo,
+    pub permissions: PermissionsContext,
+    pub location: Objid,
+    pub verb_name: String,
+    pub this: Objid,
+    pub player: Objid,
+    pub caller: Objid,
+    pub args: Vec<Var>,
+    pub command: Option<ParsedCommand>,
+}
+
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ExecutionResult {
+    /// Execution of this call stack is complete.
     Complete(Var),
+    /// All is well. The task should let the VM continue executing.
     More,
+    /// An exception was raised during execution.
     Exception(FinallyReason),
+    /// Request dispatch to another verb
+    ContinueVerb(VerbCallRequest),
 }
 
 impl Default for VM {

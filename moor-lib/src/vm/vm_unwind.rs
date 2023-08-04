@@ -305,45 +305,48 @@ impl VM {
                 return Ok(ExecutionResult::More);
             }
 
+            // If we're doing a return, and this is the last activation, we're done and just pass
+            // the returned value up out of the interpreter loop.
+            // Otherwise pop off this activation, and continue unwinding.
+            if let FinallyReason::Return(value) = &why {
+                if self.stack.len() == 1 {
+                    tracing_exit_vm_span(&self.top().span_id, &why, value);
+                    return Ok(ExecutionResult::Complete(value.clone()));
+                }
+            }
+
             if let FinallyReason::Uncaught {
-                code: _,
+                code,
                 msg: _,
                 value: _,
                 stack: _,
                 backtrace: _,
             } = &why
             {
-                trace!("Uncaught error: {:?}", why);
-                // Walk back up the stack, closing out spans as we go.
-                while let Some(last) = self.stack.pop() {
-                    tracing_exit_vm_span(&last.span_id, &why, &v_none());
-                }
+                tracing_exit_vm_span(&self.top().span_id, &why, &v_err(*code));
                 return Ok(ExecutionResult::Exception(why));
             }
 
-            let return_value = match &why {
-                FinallyReason::Return(value) => value.clone(),
-                _ => v_none(),
-            };
+            self.stack.pop().expect("Stack underflow");
 
-            trace!(?return_value, "unwind_stack");
+            if self.stack.is_empty() {
+                return Ok(ExecutionResult::Complete(v_none()));
+            }
+            // TODO builtin function unwinding stuff
 
-            // Pop off our activation.
-            let last = self.stack.pop().expect("Stack underflow");
-            tracing_exit_vm_span(&last.span_id, &why, &return_value);
-
-            // Last activation? Return the value ultimately back to the scheduler.
-            let Some(next) = self.stack.last_mut() else {
-                return Ok(ExecutionResult::Complete(return_value));
-            };
-
-            // Otherwise, shove it on the parent activation's stack.
-            next.push(return_value);
-
-            return Ok(ExecutionResult::More);
+            // If it was a return that brought us here, stick it onto the end of the next
+            // activation's value stack.
+            // (Unless we're the final activation, in which case that should have been handled
+            // above)
+            if let FinallyReason::Return(value) = &why {
+                self.push(value);
+                trace!(value = ?value, verb_name = self.top().verb_name, "RETURN");
+                tracing_exit_vm_span(&self.top().span_id, &why, value);
+                return Ok(ExecutionResult::More);
+            }
         }
 
-        // We realistically cannot get here...
+        // We realistically should not get here...
         unreachable!("Unwound stack to empty, but no exit condition was hit");
     }
 }

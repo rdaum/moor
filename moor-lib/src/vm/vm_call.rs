@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
+use anyhow::Context;
+use moor_value::var::error::Error;
 use tokio::sync::RwLock;
-use tracing::{span, trace, Level};
+use tracing::{error, span, trace, Level};
 
 use crate::compiler::builtins::BUILTINS;
 use crate::model::ObjectError;
@@ -10,22 +11,21 @@ use crate::model::ObjectError;
 use crate::model::permissions::{PermissionsContext, Perms};
 use crate::model::verbs::VerbInfo;
 use crate::model::world_state::WorldState;
-use crate::model::ObjectError::VerbNotFound;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
 
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::builtin::BfCallState;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, VM};
+use crate::vm::{ExecutionResult, VerbCallRequest, VM};
 use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_objid, v_str, v_string, Var};
+use moor_value::var::Var;
 
 impl VM {
-    /// Entry point from scheduler for setting up a command execution in this VM.
-    pub fn setup_verb_command(
+    /// Entry point (from the scheduler) for beginning a command execution in this VM.
+    pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
         vi: VerbInfo,
@@ -33,15 +33,11 @@ impl VM {
         this: Objid,
         player: Objid,
         permissions: PermissionsContext,
-        command: &ParsedCommand,
-    ) -> Result<(), anyhow::Error> {
-        let Some(binary) = vi.attrs.program.clone() else {
-            bail!(VerbNotFound(obj, command.verb.to_string()))
-        };
-
+        command: ParsedCommand,
+    ) -> Result<VerbCallRequest, Error> {
         let span = span!(
             Level::TRACE,
-            "setup_verb_command",
+            "start_call_command_verb",
             task_id,
             ?this,
             verb = command.verb,
@@ -52,114 +48,91 @@ impl VM {
         );
         let span_id = span.id();
 
-        let mut a = Activation::new_for_method(
-            task_id,
-            binary,
-            NOTHING,
+        let call_request = VerbCallRequest {
+            verb_info: vi,
+            permissions,
+            location: obj,
+            verb_name: command.verb.to_string(),
             this,
             player,
-            permissions,
-            command.verb.as_str(),
-            vi,
-            &command.args,
-            vec![],
-            span_id.clone(),
-        )?;
-
-        // TODO use pre-set constant offsets for these like LambdaMOO does.
-        a.set_var("argstr", v_string(command.argstr.clone()))
-            .unwrap();
-        a.set_var("dobj", v_objid(command.dobj)).unwrap();
-        a.set_var("dobjstr", v_string(command.dobjstr.clone()))
-            .unwrap();
-        a.set_var("prepstr", v_string(command.prepstr.clone()))
-            .unwrap();
-        a.set_var("iobj", v_objid(command.iobj)).unwrap();
-        a.set_var("iobjstr", v_string(command.iobjstr.clone()))
-            .unwrap();
-
-        self.stack.push(a);
-        trace!(
-            ?this,
-            command.verb,
-            ?command.args,
-            command.argstr,
-            ?command.dobj,
-            command.dobjstr,
-            ?command.prepstr,
-            ?command.iobj,
-            command.iobjstr,
-            "start command"
-        );
+            caller: NOTHING,
+            args: command.args.to_vec(),
+            command: Some(command),
+        };
 
         tracing_enter_span(&span_id, &None);
-        Ok(())
+
+        Ok(call_request)
     }
 
-    /// Entry point from scheduler for setting up a method execution (non-command) in this VM.
-    pub async fn setup_verb_method_call(
+    /// Entry point (from the scheduler) for beginning a verb execution in this VM.
+    pub async fn start_call_method_verb(
         &mut self,
-        task_id: TaskId,
         state: &mut dyn WorldState,
-        permissions: PermissionsContext,
+        task_id: TaskId,
+        verb_name: String,
         obj: Objid,
-        verb_name: &str,
         this: Objid,
         player: Objid,
-        args: &[Var],
-    ) -> Result<(), anyhow::Error> {
-        let vi = state
-            .find_method_verb_on(permissions.clone(), obj, verb_name)
-            .await?;
-
-        let Some(binary) = vi.attrs.program.clone() else {
-            bail!(VerbNotFound(obj, verb_name.to_string()))
+        args: Vec<Var>,
+        permissions: PermissionsContext,
+    ) -> Result<VerbCallRequest, Error> {
+        // Find the callable verb ...
+        let verb_info = match state
+            .find_method_verb_on(permissions.clone(), this, verb_name.as_str())
+            .await
+        {
+            Ok(vi) => vi,
+            Err(ObjectError::ObjectPermissionDenied) => {
+                return Err(E_PERM);
+            }
+            Err(ObjectError::VerbPermissionDenied) => {
+                return Err(E_PERM);
+            }
+            Err(ObjectError::VerbNotFound(_, _)) => {
+                return Err(E_VERBNF);
+            }
+            Err(e) => {
+                error!(error = ?e, "Error finding verb");
+                return Err(E_INVIND);
+            }
         };
 
         let span = span!(
             Level::TRACE,
-            "setup_verb_method_call",
+            "start_call_method_verb",
             task_id,
             ?this,
             verb = verb_name,
-            verb_aliases = ?vi.names,
+            verb_aliases = ?verb_info.names,
             ?player,
             ?args,
-            permissions = ?permissions,
+            permission = ?permissions,
         );
         let span_id = span.id();
 
-        let mut a = Activation::new_for_method(
-            task_id,
-            binary,
-            NOTHING,
+        let call_request = VerbCallRequest {
+            verb_info,
+            permissions,
+            location: obj,
+            verb_name,
             this,
             player,
-            permissions,
-            verb_name,
-            vi,
+            caller: NOTHING,
             args,
-            vec![],
-            span_id.clone(),
-        )?;
+            command: None,
+        };
 
-        a.set_var("argstr", v_str("")).unwrap();
-        a.set_var("dobj", v_objid(NOTHING)).unwrap();
-        a.set_var("dobjstr", v_str("")).unwrap();
-        a.set_var("prepstr", v_str("")).unwrap();
-        a.set_var("iobj", v_objid(NOTHING)).unwrap();
-        a.set_var("iobjstr", v_str("")).unwrap();
-
-        self.stack.push(a);
-
-        trace!(?this, verb_name, ?args, "method call");
         tracing_enter_span(&span_id, &None);
 
-        Ok(())
+        Ok(call_request)
     }
-
-    /// Entry point for VM setting up a method call from the Op::CallVerb instruction.
-    pub(crate) async fn call_verb(
+    /// Entry point for preparing a verb call for execution, invoked from the CallVerb opcode
+    /// Seek the verb and prepare the call parameters.
+    /// All parameters for player, caller, etc. are pulled off the stack.
+    /// The call params will be returned back to the task in the scheduler, which will then dispatch
+    /// back through to `do_method_call`
+    pub(crate) async fn prepare_call_verb(
         &mut self,
         state: &mut dyn WorldState,
         this: Objid,
@@ -170,13 +143,16 @@ impl VM {
         if !self_valid {
             return self.push_error(E_INVIND);
         }
-        // find callable verb
-        let verbinfo = match state
+        // Find the callable verb ...
+        let verb_info = match state
             .find_method_verb_on(self.top().permissions.clone(), this, verb_name)
             .await
         {
             Ok(vi) => vi,
             Err(ObjectError::ObjectPermissionDenied) => {
+                return self.push_error(E_PERM);
+            }
+            Err(ObjectError::VerbPermissionDenied) => {
                 return self.push_error(E_PERM);
             }
             Err(ObjectError::VerbNotFound(_, _)) => {
@@ -188,119 +164,106 @@ impl VM {
                 })?;
             }
         };
-        let Some(binary) = verbinfo.attrs.program.clone() else {
-            return self.push_error_msg(
-                E_VERBNF,
-                format!("Verb \"{}\" is not a program", verb_name),
-            );
-        };
-
-        let caller = self.top().this;
-
-        let top = self.top();
-        let mut callers = top.callers.to_vec();
-        let task_id = top.task_id;
-
-        let follows_span = self.top().span_id.clone();
-
-        // Should this be necessary? Can't we just walk the stack?
-        callers.push(Caller {
-            this,
-            verb_name: verb_name.to_string(),
-            perms: top.permissions.clone(),
-            verb_loc: top.verb_definer(),
-            player: top.player,
-            line_number: 0,
-        });
 
         // Derive permissions for the new activation from the current one + the verb's owner
         // permissions.
-        let verb_owner = verbinfo.attrs.owner.unwrap();
+        let verb_owner = verb_info.attrs.owner.unwrap();
         let next_task_perms = state.flags_of(verb_owner).await?;
-        let new_perms = top
+        let permissions = self
+            .top()
             .permissions
             .mk_child_perms(Perms::new(verb_owner, next_task_perms));
 
-        let span = span!(
-            Level::TRACE,
-            "VC",
-            task_id,
-            ?this,
-            verb_name,
-            verb_aliases = ?verbinfo.names,
-            player = ?top.player,
-            ?args,
-            permissions = ?new_perms,
-        );
-        let span_id = span.id();
-
-        let mut a = Activation::new_for_method(
-            task_id,
-            binary,
-            caller,
+        // Construct the call request based on a combination of the current activation record and
+        // the new values.
+        let call_request = VerbCallRequest {
+            verb_info,
+            permissions,
+            location: this,
+            verb_name: verb_name.to_string(),
             this,
-            top.player,
-            new_perms,
-            verb_name,
-            verbinfo,
-            args,
-            callers,
-            span_id.clone(),
-        )?;
+            player: self.top().player,
+            caller: self.top().verb_definer(),
+            args: args.to_vec(),
+            command: self.top().command.clone(),
+        };
 
-        // TODO use pre-set constant offsets for these like LambdaMOO does.
-        let argstr = self.top().get_var("argstr");
-        let dobj = self.top().get_var("dobj");
-        let dobjstr = self.top().get_var("dobjstr");
-        let prepstr = self.top().get_var("prepstr");
-        let iobj = self.top().get_var("iobj");
-        let iobjstr = self.top().get_var("iobjstr");
-
-        a.set_var("argstr", argstr.unwrap()).unwrap();
-        a.set_var("dobj", dobj.unwrap()).unwrap();
-        a.set_var("dobjstr", dobjstr.unwrap()).unwrap();
-        a.set_var("prepstr", prepstr.unwrap()).unwrap();
-        a.set_var("iobj", iobj.unwrap()).unwrap();
-        a.set_var("iobjstr", iobjstr.unwrap()).unwrap();
-
-        self.stack.push(a);
-        trace!(?this, verb_name, ?args, ?caller, "call_verb");
-
-        tracing_enter_span(&span_id, &follows_span);
-
-        Ok(ExecutionResult::More)
+        Ok(ExecutionResult::ContinueVerb(call_request))
     }
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
     /// version.
-    pub(crate) async fn pass_verb(
+    pub(crate) async fn prepare_pass_verb(
         &mut self,
         state: &mut dyn WorldState,
         args: &[Var],
     ) -> Result<ExecutionResult, anyhow::Error> {
         // get parent of verb definer object & current verb name.
-        // TODO probably need verb definer right on Activation, this is gross.
         let definer = self.top().verb_definer();
-        let parent = state
-            .parent_of(self.top().permissions.clone(), definer)
-            .await?;
+        let permissions = self.top().permissions.clone();
+        let parent = state.parent_of(permissions.clone(), definer).await?;
         let verb = self.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
-        let task_id = self.top().task_id;
-        trace!(task_id, verb, ?definer, ?parent);
-        self.setup_verb_method_call(
-            task_id,
-            state,
-            self.top().permissions.clone(),
+        trace!(task_id = self.top().task_id, verb, ?definer, ?parent);
+
+        let Ok(vi) = state.find_method_verb_on(
+            permissions.clone(),
             parent,
             verb.as_str(),
-            self.top().this,
-            self.top().player,
-            args,
-        )
-        .await?;
-        Ok(ExecutionResult::More)
+        ).await else {
+            return self.raise_error(E_VERBNF);
+        };
+
+        let call_request = VerbCallRequest {
+            verb_info: vi,
+            permissions,
+            location: parent,
+            verb_name: verb.clone(),
+            this: self.top().this,
+            player: self.top().player,
+            caller: self.top().verb_definer(),
+            args: args.to_vec(),
+            command: self.top().command.clone(),
+        };
+
+        Ok(ExecutionResult::ContinueVerb(call_request))
+    }
+
+    /// Entry point from scheduler for actually beginning the dispatch of a method execution
+    /// (non-command) in this VM.
+    /// Actually creates the activation record and puts it on the stack.
+    pub async fn exec_call_request(
+        &mut self,
+        task_id: TaskId,
+        call_request: VerbCallRequest,
+    ) -> Result<(), anyhow::Error> {
+        let span = span!(Level::TRACE, "VC", task_id, ?call_request);
+        let span_id = span.id();
+
+        let mut callers = if self.stack.is_empty() {
+            vec![]
+        } else {
+            self.top().callers.clone()
+        };
+
+        // Should this be necessary? Can't we just walk the stack?
+        callers.push(Caller {
+            this: call_request.this,
+            verb_name: call_request.verb_name.clone(),
+            perms: call_request.permissions.clone(),
+            verb_loc: call_request.verb_info.attrs.definer.unwrap(),
+            player: call_request.player,
+            line_number: 0,
+        });
+
+        let a = Activation::for_call(task_id, call_request, callers, span_id.clone())?;
+
+        self.stack.push(a);
+
+        tracing_enter_span(&span_id, &None);
+
+        Ok(())
     }
 
     /// Call into a builtin function.

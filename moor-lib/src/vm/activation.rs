@@ -6,11 +6,13 @@ use crate::model::permissions::PermissionsContext;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::TaskId;
 
+use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::opcode::{Binary, Op};
+use crate::vm::VerbCallRequest;
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::E_VARNF;
-use moor_value::var::objid::Objid;
-use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, Var, VarType};
+use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -52,23 +54,18 @@ pub(crate) struct Activation {
     pub(crate) verb_name: String,
     pub(crate) verb_info: VerbInfo,
     pub(crate) callers: Vec<Caller>,
+    pub(crate) command: Option<ParsedCommand>,
     pub(crate) span_id: Option<tracing::span::Id>,
 }
 
 impl Activation {
-    pub fn new_for_method(
+    pub fn for_call(
         task_id: TaskId,
-        binary: Binary,
-        caller: Objid,
-        this: Objid,
-        player: Objid,
-        permissions: PermissionsContext,
-        verb_name: &str,
-        verb_info: VerbInfo,
-        args: &[Var],
+        verb_call_request: VerbCallRequest,
         callers: Vec<Caller>,
         span_id: Option<tracing::span::Id>,
     ) -> Result<Self, anyhow::Error> {
+        let binary = verb_call_request.verb_info.attrs.program.clone().unwrap();
         let environment = vec![v_none(); binary.var_names.width()];
 
         let mut a = Self {
@@ -79,19 +76,22 @@ impl Activation {
             handler_stack: vec![],
             pc: 0,
             temp: v_none(),
-            this,
-            player,
-            permissions,
-            verb_info,
-            verb_name: verb_name.to_string(),
+            this: verb_call_request.this,
+            player: verb_call_request.player,
+            permissions: verb_call_request.permissions,
+            verb_info: verb_call_request.verb_info,
+            verb_name: verb_call_request.verb_name.clone(),
             callers,
+            command: verb_call_request.command.clone(),
             span_id,
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
-        a.set_var("this", v_objid(this)).unwrap();
-        a.set_var("player", v_objid(player)).unwrap();
-        a.set_var("caller", v_objid(caller)).unwrap();
+        a.set_var("this", v_objid(verb_call_request.this)).unwrap();
+        a.set_var("player", v_objid(verb_call_request.player))
+            .unwrap();
+        a.set_var("caller", v_objid(verb_call_request.caller))
+            .unwrap();
         a.set_var("NUM", v_int(VarType::TYPE_INT as i64)).unwrap();
         a.set_var("OBJ", v_int(VarType::TYPE_OBJ as i64)).unwrap();
         a.set_var("STR", v_int(VarType::TYPE_STR as i64)).unwrap();
@@ -100,9 +100,30 @@ impl Activation {
         a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
         a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
             .unwrap();
-        a.set_var("verb", v_str(verb_name)).unwrap();
-        a.set_var("args", v_list(args.into())).unwrap();
+        a.set_var("verb", v_str(verb_call_request.verb_name.as_str()))
+            .unwrap();
+        a.set_var("args", v_list(verb_call_request.args)).unwrap();
 
+        // From the command, if any...
+        if let Some(command) = verb_call_request.command {
+            a.set_var("argstr", v_string(command.argstr.clone()))
+                .unwrap();
+            a.set_var("dobj", v_objid(command.dobj)).unwrap();
+            a.set_var("dobjstr", v_string(command.dobjstr.clone()))
+                .unwrap();
+            a.set_var("prepstr", v_string(command.prepstr.clone()))
+                .unwrap();
+            a.set_var("iobj", v_objid(command.iobj)).unwrap();
+            a.set_var("iobjstr", v_string(command.iobjstr.clone()))
+                .unwrap();
+        } else {
+            a.set_var("argstr", v_str("")).unwrap();
+            a.set_var("dobj", v_objid(NOTHING)).unwrap();
+            a.set_var("dobjstr", v_str("")).unwrap();
+            a.set_var("prepstr", v_str("")).unwrap();
+            a.set_var("iobj", v_objid(NOTHING)).unwrap();
+            a.set_var("iobjstr", v_str("")).unwrap();
+        }
         Ok(a)
     }
 
@@ -119,15 +140,6 @@ impl Activation {
         if let Some(n) = n {
             self.environment[n] = value;
             Ok(())
-        } else {
-            Err(E_VARNF)
-        }
-    }
-
-    pub fn get_var(&self, name: &str) -> Result<Var, Error> {
-        let n = self.binary.var_names.find_name_offset(name);
-        if let Some(n) = n {
-            Ok(self.environment[n].clone())
         } else {
             Err(E_VARNF)
         }

@@ -432,7 +432,7 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_TYPE);
                 };
-                self.pass_verb(state, &args[..]).await?;
+                return self.prepare_pass_verb(state, &args[..]).await;
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
@@ -444,7 +444,9 @@ impl VM {
                 };
                 // TODO: check obj for validity, return E_INVIND if not
 
-                return self.call_verb(state, *obj, verb.as_str(), &args[..]).await;
+                return self
+                    .prepare_call_verb(state, *obj, verb.as_str(), &args[..])
+                    .await;
             }
             Op::Return => {
                 let ret_val = self.pop();

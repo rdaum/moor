@@ -13,8 +13,7 @@ mod tests {
     use crate::model::permissions::PermissionsContext;
     use crate::model::props::PropFlag;
     use crate::model::world_state::{WorldState, WorldStateSource};
-    use crate::model::ObjectError;
-    use crate::model::ObjectError::VerbNotFound;
+
     use crate::tasks::Sessions;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
@@ -72,10 +71,10 @@ mod tests {
     ) {
         let o = Objid(0);
 
-        assert!(vm
-            .setup_verb_method_call(0, state, perms, o, verb_name, o, o, &[],)
-            .await
-            .is_ok());
+        let Ok(cr) = vm.start_call_method_verb(state, 0, verb_name.to_string(),o, o, o, vec![], perms).await else {
+            panic!("failed to prepare call verb")
+        };
+        assert!(vm.exec_call_request(0, cr).await.is_ok());
     }
 
     async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
@@ -89,6 +88,9 @@ mod tests {
                 Ok(ExecutionResult::Exception(e)) => {
                     panic!("MOO exception {:?}", e);
                 }
+                Ok(ExecutionResult::ContinueVerb(cr)) => {
+                    vm.exec_call_request(0, cr).await.unwrap();
+                }
             }
         }
     }
@@ -100,21 +102,20 @@ mod tests {
         let mut vm = VM::new();
         let o = Objid(0);
 
-        match vm
-            .setup_verb_method_call(0, state.as_mut(), perms, o, "test", o, o, &[])
-            .await
-        {
-            Err(e) => match e.downcast::<ObjectError>() {
-                Ok(VerbNotFound(vo, vs)) => {
-                    assert_eq!(vo, o);
-                    assert_eq!(vs, "test");
-                }
-                _ => {
-                    panic!("expected verbnf error");
-                }
-            },
-            _ => panic!("expected verbnf error"),
-        }
+        assert_eq!(
+            vm.start_call_method_verb(
+                state.as_mut(),
+                0,
+                "test".to_string(),
+                o,
+                o,
+                o,
+                vec![],
+                perms
+            )
+            .await,
+            Err(E_VERBNF)
+        );
     }
 
     #[tokio::test]
@@ -796,6 +797,9 @@ mod tests {
                 Err(e) => panic!("error during execution: {:?}", e),
                 Ok(ExecutionResult::Exception(e)) => {
                     panic!("MOO exception {:?}", e);
+                }
+                Ok(ExecutionResult::ContinueVerb(cr)) => {
+                    vm.exec_call_request(0, cr).await.unwrap();
                 }
             }
         }

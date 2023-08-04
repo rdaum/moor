@@ -26,7 +26,7 @@ pub enum VerbAttr {
     Program = 4,
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
     pub owner: Option<Objid>,
@@ -35,7 +35,7 @@ pub struct VerbAttrs {
     pub program: Option<Binary>,
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct VerbInfo {
     pub names: Vec<String>,
     pub attrs: VerbAttrs,
