@@ -1,18 +1,17 @@
 use tracing::trace;
 
-use crate::compiler::labels::Label;
-
-use crate::model::permissions::PermissionsContext;
-use crate::model::verbs::VerbInfo;
-use crate::tasks::TaskId;
-
-use crate::tasks::command_parse::ParsedCommand;
-use crate::vm::opcode::{Binary, Op};
-use crate::vm::VerbCallRequest;
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::E_VARNF;
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType};
+
+use crate::compiler::labels::Label;
+use crate::model::permissions::PermissionsContext;
+use crate::model::verbs::VerbInfo;
+use crate::tasks::command_parse::ParsedCommand;
+use crate::tasks::TaskId;
+use crate::vm::opcode::{Binary, Op};
+use crate::vm::ResolvedVerbCall;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -53,7 +52,6 @@ pub(crate) struct Activation {
     pub(crate) permissions: PermissionsContext,
     pub(crate) verb_name: String,
     pub(crate) verb_info: VerbInfo,
-    pub(crate) callers: Vec<Caller>,
     pub(crate) command: Option<ParsedCommand>,
     pub(crate) span_id: Option<tracing::span::Id>,
 }
@@ -61,11 +59,15 @@ pub(crate) struct Activation {
 impl Activation {
     pub fn for_call(
         task_id: TaskId,
-        verb_call_request: VerbCallRequest,
-        callers: Vec<Caller>,
+        verb_call_request: ResolvedVerbCall,
         span_id: Option<tracing::span::Id>,
     ) -> Result<Self, anyhow::Error> {
-        let binary = verb_call_request.verb_info.attrs.program.clone().unwrap();
+        let binary = verb_call_request
+            .resolved_verb
+            .attrs
+            .program
+            .clone()
+            .unwrap();
         let environment = vec![v_none(); binary.var_names.width()];
 
         let mut a = Self {
@@ -76,21 +78,22 @@ impl Activation {
             handler_stack: vec![],
             pc: 0,
             temp: v_none(),
-            this: verb_call_request.this,
-            player: verb_call_request.player,
+            this: verb_call_request.call.this,
+            player: verb_call_request.call.player,
             permissions: verb_call_request.permissions,
-            verb_info: verb_call_request.verb_info,
-            verb_name: verb_call_request.verb_name.clone(),
-            callers,
+            verb_info: verb_call_request.resolved_verb,
+            verb_name: verb_call_request.call.verb_name.clone(),
+
             command: verb_call_request.command.clone(),
             span_id,
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
-        a.set_var("this", v_objid(verb_call_request.this)).unwrap();
-        a.set_var("player", v_objid(verb_call_request.player))
+        a.set_var("this", v_objid(verb_call_request.call.this))
             .unwrap();
-        a.set_var("caller", v_objid(verb_call_request.caller))
+        a.set_var("player", v_objid(verb_call_request.call.player))
+            .unwrap();
+        a.set_var("caller", v_objid(verb_call_request.call.caller))
             .unwrap();
         a.set_var("NUM", v_int(VarType::TYPE_INT as i64)).unwrap();
         a.set_var("OBJ", v_int(VarType::TYPE_OBJ as i64)).unwrap();
@@ -100,9 +103,10 @@ impl Activation {
         a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
         a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
             .unwrap();
-        a.set_var("verb", v_str(verb_call_request.verb_name.as_str()))
+        a.set_var("verb", v_str(verb_call_request.call.verb_name.as_str()))
             .unwrap();
-        a.set_var("args", v_list(verb_call_request.args)).unwrap();
+        a.set_var("args", v_list(verb_call_request.call.args))
+            .unwrap();
 
         // From the command, if any...
         if let Some(command) = verb_call_request.command {

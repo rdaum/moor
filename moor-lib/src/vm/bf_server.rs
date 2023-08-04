@@ -4,15 +4,16 @@ use std::time::SystemTime;
 use async_trait::async_trait;
 use tracing::warn;
 
+use moor_value::var::error::Error::{E_INVARG, E_TYPE};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_bool, v_err, v_int, v_list, v_none, v_objid, v_string, Var};
+
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
-use moor_value::var::error::Error::{E_INVARG, E_TYPE};
-use moor_value::var::variant::Variant;
-use moor_value::var::{v_bool, v_err, v_int, v_list, v_none, v_objid, v_string, Var};
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
@@ -53,7 +54,8 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
         );
     }
 
-    Ok(v_none())
+    // MOO docs say this should return none, but in reality it returns 1?
+    Ok(v_int(1))
 }
 bf_declare!(notify, bf_notify);
 
@@ -99,7 +101,7 @@ async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyho
         return Ok(v_err(E_INVARG));
     }
 
-    Ok(v_objid(bf_args.frame.permissions.caller_perms().obj))
+    Ok(v_objid(bf_args.perms().caller_perms().obj))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
@@ -113,8 +115,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
 
     bf_args.perms().task_perms().check_wizard()?;
     bf_args
-        .frame
-        .permissions
+        .perms()
         .set_task_perms(*perms_for, bf_args.world_state.flags_of(*perms_for).await?);
 
     Ok(v_none())
@@ -126,10 +127,9 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
         return Ok(v_err(E_INVARG));
     }
 
+    let callers = bf_args.vm.callers();
     Ok(v_list(
-        bf_args
-            .frame
-            .callers
+        callers
             .iter()
             .map(|c| {
                 let callers = vec![
@@ -152,7 +152,7 @@ async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
         return Ok(v_err(E_INVARG));
     }
 
-    Ok(v_int(bf_args.frame.task_id as i64))
+    Ok(v_int(bf_args.vm.top().task_id as i64))
 }
 bf_declare!(task_id, bf_task_id);
 
@@ -164,7 +164,9 @@ async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyho
         return Ok(v_err(E_TYPE));
     };
     let sessions = bf_args.sessions.read().await;
-    let idle_seconds = sessions.idle_seconds(*who)?;
+    let Ok(idle_seconds) = sessions.idle_seconds(*who) else {
+        return Ok(v_err(E_INVARG));
+    };
 
     Ok(v_int(idle_seconds as i64))
 }
@@ -178,7 +180,9 @@ async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
         return Ok(v_err(E_TYPE));
     };
     let sessions = bf_args.sessions.read().await;
-    let connected_seconds = sessions.connected_seconds(*who)?;
+    let Ok(connected_seconds) = sessions.connected_seconds(*who) else {
+        return Ok(v_err(E_INVARG));
+    };
 
     Ok(v_int(connected_seconds as i64))
 }

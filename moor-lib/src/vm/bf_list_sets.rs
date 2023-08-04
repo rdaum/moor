@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use moor_value::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_err, v_int, Var};
+
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
-use moor_value::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
-use moor_value::var::variant::Variant;
-use moor_value::var::{v_err, v_int, Var};
 
 async fn bf_is_member<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
     if bf_args.args.len() != 2 {

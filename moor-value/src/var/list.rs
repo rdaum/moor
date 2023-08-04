@@ -1,5 +1,5 @@
 use crate::var::variant::Variant;
-use crate::var::Var;
+use crate::var::{v_empty_list, Var};
 use bincode::{Decode, Encode};
 use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
 use std::sync::Arc;
@@ -51,6 +51,9 @@ impl List {
 
     /// Remove the first found instance of the given value from the list.
     pub fn setremove(&self, value: &Var) -> Var {
+        if self.inner.is_empty() {
+            return v_empty_list();
+        }
         let mut new_list = Vec::with_capacity(self.inner.len() - 1);
         let mut found = false;
         for v in self.inner.iter() {

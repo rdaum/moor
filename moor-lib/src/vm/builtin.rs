@@ -3,25 +3,25 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
+use moor_value::var::Var;
+
 use crate::model::permissions::PermissionsContext;
 use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;
-
-use crate::vm::activation::Activation;
-use moor_value::var::Var;
+use crate::vm::VM;
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
+    pub(crate) vm: &'a VM,
     pub(crate) name: &'a str,
     pub(crate) world_state: &'a mut dyn WorldState,
-    pub(crate) frame: &'a mut Activation,
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
     pub(crate) args: Vec<Var>,
 }
 
 impl<'a> BfCallState<'a> {
     pub fn perms(&self) -> PermissionsContext {
-        self.frame.permissions.clone()
+        self.vm.top().permissions.clone()
     }
 }
 

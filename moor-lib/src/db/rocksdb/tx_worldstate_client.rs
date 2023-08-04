@@ -2,6 +2,11 @@ use anyhow::Error;
 use async_trait::async_trait;
 use tracing::debug;
 
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_int, v_list, v_objid, Var};
+
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
 use crate::db::rocksdb::RocksDbTransaction;
@@ -15,10 +20,6 @@ use crate::model::world_state::WorldState;
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::opcode::Binary;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{Objid, NOTHING};
-use moor_value::var::variant::Variant;
-use moor_value::var::{v_int, v_list, v_objid, Var};
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.

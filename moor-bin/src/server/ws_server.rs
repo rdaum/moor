@@ -1,17 +1,18 @@
-use anyhow::anyhow;
-use async_trait::async_trait;
-use futures_util::stream::SplitSink;
-use futures_util::{SinkExt, StreamExt};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::{Receiver, Sender};
+
+use anyhow::anyhow;
+use async_trait::async_trait;
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::{ConnectInfo, Path, WebSocketUpgrade};
+use axum::response::IntoResponse;
+use axum::Extension;
+use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::RwLock;
-use tokio_tungstenite::{accept_async, WebSocketStream};
-use tracing::warn;
 use tracing::{error, info, instrument};
-use tungstenite::{Error, Message};
 
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
@@ -24,7 +25,7 @@ struct WebSocketSessions {
 
 struct WsConnection {
     player: Objid,
-    sink: SplitSink<WebSocketStream<TcpStream>, Message>,
+    sink: SplitSink<WebSocket, Message>,
     connected_time: std::time::Instant,
     last_activity: std::time::Instant,
 }
@@ -47,19 +48,16 @@ impl WebSocketServer {
     }
 }
 
-async fn ws_accept_connection(
-    server: Arc<RwLock<WebSocketServer>>,
-    peer: SocketAddr,
-    stream: TcpStream,
-) {
-    if let Err(e) = ws_handle_connection(server.clone(), peer, stream).await {
-        if let Some(e) = e.downcast_ref::<tungstenite::Error>() {
-            match e {
-                Error::ConnectionClosed | Error::Protocol(_) | Error::Utf8 => (),
-                err => info!("Error processing connection: {}", err),
-            }
-        }
-    }
+pub async fn ws_handler(
+    ws: WebSocketUpgrade,
+    Path(player): Path<i64>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Extension(ws_server): Extension<Arc<RwLock<WebSocketServer>>>,
+) -> impl IntoResponse {
+    info!("New websocket connection from {}", addr);
+    // TODO validate player id
+    // TODO password in headers? auth phase?
+    ws.on_upgrade(move |socket| ws_handle_connection(ws_server, addr, socket, Objid(player)))
 }
 
 async fn ws_send_error(
@@ -78,17 +76,16 @@ async fn ws_send_error(
 }
 
 #[instrument(skip(server, stream))]
-async fn ws_handle_connection(
+pub async fn ws_handle_connection(
     server: Arc<RwLock<WebSocketServer>>,
     peer: SocketAddr,
-    stream: TcpStream,
-) -> Result<(), anyhow::Error> {
-    let ws_stream = accept_async(stream).await.expect("Failed to accept");
+    stream: WebSocket,
+    player: Objid,
+) {
+    info!(?player, ?peer, "New websocket connection");
+    let (ws_sender, mut ws_receiver) = stream.split();
 
-    let player = Objid(2);
-
-    info!("New inbound websocket connection: {}", peer);
-    let (ws_sender, mut ws_receiver) = WebSocketStream::split(ws_stream);
+    // TODO auth/validation phase.  Add interface on Sesson?
 
     // Register connection with player.
     {
@@ -119,29 +116,35 @@ async fn ws_handle_connection(
             error!("Error receiving a message: {}", msg.unwrap_err());
             break;
         };
-        if msg.is_text() || msg.is_binary() {
-            let cmd = msg.into_text().unwrap();
-            let cmd = cmd.as_str().trim();
-
-            // Record activity on the connection, to compute idle_seconds.
-            {
-                let server = server.write().await;
-                let mut sessions = server.sessions.write().await;
-                let connection = sessions.connections.get_mut(&player).unwrap();
-                connection.last_activity = std::time::Instant::now();
-            }
-            let task_id = {
-                let server = server.read().await;
-                let mut scheduler = server.scheduler.write().await;
-                scheduler
-                    .submit_command_task(player, cmd, server.sessions.clone())
-                    .await
-            };
-            if let Err(e) = task_id {
-                error!("Error submitting command ({}): {:?}", cmd, e);
-                ws_send_error(server.clone(), player, format!("{:?}", e)).await?;
+        let cmd = match msg.into_text() {
+            Ok(cmd) => cmd,
+            Err(e) => {
+                error!("Error decoding a message: {:?}", e);
                 continue;
             }
+        };
+        let cmd = cmd.as_str().trim();
+
+        // Record activity on the connection, to compute idle_seconds.
+        {
+            let server = server.write().await;
+            let mut sessions = server.sessions.write().await;
+            let connection = sessions.connections.get_mut(&player).unwrap();
+            connection.last_activity = std::time::Instant::now();
+        }
+        let task_id = {
+            let server = server.read().await;
+            let mut scheduler = server.scheduler.write().await;
+            scheduler
+                .submit_command_task(player, cmd, server.sessions.clone())
+                .await
+        };
+        if let Err(e) = task_id {
+            error!("Error submitting command ({}): {:?}", cmd, e);
+            ws_send_error(server.clone(), player, format!("{:?}", e))
+                .await
+                .unwrap();
+            continue;
         }
     }
 
@@ -152,38 +155,6 @@ async fn ws_handle_connection(
         connections.remove(&player).unwrap();
         info!("WebSocket session finished: {}", peer);
     }
-
-    Ok(())
-}
-
-pub async fn ws_server_start(
-    server: Arc<RwLock<WebSocketServer>>,
-    addr: String,
-    mut shutdown_receiver: Receiver<Option<String>>,
-) -> Result<(), anyhow::Error> {
-    // Create the event loop and TCP listener we'll accept connections on.
-    let try_socket = TcpListener::bind(&addr).await;
-    let listener = try_socket.expect("Failed to bind");
-    info!("Listening on: {}", addr);
-
-    loop {
-        tokio::select! {
-            shutdown = shutdown_receiver.recv() => {
-                warn!("Shutting down websocket server: {:?}", shutdown);
-                break;
-            }
-            stream = listener.accept() => {
-                let stream = stream.unwrap().0;
-                let peer = stream
-                    .peer_addr()
-                    .expect("connected streams should have a peer address");
-
-                tokio::spawn(ws_accept_connection(server.clone(), peer, stream));
-            }
-        }
-    }
-
-    Ok(())
 }
 
 #[async_trait]
@@ -201,6 +172,11 @@ impl Sessions for WebSocketSessions {
         }
         SplitSink::send(&mut conn.sink, msg.into()).await?;
 
+        Ok(())
+    }
+
+    async fn shutdown(&mut self, msg: Option<String>) -> Result<(), anyhow::Error> {
+        self.shutdown_sender.send(msg).await.unwrap();
         Ok(())
     }
 
@@ -224,10 +200,5 @@ impl Sessions for WebSocketSessions {
         let now = std::time::Instant::now();
         let duration = now - conn.last_activity;
         Ok(duration.as_secs_f64())
-    }
-
-    async fn shutdown(&mut self, msg: Option<String>) -> Result<(), anyhow::Error> {
-        self.shutdown_sender.send(msg).await.unwrap();
-        Ok(())
     }
 }

@@ -7,12 +7,6 @@ use std::str::FromStr;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 
-use crate::compiler::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
-};
-use crate::compiler::labels::Names;
-use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::compiler::Parse;
 use moor_value::util::unquote_str;
 use moor_value::var::error::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA,
@@ -20,6 +14,13 @@ use moor_value::var::error::Error::{
 };
 use moor_value::var::objid::{Objid, SYSTEM_OBJECT};
 use moor_value::var::{v_err, v_float, v_int, v_objid, v_str};
+
+use crate::compiler::ast::{
+    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+};
+use crate::compiler::labels::Names;
+use crate::compiler::parse::moo::{MooParser, Rule};
+use crate::compiler::Parse;
 
 pub mod moo {
     #[derive(Parser)]
@@ -731,6 +732,9 @@ pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use moor_value::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
+    use moor_value::var::{v_err, v_float, v_int, v_obj, v_str};
+
     use crate::compiler::ast::Arg::Normal;
     use crate::compiler::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
     use crate::compiler::ast::{
@@ -739,8 +743,6 @@ mod tests {
     };
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
-    use moor_value::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_value::var::{v_err, v_float, v_int, v_obj, v_str};
 
     #[test]
     fn test_call_verb() {

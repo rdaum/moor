@@ -1,8 +1,9 @@
 use thiserror::Error;
 
+use moor_value::var::objid::Objid;
+
 use crate::model::objects::ObjAttr;
 use crate::model::verbs::Vid;
-use moor_value::var::objid::Objid;
 
 pub mod r#match;
 pub mod objects;

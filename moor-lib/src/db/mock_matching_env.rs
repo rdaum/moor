@@ -3,8 +3,9 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
-use crate::db::matching::MatchEnvironment;
 use moor_value::var::objid::{Objid, NOTHING};
+
+use crate::db::matching::MatchEnvironment;
 
 pub const MOCK_PLAYER: Objid = Objid(3);
 pub const MOCK_ROOM1: Objid = Objid(1);

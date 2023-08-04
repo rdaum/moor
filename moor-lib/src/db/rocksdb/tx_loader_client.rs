@@ -1,3 +1,9 @@
+use async_trait::async_trait;
+
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
+
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::{LoaderInterface, RocksDbTransaction};
 use crate::db::CommitResult;
@@ -6,17 +12,13 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::vm::opcode::Binary;
-use async_trait::async_trait;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
 
 #[async_trait]
 impl LoaderInterface for RocksDbTransaction {
     async fn create_object(
         &self,
         objid: Option<Objid>,
-        attrs: &mut ObjAttrs,
+        attrs: &ObjAttrs,
     ) -> Result<Objid, anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox

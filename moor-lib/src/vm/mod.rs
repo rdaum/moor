@@ -1,5 +1,7 @@
-use moor_value::var::objid::Objid;
 use std::sync::Arc;
+
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 use crate::compiler::builtins::BUILTINS;
 use crate::model::permissions::PermissionsContext;
@@ -9,7 +11,6 @@ use crate::vm::activation::Activation;
 use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
 use crate::vm::vm_unwind::FinallyReason;
-use moor_value::var::Var;
 
 pub(crate) mod opcode;
 pub(crate) mod vm_call;
@@ -38,16 +39,27 @@ pub struct VM {
     pub(crate) builtins: Vec<Arc<Box<dyn BuiltinFunction>>>,
 }
 
+/// The minimum set of information needed to make a *resolution* call for a verb.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VerbCallRequest {
-    pub verb_info: VerbInfo,
-    pub permissions: PermissionsContext,
-    pub location: Objid,
+pub struct VerbCall {
     pub verb_name: String,
+    pub location: Objid,
     pub this: Objid,
     pub player: Objid,
-    pub caller: Objid,
     pub args: Vec<Var>,
+    pub caller: Objid,
+}
+
+/// The set of arguments for a VM-requested *resolved* verb method dispatch.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ResolvedVerbCall {
+    /// The applicable permissions context.
+    pub permissions: PermissionsContext,
+    /// The resolved verb.
+    pub resolved_verb: VerbInfo,
+    /// The call parameters that were used to resolve the verb.
+    pub call: VerbCall,
+    /// The parsed user command that led to this verb dispatch, if any.
     pub command: Option<ParsedCommand>,
 }
 
@@ -60,7 +72,7 @@ pub enum ExecutionResult {
     /// An exception was raised during execution.
     Exception(FinallyReason),
     /// Request dispatch to another verb
-    ContinueVerb(VerbCallRequest),
+    ContinueVerb(ResolvedVerbCall),
 }
 
 impl Default for VM {

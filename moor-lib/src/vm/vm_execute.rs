@@ -3,15 +3,16 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::trace;
 
+use moor_value::var::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
+
 use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, VM};
-use moor_value::var::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
-use moor_value::var::variant::Variant;
-use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
 
 macro_rules! binary_bool_op {
     ( $self:ident, $op:tt ) => {

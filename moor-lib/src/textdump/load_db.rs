@@ -4,6 +4,10 @@ use std::io::BufReader;
 
 use tracing::{debug, info, span, warn};
 
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
+
 use crate::compiler::codegen::compile;
 use crate::db::rocksdb::server::RocksDbServer;
 use crate::db::rocksdb::LoaderInterface;
@@ -12,9 +16,6 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
 use crate::textdump::{Object, TextdumpReader};
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
 
 struct RProp {
     definer: Objid,

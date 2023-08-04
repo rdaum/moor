@@ -1,14 +1,13 @@
-use crate::compiler::labels::{Label, Name};
-
-use crate::model::world_state::WorldState;
-use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
-
-use crate::vm::activation::Activation;
-use crate::vm::opcode::Op;
-use crate::vm::{ExecutionResult, VM};
 use moor_value::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_none, Var};
+
+use crate::compiler::labels::{Label, Name};
+use crate::model::world_state::WorldState;
+use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
+use crate::vm::activation::{Activation, Caller};
+use crate::vm::opcode::Op;
+use crate::vm::{ExecutionResult, VM};
 
 impl VM {
     /// VM-level property resolution.
@@ -84,6 +83,29 @@ impl VM {
             },
         }
         Ok(ExecutionResult::More)
+    }
+
+    /// Return the callers stack, in the format expected by the `callers` built-in function.
+    pub(crate) fn callers(&self) -> Vec<Caller> {
+        // Starting from the top, and working back
+        let mut callers = vec![];
+        for activation in self.stack.iter().rev() {
+            let verb_name = activation.verb_name.clone();
+            let verb_loc = activation.verb_definer();
+            let player = activation.player;
+            let line_number = 0; // TODO: fix after decompilation support
+            let this = activation.this;
+            let perms = activation.permissions.clone();
+            callers.push(Caller {
+                verb_name,
+                verb_loc,
+                player,
+                line_number,
+                this,
+                perms,
+            });
+        }
+        callers
     }
 
     pub(crate) fn top_mut(&mut self) -> &mut Activation {

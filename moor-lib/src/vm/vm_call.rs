@@ -1,27 +1,26 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use moor_value::var::error::Error;
 use tokio::sync::RwLock;
 use tracing::{error, span, trace, Level};
 
-use crate::compiler::builtins::BUILTINS;
-use crate::model::ObjectError;
+use moor_value::var::error::Error;
+use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
+use moor_value::var::objid::Objid;
+use moor_value::var::variant::Variant;
+use moor_value::var::Var;
 
+use crate::compiler::builtins::BUILTINS;
 use crate::model::permissions::{PermissionsContext, Perms};
 use crate::model::verbs::VerbInfo;
 use crate::model::world_state::WorldState;
+use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId};
-
-use crate::vm::activation::{Activation, Caller};
+use crate::vm::activation::Activation;
 use crate::vm::builtin::BfCallState;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, VerbCallRequest, VM};
-use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
-use moor_value::var::objid::{Objid, NOTHING};
-use moor_value::var::variant::Variant;
-use moor_value::var::Var;
+use crate::vm::{ExecutionResult, ResolvedVerbCall, VerbCall, VM};
 
 impl VM {
     /// Entry point (from the scheduler) for beginning a command execution in this VM.
@@ -29,34 +28,28 @@ impl VM {
         &mut self,
         task_id: TaskId,
         vi: VerbInfo,
-        obj: Objid,
-        this: Objid,
-        player: Objid,
-        permissions: PermissionsContext,
+        verb_call: VerbCall,
         command: ParsedCommand,
-    ) -> Result<VerbCallRequest, Error> {
+        permissions: PermissionsContext,
+    ) -> Result<ResolvedVerbCall, Error> {
         let span = span!(
             Level::TRACE,
             "start_call_command_verb",
             task_id,
-            ?this,
+            this = ?verb_call.this,
             verb = command.verb,
             verb_aliases = ?vi.names,
-            ?player,
-            args = ?command.args,
+            player = ?verb_call.player,
+            args = ?verb_call.args,
+            command = ?command,
             permission = ?permissions,
         );
         let span_id = span.id();
 
-        let call_request = VerbCallRequest {
-            verb_info: vi,
+        let call_request = ResolvedVerbCall {
             permissions,
-            location: obj,
-            verb_name: command.verb.to_string(),
-            this,
-            player,
-            caller: NOTHING,
-            args: command.args.to_vec(),
+            resolved_verb: vi,
+            call: verb_call,
             command: Some(command),
         };
 
@@ -70,16 +63,16 @@ impl VM {
         &mut self,
         state: &mut dyn WorldState,
         task_id: TaskId,
-        verb_name: String,
-        obj: Objid,
-        this: Objid,
-        player: Objid,
-        args: Vec<Var>,
+        verb_call: VerbCall,
         permissions: PermissionsContext,
-    ) -> Result<VerbCallRequest, Error> {
+    ) -> Result<ResolvedVerbCall, Error> {
         // Find the callable verb ...
         let verb_info = match state
-            .find_method_verb_on(permissions.clone(), this, verb_name.as_str())
+            .find_method_verb_on(
+                permissions.clone(),
+                verb_call.this,
+                verb_call.verb_name.as_str(),
+            )
             .await
         {
             Ok(vi) => vi,
@@ -102,24 +95,19 @@ impl VM {
             Level::TRACE,
             "start_call_method_verb",
             task_id,
-            ?this,
-            verb = verb_name,
+            this = ?verb_call.this,
+            verb = verb_call.verb_name,
             verb_aliases = ?verb_info.names,
-            ?player,
-            ?args,
+            player = ?verb_call.player,
+            args = ?verb_call.args,
             permission = ?permissions,
         );
         let span_id = span.id();
 
-        let call_request = VerbCallRequest {
-            verb_info,
+        let call_request = ResolvedVerbCall {
             permissions,
-            location: obj,
-            verb_name,
-            this,
-            player,
-            caller: NOTHING,
-            args,
+            resolved_verb: verb_info,
+            call: verb_call,
             command: None,
         };
 
@@ -139,6 +127,14 @@ impl VM {
         verb_name: &str,
         args: &[Var],
     ) -> Result<ExecutionResult, anyhow::Error> {
+        let call = VerbCall {
+            verb_name: verb_name.to_string(),
+            location: this,
+            this,
+            player: self.top().player,
+            args: args.to_vec(),
+            caller: self.top().permissions.caller_perms().obj,
+        };
         let self_valid = state.valid(this).await?;
         if !self_valid {
             return self.push_error(E_INVIND);
@@ -176,15 +172,10 @@ impl VM {
 
         // Construct the call request based on a combination of the current activation record and
         // the new values.
-        let call_request = VerbCallRequest {
-            verb_info,
+        let call_request = ResolvedVerbCall {
             permissions,
-            location: this,
-            verb_name: verb_name.to_string(),
-            this,
-            player: self.top().player,
-            caller: self.top().verb_definer(),
-            args: args.to_vec(),
+            resolved_verb: verb_info,
+            call,
             command: self.top().command.clone(),
         };
 
@@ -215,15 +206,18 @@ impl VM {
             return self.raise_error(E_VERBNF);
         };
 
-        let call_request = VerbCallRequest {
-            verb_info: vi,
-            permissions,
+        let call = VerbCall {
+            verb_name: verb,
             location: parent,
-            verb_name: verb.clone(),
             this: self.top().this,
             player: self.top().player,
-            caller: self.top().verb_definer(),
             args: args.to_vec(),
+            caller: permissions.caller_perms().obj,
+        };
+        let call_request = ResolvedVerbCall {
+            permissions,
+            resolved_verb: vi,
+            call,
             command: self.top().command.clone(),
         };
 
@@ -236,28 +230,12 @@ impl VM {
     pub async fn exec_call_request(
         &mut self,
         task_id: TaskId,
-        call_request: VerbCallRequest,
+        call_request: ResolvedVerbCall,
     ) -> Result<(), anyhow::Error> {
         let span = span!(Level::TRACE, "VC", task_id, ?call_request);
         let span_id = span.id();
 
-        let mut callers = if self.stack.is_empty() {
-            vec![]
-        } else {
-            self.top().callers.clone()
-        };
-
-        // Should this be necessary? Can't we just walk the stack?
-        callers.push(Caller {
-            this: call_request.this,
-            verb_name: call_request.verb_name.clone(),
-            perms: call_request.permissions.clone(),
-            verb_loc: call_request.verb_info.attrs.definer.unwrap(),
-            player: call_request.player,
-            line_number: 0,
-        });
-
-        let a = Activation::for_call(task_id, call_request, callers, span_id.clone())?;
+        let a = Activation::for_call(task_id, call_request, span_id.clone())?;
 
         self.stack.push(a);
 
@@ -291,9 +269,9 @@ impl VM {
         let _guard = span.enter();
         // this is clearly wrong and we need to be passing in a reference...
         let mut bf_args = BfCallState {
+            vm: self,
             name: BUILTINS[bf_func_num],
             world_state: state,
-            frame: self.top_mut(),
             sessions: client_connection,
             args: args.to_vec(),
         };

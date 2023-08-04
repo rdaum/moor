@@ -3,7 +3,10 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
 use async_trait::async_trait;
+
 use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::{v_none, Var};
 
 use crate::db::rocksdb::LoaderInterface;
 use crate::db::CommitResult;
@@ -17,8 +20,6 @@ use crate::model::ObjectError;
 use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::opcode::Binary;
-use moor_value::var::objid::Objid;
-use moor_value::var::{v_none, Var};
 
 struct MockStore {
     verbs: HashMap<(Objid, String), VerbInfo>,
@@ -286,7 +287,7 @@ impl LoaderInterface for MockWorldStateSource {
     async fn create_object(
         &self,
         _objid: Option<Objid>,
-        _attrs: &mut ObjAttrs,
+        _attrs: &ObjAttrs,
     ) -> Result<Objid, Error> {
         todo!()
     }

@@ -7,21 +7,21 @@ mod tests {
     use tokio::sync::RwLock;
     use tracing_test::traced_test;
 
+    use moor_value::util::bitenum::BitEnum;
+    use moor_value::var::error::Error::E_VERBNF;
+    use moor_value::var::objid::{Objid, NOTHING};
+    use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
+
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::mock_world_state::MockWorldStateSource;
     use crate::model::permissions::PermissionsContext;
     use crate::model::props::PropFlag;
     use crate::model::world_state::{WorldState, WorldStateSource};
-
     use crate::tasks::Sessions;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
-    use crate::vm::{ExecutionResult, VM};
-    use moor_value::util::bitenum::BitEnum;
-    use moor_value::var::error::Error::E_VERBNF;
-    use moor_value::var::objid::Objid;
-    use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
+    use crate::vm::{ExecutionResult, VerbCall, VM};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -71,7 +71,15 @@ mod tests {
     ) {
         let o = Objid(0);
 
-        let Ok(cr) = vm.start_call_method_verb(state, 0, verb_name.to_string(),o, o, o, vec![], perms).await else {
+        let call = VerbCall {
+            verb_name: verb_name.to_string(),
+            location: o,
+            this: o,
+            player: o,
+            args: vec![],
+            caller: NOTHING,
+        };
+        let Ok(cr) = vm.start_call_method_verb(state, 0, call, perms).await else {
             panic!("failed to prepare call verb")
         };
         assert!(vm.exec_call_request(0, cr).await.is_ok());
@@ -102,18 +110,17 @@ mod tests {
         let mut vm = VM::new();
         let o = Objid(0);
 
+        let call = VerbCall {
+            verb_name: "test".to_string(),
+            location: o,
+            this: o,
+            player: o,
+            args: vec![],
+            caller: NOTHING,
+        };
         assert_eq!(
-            vm.start_call_method_verb(
-                state.as_mut(),
-                0,
-                "test".to_string(),
-                o,
-                o,
-                o,
-                vec![],
-                perms
-            )
-            .await,
+            vm.start_call_method_verb(state.as_mut(), 0, call, perms)
+                .await,
             Err(E_VERBNF)
         );
     }
@@ -818,7 +825,7 @@ mod tests {
         let result =
             exec_vm_with_mock_client_connection(&mut vm, state.as_mut(), client_connection.clone())
                 .await;
-        assert_eq!(result, v_none());
+        assert_eq!(result, v_int(1));
 
         assert_eq!(
             client_connection.read().await.received,

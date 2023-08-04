@@ -3,9 +3,10 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-use moor_value::var::{v_int, Var};
 use thiserror::Error;
 use tracing::error;
+
+use moor_value::var::{v_int, Var};
 
 use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
@@ -760,12 +761,13 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::builtins::BUILTINS;
-    use crate::vm::opcode::Op::*;
-    use crate::vm::opcode::ScatterLabel;
     use moor_value::var::error::Error::{E_INVARG, E_PERM, E_PROPNF};
     use moor_value::var::objid::Objid;
     use moor_value::var::v_obj;
+
+    use crate::compiler::builtins::BUILTINS;
+    use crate::vm::opcode::Op::*;
+    use crate::vm::opcode::ScatterLabel;
 
     use super::*;
 

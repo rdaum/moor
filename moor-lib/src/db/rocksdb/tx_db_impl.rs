@@ -2,8 +2,12 @@ use anyhow::{bail, Error};
 use lazy_static::lazy_static;
 use rocksdb::{ColumnFamily, ErrorKind};
 use tracing::trace;
-
 use uuid::Uuid;
+
+use moor_value::util::bitenum::BitEnum;
+use moor_value::util::verbname_cmp;
+use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::{v_none, Var};
 
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
 use crate::db::rocksdb::{ColumnFamilies, DbStorage};
@@ -14,10 +18,7 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
 use crate::vm::opcode::Binary;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::util::verbname_cmp;
-use moor_value::var::objid::{Objid, NOTHING};
-use moor_value::var::{v_none, Var};
+
 lazy_static! {
     static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 }
@@ -909,15 +910,16 @@ mod tests {
     use strum::VariantNames;
     use tempdir::TempDir;
 
+    use moor_value::util::bitenum::BitEnum;
+    use moor_value::var::objid::{Objid, NOTHING};
+    use moor_value::var::v_str;
+
     use crate::compiler::codegen::compile;
     use crate::db::rocksdb::tx_db_impl::RocksDbTx;
     use crate::db::rocksdb::{ColumnFamilies, DbStorage};
     use crate::model::objects::ObjAttrs;
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::ObjectError;
-    use moor_value::util::bitenum::BitEnum;
-    use moor_value::var::objid::{Objid, NOTHING};
-    use moor_value::var::v_str;
 
     struct TestDb {
         db: Arc<OptimisticTransactionDB>,

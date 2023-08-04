@@ -1,5 +1,9 @@
 use std::collections::{HashMap, VecDeque};
+
 use tracing::trace;
+
+use moor_value::var::variant::Variant;
+use moor_value::var::Var;
 
 use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
@@ -9,8 +13,6 @@ use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound}
 use crate::compiler::labels::{JumpLabel, Label, Name};
 use crate::compiler::Parse;
 use crate::vm::opcode::{Binary, Op, ScatterLabel};
-use moor_value::var::variant::Variant;
-use moor_value::var::Var;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -532,13 +534,8 @@ impl Decompile {
                 // Decompile the body.
                 // Means decompiling until we hit EndExcept, so scan forward for that.
                 // TODO: make sure that this doesn't fail with nested try/excepts?
-                let (body, end_except) = self.decompile_statements_until_match(|_, o| {
-                    if let Op::EndExcept(_) = o {
-                        true
-                    } else {
-                        false
-                    }
-                })?;
+                let (body, end_except) =
+                    self.decompile_statements_until_match(|_, o| matches!(o, Op::EndExcept(_)))?;
                 let Op::EndExcept(end_label) = end_except else {
                     return Err(MalformedProgram("expected EndExcept".to_string()));
                 };

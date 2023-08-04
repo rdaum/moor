@@ -1,10 +1,11 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 
-use crate::model::ObjectError;
-use crate::tasks::command_parse::ParseMatcher;
 use moor_value::var::objid::FAILED_MATCH;
 use moor_value::var::objid::{Objid, AMBIGUOUS, NOTHING};
+
+use crate::model::ObjectError;
+use crate::tasks::command_parse::ParseMatcher;
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
@@ -137,13 +138,14 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
 
 #[cfg(test)]
 mod tests {
+    use moor_value::var::objid::FAILED_MATCH;
+    use moor_value::var::objid::{Objid, NOTHING};
+
     use crate::db::matching::{do_match_object_names, MatchData, MatchEnvironmentParseMatcher};
     use crate::db::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
     use crate::tasks::command_parse::ParseMatcher;
-    use moor_value::var::objid::FAILED_MATCH;
-    use moor_value::var::objid::{Objid, NOTHING};
 
     #[test]
     fn test_match_object_names_fail() {

@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use dashmap::DashMap;
@@ -8,27 +9,32 @@ use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, span, trace, Level};
+use tokio::time::sleep;
+use tracing::{debug, error, info, instrument, span, trace, warn, Level};
+
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::MatchEnvironmentParseMatcher;
 use crate::model::world_state::WorldStateSource;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
-use crate::tasks::task::{Task, TaskControl, TaskControlMsg, TaskControlResponse};
+use crate::tasks::task::{Task, TaskControlMsg, TaskControlResponse};
 use crate::tasks::{Sessions, TaskId};
 use crate::vm::VM;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
+
+struct TaskControl {
+    task_id: TaskId,
+    control_sender: UnboundedSender<TaskControlMsg>,
+    response_receiver: UnboundedReceiver<TaskControlResponse>,
+}
 
 pub struct Scheduler {
     running: AtomicBool,
     state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
     next_task_id: AtomicUsize,
     tasks: DashMap<TaskId, TaskControl>,
-    response_sender: UnboundedSender<(TaskId, TaskControlResponse)>,
-    response_receiver: UnboundedReceiver<(TaskId, TaskControlResponse)>,
-
     num_started_tasks: ConcurrentCounter,
     num_succeeded_tasks: ConcurrentCounter,
     num_aborted_tasks: ConcurrentCounter,
@@ -42,16 +48,33 @@ pub enum SchedulerError {
     NoCommandMatch(String, ParsedCommand),
 }
 
+pub async fn scheduler_loop(scheduler: Arc<RwLock<Scheduler>>) {
+    {
+        let start_lock = scheduler.write().await;
+        start_lock.running.store(true, Ordering::SeqCst);
+    }
+    loop {
+        {
+            let mut scheduler = scheduler.write().await;
+            if !scheduler.running.load(Ordering::SeqCst) {
+                break;
+            }
+            if let Err(e) = scheduler.do_process().await {
+                error!(error = ?e, "Error processing scheduler loop");
+            }
+        }
+        sleep(Duration::from_millis(1)).await;
+    }
+    info!("Scheduler done.");
+}
+
 impl Scheduler {
     pub fn new(state_source: Arc<RwLock<dyn WorldStateSource + Sync + Send>>) -> Self {
-        let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
         Self {
             running: Default::default(),
             state_source,
             next_task_id: Default::default(),
             tasks: DashMap::new(),
-            response_sender,
-            response_receiver,
             num_started_tasks: ConcurrentCounter::new(0),
             num_succeeded_tasks: ConcurrentCounter::new(0),
             num_aborted_tasks: ConcurrentCounter::new(0),
@@ -177,52 +200,50 @@ impl Scheduler {
         Ok(task_id)
     }
 
-    #[instrument(skip(self))]
-    pub async fn do_process(&mut self) -> Result<(), anyhow::Error> {
-        let msg = match self.response_receiver.try_recv() {
-            Ok(msg) => msg,
-            Err(TryRecvError::Empty) => return Ok(()),
-            Err(e) => {
-                return Err(anyhow!(e));
-            }
-        };
-        match msg {
-            (task_id, TaskControlResponse::AbortCancelled) => {
-                self.num_aborted_tasks.add(1);
+    /// This is expected to be run on a loop, and will process the first task response it sees.
+    async fn do_process(&mut self) -> Result<(), anyhow::Error> {
+        // Would have preferred a futures::select_all here, but it doesn't seem to be possible to
+        // do this without consuming the futures, which we don't want to do.
+        let mut to_remove = Vec::new();
+        for mut task in self.tasks.iter_mut() {
+            match task.response_receiver.try_recv() {
+                Ok(msg) => match msg {
+                    TaskControlResponse::AbortCancelled => {
+                        self.num_aborted_tasks.add(1);
 
-                debug!("Cleaning up cancelled task {:?}", task_id);
-                self.remove_task(task_id)
-                    .await
-                    .expect("Could not remove task");
-            }
-            (task_id, TaskControlResponse::AbortError(e)) => {
-                self.num_errored_tasks.add(1);
+                        warn!(task = task.task_id, "Task cancelled");
+                        to_remove.push(task.task_id);
+                    }
+                    TaskControlResponse::AbortError(e) => {
+                        self.num_errored_tasks.add(1);
 
-                error!("Error in task {:?}: {:?}", task_id, e);
-                self.remove_task(task_id)
-                    .await
-                    .expect("Could not remove task");
-            }
-            (task_id, TaskControlResponse::Exception(finally_reason)) => {
-                self.num_excepted_tasks.add(1);
+                        warn!(task = task.task_id, error = ?e, "Task aborted");
+                        to_remove.push(task.task_id);
+                    }
+                    TaskControlResponse::Exception(finally_reason) => {
+                        self.num_excepted_tasks.add(1);
 
-                error!("Exception in task {:?}: {:?}", task_id, finally_reason);
-                self.remove_task(task_id)
-                    .await
-                    .expect("Could not remove task");
-            }
-            (task_id, TaskControlResponse::Success(value)) => {
-                self.num_succeeded_tasks.add(1);
-                debug!(
-                    "Task {:?} completed successfully with return value: {}",
-                    task_id,
-                    value.to_literal()
-                );
-                self.remove_task(task_id)
-                    .await
-                    .expect("Could not remove task");
+                        warn!(task = task.task_id, finally_reason = ?finally_reason, "Task threw exception");
+                        to_remove.push(task.task_id);
+                    }
+                    TaskControlResponse::Success(value) => {
+                        self.num_succeeded_tasks.add(1);
+                        debug!(task = task.task_id, result = ?value, "Task succeeded");
+                        to_remove.push(task.task_id);
+                    }
+                },
+                Err(TryRecvError::Empty) => {}
+                Err(e) => {
+                    error!(task = task.task_id, error = ?e, "Task sys-errored");
+                    to_remove.push(task.task_id);
+                    continue;
+                }
             }
         }
+        for task_id in to_remove {
+            self.tasks.remove(&task_id);
+        }
+
         Ok(())
     }
 
@@ -243,17 +264,18 @@ impl Scheduler {
             state_source.new_world_state(player).await?
         };
 
-        let (tx_control, rx_control) = tokio::sync::mpsc::unbounded_channel();
+        let (control_sender, control_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (response_sender, response_receiver) = tokio::sync::mpsc::unbounded_channel();
 
         let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
 
         let task_control = TaskControl {
-            control_sender: tx_control,
+            task_id,
+            control_sender,
+            response_receiver,
         };
 
         self.tasks.insert(task_id, task_control);
-
-        let task_response_sender = self.response_sender.clone();
 
         // Spawn the task's thread.
         tokio::spawn(async move {
@@ -265,10 +287,10 @@ impl Scheduler {
             );
 
             let vm = VM::new();
-            let mut task = Task::new(
+            let task = Task::new(
                 task_id,
-                rx_control,
-                task_response_sender,
+                control_receiver,
+                response_sender,
                 player,
                 vm,
                 client_connection,
@@ -277,7 +299,7 @@ impl Scheduler {
             );
 
             debug!("Starting up task: {:?}", task_id);
-            task.run(task_id).await;
+            task.run().await;
             debug!("Completed task: {:?}", task_id);
         });
 

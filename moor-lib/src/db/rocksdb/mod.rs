@@ -1,9 +1,12 @@
-use async_trait::async_trait;
 use std::thread;
 
+use async_trait::async_trait;
 use crossbeam_channel::Sender;
-use moor_value::util::bitenum::BitEnum;
 use strum::{EnumString, EnumVariantNames};
+
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
 
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::tx_server::{PropHandle, VerbHandle};
@@ -13,8 +16,6 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::vm::opcode::Binary;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
 
 pub mod server;
 mod tx_db_impl;
@@ -29,13 +30,13 @@ pub struct RocksDbTransaction {
 }
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
-/// WorldState could provide, but potentiall different constraints/semantics.
+/// WorldState could provide, but potentially different constraints/semantics.
 #[async_trait]
 pub trait LoaderInterface {
     async fn create_object(
         &self,
         objid: Option<Objid>,
-        attrs: &mut ObjAttrs,
+        attrs: &ObjAttrs,
     ) -> Result<Objid, anyhow::Error>;
     async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error>;
 

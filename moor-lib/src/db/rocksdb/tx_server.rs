@@ -4,6 +4,9 @@ use crossbeam_channel::{Receiver, RecvError};
 use rocksdb::ColumnFamily;
 use tracing::warn;
 
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+
 use crate::db::rocksdb::tx_db_impl::RocksDbTx;
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::DbStorage;
@@ -11,8 +14,6 @@ use crate::model::props::PropFlag;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::VerbFlag;
 use crate::model::ObjectError;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
 
 // Internal storage for the verb information stored in the ObjectVerbs column family, basically
 // everything sans-program.

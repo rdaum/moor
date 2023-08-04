@@ -2,15 +2,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::error::Error::{E_INVARG, E_TYPE};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_err, v_int, v_list, v_objid, v_string, Var};
+
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::props::{PropAttrs, PropFlag};
 use crate::vm::builtin::{BfCallState, BuiltinFunction};
 use crate::vm::VM;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::error::Error::{E_INVARG, E_TYPE};
-use moor_value::var::variant::Variant;
-use moor_value::var::{v_err, v_int, v_list, v_objid, v_string, Var};
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }

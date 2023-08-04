@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
-use moor_lib::tasks::scheduler::Scheduler;
+use moor_lib::tasks::scheduler::{scheduler_loop, Scheduler};
 use moor_lib::tasks::Sessions;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_value::var::objid::Objid;
@@ -120,9 +120,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let state_src = Arc::new(RwLock::new(src));
     let scheduler = Arc::new(RwLock::new(Scheduler::new(state_src.clone())));
 
-    let mut scheduler_process_interval =
-        tokio::time::interval(std::time::Duration::from_millis(100));
-
     let eval_sessions = Arc::new(RwLock::new(ReplSession {
         player: Objid(2),
         _console_writer: stdout.clone(),
@@ -131,8 +128,9 @@ async fn main() -> Result<(), anyhow::Error> {
     }));
     loop {
         tokio::select! {
-            _ = scheduler_process_interval.tick() => {
-                scheduler.write().await.do_process().await.unwrap();
+            _ = tokio::spawn(scheduler_loop(scheduler.clone())) => {
+               writeln!(stdout, "Scheduler loop exited, stopping...")?;
+               break;
             }
             cmd = rl.readline() => match cmd {
                 Ok(line) => {
