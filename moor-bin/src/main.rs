@@ -4,10 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-
-use axum::{
-    routing::get, Extension, Router,
-};
+use axum::{routing::get, Extension, Router};
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;

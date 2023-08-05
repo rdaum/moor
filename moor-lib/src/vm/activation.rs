@@ -5,7 +5,7 @@ use moor_value::var::error::Error::E_VARNF;
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType};
 
-use crate::compiler::labels::Label;
+use crate::compiler::labels::{Label, Name};
 use crate::model::permissions::PermissionsContext;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::command_parse::ParsedCommand;
@@ -28,17 +28,20 @@ pub struct Caller {
 // That is:
 //   when created, the stack's current size is stored in `valstack_pos`
 //   when popped off in unwind, the valstack's size is eaten back to pos.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HandlerType {
     Catch(usize),
     CatchLabel(Label),
     Finally(Label),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HandlerLabel {
     pub(crate) handler_type: HandlerType,
     pub(crate) valstack_pos: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Activation {
     pub(crate) task_id: TaskId,
     pub(crate) binary: Binary,
@@ -149,6 +152,14 @@ impl Activation {
         }
     }
 
+    pub fn set_var_offset(&mut self, offset: Name, value: Var) -> Result<(), Error> {
+        if offset.0 as usize >= self.environment.len() {
+            return Err(E_VARNF);
+        }
+        self.environment[offset.0 as usize] = value;
+        Ok(())
+    }
+
     pub fn next_op(&mut self) -> Option<Op> {
         if !self.pc < self.binary.main_vector.len() {
             return None;
@@ -203,6 +214,6 @@ impl Activation {
     pub fn jump(&mut self, label_id: Label) {
         let label = &self.binary.jump_labels[label_id.0 as usize];
         trace!("Jump to {}", label.position.0);
-        self.pc = label.position.0 as usize;
+        self.pc = label.position.0;
     }
 }

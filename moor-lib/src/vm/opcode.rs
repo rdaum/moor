@@ -72,7 +72,7 @@ pub enum Op {
     PushGetProp,
     PutProp,
     Fork {
-        f_index: Label,
+        fv_offset: Offset,
         id: Option<Name>,
     },
     CallVerb,

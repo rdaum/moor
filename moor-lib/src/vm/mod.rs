@@ -1,12 +1,15 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 use crate::compiler::builtins::BUILTINS;
+use crate::compiler::labels::{Name, Offset};
 use crate::model::permissions::PermissionsContext;
 use crate::model::verbs::VerbInfo;
 use crate::tasks::command_parse::ParsedCommand;
+use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
 use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
@@ -34,23 +37,32 @@ mod builtin;
 mod vm_test;
 
 pub struct VM {
-    // Activation stack.
     pub(crate) stack: Vec<Activation>,
     pub(crate) builtins: Vec<Arc<Box<dyn BuiltinFunction>>>,
 }
 
-/// The minimum set of information needed to make a *resolution* call for a verb.
+/// The set of parameters for a VM-requested fork.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VerbCall {
-    pub verb_name: String,
-    pub location: Objid,
-    pub this: Objid,
-    pub player: Objid,
-    pub args: Vec<Var>,
-    pub caller: Objid,
+pub struct ForkRequest {
+    /// The player. This is in the activation as well, but it's nicer to have it up here and
+    /// explicit
+    pub(crate) player: Objid,
+    /// The task ID of the task that forked us
+    pub(crate) parent_task_id: usize,
+    /// The time to delay before starting the forked task, if any.
+    pub(crate) delay: Option<Duration>,
+    /// A copy of the activation record from the task that forked us.
+    pub(crate) activation: Activation,
+    /// The unique fork vector offset into the fork vector for the executing binary held in the
+    /// activation record.  This is copied into the main vector and execution proceeds from there,
+    /// instead.
+    pub(crate) fork_vector_offset: Offset,
+    /// The (optional) variable label where the task ID of the new task should be stored, in both
+    /// the parent activation and the new task's activation.
+    pub task_id: Option<Name>,
 }
 
-/// The set of arguments for a VM-requested *resolved* verb method dispatch.
+/// The set of parameters for a VM-requested *resolved* verb method dispatch.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ResolvedVerbCall {
     /// The applicable permissions context.
@@ -73,6 +85,8 @@ pub enum ExecutionResult {
     Exception(FinallyReason),
     /// Request dispatch to another verb
     ContinueVerb(ResolvedVerbCall),
+    /// Request dispatch of a new task as a fork
+    DispatchFork(ForkRequest),
 }
 
 impl Default for VM {

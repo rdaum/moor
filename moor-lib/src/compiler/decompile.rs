@@ -97,7 +97,7 @@ impl Decompile {
         let old_len = self.s.len();
 
         trace!("seek up to pos {}", jump_label.position.0);
-        while self.position + 1 < jump_label.position.0 as usize {
+        while self.position + 1 < jump_label.position.0 {
             self.decompile()?;
         }
         trace!(
@@ -119,7 +119,7 @@ impl Decompile {
         let old_len = self.s.len();
 
         trace!("seek up to pos {}", jump_label.position.0);
-        while self.position < jump_label.position.0 as usize {
+        while self.position < jump_label.position.0 {
             self.decompile()?;
         }
         trace!(
@@ -142,7 +142,7 @@ impl Decompile {
         let old_len = self.s.len();
 
         trace!("seek up to pos {}", jump_label.position.0);
-        while self.position + 1 < jump_label.position.0 as usize {
+        while self.position + 1 < jump_label.position.0 {
             self.decompile()?;
         }
         // Next opcode must be the jump to the end of the whole branch
@@ -272,7 +272,7 @@ impl Decompile {
             }
             Op::Exit { stack: _, label } => {
                 let position = self.find_jump(&label)?.position;
-                if position.0 < self.position as u32 {
+                if position.0 < self.position {
                     self.s.push(Stmt::Continue { exit: None });
                 } else {
                     self.s.push(Stmt::Break { exit: None });
@@ -560,7 +560,7 @@ impl Decompile {
 
                     // Scan forward until the jump, decompiling as we go.
                     trace!("Decompiling except arm @ pos {}", self.position);
-                    let end_label_position = self.find_jump(&end_label)?.position.0 as usize;
+                    let end_label_position = self.find_jump(&end_label)?.position.0;
                     let (statements, _) =
                         self.decompile_statements_until_match(|position, o| {
                             if position == end_label_position {

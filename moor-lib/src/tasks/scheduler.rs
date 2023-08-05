@@ -22,12 +22,14 @@ use crate::model::world_state::WorldStateSource;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::task::{Task, TaskControlMsg, TaskControlResponse};
 use crate::tasks::{Sessions, TaskId};
-use crate::vm::VM;
+use crate::vm::{ForkRequest, VM};
 
 struct TaskControl {
     task_id: TaskId,
     control_sender: UnboundedSender<TaskControlMsg>,
     response_receiver: UnboundedReceiver<TaskControlResponse>,
+    state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
+    sessions: Arc<RwLock<dyn Sessions>>,
 }
 
 pub struct Scheduler {
@@ -36,6 +38,7 @@ pub struct Scheduler {
     next_task_id: AtomicUsize,
     tasks: DashMap<TaskId, TaskControl>,
     num_started_tasks: ConcurrentCounter,
+    num_forked_tasks: ConcurrentCounter,
     num_succeeded_tasks: ConcurrentCounter,
     num_aborted_tasks: ConcurrentCounter,
     num_errored_tasks: ConcurrentCounter,
@@ -84,6 +87,7 @@ impl Scheduler {
             next_task_id: Default::default(),
             tasks: DashMap::new(),
             num_started_tasks: ConcurrentCounter::new(0),
+            num_forked_tasks: ConcurrentCounter::new(0),
             num_succeeded_tasks: ConcurrentCounter::new(0),
             num_aborted_tasks: ConcurrentCounter::new(0),
             num_errored_tasks: ConcurrentCounter::new(0),
@@ -129,7 +133,7 @@ impl Scheduler {
             }
         };
         let task_id = self
-            .new_task(player, self.state_source.clone(), sessions)
+            .new_task(player, self.state_source.clone(), sessions, None)
             .await?;
 
         let Some(task_ref) = self.tasks.get_mut(&task_id) else {
@@ -164,7 +168,7 @@ impl Scheduler {
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
         let task_id = self
-            .new_task(player, self.state_source.clone(), sessions)
+            .new_task(player, self.state_source.clone(), sessions, None)
             .await?;
 
         let Some(task_ref) = self.tasks.get_mut(&task_id) else {
@@ -193,7 +197,7 @@ impl Scheduler {
         let binary = compile(code.as_str())?;
 
         let task_id = self
-            .new_task(player, self.state_source.clone(), sessions)
+            .new_task(player, self.state_source.clone(), sessions, None)
             .await?;
 
         let Some(task_ref) = self.tasks.get_mut(&task_id) else {
@@ -208,11 +212,40 @@ impl Scheduler {
         Ok(task_id)
     }
 
+    pub async fn submit_fork_task(
+        &mut self,
+        fork_request: ForkRequest,
+        state_source: Arc<RwLock<dyn WorldStateSource + Sync + Send>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
+    ) -> Result<TaskId, anyhow::Error> {
+        let task_id = self
+            .new_task(
+                fork_request.player,
+                state_source,
+                sessions,
+                fork_request.delay,
+            )
+            .await?;
+
+        let Some(task_ref) = self.tasks.get_mut(&task_id) else {
+            return Err(anyhow!("Could not find task with id {:?}", task_id));
+        };
+
+        // This gets enqueued as the first thing the task sees when it is started.
+        task_ref.control_sender.send(TaskControlMsg::StartFork {
+            task_id,
+            fork_request,
+        })?;
+
+        self.num_forked_tasks.add(1);
+        Ok(task_id)
+    }
     /// This is expected to be run on a loop, and will process the first task response it sees.
     async fn do_process(&mut self) -> Result<(), anyhow::Error> {
         // Would have preferred a futures::select_all here, but it doesn't seem to be possible to
         // do this without consuming the futures, which we don't want to do.
         let mut to_remove = Vec::new();
+        let mut fork_requests = Vec::new();
         for mut task in self.tasks.iter_mut() {
             match task.response_receiver.try_recv() {
                 Ok(msg) => match msg {
@@ -239,6 +272,17 @@ impl Scheduler {
                         debug!(task = task.task_id, result = ?value, "Task succeeded");
                         to_remove.push(task.task_id);
                     }
+                    TaskControlResponse::RequestFork(fork_request, reply) => {
+                        // Task has requested a fork. Dispatch it and reply with the new task id.
+                        // Gotta dump this out til we exit the loop tho, since self.tasks is already
+                        // borrowed here.
+                        fork_requests.push((
+                            fork_request,
+                            reply,
+                            task.state_source.clone(),
+                            task.sessions.clone(),
+                        ));
+                    }
                 },
                 Err(TryRecvError::Empty) => {}
                 Err(e) => {
@@ -248,6 +292,15 @@ impl Scheduler {
                 }
             }
         }
+        // Service fork requests
+        for (fork_request, reply, state_source, sessions) in fork_requests {
+            let task_id = self
+                .submit_fork_task(fork_request, state_source, sessions)
+                .await?;
+            reply.send(task_id).expect("Could not send fork reply");
+        }
+
+        // Service task removals
         for task_id in to_remove {
             self.tasks.remove(&task_id);
         }
@@ -272,6 +325,7 @@ impl Scheduler {
         player: Objid,
         state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
         client_connection: Arc<RwLock<dyn Sessions>>,
+        delay_start: Option<Duration>,
     ) -> Result<TaskId, anyhow::Error> {
         let (state, perms) = {
             let mut state_source = state_source.write().await;
@@ -287,15 +341,20 @@ impl Scheduler {
             task_id,
             control_sender,
             response_receiver,
+            state_source: state_source.clone(),
+            sessions: client_connection.clone(),
         };
 
         self.tasks.insert(task_id, task_control);
 
         // Spawn the task's thread.
         tokio::spawn(async move {
+            if let Some(delay) = delay_start {
+                tokio::time::sleep(delay).await;
+            }
             span!(
                 Level::DEBUG,
-                "spawn_task",
+                "spawn_fork",
                 task_id = task_id,
                 player = player.to_literal()
             );

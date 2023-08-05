@@ -1105,7 +1105,6 @@ mod tests {
             )
             .unwrap();
 
-
         tx.set_object_location(b, c).unwrap();
         assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_contents(a).unwrap(), vec![]);

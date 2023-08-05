@@ -10,17 +10,17 @@ use uuid::Uuid;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
-use moor_value::var::Var;
+use moor_value::var::{v_int, Var};
 
 use crate::model::permissions::PermissionsContext;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::model::world_state::WorldState;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::{Sessions, TaskId};
+use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::opcode::Binary;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, VerbCall, VM};
+use crate::vm::{ExecutionResult, ForkRequest, VM};
 
 #[derive(Debug)]
 pub(crate) enum TaskControlMsg {
@@ -36,6 +36,10 @@ pub(crate) enum TaskControlMsg {
         verb: String,
         args: Vec<Var>,
     },
+    StartFork {
+        task_id: TaskId,
+        fork_request: ForkRequest,
+    },
     StartEval {
         player: Objid,
         binary: Binary,
@@ -43,11 +47,11 @@ pub(crate) enum TaskControlMsg {
     Abort,
 }
 
-#[derive(Debug)]
 pub(crate) enum TaskControlResponse {
     Success(Var),
     Exception(FinallyReason),
     AbortError(Error),
+    RequestFork(ForkRequest, tokio::sync::oneshot::Sender<TaskId>),
     AbortCancelled,
 }
 
@@ -126,7 +130,7 @@ impl Task {
                         return;
                     }
                     _ => {
-                        trace!(task_id = self.task_id, result = ?vm_exec_result, "Task end");
+                        trace!(task_id = self.task_id, "Task end");
                         self.world_state.rollback().await.unwrap();
 
                         self.response_sender
@@ -234,6 +238,15 @@ impl Task {
                 self.vm.exec_call_request(self.task_id, cr).await?;
                 self.running_method = true;
             }
+            TaskControlMsg::StartFork {
+                task_id,
+                fork_request,
+            } => {
+                assert!(!self.running_method);
+                trace!(?task_id, "Setting up fork");
+                self.vm.exec_fork_vector(fork_request, task_id).await?;
+                self.running_method = true;
+            }
             TaskControlMsg::StartEval { player, binary } => {
                 assert!(!self.running_method);
                 trace!(?player, ?binary, "Starting eval");
@@ -301,6 +314,25 @@ impl Task {
                     .exec_call_request(self.task_id, call_request)
                     .await
                     .expect("Could not set up VM for command execution");
+                Ok(None)
+            }
+            ExecutionResult::DispatchFork(fork_request) => {
+                // To fork a new task, we need to get the scheduler to do some work for us. So we'll
+                // send a message back asking it to fork the task and return the new task id on a
+                // reply channel.
+                // We will then take the new task id and send it back to the caller.
+                let (send, reply) = tokio::sync::oneshot::channel();
+                let task_id_var = fork_request.task_id;
+                self.response_sender
+                    .send(TaskControlResponse::RequestFork(fork_request, send))
+                    .expect("Could not send fork request");
+                let task_id = reply.await.expect("Could not get fork reply");
+                if let Some(task_id_var) = task_id_var {
+                    self.vm
+                        .top_mut()
+                        .set_var_offset(task_id_var, v_int(task_id as i64))
+                        .expect("Could not set forked task id");
+                }
                 Ok(None)
             }
             ExecutionResult::Complete(a) => {

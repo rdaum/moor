@@ -49,17 +49,11 @@ impl Default for Names {
 /// An offset is a program offset; a bit like a jump label, but represents a *relative* program
 /// position
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
-pub struct Offset(pub u32);
-
-impl From<i32> for Offset {
-    fn from(value: i32) -> Self {
-        Offset(value as u32)
-    }
-}
+pub struct Offset(pub usize);
 
 impl From<usize> for Offset {
     fn from(value: usize) -> Self {
-        Offset(value as u32)
+        Offset(value)
     }
 }
 

@@ -145,10 +145,10 @@ impl CodegenState {
         self.saved_stack = old
     }
 
-    fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> Label {
+    fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> Offset {
         let fv = self.fork_vectors.len();
         self.fork_vectors.push(opcodes);
-        Label(fv as u32)
+        Offset(fv)
     }
 
     fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), anyhow::Error> {
@@ -594,12 +594,13 @@ impl CodegenState {
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
+                self.emit(Op::Done);
                 let forked_ops = std::mem::take(&mut self.ops);
                 let fv_id = self.add_fork_vector(forked_ops);
                 self.ops = stashed_ops;
                 self.emit(Op::Fork {
                     id: *id,
-                    f_index: fv_id,
+                    fv_offset: fv_id,
                 });
                 self.pop_stack(1);
             }
@@ -1131,7 +1132,7 @@ mod tests {
             vec![
                 Imm(0.into()),
                 Fork {
-                    f_index: 0.into(),
+                    fv_offset: 0.into(),
                     id: None
                 },
                 Done
@@ -1145,7 +1146,8 @@ mod tests {
                 Imm(a),       // 'a'
                 MakeSingletonList,
                 CallVerb,
-                Pop
+                Pop,
+                Done
             ]
         );
     }
@@ -1165,7 +1167,7 @@ mod tests {
             vec![
                 Imm(five),
                 Fork {
-                    f_index: 0.into(),
+                    fv_offset: 0.into(),
                     id: Some(fid)
                 },
                 Done
@@ -1179,7 +1181,8 @@ mod tests {
                 Push(fid),    // fid
                 MakeSingletonList,
                 CallVerb,
-                Pop
+                Pop,
+                Done
             ]
         );
     }

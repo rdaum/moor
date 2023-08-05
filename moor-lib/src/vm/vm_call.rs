@@ -8,7 +8,7 @@ use moor_value::var::error::Error;
 use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
-use moor_value::var::Var;
+use moor_value::var::{v_int, Var};
 
 use crate::compiler::builtins::BUILTINS;
 use crate::model::permissions::{PermissionsContext, Perms};
@@ -16,11 +16,11 @@ use crate::model::verbs::VerbInfo;
 use crate::model::world_state::WorldState;
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::{Sessions, TaskId};
+use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::activation::Activation;
 use crate::vm::builtin::BfCallState;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, ResolvedVerbCall, VerbCall, VM};
+use crate::vm::{ExecutionResult, ForkRequest, ResolvedVerbCall, VM};
 
 impl VM {
     /// Entry point (from the scheduler) for beginning a command execution in this VM.
@@ -241,6 +241,37 @@ impl VM {
 
         tracing_enter_span(&span_id, &None);
 
+        Ok(())
+    }
+
+    /// Prepare a new stack & call hierarchy for invocation of a forked task.
+    /// Called (ultimately) from the scheduler as the result of a fork() call.
+    /// We get an activation record which is a copy of where it was borked from, and a new Binary
+    /// which is the new task's code, derived from a fork vector in the original task.
+    pub(crate) async fn exec_fork_vector(
+        &mut self,
+        fork_request: ForkRequest,
+        task_id: usize,
+    ) -> Result<(), anyhow::Error> {
+        let span = span!(Level::TRACE, "FORK", task_id);
+        let span_id = span.id();
+
+        // Set the activation up with the new task ID, and the new code.
+        let mut a = fork_request.activation;
+        a.span_id = span_id.clone();
+        a.task_id = task_id;
+        a.binary.main_vector = a.binary.fork_vectors[fork_request.fork_vector_offset.0].clone();
+        a.pc = 0;
+        if let Some(task_id_name) = fork_request.task_id {
+            a.set_var_offset(task_id_name, v_int(task_id as i64))
+                .unwrap();
+        }
+
+        // TODO how to set the task_id in the parent activation, as we no longer have a reference
+        // to it?
+        self.stack = vec![a];
+
+        tracing_enter_span(&span_id, &None);
         Ok(())
     }
 

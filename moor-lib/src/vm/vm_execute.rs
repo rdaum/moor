@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::RwLock;
 use tracing::trace;
@@ -12,7 +13,7 @@ use crate::tasks::Sessions;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, VM};
+use crate::vm::{ExecutionResult, ForkRequest, VM};
 
 macro_rules! binary_bool_op {
     ( $self:ident, $op:tt ) => {
@@ -403,7 +404,7 @@ impl VM {
                 }
             }
             Op::Length(offset) => {
-                let v = self.top().valstack[offset.0 as usize].clone();
+                let v = self.top().valstack[offset.0].clone();
                 match v.variant() {
                     Variant::Str(s) => self.push(&v_int(s.len() as i64)),
                     Variant::List(l) => self.push(&v_int(l.len() as i64)),
@@ -425,8 +426,31 @@ impl VM {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
                 return self.set_property(state, propname, obj, rhs).await;
             }
-            Op::Fork { id: _, f_index: _ } => {
-                unimplemented!("fork")
+            Op::Fork { id, fv_offset } => {
+                // Delay time should be on stack
+                let time = self.pop();
+                let Variant::Int(time) = time.variant() else {
+                    return self.push_error(E_TYPE);
+                };
+
+                if *time < 0 {
+                    return self.push_error(E_INVARG);
+                }
+                let delay = if *time == 0 {
+                    None
+                } else {
+                    Some(Duration::from_secs(*time as u64))
+                };
+                let new_activation = self.top().clone();
+                let fork = ForkRequest {
+                    player: self.top().player,
+                    parent_task_id: self.top().task_id,
+                    delay,
+                    activation: new_activation,
+                    fork_vector_offset: fv_offset,
+                    task_id: id,
+                };
+                return Ok(ExecutionResult::DispatchFork(fork));
             }
             Op::Pass => {
                 let args = self.pop();

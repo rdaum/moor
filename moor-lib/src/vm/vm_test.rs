@@ -18,10 +18,10 @@ mod tests {
     use crate::model::permissions::PermissionsContext;
     use crate::model::props::PropFlag;
     use crate::model::world_state::{WorldState, WorldStateSource};
-    use crate::tasks::Sessions;
+    use crate::tasks::{Sessions, VerbCall};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
-    use crate::vm::{ExecutionResult, VerbCall, VM};
+    use crate::vm::{ExecutionResult, VM};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -98,6 +98,9 @@ mod tests {
                 }
                 Ok(ExecutionResult::ContinueVerb(cr)) => {
                     vm.exec_call_request(0, cr).await.unwrap();
+                }
+                Ok(ExecutionResult::DispatchFork(_)) => {
+                    panic!("fork not implemented in test VM")
                 }
             }
         }
@@ -807,6 +810,9 @@ mod tests {
                 }
                 Ok(ExecutionResult::ContinueVerb(cr)) => {
                     vm.exec_call_request(0, cr).await.unwrap();
+                }
+                Ok(ExecutionResult::DispatchFork(_)) => {
+                    panic!("dispatch fork not supported in this test");
                 }
             }
         }
