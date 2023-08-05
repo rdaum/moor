@@ -6,10 +6,10 @@ use anyhow::anyhow;
 use dashmap::DashMap;
 use fast_counter::ConcurrentCounter;
 use thiserror::Error;
+use tokio::select;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
 use moor_value::var::objid::Objid;
@@ -53,17 +53,25 @@ pub async fn scheduler_loop(scheduler: Arc<RwLock<Scheduler>>) {
         let start_lock = scheduler.write().await;
         start_lock.running.store(true, Ordering::SeqCst);
     }
+    let mut interval = tokio::time::interval(Duration::from_millis(5));
     loop {
         {
-            let mut scheduler = scheduler.write().await;
-            if !scheduler.running.load(Ordering::SeqCst) {
-                break;
-            }
-            if let Err(e) = scheduler.do_process().await {
-                error!(error = ?e, "Error processing scheduler loop");
+            select! {
+                _ = interval.tick() => {
+                    let mut scheduler = scheduler.write().await;
+                    if !scheduler.running.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    if let Err(e) = scheduler.do_process().await {
+                        error!(error = ?e, "Error processing scheduler loop");
+                    }
+                }
             }
         }
-        sleep(Duration::from_millis(1)).await;
+    }
+    {
+        let start_lock = scheduler.write().await;
+        start_lock.running.store(false, Ordering::SeqCst);
     }
     info!("Scheduler done.");
 }
@@ -249,6 +257,12 @@ impl Scheduler {
 
     pub async fn stop(scheduler: Arc<RwLock<Self>>) -> Result<(), anyhow::Error> {
         let scheduler = scheduler.write().await;
+        // Send shut down to all the tasks.
+        for task in &scheduler.tasks {
+            task.control_sender.send(TaskControlMsg::Abort)?;
+        }
+        // Then spin until they're all done.
+        while !scheduler.tasks.is_empty() {}
         scheduler.running.store(false, Ordering::SeqCst);
         Ok(())
     }

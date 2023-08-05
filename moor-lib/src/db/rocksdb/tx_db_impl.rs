@@ -1105,10 +1105,31 @@ mod tests {
             )
             .unwrap();
 
+
         tx.set_object_location(b, c).unwrap();
         assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_contents(a).unwrap(), vec![]);
         assert_eq!(tx.get_object_contents(c).unwrap(), vec![b]);
+
+        let d = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test4".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+        tx.set_object_location(d, c).unwrap();
+        assert_eq!(tx.get_object_contents(c).unwrap(), vec![b, d]);
+        assert_eq!(tx.get_object_location(d).unwrap(), c);
+
+        tx.set_object_location(a, c).unwrap();
+        assert_eq!(tx.get_object_contents(c).unwrap(), vec![b, d, a]);
+        assert_eq!(tx.get_object_location(a).unwrap(), c);
     }
 
     #[test]

@@ -100,7 +100,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .listen_address
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
 
-    let (shutdown_sender, _shutdown_receiver) = tokio::sync::mpsc::channel(1);
+    let (shutdown_sender, mut shutdown_receiver) = tokio::sync::mpsc::channel(1);
 
     let ws_server = Arc::new(RwLock::new(WebSocketServer::new(
         scheduler.clone(),
@@ -133,6 +133,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     loop {
         select! {
+            _ = shutdown_receiver.recv() => {
+                info!("Shutdown received, stopping...");
+                Scheduler::stop(scheduler.clone()).await.unwrap();
+                info!("All tasks stopped.");
+                axum_server.abort();
+                break;
+            }
             _ = scheduler_loop => {
                 info!("Scheduler loop exited, stopping...");
                 axum_server.abort();

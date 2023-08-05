@@ -85,7 +85,7 @@ pub async fn ws_handle_connection(
     info!(?player, ?peer, "New websocket connection");
     let (ws_sender, mut ws_receiver) = stream.split();
 
-    // TODO auth/validation phase.  Add interface on Sesson?
+    // TODO auth/validation phase.  Add interface on Session?
 
     // Register connection with player.
     {
