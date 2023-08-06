@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -9,6 +10,7 @@ use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
 
 use crate::model::world_state::WorldState;
+use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::Sessions;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
@@ -36,11 +38,16 @@ macro_rules! binary_var_op {
     };
 }
 
+pub struct VmExecParams<'a> {
+    pub world_state: &'a mut dyn WorldState,
+    pub sessions: Arc<RwLock<dyn Sessions>>,
+    pub scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+}
+
 impl VM {
-    pub async fn exec(
+    pub async fn exec<'a>(
         &mut self,
-        state: &mut dyn WorldState,
-        client_connection: Arc<RwLock<dyn Sessions>>,
+        exec_params: VmExecParams<'a>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         let op = self
             .next_op()
@@ -415,16 +422,22 @@ impl VM {
             }
             Op::GetProp => {
                 let (propname, obj) = (self.pop(), self.pop());
-                return self.resolve_property(state, propname, obj).await;
+                return self
+                    .resolve_property(exec_params.world_state, propname, obj)
+                    .await;
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
                 let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
-                return self.resolve_property(state, propname, obj).await;
+                return self
+                    .resolve_property(exec_params.world_state, propname, obj)
+                    .await;
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (self.pop(), self.pop(), self.pop());
-                return self.set_property(state, propname, obj, rhs).await;
+                return self
+                    .set_property(exec_params.world_state, propname, obj, rhs)
+                    .await;
             }
             Op::Fork { id, fv_offset } => {
                 // Delay time should be on stack
@@ -457,7 +470,9 @@ impl VM {
                 let Variant::List(args) = args.variant() else {
                     return self.push_error(E_TYPE);
                 };
-                return self.prepare_pass_verb(state, &args[..]).await;
+                return self
+                    .prepare_pass_verb(exec_params.world_state, &args[..])
+                    .await;
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (self.pop(), self.pop(), self.pop());
@@ -470,7 +485,7 @@ impl VM {
                 // TODO: check obj for validity, return E_INVIND if not
 
                 return self
-                    .prepare_call_verb(state, *obj, verb.as_str(), &args[..])
+                    .prepare_call_verb(exec_params.world_state, *obj, verb.as_str(), &args[..])
                     .await;
             }
             Op::Return => {
@@ -490,7 +505,13 @@ impl VM {
                     return self.push_error(E_ARGS);
                 };
                 return self
-                    .call_builtin_function(id.0 as usize, &args[..], state, client_connection)
+                    .call_builtin_function(
+                        id.0 as usize,
+                        &args[..],
+                        exec_params.world_state,
+                        exec_params.sessions,
+                        exec_params.scheduler_sender.clone(),
+                    )
                     .await;
             }
             Op::PushLabel(label) => {

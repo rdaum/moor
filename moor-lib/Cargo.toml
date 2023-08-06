@@ -41,10 +41,6 @@ thiserror = "1.0.40"
 ## For macro-ing
 paste = "1.0.12"
 
-## Support to assist a generally more lovely concurrency story.
-dashmap = "5.4.0" # Fast foncurrent hash hash
-fast-counter = "1.0.0" # Concurrent thread local counters.
-
 ## Asynchronous transaction processing & networking
 tokio = { version = "1.28.2", features = ["full"] }
 tokio-test = "0.4.2"
@@ -52,7 +48,11 @@ tokio-test = "0.4.2"
 ## Logging & tracing
 tracing = "0.1.37"
 tracing-test = "0.2.4"
+metrics = "0.21.1"
+metrics-util = { version = "0.15.1",  default-features = false, features = ["recency", "registry", "summary"] }
+metrics-macros = "0.7.0"
 
+# For the DB layer.
 rocksdb = "0.21.0"
 crossbeam-channel = "0.5.8"
 bincode = "2.0.0-rc.3"

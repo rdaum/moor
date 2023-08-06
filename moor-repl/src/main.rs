@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
-use moor_lib::tasks::scheduler::{scheduler_loop, Scheduler};
+use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_value::var::objid::Objid;
@@ -31,14 +31,13 @@ struct Args {
 
 async fn do_eval(
     player: Objid,
-    scheduler: Arc<RwLock<Scheduler>>,
+    mut scheduler: Scheduler,
     program: String,
     sessions: Arc<RwLock<ReplSession>>,
 ) -> Result<(), anyhow::Error> {
-    let task_id = {
-        let mut scheduler = scheduler.write().await;
-        scheduler.submit_eval_task(player, program, sessions).await
-    }?;
+    let task_id = scheduler
+        .submit_eval_task(player, program, sessions)
+        .await?;
     info!("Submitted task {}", task_id);
     Ok(())
 }
@@ -118,7 +117,7 @@ async fn main() -> Result<(), anyhow::Error> {
     tx.commit().await.unwrap();
 
     let state_src = Arc::new(RwLock::new(src));
-    let scheduler = Arc::new(RwLock::new(Scheduler::new(state_src.clone())));
+    let scheduler = Scheduler::new(state_src.clone());
 
     let eval_sessions = Arc::new(RwLock::new(ReplSession {
         player: Objid(2),
@@ -126,9 +125,13 @@ async fn main() -> Result<(), anyhow::Error> {
         connect_time: std::time::Instant::now(),
         last_activity: std::time::Instant::now(),
     }));
+
     loop {
+        let mut loop_scheduler = scheduler.clone();
+        let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
+
         tokio::select! {
-            _ = tokio::spawn(scheduler_loop(scheduler.clone())) => {
+            _ = scheduler_loop => {
                writeln!(stdout, "Scheduler loop exited, stopping...")?;
                break;
             }

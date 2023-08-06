@@ -148,7 +148,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | Name              | Complete | Notes |
 |-------------------|----------|-------|
 | task_id           | &check;  |       |
-| queued_tasks      |          |       |
+| queued_tasks      | &check;  |       |
 | kill_task         |          |       |
 | output_delimiters |          |       |
 | queue_info        |          |       |

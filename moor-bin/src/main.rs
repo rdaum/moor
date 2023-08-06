@@ -20,7 +20,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
 use moor_lib::model::objects::{ObjAttrs, ObjFlag};
-use moor_lib::tasks::scheduler::{scheduler_loop, Scheduler};
+use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
@@ -91,7 +91,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let state_src = Arc::new(RwLock::new(src));
-    let scheduler = Arc::new(RwLock::new(Scheduler::new(state_src.clone())));
+    let scheduler = Scheduler::new(state_src.clone());
 
     let addr = args
         .listen_address
@@ -99,8 +99,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let (shutdown_sender, mut shutdown_receiver) = tokio::sync::mpsc::channel(1);
 
+    let server_scheduler = scheduler.clone();
     let ws_server = Arc::new(RwLock::new(WebSocketServer::new(
-        scheduler.clone(),
+        server_scheduler,
         shutdown_sender,
     )));
     let mut hup_signal =
@@ -108,7 +109,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut stop_signal =
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
-    let scheduler_loop = tokio::spawn(scheduler_loop(scheduler.clone()));
+    let mut loop_scheduler = scheduler.clone();
+    let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
     let web_router = Router::new()
         .route("/ws/players/:player", get(ws_handler))
@@ -132,7 +134,7 @@ async fn main() -> Result<(), anyhow::Error> {
         select! {
             _ = shutdown_receiver.recv() => {
                 info!("Shutdown received, stopping...");
-                Scheduler::stop(scheduler.clone()).await.unwrap();
+                scheduler.clone().stop().await.unwrap();
                 info!("All tasks stopped.");
                 axum_server.abort();
                 break;

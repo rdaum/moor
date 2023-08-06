@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 use tracing::{error, span, trace, Level};
 
@@ -16,6 +17,7 @@ use crate::model::verbs::VerbInfo;
 use crate::model::world_state::WorldState;
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
+use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::activation::Activation;
 use crate::vm::builtin::{BfCallState, BfRet};
@@ -281,7 +283,8 @@ impl VM {
         bf_func_num: usize,
         args: &[Var],
         state: &mut dyn WorldState,
-        client_connection: Arc<RwLock<dyn Sessions>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
+        scheduler_sender: UnboundedSender<SchedulerControlMsg>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         if bf_func_num >= self.builtins.len() {
             return self.raise_error(E_VARNF);
@@ -303,8 +306,9 @@ impl VM {
             vm: self,
             name: BUILTINS[bf_func_num],
             world_state: state,
-            sessions: client_connection,
+            sessions,
             args: args.to_vec(),
+            scheduler_sender,
         };
         match bf.call(&mut bf_args).await {
             Ok(BfRet::Ret(result)) => {
@@ -314,12 +318,8 @@ impl VM {
                 self.push(&result);
                 Ok(ExecutionResult::More)
             }
-            Ok(BfRet::Error(e)) => {
-                self.push_error(e)
-            }
-            Ok(BfRet::VmInstr(vmi)) => {
-                Ok(vmi)
-            }
+            Ok(BfRet::Error(e)) => self.push_error(e),
+            Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
             Err(e) => match e.downcast_ref() {
                 Some(ObjectError::ObjectNotFound(_)) => self.push_error(E_INVARG),
                 Some(ObjectError::ObjectPermissionDenied) => self.push_error(E_PERM),

@@ -32,11 +32,11 @@ struct WsConnection {
 
 pub struct WebSocketServer {
     sessions: Arc<RwLock<WebSocketSessions>>,
-    scheduler: Arc<RwLock<Scheduler>>,
+    scheduler: Scheduler,
 }
 
 impl WebSocketServer {
-    pub fn new(scheduler: Arc<RwLock<Scheduler>>, shutdown_sender: Sender<Option<String>>) -> Self {
+    pub fn new(scheduler: Scheduler, shutdown_sender: Sender<Option<String>>) -> Self {
         let inner = WebSocketSessions {
             connections: Default::default(),
             shutdown_sender,
@@ -133,10 +133,11 @@ pub async fn ws_handle_connection(
             connection.last_activity = std::time::Instant::now();
         }
         let task_id = {
-            let server = server.read().await;
-            let mut scheduler = server.scheduler.write().await;
-            scheduler
-                .submit_command_task(player, cmd, server.sessions.clone())
+            let mut server = server.write().await;
+            let sessions = server.sessions.clone();
+            server
+                .scheduler
+                .submit_command_task(player, cmd, sessions)
                 .await
         };
         if let Err(e) = task_id {

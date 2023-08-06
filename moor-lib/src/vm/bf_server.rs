@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
-use tracing::warn;
+use tokio::sync::oneshot;
+use tracing::{debug, warn};
 
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
@@ -12,6 +13,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
+use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
@@ -277,6 +279,53 @@ async fn bf_suspend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::
 }
 bf_declare!(suspend, bf_suspend);
 
+async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if !bf_args.args.is_empty() {
+        return Ok(Error(E_INVARG));
+    }
+
+    // Ask the scheduler (through its mailbox) to describe all the queued tasks.
+    let (send, receive) = oneshot::channel();
+    debug!("sending DescribeOtherTasks to scheduler");
+    bf_args
+        .scheduler_sender
+        .send(SchedulerControlMsg::DescribeOtherTasks(send))
+        .expect("scheduler is not listening");
+    debug!("waiting for response from scheduler");
+    let mut tasks = receive.await?;
+    debug!("got response from scheduler");
+
+    // return in form:
+    //     {<task-id>, <start-time>, <x>, <y>,
+    //      <programmer>, <verb-loc>, <verb-name>, <line>, <this>}
+    let tasks = tasks
+        .iter()
+        .map(|task| {
+            let task_id = v_int(task.task_id as i64);
+            let start_time = match task.start_time {
+                None => v_none(),
+                Some(start_time) => {
+                    let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+                    v_int(time.as_secs() as i64)
+                }
+            };
+            let x = v_none();
+            let y = v_none();
+            let programmer = v_objid(task.permissions.task_perms().obj);
+            let verb_loc = v_objid(task.verb_definer);
+            let verb_name = v_string(task.verb_name.clone());
+            let line = v_int(task.line_number as i64);
+            let this = v_objid(task.this);
+            v_list(vec![
+                task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
+            ])
+        })
+        .collect();
+
+    Ok(Ret(v_list(tasks)))
+}
+bf_declare!(queued_tasks, bf_queued_tasks);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -296,6 +345,7 @@ impl VM {
             Arc::new(Box::new(BfServerVersion {}));
         self.builtins[offset_for_builtin("shutdown")] = Arc::new(Box::new(BfShutdown {}));
         self.builtins[offset_for_builtin("suspend")] = Arc::new(Box::new(BfSuspend {}));
+        self.builtins[offset_for_builtin("queued_tasks")] = Arc::new(Box::new(BfQueuedTasks {}));
 
         Ok(())
     }
