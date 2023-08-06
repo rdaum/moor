@@ -3,12 +3,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
+use moor_value::var::error::Error;
 use moor_value::var::Var;
 
 use crate::model::permissions::PermissionsContext;
 use crate::model::world_state::WorldState;
 use crate::tasks::Sessions;
-use crate::vm::VM;
+use crate::vm::{ExecutionResult, VM};
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
@@ -28,7 +29,13 @@ impl<'a> BfCallState<'a> {
 #[async_trait]
 pub(crate) trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
-    async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error>;
+    async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error>;
+}
+
+pub(crate) enum BfRet {
+    Ret(Var),
+    Error(Error),
+    VmInstr(ExecutionResult),
 }
 
 #[macro_export]
@@ -44,7 +51,7 @@ macro_rules! bf_declare {
                 async fn call<'a>(
                     &self,
                     bf_args: &mut BfCallState<'a>
-                ) -> Result<Var, anyhow::Error> {
+                ) -> Result<BfRet, anyhow::Error> {
                     $action(bf_args).await
                 }
             }

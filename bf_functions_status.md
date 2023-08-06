@@ -163,7 +163,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 |----------------|----------|----------------------------------------------|
 | call_function  |          |                                              |
 | raise          | &check;  | Does not support message / value parameters. |
-| suspend        |          |                                              |
+| suspend        | &check;  |                                              |
 | seconds_left   |          |                                              |
 | ticks_left     |          |                                              |
 | pass           | &check;  | Is an opcode                                 |

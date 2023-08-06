@@ -18,7 +18,7 @@ use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::activation::Activation;
-use crate::vm::builtin::BfCallState;
+use crate::vm::builtin::{BfCallState, BfRet};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, ResolvedVerbCall, VM};
 
@@ -307,12 +307,18 @@ impl VM {
             args: args.to_vec(),
         };
         match bf.call(&mut bf_args).await {
-            Ok(result) => {
+            Ok(BfRet::Ret(result)) => {
                 if let Variant::Err(e) = result.variant() {
                     return self.push_error(*e);
                 }
                 self.push(&result);
                 Ok(ExecutionResult::More)
+            }
+            Ok(BfRet::Error(e)) => {
+                self.push_error(e)
+            }
+            Ok(BfRet::VmInstr(vmi)) => {
+                Ok(vmi)
             }
             Err(e) => match e.downcast_ref() {
                 Some(ObjectError::ObjectNotFound(_)) => self.push_error(E_INVARG),

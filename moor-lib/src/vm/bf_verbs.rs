@@ -5,23 +5,24 @@ use async_trait::async_trait;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_err, v_list, v_none, v_objid, v_str, v_string, Var};
+use moor_value::var::{v_list, v_none, v_objid, v_str, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::r#match::{ArgSpec, VerbArgsSpec};
 use crate::model::verbs::VerbFlag;
 use crate::tasks::command_parse::{parse_preposition_string, preposition_to_string};
-use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::builtin::BfRet::{Error, Ret};
+use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
-async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
 
     let verb_info = match bf_args.args[1].variant() {
@@ -34,7 +35,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
             if verb_index < 1 {
-                return Ok(v_err(E_INVARG));
+                return Ok(Error(E_INVARG));
             }
             let verb_index = (verb_index as usize) - 1;
             bf_args
@@ -43,7 +44,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
                 .await?
         }
         _ => {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         }
     };
     let owner = verb_info.attrs.owner.unwrap();
@@ -72,23 +73,23 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         v_string(perms_string),
         v_string(verb_names),
     ]);
-    Ok(result)
+    Ok(Ret(result))
 }
 bf_declare!(verb_info, bf_verb_info);
 
 // set_verb_info (obj <object>, str <verb-desc>, list <info>) => none
-async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::List(info) = bf_args.args[2].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     if info.len() != 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     match (info[0].variant(), info[1].variant(), info[2].variant()) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
@@ -99,7 +100,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                     'w' => perms |= VerbFlag::Write,
                     'x' => perms |= VerbFlag::Exec,
                     'd' => perms |= VerbFlag::Debug,
-                    _ => return Ok(v_err(E_INVARG)),
+                    _ => return Ok(Error(E_INVARG)),
                 }
             }
 
@@ -128,7 +129,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                 Variant::Int(verb_index) => {
                     let verb_index = *verb_index;
                     if verb_index < 1 {
-                        return Ok(v_err(E_INVARG));
+                        return Ok(Error(E_INVARG));
                     }
                     let verb_index = (verb_index as usize) - 1;
                     bf_args
@@ -144,22 +145,22 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                         )
                         .await?;
                 }
-                _ => return Ok(v_err(E_TYPE)),
+                _ => return Ok(Error(E_TYPE)),
             }
 
-            Ok(v_none())
+            Ok(Ret(v_none()))
         }
-        _ => Ok(v_err(E_INVARG)),
+        _ => Ok(Error(E_INVARG)),
     }
 }
 bf_declare!(set_verb_info, bf_set_verb_info);
 
-async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let args = match bf_args.args[1].variant() {
         Variant::Str(verb_desc) => {
@@ -173,7 +174,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
             if verb_index < 1 {
-                return Ok(v_err(E_INVARG));
+                return Ok(Error(E_INVARG));
             }
             let verb_index = (verb_index as usize) - 1;
             let verb_info = bf_args
@@ -182,7 +183,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
                 .await?;
             verb_info.attrs.args_spec.unwrap()
         }
-        _ => return Ok(v_err(E_TYPE)),
+        _ => return Ok(Error(E_TYPE)),
     };
     // Output is {dobj, prep, iobj} as strings
     let result = v_list(vec![
@@ -190,23 +191,23 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::
         v_str(preposition_to_string(&args.prep)),
         v_str(args.iobj.to_string()),
     ]);
-    Ok(result)
+    Ok(Ret(result))
 }
 bf_declare!(verb_args, bf_verb_args);
 
 // set_verb_args (obj <object>, str <verb-desc>, list <args>) => none
-async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::List(verbinfo) = bf_args.args[2].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     if verbinfo.len() != 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     match (
         verbinfo[0].variant(),
@@ -215,13 +216,13 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
     ) {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
             let Some(dobj) = ArgSpec::from_string(dobj_str.as_str()) else {
-                return Ok(v_err(E_INVARG));
+                return Ok(Error(E_INVARG));
             };
             let Some(prep) = parse_preposition_string(prep_str.as_str()) else {
-                return Ok(v_err(E_INVARG));
+                return Ok(Error(E_INVARG));
             };
             let Some(iobj) = ArgSpec::from_string(iobj_str.as_str()) else {
-                return Ok(v_err(E_INVARG));
+                return Ok(Error(E_INVARG));
             };
             let args = VerbArgsSpec { dobj, prep, iobj };
             match bf_args.args[1].variant() {
@@ -242,7 +243,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                 Variant::Int(verb_index) => {
                     let verb_index = *verb_index;
                     if verb_index < 1 {
-                        return Ok(v_err(E_INVARG));
+                        return Ok(Error(E_INVARG));
                     }
                     let verb_index = (verb_index as usize) - 1;
                     bf_args
@@ -258,11 +259,11 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
                         )
                         .await?;
                 }
-                _ => return Ok(v_err(E_TYPE)),
+                _ => return Ok(Error(E_TYPE)),
             }
-            Ok(v_none())
+            Ok(Ret(v_none()))
         }
-        _ => Ok(v_err(E_INVARG)),
+        _ => Ok(Error(E_INVARG)),
     }
 }
 bf_declare!(set_verb_args, bf_set_verb_args);

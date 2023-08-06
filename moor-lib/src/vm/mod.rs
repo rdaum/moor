@@ -87,6 +87,12 @@ pub enum ExecutionResult {
     ContinueVerb(ResolvedVerbCall),
     /// Request dispatch of a new task as a fork
     DispatchFork(ForkRequest),
+    /// Request that this task be suspended for a duration of time.
+    /// This leads to the task performing a commit, being suspended for a delay, and then being
+    /// resumed under a new transaction.
+    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
+    /// resumed using `resume()` or `kill_task()`.
+    Suspend(Option<Duration>),
 }
 
 impl Default for VM {

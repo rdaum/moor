@@ -117,9 +117,13 @@ impl VM {
     }
 
     pub(crate) fn pop(&mut self) -> Var {
-        self.top_mut()
-            .pop()
-            .unwrap_or_else(|| panic!("stack underflow, activation depth: {}", self.stack.len()))
+        self.top_mut().pop().unwrap_or_else(|| {
+            panic!(
+                "stack underflow, activation depth: {} PC: {}",
+                self.stack.len(),
+                self.top().pc
+            )
+        })
     }
 
     pub(crate) fn push(&mut self, v: &Var) {

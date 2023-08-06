@@ -1,38 +1,39 @@
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use tracing::warn;
 
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_bool, v_err, v_int, v_list, v_none, v_objid, v_string, Var};
+use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
-use crate::vm::builtin::{BfCallState, BuiltinFunction};
-use crate::vm::VM;
+use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
+use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
+use crate::vm::{ExecutionResult, VM};
 
-async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
     // instead. right now it just panics so we can find all the places that need to be updated.
     unimplemented!("BF is not implemented: {}", bf_args.name);
 }
 bf_declare!(noop, bf_noop);
 
-async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let msg = bf_args.args[1].variant();
     let Variant::Str(msg) = msg else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
@@ -55,16 +56,16 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
     }
 
     // MOO docs say this should return none, but in reality it returns 1?
-    Ok(v_int(1))
+    Ok(Ret(v_int(1)))
 }
 bf_declare!(notify, bf_notify);
 
-async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if !bf_args.args.is_empty() {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
 
-    Ok(v_list(
+    Ok(Ret(v_list(
         bf_args
             .sessions
             .read()
@@ -74,43 +75,43 @@ async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
             .iter()
             .map(|p| v_objid(*p))
             .collect(),
-    ))
+    )))
 }
 bf_declare!(connected_players, bf_connected_players);
 
-async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
 
     let is_player = match bf_args.world_state.flags_of(*player).await {
         Ok(flags) => flags.contains(ObjFlag::User),
-        Err(ObjectError::ObjectNotFound(_)) => return Ok(v_err(E_INVARG)),
+        Err(ObjectError::ObjectNotFound(_)) => return Ok(Error(E_INVARG)),
         Err(e) => return Err(e.into()),
     };
-    Ok(v_bool(is_player))
+    Ok(Ret(v_bool(is_player)))
 }
 bf_declare!(is_player, bf_is_player);
 
-async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if !bf_args.args.is_empty() {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
 
-    Ok(v_objid(bf_args.perms().caller_perms().obj))
+    Ok(Ret(v_objid(bf_args.perms().caller_perms().obj)))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
-async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(perms_for) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
 
     bf_args.perms().task_perms().check_wizard()?;
@@ -118,17 +119,17 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
         .perms()
         .set_task_perms(*perms_for, bf_args.world_state.flags_of(*perms_for).await?);
 
-    Ok(v_none())
+    Ok(Ret(v_none()))
 }
 bf_declare!(set_task_perms, bf_set_task_perms);
 
-async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if !bf_args.args.is_empty() {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
 
     let callers = bf_args.vm.callers();
-    Ok(v_list(
+    Ok(Ret(v_list(
         callers
             .iter()
             .map(|c| {
@@ -143,60 +144,60 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Er
                 v_list(callers)
             })
             .collect(),
-    ))
+    )))
 }
 bf_declare!(callers, bf_callers);
 
-async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if !bf_args.args.is_empty() {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
 
-    Ok(v_int(bf_args.vm.top().task_id as i64))
+    Ok(Ret(v_int(bf_args.vm.top().task_id as i64)))
 }
 bf_declare!(task_id, bf_task_id);
 
-async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let sessions = bf_args.sessions.read().await;
     let Ok(idle_seconds) = sessions.idle_seconds(*who) else {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
-    Ok(v_int(idle_seconds as i64))
+    Ok(Ret(v_int(idle_seconds as i64)))
 }
 bf_declare!(idle_seconds, bf_idle_seconds);
 
-async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let sessions = bf_args.sessions.read().await;
     let Ok(connected_seconds) = sessions.connected_seconds(*who) else {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
-    Ok(v_int(connected_seconds as i64))
+    Ok(Ret(v_int(connected_seconds as i64)))
 }
 bf_declare!(connected_seconds, bf_connected_seconds);
 
-async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() > 1 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let msg = if bf_args.args.is_empty() {
         None
     } else {
         let Variant::Str(msg) = bf_args.args[0].variant() else {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         };
         Some(msg.as_str().to_string())
     };
@@ -204,55 +205,77 @@ async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::E
     bf_args.perms().task_perms().check_wizard()?;
     bf_args.sessions.write().await.shutdown(msg).await.unwrap();
 
-    Ok(v_none())
+    Ok(Ret(v_none()))
 }
 bf_declare!(shutdown, bf_shutdown);
 
-async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if !bf_args.args.is_empty() {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
-    Ok(v_int(
+    Ok(Ret(v_int(
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64,
-    ))
+    )))
 }
 bf_declare!(time, bf_time);
 
-async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
     //
     // Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.  <Message>, which defaults to the value of `tostr(<code>)',
     // and <value>, which defaults to zero, are made available to any `try'-`except' statements that catch the error.  If the error is not caught, then <message> will
     // appear on the first line of the traceback printed to the user.
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
 
     let Variant::Err(_) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
     // TODO implement message & value params, can't do that with the existing bf interface for
     // returning errors right now :-(
     // probably need to change the result type here to not use anyhow::Error, and pack in some
     // more useful stuff
-    Ok(bf_args.args[0].clone())
+    Ok(Ret(bf_args.args[0].clone()))
 }
 bf_declare!(raise, bf_raise);
 
-async fn bf_server_version<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_server_version<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if !bf_args.args.is_empty() {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     // TODO: This is a placeholder for now, should be set by the server on startup. But right now
     // there isn't a good place to stash this other than WorldState. I intend on refactoring the
     // signature for BF invocations, and when I do this, I'll get additional metadata on there.
-    Ok(v_string("0.0.1".to_string()))
+    Ok(Ret(v_string("0.0.1".to_string())))
 }
 bf_declare!(server_version, bf_server_version);
+
+async fn bf_suspend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    // Syntax:  suspend(<seconds>)   => none
+    //
+    // Suspends the current task for <seconds> seconds.  If <seconds> is not specified, the task is suspended indefinitely.  The task may be resumed early by
+    // calling `resume' on it.
+    if bf_args.args.len() > 1 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let seconds = if bf_args.args.is_empty() {
+        None
+    } else {
+        let Variant::Int(seconds) = bf_args.args[0].variant() else {
+            return Ok(Error(E_TYPE));
+        };
+        Some(Duration::from_secs(*seconds as u64))
+    };
+
+    Ok(VmInstr(ExecutionResult::Suspend(seconds)))
+}
+bf_declare!(suspend, bf_suspend);
 
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
@@ -272,6 +295,8 @@ impl VM {
         self.builtins[offset_for_builtin("server_version")] =
             Arc::new(Box::new(BfServerVersion {}));
         self.builtins[offset_for_builtin("shutdown")] = Arc::new(Box::new(BfShutdown {}));
+        self.builtins[offset_for_builtin("suspend")] = Arc::new(Box::new(BfSuspend {}));
+
         Ok(())
     }
 }

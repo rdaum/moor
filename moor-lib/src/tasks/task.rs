@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+
 use anyhow::Error;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
-use tracing::{error, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 
+use crate::db::CommitResult;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
@@ -15,7 +17,7 @@ use moor_value::var::{v_int, Var};
 use crate::model::permissions::PermissionsContext;
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbFlag, VerbInfo};
-use crate::model::world_state::WorldState;
+use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::opcode::Binary;
@@ -52,47 +54,27 @@ pub(crate) enum TaskControlResponse {
     Exception(FinallyReason),
     AbortError(Error),
     RequestFork(ForkRequest, tokio::sync::oneshot::Sender<TaskId>),
+    /// Put task into suspended state, with an optional channel for it to wake us.
+    Suspended(Option<tokio::sync::oneshot::Sender<()>>),
     AbortCancelled,
 }
 
 pub(crate) struct Task {
-    task_id: TaskId,
-    control_receiver: UnboundedReceiver<TaskControlMsg>,
-    response_sender: UnboundedSender<TaskControlResponse>,
-    player: Objid,
-    vm: VM,
-    sessions: Arc<RwLock<dyn Sessions>>,
-    world_state: Box<dyn WorldState>,
-    perms: PermissionsContext,
-    running_method: bool,
-    tmp_verb: Option<(Objid, String)>,
+    pub(crate) task_id: TaskId,
+    pub(crate) control_receiver: UnboundedReceiver<TaskControlMsg>,
+    pub(crate) response_sender: UnboundedSender<TaskControlResponse>,
+    pub(crate) player: Objid,
+    pub(crate) vm: VM,
+    pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    pub(crate) world_state: Box<dyn WorldState>,
+    // Needed when tasks resume from a suspended state and need a new transaction.
+    pub(crate) state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
+    pub(crate) perms: PermissionsContext,
+    pub(crate) running_method: bool,
+    pub(crate) tmp_verb: Option<(Objid, String)>,
 }
 
 impl Task {
-    pub fn new(
-        task_id: TaskId,
-        control_receiver: UnboundedReceiver<TaskControlMsg>,
-        response_sender: UnboundedSender<TaskControlResponse>,
-        player: Objid,
-        vm: VM,
-        sessions: Arc<RwLock<dyn Sessions>>,
-        state: Box<dyn WorldState>,
-        perms: PermissionsContext,
-    ) -> Self {
-        Self {
-            task_id,
-            control_receiver,
-            response_sender,
-            player,
-            vm,
-            sessions,
-            world_state: state,
-            perms,
-            running_method: false,
-            tmp_verb: None,
-        }
-    }
-
     #[instrument(skip(self), name = "task_run")]
     pub(crate) async fn run(mut self) {
         loop {
@@ -333,6 +315,52 @@ impl Task {
                         .set_var_offset(task_id_var, v_int(task_id as i64))
                         .expect("Could not set forked task id");
                 }
+                Ok(None)
+            }
+            ExecutionResult::Suspend(delay) => {
+                trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
+                // Attempt commit...
+                // TODO: what to do on conflict? The whole thing needs to be retried, but we have
+                // not implemented that at any other level yet, so we'll just abort for now.
+                let commit_result = self
+                    .world_state
+                    .commit()
+                    .await
+                    .expect("Could not commit world state before suspend");
+                if let CommitResult::ConflictRetry = commit_result {
+                    error!("Conflict during commit before suspend");
+                    return Ok(Some(TaskControlResponse::AbortCancelled));
+                }
+
+                // If this is 'indefinite' suspension, we give the scheduler a channel to wake us.
+                // If not, just set a timer and wait on it.
+                // But in both cases we need to tell the scheduler about our suspension state.
+                if let Some(delay) = delay {
+                    self.response_sender
+                        .send(TaskControlResponse::Suspended(None))
+                        .expect("Could not send suspend response");
+                    tokio::time::sleep(delay).await;
+                } else {
+                    let (send, reply) = tokio::sync::oneshot::channel();
+                    self.response_sender
+                        .send(TaskControlResponse::Suspended(Some(send)))
+                        .expect("Could not send suspend response");
+                    reply.await.expect("Could not get suspend reply");
+                };
+
+                // We're back. Get a new world state and resume.
+                debug!(
+                    task_id = self.task_id,
+                    "Resuming task, getting new transaction"
+                );
+                let mut state_source = self.state_source.write().await;
+                let (new_world_state, permissions) =
+                    state_source.new_world_state(self.player).await?;
+                self.world_state = new_world_state;
+                self.perms = permissions;
+                // suspend needs a return value. this seems to be what lambdamoo gives.
+                self.vm.top_mut().push(v_int(0));
+                debug!(task_id = self.task_id, "Resuming task...");
                 Ok(None)
             }
             ExecutionResult::Complete(a) => {

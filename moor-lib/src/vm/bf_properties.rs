@@ -5,25 +5,26 @@ use async_trait::async_trait;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_err, v_int, v_list, v_objid, v_string, Var};
+use moor_value::var::{v_int, v_list, v_objid, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::model::props::{PropAttrs, PropFlag};
-use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::builtin::BfRet::{Error, Ret};
+use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }
-async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let property_info = bf_args
         .world_state
@@ -45,35 +46,35 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyh
         perms.push('c');
     }
 
-    Ok(v_list(vec![
+    Ok(Ret(v_list(vec![
         v_objid(owner),
         v_string(perms),
         v_string(name),
-    ]))
+    ])))
 }
 bf_declare!(property_info, bf_property_info);
 
-async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::List(info) = bf_args.args[2].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Obj(owner) = info[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Str(perms) = info[1].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Str(name) = info[2].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let mut flags = BitEnum::new();
     for c in perms.as_str().chars() {
@@ -81,7 +82,7 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
             'r' => flags |= PropFlag::Read,
             'w' => flags |= PropFlag::Write,
             'c' => flags |= PropFlag::Chown,
-            _ => return Ok(v_err(E_INVARG)),
+            _ => return Ok(Error(E_INVARG)),
         }
     }
     bf_args
@@ -100,19 +101,19 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
             },
         )
         .await?;
-    Ok(v_list(vec![]))
+    Ok(Ret(v_list(vec![])))
 }
 bf_declare!(set_property_info, bf_set_property_info);
 
-async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let property_info = bf_args
         .world_state
@@ -123,19 +124,19 @@ async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, 
     } else {
         0
     };
-    Ok(v_int(is_clear))
+    Ok(Ret(v_int(is_clear)))
 }
 bf_declare!(is_clear_property, bf_is_clear_property);
 
-async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Ok(v_err(E_TYPE));
+        return Ok(Error(E_TYPE));
     };
     bf_args
         .world_state
@@ -153,7 +154,7 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, any
             },
         )
         .await?;
-    Ok(v_list(vec![]))
+    Ok(Ret(v_list(vec![])))
 }
 bf_declare!(set_clear_property, bf_clear_property);
 

@@ -7,12 +7,13 @@ use rand::Rng;
 
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_str, Var};
+use moor_value::var::{v_empty_list, v_int, v_list, v_str};
 use regexpr_binding::Pattern;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::vm::builtin::{BfCallState, BuiltinFunction};
+use crate::vm::builtin::BfRet::{Error, Ret};
+use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
@@ -40,16 +41,16 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
 }
 
 //Function: str strsub (str subject, str what, str with [, case-matters])
-async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
         let Variant::Int(case_matters) = bf_args.args[3].variant() else {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
     let (subject, what, with) = (
         bf_args.args[0].variant(),
@@ -57,10 +58,10 @@ async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Err
         bf_args.args[2].variant(),
     );
     match (subject, what, with) {
-        (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => Ok(v_str(
+        (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => Ok(Ret(v_str(
             strsub(subject.as_str(), what.as_str(), with.as_str(), case_matters).as_str(),
-        )),
-        _ => Ok(v_err(E_TYPE)),
+        ))),
+        _ => Ok(Error(E_TYPE)),
     }
 }
 bf_declare!(strsub, bf_strsub);
@@ -89,62 +90,62 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
-async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (subject, what) {
-        (Variant::Str(subject), Variant::Str(what)) => Ok(v_int(str_index(
+        (Variant::Str(subject), Variant::Str(what)) => Ok(Ret(v_int(str_index(
             subject.as_str(),
             what.as_str(),
             case_matters,
-        ))),
-        _ => Ok(v_err(E_TYPE)),
+        )))),
+        _ => Ok(Error(E_TYPE)),
     }
 }
 bf_declare!(index, bf_index);
 
-async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (subject, what) {
-        (Variant::Str(subject), Variant::Str(what)) => Ok(v_int(str_rindex(
+        (Variant::Str(subject), Variant::Str(what)) => Ok(Ret(v_int(str_rindex(
             subject.as_str(),
             what.as_str(),
             case_matters,
-        ))),
-        _ => Ok(v_err(E_TYPE)),
+        )))),
+        _ => Ok(Error(E_TYPE)),
     }
 }
 bf_declare!(rindex, bf_rindex);
 
-async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
-        (Variant::Str(str1), Variant::Str(str2)) => Ok(v_int(str1.cmp(str2) as i64)),
-        _ => Ok(v_err(E_TYPE)),
+        (Variant::Str(str1), Variant::Str(str2)) => Ok(Ret(v_int(str1.cmp(str2) as i64))),
+        _ => Ok(Error(E_TYPE)),
     }
 }
 bf_declare!(strcmp, bf_strcmp);
@@ -166,9 +167,9 @@ fn des_crypt(text: &str, salt: &str) -> String {
     crypted.iter().map(|i| char::from(*i)).collect()
 }
 
-async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let salt = if bf_args.args.len() == 1 {
         let mut rng = rand::thread_rng();
@@ -179,33 +180,33 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
         salt
     } else {
         let Variant::Str(salt) = bf_args.args[1].variant() else {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         };
         String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
-        Ok(v_str(des_crypt(text.as_str(), salt.as_str()).as_str()))
+        Ok(Ret(v_str(des_crypt(text.as_str(), salt.as_str()).as_str())))
     } else {
-        Ok(v_err(E_TYPE))
+        Ok(Error(E_TYPE))
     }
 }
 bf_declare!(crypt, bf_crypt);
 
-async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
             let hash_digest = md5::compute(s.as_str().as_bytes());
-            Ok(v_str(format!("{:x}", hash_digest).as_str()))
+            Ok(Ret(v_str(format!("{:x}", hash_digest).as_str())))
         }
-        _ => Ok(v_err(E_INVARG)),
+        _ => Ok(Error(E_INVARG)),
     }
 }
 bf_declare!(string_hash, bf_string_hash);
 
-async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     unimplemented!("binary_hash")
 }
 bf_declare!(binary_hash, bf_binary_hash);
@@ -216,18 +217,18 @@ bf_declare!(binary_hash, bf_binary_hash);
 // whole 'legacy' regex engine in a mutex.
 pub static mut task_timed_out: u64 = 0;
 
-async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Error> {
+async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Ok(v_err(E_INVARG));
+        return Ok(Error(E_INVARG));
     }
     let (subject, pattern) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
         (Variant::Str(subject), Variant::Str(pattern)) => (subject, pattern),
-        _ => return Ok(v_err(E_TYPE)),
+        _ => return Ok(Error(E_TYPE)),
     };
 
     let case_matters = if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Ok(v_err(E_TYPE));
+            return Ok(Error(E_TYPE));
         };
         *case_matters == 1
     } else {
@@ -236,19 +237,19 @@ async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<Var, anyhow::Erro
 
     // TODO: pattern cache?
     let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
-        return  Ok(v_err(E_INVARG));
+        return  Ok(Error(E_INVARG));
     };
 
     let Ok(match_vec) = pattern.match_pattern(subject.as_str()) else {
-        return  Ok(v_empty_list());
+        return  Ok(Ret(v_empty_list()));
     };
 
-    Ok(v_list(
+    Ok(Ret(v_list(
         match_vec
             .iter()
             .map(|(start, end)| v_list(vec![v_int(*start as i64), v_int(*end as i64)]))
             .collect(),
-    ))
+    )))
 }
 bf_declare!(match, bf_match);
 

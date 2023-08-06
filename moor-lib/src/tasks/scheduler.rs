@@ -30,6 +30,7 @@ struct TaskControl {
     response_receiver: UnboundedReceiver<TaskControlResponse>,
     state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
     sessions: Arc<RwLock<dyn Sessions>>,
+    resume_channel: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 pub struct Scheduler {
@@ -283,6 +284,11 @@ impl Scheduler {
                             task.sessions.clone(),
                         ));
                     }
+                    TaskControlResponse::Suspended(reply) => {
+                        // Task is suspended. Mark the control with the 'resume' reply channel, if
+                        // provided, so that when a resume is requested, we can do so.
+                        task.resume_channel = reply;
+                    }
                 },
                 Err(TryRecvError::Empty) => {}
                 Err(e) => {
@@ -324,10 +330,10 @@ impl Scheduler {
         &mut self,
         player: Objid,
         state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
-        client_connection: Arc<RwLock<dyn Sessions>>,
+        sessions: Arc<RwLock<dyn Sessions>>,
         delay_start: Option<Duration>,
     ) -> Result<TaskId, anyhow::Error> {
-        let (state, perms) = {
+        let (world_state, perms) = {
             let mut state_source = state_source.write().await;
             state_source.new_world_state(player).await?
         };
@@ -342,7 +348,8 @@ impl Scheduler {
             control_sender,
             response_receiver,
             state_source: state_source.clone(),
-            sessions: client_connection.clone(),
+            sessions: sessions.clone(),
+            resume_channel: None,
         };
 
         self.tasks.insert(task_id, task_control);
@@ -360,17 +367,20 @@ impl Scheduler {
             );
 
             let vm = VM::new();
-            let task = Task::new(
+
+            let task = Task {
                 task_id,
                 control_receiver,
                 response_sender,
                 player,
                 vm,
-                client_connection,
-                state,
+                sessions: sessions.clone(),
+                world_state,
+                state_source,
                 perms,
-            );
-
+                running_method: false,
+                tmp_verb: None,
+            };
             debug!("Starting up task: {:?}", task_id);
             task.run().await;
             debug!("Completed task: {:?}", task_id);

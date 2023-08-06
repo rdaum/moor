@@ -102,6 +102,9 @@ mod tests {
                 Ok(ExecutionResult::DispatchFork(_)) => {
                     panic!("fork not implemented in test VM")
                 }
+                Ok(ExecutionResult::Suspend(_)) => {
+                    panic!("suspend not implemented in test VM")
+                }
             }
         }
     }
@@ -813,6 +816,9 @@ mod tests {
                 }
                 Ok(ExecutionResult::DispatchFork(_)) => {
                     panic!("dispatch fork not supported in this test");
+                }
+                Ok(ExecutionResult::Suspend(_)) => {
+                    panic!("suspend not supported in this test");
                 }
             }
         }
