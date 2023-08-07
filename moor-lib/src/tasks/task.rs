@@ -53,7 +53,7 @@ pub(crate) enum TaskControlMsg {
     StartEval { player: Objid, binary: Binary },
     /// The scheduler is telling the task to resume execution. Use the given world state
     /// (transaction) and permissions when doing so.
-    Resume(Box<dyn WorldState>, PermissionsContext),
+    Resume(Box<dyn WorldState>, PermissionsContext, Var),
     /// The scheduler is asking the task to describe itself.
     /// This causes deadlock if the task requesting the description is the task being described,
     /// so I need to rethink this.
@@ -155,10 +155,7 @@ impl Task {
                     return;
                 }
                 Err(e) => {
-                    error!(task_id = self.task_id, error = ?e, "Task error");
-                    self.scheduler_control_sender
-                        .send(SchedulerControlMsg::TaskAbortError(e))
-                        .expect("Could not send error response");
+                    warn!(task_id = self.task_id, error = ?e, "Task mailbox receive error");
                     return;
                 }
             };
@@ -288,7 +285,7 @@ impl Task {
                 self.tmp_verb = Some((player, tmp_name.clone()));
                 return Ok(None);
             }
-            TaskControlMsg::Resume(world_state, permissions) => {
+            TaskControlMsg::Resume(world_state, permissions, value) => {
                 // We're back. Get a new world state and resume.
                 debug!(
                     task_id = self.task_id,
@@ -296,8 +293,8 @@ impl Task {
                 );
                 self.world_state = world_state;
                 self.perms = permissions;
-                // suspend needs a return value. this seems to be what lambdamoo gives.
-                self.vm.top_mut().push(v_int(0));
+                // suspend needs a return value.
+                self.vm.top_mut().push(value);
                 self.start_time = Some(SystemTime::now());
                 debug!(task_id = self.task_id, "Resuming task...");
                 self.running_method = true;

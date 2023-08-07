@@ -11,12 +11,14 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
+use moor_value::var::error::Error::{E_INVARG, E_PERM};
 use moor_value::var::objid::Objid;
-use moor_value::var::Var;
+use moor_value::var::{v_err, v_int, v_none, Var};
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::MatchEnvironmentParseMatcher;
+use crate::model::objects::ObjFlag;
 use crate::model::permissions::PermissionsContext;
 use crate::model::world_state::WorldStateSource;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
@@ -69,6 +71,18 @@ pub enum SchedulerControlMsg {
     TaskSuspend(Option<SystemTime>),
     /// Task is requesting a list of all other tasks known to the scheduler.
     DescribeOtherTasks(oneshot::Sender<Vec<TaskDescription>>),
+    /// Task is requesting that the scheduler abort another task.
+    KillTask {
+        victim_task_id: TaskId,
+        sender_permissions: PermissionsContext,
+        result_sender: oneshot::Sender<Var>,
+    },
+    ResumeTask {
+        queued_task_id: TaskId,
+        sender_permissions: PermissionsContext,
+        return_value: Var,
+        result_sender: oneshot::Sender<Var>,
+    },
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -334,6 +348,9 @@ impl Inner {
         let mut to_remove = Vec::new();
         let mut fork_requests = Vec::new();
         let mut desc_requests = Vec::new();
+        let mut kill_requests = Vec::new();
+        let mut resume_requests = Vec::new();
+
         let mut to_wake = Vec::new();
         for (task_id, task) in self.tasks.iter_mut() {
             // Look for any tasks in suspension whose wake-up time has passed.
@@ -392,10 +409,37 @@ impl Inner {
                         // Task is asking for a description of all other tasks.
                         desc_requests.push((task.task_id, reply));
                     }
+                    SchedulerControlMsg::KillTask {
+                        victim_task_id,
+                        sender_permissions,
+                        result_sender,
+                    } => {
+                        // Task is asking to kill another task.
+                        kill_requests.push((
+                            task.task_id,
+                            victim_task_id,
+                            sender_permissions,
+                            result_sender,
+                        ));
+                    }
+                    SchedulerControlMsg::ResumeTask {
+                        queued_task_id,
+                        sender_permissions,
+                        return_value,
+                        result_sender,
+                    } => {
+                        resume_requests.push((
+                            task.task_id,
+                            queued_task_id,
+                            sender_permissions,
+                            return_value,
+                            result_sender,
+                        ));
+                    }
                 },
                 Err(TryRecvError::Empty) => {}
                 Err(e) => {
-                    error!(task = task.task_id, error = ?e, "Task sys-errored");
+                    warn!(task = task.task_id, error = ?e, "Task sys-errored");
                     to_remove.push(*task_id);
                     continue;
                 }
@@ -413,8 +457,11 @@ impl Inner {
                 .new_world_state(task.player)
                 .await?;
 
-            task.task_control_sender
-                .send(TaskControlMsg::Resume(world_state, permissions))?;
+            task.task_control_sender.send(TaskControlMsg::Resume(
+                world_state,
+                permissions,
+                v_int(0),
+            ))?;
         }
 
         // Service fork requests
@@ -427,6 +474,7 @@ impl Inner {
 
         // Service task removals
         for task_id in to_remove {
+            trace!(task = task_id, "Task removed");
             self.tasks.remove(&task_id);
         }
 
@@ -443,6 +491,10 @@ impl Inner {
                 "Task requesting task descriptions"
             );
             for (task_id, task) in self.tasks.iter() {
+                // Tasks not in suspended state shouldn't be added.
+                if !task.suspended {
+                    continue;
+                }
                 if *task_id != requesting_task_id {
                     trace!(
                         requesting_task_id = requesting_task_id,
@@ -467,6 +519,118 @@ impl Inner {
             );
             reply.send(tasks).expect("Could not send task description");
             trace!(task = requesting_task_id, "Sent task descriptions back");
+        }
+
+        // Service kill requests
+        for (requesting_task_id, victim_task_id, sender_permissions, result_sender) in kill_requests
+        {
+            // If the task somehow is reuesting a kill on itself, that would lead to deadlock,
+            // because we could never send the result back. So we reject that outright. bf_kill_task
+            // should be handling this upfront.
+            if requesting_task_id == victim_task_id {
+                error!(
+                    task = requesting_task_id,
+                    "Task requested to kill itself. Ignoring"
+                );
+                continue;
+            }
+
+            let victim_task = match self.tasks.get(&victim_task_id) {
+                Some(victim_task) => victim_task,
+                None => {
+                    result_sender
+                        .send(v_err(E_INVARG))
+                        .expect("Could not send kill result");
+                    continue;
+                }
+            };
+
+            // We reject this outright if the sender permissions are not sufficient:
+            //   The either have to be the owner of the task (task.programmer == sender_permissions.task_perms)
+            //   Or they have to be a wizard.
+            // TODO: Will have to verify that it's enough that .player on task control can
+            // be considered "owner" of the task, or there needs to be some more
+            // elaborate consideration here?
+            if !sender_permissions.has_flag(ObjFlag::Wizard)
+                && sender_permissions.task_perms().obj != victim_task.player
+            {
+                result_sender
+                    .send(v_err(E_PERM))
+                    .expect("Could not send kill result");
+                continue;
+            }
+
+            victim_task
+                .task_control_sender
+                .send(TaskControlMsg::Abort)?;
+
+            result_sender
+                .send(v_none())
+                .expect("Could not send kill result");
+        }
+
+        // Service resume requests
+        for (requesting_task_id, queued_task_id, sender_permissions, return_value, result_sender) in
+            resume_requests
+        {
+            // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
+            // request.
+            if requesting_task_id == queued_task_id {
+                error!(
+                    task = requesting_task_id,
+                    "Task requested to resume itself. Ignoring"
+                );
+                continue;
+            }
+
+            // Task does not exist.
+            let queued_task = match self.tasks.get_mut(&queued_task_id) {
+                Some(queued_task) => queued_task,
+                None => {
+                    result_sender
+                        .send(v_err(E_INVARG))
+                        .expect("Could not send resume result");
+                    continue;
+                }
+            };
+
+            // No permissions.
+            if !sender_permissions.has_flag(ObjFlag::Wizard)
+                && sender_permissions.task_perms().obj != queued_task.player
+            {
+                result_sender
+                    .send(v_err(E_PERM))
+                    .expect("Could not send resume result");
+                continue;
+            }
+
+            // Task is not suspended.
+            if !queued_task.suspended {
+                result_sender
+                    .send(v_err(E_INVARG))
+                    .expect("Could not send resume result");
+                continue;
+            }
+
+            // Follow the usual task resume logic.
+            let (world_state, permissions) = self
+                .state_source
+                .write()
+                .await
+                .new_world_state(queued_task.player)
+                .await?;
+
+            queued_task.suspended = false;
+            queued_task
+                .task_control_sender
+                .send(TaskControlMsg::Resume(
+                    world_state,
+                    permissions,
+                    return_value,
+                ))?;
+            result_sender
+                .send(v_none())
+                .expect("Could not send resume result");
         }
 
         Ok(())

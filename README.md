@@ -29,13 +29,11 @@ client connectivity with websockets and such.
    * Some simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected.
    * About half of builtins are supported.
    * Permissions support (though mostly untested.)
-   * `fork`ed & `suspend`ed tasks (But no support for task management builtins like `kill_task` and `resume` yet)
+   * `fork`ed & `suspend`ed tasks
 
 ### Missing/ Next steps
 
-   * Task management generally:
-      * timeouts / tick count management
-      * `kill_task` and `resume` builtins
+   * Timeouts / tick count management in tasks
    * Auth/connect phase for the websocket server (currently just accepts any unauthed connection to any player object)
    * More builtins. See [bf_functions_status.md](bf_functions_status.md) for chart of current status.
    * Decompilation support; this is about half done.

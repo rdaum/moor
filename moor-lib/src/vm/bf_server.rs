@@ -14,6 +14,7 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
 use crate::tasks::scheduler::SchedulerControlMsg;
+use crate::tasks::TaskId;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
@@ -292,7 +293,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
         .send(SchedulerControlMsg::DescribeOtherTasks(send))
         .expect("scheduler is not listening");
     debug!("waiting for response from scheduler");
-    let mut tasks = receive.await?;
+    let tasks = receive.await?;
     debug!("got response from scheduler");
 
     // return in form:
@@ -326,6 +327,87 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
 
+async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    // Syntax:  kill_task(<task-id>)   => none
+    //
+    // Kills the task with the given <task-id>.  The task must be queued or suspended, and the current task must be the owner of the task being killed.
+    if bf_args.args.len() != 1 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let Variant::Int(victim_task_id) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    // If the task ID is itself, that means returning an Complete execution result, which will cascade
+    // back to the task loop and it will terminate itself.
+    // Not sure this is *exactly* what MOO does, but it's close enough for now.
+    let victim_task_id = *victim_task_id as TaskId;
+
+    if victim_task_id == bf_args.vm.top().task_id {
+        return Ok(VmInstr(ExecutionResult::Complete(v_none())));
+    }
+
+    let (send, receive) = oneshot::channel();
+    bf_args
+        .scheduler_sender
+        .send(SchedulerControlMsg::KillTask {
+            victim_task_id,
+            sender_permissions: bf_args.vm.top().permissions.clone(),
+            result_sender: send,
+        })
+        .expect("scheduler is not listening");
+
+    let result = receive.await?;
+    if let Variant::Err(err) = result.variant() {
+        return Ok(Error(*err));
+    }
+    Ok(Ret(result))
+}
+bf_declare!(kill_task, bf_kill_task);
+
+async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() < 2 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let Variant::Int(resume_task_id) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    // Optional 2nd argument is the value to return from suspend() in the resumed task.
+    let return_value = if bf_args.args.len() == 2 {
+        bf_args.args[1].clone()
+    } else {
+        v_none()
+    };
+
+    let task_id = *resume_task_id as TaskId;
+
+    // Resuming ourselves makes no sense, it's not suspended. E_INVARG.
+    if task_id == bf_args.vm.top().task_id {
+        return Ok(Error(E_INVARG));
+    }
+
+    let (send, receive) = oneshot::channel();
+    bf_args
+        .scheduler_sender
+        .send(SchedulerControlMsg::ResumeTask {
+            queued_task_id: task_id,
+            sender_permissions: bf_args.vm.top().permissions.clone(),
+            return_value,
+            result_sender: send,
+        })
+        .expect("scheduler is not listening");
+
+    let result = receive.await?;
+    if let Variant::Err(err) = result.variant() {
+        return Ok(Error(*err));
+    }
+    Ok(Ret(result))
+}
+bf_declare!(resume, bf_resume);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -346,6 +428,8 @@ impl VM {
         self.builtins[offset_for_builtin("shutdown")] = Arc::new(Box::new(BfShutdown {}));
         self.builtins[offset_for_builtin("suspend")] = Arc::new(Box::new(BfSuspend {}));
         self.builtins[offset_for_builtin("queued_tasks")] = Arc::new(Box::new(BfQueuedTasks {}));
+        self.builtins[offset_for_builtin("kill_task")] = Arc::new(Box::new(BfKillTask {}));
+        self.builtins[offset_for_builtin("resume")] = Arc::new(Box::new(BfResume {}));
 
         Ok(())
     }

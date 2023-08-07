@@ -149,10 +149,10 @@ The following is a table of the status of various builtin-functions, to keep an 
 |-------------------|----------|-------|
 | task_id           | &check;  |       |
 | queued_tasks      | &check;  |       |
-| kill_task         |          |       |
+| kill_task         | &check;  |       |
+| resume            | &check;  |       |
 | output_delimiters |          |       |
 | queue_info        |          |       |
-| resume            |          |       |
 | force_input       |          |       |
 | flush_input       |          |       |
 
