@@ -22,6 +22,7 @@ mod tests {
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
     use crate::vm::{ExecutionResult, VM};
+    use crate::vm::vm_execute::VmExecParams;
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -88,8 +89,15 @@ mod tests {
     async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
         let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
         // Call repeatedly into exec until we ge either an error or Complete.
+
         loop {
-            match vm.exec(state, client_connection.clone()).await {
+            let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
+            let vm_exec_params = VmExecParams {
+                world_state: state,
+                sessions: client_connection.clone(),
+                scheduler_sender: sched_send.clone(),
+            };
+            match vm.exec(vm_exec_params).await {
                 Ok(ExecutionResult::More) => continue,
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),
@@ -804,7 +812,13 @@ mod tests {
     ) -> Var {
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
-            match vm.exec(state, client_connection.clone()).await {
+            let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
+            let vm_exec_params = VmExecParams {
+                world_state: state,
+                sessions: client_connection.clone(),
+                scheduler_sender: sched_send.clone(),
+            };
+            match vm.exec(vm_exec_params).await {
                 Ok(ExecutionResult::More) => continue,
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),
