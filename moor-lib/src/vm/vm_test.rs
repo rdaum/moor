@@ -21,8 +21,8 @@ mod tests {
     use crate::tasks::{Sessions, VerbCall};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Binary, Op};
-    use crate::vm::{ExecutionResult, VM};
     use crate::vm::vm_execute::VmExecParams;
+    use crate::vm::{ExecutionResult, VM};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -96,6 +96,9 @@ mod tests {
                 world_state: state,
                 sessions: client_connection.clone(),
                 scheduler_sender: sched_send.clone(),
+                max_stack_depth: 50,
+                ticks_left: 90_000,
+                time_left: None,
             };
             match vm.exec(vm_exec_params).await {
                 Ok(ExecutionResult::More) => continue,
@@ -817,6 +820,9 @@ mod tests {
                 world_state: state,
                 sessions: client_connection.clone(),
                 scheduler_sender: sched_send.clone(),
+                max_stack_depth: 50,
+                ticks_left: 90_000,
+                time_left: None,
             };
             match vm.exec(vm_exec_params).await {
                 Ok(ExecutionResult::More) => continue,

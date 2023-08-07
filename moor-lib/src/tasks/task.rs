@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -18,7 +18,7 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{VerbFlag, VerbInfo};
 use crate::model::world_state::WorldState;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::scheduler::{SchedulerControlMsg, TaskDescription};
+use crate::tasks::scheduler::{AbortLimitReason, SchedulerControlMsg, TaskDescription};
 use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::opcode::Binary;
 use crate::vm::vm_execute::VmExecParams;
@@ -68,7 +68,7 @@ pub(crate) struct Task {
     /// For currently execution tasks this is when the task actually began running.
     /// For tasks in suspension, this is when they will wake up.
     /// If the task is in indefinite suspension, this is None.
-    pub(crate) start_time: Option<SystemTime>,
+    pub(crate) scheduled_start_time: Option<SystemTime>,
     pub(crate) task_control_receiver: UnboundedReceiver<TaskControlMsg>,
     pub(crate) scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
     pub(crate) player: Objid,
@@ -78,6 +78,12 @@ pub(crate) struct Task {
     pub(crate) perms: PermissionsContext,
     pub(crate) running_method: bool,
     pub(crate) tmp_verb: Option<(Objid, String)>,
+    /// The maximum stack detph for this task
+    pub(crate) max_stack_depth: usize,
+    /// The amount of ticks (opcode executions) allotted to this task
+    pub(crate) max_ticks: usize,
+    /// The maximum amount of time allotted to this task
+    pub(crate) max_time: Duration,
 }
 
 impl Task {
@@ -193,7 +199,9 @@ impl Task {
                     command,
                     self.perms.clone(),
                 )?;
-                self.start_time = Some(SystemTime::now());
+                self.scheduled_start_time = None;
+                self.vm.start_time = Some(SystemTime::now());
+                self.vm.tick_count = 0;
                 self.vm
                     .exec_call_request(self.task_id, cr)
                     .await
@@ -228,7 +236,9 @@ impl Task {
                         self.perms.clone(),
                     )
                     .await?;
-                self.start_time = Some(SystemTime::now());
+                self.scheduled_start_time = None;
+                self.vm.start_time = Some(SystemTime::now());
+                self.vm.tick_count = 0;
                 self.vm.exec_call_request(self.task_id, cr).await?;
                 self.running_method = true;
             }
@@ -239,7 +249,9 @@ impl Task {
             } => {
                 assert!(!self.running_method);
                 trace!(?task_id, "Setting up fork");
-                self.start_time = Some(SystemTime::now());
+                self.scheduled_start_time = None;
+                self.vm.start_time = Some(SystemTime::now());
+                self.vm.tick_count = 0;
                 self.vm.exec_fork_vector(fork_request, task_id).await?;
                 self.running_method = !suspended;
             }
@@ -277,7 +289,9 @@ impl Task {
                         self.perms.clone(),
                     )
                     .await?;
-                self.start_time = Some(SystemTime::now());
+                self.scheduled_start_time = None;
+                self.vm.start_time = Some(SystemTime::now());
+                self.vm.tick_count = 0;
                 self.vm.exec_call_request(self.task_id, cr).await?;
                 self.running_method = true;
 
@@ -295,7 +309,9 @@ impl Task {
                 self.perms = permissions;
                 // suspend needs a return value.
                 self.vm.top_mut().push(value);
-                self.start_time = Some(SystemTime::now());
+                self.scheduled_start_time = None;
+                self.vm.start_time = Some(SystemTime::now());
+                self.vm.tick_count = 0;
                 debug!(task_id = self.task_id, "Resuming task...");
                 self.running_method = true;
                 return Ok(None);
@@ -311,7 +327,7 @@ impl Task {
                 trace!("Received and responding to describe request");
                 let description = TaskDescription {
                     task_id: self.task_id,
-                    start_time: self.start_time.clone(),
+                    start_time: self.scheduled_start_time,
                     permissions: self.vm.top().permissions.clone(),
                     verb_name: self.vm.top().verb_name.clone(),
                     verb_definer: self.vm.top().verb_definer(),
@@ -333,12 +349,31 @@ impl Task {
         if !self.running_method {
             return Ok(None);
         }
+
+        // Check ticks and seconds, and abort the task if we've exceeded the limits.
+        let time_left = match self.vm.start_time {
+            Some(start_time) => {
+                let elapsed = start_time.elapsed()?;
+                if elapsed > self.max_time {
+                    return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(AbortLimitReason::Time(elapsed))));
+                }
+                Some(self.max_time - elapsed)
+            }
+            None => None,
+        };
+        if self.vm.tick_count >= self.max_ticks {
+            return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(AbortLimitReason::Ticks(self.vm.tick_count))));
+        }
         let exec_params = VmExecParams {
             world_state: self.world_state.as_mut(),
             sessions: self.sessions.clone(),
             scheduler_sender: self.scheduler_control_sender.clone(),
+            max_stack_depth: self.max_stack_depth,
+            ticks_left: self.max_ticks - self.vm.tick_count,
+            time_left,
         };
         let result = self.vm.exec(exec_params).await?;
+        self.vm.tick_count += 1;
         match result {
             ExecutionResult::More => Ok(None),
             ExecutionResult::ContinueVerb(call_request) => {

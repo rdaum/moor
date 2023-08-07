@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
@@ -37,8 +37,14 @@ mod builtin;
 mod vm_test;
 
 pub struct VM {
+    /// The stack of activation records / stack frames.
     pub(crate) stack: Vec<Activation>,
+    /// The set of built-in functions, indexed by their Name offset in the variable stack.
     pub(crate) builtins: Vec<Arc<Box<dyn BuiltinFunction>>>,
+    /// The number of ticks that have been executed so far.
+    pub(crate) tick_count: usize,
+    /// The time at which the VM was started.
+    pub(crate) start_time: Option<SystemTime>,
 }
 
 /// The set of parameters for a VM-requested fork.
@@ -112,6 +118,8 @@ impl VM {
         let mut vm = Self {
             stack: vec![],
             builtins: bf_funcs,
+            tick_count: 0,
+            start_time: None,
         };
 
         vm.register_bf_server().unwrap();

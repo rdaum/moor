@@ -1,8 +1,4 @@
-use std::sync::Arc;
-
 use anyhow::Context;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock;
 use tracing::{error, span, trace, Level};
 
 use moor_value::var::error::Error;
@@ -17,10 +13,10 @@ use crate::model::verbs::VerbInfo;
 use crate::model::world_state::WorldState;
 use crate::model::ObjectError;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::scheduler::SchedulerControlMsg;
-use crate::tasks::{Sessions, TaskId, VerbCall};
+use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::Activation;
 use crate::vm::builtin::{BfCallState, BfRet};
+use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, ResolvedVerbCall, VM};
 
@@ -278,13 +274,11 @@ impl VM {
     }
 
     /// Call into a builtin function.
-    pub(crate) async fn call_builtin_function(
+    pub(crate) async fn call_builtin_function<'a>(
         &mut self,
         bf_func_num: usize,
         args: &[Var],
-        state: &mut dyn WorldState,
-        sessions: Arc<RwLock<dyn Sessions>>,
-        scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+        exec_args: &mut VmExecParams<'a>,
     ) -> Result<ExecutionResult, anyhow::Error> {
         if bf_func_num >= self.builtins.len() {
             return self.raise_error(E_VARNF);
@@ -305,10 +299,12 @@ impl VM {
         let mut bf_args = BfCallState {
             vm: self,
             name: BUILTINS[bf_func_num],
-            world_state: state,
-            sessions,
+            world_state: exec_args.world_state,
+            sessions: exec_args.sessions.clone(),
             args: args.to_vec(),
-            scheduler_sender,
+            scheduler_sender: exec_args.scheduler_sender.clone(),
+            ticks_left: exec_args.ticks_left,
+            time_left: exec_args.time_left,
         };
         match bf.call(&mut bf_args).await {
             Ok(BfRet::Ret(result)) => {

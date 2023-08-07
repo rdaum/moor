@@ -5,7 +5,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use moor_value::var::error::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE, E_VARNF};
+use moor_value::var::error::Error::{E_ARGS, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
 
@@ -42,13 +42,21 @@ pub struct VmExecParams<'a> {
     pub world_state: &'a mut dyn WorldState,
     pub sessions: Arc<RwLock<dyn Sessions>>,
     pub scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+    pub max_stack_depth: usize,
+    pub ticks_left: usize,
+    pub time_left: Option<Duration>,
 }
 
 impl VM {
     pub async fn exec<'a>(
         &mut self,
-        exec_params: VmExecParams<'a>,
+        mut exec_params: VmExecParams<'a>,
     ) -> Result<ExecutionResult, anyhow::Error> {
+        // Before executing, check stack depth...
+        if self.stack.len() >= exec_params.max_stack_depth {
+            return self.raise_error(E_MAXREC);
+        }
+
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");
@@ -505,13 +513,7 @@ impl VM {
                     return self.push_error(E_ARGS);
                 };
                 return self
-                    .call_builtin_function(
-                        id.0 as usize,
-                        &args[..],
-                        exec_params.world_state,
-                        exec_params.sessions,
-                        exec_params.scheduler_sender.clone(),
-                    )
+                    .call_builtin_function(id.0 as usize, &args[..], &mut exec_params)
                     .await;
             }
             Op::PushLabel(label) => {

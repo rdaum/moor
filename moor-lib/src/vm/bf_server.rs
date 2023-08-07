@@ -408,6 +408,37 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
 }
 bf_declare!(resume, bf_resume);
 
+async fn bf_ticks_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    // Syntax:  ticks_left()   => int
+    //
+    // Returns the number of ticks left in the current time slice.
+    if !bf_args.args.is_empty() {
+        return Ok(Error(E_INVARG));
+    }
+
+    let ticks_left = bf_args.ticks_left;
+
+    Ok(Ret(v_int(ticks_left as i64)))
+}
+bf_declare!(ticks_left, bf_ticks_left);
+
+async fn bf_seconds_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    // Syntax:  seconds_left()   => int
+    //
+    // Returns the number of seconds left in the current time slice.
+    if !bf_args.args.is_empty() {
+        return Ok(Error(E_INVARG));
+    }
+
+    let seconds_left = match bf_args.time_left {
+        None => v_none(),
+        Some(d) => v_int(d.as_secs() as i64),
+    };
+
+    Ok(Ret(seconds_left))
+}
+bf_declare!(seconds_left, bf_seconds_left);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -430,6 +461,8 @@ impl VM {
         self.builtins[offset_for_builtin("queued_tasks")] = Arc::new(Box::new(BfQueuedTasks {}));
         self.builtins[offset_for_builtin("kill_task")] = Arc::new(Box::new(BfKillTask {}));
         self.builtins[offset_for_builtin("resume")] = Arc::new(Box::new(BfResume {}));
+        self.builtins[offset_for_builtin("ticks_left")] = Arc::new(Box::new(BfTicksLeft {}));
+        self.builtins[offset_for_builtin("seconds_left")] = Arc::new(Box::new(BfSecondsLeft {}));
 
         Ok(())
     }

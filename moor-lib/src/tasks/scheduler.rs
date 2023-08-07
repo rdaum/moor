@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{anyhow, Error};
 use metrics_macros::{gauge, increment_counter};
+use moor_value::util::bitenum::BitEnum;
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -13,6 +14,7 @@ use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
 use moor_value::var::error::Error::{E_INVARG, E_PERM};
 use moor_value::var::objid::Objid;
+use moor_value::var::variant::Variant;
 use moor_value::var::{v_err, v_int, v_none, Var};
 
 use crate::compiler::codegen::compile;
@@ -20,7 +22,7 @@ use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::MatchEnvironmentParseMatcher;
 use crate::model::objects::ObjFlag;
 use crate::model::permissions::PermissionsContext;
-use crate::model::world_state::WorldStateSource;
+use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::task::{Task, TaskControlMsg};
 use crate::tasks::{Sessions, TaskId};
@@ -28,6 +30,14 @@ use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ForkRequest, VM};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
+
+// TODO allow these to be set by command line arguments, as well.
+// Note these can be overriden in-core.
+const DEFAULT_FG_TICKS: usize = 30_000;
+const DEFAULT_BG_TICKS: usize = 15_000;
+const DEFAULT_FG_SECONDS: u64 = 5;
+const DEFAULT_BG_SECONDS: u64 = 3;
+const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
@@ -60,6 +70,11 @@ pub struct TaskDescription {
     pub this: Objid,
 }
 
+pub enum AbortLimitReason {
+    Ticks(usize),
+    Time(Duration)
+}
+
 /// The messages that can be sent from tasks to the scheduler.
 pub enum SchedulerControlMsg {
     TaskSuccess(Var),
@@ -67,6 +82,7 @@ pub enum SchedulerControlMsg {
     TaskAbortError(Error),
     TaskRequestFork(ForkRequest, oneshot::Sender<TaskId>),
     TaskAbortCancelled,
+    TaskAbortLimitsReached(AbortLimitReason),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
     TaskSuspend(Option<SystemTime>),
     /// Task is requesting a list of all other tasks known to the scheduler.
@@ -107,6 +123,59 @@ struct TaskControl {
 pub enum SchedulerError {
     #[error("Could not find match for command '{0}': {1:?}")]
     NoCommandMatch(String, ParsedCommand),
+}
+
+// TODO cache
+async fn max_vm_values(ws: &mut dyn WorldState, is_background: bool) -> (usize, u64, usize) {
+    let (mut max_ticks, mut max_seconds, mut max_stack_depth) = if is_background {
+        (
+            DEFAULT_BG_TICKS,
+            DEFAULT_BG_SECONDS,
+            DEFAULT_MAX_STACK_DEPTH,
+        )
+    } else {
+        (
+            DEFAULT_FG_TICKS,
+            DEFAULT_FG_SECONDS,
+            DEFAULT_MAX_STACK_DEPTH,
+        )
+    };
+
+    // Look up fg_ticks, fg_seconds, and max_stack_depth on $server_options.
+    // These are optional properties, and if they are not set, we use the defaults.
+    let wizperms = PermissionsContext::root_for(Objid(2), BitEnum::new_with(ObjFlag::Wizard));
+    if let Ok(server_options) = ws
+        .retrieve_property(wizperms.clone(), Objid(0), "server_options")
+        .await
+    {
+        if let Variant::Obj(server_options) = server_options.variant() {
+            if let Ok(v) = ws
+                .retrieve_property(wizperms.clone(), *server_options, "fg_ticks")
+                .await
+            {
+                if let Variant::Int(v) = v.variant() {
+                    max_ticks = *v as usize;
+                }
+            }
+            if let Ok(v) = ws
+                .retrieve_property(wizperms.clone(), *server_options, "fg_seconds")
+                .await
+            {
+                if let Variant::Int(v) = v.variant() {
+                    max_seconds = *v as u64;
+                }
+            }
+            if let Ok(v) = ws
+                .retrieve_property(wizperms, *server_options, "max_stack_depth")
+                .await
+            {
+                if let Variant::Int(v) = v.variant() {
+                    max_stack_depth = *v as usize;
+                }
+            }
+        }
+    }
+    (max_ticks, max_seconds, max_stack_depth)
 }
 
 /// Public facing interface for the scheduler.
@@ -193,7 +262,7 @@ impl Scheduler {
         };
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone())
+            .new_task(player, state_source, sessions, None, self.clone(), false)
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -232,7 +301,7 @@ impl Scheduler {
 
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone())
+            .new_task(player, state_source, sessions, None, self.clone(), false)
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -267,7 +336,7 @@ impl Scheduler {
 
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone())
+            .new_task(player, state_source, sessions, None, self.clone(), false)
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -311,6 +380,7 @@ impl Inner {
                 sessions,
                 fork_request.delay,
                 scheduler_ref,
+                false,
             )
             .await?;
 
@@ -374,6 +444,20 @@ impl Inner {
                         increment_counter!("moo.scheduler.aborted_error");
 
                         warn!(task = task.task_id, error = ?e, "Task aborted");
+                        to_remove.push(*task_id);
+                    }
+                    SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
+                        match limit_reason {
+                            AbortLimitReason::Ticks(t) => {
+                                increment_counter!("moo.scheduler.aborted_ticks");
+                                warn!(task = task.task_id, ticks = t, "Task aborted, ticks exceeded");
+                            }
+                            AbortLimitReason::Time(t) => {
+                                increment_counter!("moo.scheduler.aborted_time");
+                                warn!(task = task.task_id, time = ?t, "Task aborted, time exceeded");
+                            }
+                        }
+                        increment_counter!("moo.scheduler.aborted_limits");
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskException(finally_reason) => {
@@ -643,11 +727,17 @@ impl Inner {
         sessions: Arc<RwLock<dyn Sessions>>,
         delay_start: Option<Duration>,
         scheduler_ref: Scheduler,
+        background: bool,
     ) -> Result<TaskId, anyhow::Error> {
-        let (world_state, perms) = {
+        let (mut world_state, perms) = {
             let mut state_source = state_source.write().await;
             state_source.new_world_state(player).await?
         };
+
+        // Find out max ticks, etc. for this task. These are either pulled from server constants in
+        // the DB or from default constants.
+        let (max_ticks, max_seconds, max_stack_depth) =
+            max_vm_values(world_state.as_mut(), background).await;
 
         let (task_control_sender, task_control_receiver) = tokio::sync::mpsc::unbounded_channel();
         let (scheduler_control_sender, scheduler_control_receiver) =
@@ -687,7 +777,7 @@ impl Inner {
 
             let task = Task {
                 task_id,
-                start_time: None,
+                scheduled_start_time: None,
                 task_control_receiver,
                 scheduler_control_sender,
                 player,
@@ -697,6 +787,9 @@ impl Inner {
                 perms,
                 running_method: false,
                 tmp_verb: None,
+                max_stack_depth,
+                max_ticks,
+                max_time: Duration::from_secs(max_seconds),
             };
             debug!("Starting up task: {:?}", task_id);
             task.run().await;

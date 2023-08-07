@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedSender;
@@ -21,6 +22,8 @@ pub(crate) struct BfCallState<'a> {
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
     pub(crate) args: Vec<Var>,
     pub(crate) scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+    pub(crate) ticks_left: usize,
+    pub(crate) time_left: Option<Duration>,
 }
 
 impl<'a> BfCallState<'a> {
