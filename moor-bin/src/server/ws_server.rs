@@ -2,17 +2,17 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use async_trait::async_trait;
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use axum::extract::{ConnectInfo, Path, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::Extension;
 use futures_util::stream::SplitSink;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::RwLock;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, trace};
 
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
@@ -25,7 +25,7 @@ struct WebSocketSessions {
 
 struct WsConnection {
     player: Objid,
-    sink: SplitSink<WebSocket, Message>,
+    ws_sender: SplitSink<WebSocket, Message>,
     connected_time: std::time::Instant,
     last_activity: std::time::Instant,
 }
@@ -94,16 +94,16 @@ pub async fn ws_handle_connection(
         let connections = &mut sessions.connections;
         let client_connection = WsConnection {
             player,
-            sink: ws_sender,
+            ws_sender,
             connected_time: std::time::Instant::now(),
             last_activity: std::time::Instant::now(),
         };
         let mut old = connections.insert(player, client_connection);
         if let Some(ref mut old) = old {
-            SplitSink::send(&mut old.sink, "Reconnecting".into())
+            SplitSink::send(&mut old.ws_sender, "Reconnecting".into())
                 .await
                 .unwrap();
-            let result = old.sink.close().await;
+            let result = old.ws_sender.close().await;
             if let Err(e) = result {
                 error!("{:?}", e);
             }
@@ -111,11 +111,7 @@ pub async fn ws_handle_connection(
     }
 
     // Task submission loop.
-    while let Some(msg) = ws_receiver.next().await {
-        let Ok(msg) = msg else {
-            error!("Error receiving a message: {}", msg.unwrap_err());
-            break;
-        };
+    while let Ok(Some(msg)) = ws_receiver.try_next().await {
         let cmd = match msg.into_text() {
             Ok(cmd) => cmd,
             Err(e) => {
@@ -129,7 +125,10 @@ pub async fn ws_handle_connection(
         {
             let server = server.write().await;
             let mut sessions = server.sessions.write().await;
-            let connection = sessions.connections.get_mut(&player).unwrap();
+            let Some(connection) = sessions.connections.get_mut(&player) else {
+                error!("No connection for player: #{}", player.0);
+                break;
+            };
             connection.last_activity = std::time::Instant::now();
         }
         let task_id = {
@@ -149,11 +148,23 @@ pub async fn ws_handle_connection(
         }
     }
 
-    // Now drop the connection from sessions
+    // Now drop the connection from sessions.
+    // And any tasks that are associated with us should be aborted.
     {
-        let server = server.write().await;
-        let connections = &mut server.sessions.write().await.connections;
-        connections.remove(&player).unwrap();
+        let mut server = server.write().await;
+        {
+            let connections = &mut server.sessions.write().await.connections;
+            if connections.remove(&player).is_none() {
+                trace!(?player, "connection already removed / no connection");
+            }
+        }
+        if server.scheduler.abort_player_tasks(player).await.is_err() {
+            trace!(
+                ?player,
+                "could not abort tasks for player (likely already aborted)"
+            );
+        }
+
         info!("WebSocket session finished: {}", peer);
     }
 }
@@ -171,13 +182,33 @@ impl Sessions for WebSocketSessions {
                 conn.player.0
             ));
         }
-        SplitSink::send(&mut conn.sink, msg.into()).await?;
+        SplitSink::send(&mut conn.ws_sender, msg.into()).await?;
 
         Ok(())
     }
 
     async fn shutdown(&mut self, msg: Option<String>) -> Result<(), anyhow::Error> {
         self.shutdown_sender.send(msg).await.unwrap();
+        Ok(())
+    }
+
+    async fn disconnect(&mut self, player: Objid) -> Result<(), Error> {
+        let Some(mut conn) = self.connections.remove(&player) else {
+            return Err(anyhow!("no known connection for objid: #{}", player.0));
+        };
+        if conn.player != player {
+            return Err(anyhow!(
+                "integrity error; connection for objid: #{} is for player: #{}",
+                player.0,
+                conn.player.0
+            ));
+        }
+        conn.ws_sender
+            .send(Message::Close(Some(CloseFrame {
+                code: axum::extract::ws::close_code::NORMAL,
+                reason: Default::default(),
+            })))
+            .await?;
         Ok(())
     }
 

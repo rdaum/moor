@@ -41,6 +41,10 @@ mod tests {
             Ok(())
         }
 
+        async fn disconnect(&mut self, _player: Objid) -> Result<(), Error> {
+            Ok(())
+        }
+
         fn connected_players(&self) -> Result<Vec<Objid>, Error> {
             Ok(vec![])
         }
@@ -792,6 +796,10 @@ mod tests {
         }
 
         async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
+            Ok(())
+        }
+
+        async fn disconnect(&mut self, _player: Objid) -> Result<(), Error> {
             Ok(())
         }
 

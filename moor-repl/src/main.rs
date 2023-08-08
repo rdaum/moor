@@ -61,6 +61,11 @@ impl Sessions for ReplSession {
         exit(0);
     }
 
+    async fn disconnect(&mut self, player: Objid) -> Result<(), Error> {
+        error!(?player, "DISCONNECT");
+        exit(0);
+    }
+
     fn connected_players(&self) -> Result<Vec<Objid>, Error> {
         Ok(vec![self.player])
     }

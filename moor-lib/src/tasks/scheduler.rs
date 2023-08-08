@@ -72,10 +72,10 @@ pub struct TaskDescription {
 
 pub enum AbortLimitReason {
     Ticks(usize),
-    Time(Duration)
+    Time(Duration),
 }
 
-/// The messages that can be sent from tasks to the scheduler.
+/// The messages that can be sent from tasks (or VM) to the scheduler.
 pub enum SchedulerControlMsg {
     TaskSuccess(Var),
     TaskException(FinallyReason),
@@ -98,6 +98,10 @@ pub enum SchedulerControlMsg {
         sender_permissions: PermissionsContext,
         return_value: Var,
         result_sender: oneshot::Sender<Var>,
+    },
+    BootPlayer {
+        player: Objid,
+        sender_permissions: PermissionsContext,
     },
 }
 
@@ -351,6 +355,26 @@ impl Scheduler {
         Ok(task_id)
     }
 
+    pub async fn abort_player_tasks(&mut self, player: Objid) -> Result<(), anyhow::Error> {
+        let mut inner = self.inner.write().await;
+        let mut to_abort = Vec::new();
+        for (task_id, task_ref) in inner.tasks.iter() {
+            if task_ref.player == player {
+                to_abort.push(*task_id);
+            }
+        }
+        for task_id in to_abort {
+            inner
+                .tasks
+                .get_mut(&task_id)
+                .unwrap()
+                .task_control_sender
+                .send(TaskControlMsg::Abort)?;
+        }
+
+        Ok(())
+    }
+
     /// Stop the scheduler run loop.
     pub async fn stop(&mut self) -> Result<(), anyhow::Error> {
         let mut scheduler = self.inner.write().await;
@@ -420,7 +444,7 @@ impl Inner {
         let mut desc_requests = Vec::new();
         let mut kill_requests = Vec::new();
         let mut resume_requests = Vec::new();
-
+        let mut to_disconnect = Vec::new();
         let mut to_wake = Vec::new();
         for (task_id, task) in self.tasks.iter_mut() {
             // Look for any tasks in suspension whose wake-up time has passed.
@@ -450,7 +474,11 @@ impl Inner {
                         match limit_reason {
                             AbortLimitReason::Ticks(t) => {
                                 increment_counter!("moo.scheduler.aborted_ticks");
-                                warn!(task = task.task_id, ticks = t, "Task aborted, ticks exceeded");
+                                warn!(
+                                    task = task.task_id,
+                                    ticks = t,
+                                    "Task aborted, ticks exceeded"
+                                );
                             }
                             AbortLimitReason::Time(t) => {
                                 increment_counter!("moo.scheduler.aborted_time");
@@ -519,6 +547,13 @@ impl Inner {
                             return_value,
                             result_sender,
                         ));
+                    }
+                    SchedulerControlMsg::BootPlayer {
+                        player,
+                        sender_permissions: _,
+                    } => {
+                        // Task is asking to boot a player.
+                        to_disconnect.push((task.task_id, player));
                     }
                 },
                 Err(TryRecvError::Empty) => {}
@@ -717,6 +752,33 @@ impl Inner {
                 .expect("Could not send resume result");
         }
 
+        for (task_id, player) in to_disconnect {
+            {
+                let task = match self.tasks.get_mut(&task_id) {
+                    Some(task) => task,
+                    None => {
+                        error!(task = task_id, "Task w/ disconnect (and session) not found");
+                        continue;
+                    }
+                };
+                // First disconnect the player...
+                warn!(?player, "Disconnecting player ...");
+                task.sessions.write().await.disconnect(player).await?;
+            }
+
+            // Then abort *all* of their still-living tasks.
+            for (task_id, task) in self.tasks.iter() {
+                if task.player != player {
+                    continue;
+                }
+                warn!(?player, task_id, "Aborting task ...");
+                // This is fire and forget, we cannot assume that the task is still alive.
+                let Ok(_) = task.task_control_sender.send(TaskControlMsg::Abort) else {
+                    trace!(?player, task_id, "Task already dead");
+                    continue;
+                };
+            }
+        }
         Ok(())
     }
 

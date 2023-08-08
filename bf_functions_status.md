@@ -136,7 +136,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | idle_seconds        | &check   |                                               |
 | connection_name     |          |                                               |
 | notify              | &check;  |                                               |
-| boot_player         |          |                                               |
+| boot_player         | &check;  |                                               |
 | server_log          |          |                                               |
 | load_server_options |          |                                               |
 | function_info       |          |                                               |

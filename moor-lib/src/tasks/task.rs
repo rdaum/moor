@@ -355,14 +355,18 @@ impl Task {
             Some(start_time) => {
                 let elapsed = start_time.elapsed()?;
                 if elapsed > self.max_time {
-                    return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(AbortLimitReason::Time(elapsed))));
+                    return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(
+                        AbortLimitReason::Time(elapsed),
+                    )));
                 }
                 Some(self.max_time - elapsed)
             }
             None => None,
         };
         if self.vm.tick_count >= self.max_ticks {
-            return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(AbortLimitReason::Ticks(self.vm.tick_count))));
+            return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(
+                AbortLimitReason::Ticks(self.vm.tick_count),
+            )));
         }
         let exec_params = VmExecParams {
             world_state: self.world_state.as_mut(),

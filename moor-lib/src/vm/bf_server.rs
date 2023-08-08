@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
 
-use moor_value::var::error::Error::{E_INVARG, E_TYPE};
+use moor_value::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_string};
 
@@ -439,6 +439,34 @@ async fn bf_seconds_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
 }
 bf_declare!(seconds_left, bf_seconds_left);
 
+async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    // Syntax:  boot_player(<player>)   => none
+    //
+    // Disconnects the player with the given object number.
+    if bf_args.args.len() != 1 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let Variant::Obj(player) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    if !bf_args.perms().has_flag(ObjFlag::Wizard) && bf_args.perms().task_perms().obj != *player {
+        return Ok(Error(E_PERM));
+    }
+
+    bf_args
+        .scheduler_sender
+        .send(SchedulerControlMsg::BootPlayer {
+            player: *player,
+            sender_permissions: bf_args.vm.top().permissions.clone(),
+        })
+        .expect("scheduler is not listening");
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(boot_player, bf_boot_player);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -463,6 +491,7 @@ impl VM {
         self.builtins[offset_for_builtin("resume")] = Arc::new(Box::new(BfResume {}));
         self.builtins[offset_for_builtin("ticks_left")] = Arc::new(Box::new(BfTicksLeft {}));
         self.builtins[offset_for_builtin("seconds_left")] = Arc::new(Box::new(BfSecondsLeft {}));
+        self.builtins[offset_for_builtin("boot_player")] = Arc::new(Box::new(BfBootPlayer {}));
 
         Ok(())
     }
