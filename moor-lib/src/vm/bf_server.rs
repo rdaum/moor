@@ -131,17 +131,24 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::
         return Ok(Error(E_INVARG));
     }
 
-    let callers = bf_args.vm.callers();
+    // We have to exempt ourselves from the callers list.
+    let callers = bf_args.vm.callers()[1..].to_vec();
     Ok(Ret(v_list(
         callers
             .iter()
             .map(|c| {
                 let callers = vec![
+                    // this
                     v_objid(c.this),
+                    // verb name
                     v_string(c.verb_name.clone()),
-                    v_objid(c.perms.task_perms().obj),
-                    v_objid(c.verb_loc),
+                    // 'programmer'
+                    v_objid(c.programmer),
+                    // verb location
+                    v_objid(c.definer),
+                    // player
                     v_objid(c.player),
+                    // line number
                     v_int(c.line_number as i64),
                 ];
                 v_list(callers)
@@ -469,7 +476,7 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
     // Syntax:  call_function(<func>, <arg1>, <arg2>, ...)   => value
     //
     // Calls the given function with the given arguments and returns the result.
-    if bf_args.args.len() < 1 {
+    if bf_args.args.is_empty() {
         return Ok(Error(E_INVARG));
     }
 
@@ -487,10 +494,10 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
     };
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
-    return Ok(BfRet::VmInstr(ExecutionResult::ContinueBuiltin(
-        func_offset,
-        args[..].to_vec(),
-    )));
+    Ok(BfRet::VmInstr(ExecutionResult::ContinueBuiltin {
+        bf_func_num: func_offset,
+        arguments: args[..].to_vec(),
+    }))
 }
 bf_declare!(call_function, bf_call_function);
 

@@ -42,6 +42,15 @@ pub trait WorldState: Send + Sync {
         obj: Objid,
     ) -> Result<Objid, ObjectError>;
 
+    /// Move an object to a new location.
+    /// (Note it is the caller's responsibility to execute :accept, :enterfunc, :exitfunc, etc.)
+    async fn move_object(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        new_loc: Objid,
+    ) -> Result<(), ObjectError>;
+
     /// Get the contents of a given object.
     async fn contents_of(
         &mut self,

@@ -104,6 +104,25 @@ impl WorldState for RocksDbTransaction {
         Ok(oid)
     }
 
+    async fn move_object(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        new_loc: Objid,
+    ) -> Result<(), ObjectError> {
+        let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Write)?;
+
+        let (send, receive) = tokio::sync::oneshot::channel();
+        self.mailbox
+            .send(Message::SetLocation(obj, new_loc, send))
+            .expect("Error sending message");
+        receive.await.expect("Error receiving message")?;
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self))]
     async fn contents_of(
         &mut self,

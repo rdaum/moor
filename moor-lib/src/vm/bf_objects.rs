@@ -1,17 +1,21 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::debug;
+use tracing::{debug, error, trace};
 
-use moor_value::var::error::Error::{E_INVARG, E_TYPE};
+use moor_value::var::error::Error::{E_INVARG, E_NACC, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_bool, v_list, v_objid, v_str};
+use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::vm::builtin::BfRet::{Error, Ret};
+use crate::model::objects::ObjFlag;
+use crate::model::ObjectError;
+use crate::tasks::VerbCall;
+use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
-use crate::vm::VM;
+use crate::vm::ExecutionResult::ContinueVerb;
+use crate::vm::{ResolvedVerbCall, VM};
 
 async fn bf_create<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     unimplemented!("create")
@@ -86,8 +90,233 @@ Returns the largest object number yet assigned to a created object. Note that th
 
 /*
 Function: none move (obj what, obj where)
-Changes what's location to be where. This is a complex process because a number of permissions checks and notifications must be performed. The actual movement takes place as described in the following paragraphs.
+Changes what's location to be where. This is a complex process because a number of permissions
+checks and notifications must be performed. The actual movement takes place as described in the
+ following paragraphs.
+
+<what> should be a valid object and <where> should be either a valid object or `#-1' (denoting a location of `nowhere'); otherwise `E_INVARG' is raised.  The
+programmer must be either the owner of <what> or a wizard; otherwise, `E_PERM' is raised.
+
+If <where> is a valid object, then the verb-call
+
+    <where>:accept(<what>)
+
+is performed before any movement takes place.  If the verb returns a false value and the programmer is not a wizard, then <where> is considered to have refused
+entrance to <what>; `move()' raises `E_NACC'.  If <where> does not define an `accept' verb, then it is treated as if it defined one that always returned false.
+
+If moving <what> into <where> would create a loop in the containment hierarchy (i.e., <what> would contain itself, even indirectly), then `E_RECMOVE' is raised
+instead.
+
+The `location' property of <what> is changed to be <where>, and the `contents' properties of the old and new locations are modified appropriately.  Let
+<old-where> be the location of <what> before it was moved.  If <old-where> is a valid object, then the verb-call
+
+    <old-where>:exitfunc(<what>)
+
+is performed and its result is ignored; it is not an error if <old-where> does not define a verb named `exitfunc'.  Finally, if <where> and <what> are still
+valid objects, and <where> is still the location of <what>, then the verb-call
+
+    <where>:enterfunc(<what>)
+
+is performed and its result is ignored; again, it is not an error if <where> does not define a verb named `enterfunc'.
  */
+
+const BF_MOVE_TRAMPOLINE_START_ACCEPT: usize = 0;
+const BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC: usize = 1;
+const BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC: usize = 2;
+const BF_MOVE_TRAMPOLINE_DONE: usize = 3;
+
+async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 2 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(what) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+    let Variant::Obj(whereto) = bf_args.args[1].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    // Before actually doing any work, reject recursive moves.
+    //   If the destination is self, E_RECMOVE
+    //   If the destination is something that's inside me, that's also E_RECMOVE
+    //   And so on...
+
+    // 'Trampoline' state machine:
+    //    None => look up :accept, if it exists, set tramp to 1, and ask for it to be invoked.
+    //            if it doesn't & perms not wizard, set raise E_NACC (as if :accept returned false)
+    //    1    => if verb call was a success (look at stack), set tramp to 2, move the object,
+    //            then prepare :exitfunc on the original object source
+    //            if :exitfunc doesn't exist, proceed to 3 (enterfunc)
+    //    2    => set tramp to 3, call :enterfunc on the destination if it exists, result is ignored.
+    //    3    => return v_none
+
+    let mut tramp = bf_args
+        .vm
+        .top()
+        .bf_trampoline
+        .unwrap_or(BF_MOVE_TRAMPOLINE_START_ACCEPT);
+    trace!(what = ?what, where_to = ?*whereto, tramp, "move: looking up :accept verb");
+    let mut shortcircuit = false;
+    loop {
+        match tramp {
+            BF_MOVE_TRAMPOLINE_START_ACCEPT => {
+                match bf_args
+                    .world_state
+                    .find_method_verb_on(bf_args.perms(), *whereto, "accept")
+                    .await
+                {
+                    Ok(dispatch) => {
+                        let continuation_verb = ResolvedVerbCall {
+                            permissions: bf_args.perms().clone(),
+                            resolved_verb: dispatch,
+                            call: VerbCall {
+                                verb_name: "accept".to_string(),
+                                location: *whereto,
+                                this: *whereto,
+                                player: bf_args.vm.top().player,
+                                args: vec![v_objid(*what)],
+                                caller: bf_args.vm.top().this,
+                            },
+                            command: None,
+                        };
+                        return Ok(VmInstr(ContinueVerb {
+                            verb_call: continuation_verb,
+                            trampoline: Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC),
+                        }));
+                    }
+                    Err(ObjectError::VerbNotFound(_, _)) => {
+                        if !bf_args.perms().has_flag(ObjFlag::Wizard) {
+                            return Ok(Error(E_NACC));
+                        }
+                        // Short-circuit fake-tramp state change.
+                        tramp = 1;
+                        shortcircuit = true;
+                        continue;
+                    }
+                    Err(e) => {
+                        error!("Error looking up accept verb: {:?}", e);
+                        return Ok(Error(E_NACC));
+                    }
+                }
+            }
+            BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC => {
+                trace!(what = ?what, where_to = ?*whereto, tramp, "move: moving object, calling exitfunc");
+
+                // Accept verb has been called, and returned. Check the result. Should be on stack,
+                // unless short-circuited, in which case we assume *false*
+                let result = if !shortcircuit {
+                    bf_args.vm.top().peek_top().unwrap()
+                } else {
+                    v_int(0)
+                };
+                // If the result is false, and we're not a wizard, then raise E_NACC.
+                if !result.is_true() && !bf_args.perms().has_flag(ObjFlag::Wizard) {
+                    return Ok(Error(E_NACC));
+                }
+
+                // Otherwise, ask the world state to move the object.
+                trace!(what = ?what, where_to = ?*whereto, tramp, "move: moving object & calling enterfunc");
+
+                let original_location = bf_args
+                    .world_state
+                    .location_of(bf_args.perms(), *what)
+                    .await?;
+
+                // Failure here is likely due to permissions, so we'll just propagate that error.
+                bf_args
+                    .world_state
+                    .move_object(bf_args.perms(), *what, *whereto)
+                    .await?;
+
+                // Now, prepare to call :exitfunc on the original location.
+                match bf_args
+                    .world_state
+                    .find_method_verb_on(bf_args.perms(), original_location, "exitfunc")
+                    .await
+                {
+                    Ok(dispatch) => {
+                        let continuation_verb = ResolvedVerbCall {
+                            permissions: bf_args.perms().clone(),
+                            resolved_verb: dispatch,
+                            call: VerbCall {
+                                verb_name: "exitfunc".to_string(),
+                                location: original_location,
+                                this: original_location,
+                                player: bf_args.vm.top().player,
+                                args: vec![v_objid(*what)],
+                                caller: bf_args.vm.top().this,
+                            },
+                            command: None,
+                        };
+                        return Ok(VmInstr(ContinueVerb {
+                            verb_call: continuation_verb,
+                            trampoline: Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC),
+                        }));
+                    }
+                    Err(ObjectError::VerbNotFound(_, _)) => {
+                        // Short-circuit fake-tramp state change.
+                        tramp = 2;
+                        continue;
+                    }
+                    Err(e) => {
+                        error!("Error looking up exitfunc verb: {:?}", e);
+                        return Ok(Error(E_NACC));
+                    }
+                }
+            }
+            BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC => {
+                trace!(what = ?what, where_to = ?*whereto, tramp, "move: calling enterfunc");
+                // Exitfunc has been called, and returned. Result is irrelevant. Prepare to call
+                // :enterfunc on the destination.
+                match bf_args
+                    .world_state
+                    .find_method_verb_on(bf_args.perms(), *whereto, "enterfunc")
+                    .await
+                {
+                    Ok(dispatch) => {
+                        let continuation_verb = ResolvedVerbCall {
+                            permissions: bf_args.perms().clone(),
+                            resolved_verb: dispatch,
+                            call: VerbCall {
+                                verb_name: "enterfunc".to_string(),
+                                location: *whereto,
+                                this: *whereto,
+                                player: bf_args.vm.top().player,
+                                args: vec![v_objid(*what)],
+                                caller: bf_args.vm.top().this,
+                            },
+                            command: None,
+                        };
+                        return Ok(VmInstr(ContinueVerb {
+                            verb_call: continuation_verb,
+                            trampoline: Some(3),
+                        }));
+                    }
+                    Err(ObjectError::VerbNotFound(_, _)) => {
+                        // Short-circuit fake-tramp state change.
+                        tramp = BF_MOVE_TRAMPOLINE_DONE;
+                        continue;
+                    }
+                    Err(e) => {
+                        error!("Error looking up enterfunc verb: {:?}", e);
+                        return Ok(Error(E_NACC));
+                    }
+                }
+            }
+            BF_MOVE_TRAMPOLINE_DONE => {
+                trace!(what = ?what, where_to = ?*whereto, tramp, "move: completed");
+
+                // Enter func was called, and returned. Result is irrelevant. We're done.
+                // Return v_none.
+                return Ok(Ret(v_none()));
+            }
+            _ => {
+                panic!("Invalid trampoline state: {} in bf_move", tramp);
+            }
+        }
+    }
+}
+bf_declare!(move, bf_move);
 
 async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
@@ -133,6 +362,7 @@ impl VM {
         self.builtins[offset_for_builtin("properties")] = Arc::new(Box::new(BfProperties {}));
         self.builtins[offset_for_builtin("parent")] = Arc::new(Box::new(BfParent {}));
         self.builtins[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
+        self.builtins[offset_for_builtin("move")] = Arc::new(Box::new(BfMove {}));
 
         Ok(())
     }

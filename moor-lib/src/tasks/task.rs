@@ -381,15 +381,22 @@ impl Task {
             self.vm.tick_count += 1;
             match result {
                 ExecutionResult::More => return Ok(None),
-                ExecutionResult::ContinueVerb(call_request) => {
+                ExecutionResult::ContinueVerb {
+                    verb_call: call_request,
+                    trampoline,
+                } => {
                     trace!(task_id = self.task_id, call_request = ?call_request, "Task continue, call into verb");
+                    self.vm.top_mut().bf_trampoline = trampoline;
                     self.vm
                         .exec_call_request(self.task_id, call_request)
                         .await
                         .expect("Could not set up VM for command execution");
                     return Ok(None);
                 }
-                ExecutionResult::ContinueBuiltin(bf_offset, args) => {
+                ExecutionResult::ContinueBuiltin {
+                    bf_func_num: bf_offset,
+                    arguments: args,
+                } => {
                     let mut exec_params = VmExecParams {
                         world_state: self.world_state.as_mut(),
                         sessions: self.sessions.clone(),

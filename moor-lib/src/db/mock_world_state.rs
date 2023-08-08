@@ -65,6 +65,15 @@ impl WorldState for MockState {
         todo!()
     }
 
+    async fn move_object(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _new_loc: Objid,
+    ) -> Result<(), ObjectError> {
+        todo!()
+    }
+
     async fn contents_of(
         &mut self,
         _perms: PermissionsContext,

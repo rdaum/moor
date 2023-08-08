@@ -1,4 +1,5 @@
 use moor_value::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE};
+use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_none, Var};
 
@@ -87,22 +88,30 @@ impl VM {
 
     /// Return the callers stack, in the format expected by the `callers` built-in function.
     pub(crate) fn callers(&self) -> Vec<Caller> {
-        // Starting from the top, and working back
+        let mut callers_iter = self.stack.iter().rev();
+        callers_iter.next(); // skip the top activation, that's our current frame
+
         let mut callers = vec![];
-        for activation in self.stack.iter().rev() {
+        for activation in callers_iter {
             let verb_name = activation.verb_name.clone();
-            let verb_loc = activation.verb_definer();
+            let definer = activation.verb_definer();
             let player = activation.player;
             let line_number = 0; // TODO: fix after decompilation support
             let this = activation.this;
             let perms = activation.permissions.clone();
+            let programmer = if activation.bf_index.is_some() {
+                NOTHING
+            } else {
+                perms.task_perms().obj
+            };
             callers.push(Caller {
                 verb_name,
-                verb_loc,
+                definer,
                 player,
                 line_number,
                 this,
                 perms,
+                programmer,
             });
         }
         callers

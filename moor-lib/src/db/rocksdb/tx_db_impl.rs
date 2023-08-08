@@ -353,7 +353,18 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         get_oid_vec(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
-    fn set_object_location(&self, o: Objid, new_location: Objid) -> Result<(), anyhow::Error> {
+    fn set_object_location(&self, what: Objid, new_location: Objid) -> Result<(), anyhow::Error> {
+        let mut oid = new_location;
+        loop {
+            if oid == NOTHING {
+                break;
+            }
+            if oid == what {
+                return Err(ObjectError::RecursiveMove(what, new_location).into());
+            }
+            oid = self.get_object_location(oid)?;
+        }
+
         // Get o's location, get its contents, remove o from old contents, put contents back
         // without it. Set new location, get its contents, add o to contents, put contents
         // back with it. Then update the location of o.
@@ -362,7 +373,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
 
         // Get and remove from contents of old location, if we had any.
-        match get_oid_value(l_cf, &self.tx, o) {
+        match get_oid_value(l_cf, &self.tx, what) {
             Ok(old_location) => {
                 if old_location == new_location {
                     return Ok(());
@@ -370,7 +381,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 if old_location != NOTHING {
                     let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
                     let old_contents = get_oid_vec(c_cf, &self.tx, old_location)?;
-                    let old_contents = old_contents.into_iter().filter(|&x| x != o).collect();
+                    let old_contents = old_contents.into_iter().filter(|&x| x != what).collect();
                     set_oid_vec(c_cf, &self.tx, old_location, old_contents)?;
                 }
             }
@@ -381,7 +392,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
             Err(_) => {}
         }
         // Set new location.
-        set_oid_value(l_cf, &self.tx, o, new_location)?;
+        set_oid_value(l_cf, &self.tx, what, new_location)?;
 
         if new_location == NOTHING {
             return Ok(());
@@ -389,7 +400,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
         // Get and add to contents of new location.
         let mut new_contents = get_oid_vec(c_cf, &self.tx, new_location).unwrap_or_else(|_| vec![]);
-        new_contents.push(o);
+        new_contents.push(what);
         set_oid_vec(c_cf, &self.tx, new_location, new_contents)?;
         Ok(())
     }
@@ -1140,6 +1151,26 @@ mod tests {
         tx.set_object_location(a, c).unwrap();
         assert_eq!(tx.get_object_contents(c).unwrap(), vec![b, d, a]);
         assert_eq!(tx.get_object_location(a).unwrap(), c);
+
+        // Validate recursive move detection.
+        match tx.set_object_location(c, b).err().unwrap().downcast_ref::<ObjectError>() {
+            Some(ObjectError::RecursiveMove(_, _)) => {}
+            _ => {
+                panic!("Expected recursive move error");
+            }
+        }
+
+        // Move b one level deeper, and then check recursive move detection again.
+        tx.set_object_location(b, d).unwrap();
+        match tx.set_object_location(c, b).err().unwrap().downcast_ref::<ObjectError>() {
+            Some(ObjectError::RecursiveMove(_, _)) => {}
+            _ => {
+                panic!("Expected recursive move error");
+            }
+        }
+
+        // The other way around, d to c should be fine.
+        tx.set_object_location(d, c).unwrap();
     }
 
     #[test]

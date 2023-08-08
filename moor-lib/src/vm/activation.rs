@@ -20,7 +20,10 @@ pub struct Caller {
     pub this: Objid,
     pub verb_name: String,
     pub perms: PermissionsContext,
-    pub verb_loc: Objid,
+    // For verb calls this should usually be the same as perms.task_perms.objid. But for builtins
+    // this is #-1, which is one of the way that MOO cores can tell that a call is a builtin. Sigh.
+    pub programmer: Objid,
+    pub definer: Objid,
     pub player: Objid,
     pub line_number: usize,
 }
@@ -166,7 +169,6 @@ impl Activation {
         bf_name: &str,
         args: Vec<Var>,
         verb_flags: BitEnum<VerbFlag>,
-        this: Objid,
         player: Objid,
         permissions: PermissionsContext,
         span_id: Option<tracing::span::Id>,
@@ -190,7 +192,7 @@ impl Activation {
             handler_stack: vec![],
             pc: 0,
             temp: v_none(),
-            this,
+            this: NOTHING,
             player,
             permissions,
             verb_info,

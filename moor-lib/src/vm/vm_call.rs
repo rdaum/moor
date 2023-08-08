@@ -2,7 +2,7 @@ use anyhow::Context;
 use tracing::{error, span, trace, Level};
 
 use moor_value::var::error::Error;
-use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
+use moor_value::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_int, Var};
 
@@ -130,8 +130,10 @@ impl VM {
             this,
             player: self.top().player,
             args: args.to_vec(),
-            caller: self.top().permissions.caller_perms().obj,
+            caller: self.top().this,
         };
+        trace!(this = ?this, verb = verb_name, args = ?args, caller = ?call.caller, "Preparing verb call");
+
         let self_valid = state.valid(this).await?;
         if !self_valid {
             return self.push_error(E_INVIND);
@@ -176,7 +178,10 @@ impl VM {
             command: self.top().command.clone(),
         };
 
-        Ok(ExecutionResult::ContinueVerb(call_request))
+        Ok(ExecutionResult::ContinueVerb {
+            verb_call: call_request,
+            trampoline: None,
+        })
     }
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
@@ -218,7 +223,10 @@ impl VM {
             command: self.top().command.clone(),
         };
 
-        Ok(ExecutionResult::ContinueVerb(call_request))
+        Ok(ExecutionResult::ContinueVerb {
+            verb_call: call_request,
+            trampoline: None,
+        })
     }
 
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
@@ -307,7 +315,6 @@ impl VM {
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
             flags,
-            self.top().this,
             self.top().player,
             self.top().permissions.clone(),
             span.id(),
@@ -327,15 +334,11 @@ impl VM {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Ok(BfRet::Error(e)) => self.push_bf_error(e),
             Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
-            Err(e) => match e.downcast_ref() {
-                Some(ObjectError::ObjectNotFound(_)) => self.push_bf_error(E_INVARG),
-                Some(ObjectError::ObjectPermissionDenied) => self.push_bf_error(E_PERM),
-                Some(ObjectError::VerbNotFound(_, _)) => self.push_bf_error(E_VERBNF),
-                Some(ObjectError::VerbPermissionDenied) => self.push_bf_error(E_PERM),
-                Some(ObjectError::InvalidVerb(_)) => self.push_bf_error(E_VERBNF),
-                Some(ObjectError::PropertyNotFound(_, _)) => self.push_bf_error(E_PROPNF),
-                Some(ObjectError::PropertyPermissionDenied) => self.push_bf_error(E_PERM),
-                Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_bf_error(E_PROPNF),
+            Err(e) => match e.downcast_ref::<ObjectError>() {
+                Some(e) => {
+                    let err_code = e.to_error_code()?;
+                    self.push_bf_error(err_code)
+                }
                 _ => Err(e),
             },
         }
@@ -349,15 +352,11 @@ impl VM {
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
-        let Some(mut bf_tramp) = self.top_mut().bf_trampoline else {
+        let Some(_) = self.top_mut().bf_trampoline else {
             let return_value = self.top_mut().pop().unwrap();
 
             return self.unwind_stack(FinallyReason::Return(return_value))
         };
-
-        // Increment the trampoline counter and reconstruct the bf call options.
-        bf_tramp += 1;
-        self.top_mut().bf_trampoline = Some(bf_tramp);
 
         let mut bf_args = BfCallState {
             vm: self,
@@ -375,15 +374,11 @@ impl VM {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Ok(BfRet::Error(e)) => self.push_bf_error(e),
             Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
-            Err(e) => match e.downcast_ref() {
-                Some(ObjectError::ObjectNotFound(_)) => self.push_bf_error(E_INVARG),
-                Some(ObjectError::ObjectPermissionDenied) => self.push_bf_error(E_PERM),
-                Some(ObjectError::VerbNotFound(_, _)) => self.push_bf_error(E_VERBNF),
-                Some(ObjectError::VerbPermissionDenied) => self.push_bf_error(E_PERM),
-                Some(ObjectError::InvalidVerb(_)) => self.push_bf_error(E_VERBNF),
-                Some(ObjectError::PropertyNotFound(_, _)) => self.push_bf_error(E_PROPNF),
-                Some(ObjectError::PropertyPermissionDenied) => self.push_bf_error(E_PERM),
-                Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_bf_error(E_PROPNF),
+            Err(e) => match e.downcast_ref::<ObjectError>() {
+                Some(e) => {
+                    let err_code = e.to_error_code()?;
+                    self.push_bf_error(err_code)
+                }
                 _ => Err(e),
             },
         }

@@ -1,3 +1,5 @@
+use anyhow::bail;
+use moor_value::var::error::Error;
 use thiserror::Error;
 
 use moor_value::var::objid::Objid;
@@ -23,6 +25,8 @@ pub enum ObjectError {
     ObjectAlreadyExists(Objid),
     #[error("Could not set/get object attribute; {0} on #{1}")]
     ObjectAttributeError(ObjAttr, Objid),
+    #[error("Recursive move detected: {0} -> {1}")]
+    RecursiveMove(Objid, Objid),
 
     #[error("Object permission denied")]
     ObjectPermissionDenied,
@@ -60,4 +64,23 @@ pub enum ObjectError {
     PropertyDbError(Objid, String, String),
     #[error("Object DB error for {0}:{1}: {2}")]
     VerbDbError(Objid, String, String),
+}
+
+impl ObjectError {
+    pub fn to_error_code(&self) -> Result<Error, anyhow::Error> {
+        match self {
+            ObjectError::ObjectNotFound(_) => Ok(Error::E_INVARG),
+            ObjectError::ObjectPermissionDenied => Ok(Error::E_PERM),
+            ObjectError::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
+            ObjectError::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
+            ObjectError::VerbPermissionDenied => Ok(Error::E_PERM),
+            ObjectError::InvalidVerb(_) => Ok(Error::E_VERBNF),
+            ObjectError::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
+            ObjectError::PropertyPermissionDenied => Ok(Error::E_PERM),
+            ObjectError::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
+            _ => {
+                bail!("Unhandled error code: {:?}", self);
+            }
+        }
+    }
 }

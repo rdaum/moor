@@ -111,7 +111,10 @@ mod tests {
                 Ok(ExecutionResult::Exception(e)) => {
                     panic!("MOO exception {:?}", e);
                 }
-                Ok(ExecutionResult::ContinueVerb(cr)) => {
+                Ok(ExecutionResult::ContinueVerb {
+                    verb_call: cr,
+                    trampoline: _,
+                }) => {
                     vm.exec_call_request(0, cr).await.unwrap();
                 }
                 Ok(ExecutionResult::DispatchFork(_)) => {
@@ -120,7 +123,10 @@ mod tests {
                 Ok(ExecutionResult::Suspend(_)) => {
                     panic!("suspend not implemented in test VM")
                 }
-                Ok(ExecutionResult::ContinueBuiltin(_, _)) => {}
+                Ok(ExecutionResult::ContinueBuiltin {
+                    bf_func_num: _,
+                    arguments: _,
+                }) => {}
             }
         }
     }
@@ -840,7 +846,10 @@ mod tests {
                 Ok(ExecutionResult::Exception(e)) => {
                     panic!("MOO exception {:?}", e);
                 }
-                Ok(ExecutionResult::ContinueVerb(cr)) => {
+                Ok(ExecutionResult::ContinueVerb {
+                    verb_call: cr,
+                    trampoline: _,
+                }) => {
                     vm.exec_call_request(0, cr).await.unwrap();
                 }
                 Ok(ExecutionResult::DispatchFork(_)) => {
@@ -849,7 +858,10 @@ mod tests {
                 Ok(ExecutionResult::Suspend(_)) => {
                     panic!("suspend not supported in this test");
                 }
-                Ok(ExecutionResult::ContinueBuiltin(_, _)) => {}
+                Ok(ExecutionResult::ContinueBuiltin {
+                    bf_func_num: _,
+                    arguments: _,
+                }) => {}
             }
         }
     }

@@ -90,11 +90,17 @@ pub enum ExecutionResult {
     /// An exception was raised during execution.
     Exception(FinallyReason),
     /// Request dispatch to another verb
-    ContinueVerb(ResolvedVerbCall),
+    ContinueVerb {
+        verb_call: ResolvedVerbCall,
+        trampoline: Option<usize>,
+    },
     /// Request dispatch of a new task as a fork
     DispatchFork(ForkRequest),
     /// Request dispatch of a builtin function with the given arguments.
-    ContinueBuiltin(usize, Vec<Var>),
+    ContinueBuiltin {
+        bf_func_num: usize,
+        arguments: Vec<Var>,
+    },
     /// Request that this task be suspended for a duration of time.
     /// This leads to the task performing a commit, being suspended for a delay, and then being
     /// resumed under a new transaction.
