@@ -4,7 +4,6 @@ use tracing::{error, span, trace, Level};
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
-use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, Var};
 
 use crate::compiler::builtins::BUILTINS;
@@ -295,36 +294,95 @@ impl VM {
         span.follows_from(self.top().span_id.clone());
 
         let _guard = span.enter();
-        // this is clearly wrong and we need to be passing in a reference...
+
+        let args = args.to_vec();
+
+        // Push an activation frame for the builtin function.
+        let flags = self.top().verb_info.attrs.flags.unwrap();
+        self.stack.push(Activation::for_bf_call(
+            self.top().task_id,
+            bf_func_num,
+            BUILTINS[bf_func_num],
+            args.clone(),
+            // We copy the flags from the calling verb, that will determine error handling 'd'
+            // behaviour below.
+            flags,
+            self.top().this,
+            self.top().player,
+            self.top().permissions.clone(),
+            span.id(),
+        ));
         let mut bf_args = BfCallState {
             vm: self,
             name: BUILTINS[bf_func_num],
             world_state: exec_args.world_state,
             sessions: exec_args.sessions.clone(),
-            args: args.to_vec(),
+            args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
             ticks_left: exec_args.ticks_left,
             time_left: exec_args.time_left,
         };
+
         match bf.call(&mut bf_args).await {
             Ok(BfRet::Ret(result)) => {
-                if let Variant::Err(e) = result.variant() {
-                    return self.push_error(*e);
-                }
-                self.push(&result);
-                Ok(ExecutionResult::More)
+                self.unwind_stack(FinallyReason::Return(result.clone()))
             }
-            Ok(BfRet::Error(e)) => self.push_error(e),
+            Ok(BfRet::Error(e)) => {
+                self.push_bf_error(e)
+            }
             Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
             Err(e) => match e.downcast_ref() {
-                Some(ObjectError::ObjectNotFound(_)) => self.push_error(E_INVARG),
-                Some(ObjectError::ObjectPermissionDenied) => self.push_error(E_PERM),
-                Some(ObjectError::VerbNotFound(_, _)) => self.push_error(E_VERBNF),
-                Some(ObjectError::VerbPermissionDenied) => self.push_error(E_PERM),
-                Some(ObjectError::InvalidVerb(_)) => self.push_error(E_VERBNF),
-                Some(ObjectError::PropertyNotFound(_, _)) => self.push_error(E_PROPNF),
-                Some(ObjectError::PropertyPermissionDenied) => self.push_error(E_PERM),
-                Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_error(E_PROPNF),
+                Some(ObjectError::ObjectNotFound(_)) => self.push_bf_error(E_INVARG),
+                Some(ObjectError::ObjectPermissionDenied) => self.push_bf_error(E_PERM),
+                Some(ObjectError::VerbNotFound(_, _)) => self.push_bf_error(E_VERBNF),
+                Some(ObjectError::VerbPermissionDenied) => self.push_bf_error(E_PERM),
+                Some(ObjectError::InvalidVerb(_)) => self.push_bf_error(E_VERBNF),
+                Some(ObjectError::PropertyNotFound(_, _)) => self.push_bf_error(E_PROPNF),
+                Some(ObjectError::PropertyPermissionDenied) => self.push_bf_error(E_PERM),
+                Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_bf_error(E_PROPNF),
+                _ => Err(e),
+            },
+        }
+    }
+
+    /// We're returning into a builtin function, which is all set up at the top of the stack.
+    pub(crate) async fn reenter_builtin_function<'a>(
+        &mut self,
+        exec_args: VmExecParams<'a>,
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        // Increment the trampoline counter and reconstruct the bf call options.
+        let bf_tramp = self.top().bf_trampoline.unwrap() + 1;
+        self.top_mut().bf_trampoline = Some(bf_tramp);
+
+        let mut bf_args = BfCallState {
+            vm: self,
+            name: self.top().verb_name.as_str(),
+            world_state: exec_args.world_state,
+            sessions: exec_args.sessions.clone(),
+            args: self.top().args.clone(),
+            scheduler_sender: exec_args.scheduler_sender.clone(),
+            ticks_left: exec_args.ticks_left,
+            time_left: exec_args.time_left,
+        };
+        let bf = self.builtins[self.top().bf_index.unwrap()].clone();
+
+        match bf.call(&mut bf_args).await {
+            Ok(BfRet::Ret(result)) => {
+                self.unwind_stack(FinallyReason::Return(result.clone()))
+            }
+            Ok(BfRet::Error(e)) => {
+                self.push_bf_error(e)
+            }
+            Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
+            Err(e) => match e.downcast_ref() {
+                Some(ObjectError::ObjectNotFound(_)) => self.push_bf_error(E_INVARG),
+                Some(ObjectError::ObjectPermissionDenied) => self.push_bf_error(E_PERM),
+                Some(ObjectError::VerbNotFound(_, _)) => self.push_bf_error(E_VERBNF),
+                Some(ObjectError::VerbPermissionDenied) => self.push_bf_error(E_PERM),
+                Some(ObjectError::InvalidVerb(_)) => self.push_bf_error(E_VERBNF),
+                Some(ObjectError::PropertyNotFound(_, _)) => self.push_bf_error(E_PROPNF),
+                Some(ObjectError::PropertyPermissionDenied) => self.push_bf_error(E_PERM),
+                Some(ObjectError::PropertyDefinitionNotFound(_, _)) => self.push_bf_error(E_PROPNF),
                 _ => Err(e),
             },
         }

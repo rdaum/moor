@@ -421,7 +421,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(oid);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
-        let mut verbs : Vec<VerbHandle> = match verbs_bytes {
+        let mut verbs: Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
                 let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
@@ -814,7 +814,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
         let ok = oid_key(location);
         let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
-        let mut props : Vec<PropHandle> = match props_bytes {
+        let mut props: Vec<PropHandle> = match props_bytes {
             None => vec![],
             Some(prop_bytes) => {
                 let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;

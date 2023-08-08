@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use bincode::{Decode, Encode};
+use lazy_static::lazy_static;
 
 use moor_value::var::Var;
 
@@ -112,6 +113,10 @@ pub enum Op {
         stack: Offset,
         label: Label,
     },
+}
+
+lazy_static! {
+    pub static ref EMPTY_PROGRAM: Binary = Binary::new();
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.

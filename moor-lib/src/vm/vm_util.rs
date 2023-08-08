@@ -116,6 +116,13 @@ impl VM {
         self.stack.last().expect("activation stack underflow")
     }
 
+    pub(crate) fn caller_mut(&mut self) -> &mut Activation {
+        let len = self.stack.len();
+        self.stack
+            .get_mut(len - 2)
+            .expect("activation stack underflow")
+    }
+
     pub(crate) fn pop(&mut self) -> Var {
         self.top_mut().pop().unwrap_or_else(|| {
             panic!(

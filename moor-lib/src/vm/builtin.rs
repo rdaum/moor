@@ -16,13 +16,21 @@ use crate::vm::{ExecutionResult, VM};
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
-    pub(crate) vm: &'a VM,
+    /// The name of the invoked function.
     pub(crate) name: &'a str,
-    pub(crate) world_state: &'a mut dyn WorldState,
-    pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    /// Arguments passed to the function.
     pub(crate) args: Vec<Var>,
+    /// Reference back to the VM, to be able to retrieve stack frames and other state.
+    pub(crate) vm: &'a VM,
+    /// Handle to the current database transaction.
+    pub(crate) world_state: &'a mut dyn WorldState,
+    /// For connection / message management.
+    pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    /// For sending messages up to the scheduler
     pub(crate) scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+    /// How many ticks are left in the current task.
     pub(crate) ticks_left: usize,
+    /// How much time is left in the current task.
     pub(crate) time_left: Option<Duration>,
 }
 
@@ -38,9 +46,14 @@ pub(crate) trait BuiltinFunction: Sync + Send {
     async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error>;
 }
 
+/// Return possibilities from a built-in function.
 pub(crate) enum BfRet {
+    /// Successful return, with a value to be pushed to the value stack.
     Ret(Var),
+    /// An error occurred, which should be raised.
     Error(Error),
+    /// BF wants to return control back to the VM, with specific instructions to things like
+    /// `suspend` or dispatch to a verb call.
     VmInstr(ExecutionResult),
 }
 

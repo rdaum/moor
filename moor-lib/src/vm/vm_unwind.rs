@@ -1,9 +1,11 @@
-use tracing::{error, trace};
+use tracing::trace;
 
 use moor_value::var::error::{Error, ErrorPack};
+use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 
+use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
 use crate::model::verbs::VerbFlag;
 use crate::vm::activation::{Activation, HandlerType};
@@ -110,14 +112,27 @@ impl VM {
             // Produce traceback line for each activation frame and append to stack_list
             // Should include line numbers (if possible), the name of the currently running verb,
             // its definer, its location, and the current player, and 'this'.
-            let traceback_entry = vec![
-                v_objid(a.this),
-                v_str(a.verb_info.names.join(" ").as_str()),
-                v_objid(a.verb_definer()),
-                v_objid(a.verb_owner()),
-                v_objid(a.player),
-                // TODO: find_line_number and add here.
-            ];
+            let traceback_entry = match a.bf_index {
+                None => {
+                    vec![
+                        v_objid(a.this),
+                        v_str(a.verb_info.names.join(" ").as_str()),
+                        v_objid(a.verb_definer()),
+                        v_objid(a.verb_owner()),
+                        v_objid(a.player),
+                        // TODO: find_line_number and add here.
+                    ]
+                }
+                Some(bf_index) => {
+                    vec![
+                        v_objid(a.this),
+                        v_str(BUILTINS[bf_index]),
+                        v_objid(NOTHING),
+                        v_objid(NOTHING),
+                        v_objid(a.player),
+                    ]
+                }
+            };
 
             stack_list.push(v_list(traceback_entry));
         }
@@ -134,9 +149,13 @@ impl VM {
             if i != 0 {
                 pieces.push("... called from ".to_string());
             }
-            pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
+            if a.bf_index.is_none() {
+                pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
+            } else {
+                pieces.push(format!("Builtin {}", BUILTINS[a.bf_index.unwrap()]));
+            }
             if a.verb_definer() != a.this {
-                pieces.push(format!(" (this == {})", a.this.0));
+                pieces.push(format!(" (this == #{})", a.this.0));
             }
             // TODO line number
             if i == 0 {
@@ -181,7 +200,7 @@ impl VM {
 
     /// Push an error to the stack and raise it.
     pub(crate) fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
-        error!(?code, "push_error");
+        trace!(?code, "push_error");
         self.push(&v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
@@ -198,13 +217,38 @@ impl VM {
         Ok(ExecutionResult::More)
     }
 
+    /// Same as push_error, but if we're !d, pop the bf activation stack off first, since it won't
+    /// do it itself. Otherwise let unwind_stack do its usual thing, so the bf shows in the
+    /// traceback.
+    pub(crate) fn push_bf_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+        trace!(?code, "push_bf_error");
+        // No matter what, the error value has to be on the stack of the calling verb, not on this
+        // frame; as we are incapable of doing anything with it...
+        self.caller_mut().push(v_err(code));
+
+        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
+        if let Some(activation) = self.stack.last() {
+            if activation
+                .verb_info
+                .attrs
+                .flags
+                .unwrap()
+                .contains(VerbFlag::Debug)
+            {
+                return self.raise_error_pack(code.make_error_pack(None));
+            }
+        }
+        self.push(&v_err(code));
+        Ok(ExecutionResult::More)
+    }
+
     /// Push an error to the stack with a description and raise it.
     pub(crate) fn push_error_msg(
         &mut self,
         code: Error,
         msg: String,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        error!(?code, msg, "push_error_msg");
+        trace!(?code, msg, "push_error_msg");
         self.push(&v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
@@ -224,7 +268,7 @@ impl VM {
 
     /// Raise an error (without pushing its value to stack)
     pub(crate) fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
-        error!(?code, "raise_error");
+        trace!(?code, "raise_error");
         self.raise_error_pack(code.make_error_pack(None))
     }
 

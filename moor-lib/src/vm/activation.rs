@@ -1,5 +1,6 @@
 use tracing::trace;
 
+use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::E_VARNF;
 use moor_value::var::objid::{Objid, NOTHING};
@@ -7,10 +8,10 @@ use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarT
 
 use crate::compiler::labels::{Label, Name};
 use crate::model::permissions::PermissionsContext;
-use crate::model::verbs::VerbInfo;
+use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
-use crate::vm::opcode::{Binary, Op};
+use crate::vm::opcode::{Binary, Op, EMPTY_PROGRAM};
 use crate::vm::ResolvedVerbCall;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
@@ -41,21 +42,44 @@ pub(crate) struct HandlerLabel {
     pub(crate) valstack_pos: usize,
 }
 
+/// Activation frame for the call stack.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Activation {
+    /// The task ID of the task that owns this VM and this stack of activations.
     pub(crate) task_id: TaskId,
+    /// The program of the verb that is currently being executed.
     pub(crate) binary: Binary,
-    pub(crate) environment: Vec<Var>,
-    pub(crate) valstack: Vec<Var>,
-    pub(crate) handler_stack: Vec<HandlerLabel>,
-    pub(crate) pc: usize,
-    pub(crate) temp: Var,
+    /// The object that is the receiver of the current verb call.
     pub(crate) this: Objid,
+    /// The object that is the 'player' role; that is, the active user of this task.
     pub(crate) player: Objid,
-    pub(crate) permissions: PermissionsContext,
+    /// The arguments to the verb or bf being called.
+    pub(crate) args: Vec<Var>,
+    /// The name of the verb that is currently being executed.
     pub(crate) verb_name: String,
+    /// The extended information about the verb that is currently being executed.
     pub(crate) verb_info: VerbInfo,
+    /// The values of the variables currently in scope, by their offset.
+    pub(crate) environment: Vec<Var>,
+    /// The value stack.
+    pub(crate) valstack: Vec<Var>,
+    /// A stack of active error handlers, each relative to a position in the valstack.
+    pub(crate) handler_stack: Vec<HandlerLabel>,
+    /// The program counter.
+    pub(crate) pc: usize,
+    /// Scratch space for PushTemp and PutTemp opcodes.
+    pub(crate) temp: Var,
+    /// The permissions context for this verb call.
+    pub(crate) permissions: PermissionsContext,
+    /// The command that triggered this verb call, if any.
     pub(crate) command: Option<ParsedCommand>,
+    /// If the activation is a call to a built-in function, the index of that function, in which
+    /// case "verb_name", "verb_info", etc. are meaningless
+    pub(crate) bf_index: Option<usize>,
+    /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
+    /// in, which can be used by the bf to figure out how to resume where it left off.
+    pub(crate) bf_trampoline: Option<usize>,
+    /// The tracing span ID for this verb call, if any.
     pub(crate) span_id: Option<tracing::span::Id>,
 }
 
@@ -86,9 +110,11 @@ impl Activation {
             permissions: verb_call_request.permissions,
             verb_info: verb_call_request.resolved_verb,
             verb_name: verb_call_request.call.verb_name.clone(),
-
             command: verb_call_request.command.clone(),
+            bf_index: None,
+            bf_trampoline: None,
             span_id,
+            args: verb_call_request.call.args.clone(),
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
@@ -134,8 +160,56 @@ impl Activation {
         Ok(a)
     }
 
+    pub fn for_bf_call(
+        task_id: TaskId,
+        bf_index: usize,
+        bf_name: &str,
+        args: Vec<Var>,
+        verb_flags: BitEnum<VerbFlag>,
+        this: Objid,
+        player: Objid,
+        permissions: PermissionsContext,
+        span_id: Option<tracing::span::Id>,
+    ) -> Self {
+        let verb_info = VerbInfo {
+            names: vec![],
+            attrs: VerbAttrs {
+                definer: None,
+                owner: None,
+                flags: Some(verb_flags),
+                args_spec: None,
+                program: None,
+            },
+        };
+
+        
+        Self {
+            task_id,
+            binary: EMPTY_PROGRAM.clone(),
+            environment: vec![],
+            valstack: vec![],
+            handler_stack: vec![],
+            pc: 0,
+            temp: v_none(),
+            this,
+            player,
+            permissions,
+            verb_info,
+            verb_name: bf_name.to_string(),
+            command: None,
+            bf_index: Some(bf_index),
+            bf_trampoline: None,
+            span_id,
+            args,
+        }
+    }
+
     pub fn verb_definer(&self) -> Objid {
-        self.verb_info.attrs.definer.unwrap()
+        if self.bf_index.is_none() {
+            self.verb_info.attrs.definer.unwrap()
+        } else {
+            NOTHING
+        }
     }
 
     pub fn verb_owner(&self) -> Objid {

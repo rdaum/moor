@@ -57,6 +57,14 @@ impl VM {
             return self.raise_error(E_MAXREC);
         }
 
+        // If the current activation frame is a builtin function, we need to jump back into it,
+        // but increment the trampoline counter, as it means we're returning into it after
+        // executing elsewhere. It will be up to the function to interpret the counter.
+        if !self.stack.is_empty() && self.top().bf_index.is_some() {
+            return self.reenter_builtin_function(exec_params).await;
+        }
+
+        // Otherwise, start poppin' opcodes.
         let op = self
             .next_op()
             .expect("Unexpected program termination; opcode stream should end with RETURN or DONE");

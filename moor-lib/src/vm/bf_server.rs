@@ -235,15 +235,13 @@ async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         return Ok(Error(E_INVARG));
     }
 
-    let Variant::Err(_) = bf_args.args[0].variant() else {
+    let Variant::Err(err) = bf_args.args[0].variant() else {
         return Ok(Error(E_INVARG));
     };
 
     // TODO implement message & value params, can't do that with the existing bf interface for
     // returning errors right now :-(
-    // probably need to change the result type here to not use anyhow::Error, and pack in some
-    // more useful stuff
-    Ok(Ret(bf_args.args[0].clone()))
+    Ok(Error(*err))
 }
 bf_declare!(raise, bf_raise);
 
