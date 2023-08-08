@@ -78,7 +78,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | players         |          |       |
 | is_player       | &check;  |       |
 | set_player_flag |          |       |
-| move            |          |       |
+| move            | &check;  |       |
 
 ### Properties
 
@@ -103,10 +103,10 @@ The following is a table of the status of various builtin-functions, to keep an 
 | set_verb_args | &check;  |                                          |
 | add_verb      |          |                                          |
 | delete_verb   |          |                                          |
-| verb_code     |          |                                          |
 | set_verb_code |          |                                          |
 | eval          |          |                                          |
 | disassemble   |          | Requires implementation of decompilation |
+| verb_code     |          | "                                        |
 
 ### Values / encoding
 
@@ -151,7 +151,6 @@ The following is a table of the status of various builtin-functions, to keep an 
 | queued_tasks      | &check;  |       |
 | kill_task         | &check;  |       |
 | resume            | &check;  |       |
-| output_delimiters |          |       |
 | queue_info        |          |       |
 | force_input       |          |       |
 | flush_input       |          |       |
@@ -187,4 +186,5 @@ to the caller if attempted.
 | unlisten                |          |       |
 | read                    |          |       |
 | listeners               |          |       |
+| output_delimiters       |          |       |
 | buffered_output_length  |          |       |
