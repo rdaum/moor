@@ -33,6 +33,8 @@ pub enum ObjectError {
     PropertyPermissionDenied,
     #[error("Property definition not found: {0}.{1}")]
     PropertyDefinitionNotFound(Objid, String),
+    #[error("Duplicate property definition: {0}.{1}")]
+    DuplicatePropertyDefinition(Objid, String),
 
     #[error("Verb not found: {0}:{1}")]
     VerbNotFound(Objid, String),
@@ -43,6 +45,8 @@ pub enum ObjectError {
     VerbDecodeError(Objid, String),
     #[error("Verb permission denied")]
     VerbPermissionDenied,
+    #[error("Verb already exists: {0}:{1}")]
+    DuplicateVerb(Objid, String),
 
     #[error("Failed object match: {0}")]
     FailedMatch(String),

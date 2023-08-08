@@ -417,19 +417,27 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
     ) -> Result<(), anyhow::Error> {
-        // TODO: check for duplicate names.
-
         // Get the old vector, add the new verb, put the new vector.
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(oid);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
-        let mut verbs = match verbs_bytes {
+        let mut verbs : Vec<VerbHandle> = match verbs_bytes {
             None => vec![],
             Some(verb_bytes) => {
                 let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
                 verbs
             }
         };
+
+        // If there's overlap in the names, we need to fail.
+        for verb in &verbs {
+            for name in &names {
+                if verb.names.contains(name) {
+                    return Err(ObjectError::DuplicateVerb(oid, name.clone()).into());
+                }
+            }
+        }
+
         // Generate a new verb ID.
         let vid = Uuid::new_v4();
         let verb = VerbHandle {
@@ -517,7 +525,6 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 verbs
             }
         };
-        // TODO: wildcard search
         let verb = verbs
             .iter()
             .find(|vh| match_in_verb_names(&vh.names, &n).is_some());
@@ -804,18 +811,22 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         value: Option<Var>,
         is_clear: bool,
     ) -> Result<PropHandle, anyhow::Error> {
-        // TODO check names for dupes and return error
-
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectProperties as u8) as usize];
         let ok = oid_key(location);
         let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
-        let mut props = match props_bytes {
+        let mut props : Vec<PropHandle> = match props_bytes {
             None => vec![],
             Some(prop_bytes) => {
                 let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
                 props
             }
         };
+
+        // Verify we don't already have a property with this name. If we do, return an error.
+        if props.iter().any(|prop| prop.name == name) {
+            return Err(ObjectError::DuplicatePropertyDefinition(location, name).into());
+        }
+
         // Generate a new property ID.
         let u = Uuid::new_v4();
         let prop = PropHandle {
