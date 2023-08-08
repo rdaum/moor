@@ -324,12 +324,8 @@ impl VM {
         };
 
         match bf.call(&mut bf_args).await {
-            Ok(BfRet::Ret(result)) => {
-                self.unwind_stack(FinallyReason::Return(result.clone()))
-            }
-            Ok(BfRet::Error(e)) => {
-                self.push_bf_error(e)
-            }
+            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
+            Ok(BfRet::Error(e)) => self.push_bf_error(e),
             Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
             Err(e) => match e.downcast_ref() {
                 Some(ObjectError::ObjectNotFound(_)) => self.push_bf_error(E_INVARG),
@@ -350,8 +346,17 @@ impl VM {
         &mut self,
         exec_args: VmExecParams<'a>,
     ) -> Result<ExecutionResult, anyhow::Error> {
+        // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
+        // Note: If there was an error that required unwinding, we'll have already done that, so
+        // we can assume a *value* here not, an error.
+        let Some(mut bf_tramp) = self.top_mut().bf_trampoline else {
+            let return_value = self.top_mut().pop().unwrap();
+
+            return self.unwind_stack(FinallyReason::Return(return_value))
+        };
+
         // Increment the trampoline counter and reconstruct the bf call options.
-        let bf_tramp = self.top().bf_trampoline.unwrap() + 1;
+        bf_tramp += 1;
         self.top_mut().bf_trampoline = Some(bf_tramp);
 
         let mut bf_args = BfCallState {
@@ -367,12 +372,8 @@ impl VM {
         let bf = self.builtins[self.top().bf_index.unwrap()].clone();
 
         match bf.call(&mut bf_args).await {
-            Ok(BfRet::Ret(result)) => {
-                self.unwind_stack(FinallyReason::Return(result.clone()))
-            }
-            Ok(BfRet::Error(e)) => {
-                self.push_bf_error(e)
-            }
+            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
+            Ok(BfRet::Error(e)) => self.push_bf_error(e),
             Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
             Err(e) => match e.downcast_ref() {
                 Some(ObjectError::ObjectNotFound(_)) => self.push_bf_error(E_INVARG),

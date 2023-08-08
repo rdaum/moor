@@ -10,7 +10,7 @@ use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_string};
 
 use crate::bf_declare;
-use crate::compiler::builtins::offset_for_builtin;
+use crate::compiler::builtins::{offset_for_builtin, BUILTINS};
 use crate::model::objects::ObjFlag;
 use crate::model::ObjectError;
 use crate::tasks::scheduler::SchedulerControlMsg;
@@ -465,6 +465,35 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyh
 }
 bf_declare!(boot_player, bf_boot_player);
 
+async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    // Syntax:  call_function(<func>, <arg1>, <arg2>, ...)   => value
+    //
+    // Calls the given function with the given arguments and returns the result.
+    if bf_args.args.len() < 1 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let Variant::Str(func_name) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    // Arguments are everything left, if any.
+    let args = &bf_args.args[1..];
+
+    // Find the function id for the given function name.
+    let func_name: &str = func_name.as_str();
+    let Some(func_offset) = BUILTINS.iter().position(|name| *name == func_name) else {
+        return Ok(Error(E_INVARG));
+    };
+
+    // Then ask the scheduler to run the function as a continuation of what we're doing now.
+    return Ok(BfRet::VmInstr(ExecutionResult::ContinueBuiltin(
+        func_offset,
+        args[..].to_vec(),
+    )));
+}
+bf_declare!(call_function, bf_call_function);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -490,6 +519,7 @@ impl VM {
         self.builtins[offset_for_builtin("ticks_left")] = Arc::new(Box::new(BfTicksLeft {}));
         self.builtins[offset_for_builtin("seconds_left")] = Arc::new(Box::new(BfSecondsLeft {}));
         self.builtins[offset_for_builtin("boot_player")] = Arc::new(Box::new(BfBootPlayer {}));
+        self.builtins[offset_for_builtin("call_function")] = Arc::new(Box::new(BfCallFunction {}));
 
         Ok(())
     }

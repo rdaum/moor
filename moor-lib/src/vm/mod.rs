@@ -93,6 +93,8 @@ pub enum ExecutionResult {
     ContinueVerb(ResolvedVerbCall),
     /// Request dispatch of a new task as a fork
     DispatchFork(ForkRequest),
+    /// Request dispatch of a builtin function with the given arguments.
+    ContinueBuiltin(usize, Vec<Var>),
     /// Request that this task be suspended for a duration of time.
     /// This leads to the task performing a commit, being suspended for a delay, and then being
     /// resumed under a new transaction.

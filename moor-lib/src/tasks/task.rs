@@ -376,125 +376,146 @@ impl Task {
             ticks_left: self.max_ticks - self.vm.tick_count,
             time_left,
         };
-        let result = self.vm.exec(exec_params).await?;
-        self.vm.tick_count += 1;
-        match result {
-            ExecutionResult::More => Ok(None),
-            ExecutionResult::ContinueVerb(call_request) => {
-                trace!(task_id = self.task_id, call_request = ?call_request, "Task continue, call into verb");
-                self.vm
-                    .exec_call_request(self.task_id, call_request)
-                    .await
-                    .expect("Could not set up VM for command execution");
-                Ok(None)
-            }
-            ExecutionResult::DispatchFork(fork_request) => {
-                // To fork a new task, we need to get the scheduler to do some work for us. So we'll
-                // send a message back asking it to fork the task and return the new task id on a
-                // reply channel.
-                // We will then take the new task id and send it back to the caller.
-                let (send, reply) = tokio::sync::oneshot::channel();
-                let task_id_var = fork_request.task_id;
-                self.scheduler_control_sender
-                    .send(SchedulerControlMsg::TaskRequestFork(fork_request, send))
-                    .expect("Could not send fork request");
-                let task_id = reply.await.expect("Could not get fork reply");
-                if let Some(task_id_var) = task_id_var {
+        let mut result = self.vm.exec(exec_params).await?;
+        loop {
+            self.vm.tick_count += 1;
+            match result {
+                ExecutionResult::More => return Ok(None),
+                ExecutionResult::ContinueVerb(call_request) => {
+                    trace!(task_id = self.task_id, call_request = ?call_request, "Task continue, call into verb");
                     self.vm
-                        .top_mut()
-                        .set_var_offset(task_id_var, v_int(task_id as i64))
-                        .expect("Could not set forked task id");
+                        .exec_call_request(self.task_id, call_request)
+                        .await
+                        .expect("Could not set up VM for command execution");
+                    return Ok(None);
                 }
-                Ok(None)
-            }
-            ExecutionResult::Suspend(delay) => {
-                trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
-                // Attempt commit...
-                // TODO: what to do on conflict? The whole thing needs to be retried, but we have
-                // not implemented that at any other level yet, so we'll just abort for now.
-                let commit_result = self
-                    .world_state
-                    .commit()
-                    .await
-                    .expect("Could not commit world state before suspend");
-                if let CommitResult::ConflictRetry = commit_result {
-                    error!("Conflict during commit before suspend");
-                    return Ok(Some(SchedulerControlMsg::TaskAbortCancelled));
+                ExecutionResult::ContinueBuiltin(bf_offset, args) => {
+                    let mut exec_params = VmExecParams {
+                        world_state: self.world_state.as_mut(),
+                        sessions: self.sessions.clone(),
+                        scheduler_sender: self.scheduler_control_sender.clone(),
+                        max_stack_depth: self.max_stack_depth,
+                        ticks_left: self.max_ticks - self.vm.tick_count,
+                        time_left,
+                    };
+                    // Ask the VM to execute the builtin function.
+                    // This will push the result onto the stack.
+                    // After this we will loop around and check the result.
+                    result = self
+                        .vm
+                        .call_builtin_function(bf_offset, &args, &mut exec_params)
+                        .await
+                        .expect("Could not perform builtin execution");
+                    continue;
                 }
-
-                // Let the scheduler know about our suspension, which can be of the form:
-                //      * Indefinite, wake-able only with Resume
-                //      * Scheduled, a duration is given, and we'll wake up after that duration
-                // In both cases we'll rely on the scheduler to wake us up in its processing loop
-                // rather than sleep here, which would make this thread unresponsive to other
-                // messages.
-                let resume_time = delay.map(|delay| SystemTime::now() + delay);
-                self.scheduler_control_sender
-                    .send(SchedulerControlMsg::TaskSuspend(resume_time))
-                    .expect("Could not send suspend response");
-
-                // Turn off VM execution and now only listen on messages.
-                self.running_method = false;
-                Ok(None)
-            }
-            ExecutionResult::Complete(a) => {
-                trace!(task_id = self.task_id, result = ?a, "Task complete");
-                Ok(Some(SchedulerControlMsg::TaskSuccess(a)))
-            }
-            ExecutionResult::Exception(fr) => {
-                trace!(task_id = self.task_id, result = ?fr, "Task exception");
-
-                match &fr {
-                    FinallyReason::Abort => {
-                        error!(task_id = self.task_id, "Task aborted");
-                        if let Err(send_error) = self
-                            .sessions
-                            .write()
-                            .await
-                            .send_text(self.player, format!("Aborted: {:?}", fr).as_str())
-                            .await
-                        {
-                            warn!("Could not send abort message to player: {:?}", send_error);
-                        };
-
-                        Ok(Some(SchedulerControlMsg::TaskAbortCancelled))
+                ExecutionResult::DispatchFork(fork_request) => {
+                    // To fork a new task, we need to get the scheduler to do some work for us. So we'll
+                    // send a message back asking it to fork the task and return the new task id on a
+                    // reply channel.
+                    // We will then take the new task id and send it back to the caller.
+                    let (send, reply) = tokio::sync::oneshot::channel();
+                    let task_id_var = fork_request.task_id;
+                    self.scheduler_control_sender
+                        .send(SchedulerControlMsg::TaskRequestFork(fork_request, send))
+                        .expect("Could not send fork request");
+                    let task_id = reply.await.expect("Could not get fork reply");
+                    if let Some(task_id_var) = task_id_var {
+                        self.vm
+                            .top_mut()
+                            .set_var_offset(task_id_var, v_int(task_id as i64))
+                            .expect("Could not set forked task id");
                     }
-                    FinallyReason::Uncaught {
-                        code: _,
-                        msg: _,
-                        value: _,
-                        stack: _,
-                        backtrace,
-                    } => {
-                        // Compose a string out of the backtrace
-                        let mut traceback = vec![];
-                        for frame in backtrace.iter() {
-                            let Variant::Str(s) = frame.variant() else {
-                                continue;
-                            };
-                            traceback.push(format!("{:}\n", s));
-                        }
+                    return Ok(None);
+                }
+                ExecutionResult::Suspend(delay) => {
+                    trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
+                    // Attempt commit...
+                    // TODO: what to do on conflict? The whole thing needs to be retried, but we have
+                    // not implemented that at any other level yet, so we'll just abort for now.
+                    let commit_result = self
+                        .world_state
+                        .commit()
+                        .await
+                        .expect("Could not commit world state before suspend");
+                    if let CommitResult::ConflictRetry = commit_result {
+                        error!("Conflict during commit before suspend");
+                        return Ok(Some(SchedulerControlMsg::TaskAbortCancelled));
+                    }
 
-                        for l in traceback.iter() {
+                    // Let the scheduler know about our suspension, which can be of the form:
+                    //      * Indefinite, wake-able only with Resume
+                    //      * Scheduled, a duration is given, and we'll wake up after that duration
+                    // In both cases we'll rely on the scheduler to wake us up in its processing loop
+                    // rather than sleep here, which would make this thread unresponsive to other
+                    // messages.
+                    let resume_time = delay.map(|delay| SystemTime::now() + delay);
+                    self.scheduler_control_sender
+                        .send(SchedulerControlMsg::TaskSuspend(resume_time))
+                        .expect("Could not send suspend response");
+
+                    // Turn off VM execution and now only listen on messages.
+                    self.running_method = false;
+                    return Ok(None);
+                }
+                ExecutionResult::Complete(a) => {
+                    trace!(task_id = self.task_id, result = ?a, "Task complete");
+                    return Ok(Some(SchedulerControlMsg::TaskSuccess(a)));
+                }
+                ExecutionResult::Exception(fr) => {
+                    trace!(task_id = self.task_id, result = ?fr, "Task exception");
+
+                    return match &fr {
+                        FinallyReason::Abort => {
+                            error!(task_id = self.task_id, "Task aborted");
                             if let Err(send_error) = self
                                 .sessions
                                 .write()
                                 .await
-                                .send_text(self.player, l.as_str())
+                                .send_text(self.player, format!("Aborted: {:?}", fr).as_str())
                                 .await
                             {
-                                warn!("Could not send traceback to player: {:?}", send_error);
-                            }
-                        }
+                                warn!("Could not send abort message to player: {:?}", send_error);
+                            };
 
-                        Ok(Some(SchedulerControlMsg::TaskException(fr)))
-                    }
-                    _ => {
-                        unreachable!(
-                            "Invalid FinallyReason {:?} reached for task {} in scheduler",
-                            fr, self.task_id
-                        );
-                    }
+                            Ok(Some(SchedulerControlMsg::TaskAbortCancelled))
+                        }
+                        FinallyReason::Uncaught {
+                            code: _,
+                            msg: _,
+                            value: _,
+                            stack: _,
+                            backtrace,
+                        } => {
+                            // Compose a string out of the backtrace
+                            let mut traceback = vec![];
+                            for frame in backtrace.iter() {
+                                let Variant::Str(s) = frame.variant() else {
+                                    continue;
+                                };
+                                traceback.push(format!("{:}\n", s));
+                            }
+
+                            for l in traceback.iter() {
+                                if let Err(send_error) = self
+                                    .sessions
+                                    .write()
+                                    .await
+                                    .send_text(self.player, l.as_str())
+                                    .await
+                                {
+                                    warn!("Could not send traceback to player: {:?}", send_error);
+                                }
+                            }
+
+                            Ok(Some(SchedulerControlMsg::TaskException(fr)))
+                        }
+                        _ => {
+                            unreachable!(
+                                "Invalid FinallyReason {:?} reached for task {} in scheduler",
+                                fr, self.task_id
+                            );
+                        }
+                    };
                 }
             }
         }

@@ -60,6 +60,7 @@ impl VM {
         // If the current activation frame is a builtin function, we need to jump back into it,
         // but increment the trampoline counter, as it means we're returning into it after
         // executing elsewhere. It will be up to the function to interpret the counter.
+        // Functions that did not set a trampoline are assumed to be complete.
         if !self.stack.is_empty() && self.top().bf_index.is_some() {
             return self.reenter_builtin_function(exec_params).await;
         }

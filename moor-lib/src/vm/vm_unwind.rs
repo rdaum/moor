@@ -217,13 +217,13 @@ impl VM {
         Ok(ExecutionResult::More)
     }
 
-    /// Same as push_error, but if we're !d, pop the bf activation stack off first, since it won't
-    /// do it itself. Otherwise let unwind_stack do its usual thing, so the bf shows in the
-    /// traceback.
+    /// Same as push_error, but for returns from builtin functions.
     pub(crate) fn push_bf_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
         trace!(?code, "push_bf_error");
-        // No matter what, the error value has to be on the stack of the calling verb, not on this
-        // frame; as we are incapable of doing anything with it...
+        // No matter what, the error value has to be on the stack of the *calling* verb, not on this
+        // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
+        // function. If we stack_unwind, it will propagate to parent. Otherwise, it will be popped
+        // by the parent anyways.
         self.caller_mut().push(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
@@ -238,7 +238,6 @@ impl VM {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
-        self.push(&v_err(code));
         Ok(ExecutionResult::More)
     }
 

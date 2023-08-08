@@ -120,6 +120,7 @@ mod tests {
                 Ok(ExecutionResult::Suspend(_)) => {
                     panic!("suspend not implemented in test VM")
                 }
+                Ok(ExecutionResult::ContinueBuiltin(_, _)) => {}
             }
         }
     }
@@ -848,6 +849,7 @@ mod tests {
                 Ok(ExecutionResult::Suspend(_)) => {
                     panic!("suspend not supported in this test");
                 }
+                Ok(ExecutionResult::ContinueBuiltin(_, _)) => {}
             }
         }
     }

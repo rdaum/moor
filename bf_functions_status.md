@@ -161,7 +161,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 | Name           | Complete | Notes                                        |
 |----------------|----------|----------------------------------------------|
-| call_function  |          |                                              |
+| call_function  | &check;  |                                              |
 | raise          | &check;  | Does not support message / value parameters. |
 | suspend        | &check;  |                                              |
 | seconds_left   | &check;  |                                              |

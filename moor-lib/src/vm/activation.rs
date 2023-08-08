@@ -182,7 +182,6 @@ impl Activation {
             },
         };
 
-        
         Self {
             task_id,
             binary: EMPTY_PROGRAM.clone(),
