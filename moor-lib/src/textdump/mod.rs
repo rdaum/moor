@@ -1,6 +1,6 @@
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db
 /// file.
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::{BufReader, Read};
 
 use moor_value::var::objid::Objid;
@@ -60,7 +60,7 @@ impl<R: Read> TextdumpReader<R> {
 
 pub struct Textdump {
     pub version: String,
-    pub objects: HashMap<Objid, Object>,
+    pub objects: BTreeMap<Objid, Object>,
     pub users: Vec<Objid>,
-    pub verbs: HashMap<(Objid, usize), Verb>,
+    pub verbs: BTreeMap<(Objid, usize), Verb>,
 }

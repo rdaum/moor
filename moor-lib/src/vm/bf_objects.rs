@@ -9,23 +9,13 @@ use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::model::objects::ObjFlag;
-use crate::model::ObjectError;
 use crate::tasks::VerbCall;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult::ContinueVerb;
-use crate::vm::{ResolvedVerbCall, VM};
-
-async fn bf_create<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
-    unimplemented!("create")
-}
-bf_declare!(create, bf_create);
-
-/*
-Function: none chparent (obj object, obj new-parent)
-Changes the parent of object to be new-parent. If object is not valid, or if new-parent is neither valid nor equal to #-1, then E_INVARG is raised. If the programmer is neither a wizard or the owner of object, or if new-parent is not fertile (i.e., its `f' bit is not set) and the programmer is neither the owner of new-parent nor a wizard, then E_PERM is raised. If new-parent is equal to object or one of its current ancestors, E_RECMOVE is raised. If object or one of its descendants defines a property with the same name as one defined either on new-parent or on one of its ancestors, then E_INVARG is raised.
- */
+use crate::vm::VM;
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::WorldStateError;
 
 /*
 Function: int valid (obj object)
@@ -55,6 +45,24 @@ async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
 }
 bf_declare!(parent, bf_parent);
 
+async fn bf_chparent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 2 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+    let Variant::Obj(new_parent) = bf_args.args[1].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+    bf_args
+        .world_state
+        .change_parent(bf_args.perms(), *obj, *new_parent)
+        .await?;
+    Ok(Ret(v_none()))
+}
+bf_declare!(chparent, bf_chparent);
+
 async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(Error(E_INVARG));
@@ -74,6 +82,81 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
 bf_declare!(children, bf_children);
 
 /*
+Syntax:  create (obj <parent> [, obj <owner>])   => obj
+ */
+const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
+const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
+
+async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(parent) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+    let owner = if bf_args.args.len() == 2 {
+        let Variant::Obj(owner) = bf_args.args[1].variant() else {
+            return Ok(Error(E_TYPE));
+        };
+        *owner
+    } else {
+        bf_args.perms().task_perms().obj
+    };
+
+    let tramp = bf_args
+        .vm
+        .top()
+        .bf_trampoline
+        .unwrap_or(BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE);
+
+    match tramp {
+        BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
+            let new_obj = bf_args
+                .world_state
+                .create_object(bf_args.perms(), *parent, owner)
+                .await?;
+
+            // We're going to try to call :initialize on the new object.
+            // Then trampoline into the done case.
+            // If :initialize doesn't exist, we'll just skip ahead.
+            let Ok(initialize) = bf_args.world_state.find_method_verb_on(
+                bf_args.perms(),
+                new_obj,
+                "initialize",
+            ).await else {
+                return Ok(Ret(v_objid(new_obj)));
+            };
+
+            return Ok(VmInstr(ContinueVerb {
+                permissions: bf_args.perms().clone(),
+                resolved_verb: initialize,
+                call: VerbCall {
+                    verb_name: "accept".to_string(),
+                    location: new_obj,
+                    this: new_obj,
+                    player: bf_args.vm.top().player,
+                    args: vec![],
+                    caller: bf_args.vm.top().this,
+                },
+                trampoline: Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC),
+                command: None,
+                trampoline_arg: Some(v_objid(new_obj)),
+            }));
+        }
+        BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
+            // The trampoline argument is the object we just created.
+            let Some(new_obj) = bf_args.vm.top().bf_trampoline_arg.clone() else {
+                panic!("Missing/invalid trampoline argument for bf_create");
+            };
+            Ok(Ret(new_obj))
+        }
+        _ => {
+            panic!("Invalid trampoline for bf_create {}", tramp)
+        }
+    }
+}
+bf_declare!(create, bf_create);
+/*
 Function: none recycle (obj object)
 The given object is destroyed, irrevocably. The programmer must either own object or be a wizard; otherwise, E_PERM is raised. If object is not valid, then E_INVARG is raised. The children of object are reparented to the parent of object. Before object is recycled, each object in its contents is moved to #-1 (implying a call to object's exitfunc verb, if any) and then object's `recycle' verb, if any, is called with no arguments.
  */
@@ -86,38 +169,6 @@ Returns the number of bytes of the server's memory required to store the given o
 /*
 Function: obj max_object ()
 Returns the largest object number yet assigned to a created object. Note that the object with this number may no longer exist; it may have been recycled. The next object created will be assigned the object number one larger than the value of max_object().
- */
-
-/*
-Function: none move (obj what, obj where)
-Changes what's location to be where. This is a complex process because a number of permissions
-checks and notifications must be performed. The actual movement takes place as described in the
- following paragraphs.
-
-<what> should be a valid object and <where> should be either a valid object or `#-1' (denoting a location of `nowhere'); otherwise `E_INVARG' is raised.  The
-programmer must be either the owner of <what> or a wizard; otherwise, `E_PERM' is raised.
-
-If <where> is a valid object, then the verb-call
-
-    <where>:accept(<what>)
-
-is performed before any movement takes place.  If the verb returns a false value and the programmer is not a wizard, then <where> is considered to have refused
-entrance to <what>; `move()' raises `E_NACC'.  If <where> does not define an `accept' verb, then it is treated as if it defined one that always returned false.
-
-If moving <what> into <where> would create a loop in the containment hierarchy (i.e., <what> would contain itself, even indirectly), then `E_RECMOVE' is raised
-instead.
-
-The `location' property of <what> is changed to be <where>, and the `contents' properties of the old and new locations are modified appropriately.  Let
-<old-where> be the location of <what> before it was moved.  If <old-where> is a valid object, then the verb-call
-
-    <old-where>:exitfunc(<what>)
-
-is performed and its result is ignored; it is not an error if <old-where> does not define a verb named `exitfunc'.  Finally, if <where> and <what> are still
-valid objects, and <where> is still the location of <what>, then the verb-call
-
-    <where>:enterfunc(<what>)
-
-is performed and its result is ignored; again, it is not an error if <where> does not define a verb named `enterfunc'.
  */
 
 const BF_MOVE_TRAMPOLINE_START_ACCEPT: usize = 0;
@@ -166,7 +217,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                     .await
                 {
                     Ok(dispatch) => {
-                        let continuation_verb = ResolvedVerbCall {
+                        return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.perms().clone(),
                             resolved_verb: dispatch,
                             call: VerbCall {
@@ -177,14 +228,12 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                                 args: vec![v_objid(*what)],
                                 caller: bf_args.vm.top().this,
                             },
-                            command: None,
-                        };
-                        return Ok(VmInstr(ContinueVerb {
-                            verb_call: continuation_verb,
                             trampoline: Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC),
+                            trampoline_arg: None,
+                            command: None,
                         }));
                     }
-                    Err(ObjectError::VerbNotFound(_, _)) => {
+                    Err(WorldStateError::VerbNotFound(_, _)) => {
                         if !bf_args.perms().has_flag(ObjFlag::Wizard) {
                             return Ok(Error(E_NACC));
                         }
@@ -235,7 +284,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                     .await
                 {
                     Ok(dispatch) => {
-                        let continuation_verb = ResolvedVerbCall {
+                        return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.perms().clone(),
                             resolved_verb: dispatch,
                             call: VerbCall {
@@ -247,13 +296,11 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                                 caller: bf_args.vm.top().this,
                             },
                             command: None,
-                        };
-                        return Ok(VmInstr(ContinueVerb {
-                            verb_call: continuation_verb,
                             trampoline: Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC),
+                            trampoline_arg: None,
                         }));
                     }
-                    Err(ObjectError::VerbNotFound(_, _)) => {
+                    Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.
                         tramp = 2;
                         continue;
@@ -274,7 +321,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                     .await
                 {
                     Ok(dispatch) => {
-                        let continuation_verb = ResolvedVerbCall {
+                        return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.perms().clone(),
                             resolved_verb: dispatch,
                             call: VerbCall {
@@ -286,13 +333,11 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                                 caller: bf_args.vm.top().this,
                             },
                             command: None,
-                        };
-                        return Ok(VmInstr(ContinueVerb {
-                            verb_call: continuation_verb,
                             trampoline: Some(3),
+                            trampoline_arg: None,
                         }));
                     }
-                    Err(ObjectError::VerbNotFound(_, _)) => {
+                    Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.
                         tramp = BF_MOVE_TRAMPOLINE_DONE;
                         continue;
@@ -363,6 +408,7 @@ impl VM {
         self.builtins[offset_for_builtin("parent")] = Arc::new(Box::new(BfParent {}));
         self.builtins[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
         self.builtins[offset_for_builtin("move")] = Arc::new(Box::new(BfMove {}));
+        self.builtins[offset_for_builtin("chparent")] = Arc::new(Box::new(BfChparent {}));
 
         Ok(())
     }

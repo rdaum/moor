@@ -7,7 +7,7 @@ use moor_value::var::objid::Objid;
 use moor_value::var::{v_str, Var};
 
 use crate::db::PREP_LIST;
-use crate::model::r#match::PrepSpec;
+use moor_value::model::r#match::PrepSpec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {

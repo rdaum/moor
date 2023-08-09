@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
 
+use anyhow::Context;
 use tracing::{debug, info, span, warn};
 
 use moor_value::util::bitenum::BitEnum;
@@ -11,21 +12,22 @@ use moor_value::var::Var;
 use crate::compiler::codegen::compile;
 use crate::db::rocksdb::server::RocksDbServer;
 use crate::db::rocksdb::LoaderInterface;
-use crate::model::objects::{ObjAttrs, ObjFlag};
-use crate::model::props::PropFlag;
-use crate::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use crate::model::verbs::VerbFlag;
 use crate::textdump::{Object, TextdumpReader};
+use crate::BINCODE_CONFIG;
+use moor_value::model::objects::{ObjAttrs, ObjFlag};
+use moor_value::model::props::PropFlag;
+use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+use moor_value::model::verbs::VerbFlag;
 
 struct RProp {
     definer: Objid,
     name: String,
-    _owner: Objid,
-    _flags: u8,
-    _value: Var,
+    owner: Objid,
+    flags: u8,
+    value: Var,
 }
 
-fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Option<RProp> {
+fn resolve_prop(omap: &BTreeMap<Objid, Object>, offset: usize, o: &Object) -> Option<RProp> {
     let local_len = o.propdefs.len();
     if offset < local_len {
         let name = o.propdefs[offset].clone();
@@ -33,9 +35,9 @@ fn resolve_prop(omap: &HashMap<Objid, Object>, offset: usize, o: &Object) -> Opt
         return Some(RProp {
             definer: o.id,
             name,
-            _owner: pval.owner,
-            _flags: pval.flags,
-            _value: pval.value.clone(),
+            owner: pval.owner,
+            flags: pval.flags,
+            value: pval.value.clone(),
         });
     }
 
@@ -88,10 +90,9 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
     let mut tdr = TextdumpReader::new(br);
     let td = tdr.read_textdump()?;
 
-    let tx = s.start_transaction().expect("Unable to start transaction");
+    let ldr = s.start_transaction().expect("Unable to start transaction");
 
-    // Pass 1 Create objects
-    info!("Instantiating objects...");
+    info!("Instantiating objects");
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
@@ -99,53 +100,77 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
             "Creating object: #{} ({}) with flags {:?}",
             objid.0, o.name, flags
         );
-        tx.create_object(
+        ldr.create_object(
             Some(*objid),
             ObjAttrs::new()
-                .owner(o.owner)
-                .location(o.location)
+                // .owner(o.owner)
+                // .location(o.location)
                 .name(o.name.as_str())
-                .parent(o.parent)
+                // .parent(o.parent)
                 .flags(flags),
         )
-        .await?;
+        .await
+        .with_context(|| format!("Unable to create object #{}", objid.0))?;
     }
 
-    info!("Instantiated objects");
-    info!("Defining props...");
+    info!("Setting object attributes (parent/location/owner)");
+    for (objid, o) in &td.objects {
+        debug!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
+        ldr.set_object_owner(*objid, o.owner)
+            .await
+            .with_context(|| format!("Unable to set owner of {}", *objid))?;
+        ldr.set_object_parent(*objid, o.parent)
+            .await
+            .with_context(|| format!("Unable to set parent of {}", *objid))?;
+        ldr.set_object_location(*objid, o.location)
+            .await
+            .with_context(|| format!("Unable to set location of {}", *objid))?;
+    }
 
-    // Pass 2 define props
+    info!("Defining properties...");
+
+    // Define props. This means going through and just adding at the very root, which will create
+    // initially-clear state in all the descendants. A second pass will then go through and update
+    // flags and values for the children.
+    for (objid, o) in &td.objects {
+        for (pnum, _p) in o.propvals.iter().enumerate() {
+            let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
+            let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
+            if resolved.definer == *objid {
+                debug!(definer = ?objid.0, name = resolved.name, "Defining property");
+                let value = Some(resolved.value);
+                ldr.define_property(
+                    resolved.definer,
+                    *objid,
+                    resolved.name.as_str(),
+                    resolved.owner,
+                    flags,
+                    value,
+                )
+                .await
+                .with_context(|| format!("Unable to define property on {}", objid))?;
+            }
+        }
+    }
+
+    info!("Setting property values & info");
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(p.flags);
             debug!(
-                "Setting property: #{}.{} Clear?: {}",
+                "Setting/updating property: #{}.{} Clear?: {}",
                 objid.0, resolved.name, p.is_clear
             );
-            let res = tx
-                .define_property(
-                    resolved.definer,
-                    *objid,
-                    resolved.name.as_str(),
-                    p.owner,
-                    flags,
-                    Some(p.value.clone()),
-                    p.is_clear,
-                )
-                .await;
-            if res.is_err() {
-                warn!(
-                    "Unable to define property {}.{}: {:?}",
-                    objid.0, resolved.name, res
-                );
-            }
+            let value = (!p.is_clear).then(|| p.value.clone());
+
+            ldr.set_update_property(*objid, resolved.name.as_str(), p.owner, flags, value)
+                .await
+                .with_context(|| format!("Unable to set property on {}", objid))?;
         }
     }
 
-    info!("Set props");
     info!("Defining verbs...");
-    // Pass 4 define verbs
     for (objid, o) in &td.objects {
         for (vn, v) in o.verbdefs.iter().enumerate() {
             let mut flags: BitEnum<VerbFlag> = BitEnum::new();
@@ -173,39 +198,31 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
 
             let names: Vec<&str> = v.name.split(' ').collect();
 
-            let verb = match td.verbs.get(&(*objid, vn)) {
-                None => {
-                    warn!("Could not find verb #{}/{} ({:?}", objid.0, vn, names);
-                    continue;
-                }
-                Some(v) => v,
+            let Some(verb) = td.verbs.get(&(*objid, vn)) else {
+                warn!("Missing program for defined verb #{}/{} ({:?})", objid.0, vn, names);
+                continue;
             };
 
-            let binary = match compile(verb.program.as_str()) {
-                Ok(b) => b,
-                Err(e) => {
-                    panic!("Compile error in #{}/{}: {:?}", objid.0, names[0], e);
-                }
-            };
+            let binary = compile(verb.program.as_str()).with_context(|| {
+                format!(
+                    "Compile error in #{}/{} ({:?}): {:?}",
+                    objid.0, vn, names, verb.program
+                )
+            })?;
 
-            let av = tx
-                .add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
-                .await;
-            if av.is_err() {
-                warn!(
-                    "Unable to add verb: #{}:{}: {:?}",
-                    objid.0,
-                    names.first().unwrap(),
-                    av
-                );
-            } else {
-                debug!("Added verb: #{}:{}", objid.0, names.join(", "));
-            }
+            // Encode the binary (for now using bincode)
+            let binary = bincode::encode_to_vec(&binary, *BINCODE_CONFIG)
+                .with_context(|| "Unable to encode MOO program")?;
+
+            ldr.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
+                .await
+                .with_context(|| format!("Unable to add verb #{}/{} ({:?})", objid.0, vn, names))?;
+            debug!("Added verb: #{}:{}", objid.0, names.join(", "));
         }
     }
     info!("Verbs defined.");
 
-    tx.commit().await?;
+    ldr.commit().await?;
 
     info!("Import complete.");
 

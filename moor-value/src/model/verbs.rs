@@ -1,11 +1,10 @@
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
+use crate::util::bitenum::BitEnum;
+use crate::var::objid::Objid;
 
 use crate::model::r#match::VerbArgsSpec;
-use crate::vm::opcode::Binary;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum VerbFlag {
@@ -24,7 +23,16 @@ pub enum VerbAttr {
     Owner = 1,
     Flags = 2,
     ArgsSpec = 3,
-    Program = 4,
+    Binary = 4,
+}
+
+/// The program type encoded for a verb.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Encode, Decode, Primitive)]
+pub enum BinaryType {
+    /// For builtin functions in stack frames -- or empty code blobs.
+    None = 0,
+    /// Opcodes match almost 1:1 with LambdaMOO 1.8.x, but is not "binary" compatible.
+    LambdaMoo18X = 1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
@@ -33,7 +41,8 @@ pub struct VerbAttrs {
     pub owner: Option<Objid>,
     pub flags: Option<BitEnum<VerbFlag>>,
     pub args_spec: Option<VerbArgsSpec>,
-    pub program: Option<Binary>,
+    pub binary_type: BinaryType,
+    pub binary: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]

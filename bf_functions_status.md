@@ -36,7 +36,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | Name     | Complete | Notes |
 |----------|----------|-------|
 | toint    | &check;  |       |
-| tonum    | &check   |       |
+| tonum    | &check;  |       |
 | tofloat  | &check;  |       |
 | min      | &check;  |       |
 | max      | &check;  |       |
@@ -87,7 +87,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | properties        | &check;  |       |
 | property_info     | &check;  |       |
 | set_property_info | &check;  |       |
-| add_property      |          |       |
+| add_property      | &check;  |       |
 | delete_property   |          |       |
 | clear_property    | &check;  |       |
 | is_clear_property | &check;  |       |
@@ -98,7 +98,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 |---------------|----------|------------------------------------------|
 | verbs         | &check;  |                                          |
 | verb_info     | &check;  |                                          |
-| set_verb_info | &check   |                                          |
+| set_verb_info | &check;  |                                          |
 | verb_args     | &check;  |                                          |
 | set_verb_args | &check;  |                                          |
 | add_verb      |          |                                          |
@@ -132,8 +132,8 @@ The following is a table of the status of various builtin-functions, to keep an 
 | dump_database       |          |                                               |
 | db_disk_size        |          |                                               |
 | connected_players   | &check;  |                                               |
-| connected_seconds   | &check   |                                               |
-| idle_seconds        | &check   |                                               |
+| connected_seconds   | &check;  |                                               |
+| idle_seconds        | &check;  |                                               |
 | connection_name     |          |                                               |
 | notify              | &check;  |                                               |
 | boot_player         | &check;  |                                               |

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::{BufRead, Read};
 
 use anyhow::anyhow;
@@ -206,7 +206,7 @@ impl<R: Read> TextdumpReader<R> {
         }
 
         info!("Parsing objects...");
-        let mut objects = HashMap::new();
+        let mut objects = BTreeMap::new();
         for _i in 0..nobjs {
             if let Some(o) = self.read_object()? {
                 objects.insert(o.id, o);
@@ -214,7 +214,7 @@ impl<R: Read> TextdumpReader<R> {
         }
 
         info!("Reading verbs...");
-        let mut verbs = HashMap::with_capacity(nprogs);
+        let mut verbs = BTreeMap::new();
         for _p in 0..nprogs {
             let verb = self.read_verb()?;
             verbs.insert((verb.objid, verb.verbnum), verb);

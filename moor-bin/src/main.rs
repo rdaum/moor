@@ -19,9 +19,9 @@ use tracing_subscriber::layer::SubscriberExt;
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::db::rocksdb::LoaderInterface;
-use moor_lib::model::objects::{ObjAttrs, ObjFlag};
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
+use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 

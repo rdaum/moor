@@ -1,8 +1,8 @@
 use anyhow::bail;
-use moor_value::var::error::Error;
 use thiserror::Error;
 
-use moor_value::var::objid::Objid;
+use crate::var::error::Error;
+use crate::var::objid::Objid;
 
 use crate::model::objects::ObjAttr;
 use crate::model::verbs::Vid;
@@ -14,16 +14,20 @@ pub mod props;
 pub mod verbs;
 pub mod world_state;
 
-// TODO ditch the bulk of these error codes and replace with MOO Error, except for the match
-// functions. We need to be able to translate back to MOO error codes and have them raised in the
-// VM, without a lot of hassle.
+/// The result code from a commit/complete operation on the world's state.
+pub enum CommitResult {
+    Success, // Value was committed
+    ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx
+             // TODO: timeout/task-too-long/error?
+}
+
 #[derive(Error, Debug, Eq, PartialEq)]
-pub enum ObjectError {
+pub enum WorldStateError {
     #[error("Object not found: {0}")]
     ObjectNotFound(Objid),
     #[error("Object already exists: {0}")]
     ObjectAlreadyExists(Objid),
-    #[error("Could not set/get object attribute; {0} on #{1}")]
+    #[error("Could not set/get object attribute; {0} on {1}")]
     ObjectAttributeError(ObjAttr, Objid),
     #[error("Recursive move detected: {0} -> {1}")]
     RecursiveMove(Objid, Objid),
@@ -66,18 +70,20 @@ pub enum ObjectError {
     VerbDbError(Objid, String, String),
 }
 
-impl ObjectError {
+impl WorldStateError {
     pub fn to_error_code(&self) -> Result<Error, anyhow::Error> {
         match self {
-            ObjectError::ObjectNotFound(_) => Ok(Error::E_INVARG),
-            ObjectError::ObjectPermissionDenied => Ok(Error::E_PERM),
-            ObjectError::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
-            ObjectError::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
-            ObjectError::VerbPermissionDenied => Ok(Error::E_PERM),
-            ObjectError::InvalidVerb(_) => Ok(Error::E_VERBNF),
-            ObjectError::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
-            ObjectError::PropertyPermissionDenied => Ok(Error::E_PERM),
-            ObjectError::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
+            WorldStateError::ObjectNotFound(_) => Ok(Error::E_INVIND),
+            WorldStateError::ObjectPermissionDenied => Ok(Error::E_PERM),
+            WorldStateError::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
+            WorldStateError::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
+            WorldStateError::VerbPermissionDenied => Ok(Error::E_PERM),
+            WorldStateError::InvalidVerb(_) => Ok(Error::E_VERBNF),
+            WorldStateError::DuplicateVerb(_, _) => Ok(Error::E_INVARG),
+            WorldStateError::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
+            WorldStateError::PropertyPermissionDenied => Ok(Error::E_PERM),
+            WorldStateError::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
+            WorldStateError::DuplicatePropertyDefinition(_, _) => Ok(Error::E_INVARG),
             _ => {
                 bail!("Unhandled error code: {:?}", self);
             }

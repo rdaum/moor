@@ -9,12 +9,12 @@ use moor_value::var::{v_list, v_none, v_objid, v_str, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::model::r#match::{ArgSpec, VerbArgsSpec};
-use crate::model::verbs::VerbFlag;
 use crate::tasks::command_parse::{parse_preposition_string, preposition_to_string};
 use crate::vm::builtin::BfRet::{Error, Ret};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
+use moor_value::model::r#match::{ArgSpec, VerbArgsSpec};
+use moor_value::model::verbs::VerbFlag;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
@@ -215,13 +215,11 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
         verbinfo[2].variant(),
     ) {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
-            let Some(dobj) = ArgSpec::from_string(dobj_str.as_str()) else {
-                return Ok(Error(E_INVARG));
-            };
-            let Some(prep) = parse_preposition_string(prep_str.as_str()) else {
-                return Ok(Error(E_INVARG));
-            };
-            let Some(iobj) = ArgSpec::from_string(iobj_str.as_str()) else {
+            let (Some(dobj), Some(prep), Some(iobj)) = (
+                ArgSpec::from_string(dobj_str.as_str()),
+                parse_preposition_string(prep_str.as_str()),
+                ArgSpec::from_string(iobj_str.as_str()),
+            ) else {
                 return Ok(Error(E_INVARG));
             };
             let args = VerbArgsSpec { dobj, prep, iobj };

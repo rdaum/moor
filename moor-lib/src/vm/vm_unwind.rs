@@ -7,10 +7,10 @@ use moor_value::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Label, Offset};
-use crate::model::verbs::VerbFlag;
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm_call::tracing_exit_vm_span;
 use crate::vm::{ExecutionResult, VM};
+use moor_value::model::verbs::VerbFlag;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FinallyReason {
@@ -238,6 +238,8 @@ impl VM {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
+        // If we're not unwinding, we need to pop the builtin function's activation frame.
+        self.stack.pop();
         Ok(ExecutionResult::More)
     }
 

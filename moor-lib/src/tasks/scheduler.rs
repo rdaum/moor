@@ -4,7 +4,6 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{anyhow, Error};
 use metrics_macros::{gauge, increment_counter};
-use moor_value::util::bitenum::BitEnum;
 use thiserror::Error;
 use tokio::select;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -12,6 +11,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
+use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_PERM};
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
@@ -20,14 +20,14 @@ use moor_value::var::{v_err, v_int, v_none, Var};
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::MatchEnvironmentParseMatcher;
-use crate::model::objects::ObjFlag;
-use crate::model::permissions::PermissionsContext;
-use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::task::{Task, TaskControlMsg};
 use crate::tasks::{Sessions, TaskId};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ForkRequest, VM};
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::model::world_state::{WorldState, WorldStateSource};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 
@@ -245,24 +245,31 @@ impl Scheduler {
             let pc = parse_command(command, matcher).await?;
             let loc = ws.location_of(perms.clone(), player).await?;
 
-            match ws.find_command_verb_on(perms.clone(), player, &pc).await? {
-                Some(vi) => (player, vi, pc),
-                None => match ws.find_command_verb_on(perms.clone(), loc, &pc).await? {
-                    Some(vi) => (loc, vi, pc),
-                    None => match ws.find_command_verb_on(perms.clone(), pc.dobj, &pc).await? {
-                        Some(vi) => (pc.dobj, vi, pc),
-                        None => match ws.find_command_verb_on(perms.clone(), pc.iobj, &pc).await? {
-                            Some(vi) => (pc.iobj, vi, pc),
-                            None => {
-                                return Err(anyhow!(SchedulerError::NoCommandMatch(
+            let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
+            let mut found = None;
+            for target in targets_to_search {
+                if let Some(vi) = ws
+                    .find_command_verb_on(
+                        perms.clone(),
+                        target,
+                        pc.verb.as_str(),
+                        pc.dobj,
+                        pc.prep,
+                        pc.iobj,
+                    )
+                    .await?
+                {
+                    found = Some((target, vi, pc.clone()));
+                    break;
+                }
+            }
+            let Some((target, vi, pc)) = found else {
+                return Err(anyhow!(SchedulerError::NoCommandMatch(
                                     command.to_string(),
                                     pc
                                 )));
-                            }
-                        },
-                    },
-                },
-            }
+            };
+            (target, vi, pc)
         };
         let state_source = inner.state_source.clone();
         let task_id = inner
@@ -350,7 +357,10 @@ impl Scheduler {
         // This gets enqueued as the first thing the task sees when it is started.
         task_ref
             .task_control_sender
-            .send(TaskControlMsg::StartEval { player, binary })?;
+            .send(TaskControlMsg::StartEval {
+                player,
+                program: binary,
+            })?;
 
         Ok(task_id)
     }

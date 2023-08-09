@@ -4,9 +4,10 @@ mod tests {
 
     use anyhow::Error;
     use async_trait::async_trait;
+    use bincode::decode_from_slice;
     use tokio::sync::RwLock;
-    use tracing_test::traced_test;
 
+    use crate::BINCODE_CONFIG;
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::{Objid, NOTHING};
@@ -15,14 +16,14 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::mock_world_state::MockWorldStateSource;
-    use crate::model::permissions::PermissionsContext;
-    use crate::model::props::PropFlag;
-    use crate::model::world_state::{WorldState, WorldStateSource};
     use crate::tasks::{Sessions, VerbCall};
     use crate::vm::opcode::Op::*;
-    use crate::vm::opcode::{Binary, Op};
+    use crate::vm::opcode::{Op, Program};
     use crate::vm::vm_execute::VmExecParams;
-    use crate::vm::{ExecutionResult, VM};
+    use crate::vm::{ExecutionResult, VerbExecutionRequest, VM};
+    use moor_value::model::permissions::PermissionsContext;
+    use moor_value::model::props::PropFlag;
+    use moor_value::model::world_state::{WorldState, WorldStateSource};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -58,8 +59,8 @@ mod tests {
         }
     }
 
-    fn mk_binary(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Binary {
-        Binary {
+    fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
+        Program {
             literals,
             jump_labels: vec![],
             var_names,
@@ -84,8 +85,15 @@ mod tests {
             args: vec![],
             caller: NOTHING,
         };
-        let Ok(cr) = vm.start_call_method_verb(state, 0, call, perms).await else {
-            panic!("failed to prepare call verb")
+        let verb = state.get_verb(perms.clone(), o, verb_name).await.unwrap();
+        let (program, _) =
+            decode_from_slice(verb.attrs.binary.as_ref().unwrap(), *BINCODE_CONFIG).unwrap();
+        let cr = VerbExecutionRequest {
+            permissions: perms,
+            resolved_verb: verb,
+            call,
+            command: None,
+            program,
         };
         assert!(vm.exec_call_request(0, cr).await.is_ok());
     }
@@ -112,9 +120,24 @@ mod tests {
                     panic!("MOO exception {:?}", e);
                 }
                 Ok(ExecutionResult::ContinueVerb {
-                    verb_call: cr,
-                    trampoline: _,
-                }) => {
+                    permissions,
+                    resolved_verb,
+                    call,
+                    command,
+                    trampoline: _, trampoline_arg: _,
+                   }) => {
+                    let (decoded_verb, _) = bincode::decode_from_slice(
+                        resolved_verb.attrs.binary.as_ref().unwrap(),
+                        *BINCODE_CONFIG,
+                    )
+                    .unwrap();
+                    let cr = VerbExecutionRequest {
+                        permissions,
+                        resolved_verb,
+                        call,
+                        command,
+                        program: decoded_verb,
+                    };
                     vm.exec_call_request(0, cr).await.unwrap();
                 }
                 Ok(ExecutionResult::DispatchFork(_)) => {
@@ -132,31 +155,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_verbnf() {
-        let mut state_src = MockWorldStateSource::new();
-        let (mut state, perms) = state_src.new_world_state(Objid(0)).await.unwrap();
-        let mut vm = VM::new();
-        let o = Objid(0);
-
-        let call = VerbCall {
-            verb_name: "test".to_string(),
-            location: o,
-            this: o,
-            player: o,
-            args: vec![],
-            caller: NOTHING,
-        };
-        assert_eq!(
-            vm.start_call_method_verb(state.as_mut(), 0, call, perms)
-                .await,
-            Err(E_VERBNF)
-        );
-    }
-
-    #[tokio::test]
     async fn test_simple_vm_execute() {
-        let binary = mk_binary(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
-        let mut state_src = MockWorldStateSource::new_with_verb("test", &binary);
+        let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
+        let mut state_src = MockWorldStateSource::new_with_verb("test", &program);
         let (mut state, perms) = state_src.new_world_state(Objid(0)).await.unwrap();
         let mut vm = VM::new();
 
@@ -169,7 +170,7 @@ mod tests {
     async fn test_string_value_simple_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![v_str("hello"), 2.into()],
                 Names::new(),
@@ -189,7 +190,7 @@ mod tests {
     async fn test_string_value_range_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![
                     Imm(0.into()),
                     Imm(1.into()),
@@ -215,7 +216,7 @@ mod tests {
     async fn test_list_value_simple_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![v_list(vec![111.into(), 222.into(), 333.into()]), 2.into()],
                 Names::new(),
@@ -235,7 +236,7 @@ mod tests {
     async fn test_list_value_range_indexing() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![
                     Imm(0.into()),
                     Imm(1.into()),
@@ -268,7 +269,7 @@ mod tests {
         let a = var_names.find_or_add_name("a");
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![
                     Imm(0.into()),
                     Put(a),
@@ -359,7 +360,7 @@ mod tests {
 
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![
                     Imm(0.into()),
                     Put(a),
@@ -396,7 +397,7 @@ mod tests {
     async fn test_property_retrieval() {
         let (mut state, perms) = MockWorldStateSource::new_with_verb(
             "test",
-            &mk_binary(
+            &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
                 vec![v_obj(0), v_str("test_prop")],
                 Names::new(),
@@ -407,7 +408,7 @@ mod tests {
         .unwrap();
         {
             state
-                .add_property(
+                .define_property(
                     perms.clone(),
                     Objid(0),
                     Objid(0),
@@ -431,14 +432,14 @@ mod tests {
         // Prepare two, chained, test verbs in our environment, with simple operations.
 
         // The first merely returns the value "666" immediately.
-        let return_verb_binary = mk_binary(
+        let return_verb_binary = mk_program(
             vec![Imm(0.into()), Return, Done],
             vec![v_int(666)],
             Names::new(),
         );
 
         // The second actually calls the first verb, and returns the result.
-        let call_verb_binary = mk_binary(
+        let call_verb_binary = mk_program(
             vec![
                 Imm(0.into()), /* obj */
                 Imm(1.into()), /* verb */
@@ -686,7 +687,6 @@ mod tests {
         assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
     }
 
-    #[traced_test]
     #[tokio::test]
     async fn test_catch_expr_any() {
         let program = "return `raise(E_VERBNF) ! ANY';";
@@ -847,9 +847,24 @@ mod tests {
                     panic!("MOO exception {:?}", e);
                 }
                 Ok(ExecutionResult::ContinueVerb {
-                    verb_call: cr,
-                    trampoline: _,
-                }) => {
+                    permissions,
+                    resolved_verb,
+                    call,
+                    command,
+                    trampoline: _, trampoline_arg: _,
+                   }) => {
+                    let (decoded_verb, _) = bincode::decode_from_slice(
+                        resolved_verb.attrs.binary.as_ref().unwrap(),
+                        *BINCODE_CONFIG,
+                    )
+                    .unwrap();
+                    let cr = VerbExecutionRequest {
+                        permissions,
+                        resolved_verb,
+                        call,
+                        command,
+                        program: decoded_verb,
+                    };
                     vm.exec_call_request(0, cr).await.unwrap();
                 }
                 Ok(ExecutionResult::DispatchFork(_)) => {

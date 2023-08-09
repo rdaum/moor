@@ -1,3 +1,7 @@
+/// A LambdaMOO 1.8.x compatibl(ish) virtual machine.
+/// Executes opcodes which are essentially 1:1 with LambdaMOO's.
+/// Aims to be semantically identical, so as to be able to run existing LambdaMOO compatible cores
+/// without blocking issues.
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -6,14 +10,15 @@ use moor_value::var::Var;
 
 use crate::compiler::builtins::BUILTINS;
 use crate::compiler::labels::{Name, Offset};
-use crate::model::permissions::PermissionsContext;
-use crate::model::verbs::VerbInfo;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
 use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
+use crate::vm::opcode::Program;
 use crate::vm::vm_unwind::FinallyReason;
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::model::verbs::VerbInfo;
 
 pub(crate) mod opcode;
 pub(crate) mod vm_call;
@@ -70,7 +75,7 @@ pub struct ForkRequest {
 
 /// The set of parameters for a VM-requested *resolved* verb method dispatch.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ResolvedVerbCall {
+pub struct VerbExecutionRequest {
     /// The applicable permissions context.
     pub permissions: PermissionsContext,
     /// The resolved verb.
@@ -79,6 +84,8 @@ pub struct ResolvedVerbCall {
     pub call: VerbCall,
     /// The parsed user command that led to this verb dispatch, if any.
     pub command: Option<ParsedCommand>,
+    /// The decoded MOO Binary that contains the verb to be executed.
+    pub program: Program,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -91,8 +98,23 @@ pub enum ExecutionResult {
     Exception(FinallyReason),
     /// Request dispatch to another verb
     ContinueVerb {
-        verb_call: ResolvedVerbCall,
+        /// The applicable permissions context.
+        permissions: PermissionsContext,
+        /// The requested verb.
+        resolved_verb: VerbInfo,
+        /// The call parameters that were used to resolve the verb.
+        call: VerbCall,
+        /// The parsed user command that led to this verb dispatch, if any.
+        command: Option<ParsedCommand>,
+        /// What to set the 'trampoline' to (if anything) when the verb returns.
+        /// If this is set, the builtin function that issued this ContinueVerb will be re-called
+        /// and the bf_trampoline argument on its activation record will be set to this value.
+        /// This is usually used to drive a state machine through a series of actions on a builtin
+        /// as it calls out to verbs.
         trampoline: Option<usize>,
+        /// Likewise, along with the trampoline # above, this can be set with an optional argument
+        /// that can be used to pass data back to the builtin function that issued this request.
+        trampoline_arg: Option<Var>,
     },
     /// Request dispatch of a new task as a fork
     DispatchFork(ForkRequest),

@@ -1,10 +1,10 @@
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{Objid, NOTHING};
+use crate::util::bitenum::BitEnum;
+use crate::var::objid::{Objid, NOTHING};
 
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::verbs::VerbFlag;
-use crate::model::ObjectError;
+use crate::model::WorldStateError;
 
 /// Holder of all context relevant for permissions when passed through for WorldState calls.
 /// WorldState implementations are responsible for performing permission checks for individual
@@ -56,7 +56,7 @@ impl Perms {
         property_owner: Objid,
         property_flags: BitEnum<PropFlag>,
         allows: PropFlag,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         if self.obj == property_owner {
             return Ok(());
         }
@@ -64,7 +64,7 @@ impl Perms {
             return Ok(());
         }
         if !property_flags.contains(allows) {
-            return Err(ObjectError::PropertyPermissionDenied);
+            return Err(WorldStateError::PropertyPermissionDenied);
         }
         Ok(())
     }
@@ -74,7 +74,7 @@ impl Perms {
         verb_owner: Objid,
         verb_flags: BitEnum<VerbFlag>,
         allows: VerbFlag,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         if self.obj == verb_owner {
             return Ok(());
         }
@@ -82,7 +82,7 @@ impl Perms {
             return Ok(());
         }
         if !verb_flags.contains(allows) {
-            return Err(ObjectError::VerbPermissionDenied);
+            return Err(WorldStateError::VerbPermissionDenied);
         }
         Ok(())
     }
@@ -92,7 +92,7 @@ impl Perms {
         object_owner: Objid,
         object_flags: BitEnum<ObjFlag>,
         allows: ObjFlag,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         if self.obj == object_owner {
             return Ok(());
         }
@@ -100,26 +100,26 @@ impl Perms {
             return Ok(());
         }
         if !object_flags.contains(allows) {
-            return Err(ObjectError::ObjectPermissionDenied);
+            return Err(WorldStateError::ObjectPermissionDenied);
         }
         Ok(())
     }
 
-    pub fn check_obj_owner_perms(&self, object_owner: Objid) -> Result<(), ObjectError> {
+    pub fn check_obj_owner_perms(&self, object_owner: Objid) -> Result<(), WorldStateError> {
         if self.obj == object_owner {
             return Ok(());
         }
         if self.flags.contains(ObjFlag::Wizard) {
             return Ok(());
         }
-        Err(ObjectError::ObjectPermissionDenied)
+        Err(WorldStateError::ObjectPermissionDenied)
     }
 
-    pub fn check_wizard(&self) -> Result<(), ObjectError> {
+    pub fn check_wizard(&self) -> Result<(), WorldStateError> {
         if self.flags.contains(ObjFlag::Wizard) {
             return Ok(());
         }
-        Err(ObjectError::ObjectPermissionDenied)
+        Err(WorldStateError::ObjectPermissionDenied)
     }
 }
 

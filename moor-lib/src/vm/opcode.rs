@@ -116,12 +116,12 @@ pub enum Op {
 }
 
 lazy_static! {
-    pub static ref EMPTY_PROGRAM: Binary = Binary::new();
+    pub static ref EMPTY_PROGRAM: Program = Program::new();
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
-pub struct Binary {
+pub struct Program {
     pub(crate) literals: Vec<Var>,
     pub(crate) jump_labels: Vec<JumpLabel>,
     pub(crate) var_names: Names,
@@ -129,9 +129,9 @@ pub struct Binary {
     pub(crate) fork_vectors: Vec<Vec<Op>>,
 }
 
-impl Binary {
+impl Program {
     pub fn new() -> Self {
-        Binary {
+        Program {
             literals: Vec::new(),
             jump_labels: Vec::new(),
             var_names: Default::default(),
@@ -156,13 +156,13 @@ impl Binary {
     }
 }
 
-impl Default for Binary {
+impl Default for Program {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Display for Binary {
+impl Display for Program {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write literals indexed by their offset #
         for (i, l) in self.literals.iter().enumerate() {

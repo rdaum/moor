@@ -10,10 +10,10 @@ use moor_value::var::objid::Objid;
 use crate::db::rocksdb::tx_db_impl::RocksDbTx;
 use crate::db::rocksdb::tx_message::Message;
 use crate::db::rocksdb::DbStorage;
-use crate::model::props::PropFlag;
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::verbs::VerbFlag;
-use crate::model::ObjectError;
+use moor_value::model::props::PropFlag;
+use moor_value::model::r#match::VerbArgsSpec;
+use moor_value::model::verbs::{BinaryType, VerbFlag};
+use moor_value::model::WorldStateError;
 
 // Internal storage for the verb information stored in the ObjectVerbs column family, basically
 // everything sans-program.
@@ -21,26 +21,27 @@ use crate::model::ObjectError;
 // be done without having to hit the database.
 #[derive(Debug, Encode, Decode, Clone)]
 pub(crate) struct VerbHandle {
-    pub(crate) uuid: u128,
+    pub(crate) uuid: [u8; 16],
     pub(crate) location: Objid,
     pub(crate) owner: Objid,
     pub(crate) names: Vec<String>,
     pub(crate) flags: BitEnum<VerbFlag>,
+    pub(crate) binary_type: BinaryType,
     pub(crate) args: VerbArgsSpec,
 }
 
 #[derive(Debug, Encode, Decode, Clone)]
-pub(crate) struct PropHandle {
-    pub(crate) uuid: u128,
+pub(crate) struct PropDef {
+    pub(crate) uuid: [u8; 16],
+    pub(crate) definer: Objid,
     pub(crate) location: Objid,
     pub(crate) name: String,
     pub(crate) perms: BitEnum<PropFlag>,
     pub(crate) owner: Objid,
-    pub(crate) is_clear: bool,
 }
 
 fn respond<V: Send + Sync + 'static>(
-    r: tokio::sync::oneshot::Sender<Result<V, ObjectError>>,
+    r: tokio::sync::oneshot::Sender<Result<V, WorldStateError>>,
     res: Result<V, anyhow::Error>,
 ) -> Result<(), anyhow::Error> {
     match res {
@@ -50,7 +51,7 @@ fn respond<V: Send + Sync + 'static>(
             };
             Ok(())
         }
-        Err(e) => match e.downcast::<ObjectError>() {
+        Err(e) => match e.downcast::<WorldStateError>() {
             Ok(e) => {
                 let Ok(_) = r.send(Err(e)) else {
                     bail!("Failed to send response to transaction server");
@@ -87,7 +88,11 @@ pub(crate) fn run_tx_server<'a>(
         };
 
         match msg {
-            Message::CreateObject(oid, attrs, r) => {
+            Message::CreateObject {
+                id: oid,
+                attrs,
+                reply: r,
+            } => {
                 respond(r, tx.create_object(oid, attrs))?;
             }
             Message::GetObjectOwner(o, r) => respond(r, tx.get_object_owner(o))?,
@@ -121,14 +126,15 @@ pub(crate) fn run_tx_server<'a>(
                 location,
                 owner,
                 names,
-                program,
+                binary,
+                binary_type,
                 flags,
                 args,
                 reply,
             } => {
                 respond(
                     reply,
-                    tx.add_object_verb(location, owner, names, program, flags, args),
+                    tx.add_object_verb(location, owner, names, binary, binary_type, flags, args),
                 )?;
             }
             Message::DeleteVerb {
@@ -148,8 +154,8 @@ pub(crate) fn run_tx_server<'a>(
             Message::GetVerbByIndex(o, i, r) => {
                 respond(r, tx.get_verb_by_index(o, i))?;
             }
-            Message::GetProgram(o, v, r) => {
-                respond(r, tx.get_program(o, v))?;
+            Message::GetVerbBinary(o, v, r) => {
+                respond(r, tx.get_binary(o, v))?;
             }
             Message::ResolveVerb(o, n, a, r) => {
                 respond(r, tx.resolve_verb(o, n, a))?;
@@ -158,7 +164,7 @@ pub(crate) fn run_tx_server<'a>(
                 respond(r, tx.retrieve_verb(o, v))?;
             }
             Message::GetProperties(o, r) => {
-                respond(r, tx.get_properties(o))?;
+                respond(r, tx.get_propdefs(o))?;
             }
             Message::RetrieveProperty(o, u, r) => {
                 respond(r, tx.retrieve_property(o, u))?;
@@ -184,32 +190,28 @@ pub(crate) fn run_tx_server<'a>(
                 obj: o,
                 uuid: u,
                 new_owner: owner,
-                new_perms: perms,
+                new_flags: perms,
                 new_name,
-                is_clear,
                 reply: r,
             } => {
-                respond(
-                    r,
-                    tx.set_property_info(o, u, owner, perms, new_name, is_clear),
-                )?;
+                respond(r, tx.set_property_info(o, u, owner, perms, new_name))?;
             }
             Message::DeleteProperty(o, u, r) => {
                 respond(r, tx.delete_property(o, u))?;
             }
             Message::DefineProperty {
-                definer: _definer,
-                obj: o,
+                definer,
+                location,
                 name,
                 owner,
                 perms,
                 value,
-                is_clear,
                 reply: r,
             } => {
-                // Note: in our current impl we don't use 'definer'. The property is defined where
-                // it lives.
-                respond(r, tx.add_property(o, name, owner, perms, value, is_clear))?;
+                respond(
+                    r,
+                    tx.define_property(definer, location, name, owner, perms, value),
+                )?;
             }
             Message::ResolveProperty(o, n, r) => {
                 respond(r, tx.resolve_property(o, n))?;

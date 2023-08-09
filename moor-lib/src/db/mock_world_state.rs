@@ -3,30 +3,33 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
 use async_trait::async_trait;
+use bincode::encode_to_vec;
+use uuid::Uuid;
 
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_none, Var};
 
 use crate::db::rocksdb::LoaderInterface;
-use crate::db::CommitResult;
-use crate::model::objects::{ObjAttrs, ObjFlag};
-use crate::model::permissions::PermissionsContext;
-use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
-use crate::model::world_state::{WorldState, WorldStateSource};
-use crate::model::ObjectError;
-use crate::model::ObjectError::{PropertyNotFound, VerbNotFound};
-use crate::tasks::command_parse::ParsedCommand;
-use crate::vm::opcode::Binary;
+use crate::vm::opcode::Program;
+use crate::BINCODE_CONFIG;
+use moor_value::model::objects::{ObjAttrs, ObjFlag};
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::model::props::{PropAttrs, PropFlag};
+use moor_value::model::r#match::{PrepSpec, VerbArgsSpec};
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
+use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::CommitResult;
+use moor_value::model::WorldStateError;
+use moor_value::model::WorldStateError::{PropertyNotFound, VerbNotFound};
 
 struct MockStore {
     verbs: HashMap<(Objid, String), VerbInfo>,
     properties: HashMap<(Objid, String), Var>,
 }
 impl MockStore {
-    fn set_verb(&mut self, o: Objid, name: &str, binary: &Binary) {
+    fn set_verb(&mut self, o: Objid, name: &str, binary: &Program) {
+        let program = encode_to_vec(binary, *BINCODE_CONFIG).unwrap();
         self.verbs.insert(
             (o, name.to_string()),
             VerbInfo {
@@ -38,7 +41,8 @@ impl MockStore {
                         BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug,
                     ),
                     args_spec: Some(VerbArgsSpec::this_none_this()),
-                    program: Some(binary.clone()),
+                    binary_type: BinaryType::LambdaMoo18X,
+                    binary: Some(program),
                 },
             },
         );
@@ -49,11 +53,11 @@ pub struct MockState(Arc<Mutex<MockStore>>);
 
 #[async_trait]
 impl WorldState for MockState {
-    async fn owner_of(&mut self, _obj: Objid) -> Result<Objid, ObjectError> {
+    async fn owner_of(&mut self, _obj: Objid) -> Result<Objid, WorldStateError> {
         todo!()
     }
 
-    async fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, ObjectError> {
+    async fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         Ok(BitEnum::all())
     }
 
@@ -61,7 +65,16 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Objid, ObjectError> {
+    ) -> Result<Objid, WorldStateError> {
+        todo!()
+    }
+
+    async fn create_object(
+        &mut self,
+        _perms: PermissionsContext,
+        _parent: Objid,
+        _owner: Objid,
+    ) -> Result<Objid, WorldStateError> {
         todo!()
     }
 
@@ -70,7 +83,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         _obj: Objid,
         _new_loc: Objid,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -78,7 +91,7 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Vec<Objid>, ObjectError> {
+    ) -> Result<Vec<Objid>, WorldStateError> {
         todo!()
     }
 
@@ -86,7 +99,7 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Vec<VerbInfo>, ObjectError> {
+    ) -> Result<Vec<VerbInfo>, WorldStateError> {
         todo!()
     }
 
@@ -94,7 +107,7 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Vec<(String, PropAttrs)>, ObjectError> {
+    ) -> Result<Vec<(String, PropAttrs)>, WorldStateError> {
         todo!()
     }
 
@@ -103,7 +116,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         obj: Objid,
         pname: &str,
-    ) -> Result<Var, ObjectError> {
+    ) -> Result<Var, WorldStateError> {
         let store = self.0.lock().unwrap();
         let p = store.properties.get(&(obj, pname.to_string()));
         match p {
@@ -117,7 +130,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         _obj: Objid,
         _pname: &str,
-    ) -> Result<PropAttrs, ObjectError> {
+    ) -> Result<PropAttrs, WorldStateError> {
         todo!()
     }
 
@@ -127,7 +140,7 @@ impl WorldState for MockState {
         _obj: Objid,
         _pname: &str,
         _attrs: PropAttrs,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -137,7 +150,7 @@ impl WorldState for MockState {
         obj: Objid,
         pname: &str,
         value: &Var,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         let mut store = self.0.lock().unwrap();
         store
             .properties
@@ -145,7 +158,25 @@ impl WorldState for MockState {
         Ok(())
     }
 
-    async fn add_property(
+    async fn is_property_clear(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _pname: &str,
+    ) -> Result<bool, WorldStateError> {
+        todo!()
+    }
+
+    async fn clear_property(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _pname: &str,
+    ) -> Result<(), WorldStateError> {
+        todo!()
+    }
+
+    async fn define_property(
         &mut self,
         _perms: PermissionsContext,
         _definer: Objid,
@@ -154,7 +185,7 @@ impl WorldState for MockState {
         _owner: Objid,
         _prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         let mut store = self.0.lock().unwrap();
 
         store
@@ -171,8 +202,9 @@ impl WorldState for MockState {
         _owner: Objid,
         _flags: BitEnum<VerbFlag>,
         _args: VerbArgsSpec,
-        _code: Binary,
-    ) -> Result<(), ObjectError> {
+        _binary: Vec<u8>,
+        _binary_type: BinaryType,
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -181,7 +213,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         _obj: Objid,
         _vname: &str,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -194,7 +226,7 @@ impl WorldState for MockState {
         _names: Option<Vec<String>>,
         _flags: Option<BitEnum<VerbFlag>>,
         _args: Option<VerbArgsSpec>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -207,7 +239,7 @@ impl WorldState for MockState {
         _names: Option<Vec<String>>,
         _flags: Option<BitEnum<VerbFlag>>,
         _args: Option<VerbArgsSpec>,
-    ) -> Result<(), ObjectError> {
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -216,8 +248,14 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         _obj: Objid,
         _vname: &str,
-    ) -> Result<VerbInfo, ObjectError> {
-        todo!()
+    ) -> Result<VerbInfo, WorldStateError> {
+        self.0
+            .lock()
+            .unwrap()
+            .verbs
+            .get(&(_obj, _vname.to_string()))
+            .cloned()
+            .ok_or_else(|| VerbNotFound(_obj, _vname.to_string()))
     }
 
     async fn get_verb_at_index(
@@ -225,7 +263,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         _obj: Objid,
         _vidx: usize,
-    ) -> Result<VerbInfo, ObjectError> {
+    ) -> Result<VerbInfo, WorldStateError> {
         todo!()
     }
 
@@ -234,7 +272,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         obj: Objid,
         vname: &str,
-    ) -> Result<VerbInfo, ObjectError> {
+    ) -> Result<VerbInfo, WorldStateError> {
         let store = self.0.lock().unwrap();
         let v = store.verbs.get(&(obj, vname.to_string()));
         match v {
@@ -246,9 +284,12 @@ impl WorldState for MockState {
     async fn find_command_verb_on(
         &mut self,
         _perms: PermissionsContext,
-        _oid: Objid,
-        _pc: &ParsedCommand,
-    ) -> Result<Option<VerbInfo>, ObjectError> {
+        _obj: Objid,
+        _command_verb: &str,
+        _dobj: Objid,
+        _prep: PrepSpec,
+        _iobj: Objid,
+    ) -> Result<Option<VerbInfo>, WorldStateError> {
         todo!()
     }
 
@@ -256,7 +297,16 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Objid, ObjectError> {
+    ) -> Result<Objid, WorldStateError> {
+        todo!()
+    }
+
+    async fn change_parent(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _new_parent: Objid,
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -264,11 +314,11 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Vec<Objid>, ObjectError> {
+    ) -> Result<Vec<Objid>, WorldStateError> {
         todo!()
     }
 
-    async fn valid(&mut self, _obj: Objid) -> Result<bool, ObjectError> {
+    async fn valid(&mut self, _obj: Objid) -> Result<bool, WorldStateError> {
         Ok(true)
     }
 
@@ -276,7 +326,7 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<(String, Vec<String>), ObjectError> {
+    ) -> Result<(String, Vec<String>), WorldStateError> {
         todo!()
     }
 
@@ -309,6 +359,10 @@ impl LoaderInterface for MockWorldStateSource {
         todo!()
     }
 
+    async fn set_object_owner(&self, _obj: Objid, _owner: Objid) -> Result<(), Error> {
+        todo!()
+    }
+
     async fn add_verb(
         &self,
         _obj: Objid,
@@ -316,12 +370,12 @@ impl LoaderInterface for MockWorldStateSource {
         _owner: Objid,
         _flags: BitEnum<VerbFlag>,
         _args: VerbArgsSpec,
-        _binary: Binary,
+        _binary: Vec<u8>,
     ) -> Result<(), Error> {
         todo!()
     }
 
-    async fn get_property(&self, _obj: Objid, _pname: &str) -> Result<Option<u128>, Error> {
+    async fn get_property(&self, _obj: Objid, _pname: &str) -> Result<Option<Uuid>, Error> {
         todo!()
     }
 
@@ -333,7 +387,17 @@ impl LoaderInterface for MockWorldStateSource {
         _owner: Objid,
         _flags: BitEnum<PropFlag>,
         _value: Option<Var>,
-        _is_clear: bool,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn set_update_property(
+        &self,
+        _objid: Objid,
+        _propname: &str,
+        _owner: Objid,
+        _flags: BitEnum<PropFlag>,
+        _value: Option<Var>,
     ) -> Result<(), Error> {
         todo!()
     }
@@ -352,7 +416,7 @@ impl MockWorldStateSource {
         Self(Arc::new(Mutex::new(store)))
     }
 
-    pub fn new_with_verb(name: &str, binary: &Binary) -> Self {
+    pub fn new_with_verb(name: &str, binary: &Program) -> Self {
         let mut store = MockStore {
             verbs: Default::default(),
             properties: Default::default(),
@@ -361,7 +425,7 @@ impl MockWorldStateSource {
         Self(Arc::new(Mutex::new(store)))
     }
 
-    pub fn new_with_verbs(verbs: Vec<(&str, &Binary)>) -> Self {
+    pub fn new_with_verbs(verbs: Vec<(&str, &Program)>) -> Self {
         let mut store = MockStore {
             verbs: Default::default(),
             properties: Default::default(),

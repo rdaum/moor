@@ -7,12 +7,12 @@ use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType};
 
 use crate::compiler::labels::{Label, Name};
-use crate::model::permissions::PermissionsContext;
-use crate::model::verbs::{VerbAttrs, VerbFlag, VerbInfo};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
-use crate::vm::opcode::{Binary, Op, EMPTY_PROGRAM};
-use crate::vm::ResolvedVerbCall;
+use crate::vm::opcode::{Op, Program, EMPTY_PROGRAM};
+use crate::vm::VerbExecutionRequest;
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -51,7 +51,7 @@ pub(crate) struct Activation {
     /// The task ID of the task that owns this VM and this stack of activations.
     pub(crate) task_id: TaskId,
     /// The program of the verb that is currently being executed.
-    pub(crate) binary: Binary,
+    pub(crate) program: Program,
     /// The object that is the receiver of the current verb call.
     pub(crate) this: Objid,
     /// The object that is the 'player' role; that is, the active user of this task.
@@ -82,6 +82,8 @@ pub(crate) struct Activation {
     /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
     /// in, which can be used by the bf to figure out how to resume where it left off.
     pub(crate) bf_trampoline: Option<usize>,
+    /// And an optional argument that can be passed with the above...
+    pub(crate) bf_trampoline_arg: Option<Var>,
     /// The tracing span ID for this verb call, if any.
     pub(crate) span_id: Option<tracing::span::Id>,
 }
@@ -89,20 +91,15 @@ pub(crate) struct Activation {
 impl Activation {
     pub fn for_call(
         task_id: TaskId,
-        verb_call_request: ResolvedVerbCall,
+        verb_call_request: VerbExecutionRequest,
         span_id: Option<tracing::span::Id>,
     ) -> Result<Self, anyhow::Error> {
-        let binary = verb_call_request
-            .resolved_verb
-            .attrs
-            .program
-            .clone()
-            .unwrap();
-        let environment = vec![v_none(); binary.var_names.width()];
+        let program = verb_call_request.program;
+        let environment = vec![v_none(); program.var_names.width()];
 
         let mut a = Self {
             task_id,
-            binary,
+            program,
             environment,
             valstack: vec![],
             handler_stack: vec![],
@@ -116,6 +113,7 @@ impl Activation {
             command: verb_call_request.command.clone(),
             bf_index: None,
             bf_trampoline: None,
+            bf_trampoline_arg: None,
             span_id,
             args: verb_call_request.call.args.clone(),
         };
@@ -180,13 +178,15 @@ impl Activation {
                 owner: None,
                 flags: Some(verb_flags),
                 args_spec: None,
-                program: None,
+                binary_type: BinaryType::None,
+                binary: None,
             },
         };
 
+        trace!(bf_name, bf_index, ?args, "for_bf_call");
         Self {
             task_id,
-            binary: EMPTY_PROGRAM.clone(),
+            program: EMPTY_PROGRAM.clone(),
             environment: vec![],
             valstack: vec![],
             handler_stack: vec![],
@@ -200,6 +200,7 @@ impl Activation {
             command: None,
             bf_index: Some(bf_index),
             bf_trampoline: None,
+            bf_trampoline_arg: None,
             span_id,
             args,
         }
@@ -218,7 +219,7 @@ impl Activation {
     }
 
     pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
-        let n = self.binary.var_names.find_name_offset(name);
+        let n = self.program.var_names.find_name_offset(name);
         if let Some(n) = n {
             self.environment[n] = value;
             Ok(())
@@ -236,16 +237,16 @@ impl Activation {
     }
 
     pub fn next_op(&mut self) -> Option<Op> {
-        if !self.pc < self.binary.main_vector.len() {
+        if !self.pc < self.program.main_vector.len() {
             return None;
         }
-        let op = self.binary.main_vector[self.pc].clone();
+        let op = self.program.main_vector[self.pc].clone();
         self.pc += 1;
         Some(op)
     }
 
     pub fn lookahead(&self) -> Option<Op> {
-        self.binary.main_vector.get(self.pc).cloned()
+        self.program.main_vector.get(self.pc).cloned()
     }
 
     pub fn skip(&mut self) {
@@ -287,7 +288,7 @@ impl Activation {
     }
 
     pub fn jump(&mut self, label_id: Label) {
-        let label = &self.binary.jump_labels[label_id.0 as usize];
+        let label = &self.program.jump_labels[label_id.0 as usize];
         trace!("Jump to {}", label.position.0);
         self.pc = label.position.0;
     }

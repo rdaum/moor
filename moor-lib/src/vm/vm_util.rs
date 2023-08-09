@@ -1,14 +1,15 @@
-use moor_value::var::error::Error::{E_INVIND, E_PERM, E_PROPNF, E_TYPE};
+use moor_value::var::error::Error::{E_INVIND, E_TYPE};
 use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_none, Var};
 
 use crate::compiler::labels::{Label, Name};
-use crate::model::world_state::WorldState;
-use crate::model::ObjectError::{PropertyNotFound, PropertyPermissionDenied};
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::opcode::Op;
 use crate::vm::{ExecutionResult, VM};
+use moor_value::model::world_state::WorldState;
+
+
 
 impl VM {
     /// VM-level property resolution.
@@ -31,13 +32,9 @@ impl VM {
             .await;
         let v = match result {
             Ok(v) => v,
-            Err(e) => match e {
-                PropertyPermissionDenied => return self.push_error(E_PERM),
-                PropertyNotFound(_, _) => return self.push_error(E_PROPNF),
-                _ => {
-                    panic!("Unexpected error in property retrieval: {:?}", e);
-                }
-            },
+            Err(e) => {
+                return self.push_error(e.to_error_code()?);
+            }
         };
         self.push(&v);
         Ok(ExecutionResult::More)
@@ -71,17 +68,9 @@ impl VM {
             Ok(()) => {
                 self.push(&v_none());
             }
-            Err(e) => match e {
-                PropertyNotFound(_, _) => {
-                    return self.push_error(E_PROPNF);
-                }
-                PropertyPermissionDenied => {
-                    return self.push_error(E_PERM);
-                }
-                _ => {
-                    panic!("Unexpected error in property update: {:?}", e);
-                }
-            },
+            Err(e) => {
+                return self.push_error(e.to_error_code()?);
+            }
         }
         Ok(ExecutionResult::More)
     }

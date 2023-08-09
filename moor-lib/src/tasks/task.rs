@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use anyhow::{bail, Error};
+use bincode::{decode_from_slice, encode_to_vec};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
@@ -12,18 +14,19 @@ use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, Var};
 
-use crate::db::CommitResult;
-use crate::model::permissions::PermissionsContext;
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::verbs::{VerbFlag, VerbInfo};
-use crate::model::world_state::WorldState;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::{AbortLimitReason, SchedulerControlMsg, TaskDescription};
 use crate::tasks::{Sessions, TaskId, VerbCall};
-use crate::vm::opcode::Binary;
+use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, ForkRequest, VM};
+use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
+use crate::BINCODE_CONFIG;
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::model::r#match::VerbArgsSpec;
+use moor_value::model::verbs::{BinaryType, VerbFlag, VerbInfo};
+use moor_value::model::world_state::WorldState;
+use moor_value::model::CommitResult;
 
 /// Messages sent to tasks from the scheduler to tell the task to do things.
 pub(crate) enum TaskControlMsg {
@@ -50,7 +53,7 @@ pub(crate) enum TaskControlMsg {
         suspended: bool,
     },
     /// The scheduler is telling the task to evaluate a specific program.
-    StartEval { player: Objid, binary: Binary },
+    StartEval { player: Objid, program: Program },
     /// The scheduler is telling the task to resume execution. Use the given world state
     /// (transaction) and permissions when doing so.
     Resume(Box<dyn WorldState>, PermissionsContext, Var),
@@ -192,13 +195,8 @@ impl Task {
                     args: command.args.clone(),
                     caller: NOTHING,
                 };
-                let cr = self.vm.start_call_command_verb(
-                    self.task_id,
-                    verbinfo,
-                    call,
-                    command,
-                    self.perms.clone(),
-                )?;
+                let cr =
+                    self.start_call_command_verb(verbinfo, call, command, self.perms.clone())?;
                 self.scheduled_start_time = None;
                 self.vm.start_time = Some(SystemTime::now());
                 self.vm.tick_count = 0;
@@ -227,15 +225,7 @@ impl Task {
                     args,
                     caller: NOTHING,
                 };
-                let cr = self
-                    .vm
-                    .start_call_method_verb(
-                        self.world_state.as_mut(),
-                        self.task_id,
-                        call,
-                        self.perms.clone(),
-                    )
-                    .await?;
+                let cr = self.start_call_method_verb(call).await?;
                 self.scheduled_start_time = None;
                 self.vm.start_time = Some(SystemTime::now());
                 self.vm.tick_count = 0;
@@ -255,9 +245,9 @@ impl Task {
                 self.vm.exec_fork_vector(fork_request, task_id).await?;
                 self.running_method = !suspended;
             }
-            TaskControlMsg::StartEval { player, binary } => {
+            TaskControlMsg::StartEval { player, program } => {
                 assert!(!self.running_method);
-                trace!(?player, ?binary, "Starting eval");
+                trace!(?player, ?program, "Starting eval");
                 // Stick the binary into the player object under a temp name.
                 let tmp_name = Uuid::new_v4().to_string();
                 self.world_state
@@ -268,7 +258,8 @@ impl Task {
                         player,
                         BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec | VerbFlag::Debug,
                         VerbArgsSpec::this_none_this(),
-                        binary.clone(),
+                        Self::encode_program(&program)?,
+                        BinaryType::LambdaMoo18X,
                     )
                     .await?;
 
@@ -280,15 +271,7 @@ impl Task {
                     args: vec![],
                     caller: NOTHING,
                 };
-                let cr = self
-                    .vm
-                    .start_call_method_verb(
-                        self.world_state.as_mut(),
-                        self.task_id,
-                        call,
-                        self.perms.clone(),
-                    )
-                    .await?;
+                let cr = self.start_call_method_verb(call).await?;
                 self.scheduled_start_time = None;
                 self.vm.start_time = Some(SystemTime::now());
                 self.vm.tick_count = 0;
@@ -382,11 +365,31 @@ impl Task {
             match result {
                 ExecutionResult::More => return Ok(None),
                 ExecutionResult::ContinueVerb {
-                    verb_call: call_request,
+                    permissions,
+                    resolved_verb,
+                    call,
+                    command,
                     trampoline,
+                    trampoline_arg,
                 } => {
-                    trace!(task_id = self.task_id, call_request = ?call_request, "Task continue, call into verb");
+                    trace!(task_id = self.task_id, call = ?call, "Task continue, call into verb");
+
+                    self.vm.top_mut().bf_trampoline_arg = trampoline_arg;
                     self.vm.top_mut().bf_trampoline = trampoline;
+
+                    let program = Self::decode_program(
+                        resolved_verb.attrs.binary_type,
+                        resolved_verb.attrs.binary.as_ref().unwrap(),
+                    )?;
+
+                    let call_request = VerbExecutionRequest {
+                        permissions,
+                        resolved_verb,
+                        call,
+                        command,
+                        program,
+                    };
+
                     self.vm
                         .exec_call_request(self.task_id, call_request)
                         .await
@@ -526,6 +529,76 @@ impl Task {
                 }
             }
         }
+    }
+
+    fn decode_program(
+        binary_type: BinaryType,
+        binary_bytes: &[u8],
+    ) -> Result<Program, anyhow::Error> {
+        match binary_type {
+            BinaryType::LambdaMoo18X => {
+                let (binary, _) = decode_from_slice(binary_bytes, *BINCODE_CONFIG)?;
+                Ok(binary)
+            }
+            _ => bail!("Unsupported binary type {:?}", binary_type),
+        }
+    }
+
+    fn encode_program(binary: &Program) -> Result<Vec<u8>, anyhow::Error> {
+        let encoded = encode_to_vec(binary, *BINCODE_CONFIG)?;
+        Ok(encoded)
+    }
+
+    /// Entry point (from the scheduler) for beginning a command execution in this VM.
+    fn start_call_command_verb(
+        &mut self,
+        vi: VerbInfo,
+        verb_call: VerbCall,
+        command: ParsedCommand,
+        permissions: PermissionsContext,
+    ) -> Result<VerbExecutionRequest, Error> {
+        let binary = Self::decode_program(vi.attrs.binary_type, vi.attrs.binary.as_ref().unwrap())?;
+
+        let call_request = VerbExecutionRequest {
+            permissions,
+            resolved_verb: vi,
+            call: verb_call,
+            command: Some(command),
+            program: binary,
+        };
+
+        Ok(call_request)
+    }
+
+    /// Entry point (from the scheduler) for beginning a verb execution in this VM.
+    pub async fn start_call_method_verb(
+        &mut self,
+        verb_call: VerbCall,
+    ) -> Result<VerbExecutionRequest, Error> {
+        // Find the callable verb ...
+        let verb_info = self
+            .world_state
+            .find_method_verb_on(
+                self.perms.clone(),
+                verb_call.this,
+                verb_call.verb_name.as_str(),
+            )
+            .await?;
+
+        let binary = Self::decode_program(
+            verb_info.attrs.binary_type,
+            verb_info.attrs.binary.as_ref().unwrap(),
+        )?;
+
+        let call_request = VerbExecutionRequest {
+            permissions: self.perms.clone(),
+            resolved_verb: verb_info.clone(),
+            call: verb_call,
+            command: None,
+            program: binary,
+        };
+
+        Ok(call_request)
     }
 }
 

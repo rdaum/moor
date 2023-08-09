@@ -383,7 +383,10 @@ impl Var {
         match self.variant() {
             Variant::Str(s) => {
                 let len = s.len() as i64;
-                if from <= 0 || from > len + 1 || to < 1 || to > len {
+                if to < from {
+                    return Ok(v_empty_str());
+                }
+                if from <= 0 || from > len + 1 || to > len {
                     return Ok(v_err(E_RANGE));
                 }
                 let (from, to) = (from as usize, to as usize);

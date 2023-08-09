@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use moor_value::var::objid::FAILED_MATCH;
 use moor_value::var::objid::{Objid, AMBIGUOUS, NOTHING};
 
-use crate::model::ObjectError;
 use crate::tasks::command_parse::ParseMatcher;
+use moor_value::model::WorldStateError;
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
@@ -118,7 +118,7 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
 
         // Check if the player is valid.
         if !self.env.obj_valid(self.player).await? {
-            return Err(anyhow!(ObjectError::FailedMatch(
+            return Err(anyhow!(WorldStateError::FailedMatch(
                 "Invalid current player when performing object match".to_string()
             )));
         }

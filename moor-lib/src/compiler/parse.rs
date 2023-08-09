@@ -20,12 +20,17 @@ use crate::compiler::ast::{
 };
 use crate::compiler::labels::Names;
 use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::compiler::Parse;
 
 pub mod moo {
     #[derive(Parser)]
     #[grammar = "src/compiler/moo.pest"]
     pub struct MooParser;
+}
+
+/// The emitted parse tree from the parse phase of the compiler.
+pub struct Parse {
+    pub stmts: Vec<Stmt>,
+    pub names: Names,
 }
 
 fn parse_atom(

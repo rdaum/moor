@@ -11,13 +11,13 @@ use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::{offset_for_builtin, BUILTINS};
-use crate::model::objects::ObjFlag;
-use crate::model::ObjectError;
 use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::WorldStateError;
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
@@ -93,7 +93,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
 
     let is_player = match bf_args.world_state.flags_of(*player).await {
         Ok(flags) => flags.contains(ObjFlag::User),
-        Err(ObjectError::ObjectNotFound(_)) => return Ok(Error(E_INVARG)),
+        Err(WorldStateError::ObjectNotFound(_)) => return Ok(Error(E_INVARG)),
         Err(e) => return Err(e.into()),
     };
     Ok(Ret(v_bool(is_player)))

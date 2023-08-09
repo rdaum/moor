@@ -1354,6 +1354,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "decorum",
+ "enum-primitive-derive",
  "int-enum",
  "lazy_static",
  "num-traits",

@@ -11,8 +11,8 @@ use crate::compiler::ast::{
 use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound};
 use crate::compiler::labels::{JumpLabel, Label, Name};
-use crate::compiler::Parse;
-use crate::vm::opcode::{Binary, Op, ScatterLabel};
+use crate::compiler::parse::Parse;
+use crate::vm::opcode::{Op, Program, ScatterLabel};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -29,7 +29,7 @@ pub enum DecompileError {
 }
 
 struct Decompile {
-    program: Binary,
+    program: Program,
     position: usize,
     expr_stack: VecDeque<Expr>,
     builtins: HashMap<Name, String>,
@@ -638,7 +638,7 @@ impl Decompile {
 }
 
 /// Reconstruct a parse tree from opcodes.
-pub fn program_to_tree(program: &Binary) -> Result<Parse, anyhow::Error> {
+pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
     let builtins = make_labels_builtins();
     let mut decompile = Decompile {
         program: program.clone(),
@@ -662,10 +662,10 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::decompile::program_to_tree;
     use crate::compiler::parse::parse_program;
-    use crate::compiler::Parse;
-    use crate::vm::opcode::Binary;
+    use crate::compiler::parse::Parse;
+    use crate::vm::opcode::Program;
 
-    fn parse_decompile(program_text: &str) -> (Parse, Parse, Binary) {
+    fn parse_decompile(program_text: &str) -> (Parse, Parse, Program) {
         let parse_1 = parse_program(program_text).unwrap();
         let binary = compile(program_text).unwrap();
         let parse_2 = program_to_tree(&binary).unwrap();

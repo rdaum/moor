@@ -1,9 +1,9 @@
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
+use crate::util::bitenum::BitEnum;
+use crate::var::objid::Objid;
+use crate::var::Var;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
 pub enum PropFlag {
@@ -32,7 +32,6 @@ pub struct PropAttrs {
     pub location: Option<Objid>,
     pub owner: Option<Objid>,
     pub flags: Option<BitEnum<PropFlag>>,
-    pub is_clear: Option<bool>,
 }
 
 impl PropAttrs {
@@ -43,7 +42,6 @@ impl PropAttrs {
             location: None,
             owner: None,
             flags: None,
-            is_clear: None,
         }
     }
 }

@@ -15,7 +15,7 @@ use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
 use crate::vm::opcode::Op::Jump;
-use crate::vm::opcode::{Binary, Op, ScatterLabel};
+use crate::vm::opcode::{Op, Program, ScatterLabel};
 
 #[derive(Error, Debug)]
 pub enum CompileError {
@@ -729,7 +729,7 @@ impl CodegenState {
     }
 }
 
-pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
+pub fn compile(program: &str) -> Result<Program, anyhow::Error> {
     let compile_span = tracing::trace_span!("compile");
     let _compile_guard = compile_span.enter();
 
@@ -749,7 +749,7 @@ pub fn compile(program: &str) -> Result<Binary, anyhow::Error> {
         return Err(anyhow!("saved stack still present after code generation"));
     }
 
-    let binary = Binary {
+    let binary = Program {
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
         var_names: cg_state.var_names,
