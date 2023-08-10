@@ -5,7 +5,7 @@ use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 
-use crate::compiler::builtins::BUILTINS;
+use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 use crate::compiler::labels::{Label, Offset};
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm_call::tracing_exit_vm_span;
@@ -126,7 +126,7 @@ impl VM {
                 Some(bf_index) => {
                     vec![
                         v_objid(a.this),
-                        v_str(BUILTINS[bf_index]),
+                        v_str(BUILTIN_DESCRIPTORS[bf_index].name.as_str()),
                         v_objid(NOTHING),
                         v_objid(NOTHING),
                         v_objid(a.player),
@@ -152,7 +152,7 @@ impl VM {
             if a.bf_index.is_none() {
                 pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
             } else {
-                pieces.push(format!("Builtin {}", BUILTINS[a.bf_index.unwrap()]));
+                pieces.push(format!("Builtin {}", BUILTIN_DESCRIPTORS[a.bf_index.unwrap()].name.as_str()));
             }
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));

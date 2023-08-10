@@ -137,7 +137,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | connection_name     |          |                                               |
 | notify              | &check;  |                                               |
 | boot_player         | &check;  |                                               |
-| server_log          |          |                                               |
+| server_log          | &check;  |                                               |
 | load_server_options |          |                                               |
 | function_info       |          |                                               |
 

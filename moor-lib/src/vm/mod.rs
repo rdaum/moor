@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
-use crate::compiler::builtins::BUILTINS;
+use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 use crate::compiler::labels::{Name, Offset};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::VerbCall;
@@ -140,8 +140,8 @@ impl Default for VM {
 impl VM {
     #[tracing::instrument()]
     pub fn new() -> Self {
-        let mut bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>> = Vec::with_capacity(BUILTINS.len());
-        for _ in 0..BUILTINS.len() {
+        let mut bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>> = Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
+        for _ in 0..BUILTIN_DESCRIPTORS.len() {
             bf_funcs.push(Arc::new(Box::new(BfNoop {})))
         }
         let _bf_noop = Box::new(BfNoop {});

@@ -5,7 +5,7 @@ use moor_value::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_int, Var};
 
-use crate::compiler::builtins::BUILTINS;
+use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::Activation;
 use crate::vm::builtin::{BfCallState, BfRet};
@@ -193,7 +193,7 @@ impl VM {
         let bf = self.builtins[bf_func_num].clone();
 
         trace!(
-            bf_name = BUILTINS[bf_func_num],
+            bf_name = BUILTIN_DESCRIPTORS[bf_func_num].name,
             bf_func_num,
             ?args,
             "Calling builtin function"
@@ -201,7 +201,7 @@ impl VM {
         let span = span!(
             Level::TRACE,
             "BF",
-            bf_name = BUILTINS[bf_func_num],
+            bf_name = BUILTIN_DESCRIPTORS[bf_func_num].name,
             bf_func_num,
             ?args
         );
@@ -216,7 +216,7 @@ impl VM {
         self.stack.push(Activation::for_bf_call(
             self.top().task_id,
             bf_func_num,
-            BUILTINS[bf_func_num],
+            BUILTIN_DESCRIPTORS[bf_func_num].name.as_str(),
             args.clone(),
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
@@ -227,7 +227,7 @@ impl VM {
         ));
         let mut bf_args = BfCallState {
             vm: self,
-            name: BUILTINS[bf_func_num].to_string(),
+            name: BUILTIN_DESCRIPTORS[bf_func_num].name.clone(),
             world_state: exec_args.world_state,
             sessions: exec_args.sessions.clone(),
             args,

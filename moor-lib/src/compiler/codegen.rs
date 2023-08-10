@@ -765,8 +765,8 @@ mod tests {
     use moor_value::var::error::Error::{E_INVARG, E_PERM, E_PROPNF};
     use moor_value::var::objid::Objid;
     use moor_value::var::v_obj;
+    use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 
-    use crate::compiler::builtins::BUILTINS;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::ScatterLabel;
 
@@ -1707,7 +1707,7 @@ mod tests {
          15: 014                 * INDEX
          16: 108                   RETURN
         */
-        let raise_num = BUILTINS.iter().position(|b| b == &"raise").unwrap();
+        let raise_num = BUILTIN_DESCRIPTORS.iter().position(|b| b.name == "raise").unwrap();
         let e_invarg = binary.find_literal(E_INVARG.into());
         assert_eq!(
             binary.main_vector,

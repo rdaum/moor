@@ -3,14 +3,16 @@ use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use tokio::sync::oneshot;
-use tracing::{debug, warn};
+use tracing::{debug, error, info, warn};
 
 use moor_value::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_string};
+use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;
-use crate::compiler::builtins::{offset_for_builtin, BUILTINS};
+use crate::compiler::builtins::{
+    offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS,
+};
 use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
@@ -488,7 +490,7 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
 
     // Find the function id for the given function name.
     let func_name: &str = func_name.as_str();
-    let Some(func_offset) = BUILTINS.iter().position(|name| *name == func_name) else {
+    let Some(func_offset) = BUILTIN_DESCRIPTORS.iter().position(|bf| bf.name == func_name) else {
         return Ok(Error(E_INVARG));
     };
 
@@ -499,6 +501,98 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
     }))
 }
 bf_declare!(call_function, bf_call_function);
+
+/*Syntax:  server_log (str <message> [, <is-error>])   => none
+
+The text in <message> is sent to the server log with a distinctive prefix (so that it can be distinguished from server-generated messages).  If the programmer
+is not a wizard, then `E_PERM' is raised.  If <is-error> is provided and true, then <message> is marked in the server log as an error.
+
+*/
+async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let Variant::Str(message) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    let is_error = if bf_args.args.len() == 2 {
+        let Variant::Int(is_error) = bf_args.args[1].variant() else {
+            return Ok(Error(E_TYPE));
+        };
+        *is_error == 1
+    } else {
+        false
+    };
+
+    if !bf_args.perms().has_flag(ObjFlag::Wizard) {
+        return Ok(Error(E_PERM));
+    }
+
+    if is_error {
+        error!("SERVER_LOG {}: {}", bf_args.vm.caller(), message);
+    } else {
+        info!("SERVER_LOG {}: {}", bf_args.vm.caller(), message);
+    }
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(server_log, bf_server_log);
+
+fn bf_function_info_to_list(bf: &Builtin) -> Var {
+    let min_args = match bf.min_args {
+        ArgCount::Q(q) => v_int(q as i64),
+        ArgCount::U => v_int(-1),
+    };
+    let max_args = match bf.max_args {
+        ArgCount::Q(q) => v_int(q as i64),
+        ArgCount::U => v_int(-1),
+    };
+    let types = bf
+        .types
+        .iter()
+        .map(|t| match t {
+            ArgType::Typed(ty) => v_int(*ty as i64),
+            ArgType::Any => v_int(-1),
+            ArgType::AnyNum => v_int(-2),
+        })
+        .collect::<Vec<_>>();
+
+    v_list(vec![
+        v_str(bf.name.as_str()),
+        min_args,
+        max_args,
+        v_list(types),
+    ])
+}
+
+async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() > 1 {
+        return Ok(Error(E_INVARG));
+    }
+
+    if bf_args.args.len() == 1 {
+        let Variant::Str(func_name) = bf_args.args[0].variant() else {
+            return Ok(Error(E_TYPE));
+        };
+        let bf = BUILTIN_DESCRIPTORS
+            .iter()
+            .find(|bf| bf.name == func_name.as_str())
+            .map(bf_function_info_to_list);
+        let Some(desc) = bf else {
+            return Ok(Error(E_INVARG));
+        };
+        return Ok(Ret(desc));
+    }
+
+    let bf_list = BUILTIN_DESCRIPTORS
+        .iter()
+        .filter_map(|bf| bf.implemented.then(|| bf_function_info_to_list(bf)))
+        .collect();
+    Ok(Ret(v_list(bf_list)))
+}
+bf_declare!(function_info, bf_function_info);
 
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
@@ -526,6 +620,8 @@ impl VM {
         self.builtins[offset_for_builtin("seconds_left")] = Arc::new(Box::new(BfSecondsLeft {}));
         self.builtins[offset_for_builtin("boot_player")] = Arc::new(Box::new(BfBootPlayer {}));
         self.builtins[offset_for_builtin("call_function")] = Arc::new(Box::new(BfCallFunction {}));
+        self.builtins[offset_for_builtin("server_log")] = Arc::new(Box::new(BfServerLog {}));
+        self.builtins[offset_for_builtin("function_info")] = Arc::new(Box::new(BfFunctionInfo {}));
 
         Ok(())
     }

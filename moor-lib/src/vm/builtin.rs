@@ -71,6 +71,8 @@ macro_rules! bf_declare {
                 fn name(&self) -> &str {
                     return stringify!($name)
                 }
+                // TODO use the descriptor in BUILTIN_DESCRIPTORS to check the arguments
+                // instead of doing it manually in each BF?
                 async fn call<'a>(
                     &self,
                     bf_args: &mut BfCallState<'a>
