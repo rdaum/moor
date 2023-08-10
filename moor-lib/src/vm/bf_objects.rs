@@ -40,7 +40,10 @@ async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(Error(E_TYPE));
     };
-    let parent = bf_args.world_state.parent_of(bf_args.perms(), *obj).await?;
+    let parent = bf_args
+        .world_state
+        .parent_of(bf_args.perms().clone(), *obj)
+        .await?;
     Ok(Ret(v_objid(parent)))
 }
 bf_declare!(parent, bf_parent);
@@ -57,7 +60,7 @@ async fn bf_chparent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
     };
     bf_args
         .world_state
-        .change_parent(bf_args.perms(), *obj, *new_parent)
+        .change_parent(bf_args.perms().clone(), *obj, *new_parent)
         .await?;
     Ok(Ret(v_none()))
 }
@@ -72,7 +75,7 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
     };
     let children = bf_args
         .world_state
-        .children_of(bf_args.perms(), *obj)
+        .children_of(bf_args.perms().clone(), *obj)
         .await?;
     debug!("Children: {:?} {:?}", obj, children);
     let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
@@ -113,14 +116,14 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
             let new_obj = bf_args
                 .world_state
-                .create_object(bf_args.perms(), *parent, owner)
+                .create_object(bf_args.perms().clone(), *parent, owner)
                 .await?;
 
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
             let Ok(initialize) = bf_args.world_state.find_method_verb_on(
-                bf_args.perms(),
+                bf_args.perms().clone(),
                 new_obj,
                 "initialize",
             ).await else {
@@ -213,7 +216,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
             BF_MOVE_TRAMPOLINE_START_ACCEPT => {
                 match bf_args
                     .world_state
-                    .find_method_verb_on(bf_args.perms(), *whereto, "accept")
+                    .find_method_verb_on(bf_args.perms().clone(), *whereto, "accept")
                     .await
                 {
                     Ok(dispatch) => {
@@ -268,19 +271,19 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
 
                 let original_location = bf_args
                     .world_state
-                    .location_of(bf_args.perms(), *what)
+                    .location_of(bf_args.perms().clone(), *what)
                     .await?;
 
                 // Failure here is likely due to permissions, so we'll just propagate that error.
                 bf_args
                     .world_state
-                    .move_object(bf_args.perms(), *what, *whereto)
+                    .move_object(bf_args.perms().clone(), *what, *whereto)
                     .await?;
 
                 // Now, prepare to call :exitfunc on the original location.
                 match bf_args
                     .world_state
-                    .find_method_verb_on(bf_args.perms(), original_location, "exitfunc")
+                    .find_method_verb_on(bf_args.perms().clone(), original_location, "exitfunc")
                     .await
                 {
                     Ok(dispatch) => {
@@ -317,7 +320,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                 // :enterfunc on the destination.
                 match bf_args
                     .world_state
-                    .find_method_verb_on(bf_args.perms(), *whereto, "enterfunc")
+                    .find_method_verb_on(bf_args.perms().clone(), *whereto, "enterfunc")
                     .await
                 {
                     Ok(dispatch) => {
@@ -370,7 +373,10 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(Error(E_TYPE));
     };
-    let verbs = bf_args.world_state.verbs(bf_args.perms(), *obj).await?;
+    let verbs = bf_args
+        .world_state
+        .verbs(bf_args.perms().clone(), *obj)
+        .await?;
     let verbs = verbs
         .iter()
         .map(|v| v_str(v.names.first().unwrap()))
@@ -392,7 +398,7 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
     };
     let props = bf_args
         .world_state
-        .properties(bf_args.perms(), *obj)
+        .properties(bf_args.perms().clone(), *obj)
         .await?;
     let props = props.iter().map(|p| v_str(&p.0)).collect();
     Ok(Ret(v_list(props)))

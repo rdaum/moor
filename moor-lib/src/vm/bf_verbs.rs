@@ -29,7 +29,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
         Variant::Str(verb_desc) => {
             bf_args
                 .world_state
-                .get_verb(bf_args.perms(), *obj, verb_desc.as_str())
+                .get_verb(bf_args.perms().clone(), *obj, verb_desc.as_str())
                 .await?
         }
         Variant::Int(verb_index) => {
@@ -40,7 +40,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
             let verb_index = (verb_index as usize) - 1;
             bf_args
                 .world_state
-                .get_verb_at_index(bf_args.perms(), *obj, verb_index)
+                .get_verb_at_index(bf_args.perms().clone(), *obj, verb_index)
                 .await?
         }
         _ => {
@@ -116,7 +116,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                     bf_args
                         .world_state
                         .set_verb_info(
-                            bf_args.perms(),
+                            bf_args.perms().clone(),
                             *obj,
                             verb_name.as_str(),
                             Some(*owner),
@@ -135,7 +135,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                     bf_args
                         .world_state
                         .set_verb_info_at_index(
-                            bf_args.perms(),
+                            bf_args.perms().clone(),
                             *obj,
                             verb_index,
                             Some(*owner),
@@ -167,7 +167,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
             let verb_desc = verb_desc.as_str();
             let verb_info = bf_args
                 .world_state
-                .get_verb(bf_args.perms(), *obj, verb_desc)
+                .get_verb(bf_args.perms().clone(), *obj, verb_desc)
                 .await?;
             verb_info.attrs.args_spec.unwrap()
         }
@@ -179,7 +179,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
             let verb_index = (verb_index as usize) - 1;
             let verb_info = bf_args
                 .world_state
-                .get_verb_at_index(bf_args.perms(), *obj, verb_index)
+                .get_verb_at_index(bf_args.perms().clone(), *obj, verb_index)
                 .await?;
             verb_info.attrs.args_spec.unwrap()
         }
@@ -228,7 +228,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                     bf_args
                         .world_state
                         .set_verb_info(
-                            bf_args.perms(),
+                            bf_args.perms().clone(),
                             *obj,
                             verb_name.as_str(),
                             None,
@@ -247,7 +247,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                     bf_args
                         .world_state
                         .set_verb_info_at_index(
-                            bf_args.perms(),
+                            bf_args.perms().clone(),
                             *obj,
                             verb_index,
                             None,

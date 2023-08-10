@@ -35,7 +35,7 @@ impl VM {
             this,
             player: self.top().player,
             args: args.to_vec(),
-            caller: self.top().this,
+            caller: self.caller(),
         };
         trace!(this = ?this, verb = verb_name, args = ?args, caller = ?call.caller, "Preparing verb call");
 
@@ -109,13 +109,14 @@ impl VM {
             return self.raise_error(E_VERBNF);
         };
 
+        let caller = self.caller();
         let call = VerbCall {
             verb_name: verb,
             location: parent,
             this: self.top().this,
             player: self.top().player,
             args: args.to_vec(),
-            caller: permissions.caller_perms().obj,
+            caller,
         };
 
         Ok(ExecutionResult::ContinueVerb {
@@ -226,7 +227,7 @@ impl VM {
         ));
         let mut bf_args = BfCallState {
             vm: self,
-            name: BUILTINS[bf_func_num],
+            name: BUILTINS[bf_func_num].to_string(),
             world_state: exec_args.world_state,
             sessions: exec_args.sessions.clone(),
             args,
@@ -270,17 +271,20 @@ impl VM {
             return self.unwind_stack(FinallyReason::Return(return_value))
         };
 
+        let bf = self.builtins[self.top().bf_index.unwrap()].clone();
+        let verb_name = self.top().verb_name.clone();
+        let sessions = exec_args.sessions.clone();
+        let args = self.top().args.clone();
         let mut bf_args = BfCallState {
             vm: self,
-            name: self.top().verb_name.as_str(),
+            name: verb_name,
             world_state: exec_args.world_state,
-            sessions: exec_args.sessions.clone(),
-            args: self.top().args.clone(),
+            sessions,
+            args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
             ticks_left: exec_args.ticks_left,
             time_left: exec_args.time_left,
         };
-        let bf = self.builtins[self.top().bf_index.unwrap()].clone();
 
         match bf.call(&mut bf_args).await {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),

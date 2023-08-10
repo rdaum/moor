@@ -224,7 +224,7 @@ impl VM {
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
         // function. If we stack_unwind, it will propagate to parent. Otherwise, it will be popped
         // by the parent anyways.
-        self.caller_mut().push(v_err(code));
+        self.parent_activation_mut().push(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {

@@ -105,7 +105,7 @@ async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
         return Ok(Error(E_INVARG));
     }
 
-    Ok(Ret(v_objid(bf_args.perms().caller_perms().obj)))
+    Ok(Ret(v_objid(bf_args.vm.caller_perms())))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
@@ -113,14 +113,13 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, a
     if bf_args.args.len() != 1 {
         return Ok(Error(E_INVARG));
     }
-    let Variant::Obj(perms_for) = bf_args.args[0].variant() else {
+    let Variant::Obj(perms_for) = bf_args.args[0].variant().clone() else {
         return Ok(Error(E_TYPE));
     };
 
     bf_args.perms().task_perms().check_wizard()?;
-    bf_args
-        .perms()
-        .set_task_perms(*perms_for, bf_args.world_state.flags_of(*perms_for).await?);
+    let flags = bf_args.world_state.flags_of(perms_for).await?;
+    bf_args.perms_mut().set_task_perms(perms_for, flags);
 
     Ok(Ret(v_none()))
 }

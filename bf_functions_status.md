@@ -64,21 +64,21 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Objects
 
-| Name            | Complete | Notes |
-|-----------------|----------|-------|
-| toobj           | &check;  |       |
-| typeof          | &check;  |       |
-| create          |          |       |
-| recycle         |          |       |
-| valid           | &check;  |       |
-| parent          | &check;  |       |
-| children        | &check;  |       |
-| chparent        |          |       |
-| max_object      |          |       |
-| players         |          |       |
-| is_player       | &check;  |       |
-| set_player_flag |          |       |
-| move            | &check;  |       |
+| Name            | Complete | Notes                                               |
+|-----------------|----------|-----------------------------------------------------|
+| toobj           | &check;  |                                                     |
+| typeof          | &check;  |                                                     |
+| create          | &check;  | Quota support not implemented yet.                  |
+| recycle         |          |                                                     |
+| valid           | &check;  |                                                     |
+| parent          | &check;  |                                                     |
+| children        | &check;  |                                                     |
+| chparent        |          |                                                     |
+| max_object      |          |                                                     |
+| players         |          |                                                     |
+| is_player       | &check;  |                                                     |
+| set_player_flag |          |                                                     |
+| move            | &check;  | There may be a problem with perms on accept() call? |
 
 ### Properties
 

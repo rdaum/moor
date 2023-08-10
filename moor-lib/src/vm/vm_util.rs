@@ -1,5 +1,5 @@
 use moor_value::var::error::Error::{E_INVIND, E_TYPE};
-use moor_value::var::objid::NOTHING;
+use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_none, Var};
 
@@ -8,8 +8,6 @@ use crate::vm::activation::{Activation, Caller};
 use crate::vm::opcode::Op;
 use crate::vm::{ExecutionResult, VM};
 use moor_value::model::world_state::WorldState;
-
-
 
 impl VM {
     /// VM-level property resolution.
@@ -114,7 +112,32 @@ impl VM {
         self.stack.last().expect("activation stack underflow")
     }
 
-    pub(crate) fn caller_mut(&mut self) -> &mut Activation {
+    // MOO does this annoying thing where callers() returns the builtin functions as if they
+    // were on the stack. but they're kinda not really on the stack? and caller_perms() and
+    // caller don't use the values from the builtin functions? so we have to special case
+    // ...
+    pub(crate) fn non_bf_top(&self) -> Option<&Activation> {
+        let mut stack_iter = self.stack.iter().rev();
+        stack_iter.next()?; // skip the top activation, that's our current frame
+        for activation in stack_iter {
+            if activation.bf_index.is_some() {
+                continue;
+            }
+            return Some(activation);
+        }
+        None
+    }
+    pub(crate) fn caller_perms(&self) -> Objid {
+        return self
+            .non_bf_top()
+            .map(|a| a.verb_definer())
+            .unwrap_or(NOTHING);
+    }
+
+    pub(crate) fn caller(&self) -> Objid {
+        return self.non_bf_top().map(|a| a.this).unwrap_or(NOTHING);
+    }
+    pub(crate) fn parent_activation_mut(&mut self) -> &mut Activation {
         let len = self.stack.len();
         self.stack
             .get_mut(len - 2)

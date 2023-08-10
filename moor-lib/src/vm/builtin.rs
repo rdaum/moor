@@ -17,11 +17,11 @@ use moor_value::model::world_state::WorldState;
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
     /// The name of the invoked function.
-    pub(crate) name: &'a str,
+    pub(crate) name: String,
     /// Arguments passed to the function.
     pub(crate) args: Vec<Var>,
     /// Reference back to the VM, to be able to retrieve stack frames and other state.
-    pub(crate) vm: &'a VM,
+    pub(crate) vm: &'a mut VM,
     /// Handle to the current database transaction.
     pub(crate) world_state: &'a mut dyn WorldState,
     /// For connection / message management.
@@ -35,8 +35,11 @@ pub(crate) struct BfCallState<'a> {
 }
 
 impl<'a> BfCallState<'a> {
-    pub fn perms(&self) -> PermissionsContext {
-        self.vm.top().permissions.clone()
+    pub fn perms_mut(&mut self) -> &mut PermissionsContext {
+        &mut self.vm.top_mut().permissions
+    }
+    pub fn perms(&self) -> &PermissionsContext {
+        &self.vm.top().permissions
     }
 }
 

@@ -124,8 +124,9 @@ mod tests {
                     resolved_verb,
                     call,
                     command,
-                    trampoline: _, trampoline_arg: _,
-                   }) => {
+                    trampoline: _,
+                    trampoline_arg: _,
+                }) => {
                     let (decoded_verb, _) = bincode::decode_from_slice(
                         resolved_verb.attrs.binary.as_ref().unwrap(),
                         *BINCODE_CONFIG,
@@ -851,8 +852,9 @@ mod tests {
                     resolved_verb,
                     call,
                     command,
-                    trampoline: _, trampoline_arg: _,
-                   }) => {
+                    trampoline: _,
+                    trampoline_arg: _,
+                }) => {
                     let (decoded_verb, _) = bincode::decode_from_slice(
                         resolved_verb.attrs.binary.as_ref().unwrap(),
                         *BINCODE_CONFIG,

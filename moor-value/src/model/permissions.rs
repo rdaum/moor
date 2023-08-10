@@ -1,5 +1,5 @@
 use crate::util::bitenum::BitEnum;
-use crate::var::objid::{Objid, NOTHING};
+use crate::var::objid::Objid;
 
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
@@ -26,12 +26,6 @@ pub struct PermissionsContext {
     // Usually the owner of the current verb.
     // But can be overridden by set_task_perms (wizard only)
     task_perms: Perms,
-
-    // Returns the permissions in use by the verb that *called* the currently-executing verb. If the
-    // currently-executing verb was not called by another verb (i.e., it is the first verb called
-    // in a command or server task), then #-1 is returned.
-    // This is what is returned by bf caller_perms().
-    caller_perms: Perms,
 
     // The original perms of the player. Used to derive caller_perms for the next call.
     // That is, self.caller_perms = parent_frame.task_perms
@@ -128,10 +122,6 @@ impl PermissionsContext {
         let player_perms = Perms { obj, flags };
         Self {
             task_perms: player_perms.clone(),
-            caller_perms: Perms {
-                obj: NOTHING,
-                flags: BitEnum::new(),
-            },
             player_perms,
         }
     }
@@ -139,7 +129,6 @@ impl PermissionsContext {
     pub fn mk_child_perms(&self, new_task_perms: Perms) -> Self {
         Self {
             task_perms: new_task_perms.clone(),
-            caller_perms: self.task_perms.clone(),
             player_perms: self.player_perms.clone(),
         }
     }
@@ -150,10 +139,6 @@ impl PermissionsContext {
 
     pub fn task_perms(&self) -> &Perms {
         &self.task_perms
-    }
-
-    pub fn caller_perms(&self) -> &Perms {
-        &self.caller_perms
     }
 
     pub fn set_task_perms(&mut self, obj: Objid, flags: BitEnum<ObjFlag>) {

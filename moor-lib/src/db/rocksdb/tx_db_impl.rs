@@ -48,6 +48,21 @@ fn get_oid_value<'a>(
     Ok(ov)
 }
 
+fn get_oid_or_nothing<'a>(
+    cf: &'a ColumnFamily,
+    tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
+    o: Objid,
+) -> Result<Objid, anyhow::Error> {
+    let ok = oid_key(o);
+    let ov = tx.get_cf(cf, ok).unwrap();
+    let Some(ov) = ov else {
+        return Ok(NOTHING);
+    };
+    let ov = u64::from_be_bytes(ov.try_into().unwrap());
+    let ov = Objid(ov as i64);
+    Ok(ov)
+}
+
 fn set_oid_value<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
@@ -185,9 +200,7 @@ impl<'a> RocksDbTx<'a> {
             }
 
             // Otherwise, find our parent.  If it's, then set o to it and continue.
-            let Ok(parent) = get_oid_value(op_cf, &self.tx, search_o) else {
-                break;
-            };
+            let parent = get_oid_or_nothing(op_cf, &self.tx, search_o)?;
             if parent == NOTHING {
                 break;
             }
@@ -224,14 +237,14 @@ impl<'a> RocksDbTx<'a> {
             if search_a != NOTHING {
                 ancestors_a.insert(search_a);
                 let parent_cf = self.cf_handles[((ColumnFamilies::ObjectParent) as u8) as usize];
-                let parent = get_oid_value(parent_cf, &self.tx, search_a).unwrap_or(NOTHING);
+                let parent = get_oid_or_nothing(parent_cf, &self.tx, search_a)?;
                 search_a = parent;
             }
 
             if search_b != NOTHING {
                 ancestors_b.insert(search_b);
                 let parent_cf = self.cf_handles[((ColumnFamilies::ObjectParent) as u8) as usize];
-                let parent = get_oid_value(parent_cf, &self.tx, search_b).unwrap_or(NOTHING);
+                let parent = get_oid_or_nothing(parent_cf, &self.tx, search_b)?;
                 search_b = parent;
             }
         }
@@ -496,7 +509,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_object_owner(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectOwner);
-        get_oid_value(cf, &self.tx, o)
+        get_oid_or_nothing(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn set_object_owner(&self, o: Objid, owner: Objid) -> Result<(), anyhow::Error> {
@@ -506,12 +519,12 @@ impl<'a> DbStorage for RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     fn get_object_parent(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
-        get_oid_value(cf, &self.tx, o)
+        get_oid_or_nothing(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn get_object_location(&self, o: Objid) -> Result<Objid, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectLocation as u8) as usize];
-        get_oid_value(cf, &self.tx, o)
+        get_oid_or_nothing(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
     fn get_object_contents(&self, o: Objid) -> Result<Vec<Objid>, anyhow::Error> {
@@ -539,7 +552,10 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
 
         // Get and remove from contents of old location, if we had any.
-        match get_oid_value(l_cf, &self.tx, what) {
+        match get_oid_or_nothing(l_cf, &self.tx, what) {
+            Ok(NOTHING) => {
+                // Object not found is fine, we just don't have a location yet.
+            }
             Ok(old_location) => {
                 if old_location == new_location {
                     return Ok(());
@@ -551,11 +567,9 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                     set_oid_vec(c_cf, &self.tx, old_location, old_contents)?;
                 }
             }
-            Err(e) if !err_is_objnjf(&e) => {
-                // Object not found is fine, we just don't have a location yet.
+            Err(e) => {
                 return Err(e);
             }
-            Err(_) => {}
         }
         // Set new location.
         set_oid_value(l_cf, &self.tx, what, new_location)?;
