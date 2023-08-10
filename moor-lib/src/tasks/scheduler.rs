@@ -30,6 +30,7 @@ use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
+const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);
 
 // TODO allow these to be set by command line arguments, as well.
 // Note these can be overriden in-core.
@@ -201,11 +202,16 @@ impl Scheduler {
             let mut start_lock = self.inner.write().await;
             start_lock.running = true;
         }
-        let mut interval = tokio::time::interval(SCHEDULER_TICK_TIME);
+        let mut scheduler_interval = tokio::time::interval(SCHEDULER_TICK_TIME);
+        let mut metrics_poller_interval = tokio::time::interval(METRICS_POLLER_TICK_TIME);
         loop {
             {
                 select! {
-                    _ = interval.tick() => {
+                    _ = metrics_poller_interval.tick() => {
+                        let inner = self.inner.read().await;
+                        gauge!("scheduler.tasks", inner.tasks.len() as f64);
+                    }
+                    _ = scheduler_interval.tick() => {
                         let mut inner = self.inner.write().await;
                         if !inner.running {
                             break;
@@ -232,6 +238,8 @@ impl Scheduler {
         command: &str,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
+        increment_counter!("scheduler.submit_command_task");
+
         let mut inner = self.inner.write().await;
 
         let (vloc, vi, command) = {
@@ -308,6 +316,8 @@ impl Scheduler {
         args: Vec<Var>,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
+        increment_counter!("scheduler.submit_verb_task");
+
         let mut inner = self.inner.write().await;
 
         let state_source = inner.state_source.clone();
@@ -340,6 +350,8 @@ impl Scheduler {
         code: String,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
+        increment_counter!("scheduler.submit_eval_task");
+
         let mut inner = self.inner.write().await;
 
         // Compile the text into a verb.
@@ -407,6 +419,7 @@ impl Inner {
         sessions: Arc<RwLock<dyn Sessions>>,
         scheduler_ref: Scheduler,
     ) -> Result<TaskId, anyhow::Error> {
+        increment_counter!("scheduler.forked_tasks");
         let task_id = self
             .new_task(
                 fork_request.player,
@@ -440,7 +453,7 @@ impl Inner {
                 suspended,
             })?;
 
-        increment_counter!("moo.scheduler.forked_tasks");
+        increment_counter!("scheduler.forked_tasks");
 
         Ok(task_id)
     }
@@ -469,13 +482,13 @@ impl Inner {
             match task.scheduler_control_receiver.try_recv() {
                 Ok(msg) => match msg {
                     SchedulerControlMsg::TaskAbortCancelled => {
-                        increment_counter!("moo.scheduler.aborted_cancelled");
+                        increment_counter!("scheduler.aborted_cancelled");
 
                         warn!(task = task.task_id, "Task cancelled");
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortError(e) => {
-                        increment_counter!("moo.scheduler.aborted_error");
+                        increment_counter!("scheduler.aborted_error");
 
                         warn!(task = task.task_id, error = ?e, "Task aborted");
                         to_remove.push(*task_id);
@@ -483,7 +496,7 @@ impl Inner {
                     SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
                         match limit_reason {
                             AbortLimitReason::Ticks(t) => {
-                                increment_counter!("moo.scheduler.aborted_ticks");
+                                increment_counter!("scheduler.aborted_ticks");
                                 warn!(
                                     task = task.task_id,
                                     ticks = t,
@@ -491,25 +504,26 @@ impl Inner {
                                 );
                             }
                             AbortLimitReason::Time(t) => {
-                                increment_counter!("moo.scheduler.aborted_time");
+                                increment_counter!("scheduler.aborted_time");
                                 warn!(task = task.task_id, time = ?t, "Task aborted, time exceeded");
                             }
                         }
-                        increment_counter!("moo.scheduler.aborted_limits");
+                        increment_counter!("scheduler.aborted_limits");
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskException(finally_reason) => {
-                        increment_counter!("moo.scheduler.exception");
+                        increment_counter!("scheduler.task_exception");
 
                         warn!(task = task.task_id, finally_reason = ?finally_reason, "Task threw exception");
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskSuccess(value) => {
-                        increment_counter!("moo.scheduler.succeeded");
+                        increment_counter!("scheduler.task_succeeded");
                         debug!(task = task.task_id, result = ?value, "Task succeeded");
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
+                        increment_counter!("scheduler.fork_task");
                         // Task has requested a fork. Dispatch it and reply with the new task id.
                         // Gotta dump this out til we exit the loop tho, since self.tasks is already
                         // borrowed here.
@@ -522,12 +536,14 @@ impl Inner {
                         ));
                     }
                     SchedulerControlMsg::TaskSuspend(resume_time) => {
+                        increment_counter!("scheduler.suspend_task");
                         // Task is suspended. The resume time (if any) is the system time at which
                         // the scheduler should try to wake us up.
                         task.suspended = true;
                         task.resume_time = resume_time;
                     }
                     SchedulerControlMsg::DescribeOtherTasks(reply) => {
+                        increment_counter!("scheduler.describe_tasks");
                         // Task is asking for a description of all other tasks.
                         desc_requests.push((task.task_id, reply));
                     }
@@ -536,6 +552,7 @@ impl Inner {
                         sender_permissions,
                         result_sender,
                     } => {
+                        increment_counter!("scheduler.kill_task");
                         // Task is asking to kill another task.
                         kill_requests.push((
                             task.task_id,
@@ -550,6 +567,7 @@ impl Inner {
                         return_value,
                         result_sender,
                     } => {
+                        increment_counter!("scheduler.resume_task");
                         resume_requests.push((
                             task.task_id,
                             queued_task_id,
@@ -562,6 +580,7 @@ impl Inner {
                         player,
                         sender_permissions: _,
                     } => {
+                        increment_counter!("scheduler.boot_player");
                         // Task is asking to boot a player.
                         to_disconnect.push((task.task_id, player));
                     }
@@ -789,6 +808,16 @@ impl Inner {
                 };
             }
         }
+
+        // Prune any completed/dead tasks
+        let dead_tasks: Vec<_> = self
+            .tasks
+            .iter()
+            .filter_map(|(task_id, task)| task.task_control_sender.is_closed().then_some(*task_id))
+            .collect();
+        for task in dead_tasks {
+            self.tasks.remove(&task);
+        }
         Ok(())
     }
 
@@ -801,6 +830,7 @@ impl Inner {
         scheduler_ref: Scheduler,
         background: bool,
     ) -> Result<TaskId, anyhow::Error> {
+        increment_counter!("scheduler.new_task");
         let (mut world_state, perms) = {
             let mut state_source = state_source.write().await;
             state_source.new_world_state(player).await?
@@ -868,8 +898,8 @@ impl Inner {
             debug!("Completed task: {:?}", task_id);
         });
 
-        increment_counter!("moo.scheduler.created_tasks");
-        gauge!("moo.scheduler.active_tasks", self.tasks.len() as f64);
+        increment_counter!("scheduler.created_tasks");
+        gauge!("scheduler.active_tasks", self.tasks.len() as f64);
 
         Ok(task_id)
     }

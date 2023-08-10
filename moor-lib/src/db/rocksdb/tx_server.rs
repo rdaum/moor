@@ -1,6 +1,7 @@
 use anyhow::bail;
 use bincode::{Decode, Encode};
 use crossbeam_channel::{Receiver, RecvError};
+use metrics_macros::increment_counter;
 use rocksdb::ColumnFamily;
 use tracing::warn;
 
@@ -73,6 +74,7 @@ pub(crate) fn run_tx_server<'a>(
         tx,
         cf_handles: cf_handles.clone(),
     };
+    increment_counter!("rocksdb.tx.start");
     let (commit_result, commit_response_send) = loop {
         let msg = match mailbox.recv() {
             Ok(msg) => msg,
@@ -223,11 +225,13 @@ pub(crate) fn run_tx_server<'a>(
             }
             Message::Commit(r) => {
                 let commit_r = tx.commit()?;
+                increment_counter!("rocksdb.tx.commit");
                 break (commit_r, r);
             }
             Message::Rollback(r) => {
                 warn!("Rolling back transaction");
                 tx.rollback()?;
+                increment_counter!("rocksdb.tx.rollback");
                 let Ok(_) = r.send(()) else {
                     bail!("Could not send result")
                 };

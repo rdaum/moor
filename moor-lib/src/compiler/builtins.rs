@@ -1073,5 +1073,8 @@ pub fn make_labels_builtins() -> HashMap<Name, String> {
 }
 
 pub fn offset_for_builtin(bf_name: &str) -> usize {
-    BUILTIN_DESCRIPTORS.iter().position(|b| b.name == bf_name).unwrap()
+    BUILTIN_DESCRIPTORS
+        .iter()
+        .position(|b| b.name == bf_name)
+        .unwrap()
 }

@@ -29,3 +29,7 @@ tokio-tungstenite = "*"
 tracing = "0.1.29"
 tracing-subscriber = "0.3"
 tracing-chrome = "0.7.1"
+metrics-exporter-prometheus = "0.12.1"
+metrics = "0.21.1"
+metrics-util = { version = "0.15.1",  default-features = false, features = ["recency", "registry", "summary"] }
+metrics-macros = "0.7.0"

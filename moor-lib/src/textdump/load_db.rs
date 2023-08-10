@@ -3,7 +3,8 @@ use std::fs::File;
 use std::io::BufReader;
 
 use anyhow::Context;
-use tracing::{debug, info, span, warn};
+use metrics_macros::increment_counter;
+use tracing::{info, span, trace, warn};
 
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
@@ -96,9 +97,8 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);
 
-        debug!(
-            "Creating object: #{} ({}) with flags {:?}",
-            objid.0, o.name, flags
+        trace!(
+            objid = ?objid, name=o.name, flags=?flags, "Creating object",
         );
         ldr.create_object(
             Some(*objid),
@@ -111,11 +111,13 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
         )
         .await
         .with_context(|| format!("Unable to create object #{}", objid.0))?;
+
+        increment_counter!("textdump.created_objects");
     }
 
     info!("Setting object attributes (parent/location/owner)");
     for (objid, o) in &td.objects {
-        debug!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
+        trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
         ldr.set_object_owner(*objid, o.owner)
             .await
             .with_context(|| format!("Unable to set owner of {}", *objid))?;
@@ -137,7 +139,7 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                debug!(definer = ?objid.0, name = resolved.name, "Defining property");
+                trace!(definer = ?objid.0, name = resolved.name, "Defining property");
                 let value = Some(resolved.value);
                 ldr.define_property(
                     resolved.definer,
@@ -150,6 +152,7 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
                 .await
                 .with_context(|| format!("Unable to define property on {}", objid))?;
             }
+            increment_counter!("textdump.defined_properties");
         }
     }
 
@@ -158,15 +161,13 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(p.flags);
-            debug!(
-                "Setting/updating property: #{}.{} Clear?: {}",
-                objid.0, resolved.name, p.is_clear
-            );
+            trace!(objid = ?objid.0, name = resolved.name, flags = ?flags, "Setting property");
             let value = (!p.is_clear).then(|| p.value.clone());
 
             ldr.set_update_property(*objid, resolved.name.as_str(), p.owner, flags, value)
                 .await
                 .with_context(|| format!("Unable to set property on {}", objid))?;
+            increment_counter!("textdump.set_properties");
         }
     }
 
@@ -199,6 +200,7 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
             let names: Vec<&str> = v.name.split(' ').collect();
 
             let Some(verb) = td.verbs.get(&(*objid, vn)) else {
+                increment_counter!("textdump.missing_programs");
                 warn!("Missing program for defined verb #{}/{} ({:?})", objid.0, vn, names);
                 continue;
             };
@@ -217,7 +219,8 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
             ldr.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
                 .await
                 .with_context(|| format!("Unable to add verb #{}/{} ({:?})", objid.0, vn, names))?;
-            debug!("Added verb: #{}:{}", objid.0, names.join(", "));
+            trace!(objid = ?objid.0, name = ?vn, "Added verb");
+            increment_counter!("textdump.compiled_verbs");
         }
     }
     info!("Verbs defined.");

@@ -139,7 +139,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | boot_player         | &check;  |                                               |
 | server_log          | &check;  |                                               |
 | load_server_options |          |                                               |
-| function_info       |          |                                               |
+| function_info       | &check;  |                                               |
 
 
 

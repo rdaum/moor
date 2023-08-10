@@ -1,16 +1,75 @@
+# Docker composition for starting up the Moor server in cargo-watch mode, with VictoriaMetris and VMagent for metrics
+# collection, and Grafana for visualization.
+
+# NOTE: This image will always import from a fresh textdump on start, with flags to discard any existing database.
+# If you want to keep your database, remove the `development_discard_db` flags from the command line in the moor service.
+
+# This composition is not intended for production use, but for development and testing, but could be used as a template
+# production once we're in a better place.
+
 version: "3.9"
+volumes:
+  vmagentdata: {}
+  vmdata: {}
+  grafanadata: {}
+networks:
+  moor_net:
 services:
   moor:
-    build: .
+    build: ./
     container_name: "moor-dev"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
       - ./.target:/root/target:cached
-      - .:/moor:cached
+      - ./:/moor:cached
     environment:
       - CARGO_TARGET_DIR=/root/target
-    command: sh -c "cargo watch -w moor-lib -w moor-bin -w  -x 'run -p moor-bin --release -- out.db JHCore-DEV-2.db 0.0.0.0:8080'"
+    working_dir: /moor
+    command: sh -c "cargo watch -w moor-lib -w moor-bin -w  -x 'run -p moor-bin -- development.db --development-discard-db --textdump JHCore-DEV-2.db 0.0.0.0:8080'"
     ports:
       - "8080:8080"
-
-
+    networks:
+      - moor_net
+  vmagent:
+    container_name: vmagent
+    image: victoriametrics/vmagent:v1.92.1
+    depends_on:
+      - "victoriametrics"
+    ports:
+      - 8429:8429
+    volumes:
+      - vmagentdata:/vmagentdata
+      - ./deploy/vmagent:/etc/prometheus/
+    command:
+      - "--promscrape.config=/etc/prometheus/prometheus.yml"
+      - "--remoteWrite.url=http://victoriametrics:8428/api/v1/write"
+    networks:
+      - moor_net
+    restart: always
+  victoriametrics:
+    container_name: victoriametrics
+    image: victoriametrics/victoria-metrics:v1.92.1
+    ports:
+      - 8428:8428
+    volumes:
+      - vmdata:/storage
+    command:
+      - "--storageDataPath=/storage"
+      - "--httpListenAddr=:8428"
+    networks:
+      - moor_net
+    restart: always
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:10.0.3
+    depends_on:
+      - "victoriametrics"
+    ports:
+      - 3000:3000
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning/
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - moor_net
+    restart: always

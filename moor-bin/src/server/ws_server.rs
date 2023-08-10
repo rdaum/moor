@@ -10,6 +10,7 @@ use axum::response::IntoResponse;
 use axum::Extension;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
+use metrics_macros::{counter, increment_counter};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::RwLock;
 use tracing::{error, info, instrument, trace};
@@ -82,6 +83,8 @@ pub async fn ws_handle_connection(
     stream: WebSocket,
     player: Objid,
 ) {
+    increment_counter!("ws_server.new_connection");
+
     info!(?player, ?peer, "New websocket connection");
     let (ws_sender, mut ws_receiver) = stream.split();
 
@@ -115,10 +118,12 @@ pub async fn ws_handle_connection(
         let cmd = match msg.into_text() {
             Ok(cmd) => cmd,
             Err(e) => {
+                increment_counter!("ws_server.error_decoding_message");
                 error!("Error decoding a message: {:?}", e);
                 continue;
             }
         };
+        increment_counter!("ws_server.message_received");
         let cmd = cmd.as_str().trim();
 
         // Record activity on the connection, to compute idle_seconds.
@@ -140,6 +145,8 @@ pub async fn ws_handle_connection(
                 .await
         };
         if let Err(e) = task_id {
+            increment_counter!("ws_server.submit_error");
+
             error!("Error submitting command ({}): {:?}", cmd, e);
             ws_send_error(server.clone(), player, format!("{:?}", e))
                 .await
@@ -165,6 +172,7 @@ pub async fn ws_handle_connection(
             );
         }
 
+        counter!("ws_server.connection_finished", 1, "peer" => peer.to_string());
         info!("WebSocket session finished: {}", peer);
     }
 }
@@ -172,6 +180,8 @@ pub async fn ws_handle_connection(
 #[async_trait]
 impl Sessions for WebSocketSessions {
     async fn send_text(&mut self, player: Objid, msg: &str) -> Result<(), anyhow::Error> {
+        increment_counter!("ws_server.sessions.send_text");
+
         let Some(conn) = self.connections.get_mut(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };
@@ -188,11 +198,13 @@ impl Sessions for WebSocketSessions {
     }
 
     async fn shutdown(&mut self, msg: Option<String>) -> Result<(), anyhow::Error> {
+        increment_counter!("ws_server.sessions.shutdown");
         self.shutdown_sender.send(msg).await.unwrap();
         Ok(())
     }
 
     async fn disconnect(&mut self, player: Objid) -> Result<(), Error> {
+        increment_counter!("ws_server.sessions.disconnect");
         let Some(mut conn) = self.connections.remove(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };
@@ -213,10 +225,13 @@ impl Sessions for WebSocketSessions {
     }
 
     fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error> {
+        increment_counter!("ws_server.sessions.request_connected_player");
+
         Ok(self.connections.keys().cloned().collect())
     }
 
     fn connected_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {
+        increment_counter!("ws_server.sessions.request_connected_seconds");
         let Some(conn) = self.connections.get(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };
@@ -226,6 +241,7 @@ impl Sessions for WebSocketSessions {
     }
 
     fn idle_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {
+        increment_counter!("ws_server.sessions.request.idle_seconds");
         let Some(conn) = self.connections.get(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };

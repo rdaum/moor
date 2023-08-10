@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::thread::spawn;
 
 use async_trait::async_trait;
+use metrics_macros::increment_counter;
 use strum::VariantNames;
 use tracing::error;
 
@@ -16,6 +17,8 @@ use moor_value::model::world_state::{WorldState, WorldStateSource};
 pub struct RocksDbServer {
     db: Arc<rocksdb::OptimisticTransactionDB>,
 }
+
+// TODO get some metrics gauges in here to export various DB-level stats.
 
 impl RocksDbServer {
     #[tracing::instrument()]
@@ -43,6 +46,7 @@ impl RocksDbServer {
                 .map(|cf| db.cf_handle(cf.1).unwrap());
 
             let tx = db.transaction();
+            increment_counter!("rocksdb.start_transaction_server");
             let e = run_tx_server(receive, tx, column_families.collect());
             if let Err(e) = e {
                 error!("System error in database transaction: {:?}", e);

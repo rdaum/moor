@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
+use metrics_macros::increment_counter;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
@@ -22,6 +23,7 @@ use moor_value::model::objects::ObjFlag;
 use moor_value::model::WorldStateError;
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    increment_counter!("vm.bf_noop.calls");
     // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
     // instead. right now it just panics so we can find all the places that need to be updated.
     unimplemented!("BF is not implemented: {}", bf_args.name);

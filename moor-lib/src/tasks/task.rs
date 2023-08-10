@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{bail, Error};
 use bincode::{decode_from_slice, encode_to_vec};
+use metrics_macros::increment_counter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
@@ -105,6 +106,7 @@ impl Task {
                     Ok(Some(result)) => result,
                     Ok(None) => continue,
                     Err(err) => {
+                        increment_counter!("tasks.error.exec");
                         self.world_state.rollback().await.unwrap();
                         error!(task_id = self.task_id, error = ?err, "Task error");
 
@@ -116,6 +118,7 @@ impl Task {
                 };
                 match vm_exec_result {
                     SchedulerControlMsg::TaskSuccess(ref result) => {
+                        increment_counter!("tasks.success_complete");
                         drop_tmp_verb(self.world_state.as_mut(), &self.perms, &self.tmp_verb).await;
 
                         trace!(self.task_id, result = ?result, "Task complete");
@@ -127,7 +130,8 @@ impl Task {
                         return;
                     }
                     _ => {
-                        trace!(task_id = self.task_id, "Task end");
+                        increment_counter!("tasks.error.unknown");
+                        trace!(task_id = self.task_id, "Task end, error");
                         self.world_state.rollback().await.unwrap();
 
                         self.scheduler_control_sender
@@ -184,6 +188,8 @@ impl Task {
                 verbinfo,
                 command,
             } => {
+                increment_counter!("task.start_command");
+
                 // We should never be asked to start a command while we're already running one.
                 assert!(!self.running_method);
                 trace!(?command, ?player, ?vloc, ?verbinfo, "Starting command");
@@ -213,6 +219,7 @@ impl Task {
                 verb,
                 args,
             } => {
+                increment_counter!("task.start_verb");
                 // We should never be asked to start a command while we're already running one.
                 assert!(!self.running_method);
                 trace!(?verb, ?player, ?vloc, ?args, "Starting verb");
@@ -246,6 +253,8 @@ impl Task {
                 self.running_method = !suspended;
             }
             TaskControlMsg::StartEval { player, program } => {
+                increment_counter!("task.start_eval");
+
                 assert!(!self.running_method);
                 trace!(?player, ?program, "Starting eval");
                 // Stick the binary into the player object under a temp name.
@@ -283,6 +292,8 @@ impl Task {
                 return Ok(None);
             }
             TaskControlMsg::Resume(world_state, permissions, value) => {
+                increment_counter!("task.resume");
+
                 // We're back. Get a new world state and resume.
                 debug!(
                     task_id = self.task_id,
@@ -301,12 +312,16 @@ impl Task {
             }
             // We've been asked to die.
             TaskControlMsg::Abort => {
+                increment_counter!("task.abort");
+
                 trace!("Aborting task");
                 self.world_state.rollback().await?;
 
                 return Ok(Some(SchedulerControlMsg::TaskAbortCancelled));
             }
             TaskControlMsg::Describe(reply_sender) => {
+                increment_counter!("task.describe");
+
                 trace!("Received and responding to describe request");
                 let description = TaskDescription {
                     task_id: self.task_id,

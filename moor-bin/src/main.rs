@@ -4,6 +4,9 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use std::future::ready;
+
 use axum::{routing::get, Extension, Router};
 use clap::builder::ValueHint;
 use clap::Parser;
@@ -32,10 +35,20 @@ mod server;
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
     #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
-    db: std::path::PathBuf,
+    db: PathBuf,
+
+    // TODO likely this should be removed when we stabilize more.
+    // (The reason this is here is because importing a textdump into an existing DB = bad.)
+    #[arg(
+        short,
+        long,
+        value_name = "discard_db",
+        help = "DANGEROUS; discard existing database; typically used for development when loading from textdump"
+    )]
+    development_discard_db: bool,
 
     #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
-    textdump: Option<std::path::PathBuf>,
+    textdump: Option<PathBuf>,
 
     #[arg(value_name = "listen", help = "Listen address")]
     listen_address: Option<String>,
@@ -48,6 +61,10 @@ struct Args {
     perfetto_tracing: Option<bool>,
 }
 
+fn setup_metrics_recorder() -> PrometheusHandle {
+    PrometheusBuilder::new().install_recorder().unwrap()
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), anyhow::Error> {
     let args: Args = Args::parse();
@@ -58,7 +75,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .finish();
     let _perfetto_guard = match args.perfetto_tracing {
         Some(true) => {
@@ -75,6 +92,13 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     info!("Moor Server starting...");
+
+    if args.development_discard_db {
+        info!("Discarding existing database...");
+        std::fs::remove_dir_all(&args.db).unwrap_or_else(|_| {
+            info!("Failed to remove existing database, continuing...");
+        });
+    }
 
     let mut src = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
     if let Some(textdump) = args.textdump {
@@ -112,6 +136,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut loop_scheduler = scheduler.clone();
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
+    let recorder_handle = setup_metrics_recorder();
+
     let web_router = Router::new()
         .route("/ws/players/:player", get(ws_handler))
         .layer(Extension(ws_server))
@@ -121,10 +147,11 @@ async fn main() -> Result<(), anyhow::Error> {
                     .level(Level::TRACE)
                     .include_headers(true),
             ),
-        );
+        )
+        .route("/metrics", get(move || ready(recorder_handle.render())));
 
     let address = &addr.parse::<SocketAddr>().unwrap();
-    info!("Listening on {}", address);
+    info!(address=?address, "Listening");
     let axum_server = tokio::spawn(
         axum::Server::bind(address)
             .serve(web_router.into_make_service_with_connect_info::<SocketAddr>()),

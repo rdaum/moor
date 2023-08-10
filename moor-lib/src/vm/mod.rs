@@ -140,7 +140,8 @@ impl Default for VM {
 impl VM {
     #[tracing::instrument()]
     pub fn new() -> Self {
-        let mut bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>> = Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
+        let mut bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>> =
+            Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
         for _ in 0..BUILTIN_DESCRIPTORS.len() {
             bf_funcs.push(Arc::new(Box::new(BfNoop {})))
         }

@@ -152,7 +152,10 @@ impl VM {
             if a.bf_index.is_none() {
                 pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
             } else {
-                pieces.push(format!("Builtin {}", BUILTIN_DESCRIPTORS[a.bf_index.unwrap()].name.as_str()));
+                pieces.push(format!(
+                    "Builtin {}",
+                    BUILTIN_DESCRIPTORS[a.bf_index.unwrap()].name.as_str()
+                ));
             }
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));

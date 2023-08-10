@@ -1,0 +1,7 @@
+scrape_configs:
+  - job_name: Moor
+    scrape_interval: 5s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['moor:8080']
+
