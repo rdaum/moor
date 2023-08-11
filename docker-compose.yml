@@ -1,4 +1,4 @@
-# Docker composition for starting up the Moor server in cargo-watch mode, with VictoriaMetris and VMagent for metrics
+# Docker composition for starting up the Moor server in cargo-watch mode, with VictoriaMetrics and VMagent for metrics
 # collection, and Grafana for visualization.
 
 # NOTE: This image will always import from a fresh textdump on start, with flags to discard any existing database.
@@ -6,6 +6,16 @@
 
 # This composition is not intended for production use, but for development and testing, but could be used as a template
 # production once we're in a better place.
+
+# After this is up and running, you should be able to connect to the server at http://localhost:8080 via websockets
+# with basic-auth 'wizard' / (any passowrd, it's blank) at ws://localhost:8080/ws/connect/players/2
+# I use websocat (cargo install websocat):
+#
+# websocat --basic-auth wizard:potrzebie -E ws://localhost:8080/ws/connect/players/2
+#
+
+# Grafana will be available at http://localhost:3000/ password is admin/admin
+# victoriametrics will be available at http://localhost:8428/
 
 version: "3.9"
 volumes:

@@ -43,7 +43,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | abs      | &check;  |       |
 | random   | &check;  |       |
 | time     | &check;  |       |
-| ctime    |          |       |
+| ctime    | &check;  |       |
 | floatstr | &check;  |       |
 | sqrt     | &check;  |       |
 | sin      | &check;  |       |
@@ -134,7 +134,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | connected_players   | &check;  |                                               |
 | connected_seconds   | &check;  |                                               |
 | idle_seconds        | &check;  |                                               |
-| connection_name     |          |                                               |
+| connection_name     | &check;  |                                               |
 | notify              | &check;  |                                               |
 | boot_player         | &check;  |                                               |
 | server_log          | &check;  |                                               |
@@ -176,15 +176,15 @@ The following is a table of the status of various builtin-functions, to keep an 
 These will likely never be implemented. But should return, e.g. E_PERM or similar
 to the caller if attempted.
 
-| Name                    | Complete | Notes |
-|-------------------------|----------|-------|
-| set_connection_option   |          |       |
-| connection_option       |          |       |
-| connection_options      |          |       |
-| open_network_connection |          |       |
-| listen                  |          |       |
-| unlisten                |          |       |
-| read                    |          |       |
-| listeners               |          |       |
-| output_delimiters       |          |       |
-| buffered_output_length  |          |       |
+| Name                    | Complete | Notes                                                 |
+|-------------------------|----------|-------------------------------------------------------|
+| set_connection_option   |          |                                                       |
+| connection_option       |          |                                                       |
+| connection_options      |          |                                                       |
+| open_network_connection |          |                                                       |
+| listen                  |          |                                                       |
+| unlisten                |          |                                                       |
+| read                    |          |                                                       |
+| listeners               | &check;  | Ehhh.. hardcoded, just to shut core login process up  |
+| output_delimiters       |          |                                                       |
+| buffered_output_length  |          |                                                       |

@@ -115,6 +115,13 @@ impl Perms {
         }
         Err(WorldStateError::ObjectPermissionDenied)
     }
+
+    pub fn check_is_wizard(&self) -> Result<bool, WorldStateError> {
+        if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(true);
+        }
+        Ok(false)
+    }
 }
 
 impl PermissionsContext {

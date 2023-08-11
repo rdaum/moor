@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use magic_crypt::{new_magic_crypt, MagicCryptTrait};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_empty_list, v_int, v_list, v_str};
+use moor_value::var::{v_empty_list, v_int, v_list, v_str, v_string};
 use regexpr_binding::Pattern;
 
 use crate::bf_declare;
@@ -144,7 +143,7 @@ async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
-        (Variant::Str(str1), Variant::Str(str2)) => Ok(Ret(v_int(str1.cmp(str2) as i64))),
+        (Variant::Str(str1), Variant::Str(str2)) => Ok(Ret(v_int(str1.as_str().cmp(str2.as_str()) as i64))),
         _ => Ok(Error(E_TYPE)),
     }
 }
@@ -158,20 +157,14 @@ string at least two characters long, the first two characters of which will be u
 encryption "salt" in the algorithm. If salt is not provided, a random pair of characters is used.
  In any case, the salt used is also returned as the first two characters of the resulting encrypted
  string.
-
-`crypt` is DES encryption, so that's what we do.
- */
-fn des_crypt(text: &str, salt: &str) -> String {
-    let mc = new_magic_crypt!(salt);
-    let crypted = mc.encrypt_str_to_bytes(text);
-    crypted.iter().map(|i| char::from(*i)).collect()
-}
-
+*/
 async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Ok(Error(E_INVARG));
     }
+
     let salt = if bf_args.args.len() == 1 {
+        // Provide a random 2-letter salt.
         let mut rng = rand::thread_rng();
         let mut salt = String::new();
 
@@ -185,7 +178,8 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
-        Ok(Ret(v_str(des_crypt(text.as_str(), salt.as_str()).as_str())))
+        let crypted = pwhash::unix::crypt(text.as_str(), salt.as_str()).unwrap();
+        Ok(Ret(v_string(crypted)))
     } else {
         Ok(Error(E_TYPE))
     }

@@ -99,7 +99,7 @@ impl List {
             }
             return false;
         }
-        return self.inner.contains(v);
+        self.inner.contains(v)
     }
 
     pub fn get(&self, index: usize) -> Option<&Var> {

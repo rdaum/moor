@@ -981,6 +981,15 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         Ok(())
     }
     #[tracing::instrument(skip(self))]
+    fn clear_property(&self, o: Objid, u: Uuid) -> Result<(), anyhow::Error> {
+        // Just delete the property value.
+        let pv_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
+        let uk = composite_key(o, u.as_bytes());
+        self.tx.delete_cf(pv_cf, uk)?;
+
+        Ok(())
+    }
+    #[tracing::instrument(skip(self))]
     fn define_property(
         &self,
         definer: Objid,
@@ -1048,14 +1057,6 @@ impl<'a> DbStorage for RocksDbTx<'a> {
 
         Ok(u)
     }
-
-    fn clear_property(&self, o: Objid, u: Uuid) -> Result<(), Error> {
-        let pv_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-        let uk = composite_key(o, u.as_bytes());
-        self.tx.delete_cf(pv_cf, uk)?;
-        Ok(())
-    }
-
     #[tracing::instrument(skip(self))]
     fn resolve_property(&self, obj: Objid, n: String) -> Result<(PropDef, Var), anyhow::Error> {
         trace!(?obj, name = ?n, "resolving property");

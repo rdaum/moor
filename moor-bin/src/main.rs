@@ -21,14 +21,10 @@ use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 
 use moor_lib::db::rocksdb::server::RocksDbServer;
-use moor_lib::db::rocksdb::LoaderInterface;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
-use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
 
-use crate::server::ws_server::{ws_handler, WebSocketServer};
+use crate::server::ws_server::{ws_connect_handler, WebSocketServer};
 
 mod server;
 
@@ -109,9 +105,6 @@ async fn main() -> Result<(), anyhow::Error> {
             .unwrap();
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
-
-        // Set some initial state in the database.
-        initialize_world_state(&mut src).await;
     }
 
     let state_src = Arc::new(RwLock::new(src));
@@ -139,7 +132,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let recorder_handle = setup_metrics_recorder();
 
     let web_router = Router::new()
-        .route("/ws/players/:player", get(ws_handler))
+        .route("/ws/connect/players/:player", get(ws_connect_handler))
         .layer(Extension(ws_server))
         .layer(
             TraceLayer::new_for_http().make_span_with(
@@ -186,30 +179,4 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Done.");
 
     Ok(())
-}
-
-async fn initialize_world_state(src: &mut RocksDbServer) {
-    let tx = src.start_transaction().unwrap();
-    // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
-    // match against.
-    // And create another player, too.
-    let first_room = Objid(70);
-    let generic_programmer = Objid(6);
-    tx.set_object_location(Objid(2), first_room).await.unwrap();
-    let o = tx
-        .create_object(
-            Some(Objid(666)),
-            &ObjAttrs {
-                owner: Some(Objid(666)),
-                name: Some("a test player".to_string()),
-                parent: Some(generic_programmer),
-                location: None,
-                flags: Some(BitEnum::new() | ObjFlag::Programmer | ObjFlag::User | ObjFlag::Read),
-            },
-        )
-        .await
-        .unwrap();
-    tx.set_object_location(o, first_room).await.unwrap();
-
-    tx.commit().await.unwrap();
 }

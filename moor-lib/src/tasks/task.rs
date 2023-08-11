@@ -57,7 +57,7 @@ pub(crate) enum TaskControlMsg {
     StartEval { player: Objid, program: Program },
     /// The scheduler is telling the task to resume execution. Use the given world state
     /// (transaction) and permissions when doing so.
-    Resume(Box<dyn WorldState>, PermissionsContext, Var),
+    Resume(Box<dyn WorldState>, Var),
     /// The scheduler is asking the task to describe itself.
     /// This causes deadlock if the task requesting the description is the task being described,
     /// so I need to rethink this.
@@ -291,7 +291,7 @@ impl Task {
                 self.tmp_verb = Some((player, tmp_name.clone()));
                 return Ok(None);
             }
-            TaskControlMsg::Resume(world_state, permissions, value) => {
+            TaskControlMsg::Resume(world_state, value) => {
                 increment_counter!("task.resume");
 
                 // We're back. Get a new world state and resume.
@@ -300,7 +300,6 @@ impl Task {
                     "Resuming task, getting new transaction"
                 );
                 self.world_state = world_state;
-                self.perms = permissions;
                 // suspend needs a return value.
                 self.vm.top_mut().push(value);
                 self.scheduled_start_time = None;

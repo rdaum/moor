@@ -201,6 +201,9 @@ pub(crate) fn run_tx_server<'a>(
             Message::DeleteProperty(o, u, r) => {
                 respond(r, tx.delete_property(o, u))?;
             }
+            Message::ClearProperty(o, u, r) => {
+                respond(r, tx.clear_property(o, u))?;
+            }
             Message::DefineProperty {
                 definer,
                 location,

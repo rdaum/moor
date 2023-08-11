@@ -110,6 +110,7 @@ pub(crate) enum Message {
         new_name: Option<String>,
         reply: Sender<Result<(), WorldStateError>>,
     },
+    ClearProperty(Objid, Uuid, Sender<Result<(), WorldStateError>>),
     DeleteProperty(Objid, Uuid, Sender<Result<(), WorldStateError>>),
     ResolveProperty(
         Objid,

@@ -5,19 +5,26 @@ use std::sync::Arc;
 use anyhow::{anyhow, Error};
 use async_trait::async_trait;
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use axum::extract::{ConnectInfo, Path, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, WebSocketUpgrade};
+use axum::headers::authorization::Basic;
+use axum::headers::Authorization;
 use axum::response::IntoResponse;
-use axum::Extension;
+use axum::{Extension, TypedHeader};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use metrics_macros::{counter, increment_counter};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::RwLock;
-use tracing::{error, info, instrument, trace};
+use tracing::{debug, error, info, instrument, trace, warn};
 
-use moor_lib::tasks::scheduler::Scheduler;
+use moor_lib::tasks::scheduler::{Scheduler, TaskWaiterResult};
 use moor_lib::tasks::Sessions;
-use moor_value::var::objid::Objid;
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{Objid, SYSTEM_OBJECT};
+use moor_value::var::{v_objid, v_str};
+use moor_value::var::variant::Variant;
 
 struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,
@@ -26,6 +33,7 @@ struct WebSocketSessions {
 
 struct WsConnection {
     player: Objid,
+    peer_addr: SocketAddr,
     ws_sender: SplitSink<WebSocket, Message>,
     connected_time: std::time::Instant,
     last_activity: std::time::Instant,
@@ -34,6 +42,8 @@ struct WsConnection {
 pub struct WebSocketServer {
     sessions: Arc<RwLock<WebSocketSessions>>,
     scheduler: Scheduler,
+    // Downward counter for connection ids, starting at -1.
+    next_connection_number: i64,
 }
 
 impl WebSocketServer {
@@ -45,20 +55,23 @@ impl WebSocketServer {
         Self {
             scheduler,
             sessions: Arc::new(RwLock::new(inner)),
+            // Start at #-4, since #-3 and above are reserved.
+            next_connection_number: -4,
         }
     }
 }
 
-pub async fn ws_handler(
+/// Handles connection to an existing player, via websocket connection & basic-auth.
+pub async fn ws_connect_handler(
     ws: WebSocketUpgrade,
-    Path(player): Path<i64>,
+    TypedHeader(auth): TypedHeader<Authorization<Basic>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(ws_server): Extension<Arc<RwLock<WebSocketServer>>>,
 ) -> impl IntoResponse {
     info!("New websocket connection from {}", addr);
     // TODO validate player id
     // TODO password in headers? auth phase?
-    ws.on_upgrade(move |socket| ws_handle_connection(ws_server, addr, socket, Objid(player)))
+    ws.on_upgrade(move |socket| ws_handle_connection(ws_server, addr, socket, auth))
 }
 
 async fn ws_send_error(
@@ -81,37 +94,168 @@ pub async fn ws_handle_connection(
     server: Arc<RwLock<WebSocketServer>>,
     peer: SocketAddr,
     stream: WebSocket,
-    player: Objid,
+    auth: Authorization<Basic>,
 ) {
-    increment_counter!("ws_server.new_connection");
+    // TODO big need of cleanup here factor chunks here into separate functions, as this has grown
+    // too large.
 
-    info!(?player, ?peer, "New websocket connection");
+    increment_counter!("ws_server.new_connection");
+    info!(?peer, "New websocket connection");
     let (ws_sender, mut ws_receiver) = stream.split();
 
-    // TODO auth/validation phase.  Add interface on Session?
+    // Get a connection number.
+    let (connection, event_receiver) = {
+        let mut server = server.write().await;
+        let connection_oid = {
+            let sessions = &mut server.sessions.write().await;
+            let connections = &mut sessions.connections;
 
-    // Register connection with player.
-    {
+            let connection_oid = Objid(server.next_connection_number);
+            let client_connection = WsConnection {
+                player: connection_oid,
+                peer_addr: peer,
+                ws_sender,
+                connected_time: std::time::Instant::now(),
+                last_activity: std::time::Instant::now(),
+            };
+
+            connections.insert(connection_oid, client_connection);
+            connection_oid
+        };
+        server.next_connection_number -= 1;
+        debug!(?connection_oid, "$do_login_command");
+        // Call the scheduler to initiate $do_login_command
+        let sessions = server.sessions.clone();
+        // TODO: Clarify permissions here.  Do we need to be wizard? JHC requires only that callers()
+        // returns empty?
+        let permissions = PermissionsContext::root_for(Objid(0), BitEnum::new_with(ObjFlag::Wizard));
+        let task_id = server
+            .scheduler
+            .submit_verb_task(
+                connection_oid,
+                SYSTEM_OBJECT,
+                "do_login_command".to_string(),
+                vec![
+                    v_str("connect"),
+                    v_str(auth.username()),
+                    v_str(auth.password()),
+                ],
+                permissions,
+                sessions,
+            )
+            .await
+            .unwrap();
+
+        let receiver = server.scheduler.subscribe_to_task(task_id).await.unwrap();
+
+        (connection_oid, receiver)
+    };
+
+    // Now we spin waiting for the task to complete.  The server will output to the connection obj
+    // we created.
+    // And we will parse its result. If it's an object that's our new player object to sign in as.
+    let connect_result = event_receiver.await.unwrap();
+    let (player, ws_sender) = match connect_result {
+        TaskWaiterResult::Success(v) => {
+            increment_counter!("ws_server.login_success");
+            let server = server.write().await;
+            let sessions = &mut server.sessions.write().await;
+            let connections = &mut sessions.connections;
+            let Some(connection_record) = connections.remove(&connection) else {
+                error!("Missing connection record for auth'd player");
+                return;
+            };
+            let Variant::Obj(player) = v.variant() else {
+                error!("invalid result from connect");
+                // Kill the connection.
+                return;
+            }                                ;
+
+            info!(player = ?*player, "connected");
+            (*player, connection_record.ws_sender)
+        }
+        _ => {
+            increment_counter!("ws_server.login_failure");
+            error!("login failure");
+            return;
+        }
+    };
+
+    // Now, re-register connection with player.
+    let is_reconnected = {
         let server = server.write().await;
         let sessions = &mut server.sessions.write().await;
         let connections = &mut sessions.connections;
         let client_connection = WsConnection {
             player,
+            peer_addr: peer,
             ws_sender,
             connected_time: std::time::Instant::now(),
             last_activity: std::time::Instant::now(),
         };
         let mut old = connections.insert(player, client_connection);
-        if let Some(ref mut old) = old {
-            SplitSink::send(&mut old.ws_sender, "Reconnecting".into())
-                .await
-                .unwrap();
-            let result = old.ws_sender.close().await;
-            if let Err(e) = result {
-                error!("{:?}", e);
+        let is_reconnected = match old {
+            Some(ref mut old) => {
+                increment_counter!("ws_server.reconnect");
+                SplitSink::send(&mut old.ws_sender, "** Redirecting connection to new port **".into())
+                    .await
+                    .unwrap();
+
+                // TODO: the problem here is that the other loop will go ahead and enter exit phase
+                // and remove the connection (via player) from the connections table at the bottom,
+                // which will in turn kill us off.
+                // Probably we'll need to think about how to have that not happen. But not tonight.
+                let result = old.ws_sender.close().await;
+                if let Err(e) = result {
+                    error!("{:?}", e);
+                }
+                true
+            }
+            None => {
+                false
+            }
+        };
+        let connect_msg = if is_reconnected {
+            "** Redirecting old connection to this port **"
+        } else {
+            "** Connected **"
+        };
+        let new = connections.get_mut(&player).unwrap();
+        SplitSink::send(&mut new.ws_sender, connect_msg.into())
+            .await
+            .unwrap();
+        is_reconnected
+    };
+
+    // And submit $user_connected(player)/$user_reconnected(player.
+    // And thus the user shall be logged-in.
+    {
+        let mut server = server.write().await;
+        let sessions = server.sessions.clone();
+        let connected_verb = if is_reconnected {
+            "user_reconnected".to_string()
+        } else {
+            "user_connected".to_string()
+        };
+        match server
+            .scheduler
+            .submit_verb_task(
+                player,
+                SYSTEM_OBJECT,
+                connected_verb,
+                vec![v_objid(player)],
+                PermissionsContext::root_for(player, BitEnum::new_with(ObjFlag::Read)),
+                sessions,
+            )
+            .await {
+            Ok(_) => {
+                trace!(player = ?player, "user_connected task submitted");
+            }
+            Err(e) => {
+                warn!(player = ?player, "Could not issue user_connected task for connected player: {:?}", e);
             }
         }
-    }
+    };
 
     // Task submission loop.
     while let Ok(Some(msg)) = ws_receiver.try_next().await {
@@ -158,20 +302,13 @@ pub async fn ws_handle_connection(
     // Now drop the connection from sessions.
     // And any tasks that are associated with us should be aborted.
     {
-        let mut server = server.write().await;
+        let server = server.write().await;
         {
             let connections = &mut server.sessions.write().await.connections;
             if connections.remove(&player).is_none() {
                 trace!(?player, "connection already removed / no connection");
             }
         }
-        if server.scheduler.abort_player_tasks(player).await.is_err() {
-            trace!(
-                ?player,
-                "could not abort tasks for player (likely already aborted)"
-            );
-        }
-
         counter!("ws_server.connection_finished", 1, "peer" => peer.to_string());
         info!("WebSocket session finished: {}", peer);
     }
@@ -224,10 +361,23 @@ impl Sessions for WebSocketSessions {
         Ok(())
     }
 
+    async fn connection_name(&self, player: Objid) -> Result<String, anyhow::Error> {
+        increment_counter!("ws_server.sessions.request_connection_name");
+        let Some(conn) = self.connections.get(&player) else {
+            return Err(anyhow!("no known connection for objid: #{}", player.0));
+        };
+        Ok(conn.peer_addr.to_string())
+    }
+
     fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error> {
         increment_counter!("ws_server.sessions.request_connected_player");
 
-        Ok(self.connections.keys().cloned().collect())
+        Ok(self
+            .connections
+            .keys()
+            .cloned()
+            .filter(|c| c.0 >= 0)
+            .collect())
     }
 
     fn connected_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {

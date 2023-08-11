@@ -268,6 +268,5 @@ pub trait WorldStateSource {
     /// Returns the world state, and a permissions context for the player.
     async fn new_world_state(
         &mut self,
-        player: Objid,
-    ) -> Result<(Box<dyn WorldState>, PermissionsContext), anyhow::Error>;
+    ) -> Result<Box<dyn WorldState>, anyhow::Error>;
 }

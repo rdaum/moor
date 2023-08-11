@@ -71,6 +71,7 @@ pub struct TaskDescription {
     pub this: Objid,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AbortLimitReason {
     Ticks(usize),
     Time(Duration),
@@ -106,6 +107,17 @@ pub enum SchedulerControlMsg {
     },
 }
 
+// A subset of the messages above, for use by subscribers on tasks (e.g. the websocket connection)
+// TODO consider consolidation here
+#[derive(Clone)]
+pub enum TaskWaiterResult {
+    Success(Var),
+    Exception(FinallyReason),
+    AbortTimeout(AbortLimitReason),
+    AbortCancelled,
+    AbortError,
+}
+
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
 /// not shared elsewhere.
 struct TaskControl {
@@ -122,6 +134,8 @@ struct TaskControl {
     // Self reference, used when forking tasks to pass them into the new task record. Not super
     // elegant and may need revisiting.
     scheduler: Scheduler,
+    // One-shot subscribers for when the task is aborted, succeeded, etc.
+    subscribers: Vec<oneshot::Sender<TaskWaiterResult>>,
 }
 
 #[derive(Debug, Eq, PartialEq, Error)]
@@ -196,6 +210,15 @@ impl Scheduler {
         }
     }
 
+    pub async fn subscribe_to_task(&self, task_id: TaskId) -> Result<oneshot::Receiver<TaskWaiterResult>, anyhow::Error> {
+        let (sender, receiver) = oneshot::channel();
+        let mut inner = self.inner.write().await;
+        if let Some(task) = inner.tasks.get_mut(&task_id) {
+            task.subscribers.push(sender);
+        }
+        Ok(receiver)
+    }
+
     /// Execute the scheduler loop, run from the server process.
     pub async fn run(&mut self) {
         {
@@ -242,9 +265,12 @@ impl Scheduler {
 
         let mut inner = self.inner.write().await;
 
-        let (vloc, vi, command) = {
+        let (vloc, vi, command, perms) = {
             let mut ss = inner.state_source.write().await;
-            let (mut ws, perms) = ss.new_world_state(player).await?;
+            let mut ws = ss.new_world_state().await?;
+            // Get perms for environment search. Player's perms.
+            let player_flags = ws.flags_of(player).await?;
+            let perms = PermissionsContext::root_for(player, player_flags);
             let me = DBMatchEnvironment {
                 ws: ws.as_mut(),
                 perms: perms.clone(),
@@ -277,11 +303,11 @@ impl Scheduler {
                                     pc
                                 )));
             };
-            (target, vi, pc)
+            (target, vi, pc, perms)
         };
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone(), false)
+            .new_task(player, state_source, sessions, None, self.clone(), perms, false)
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -314,6 +340,7 @@ impl Scheduler {
         vloc: Objid,
         verb: String,
         args: Vec<Var>,
+        perms: PermissionsContext,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.submit_verb_task");
@@ -322,7 +349,7 @@ impl Scheduler {
 
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone(), false)
+            .new_task(player, state_source, sessions, None, self.clone(), perms, false)
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -347,6 +374,7 @@ impl Scheduler {
     pub async fn submit_eval_task(
         &mut self,
         player: Objid,
+        perms: PermissionsContext,
         code: String,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
@@ -359,7 +387,7 @@ impl Scheduler {
 
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone(), false)
+            .new_task(player, state_source, sessions, None, self.clone(), perms, false)
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -427,6 +455,7 @@ impl Inner {
                 sessions,
                 fork_request.delay,
                 scheduler_ref,
+                fork_request.perms.clone(),
                 false,
             )
             .await?;
@@ -462,6 +491,7 @@ impl Inner {
     async fn do_process(&mut self) -> Result<(), anyhow::Error> {
         // Would have preferred a futures::select_all here, but it doesn't seem to be possible to
         // do this without consuming the futures, which we don't want to do.
+        let mut to_notify = Vec::new();
         let mut to_remove = Vec::new();
         let mut fork_requests = Vec::new();
         let mut desc_requests = Vec::new();
@@ -485,12 +515,16 @@ impl Inner {
                         increment_counter!("scheduler.aborted_cancelled");
 
                         warn!(task = task.task_id, "Task cancelled");
+
+                        to_notify.push((*task_id, TaskWaiterResult::AbortCancelled));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortError(e) => {
                         increment_counter!("scheduler.aborted_error");
 
                         warn!(task = task.task_id, error = ?e, "Task aborted");
+
+                        to_notify.push((*task_id, TaskWaiterResult::AbortError));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
@@ -509,17 +543,20 @@ impl Inner {
                             }
                         }
                         increment_counter!("scheduler.aborted_limits");
+                        to_notify.push((*task_id, TaskWaiterResult::AbortTimeout(limit_reason)));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskException(finally_reason) => {
                         increment_counter!("scheduler.task_exception");
 
                         warn!(task = task.task_id, finally_reason = ?finally_reason, "Task threw exception");
+                        to_notify.push((*task_id, TaskWaiterResult::Exception(finally_reason)));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskSuccess(value) => {
                         increment_counter!("scheduler.task_succeeded");
                         debug!(task = task.task_id, result = ?value, "Task succeeded");
+                        to_notify.push((*task_id, TaskWaiterResult::Success(value)));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
@@ -593,21 +630,31 @@ impl Inner {
                 }
             }
         }
+
+        // Send notifications. These are oneshot and consumed.
+        for (task_id, result) in to_notify {
+            let task = self.tasks.get_mut(&task_id).unwrap();
+            for subscriber in task.subscribers.drain(..) {
+                if let Err(_) = subscriber.send(result.clone()) {
+                    error!("Notify to subscriber on task {} failed", task_id);
+                }
+            }
+        }
+
         // Service wake-ups
         for task_id in to_wake {
             let task = self.tasks.get_mut(&task_id).unwrap();
             task.suspended = false;
 
-            let (world_state, permissions) = self
+            let world_state = self
                 .state_source
                 .write()
                 .await
-                .new_world_state(task.player)
+                .new_world_state()
                 .await?;
 
             task.task_control_sender.send(TaskControlMsg::Resume(
                 world_state,
-                permissions,
                 v_int(0),
             ))?;
         }
@@ -761,11 +808,11 @@ impl Inner {
             }
 
             // Follow the usual task resume logic.
-            let (world_state, permissions) = self
+            let world_state = self
                 .state_source
                 .write()
                 .await
-                .new_world_state(queued_task.player)
+                .new_world_state()
                 .await?;
 
             queued_task.suspended = false;
@@ -773,7 +820,6 @@ impl Inner {
                 .task_control_sender
                 .send(TaskControlMsg::Resume(
                     world_state,
-                    permissions,
                     return_value,
                 ))?;
             result_sender
@@ -828,12 +874,13 @@ impl Inner {
         sessions: Arc<RwLock<dyn Sessions>>,
         delay_start: Option<Duration>,
         scheduler_ref: Scheduler,
+        perms: PermissionsContext,
         background: bool,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.new_task");
-        let (mut world_state, perms) = {
+        let mut world_state = {
             let mut state_source = state_source.write().await;
-            state_source.new_world_state(player).await?
+            state_source.new_world_state().await?
         };
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
@@ -858,6 +905,7 @@ impl Inner {
             suspended: false,
             resume_time: None,
             scheduler: scheduler_ref.clone(),
+            subscribers: vec![],
         };
         self.tasks.insert(task_id, task_control);
 

@@ -24,9 +24,10 @@ bytes = "1.4.0"
 smallvec = "1.10.0"
 strum = { version = "0.25.0", features = ["derive"] }
 uuid = { version = "1.3.3", features = ["v4"] }
+chrono = "0.4.26"
 
 ## Required for MOO builtins.
-magic-crypt = "3.1.12"  # For MOO's hokey 'crypt' builtin
+pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
 md5 = "0.7.0" # For MOO's "string_hash"
 rand = "0.8.5"
 

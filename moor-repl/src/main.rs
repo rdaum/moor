@@ -18,6 +18,9 @@ use moor_lib::db::rocksdb::LoaderInterface;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
 use moor_lib::textdump::load_db::textdump_load;
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::permissions::PermissionsContext;
+use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 
 #[derive(Parser, Debug)] // requires `derive` feature
@@ -35,8 +38,9 @@ async fn do_eval(
     program: String,
     sessions: Arc<RwLock<ReplSession>>,
 ) -> Result<(), anyhow::Error> {
+    let perms = PermissionsContext::root_for(player, BitEnum::new_with(ObjFlag::Wizard));
     let task_id = scheduler
-        .submit_eval_task(player, program, sessions)
+        .submit_eval_task(player, perms, program, sessions)
         .await?;
     info!("Submitted task {}", task_id);
     Ok(())
@@ -59,6 +63,10 @@ impl Sessions for ReplSession {
     async fn shutdown(&mut self, msg: Option<String>) -> Result<(), Error> {
         error!(msg, "SHUTDOWN");
         exit(0);
+    }
+
+    async fn connection_name(&self, player: Objid) -> Result<String, Error> {
+        Ok(format!("REPL:{}", player))
     }
 
     async fn disconnect(&mut self, player: Objid) -> Result<(), Error> {

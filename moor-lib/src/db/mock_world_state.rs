@@ -441,12 +441,7 @@ impl MockWorldStateSource {
 impl WorldStateSource for MockWorldStateSource {
     async fn new_world_state(
         &mut self,
-        player: Objid,
-    ) -> Result<(Box<dyn WorldState>, PermissionsContext), Error> {
-        let permissions_context = PermissionsContext::root_for(
-            player,
-            BitEnum::new() | ObjFlag::Wizard | ObjFlag::Programmer,
-        );
-        Ok((Box::new(MockState(self.0.clone())), permissions_context))
+    ) -> Result<Box<dyn WorldState>, Error> {
+        Ok(Box::new(MockState(self.0.clone())))
     }
 }

@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
+use chrono::{DateTime, Local};
 use metrics_macros::increment_counter;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
@@ -21,6 +22,7 @@ use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
 use moor_value::model::objects::ObjFlag;
 use moor_value::model::WorldStateError;
+use moor_value::var::objid::NOTHING;
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     increment_counter!("vm.bf_noop.calls");
@@ -202,6 +204,37 @@ async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
 }
 bf_declare!(connected_seconds, bf_connected_seconds);
 
+
+/*
+Syntax:  connection_name (obj <player>)   => str
+
+Returns a network-specific string identifying the connection being used by the given player.  If the programmer is not a wizard and not
+<player>, then `E_PERM' is raised.  If <player> is not currently connected, then `E_INVARG' is raised.
+
+ */
+async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 1 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let Variant::Obj(player) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    let caller =  bf_args.vm.non_bf_top().map(|a| a.this).unwrap_or(NOTHING);
+    if !bf_args.perms().task_perms().check_is_wizard()? && caller != *player {
+        return Ok(Error(E_PERM));
+    }
+
+    let sessions = bf_args.sessions.read().await;
+    let Ok(connection_name) = sessions.connection_name(*player).await else {
+        return Ok(Error(E_INVARG));
+    };
+
+    Ok(Ret(v_string(connection_name)))
+}
+bf_declare!(connection_name, bf_connection_name);
+
 async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() > 1 {
         return Ok(Error(E_INVARG));
@@ -235,6 +268,24 @@ async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
 }
 bf_declare!(time, bf_time);
 
+async fn bf_ctime<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() > 1 {
+        return Ok(Error(E_INVARG));
+    }
+    let time = if bf_args.args.is_empty() {
+        SystemTime::now()
+    } else {
+        let Variant::Int(time) = bf_args.args[0].variant() else {
+            return Ok(Error(E_TYPE));
+        };
+        SystemTime::UNIX_EPOCH + Duration::from_secs(*time as u64)
+    };
+
+    let date_time : DateTime<Local> = chrono::DateTime::from(time);
+
+    Ok(Ret(v_string(date_time.to_rfc2822())))
+}
+bf_declare!(ctime, bf_ctime);
 async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
     //
@@ -533,9 +584,9 @@ async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
     }
 
     if is_error {
-        error!("SERVER_LOG {}: {}", bf_args.vm.caller(), message);
+        error!("SERVER_LOG {}: {}", bf_args.vm.top().player, message);
     } else {
-        info!("SERVER_LOG {}: {}", bf_args.vm.caller(), message);
+        info!("SERVER_LOG {}: {}", bf_args.vm.top().player, message);
     }
 
     Ok(Ret(v_none()))
@@ -596,6 +647,22 @@ async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
 }
 bf_declare!(function_info, bf_function_info);
 
+async fn bf_listeners<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if !bf_args.args.is_empty() {
+        return Ok(Error(E_INVARG));
+    }
+
+    // TODO this function is hardcoded to just return {{#0, 7777, 1}}
+    // this is on account that existing cores expect this to be the case
+    // but we have no intend of supporting other network listener magic at this point
+    let listeners = v_list(vec![
+        v_list(vec![v_int(0), v_int(7777), v_int(1)]),
+    ]);
+
+    Ok(Ret(listeners))
+}
+bf_declare!(listeners, bf_listeners);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -609,7 +676,9 @@ impl VM {
         self.builtins[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
         self.builtins[offset_for_builtin("connected_seconds")] =
             Arc::new(Box::new(BfConnectedSeconds {}));
+        self.builtins[offset_for_builtin("connection_name")] = Arc::new(Box::new(BfConnectionName {}));
         self.builtins[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
+        self.builtins[offset_for_builtin("ctime")] = Arc::new(Box::new(BfCtime {}));
         self.builtins[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));
         self.builtins[offset_for_builtin("server_version")] =
             Arc::new(Box::new(BfServerVersion {}));
@@ -624,6 +693,7 @@ impl VM {
         self.builtins[offset_for_builtin("call_function")] = Arc::new(Box::new(BfCallFunction {}));
         self.builtins[offset_for_builtin("server_log")] = Arc::new(Box::new(BfServerLog {}));
         self.builtins[offset_for_builtin("function_info")] = Arc::new(Box::new(BfFunctionInfo {}));
+        self.builtins[offset_for_builtin("listeners")] = Arc::new(Box::new(BfListeners {}));
 
         Ok(())
     }

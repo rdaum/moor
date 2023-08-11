@@ -19,6 +19,8 @@ pub trait Sessions: Send + Sync {
     /// Process a (wizard) request for system shutdown, with an optional shutdown message.
     async fn shutdown(&mut self, msg: Option<String>) -> Result<(), anyhow::Error>;
 
+    async fn connection_name(&self, player: Objid) -> Result<String, anyhow::Error>;
+
     /// Disconnect the given player's connection.
     async fn disconnect(&mut self, player: Objid) -> Result<(), anyhow::Error>;
 

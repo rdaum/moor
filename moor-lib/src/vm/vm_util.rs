@@ -135,8 +135,16 @@ impl VM {
     }
 
     pub(crate) fn caller(&self) -> Objid {
-        return self.non_bf_top().map(|a| a.this).unwrap_or(NOTHING);
+        let stack_iter = self.stack.iter().rev();
+        for activation in stack_iter {
+            if activation.bf_index.is_some() {
+                continue;
+            }
+            return activation.this;
+        }
+        NOTHING
     }
+
     pub(crate) fn parent_activation_mut(&mut self) -> &mut Activation {
         let len = self.stack.len();
         self.stack

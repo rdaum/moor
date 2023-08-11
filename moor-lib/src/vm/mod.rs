@@ -58,6 +58,8 @@ pub struct ForkRequest {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit
     pub(crate) player: Objid,
+    /// The permissions context for the forked task.
+    pub(crate) perms: PermissionsContext,
     /// The task ID of the task that forked us
     pub(crate) parent_task_id: usize,
     /// The time to delay before starting the forked task, if any.

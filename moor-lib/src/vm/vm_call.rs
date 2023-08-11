@@ -35,6 +35,8 @@ impl VM {
             this,
             player: self.top().player,
             args: args.to_vec(),
+            // caller her is current-activation 'this', not activation caller() ...
+            // unless we're a builtin, in which case we're #-1.
             caller: self.caller(),
         };
         trace!(this = ?this, verb = verb_name, args = ?args, caller = ?call.caller, "Preparing verb call");

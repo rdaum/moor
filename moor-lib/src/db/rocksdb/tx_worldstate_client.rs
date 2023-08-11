@@ -457,7 +457,7 @@ impl WorldState for RocksDbTransaction {
         // Then ask the db to remove the value.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::DeleteProperty(
+            .send(Message::ClearProperty(
                 ph.location,
                 Uuid::from_bytes(ph.uuid),
                 send,
