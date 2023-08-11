@@ -25,20 +25,20 @@ client connectivity with websockets and such.
 
    * Successfully compiles and executes the full LambdaMOO 1.8.x language
    * Successfully imports a JaysHouseCore textdump.
-   * Accepts inbound websocket connections (in lieux of telnet), attaches them to a session, and executes commands.
-   * Some simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected.
-   * About half of builtins are supported.
+   * Accepts inbound websocket connections (in lieux of telnet), accepts Basic-Auth login, attaches them to a user, 
+     and executes commands.
+   * Most simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected.
    * Permissions/security support (though mostly untested.)
    * `fork`ed & `suspend`ed tasks, tick counts, time limits, etc.
 
 ### Missing/ Next steps
 
-   * Auth/connect phase for the websocket server (currently just accepts any unauthed connection to any player object)
-   * More builtins. See [bf_functions_status.md](bf_functions_status.md) for chart of current status.
    * Decompilation support (along with line numbers in tracebacks); this is about half done.
    * Dump to textdump format. (Requires above)
    * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog slow 
      without it
+   * More builtins. See [bf_functions_status.md](bf_functions_status.md) for chart of current status.
+   * Bugs bugs bugs.
 
 ## LambdaMOO is 30+ years old, why remain compatible?
 
