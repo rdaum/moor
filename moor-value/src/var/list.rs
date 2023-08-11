@@ -82,8 +82,24 @@ impl List {
         self.inner.is_empty()
     }
 
+    // "in" operator is case insensitive...
     pub fn contains(&self, v: &Var) -> bool {
         self.inner.contains(v)
+    }
+
+    // but bf_is_member is not... sigh.
+    pub fn contains_case_sensitive(&self, v: &Var) -> bool {
+        if let Variant::Str(s) = v.variant() {
+            for item in self.inner.iter() {
+                if let Variant::Str(s2) = item.variant() {
+                    if s.as_str() == s2.as_str() {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        return self.inner.contains(v);
     }
 
     pub fn get(&self, index: usize) -> Option<&Var> {

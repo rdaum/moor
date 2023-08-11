@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::str::FromStr;
 use std::sync::Arc;
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Encode, Decode, Ord, PartialOrd, Hash)]
 pub struct Str {
     inner: Arc<String>,
 }
@@ -68,6 +68,15 @@ impl Str {
         }
     }
 }
+
+// MOO's string comparisons are all case-insensitive. To get case-sensitive you have to use
+// bf_is_member and bf_strcmp.
+impl PartialEq for Str {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.eq_ignore_ascii_case(other.inner.as_str())
+    }
+}
+impl Eq for Str {}
 
 impl FromStr for Str {
     type Err = anyhow::Error;

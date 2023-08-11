@@ -20,7 +20,7 @@ async fn bf_is_member<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
     let Variant::List(list) = list.variant() else {
         return Ok(Error(E_TYPE));
     };
-    if list.contains(value) {
+    if list.contains_case_sensitive(value) {
         Ok(Ret(v_int(1)))
     } else {
         Ok(Ret(v_int(0)))
