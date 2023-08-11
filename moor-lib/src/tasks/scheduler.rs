@@ -47,11 +47,6 @@ pub struct Scheduler {
     inner: Arc<RwLock<Inner>>,
 }
 
-// Scheduler is a just a handle which points to an inner send/sync thing. It can be passed around at
-// will between threads.
-unsafe impl Send for Scheduler {}
-unsafe impl Sync for Scheduler {}
-
 pub struct Inner {
     running: bool,
     state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
@@ -210,7 +205,10 @@ impl Scheduler {
         }
     }
 
-    pub async fn subscribe_to_task(&self, task_id: TaskId) -> Result<oneshot::Receiver<TaskWaiterResult>, anyhow::Error> {
+    pub async fn subscribe_to_task(
+        &self,
+        task_id: TaskId,
+    ) -> Result<oneshot::Receiver<TaskWaiterResult>, anyhow::Error> {
         let (sender, receiver) = oneshot::channel();
         let mut inner = self.inner.write().await;
         if let Some(task) = inner.tasks.get_mut(&task_id) {
@@ -220,7 +218,7 @@ impl Scheduler {
     }
 
     /// Execute the scheduler loop, run from the server process.
-    pub async fn run(&mut self) {
+    pub async fn run(&self) {
         {
             let mut start_lock = self.inner.write().await;
             start_lock.running = true;
@@ -256,7 +254,7 @@ impl Scheduler {
     /// Submit a command to the scheduler for execution.
     #[instrument(skip(self, sessions))]
     pub async fn submit_command_task(
-        &mut self,
+        &self,
         player: Objid,
         command: &str,
         sessions: Arc<RwLock<dyn Sessions>>,
@@ -307,7 +305,15 @@ impl Scheduler {
         };
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone(), perms, false)
+            .new_task(
+                player,
+                state_source,
+                sessions,
+                None,
+                self.clone(),
+                perms,
+                false,
+            )
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -335,7 +341,7 @@ impl Scheduler {
     /// Submit a verb task to the scheduler for execution.
     #[instrument(skip(self, sessions))]
     pub async fn submit_verb_task(
-        &mut self,
+        &self,
         player: Objid,
         vloc: Objid,
         verb: String,
@@ -349,7 +355,15 @@ impl Scheduler {
 
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone(), perms, false)
+            .new_task(
+                player,
+                state_source,
+                sessions,
+                None,
+                self.clone(),
+                perms,
+                false,
+            )
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -372,7 +386,7 @@ impl Scheduler {
     /// Submit an eval task to the scheduler for execution.
     #[instrument(skip(self, sessions))]
     pub async fn submit_eval_task(
-        &mut self,
+        &self,
         player: Objid,
         perms: PermissionsContext,
         code: String,
@@ -387,7 +401,15 @@ impl Scheduler {
 
         let state_source = inner.state_source.clone();
         let task_id = inner
-            .new_task(player, state_source, sessions, None, self.clone(), perms, false)
+            .new_task(
+                player,
+                state_source,
+                sessions,
+                None,
+                self.clone(),
+                perms,
+                false,
+            )
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
@@ -405,7 +427,7 @@ impl Scheduler {
         Ok(task_id)
     }
 
-    pub async fn abort_player_tasks(&mut self, player: Objid) -> Result<(), anyhow::Error> {
+    pub async fn abort_player_tasks(&self, player: Objid) -> Result<(), anyhow::Error> {
         let mut inner = self.inner.write().await;
         let mut to_abort = Vec::new();
         for (task_id, task_ref) in inner.tasks.iter() {
@@ -426,7 +448,7 @@ impl Scheduler {
     }
 
     /// Stop the scheduler run loop.
-    pub async fn stop(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn stop(&self) -> Result<(), anyhow::Error> {
         let mut scheduler = self.inner.write().await;
         // Send shut down to all the tasks.
         for task in scheduler.tasks.values() {
@@ -646,17 +668,10 @@ impl Inner {
             let task = self.tasks.get_mut(&task_id).unwrap();
             task.suspended = false;
 
-            let world_state = self
-                .state_source
-                .write()
-                .await
-                .new_world_state()
-                .await?;
+            let world_state = self.state_source.write().await.new_world_state().await?;
 
-            task.task_control_sender.send(TaskControlMsg::Resume(
-                world_state,
-                v_int(0),
-            ))?;
+            task.task_control_sender
+                .send(TaskControlMsg::Resume(world_state, v_int(0)))?;
         }
 
         // Service fork requests
@@ -808,20 +823,12 @@ impl Inner {
             }
 
             // Follow the usual task resume logic.
-            let world_state = self
-                .state_source
-                .write()
-                .await
-                .new_world_state()
-                .await?;
+            let world_state = self.state_source.write().await.new_world_state().await?;
 
             queued_task.suspended = false;
             queued_task
                 .task_control_sender
-                .send(TaskControlMsg::Resume(
-                    world_state,
-                    return_value,
-                ))?;
+                .send(TaskControlMsg::Resume(world_state, return_value))?;
             result_sender
                 .send(v_none())
                 .expect("Could not send resume result");

@@ -73,7 +73,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | valid           | &check;  |                                                     |
 | parent          | &check;  |                                                     |
 | children        | &check;  |                                                     |
-| chparent        |          |                                                     |
+| chparent        | &check;  |                                                     |
 | max_object      |          |                                                     |
 | players         |          |                                                     |
 | is_player       | &check;  |                                                     |

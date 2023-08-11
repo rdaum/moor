@@ -204,7 +204,6 @@ async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
 }
 bf_declare!(connected_seconds, bf_connected_seconds);
 
-
 /*
 Syntax:  connection_name (obj <player>)   => str
 
@@ -221,7 +220,7 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         return Ok(Error(E_TYPE));
     };
 
-    let caller =  bf_args.vm.non_bf_top().map(|a| a.this).unwrap_or(NOTHING);
+    let caller = bf_args.vm.non_bf_top().map(|a| a.this).unwrap_or(NOTHING);
     if !bf_args.perms().task_perms().check_is_wizard()? && caller != *player {
         return Ok(Error(E_PERM));
     }
@@ -281,7 +280,7 @@ async fn bf_ctime<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         SystemTime::UNIX_EPOCH + Duration::from_secs(*time as u64)
     };
 
-    let date_time : DateTime<Local> = chrono::DateTime::from(time);
+    let date_time: DateTime<Local> = chrono::DateTime::from(time);
 
     Ok(Ret(v_string(date_time.to_rfc2822())))
 }
@@ -655,9 +654,7 @@ async fn bf_listeners<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
     // TODO this function is hardcoded to just return {{#0, 7777, 1}}
     // this is on account that existing cores expect this to be the case
     // but we have no intend of supporting other network listener magic at this point
-    let listeners = v_list(vec![
-        v_list(vec![v_int(0), v_int(7777), v_int(1)]),
-    ]);
+    let listeners = v_list(vec![v_list(vec![v_int(0), v_int(7777), v_int(1)])]);
 
     Ok(Ret(listeners))
 }
@@ -676,7 +673,8 @@ impl VM {
         self.builtins[offset_for_builtin("idle_seconds")] = Arc::new(Box::new(BfIdleSeconds {}));
         self.builtins[offset_for_builtin("connected_seconds")] =
             Arc::new(Box::new(BfConnectedSeconds {}));
-        self.builtins[offset_for_builtin("connection_name")] = Arc::new(Box::new(BfConnectionName {}));
+        self.builtins[offset_for_builtin("connection_name")] =
+            Arc::new(Box::new(BfConnectionName {}));
         self.builtins[offset_for_builtin("time")] = Arc::new(Box::new(BfTime {}));
         self.builtins[offset_for_builtin("ctime")] = Arc::new(Box::new(BfCtime {}));
         self.builtins[offset_for_builtin("raise")] = Arc::new(Box::new(BfRaise {}));

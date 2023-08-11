@@ -143,7 +143,9 @@ async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
-        (Variant::Str(str1), Variant::Str(str2)) => Ok(Ret(v_int(str1.as_str().cmp(str2.as_str()) as i64))),
+        (Variant::Str(str1), Variant::Str(str2)) => {
+            Ok(Ret(v_int(str1.as_str().cmp(str2.as_str()) as i64)))
+        }
         _ => Ok(Error(E_TYPE)),
     }
 }

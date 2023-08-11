@@ -162,7 +162,7 @@ mod tests {
     fn mock_perms() -> PermissionsContext {
         PermissionsContext::root_for(Objid(0), BitEnum::all())
     }
-    
+
     #[tokio::test]
     async fn test_simple_vm_execute() {
         let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
@@ -334,11 +334,10 @@ mod tests {
     #[tokio::test]
     async fn test_list_range_length() {
         let program = "return {{1,2,3}[2..$], {1}[$]};";
-        let mut state =
-            MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
-                .new_world_state()
-                .await
-                .unwrap();
+        let mut state = MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
+            .new_world_state()
+            .await
+            .unwrap();
         let mut vm = VM::new();
         call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
@@ -351,11 +350,10 @@ mod tests {
     #[tokio::test]
     async fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
-        let mut state =
-            MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
-                .new_world_state()
-                .await
-                .unwrap();
+        let mut state = MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
+            .new_world_state()
+            .await
+            .unwrap();
         let mut vm = VM::new();
         call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;

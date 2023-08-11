@@ -59,9 +59,7 @@ impl RocksDbServer {
 #[async_trait]
 impl WorldStateSource for RocksDbServer {
     #[tracing::instrument(skip(self))]
-    async fn new_world_state(
-        &mut self,
-    ) -> Result<Box<dyn WorldState>, anyhow::Error> {
+    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, anyhow::Error> {
         // Return a transaction wrapped by the higher level RocksDbWorldState.
         let tx = self.start_transaction()?;
         Ok(Box::new(tx))

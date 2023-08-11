@@ -34,7 +34,7 @@ struct Args {
 
 async fn do_eval(
     player: Objid,
-    mut scheduler: Scheduler,
+    scheduler: Scheduler,
     program: String,
     sessions: Arc<RwLock<ReplSession>>,
 ) -> Result<(), anyhow::Error> {
@@ -140,7 +140,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }));
 
     loop {
-        let mut loop_scheduler = scheduler.clone();
+        let loop_scheduler = scheduler.clone();
         let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
         tokio::select! {

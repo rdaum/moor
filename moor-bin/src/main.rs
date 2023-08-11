@@ -7,7 +7,7 @@ use std::sync::Arc;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::future::ready;
 
-use axum::{routing::get, Extension, Router};
+use axum::{routing::get, Router};
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
@@ -117,23 +117,20 @@ async fn main() -> Result<(), anyhow::Error> {
     let (shutdown_sender, mut shutdown_receiver) = tokio::sync::mpsc::channel(1);
 
     let server_scheduler = scheduler.clone();
-    let ws_server = Arc::new(RwLock::new(WebSocketServer::new(
-        server_scheduler,
-        shutdown_sender,
-    )));
+    let ws_server = WebSocketServer::new(server_scheduler, shutdown_sender);
     let mut hup_signal =
         signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
     let mut stop_signal =
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
-    let mut loop_scheduler = scheduler.clone();
+    let loop_scheduler = scheduler.clone();
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
     let recorder_handle = setup_metrics_recorder();
 
     let web_router = Router::new()
         .route("/ws/connect/players/:player", get(ws_connect_handler))
-        .layer(Extension(ws_server))
+        .with_state(ws_server)
         .layer(
             TraceLayer::new_for_http().make_span_with(
                 trace::DefaultMakeSpan::new()

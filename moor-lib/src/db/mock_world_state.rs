@@ -439,9 +439,7 @@ impl MockWorldStateSource {
 
 #[async_trait]
 impl WorldStateSource for MockWorldStateSource {
-    async fn new_world_state(
-        &mut self,
-    ) -> Result<Box<dyn WorldState>, Error> {
+    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, Error> {
         Ok(Box::new(MockState(self.0.clone())))
     }
 }
