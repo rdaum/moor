@@ -27,18 +27,22 @@ client connectivity with websockets and such.
    * Successfully imports a JaysHouseCore textdump.
    * Accepts inbound websocket connections (in lieux of telnet), accepts Basic-Auth login, attaches them to a user, 
      and executes commands.
-   * Most simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected.
+     ![Screenshot of simple session](./doc/screenshot-session.png)
+   * Most simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected. (But also a bunch of simple things ... don't.)
    * Permissions/security support (though mostly untested.)
    * `fork`ed & `suspend`ed tasks, tick counts, time limits, etc.
+   * And what's software without dashboards?
+
+![Screenshot of grafana dashboard](./doc/screenshot-grafana.png)
 
 ### Missing/ Next steps
 
+   * Bugs bugs bugs.
    * Decompilation support (along with line numbers in tracebacks); this is about half done.
    * Dump to textdump format. (Requires above)
    * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog slow 
      without it
-   * More builtins. See [bf_functions_status.md](bf_functions_status.md) for chart of current status.
-   * Bugs bugs bugs.
+   * More builtins. See [bf_functions_status.md](./doc/bf_functions_status.md) for chart of current status.
 
 ## LambdaMOO is 30+ years old, why remain compatible?
 
