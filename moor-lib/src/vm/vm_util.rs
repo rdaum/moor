@@ -66,7 +66,7 @@ impl VM {
 
         match update_result {
             Ok(()) => {
-                self.push(&v_none());
+                self.push(&value);
             }
             Err(e) => {
                 return self.push_error(e.to_error_code()?);
