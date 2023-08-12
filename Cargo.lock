@@ -1442,6 +1442,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bincode",
+ "bytes",
  "decorum",
  "enum-primitive-derive",
  "int-enum",

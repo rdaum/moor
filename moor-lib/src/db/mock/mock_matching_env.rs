@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
-use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::objid::{ObjSet, Objid, NOTHING};
 
 use crate::db::matching::MatchEnvironment;
 
@@ -44,7 +44,7 @@ impl MatchEnvironment for MockMatchEnvironment {
             .map_or_else(Vec::new, |o| o.names.clone()))
     }
 
-    async fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, anyhow::Error> {
+    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, anyhow::Error> {
         let mut result = Vec::new();
         if let Some(player_obj) = self.objects.get(&player) {
             result.push(MOCK_PLAYER);
@@ -55,7 +55,7 @@ impl MatchEnvironment for MockMatchEnvironment {
                 result.extend(location_obj.contents.iter().cloned());
             }
         }
-        Ok(result)
+        Ok(ObjSet::from(result))
     }
 
     async fn location_of(&mut self, oid: Objid) -> Result<Objid, anyhow::Error> {
@@ -70,14 +70,14 @@ fn create_mock_object(
     env: &mut MockMatchEnvironment,
     oid: Objid,
     location: Objid,
-    contents: Vec<Objid>,
+    contents: ObjSet,
     names: Vec<String>,
 ) {
     env.objects.insert(
         oid,
         MockObject {
             location,
-            contents: contents.into_iter().collect(),
+            contents: contents.iter().cloned().collect(),
             names,
         },
     );
@@ -90,42 +90,42 @@ pub fn setup_mock_environment() -> MockMatchEnvironment {
         &mut env,
         MOCK_PLAYER,
         MOCK_ROOM1,
-        vec![],
+        ObjSet::new(),
         vec!["porcupine".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_ROOM1,
         NOTHING,
-        vec![MOCK_THING1, MOCK_THING2],
+        ObjSet::from(vec![MOCK_THING1, MOCK_THING2]),
         vec!["room1".to_string(), "r1".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_ROOM2,
         NOTHING,
-        vec![MOCK_THING3],
+        ObjSet::from(vec![MOCK_THING3]),
         vec!["room2".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_THING1,
         MOCK_ROOM1,
-        vec![],
+        ObjSet::new(),
         vec!["thing1".to_string(), "t1".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_THING2,
         MOCK_ROOM1,
-        vec![],
+        ObjSet::new(),
         vec!["thing2".to_string(), "t2".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_THING3,
         MOCK_ROOM2,
-        vec![],
+        ObjSet::new(),
         vec!["thing3".to_string(), "t3".to_string()],
     );
 

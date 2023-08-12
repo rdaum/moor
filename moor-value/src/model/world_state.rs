@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 
 use crate::util::bitenum::BitEnum;
-use crate::var::objid::Objid;
+use crate::var::objid::{ObjSet, Objid};
 use crate::var::Var;
 
 use crate::model::objects::ObjFlag;
@@ -73,7 +73,7 @@ pub trait WorldState: Send + Sync {
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
-    ) -> Result<Vec<Objid>, WorldStateError>;
+    ) -> Result<ObjSet, WorldStateError>;
 
     /// Get the names of all the verbs on the given object.
     async fn verbs(
@@ -252,7 +252,7 @@ pub trait WorldState: Send + Sync {
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
-    ) -> Result<Vec<Objid>, WorldStateError>;
+    ) -> Result<ObjSet, WorldStateError>;
 
     /// Check the validity of an object.
     async fn valid(&mut self, obj: Objid) -> Result<bool, WorldStateError>;

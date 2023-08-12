@@ -11,14 +11,14 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 use crate::compiler::codegen::compile;
-use crate::db::rocksdb::server::RocksDbServer;
-use crate::db::rocksdb::LoaderInterface;
+use crate::db::rocksdb::db_server::RocksDbServer;
+use crate::db::LoaderInterface;
 use crate::textdump::{Object, TextdumpReader};
-use crate::BINCODE_CONFIG;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_value::model::verbs::VerbFlag;
+use moor_value::BINCODE_CONFIG;
 
 struct RProp {
     definer: Objid,

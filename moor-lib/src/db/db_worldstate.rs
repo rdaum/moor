@@ -4,13 +4,12 @@ use tracing::debug;
 use uuid::Uuid;
 
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::objid::{ObjSet, Objid, NOTHING};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, v_list, v_objid, Var};
 
-use crate::db::rocksdb::tx_message::Message;
-use crate::db::rocksdb::tx_server::{PropDef, VerbHandle};
-use crate::db::rocksdb::RocksDbTransaction;
+use crate::db::db_message::DbMessage;
+use crate::db::{DbTxWorldState, PropDef, VerbDef};
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::props::{PropAttrs, PropFlag};
@@ -38,7 +37,7 @@ use moor_value::model::WorldStateError;
 //    * if a tx commit fails, the (local) changes are discarded, and, again, the lock released
 //    * likely something that should get run through Jepsen
 
-fn verbhandle_to_verbinfo(vh: &VerbHandle, program: Option<Vec<u8>>) -> VerbInfo {
+fn verbhandle_to_verbinfo(vh: &VerbDef, program: Option<Vec<u8>>) -> VerbInfo {
     VerbInfo {
         names: vh.names.clone(),
         attrs: VerbAttrs {
@@ -63,12 +62,12 @@ fn prophandle_to_propattrs(ph: &PropDef, value: Option<Var>) -> PropAttrs {
 }
 
 #[async_trait]
-impl WorldState for RocksDbTransaction {
+impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn owner_of(&mut self, obj: Objid) -> Result<Objid, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetObjectOwner(obj, send))
+            .send(DbMessage::GetObjectOwner(obj, send))
             .expect("Error sending message");
         let oid = receive.await.expect("Error receiving message")?;
         Ok(oid)
@@ -78,7 +77,7 @@ impl WorldState for RocksDbTransaction {
     async fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetObjectFlagsOf(obj, send))
+            .send(DbMessage::GetObjectFlagsOf(obj, send))
             .expect("Error sending message");
         let flags = receive.await.expect("Error receiving message")?;
         Ok(flags)
@@ -97,7 +96,7 @@ impl WorldState for RocksDbTransaction {
             .check_object_allows(owner, flags, ObjFlag::Write)?;
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetObjectFlagsOf(obj, new_flags, send))
+            .send(DbMessage::SetObjectFlagsOf(obj, new_flags, send))
             .expect("Error sending message");
         receive.await.expect("Error receiving message")?;
         Ok(())
@@ -116,7 +115,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetLocationOf(obj, send))
+            .send(DbMessage::GetLocationOf(obj, send))
             .expect("Error sending message");
         let oid = receive.await.expect("Error receiving message")?;
         Ok(oid)
@@ -157,7 +156,7 @@ impl WorldState for RocksDbTransaction {
         };
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::CreateObject {
+            .send(DbMessage::CreateObject {
                 id: None,
                 attrs,
                 reply: send,
@@ -180,7 +179,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetLocationOf(obj, new_loc, send))
+            .send(DbMessage::SetLocationOf(obj, new_loc, send))
             .expect("Error sending message");
         receive.await.expect("Error receiving message")?;
         Ok(())
@@ -191,7 +190,7 @@ impl WorldState for RocksDbTransaction {
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
-    ) -> Result<Vec<Objid>, WorldStateError> {
+    ) -> Result<ObjSet, WorldStateError> {
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
         perms
             .task_perms()
@@ -199,7 +198,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetContentsOf(obj, send))
+            .send(DbMessage::GetContentsOf(obj, send))
             .expect("Error sending message");
         let contents = receive.await.expect("Error receiving message")?;
         Ok(contents)
@@ -218,7 +217,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbs(obj, send))
+            .send(DbMessage::GetVerbs(obj, send))
             .expect("Error sending message");
         let verbs = receive.await.expect("Error receiving message")?;
         Ok(verbs
@@ -243,7 +242,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetProperties(obj, send))
+            .send(DbMessage::GetProperties(obj, send))
             .expect("Error sending message");
         let properties = receive.await.expect("Error receiving message")?;
         Ok(properties
@@ -306,7 +305,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::ResolveProperty(obj, pname.into(), send))
+            .send(DbMessage::ResolveProperty(obj, pname.into(), send))
             .expect("Error sending message");
         let (ph, value) = receive.await.expect("Error receiving message")?;
 
@@ -325,7 +324,7 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<PropAttrs, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetProperties(obj, send))
+            .send(DbMessage::GetProperties(obj, send))
             .expect("Error sending message");
         let properties = receive.await.expect("Error receiving message")?;
         let ph = properties
@@ -344,14 +343,13 @@ impl WorldState for RocksDbTransaction {
     async fn set_property_info(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         pname: &str,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetProperties(obj, send))
+            .send(DbMessage::GetProperties(obj, send))
             .expect("Error sending message");
         let properties = receive.await.expect("Error receiving message")?;
         let ph = properties
@@ -370,7 +368,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetPropertyInfo {
+            .send(DbMessage::SetPropertyInfo {
                 obj,
                 uuid: Uuid::from_bytes(ph.uuid),
                 new_owner: attrs.owner,
@@ -408,7 +406,7 @@ impl WorldState for RocksDbTransaction {
                 };
                 let (send, receive) = tokio::sync::oneshot::channel();
                 self.mailbox
-                    .send(Message::SetObjectNameOf(
+                    .send(DbMessage::SetObjectNameOf(
                         obj,
                         name.as_str().to_string(),
                         send,
@@ -424,7 +422,7 @@ impl WorldState for RocksDbTransaction {
                 };
                 let (send, receive) = tokio::sync::oneshot::channel();
                 self.mailbox
-                    .send(Message::SetObjectOwner(obj, *owner, send))
+                    .send(DbMessage::SetObjectOwner(obj, *owner, send))
                     .expect("Error sending message");
                 receive.await.expect("Error receiving message")?;
                 return Ok(());
@@ -445,7 +443,7 @@ impl WorldState for RocksDbTransaction {
 
             let (send, receive) = tokio::sync::oneshot::channel();
             self.mailbox
-                .send(Message::SetObjectFlagsOf(obj, flags, send))
+                .send(DbMessage::SetObjectFlagsOf(obj, flags, send))
                 .expect("Error sending message");
             receive.await.expect("Error receiving message")?;
             return Ok(());
@@ -453,7 +451,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetProperties(obj, send))
+            .send(DbMessage::GetProperties(obj, send))
             .expect("Error sending message");
         let properties = receive.await.expect("Error receiving message")?;
         let ph = properties
@@ -467,7 +465,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetProperty(
+            .send(DbMessage::SetProperty(
                 ph.location,
                 Uuid::from_bytes(ph.uuid),
                 value.clone(),
@@ -486,7 +484,7 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<bool, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetProperties(obj, send))
+            .send(DbMessage::GetProperties(obj, send))
             .expect("Error sending message");
         let properties = receive.await.expect("Error receiving message")?;
         let ph = properties
@@ -497,7 +495,7 @@ impl WorldState for RocksDbTransaction {
         // Now RetrieveProperty and if it's not there, it's clear.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::RetrieveProperty(
+            .send(DbMessage::RetrieveProperty(
                 ph.location,
                 Uuid::from_bytes(ph.uuid),
                 send,
@@ -523,7 +521,7 @@ impl WorldState for RocksDbTransaction {
         // First seek the property handle.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetProperties(obj, send))
+            .send(DbMessage::GetProperties(obj, send))
             .expect("Error sending message");
         let properties = receive.await.expect("Error receiving message")?;
         let ph = properties
@@ -533,7 +531,7 @@ impl WorldState for RocksDbTransaction {
         // Then ask the db to remove the value.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::ClearProperty(
+            .send(DbMessage::ClearProperty(
                 ph.location,
                 Uuid::from_bytes(ph.uuid),
                 send,
@@ -567,7 +565,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::DefineProperty {
+            .send(DbMessage::DefineProperty {
                 definer,
                 location,
                 name: pname.into(),
@@ -600,7 +598,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::AddVerb {
+            .send(DbMessage::AddVerb {
                 location: obj,
                 owner,
                 names,
@@ -630,7 +628,7 @@ impl WorldState for RocksDbTransaction {
         // Find the verb uuid & permissions.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .send(DbMessage::GetVerbByName(obj, vname.to_string(), send))
             .expect("Error sending message");
         let vh = receive.await.expect("Error receiving message")?;
 
@@ -640,7 +638,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::DeleteVerb {
+            .send(DbMessage::DeleteVerb {
                 location: obj,
                 uuid: Uuid::from_bytes(vh.uuid),
                 reply: send,
@@ -663,7 +661,7 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<(), WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .send(DbMessage::GetVerbByName(obj, vname.to_string(), send))
             .expect("Error sending message");
         let vh = receive.await.expect("Error receiving message")?;
 
@@ -672,7 +670,7 @@ impl WorldState for RocksDbTransaction {
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetVerbInfo {
+            .send(DbMessage::SetVerbInfo {
                 obj,
                 uuid: Uuid::from_bytes(vh.uuid),
                 owner,
@@ -698,7 +696,7 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<(), WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbs(obj, send))
+            .send(DbMessage::GetVerbs(obj, send))
             .expect("Error sending message");
         let verbs = receive.await.expect("Error receiving message")?;
         if vidx >= verbs.len() {
@@ -710,7 +708,7 @@ impl WorldState for RocksDbTransaction {
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetVerbInfo {
+            .send(DbMessage::SetVerbInfo {
                 obj,
                 uuid: Uuid::from_bytes(vh.uuid),
                 owner,
@@ -733,7 +731,7 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<VerbInfo, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbByName(obj, vname.to_string(), send))
+            .send(DbMessage::GetVerbByName(obj, vname.to_string(), send))
             .expect("Error sending message");
         let vh = receive.await.expect("Error receiving message")?;
 
@@ -743,7 +741,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbBinary(
+            .send(DbMessage::GetVerbBinary(
                 vh.location,
                 Uuid::from_bytes(vh.uuid),
                 send,
@@ -761,7 +759,7 @@ impl WorldState for RocksDbTransaction {
     ) -> Result<VerbInfo, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbByIndex(obj, vidx, send))
+            .send(DbMessage::GetVerbByIndex(obj, vidx, send))
             .expect("Error sending message");
         let vh = receive.await.expect("Error receiving message")?;
 
@@ -771,7 +769,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbBinary(
+            .send(DbMessage::GetVerbBinary(
                 vh.location,
                 Uuid::from_bytes(vh.uuid),
                 send,
@@ -792,7 +790,7 @@ impl WorldState for RocksDbTransaction {
         // verbthat purely determenis permsisions.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::ResolveVerb(obj, vname.to_string(), None, send))
+            .send(DbMessage::ResolveVerb(obj, vname.to_string(), None, send))
             .expect("Error sending message");
         let vh = receive.await.expect("Error receiving message")?;
 
@@ -802,7 +800,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbBinary(
+            .send(DbMessage::GetVerbBinary(
                 vh.location,
                 Uuid::from_bytes(vh.uuid),
                 send,
@@ -847,7 +845,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::ResolveVerb(
+            .send(DbMessage::ResolveVerb(
                 obj,
                 command_verb.to_string(),
                 Some(argspec),
@@ -872,7 +870,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetVerbBinary(
+            .send(DbMessage::GetVerbBinary(
                 vh.location,
                 Uuid::from_bytes(vh.uuid),
                 send,
@@ -891,7 +889,7 @@ impl WorldState for RocksDbTransaction {
         // TODO: MOO does not check permissions on this. Should it?
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetParentOf(obj, send))
+            .send(DbMessage::GetParentOf(obj, send))
             .expect("Error sending message");
         let oid = receive.await.expect("Error receiving message")?;
         Ok(oid)
@@ -927,7 +925,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetParent(obj, new_parent, send))
+            .send(DbMessage::SetParent(obj, new_parent, send))
             .expect("Error sending message");
         receive.await.expect("Error receiving message")?;
         Ok(())
@@ -938,7 +936,7 @@ impl WorldState for RocksDbTransaction {
         &mut self,
         perms: PermissionsContext,
         obj: Objid,
-    ) -> Result<Vec<Objid>, WorldStateError> {
+    ) -> Result<ObjSet, WorldStateError> {
         let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
         perms
             .task_perms()
@@ -946,7 +944,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetChildrenOf(obj, send))
+            .send(DbMessage::GetChildrenOf(obj, send))
             .expect("Error sending message");
         let children = receive.await.expect("Error receiving message")?;
         debug!("Children: {:?} {:?}", obj, children);
@@ -957,7 +955,7 @@ impl WorldState for RocksDbTransaction {
     async fn valid(&mut self, obj: Objid) -> Result<bool, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::Valid(obj, send))
+            .send(DbMessage::Valid(obj, send))
             .expect("Error sending message");
         let valid = receive.await.expect("Error receiving message");
         Ok(valid)
@@ -974,7 +972,7 @@ impl WorldState for RocksDbTransaction {
 
         // First get name
         self.mailbox
-            .send(Message::GetObjectNameOf(obj, send))
+            .send(DbMessage::GetObjectNameOf(obj, send))
             .expect("Error sending message");
         let name = receive.await.expect("Error receiving message")?;
 
@@ -997,7 +995,7 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     async fn commit(&mut self) -> Result<CommitResult, Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::Commit(send))?;
+        self.mailbox.send(DbMessage::Commit(send))?;
         let cr = receive.await?;
         // self.join_handle
         //     .join()
@@ -1008,7 +1006,7 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     async fn rollback(&mut self) -> Result<(), Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::Rollback(send))?;
+        self.mailbox.send(DbMessage::Rollback(send))?;
         receive.await?;
         // self.join_handle
         //     .join()

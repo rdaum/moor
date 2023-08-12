@@ -22,12 +22,12 @@ use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-use crate::BINCODE_CONFIG;
 use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag, VerbInfo};
 use moor_value::model::world_state::WorldState;
 use moor_value::model::CommitResult;
+use moor_value::BINCODE_CONFIG;
 
 /// Messages sent to tasks from the scheduler to tell the task to do things.
 pub(crate) enum TaskControlMsg {

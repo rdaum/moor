@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 
-use moor_value::var::objid::FAILED_MATCH;
+use moor_value::var::objid::{ObjSet, FAILED_MATCH};
 use moor_value::var::objid::{Objid, AMBIGUOUS, NOTHING};
 
 use crate::tasks::command_parse::ParseMatcher;
@@ -18,7 +18,7 @@ pub trait MatchEnvironment {
     async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, anyhow::Error>;
 
     // Returns location, contents, and player, all the things we'd search for matches on.
-    async fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, anyhow::Error>;
+    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, anyhow::Error>;
 
     // Return the location of a given object.
     async fn location_of(&mut self, player: Objid) -> Result<Objid, anyhow::Error>;
@@ -77,13 +77,13 @@ pub async fn match_contents<M: MatchEnvironment + Send + Sync>(
     };
 
     let search = env.get_surroundings(player).await?; // location, contents, player
-    for oid in search {
-        if !env.obj_valid(oid).await? {
+    for oid in search.iter() {
+        if !env.obj_valid(*oid).await? {
             continue;
         }
 
-        let object_names = env.get_names(oid).await?;
-        let result = do_match_object_names(oid, &mut match_data, object_names, object_name)?;
+        let object_names = env.get_names(*oid).await?;
+        let result = do_match_object_names(*oid, &mut match_data, object_names, object_name)?;
         if result == AMBIGUOUS {
             return Ok(Some(AMBIGUOUS));
         }
@@ -142,7 +142,7 @@ mod tests {
     use moor_value::var::objid::{Objid, NOTHING};
 
     use crate::db::matching::{do_match_object_names, MatchData, MatchEnvironmentParseMatcher};
-    use crate::db::mock_matching_env::{
+    use crate::db::mock::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
     use crate::tasks::command_parse::ParseMatcher;

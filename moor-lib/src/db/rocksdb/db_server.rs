@@ -8,9 +8,12 @@ use strum::VariantNames;
 use tracing::error;
 
 use crate::db::rocksdb::tx_server::run_tx_server;
-use crate::db::rocksdb::{ColumnFamilies, RocksDbTransaction};
+use crate::db::rocksdb::ColumnFamilies;
+use crate::db::DbTxWorldState;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
 
+// Rocks implementation of 'WorldStateSource' -- opens the physical database and provides
+// transactional 'WorldState' implementations for each new transaction.
 pub struct RocksDbServer {
     db: Arc<rocksdb::OptimisticTransactionDB>,
 }
@@ -31,7 +34,7 @@ impl RocksDbServer {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn start_transaction(&self) -> Result<RocksDbTransaction, anyhow::Error> {
+    pub fn start_transaction(&self) -> Result<DbTxWorldState, anyhow::Error> {
         // Spawn a thread to handle the transaction, and return a mailbox to it.
         let (send, receive) = crossbeam_channel::unbounded();
         let db = self.db.clone();
@@ -49,7 +52,7 @@ impl RocksDbServer {
                 error!("System error in database transaction: {:?}", e);
             }
         });
-        Ok(RocksDbTransaction {
+        Ok(DbTxWorldState {
             join_handle: jh,
             mailbox: send,
         })

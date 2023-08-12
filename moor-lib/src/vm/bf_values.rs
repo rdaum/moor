@@ -3,18 +3,18 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use bincode::enc::write::Writer;
-use bincode::error::EncodeError;
+
+use moor_value::AsBytes;
 
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_float, v_int, v_obj, v_str};
 
+use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::vm::builtin::BfRet::{Error, Ret};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use crate::{bf_declare, BINCODE_CONFIG};
 
 async fn bf_typeof<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     let arg = &bf_args.args[0];
@@ -128,28 +128,12 @@ async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
 }
 bf_declare!(equal, bf_equal);
 
-struct CountingWriter {
-    count: usize,
-}
-impl Writer for CountingWriter {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
-        self.count += bytes.len();
-        Ok(())
-    }
-}
-
 async fn bf_value_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(Error(E_INVARG));
     }
-    // We can spitball this *for now* by doing a bincode on the value and returning the amount
-    // "written" (into our empty writer).
-    // But in the long run that ties  us to bincode, etc. Also expensive.
-    let mut cw = CountingWriter { count: 0 };
-    let Ok(_) = bincode::encode_into_writer(&bf_args.args[0], &mut cw, *BINCODE_CONFIG) else {
-        return Ok(Error(E_INVARG));
-    };
-    Ok(Ret(v_int(cw.count as i64)))
+    let count = bf_args.args[0].size_bytes();
+    Ok(Ret(v_int(count as i64)))
 }
 bf_declare!(value_bytes, bf_value_bytes);
 
@@ -176,7 +160,7 @@ async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
 }
 bf_declare!(length, bf_length);
 
-async fn object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     // TODO: we fake this to make cores work. But in reality calculating the size of an object
     // would be too expensive and awkward in general. We'd need to go looking for all its verbs
     // and properties and add them up. So we just return 128 for now.
@@ -188,7 +172,7 @@ async fn object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
     };
     Ok(Ret(v_int(128)))
 }
-bf_declare!(object_bytes, object_bytes);
+bf_declare!(object_bytes, bf_object_bytes);
 
 impl VM {
     pub(crate) fn register_bf_values(&mut self) -> Result<(), anyhow::Error> {

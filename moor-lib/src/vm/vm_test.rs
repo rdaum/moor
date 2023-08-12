@@ -7,15 +7,15 @@ mod tests {
     use bincode::decode_from_slice;
     use tokio::sync::RwLock;
 
-    use crate::BINCODE_CONFIG;
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::{Objid, NOTHING};
     use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
+    use moor_value::BINCODE_CONFIG;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::mock_world_state::MockWorldStateSource;
+    use crate::db::mock::mock_world_state::MockWorldStateSource;
     use crate::tasks::{Sessions, VerbCall};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};

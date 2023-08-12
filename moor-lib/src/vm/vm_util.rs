@@ -1,7 +1,7 @@
 use moor_value::var::error::Error::{E_INVIND, E_TYPE};
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_none, Var};
+use moor_value::var::Var;
 use tracing::debug;
 
 use crate::compiler::labels::{Label, Name};

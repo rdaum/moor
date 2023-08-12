@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 
-use moor_value::var::objid::Objid;
+use moor_value::var::objid::{ObjSet, Objid};
 
 use crate::db::matching::MatchEnvironment;
 use moor_value::model::permissions::PermissionsContext;
@@ -25,11 +25,11 @@ impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
         Ok(object_names)
     }
 
-    async fn get_surroundings(&mut self, player: Objid) -> Result<Vec<Objid>, anyhow::Error> {
+    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, anyhow::Error> {
         let location = self.ws.location_of(self.perms.clone(), player).await?;
         let mut surroundings = self.ws.contents_of(self.perms.clone(), location).await?;
-        surroundings.push(location);
-        surroundings.push(player);
+        surroundings.insert(location);
+        surroundings.insert(player);
 
         Ok(surroundings)
     }

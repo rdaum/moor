@@ -13,8 +13,8 @@ use rustyline_async::{Readline, ReadlineError, SharedWriter};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use moor_lib::db::rocksdb::server::RocksDbServer;
-use moor_lib::db::rocksdb::LoaderInterface;
+use moor_lib::db::rocksdb::db_server::RocksDbServer;
+use moor_lib::db::LoaderInterface;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
 use moor_lib::textdump::load_db::textdump_load;

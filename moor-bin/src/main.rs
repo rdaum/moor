@@ -20,7 +20,7 @@ use tracing::{info, Level};
 use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 
-use moor_lib::db::rocksdb::server::RocksDbServer;
+use moor_lib::db::rocksdb::db_server::RocksDbServer;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
 

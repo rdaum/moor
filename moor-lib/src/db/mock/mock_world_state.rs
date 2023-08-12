@@ -3,16 +3,16 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
 use async_trait::async_trait;
-use bincode::encode_to_vec;
+
+use moor_value::AsBytes;
 use uuid::Uuid;
 
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
+use moor_value::var::objid::{ObjSet, Objid};
 use moor_value::var::{v_none, Var};
 
-use crate::db::rocksdb::LoaderInterface;
+use crate::db::LoaderInterface;
 use crate::vm::opcode::Program;
-use crate::BINCODE_CONFIG;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::props::{PropAttrs, PropFlag};
@@ -28,8 +28,8 @@ struct MockStore {
     properties: HashMap<(Objid, String), Var>,
 }
 impl MockStore {
-    fn set_verb(&mut self, o: Objid, name: &str, binary: &Program) {
-        let program = encode_to_vec(binary, *BINCODE_CONFIG).unwrap();
+    fn set_verb(&mut self, o: Objid, name: &str, program: &Program) {
+        let binary = program.as_bytes();
         self.verbs.insert(
             (o, name.to_string()),
             VerbInfo {
@@ -42,7 +42,7 @@ impl MockStore {
                     ),
                     args_spec: Some(VerbArgsSpec::this_none_this()),
                     binary_type: BinaryType::LambdaMoo18X,
-                    binary: Some(program),
+                    binary: Some(binary.to_vec()),
                 },
             },
         );
@@ -100,7 +100,7 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Vec<Objid>, WorldStateError> {
+    ) -> Result<ObjSet, WorldStateError> {
         todo!()
     }
 
@@ -323,7 +323,7 @@ impl WorldState for MockState {
         &mut self,
         _perms: PermissionsContext,
         _obj: Objid,
-    ) -> Result<Vec<Objid>, WorldStateError> {
+    ) -> Result<ObjSet, WorldStateError> {
         todo!()
     }
 

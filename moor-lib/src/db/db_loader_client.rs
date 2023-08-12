@@ -6,8 +6,8 @@ use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
-use crate::db::rocksdb::tx_message::Message;
-use crate::db::rocksdb::{LoaderInterface, RocksDbTransaction};
+use crate::db::db_message::DbMessage;
+use crate::db::{DbTxWorldState, LoaderInterface};
 use moor_value::model::objects::ObjAttrs;
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
@@ -15,14 +15,14 @@ use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::CommitResult;
 
 #[async_trait]
-impl LoaderInterface for RocksDbTransaction {
+impl LoaderInterface for DbTxWorldState {
     async fn create_object(
         &self,
         objid: Option<Objid>,
         attrs: &ObjAttrs,
     ) -> Result<Objid, anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::CreateObject {
+        self.mailbox.send(DbMessage::CreateObject {
             id: objid,
             attrs: attrs.clone(),
             reply: send,
@@ -32,21 +32,21 @@ impl LoaderInterface for RocksDbTransaction {
     }
     async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::SetParent(obj, parent, send))?;
+        self.mailbox.send(DbMessage::SetParent(obj, parent, send))?;
         receive.await??;
         Ok(())
     }
     async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetLocationOf(o, location, send))?;
+            .send(DbMessage::SetLocationOf(o, location, send))?;
         receive.await??;
         Ok(())
     }
     async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetObjectOwner(obj, owner, send))?;
+            .send(DbMessage::SetObjectOwner(obj, owner, send))?;
         receive.await??;
         Ok(())
     }
@@ -61,7 +61,7 @@ impl LoaderInterface for RocksDbTransaction {
         binary: Vec<u8>,
     ) -> Result<(), anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::AddVerb {
+        self.mailbox.send(DbMessage::AddVerb {
             location: obj,
             owner,
             names: names.iter().map(|s| s.to_string()).collect(),
@@ -76,9 +76,9 @@ impl LoaderInterface for RocksDbTransaction {
     }
     async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::GetProperties(obj, send))?;
+        self.mailbox.send(DbMessage::GetProperties(obj, send))?;
         let properties = receive.await??;
-        for vh in &properties {
+        for vh in properties.iter() {
             if vh.name == pname {
                 return Ok(Some(Uuid::from_bytes(vh.uuid)));
             }
@@ -95,7 +95,7 @@ impl LoaderInterface for RocksDbTransaction {
         value: Option<Var>,
     ) -> Result<(), anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::DefineProperty {
+        self.mailbox.send(DbMessage::DefineProperty {
             definer,
             location: objid,
             name: propname.to_string(),
@@ -117,8 +117,11 @@ impl LoaderInterface for RocksDbTransaction {
     ) -> Result<(), anyhow::Error> {
         // First find the property.
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(Message::ResolveProperty(objid, propname.to_string(), send))?;
+        self.mailbox.send(DbMessage::ResolveProperty(
+            objid,
+            propname.to_string(),
+            send,
+        ))?;
         let (propdef, _) = receive.await?.with_context(|| {
             format!("Error resolving property {} on object {}", propname, objid)
         })?;
@@ -128,7 +131,7 @@ impl LoaderInterface for RocksDbTransaction {
         if let Some(value) = value {
             let (send, receive) = tokio::sync::oneshot::channel();
             self.mailbox
-                .send(Message::SetProperty(objid, uuid, value, send))?;
+                .send(DbMessage::SetProperty(objid, uuid, value, send))?;
             receive
                 .await?
                 .with_context(|| format!("Error setting value for {}.{}", objid, propname))?;
@@ -137,7 +140,7 @@ impl LoaderInterface for RocksDbTransaction {
         // And then set the flags and owner the child had.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetPropertyInfo {
+            .send(DbMessage::SetPropertyInfo {
                 obj: objid,
                 uuid,
                 new_owner: Some(owner),
@@ -154,7 +157,7 @@ impl LoaderInterface for RocksDbTransaction {
 
     async fn commit(self) -> Result<CommitResult, anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::Commit(send))?;
+        self.mailbox.send(DbMessage::Commit(send))?;
         let cr = receive.await?;
         self.join_handle
             .join()
