@@ -24,7 +24,7 @@ use moor_lib::db::rocksdb::server::RocksDbServer;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
 
-use crate::server::ws_server::{ws_connect_handler, WebSocketServer};
+use crate::server::ws_server::{ws_connect_handler, ws_create_handler, WebSocketServer};
 
 mod server;
 
@@ -71,7 +71,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .finish();
     let _perfetto_guard = match args.perfetto_tracing {
         Some(true) => {
@@ -129,7 +129,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let recorder_handle = setup_metrics_recorder();
 
     let web_router = Router::new()
-        .route("/ws/connect/players/:player", get(ws_connect_handler))
+        .route("/ws/connect", get(ws_connect_handler))
+        .route("/ws/create", get(ws_create_handler))
         .with_state(ws_server)
         .layer(
             TraceLayer::new_for_http().make_span_with(

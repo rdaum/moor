@@ -1,6 +1,7 @@
 use crate::var::variant::Variant;
 use crate::var::{v_empty_list, Var};
 use bincode::{Decode, Encode};
+use std::cmp::min;
 use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
 use std::sync::Arc;
 
@@ -66,8 +67,13 @@ impl List {
         Var::new(Variant::List(Self::from_vec(new_list)))
     }
 
-    pub fn insert(&self, index: usize, v: &Var) -> Var {
+    pub fn insert(&self, index: isize, v: &Var) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() + 1);
+        let index = if index < 0 {
+            0
+        } else {
+            min(index as usize, self.inner.len())
+        };
         new_list.extend_from_slice(&self.inner[..index]);
         new_list.push(v.clone());
         new_list.extend_from_slice(&self.inner[index..]);
@@ -166,5 +172,28 @@ impl Index<RangeFull> for List {
 
     fn index(&self, index: RangeFull) -> &Self::Output {
         &self.inner[index]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::var::list::List;
+    use crate::var::{v_int, v_list};
+
+    #[test]
+    pub fn weird_moo_insert_scenarios() {
+        // MOO supports negative indexes, which just floor to 0...
+        let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
+        assert_eq!(
+            list.insert(-1, &v_int(0)),
+            v_list(vec![v_int(0), v_int(1), v_int(2), v_int(3)])
+        );
+
+        // MOO supports indexes beyond length of the list, which just append to the end...
+        let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
+        assert_eq!(
+            list.insert(100, &v_int(0)),
+            v_list(vec![v_int(1), v_int(2), v_int(3), v_int(0)])
+        );
     }
 }

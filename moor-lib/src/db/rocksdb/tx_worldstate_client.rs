@@ -78,10 +78,29 @@ impl WorldState for RocksDbTransaction {
     async fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::GetFlagsOf(obj, send))
+            .send(Message::GetObjectFlagsOf(obj, send))
             .expect("Error sending message");
         let flags = receive.await.expect("Error receiving message")?;
         Ok(flags)
+    }
+
+    async fn set_flags_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        new_flags: BitEnum<ObjFlag>,
+    ) -> Result<(), Error> {
+        // Owner or wizard only.
+        let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+        perms
+            .task_perms()
+            .check_object_allows(owner, flags, ObjFlag::Write)?;
+        let (send, receive) = tokio::sync::oneshot::channel();
+        self.mailbox
+            .send(Message::SetObjectFlagsOf(obj, new_flags, send))
+            .expect("Error sending message");
+        receive.await.expect("Error receiving message")?;
+        Ok(())
     }
 
     #[tracing::instrument(skip(self))]
@@ -161,7 +180,7 @@ impl WorldState for RocksDbTransaction {
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
-            .send(Message::SetLocation(obj, new_loc, send))
+            .send(Message::SetLocationOf(obj, new_loc, send))
             .expect("Error sending message");
         receive.await.expect("Error receiving message")?;
         Ok(())
@@ -250,7 +269,7 @@ impl WorldState for RocksDbTransaction {
             return Err(WorldStateError::ObjectNotFound(obj));
         }
 
-        // Special properties like name, location, and contents get treated specially.
+        // Special properties like namnne, location, and contents get treated specially.
         if pname == "name" {
             return self
                 .names_of(perms, obj)
@@ -368,12 +387,69 @@ impl WorldState for RocksDbTransaction {
     async fn update_property(
         &mut self,
         perms: PermissionsContext,
-
         obj: Objid,
         pname: &str,
         value: &Var,
     ) -> Result<(), WorldStateError> {
-        // TODO: special property updates
+        // You have to use move/chparent for this kinda fun.
+        if pname == "location" || pname == "contents" || pname == "parent" || pname == "children" {
+            return Err(WorldStateError::PropertyPermissionDenied);
+        }
+
+        if pname == "name" || pname == "owner" {
+            let (flags, objowner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+            // User is either wizard or owner
+            perms
+                .task_perms()
+                .check_object_allows(objowner, flags, ObjFlag::Write)?;
+            if pname == "name" {
+                let Variant::Str(name) = value.variant() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                let (send, receive) = tokio::sync::oneshot::channel();
+                self.mailbox
+                    .send(Message::SetObjectNameOf(
+                        obj,
+                        name.as_str().to_string(),
+                        send,
+                    ))
+                    .expect("Error sending message");
+                receive.await.expect("Error receiving message")?;
+                return Ok(());
+            }
+
+            if pname == "owner" {
+                let Variant::Obj(owner) = value.variant() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                let (send, receive) = tokio::sync::oneshot::channel();
+                self.mailbox
+                    .send(Message::SetObjectOwner(obj, *owner, send))
+                    .expect("Error sending message");
+                receive.await.expect("Error receiving message")?;
+                return Ok(());
+            }
+        }
+
+        if pname == "programmer" || pname == "wizard" {
+            // Caller *must* be a wizard for either of these.
+            perms.task_perms().check_wizard()?;
+
+            // Gott get and then set flags
+            let mut flags = self.flags_of(obj).await?;
+            if pname == "programmer" {
+                flags.set(ObjFlag::Programmer);
+            } else if pname == "wizard" {
+                flags.set(ObjFlag::Wizard);
+            }
+
+            let (send, receive) = tokio::sync::oneshot::channel();
+            self.mailbox
+                .send(Message::SetObjectFlagsOf(obj, flags, send))
+                .expect("Error sending message");
+            receive.await.expect("Error receiving message")?;
+            return Ok(());
+        }
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
@@ -712,11 +788,8 @@ impl WorldState for RocksDbTransaction {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
-        let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
-            .check_object_allows(owner, objflags, ObjFlag::Read)?;
-
+        // We were mistakenly doing a perms check on the object itself.  turns out that it's the
+        // verbthat purely determenis permsisions.
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
             .send(Message::ResolveVerb(obj, vname.to_string(), None, send))
@@ -812,14 +885,10 @@ impl WorldState for RocksDbTransaction {
     #[tracing::instrument(skip(self))]
     async fn parent_of(
         &mut self,
-        perms: PermissionsContext,
+        _perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Objid, WorldStateError> {
-        let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
-            .check_object_allows(owner, objflags, ObjFlag::Read)?;
-
+        // TODO: MOO does not check permissions on this. Should it?
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
             .send(Message::GetParentOf(obj, send))
@@ -839,19 +908,22 @@ impl WorldState for RocksDbTransaction {
         }
 
         let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        let (parentflags, parentowner) = (
-            self.flags_of(new_parent).await?,
-            self.owner_of(new_parent).await?,
-        );
+
+        if new_parent != NOTHING {
+            let (parentflags, parentowner) = (
+                self.flags_of(new_parent).await?,
+                self.owner_of(new_parent).await?,
+            );
+            perms
+                .task_perms()
+                .check_object_allows(parentowner, parentflags, ObjFlag::Write)?;
+            perms
+                .task_perms()
+                .check_object_allows(parentowner, parentflags, ObjFlag::Fertile)?;
+        }
         perms
             .task_perms()
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
-        perms
-            .task_perms()
-            .check_object_allows(parentowner, parentflags, ObjFlag::Write)?;
-        perms
-            .task_perms()
-            .check_object_allows(parentowner, parentflags, ObjFlag::Fertile)?;
 
         let (send, receive) = tokio::sync::oneshot::channel();
         self.mailbox
@@ -897,18 +969,12 @@ impl WorldState for RocksDbTransaction {
         perms: PermissionsContext,
         obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError> {
-        // Not sure if we should actually be checking perms here.
-        // TODO: check to see if MOO makes names of unreadable objects available.
-        let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
-            .check_object_allows(owner, objflags, ObjFlag::Read)?;
-
+        // Another thing that MOO allows lookup of without permissions.
         let (send, receive) = tokio::sync::oneshot::channel();
 
         // First get name
         self.mailbox
-            .send(Message::GetObjectName(obj, send))
+            .send(Message::GetObjectNameOf(obj, send))
             .expect("Error sending message");
         let name = receive.await.expect("Error receiving message")?;
 

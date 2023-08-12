@@ -43,6 +43,8 @@ pub enum WorldStateError {
     PropertyDefinitionNotFound(Objid, String),
     #[error("Duplicate property definition: {0}.{1}")]
     DuplicatePropertyDefinition(Objid, String),
+    #[error("Property type mismatch")]
+    PropertyTypeMismatch,
 
     #[error("Verb not found: {0}:{1}")]
     VerbNotFound(Objid, String),
@@ -73,7 +75,7 @@ pub enum WorldStateError {
 impl WorldStateError {
     pub fn to_error_code(&self) -> Result<Error, anyhow::Error> {
         match self {
-            WorldStateError::ObjectNotFound(_) => Ok(Error::E_INVIND),
+            WorldStateError::ObjectNotFound(_) => Ok(Error::E_INVARG),
             WorldStateError::ObjectPermissionDenied => Ok(Error::E_PERM),
             WorldStateError::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
             WorldStateError::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
@@ -84,6 +86,7 @@ impl WorldStateError {
             WorldStateError::PropertyPermissionDenied => Ok(Error::E_PERM),
             WorldStateError::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
             WorldStateError::DuplicatePropertyDefinition(_, _) => Ok(Error::E_INVARG),
+            WorldStateError::PropertyTypeMismatch => Ok(Error::E_TYPE),
             _ => {
                 bail!("Unhandled error code: {:?}", self);
             }

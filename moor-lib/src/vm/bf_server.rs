@@ -123,9 +123,19 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, a
         return Ok(Error(E_TYPE));
     };
 
-    bf_args.perms().task_perms().check_wizard()?;
+    // Get parent stack frame and check its verb owner. That is, who is calling us.
+    if !bf_args.perms().task_perms().check_is_wizard()? {
+        let Some(top_stack) = bf_args.vm.non_bf_top() else {
+            return Ok(Error(E_PERM));
+        };
+        let progr = top_stack.verb_info.attrs.owner.unwrap();
+        if progr != perms_for {
+            return Ok(Error(E_PERM));
+        }
+    }
     let flags = bf_args.world_state.flags_of(perms_for).await?;
     bf_args.perms_mut().set_task_perms(perms_for, flags);
+    bf_args.vm.set_task_perms(perms_for);
 
     Ok(Ret(v_none()))
 }

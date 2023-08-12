@@ -15,21 +15,21 @@ The following is a table of the status of various builtin-functions, to keep an 
 | listset    | &check;  |       |
 | equal      | &check;  |       |
 | is_member  | &check;  |       |
+| match      | &check;  |       |
+| rmatch     | &check;  |       |
+| substitute | &check;  |       |
 
 ### Strings
 
-| Name       | Complete | Notes                                          |
-|------------|----------|------------------------------------------------|
-| tostr      | &check;  |                                                |
-| toliteral  | &check;  |                                                |
-| match      | &check;  |                                                |
-| rmatch     |          | Just alter indices for the regexp match range. |
-| substitute | &check;  | Might need more testing.                       |
-| crypt      | &check;  | DES                                            |
-| index      | &check;  |                                                |
-| rindex     | &check;  |                                                |
-| strcmp     | &check;  |                                                |
-| strsub     | &check;  |                                                |
+| Name       | Complete | Notes                                                                          |
+|------------|----------|--------------------------------------------------------------------------------|
+| tostr      | &check;  |                                                                                |
+| toliteral  | &check;  |                                                                                |
+| crypt      | &check;  | Pretty damned insecure, only here to support existing core password functions. |
+| index      | &check;  |                                                                                |
+| rindex     | &check;  |                                                                                |
+| strcmp     | &check;  |                                                                                |
+| strsub     | &check;  |                                                                                |
 
 ### Numbers
 
@@ -77,7 +77,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | max_object      |          |                                                     |
 | players         |          |                                                     |
 | is_player       | &check;  |                                                     |
-| set_player_flag |          |                                                     |
+| set_player_flag | &check;  |                                                     |
 | move            | &check;  | There may be a problem with perms on accept() call? |
 
 ### Properties
@@ -110,36 +110,36 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Values / encoding
 
-| Name          | Complete | Notes |
-|---------------|----------|-------|
-| value_bytes   |          |       |
-| value_hash    |          |       |
-| string_hash   | &check;  |       |
-| binary_hash   |          |       |
-| decode_binary |          |       |
-| encode_binary |          |       |
-| object_bytes  |          |       |
+| Name          | Complete | Notes                                                                                                        |
+|---------------|----------|--------------------------------------------------------------------------------------------------------------|
+| value_bytes   | &check;  | Encodes the value as it is currently stored in DB, and counts bytes. But I'd rather not keep this, long run. |
+| value_hash    |          |                                                                                                              |
+| string_hash   | &check;  |                                                                                                              |
+| binary_hash   |          |                                                                                                              |
+| decode_binary |          |                                                                                                              |
+| encode_binary |          |                                                                                                              |
+| object_bytes  | &check;  | Fake value. Only there to make JHCore happy. Actually calculating this would be tricky                       |
 
 ### Server
 
-| Name                | Complete | Notes                                         |
-|---------------------|----------|-----------------------------------------------|
-| server_version      | &check;  | Hardcoded value, should derive from bin crate |
-| renumber            |          |                                               |
-| reset_max_object    |          |                                               |
-| memory_usage        |          |                                               |
-| shutdown            | &check;  |                                               |
-| dump_database       |          |                                               |
-| db_disk_size        |          |                                               |
-| connected_players   | &check;  |                                               |
-| connected_seconds   | &check;  |                                               |
-| idle_seconds        | &check;  |                                               |
-| connection_name     | &check;  |                                               |
-| notify              | &check;  |                                               |
-| boot_player         | &check;  |                                               |
-| server_log          | &check;  |                                               |
-| load_server_options |          |                                               |
-| function_info       | &check;  |                                               |
+| Name                | Complete | Notes                                                                    |
+|---------------------|----------|--------------------------------------------------------------------------|
+| server_version      | &check;  | Hardcoded value, should derive from bin crate                            |
+| renumber            |          |                                                                          |
+| reset_max_object    |          |                                                                          |
+| memory_usage        |          |                                                                          |
+| shutdown            | &check;  |                                                                          |
+| dump_database       |          |                                                                          |
+| db_disk_size        |          |                                                                          |
+| connected_players   | &check;  |                                                                          |
+| connected_seconds   | &check;  |                                                                          |
+| idle_seconds        | &check;  |                                                                          |
+| connection_name     | &check;  | To make this 100% compat with core, reverse DNS & listen port is needed. |
+| notify              | &check;  |                                                                          |
+| boot_player         | &check;  |                                                                          |
+| server_log          | &check;  |                                                                          |
+| load_server_options |          |                                                                          |
+| function_info       | &check;  |                                                                          |
 
 
 

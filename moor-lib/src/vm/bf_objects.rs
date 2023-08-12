@@ -16,6 +16,7 @@ use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
 use moor_value::model::objects::ObjFlag;
 use moor_value::model::WorldStateError;
+use moor_value::var::objid::NOTHING;
 
 /*
 Function: int valid (obj object)
@@ -40,6 +41,9 @@ async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(Error(E_TYPE));
     };
+    if obj.0 < 0 {
+        return Ok(Error(E_INVARG));
+    }
     let parent = bf_args
         .world_state
         .parent_of(bf_args.perms().clone(), *obj)
@@ -134,14 +138,14 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
                 permissions: bf_args.perms().clone(),
                 resolved_verb: initialize,
                 call: VerbCall {
-                    verb_name: "accept".to_string(),
+                    verb_name: "initialize".to_string(),
                     location: new_obj,
                     this: new_obj,
                     player: bf_args.vm.top().player,
                     args: vec![],
                     caller: bf_args.vm.top().this,
                 },
-                trampoline: Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC),
+                trampoline: Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE),
                 command: None,
                 trampoline_arg: Some(v_objid(new_obj)),
             }));
@@ -280,14 +284,20 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                     .move_object(bf_args.perms().clone(), *what, *whereto)
                     .await?;
 
-                // Now, prepare to call :exitfunc on the original location.
+                // If the object has no location, then we can move on to the enterfunc.
+                if original_location == NOTHING {
+                    tramp = BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC;
+                    continue;
+                }
+
+                // Call exitfunc...
                 match bf_args
                     .world_state
                     .find_method_verb_on(bf_args.perms().clone(), original_location, "exitfunc")
                     .await
                 {
                     Ok(dispatch) => {
-                        return Ok(VmInstr(ContinueVerb {
+                        let continuation = ContinueVerb {
                             permissions: bf_args.perms().clone(),
                             resolved_verb: dispatch,
                             call: VerbCall {
@@ -301,7 +311,8 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                             command: None,
                             trampoline: Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC),
                             trampoline_arg: None,
-                        }));
+                        };
+                        return Ok(VmInstr(continuation));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.
@@ -315,7 +326,12 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                 }
             }
             BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC => {
+                if *whereto == NOTHING {
+                    tramp = BF_MOVE_TRAMPOLINE_DONE;
+                    continue;
+                }
                 trace!(what = ?what, where_to = ?*whereto, tramp, "move: calling enterfunc");
+
                 // Exitfunc has been called, and returned. Result is irrelevant. Prepare to call
                 // :enterfunc on the destination.
                 match bf_args
@@ -405,6 +421,44 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
 }
 bf_declare!(properties, bf_properties);
 
+async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 2 {
+        return Ok(Error(E_INVARG));
+    }
+
+    let (Variant::Obj(obj), Variant::Int(f)) = (bf_args.args[0].variant(), bf_args.args[1].variant()) else {
+        return Ok(Error(E_INVARG));
+    };
+
+    let f = *f == 1;
+
+    // User must be a wizard.
+    bf_args.perms().task_perms().check_wizard()?;
+
+    // Get and set object flags
+    let mut flags = bf_args.world_state.flags_of(*obj).await?;
+
+    if f {
+        flags.set(ObjFlag::User);
+    } else {
+        flags.clear(ObjFlag::User);
+    }
+
+    bf_args
+        .world_state
+        .set_flags_of(bf_args.perms().clone(), *obj, flags)
+        .await?;
+
+    // If the object was player, update the VM's copy of the perms.
+    if *obj == bf_args.perms().task_perms().obj {
+        let _perms = bf_args.vm.top_mut().permissions.clone();
+        bf_args.vm.top_mut().permissions.set_task_perms(*obj, flags);
+    }
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(set_player_flag, bf_set_player_flag);
+
 impl VM {
     pub(crate) fn register_bf_objects(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("create")] = Arc::new(Box::new(BfCreate {}));
@@ -415,7 +469,8 @@ impl VM {
         self.builtins[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
         self.builtins[offset_for_builtin("move")] = Arc::new(Box::new(BfMove {}));
         self.builtins[offset_for_builtin("chparent")] = Arc::new(Box::new(BfChparent {}));
-
+        self.builtins[offset_for_builtin("set_player_flag")] =
+            Arc::new(Box::new(BfSetPlayerFlag {}));
         Ok(())
     }
 }

@@ -1,3 +1,4 @@
+use anyhow::Error;
 use async_trait::async_trait;
 
 use crate::util::bitenum::BitEnum;
@@ -32,6 +33,14 @@ pub trait WorldState: Send + Sync {
     /// permissions. It is the caller's responsibility to ensure that the program is using this
     /// call appropriately.
     async fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError>;
+
+    /// Set the flags of an object.
+    async fn set_flags_of(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        flags: BitEnum<ObjFlag>,
+    ) -> Result<(), Error>;
 
     /// Get the location of the given object.
     async fn location_of(

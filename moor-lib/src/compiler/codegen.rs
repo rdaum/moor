@@ -2202,4 +2202,52 @@ mod tests {
             ]
         )
     }
+
+    #[test]
+    fn test_regression() {
+        let program = compile(r#"
+        ":recreate(object,newparent) -- effectively recycle and recreate the specified object as a child of parent.  Returns
+true iff successful.";
+who = caller_perms();
+if (!(valid(object) && (parent == #-1 || valid(parent))))
+  return E_INVARG;
+elseif (who.wizard)
+  "no problemo";
+elseif (who != object.owner || !(parent == #-1 || parent.f || who == parent.owner))
+  return E_PERM;
+endif
+"Chparent any children to their grandparent instead of orphaning them horribly.  Have to do the chparent with
+wizperms, in case the children are owned by others, so do this before set_task_perms.";
+for c in (children(object))
+  chparent(c, parent(object));
+endfor
+set_task_perms(who);
+if ($object_utils:has_verb(object, "recycle"))
+  object:recycle();
+endif
+chparent(object, #-1);
+for p in (properties(object))
+  delete_property(object, p);
+endfor
+for v in (verbs(object))
+  delete_verb(object, 1);
+endfor
+for item in (object.contents)
+  move(item, #-1);
+endfor
+chparent(object, parent);
+object.name = "";
+if ($object_utils:has_verb(parent, "initialize"))
+  object:initialize();
+endif
+object.r = 1;
+object.f = 0;
+object.w = 0;
+
+"#).unwrap();
+
+        for (i, opcode) in program.main_vector.iter().enumerate() {
+            println!("{}: {:?}", i, opcode);
+        }
+    }
 }

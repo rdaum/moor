@@ -445,7 +445,7 @@ impl VM {
             }
             Op::PushGetProp => {
                 let peeked = self.peek(2);
-                let (propname, obj) = (peeked[0].clone(), peeked[1].clone());
+                let (propname, obj) = (peeked[1].clone(), peeked[0].clone());
                 return self
                     .resolve_property(exec_params.world_state, propname, obj)
                     .await;

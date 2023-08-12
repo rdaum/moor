@@ -1,5 +1,5 @@
 use anyhow::Context;
-use tracing::{span, trace, Level};
+use tracing::{debug, span, trace, Level};
 
 use moor_value::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
@@ -39,7 +39,7 @@ impl VM {
             // unless we're a builtin, in which case we're #-1.
             caller: self.caller(),
         };
-        trace!(this = ?this, verb = verb_name, args = ?args, caller = ?call.caller, "Preparing verb call");
+        debug!(this = ?this, verb = verb_name, args = ?args, caller = ?call.caller, "Preparing verb call");
 
         let self_valid = state.valid(this).await?;
         if !self_valid {
@@ -194,7 +194,7 @@ impl VM {
         }
         let bf = self.builtins[bf_func_num].clone();
 
-        trace!(
+        debug!(
             bf_name = BUILTIN_DESCRIPTORS[bf_func_num].name,
             bf_func_num,
             ?args,

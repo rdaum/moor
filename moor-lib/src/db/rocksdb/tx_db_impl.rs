@@ -116,7 +116,9 @@ pub(crate) struct RocksDbTx<'a> {
 }
 
 fn match_in_verb_names<'a>(verb_names: &'a [String], word: &str) -> Option<&'a String> {
-    verb_names.iter().find(|&verb| verbname_cmp(verb, word))
+    verb_names
+        .iter()
+        .find(|&verb| verbname_cmp(verb.to_lowercase().as_str(), word.to_lowercase().as_str()))
 }
 
 impl<'a> RocksDbTx<'a> {
@@ -192,7 +194,9 @@ impl<'a> RocksDbTx<'a> {
                     props
                 }
             };
-            let prop = props.iter().find(|vh| vh.name == n);
+            let prop = props
+                .iter()
+                .find(|vh| vh.name.to_lowercase() == n.to_lowercase());
 
             if let Some(prop) = prop {
                 trace!(?prop, parent = ?search_o, "found property");
@@ -359,7 +363,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         // c) all the new ancestors we'd have after the reparenting, all in one go. Hopefully.
         // TODO: the argument order seems backward here. I was able to make it work by flipping
         // new_parent and o, but I need to get to the bottom of this and fix it properly.
-        let (_shared_ancestor, old_ancestors, new_ancestors) =
+        let (_shared_ancestor, new_ancestors, old_ancestors) =
             self.closest_common_ancestor_with_ancestors(new_parent, o)?;
 
         // Remove from _me_ any of the properties defined by any of my ancestors
@@ -374,7 +378,7 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         }
         let new_props: Vec<PropDef> = old_props
             .into_iter()
-            .filter(|p| delort_props.contains(&p.uuid))
+            .filter(|p| !delort_props.contains(&p.uuid))
             .collect();
         self.update_propdefs(o, new_props)?;
 
@@ -383,14 +387,14 @@ impl<'a> DbStorage for RocksDbTx<'a> {
         let descendants = self.descendants(o)?;
 
         let mut descendant_props = HashMap::new();
-        for c in descendants {
+        for c in descendants.iter() {
             let mut inherited_props = vec![];
             // Remove the set values.
-            let old_props = self.get_propdefs(c)?;
+            let old_props = self.get_propdefs(*c)?;
             for p in &old_props {
                 if old_ancestors.contains(&p.definer) {
                     inherited_props.push(p.uuid);
-                    let vk = composite_key(c, &p.uuid);
+                    let vk = composite_key(*c, &p.uuid);
                     self.tx.delete_cf(property_value_cf, vk)?;
                 }
             }
@@ -446,13 +450,13 @@ impl<'a> DbStorage for RocksDbTx<'a> {
                 }
             }
         }
-        // Then put clear copies on each of the descendants
+        // Then put clear copies on each of the descendants ... and me.
         // This really just means defining the property with no value, which is what we do.
         let descendants = self.descendants(o)?;
-        for c in descendants {
+        for c in descendants.iter().chain(std::iter::once(&o)) {
             // Check if we have a cached/modified copy from above in descendant_props
             let mut c_props = match descendant_props.remove(&c) {
-                None => self.get_propdefs(c)?,
+                None => self.get_propdefs(*c)?,
                 Some(props) => props,
             };
             for p in &new_props {

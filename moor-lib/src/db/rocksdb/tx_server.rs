@@ -103,22 +103,22 @@ pub(crate) fn run_tx_server<'a>(
             Message::SetParent(o, p, r) => respond(r, tx.set_object_parent(o, p))?,
             Message::GetChildrenOf(o, r) => respond(r, tx.get_object_children(o))?,
             Message::GetLocationOf(o, r) => respond(r, tx.get_object_location(o))?,
-            Message::SetLocation(o, l, r) => {
+            Message::SetLocationOf(o, l, r) => {
                 respond(r, tx.set_object_location(o, l))?;
             }
             Message::GetContentsOf(o, r) => {
                 respond(r, tx.get_object_contents(o))?;
             }
-            Message::GetFlagsOf(o, r) => {
+            Message::GetObjectFlagsOf(o, r) => {
                 respond(r, tx.get_object_flags(o))?;
             }
-            Message::SetFlags(o, f, r) => {
+            Message::SetObjectFlagsOf(o, f, r) => {
                 respond(r, tx.set_object_flags(o, f))?;
             }
-            Message::GetObjectName(o, r) => {
+            Message::GetObjectNameOf(o, r) => {
                 respond(r, tx.get_object_name(o))?;
             }
-            Message::SetObjectName(o, names, r) => {
+            Message::SetObjectNameOf(o, names, r) => {
                 respond(r, tx.set_object_name(o, names))?;
             }
             Message::GetVerbs(o, r) => {

@@ -61,6 +61,15 @@ impl WorldState for MockState {
         Ok(BitEnum::all())
     }
 
+    async fn set_flags_of(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _flags: BitEnum<ObjFlag>,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
     async fn location_of(
         &mut self,
         _perms: PermissionsContext,

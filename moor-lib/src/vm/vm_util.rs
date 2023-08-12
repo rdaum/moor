@@ -2,6 +2,7 @@ use moor_value::var::error::Error::{E_INVIND, E_TYPE};
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_none, Var};
+use tracing::debug;
 
 use crate::compiler::labels::{Label, Name};
 use crate::vm::activation::{Activation, Caller};
@@ -31,6 +32,7 @@ impl VM {
         let v = match result {
             Ok(v) => v,
             Err(e) => {
+                debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
                 return self.push_error(e.to_error_code()?);
             }
         };
@@ -115,23 +117,20 @@ impl VM {
     // MOO does this annoying thing where callers() returns the builtin functions as if they
     // were on the stack. but they're kinda not really on the stack? and caller_perms() and
     // caller don't use the values from the builtin functions? so we have to special case
-    // ...
+    // for some cases, and skip the frames from builtin functions.
     pub(crate) fn non_bf_top(&self) -> Option<&Activation> {
-        let mut stack_iter = self.stack.iter().rev();
-        stack_iter.next()?; // skip the top activation, that's our current frame
-        for activation in stack_iter {
-            if activation.bf_index.is_some() {
-                continue;
-            }
-            return Some(activation);
-        }
-        None
+        let stack_iter = self.stack.iter().rev();
+        let mut non_bf_frames = stack_iter.filter(|a| a.bf_index.is_none());
+        non_bf_frames.next()?; // skip the top activation, that's our current frame
+        non_bf_frames.next()
     }
+
     pub(crate) fn caller_perms(&self) -> Objid {
-        return self
-            .non_bf_top()
-            .map(|a| a.verb_definer())
-            .unwrap_or(NOTHING);
+        return self.non_bf_top().map(|a| a.progr).unwrap_or(NOTHING);
+    }
+
+    pub(crate) fn set_task_perms(&mut self, perms: Objid) {
+        self.top_mut().progr = perms;
     }
 
     pub(crate) fn caller(&self) -> Objid {

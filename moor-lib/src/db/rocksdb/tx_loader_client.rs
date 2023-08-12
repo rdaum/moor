@@ -38,7 +38,8 @@ impl LoaderInterface for RocksDbTransaction {
     }
     async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error> {
         let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(Message::SetLocation(o, location, send))?;
+        self.mailbox
+            .send(Message::SetLocationOf(o, location, send))?;
         receive.await??;
         Ok(())
     }

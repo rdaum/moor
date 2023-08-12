@@ -62,6 +62,9 @@ pub(crate) struct Activation {
     pub(crate) verb_name: String,
     /// The extended information about the verb that is currently being executed.
     pub(crate) verb_info: VerbInfo,
+    /// Set initially to verb owner, what set_task_perms() can override, caller_perms() returns the
+    /// value of the parent stack frame (or #-1 if none)
+    pub(crate) progr: Objid,
     /// The values of the variables currently in scope, by their offset.
     pub(crate) environment: Vec<Var>,
     /// The value stack.
@@ -97,6 +100,7 @@ impl Activation {
         let program = verb_call_request.program;
         let environment = vec![v_none(); program.var_names.width()];
 
+        let verb_owner = verb_call_request.resolved_verb.attrs.owner.unwrap();
         let mut a = Self {
             task_id,
             program,
@@ -116,6 +120,7 @@ impl Activation {
             bf_trampoline_arg: None,
             span_id,
             args: verb_call_request.call.args.clone(),
+            progr: verb_owner,
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
@@ -203,6 +208,7 @@ impl Activation {
             bf_trampoline_arg: None,
             span_id,
             args,
+            progr: NOTHING,
         }
     }
 

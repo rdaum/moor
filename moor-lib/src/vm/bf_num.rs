@@ -33,7 +33,7 @@ async fn bf_min<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Erro
     }
 
     match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.max(b)))),
+        (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.min(b)))),
         (Variant::Float(a), Variant::Float(b)) => {
             let m = R64::from(*a).min(R64::from(*b));
             Ok(Ret(v_float(m.into())))

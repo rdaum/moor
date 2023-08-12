@@ -3,7 +3,7 @@
 #![allow(non_snake_case)]
 
 use std::error::Error;
-use std::ffi::CString;
+use std::ffi::{c_int, CString};
 use std::fmt::{Debug, Display, Formatter};
 
 use once_cell::sync::Lazy;
@@ -86,7 +86,9 @@ impl Error for MatchError {}
 
 impl Pattern {
     pub fn new(pattern_string: &str, case_matters: bool) -> Result<Self, CompileError> {
-        let pattern_string = translate_pattern(pattern_string);
+        let Some(pattern_string) = translate_pattern(pattern_string) else {
+            return Err(CompileError::FailedCompile("bad pattern translation".to_string()));
+        };
         let pattern_str_len = pattern_string.len();
         let fastmap = Box::new([0i8; 256]);
         let fastmap_ptr = Box::into_raw(fastmap);
@@ -133,32 +135,40 @@ impl Pattern {
         })
     }
 
-    pub fn match_pattern(&self, string: &str) -> Result<Vec<(isize, isize)>, MatchError> {
+    fn do_match_pattern(
+        &self,
+        string: &str,
+        is_reverse: bool,
+    ) -> Result<((isize, isize), Vec<(isize, isize)>), MatchError> {
         let mut regs = re_registers {
             start: [0; 100],
             end: [0; 100],
         };
+        let len = string.len() as c_int;
         let string_c_str = CString::new(string).unwrap();
-        let len = string.len() as _;
+        let (startpos, range) = if is_reverse { (len, -len) } else { (0, len) };
         let match_result = unsafe {
             re_search(
                 self.pattern_ptr,
                 string_c_str.as_ptr() as _,
                 len,
-                0,
-                len,
+                startpos,
+                range,
                 &mut regs as *mut _,
             )
         };
         if match_result >= 0 {
+            // First indices are the overall match. The rest are the submatches.
+            let overall = (regs.start[0] as isize + 1, regs.end[0] as isize);
             let mut indices = Vec::new();
-            for i in 0..10 {
-                // Convert from 0-based open interval to 1-based closed one. */
+            for i in 1..10 {
+                // Convert from 0-based open interval to 1-based closed one.
                 let start = regs.start[i as usize] + 1;
                 let end = regs.end[i as usize];
                 indices.push((start as isize, end as isize));
             }
-            Ok(indices)
+
+            Ok((overall, indices))
         } else {
             match match_result {
                 -1 => Err(MatchError::Failed),
@@ -167,80 +177,80 @@ impl Pattern {
             }
         }
     }
+
+    pub fn match_pattern(
+        &self,
+        string: &str,
+    ) -> Result<((isize, isize), Vec<(isize, isize)>), MatchError> {
+        self.do_match_pattern(string, false)
+    }
+
+    pub fn reverse_match_pattern(
+        &self,
+        string: &str,
+    ) -> Result<((isize, isize), Vec<(isize, isize)>), MatchError> {
+        self.do_match_pattern(string, true)
+    }
 }
 
 /// Translate a MOO pattern into a more standard syntax.  Effectively, this
-/// just involves converting from `%' escapes into `\' escapes.
-fn translate_pattern(pattern: &str) -> String {
+/// just involves remove `%' escapes into `\' escapes.
+fn translate_pattern(pattern: &str) -> Option<String> {
     let mut s = String::with_capacity(pattern.len());
-    let mut idx = 0;
-    while idx < pattern.len() {
-        let c = pattern.chars().nth(idx).unwrap();
-        match c {
-            '%' => {
-                idx += 1;
-                let c = pattern.chars().nth(idx).unwrap();
-                match c {
-                    '.'
-                    | '*'
-                    | '+'
-                    | '?'
-                    | '['
-                    | '^'
-                    | '$'
-                    | '|'
-                    | '('
-                    | ')'
-                    | '1'..='9'
-                    | 'b'
-                    | 'B'
-                    | '<'
-                    | '>'
-                    | 'w'
-                    | 'W' => {
-                        s.push('\\');
-                    }
-                    _ => {}
-                }
-                s.push(c);
+    let mut c_iter = pattern.chars();
+    loop {
+        let Some(mut c) = c_iter.next() else{
+            break;
+        };
+        if c == '%' {
+            let Some(escape) = c_iter.next() else {
+                return None;
+            };
+            if ".*+?[^$|()123456789bB<>wW".contains(escape) {
+                s.push('\\');
             }
-            '\\' => {
-                s.push_str("\\\\");
-            }
-            '[' => {
-                // Any '%' or '\' characters inside a charset should be copied
-                // over without translation.
-                s.push('[');
-                idx += 1;
-                let c = pattern.chars().nth(idx).unwrap();
-                if c == '^' {
-                    s.push('^');
-                    idx += 1;
-                }
-                // This is the only place a ']' can appear and not be the end of
-                //  the charset.
-                if c == ']' {
-                    s.push(']');
-                    idx += 1;
-                }
-                while idx < pattern.len() {
-                    let c = pattern.chars().nth(idx).unwrap();
-                    if c == ']' {
-                        s.push(']');
-                        idx += 1;
-                        break;
-                    }
-                    s.push(c);
-                    idx += 1;
-                }
-            }
-            _ => {
-                s.push(c);
-            }
+            s.push(escape);
+            continue;
         }
-        idx += 1;
+        if c == '\\' {
+            s.push_str("\\\\");
+            continue;
+        }
+        if c == '[' {
+            /* Any '%' or '\' characters inside a charset should be copied
+             * over without translation. */
+            s.push(c);
+            let Some(next) = c_iter.next() else {
+                return None;
+            };
+            c = next;
+            if c == '^' {
+                s.push(c);
+                let Some(next) = c_iter.next() else {
+                    return None;
+                };
+                c = next;
+            }
+            if c == ']' {
+                s.push(c);
+                let Some(next) = c_iter.next() else {
+                    return None;
+                };
+                c = next;
+            }
+            while c != ']' {
+                s.push(c);
+                let Some(next) = c_iter.next() else {
+                    return None;
+                };
+                c = next;
+            }
+            s.push(c);
+            continue;
+        }
+        s.push(c);
     }
-    s
+    Some(s)
 }
 
 #[cfg(test)]
@@ -249,7 +259,7 @@ mod tests {
 
     use crate::{
         re_compile_fastmap, re_compile_pattern, re_pattern_buffer, re_registers, re_search,
-        re_set_syntax, CompileError, Pattern, RE_CONTEXT_INDEP_OPS,
+        re_set_syntax, translate_pattern, CompileError, Pattern, RE_CONTEXT_INDEP_OPS,
     };
 
     #[no_mangle]
@@ -327,14 +337,64 @@ mod tests {
     #[test]
     fn test_match_case_sensitive() {
         let pattern = Pattern::new(r#"^The.*Spain$"#, false).unwrap();
-        let match_result = pattern.match_pattern("The rain in Spain").unwrap();
-        assert_eq!(match_result[0], (1, 17));
+        let (overall, match_result) = pattern.match_pattern("The rain in Spain").unwrap();
+        assert_eq!(overall, (1, 17));
+        assert_eq!(match_result[0], (0, -1));
     }
 
     #[test]
     fn test_match_case_insensitive() {
         let pattern = Pattern::new(r#"^The.*Spain$"#, false).unwrap();
-        let match_result = pattern.match_pattern("the rain in spain").unwrap();
-        assert_eq!(match_result[0], (1, 17));
+        let (overall, match_result) = pattern.match_pattern("the rain in spain").unwrap();
+        assert_eq!(overall, (1, 17));
+        assert_eq!(match_result[0], (0, -1));
+    }
+
+    #[test]
+    fn test_subs_match() {
+        //    match("foobar", "f%(o*%)b")
+        //             =>  {1, 4, {{2, 3}, {0, -1}, ...}, "foobar"}
+        let pattern = Pattern::new(r#"f%(o*%)b"#, false).unwrap();
+        let (overall, match_result) = pattern.match_pattern("foobar").unwrap();
+        assert_eq!(overall, (1, 4));
+        assert_eq!(match_result[0], (2, 3));
+        assert_eq!(match_result[1], (0, -1));
+    }
+
+    #[test]
+    fn test_reverse_match() {
+        // from `help`:
+        // rmatch("foobar", "o*b")      =>  {4, 4, {{0, -1}, ...}, "foobar"}
+        let pattern = Pattern::new(r#"o*b"#, false).unwrap();
+        let (overall, _match_result) = pattern.reverse_match_pattern("foobar").unwrap();
+        assert_eq!(overall, (4, 4));
+    }
+
+    #[test]
+    fn test_pattern_translation() {
+        let pattern = "^.* %(from%|to%) %([^, ]+%)";
+        let translated = translate_pattern(pattern);
+        assert_eq!(
+            translated,
+            Some("^.* \\(from\\|to\\) \\([^, ]+\\)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_regression_hostname_pattern() {
+        // Based on a real-world example. Was fixed by fixing `translate_pattern`.
+
+        let pattern = Pattern::new("^.* %(from%|to%) %([^, ]+%)", false).unwrap();
+        let (overall, match_result) = pattern
+            .match_pattern("port 7777 from 127.0.0.1, port 48610")
+            .unwrap();
+        // MOO is returning:
+        //   {1, 24, {{11, 14}, {16, 24}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1},  "port 7777 from 127.0.0.1, port 48610"}
+        // But our version was returning:
+        //   {1, 16, {{11, 14}, {16, 16}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "port 7777 from 127.0.0.1, port 48610"}
+        assert_eq!(overall, (1, 24));
+        assert_eq!(match_result[0], (11, 14));
+        assert_eq!(match_result[1], (16, 24));
+        assert_eq!(match_result[2], (0, -1));
     }
 }

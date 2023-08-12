@@ -32,7 +32,6 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
         .await?;
     let owner = property_info.owner.unwrap();
     let flags = property_info.flags.unwrap();
-    let name = property_info.name.unwrap();
 
     // Turn perm flags into string: r w c
     let mut perms = String::new();
@@ -46,11 +45,7 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
         perms.push('c');
     }
 
-    Ok(Ret(v_list(vec![
-        v_objid(owner),
-        v_string(perms),
-        v_string(name),
-    ])))
+    Ok(Ret(v_list(vec![v_objid(owner), v_string(perms)])))
 }
 bf_declare!(property_info, bf_property_info);
 

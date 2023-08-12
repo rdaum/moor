@@ -6,8 +6,7 @@ use rand::Rng;
 
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_empty_list, v_int, v_list, v_str, v_string};
-use regexpr_binding::Pattern;
+use moor_value::var::{v_int, v_str, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -207,48 +206,6 @@ async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
 }
 bf_declare!(binary_hash, bf_binary_hash);
 
-#[no_mangle]
-#[used]
-// TODO: This is not thread safe. If we actually want to use this flag, we will want to put the
-// whole 'legacy' regex engine in a mutex.
-pub static mut task_timed_out: u64 = 0;
-
-async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Ok(Error(E_INVARG));
-    }
-    let (subject, pattern) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Str(subject), Variant::Str(pattern)) => (subject, pattern),
-        _ => return Ok(Error(E_TYPE)),
-    };
-
-    let case_matters = if bf_args.args.len() == 3 {
-        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Ok(Error(E_TYPE));
-        };
-        *case_matters == 1
-    } else {
-        false
-    };
-
-    // TODO: pattern cache?
-    let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
-        return  Ok(Error(E_INVARG));
-    };
-
-    let Ok(match_vec) = pattern.match_pattern(subject.as_str()) else {
-        return  Ok(Ret(v_empty_list()));
-    };
-
-    Ok(Ret(v_list(
-        match_vec
-            .iter()
-            .map(|(start, end)| v_list(vec![v_int(*start as i64), v_int(*end as i64)]))
-            .collect(),
-    )))
-}
-bf_declare!(match, bf_match);
-
 impl VM {
     pub(crate) fn register_bf_strings(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("strsub")] = Arc::new(Box::new(BfStrsub {}));
@@ -258,7 +215,6 @@ impl VM {
         self.builtins[offset_for_builtin("crypt")] = Arc::new(Box::new(BfCrypt {}));
         self.builtins[offset_for_builtin("string_hash")] = Arc::new(Box::new(BfStringHash {}));
         self.builtins[offset_for_builtin("binary_hash")] = Arc::new(Box::new(BfBinaryHash {}));
-        self.builtins[offset_for_builtin("match")] = Arc::new(Box::new(BfMatch {}));
 
         Ok(())
     }
