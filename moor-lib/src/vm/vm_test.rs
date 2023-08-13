@@ -779,6 +779,49 @@ mod tests {
         assert_eq!(result, v_str("You"));
     }
 
+    #[tokio::test]
+    // Regression test for Op::Length inside try/except, which was causing a panic due to the stack
+    // offset being off by 1.
+    async fn test_regression_length_expr_inside_try_except() {
+        let program = r#"
+        try
+          return "hello world"[2..$];
+        except (E_RANGE)
+        endtry
+        "#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_str("ello world"));
+    }
+
+    #[tokio::test]
+    // Same bug as above existed for catch exprs
+    async fn test_regression_length_expr_inside_catch() {
+        let program = r#"
+        return `"hello world"[2..$] ! ANY';
+        "#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_str("ello world"));
+    }
+
+    // And try/finally..
+    #[tokio::test]
+    async fn test_regression_length_expr_inside_finally() {
+        let program = r#"
+        try return "hello world"[2..$]; finally endtry return "oh nope!";
+        "#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_str("ello world"));
+    }
+
     struct MockClientConnection {
         received: Vec<String>,
     }

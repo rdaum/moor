@@ -428,7 +428,8 @@ impl VM {
                 }
             }
             Op::Length(offset) => {
-                let v = self.top().valstack[offset.0].clone();
+                let vsr = &self.top().valstack;
+                let v = &vsr[offset.0];
                 match v.variant() {
                     Variant::Str(s) => self.push(&v_int(s.len() as i64)),
                     Variant::List(l) => self.push(&v_int(l.len() as i64)),

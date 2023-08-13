@@ -629,8 +629,41 @@ impl Decompile {
             Op::Length(_) => {
                 self.push_expr(Expr::Length);
             }
-            _ => {
-                todo!("decompile for {:?}", opcode);
+            Op::IfQues(_) => {
+                unimplemented!()
+            }
+            Op::Jump { .. } => {
+                unimplemented!()
+            }
+            Op::CheckListForSplice => {
+                unimplemented!()
+            }
+            Op::PushTemp => {
+                unimplemented!()
+            }
+            Op::GPut { .. } => {
+                unimplemented!()
+            }
+            Op::GPush { .. } => {
+                unimplemented!()
+            }
+            Op::PutProp => {
+                unimplemented!()
+            }
+            Op::EndCatch(_) => {
+                unimplemented!()
+            }
+            Op::EndExcept(_) => {
+                unimplemented!()
+            }
+            Op::EndFinally => {
+                unimplemented!()
+            }
+            Op::Continue => {
+                unimplemented!()
+            }
+            Op::ExitId(_) => {
+                unimplemented!()
             }
         }
         Ok(())
