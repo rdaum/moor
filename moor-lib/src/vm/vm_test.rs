@@ -822,6 +822,27 @@ mod tests {
         assert_eq!(result, v_str("ello world"));
     }
 
+    #[tokio::test]
+    async fn test_labelled_while_regression() {
+        let program = r#"
+          c = 0;
+          object = #1;
+          while properties (1)
+            c = c + 1;
+            if (c > 10)
+                return #4;
+            endif
+            object = #2;
+            break properties;
+          endwhile
+          return object;
+        "#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_obj(2));
+    }
     struct MockClientConnection {
         received: Vec<String>,
     }

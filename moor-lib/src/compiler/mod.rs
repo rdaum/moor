@@ -4,3 +4,5 @@ pub mod codegen;
 pub mod decompile;
 pub mod labels;
 pub mod parse;
+
+mod codegen_tests;
