@@ -10,19 +10,21 @@ pub mod util;
 pub mod var;
 
 lazy_static! {
-    pub static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
+    static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 }
 
-/// A trait for all values that can be stored in the database. (All of them).
+/// A trait for all values that can be stored in the database. (e.g. all of them).
 /// To abstract away from the underlying serialization format, we use this trait.
-pub trait AsBytes {
+pub trait AsByteBuffer {
     /// Returns the size of this value in bytes.
     /// For now assume this is a costly operation.
     fn size_bytes(&self) -> usize;
     /// Return the bytes representing this value.
-    fn as_bytes(&self) -> Bytes;
+    fn as_byte_buffer(&self) -> Bytes;
     /// Create a value from the given bytes.
-    fn from_bytes(bytes: Bytes) -> Self;
+    /// Either takes ownership or moves.
+    fn from_byte_vector(bytes: Vec<u8>) -> Self;
+    // TODO from_byte_buffer (Bytes) ? may not be needed.
 }
 
 struct CountingWriter {
@@ -45,7 +47,7 @@ impl Reader for BytesBufReader {
 }
 
 /// Implementation of AsBytes for all types that are binpackable.
-impl<T: Encode + Decode + Sized> AsBytes for T {
+impl<T: Encode + Decode + Sized> AsByteBuffer for T {
     fn size_bytes(&self) -> usize
     where
         Self: Encode,
@@ -59,7 +61,7 @@ impl<T: Encode + Decode + Sized> AsBytes for T {
         cw.count
     }
 
-    fn as_bytes(&self) -> Bytes
+    fn as_byte_buffer(&self) -> Bytes
     where
         Self: Sized + Encode,
     {
@@ -67,11 +69,12 @@ impl<T: Encode + Decode + Sized> AsBytes for T {
         Bytes::from(v)
     }
 
-    fn from_bytes(bytes: Bytes) -> Self
+    fn from_byte_vector(bytes: Vec<u8>) -> Self
     where
         Self: Sized + Decode,
     {
-        bincode::decode_from_reader(BytesBufReader(bytes.clone()), *BINCODE_CONFIG)
-            .expect("bytes to bincode")
+        bincode::decode_from_slice(&bytes[..], *BINCODE_CONFIG)
+            .expect("bincode from bytes")
+            .0
     }
 }

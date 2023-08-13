@@ -5,7 +5,7 @@ use moor_value::var::objid::{ObjSet, Objid, NOTHING};
 use crate::db::rocksdb::ColumnFamilies;
 
 use moor_value::model::WorldStateError;
-use moor_value::BINCODE_CONFIG;
+use moor_value::AsByteBuffer;
 
 pub(crate) fn oid_key(o: Objid) -> Vec<u8> {
     o.0.to_be_bytes().to_vec()
@@ -15,11 +15,6 @@ pub(crate) fn composite_key(o: Objid, uuid: &uuid::Bytes) -> Vec<u8> {
     let mut key = oid_key(o);
     key.extend_from_slice(&uuid[..]);
     key
-}
-
-pub(crate) fn encode_objset(o: ObjSet) -> Result<Vec<u8>, anyhow::Error> {
-    let ov = bincode::encode_to_vec(o, *BINCODE_CONFIG)?;
-    Ok(ov)
 }
 
 pub(crate) fn get_oid_value<'a>(
@@ -70,7 +65,7 @@ pub(crate) fn get_objset<'a>(
     let ok = oid_key(o);
     let bytes = tx.get_cf(cf, ok)?;
     let bytes = bytes.ok_or(WorldStateError::ObjectNotFound(o))?;
-    let (ov, _) = bincode::decode_from_slice(&bytes, *BINCODE_CONFIG).unwrap();
+    let ov = ObjSet::from_byte_vector(bytes);
     Ok(ov)
 }
 
@@ -81,8 +76,7 @@ pub(crate) fn set_objset<'a>(
     v: ObjSet,
 ) -> Result<(), WorldStateError> {
     let ok = oid_key(o);
-    let ov = encode_objset(v).unwrap();
-    tx.put_cf(cf, ok, ov).unwrap();
+    tx.put_cf(cf, ok, v.as_byte_buffer()).unwrap();
     Ok(())
 }
 

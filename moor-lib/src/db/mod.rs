@@ -13,6 +13,7 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 use std::thread;
 use uuid::Uuid;
+use moor_value::util::verbname_cmp;
 
 pub mod matching;
 
@@ -110,22 +111,15 @@ pub(crate) struct VerbDef {
     pub(crate) args: VerbArgsSpec,
 }
 
-pub trait HasUuid {
-    fn uuid(&self) -> Uuid;
-}
-
-impl HasUuid for VerbDef {
-    fn uuid(&self) -> Uuid {
-        Uuid::from_bytes(self.uuid)
-    }
-}
-impl HasUuid for PropDef {
-    fn uuid(&self) -> Uuid {
-        Uuid::from_bytes(self.uuid)
+impl Named for VerbDef {
+    fn matches_name(&self, name: &str) -> bool {
+        self.names
+            .iter()
+            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.to_lowercase().as_str()))
     }
 }
 
-type VerbDefs = Container<VerbDef>;
+type VerbDefs = Defs<VerbDef>;
 
 #[derive(Debug, Encode, Decode, Clone)]
 pub(crate) struct PropDef {
@@ -137,12 +131,39 @@ pub(crate) struct PropDef {
     pub(crate) owner: Objid,
 }
 
-type PropDefs = Container<PropDef>;
 
+impl Named for PropDef {
+    fn matches_name(&self, name: &str) -> bool {
+        verbname_cmp(self.name.to_lowercase().as_str(), name.to_lowercase().as_str())
+    }
+}
+impl HasUuid for PropDef {
+    fn uuid(&self) -> Uuid {
+        Uuid::from_bytes(self.uuid)
+    }
+}
 
+type PropDefs = Defs<PropDef>;
+
+pub trait HasUuid {
+    fn uuid(&self) -> Uuid;
+}
+
+pub trait Named {
+    fn matches_name(&self, name: &str) -> bool;
+}
+
+impl HasUuid for VerbDef {
+    fn uuid(&self) -> Uuid {
+        Uuid::from_bytes(self.uuid)
+    }
+}
+
+/// A container for verb or property defs.
+/// Immutable, and can be iterated over in sequence, or indexed by uuid.
 #[derive(Debug, Encode, Decode, Clone)]
-pub(crate) struct Container<T: Encode + Decode + Clone + Sized + HasUuid + 'static>(Vec<T>);
-impl<T: Encode + Decode + Clone + HasUuid> Container<T> {
+pub(crate) struct Defs<T: Encode + Decode + Clone + Sized + HasUuid  + Named + 'static>(Vec<T>);
+impl<T: Encode + Decode + Clone + HasUuid + Named> Defs<T> {
     pub fn empty() -> Self {
         Self(vec![])
     }
@@ -158,6 +179,9 @@ impl<T: Encode + Decode + Clone + HasUuid> Container<T> {
     pub(crate) fn contains(&self, uuid: Uuid) -> bool {
         self.0.iter().any(|p| p.uuid() == uuid)
     }
+    pub(crate) fn find_named(&self, name: &str) -> Option<&T> {
+        self.0.iter().find(|p| p.matches_name(name))
+    }
     pub(crate) fn with_removed(&self, uuid: Uuid) -> Option<Self> {
         // Return None if the uuid isn't found, otherwise return a copy with the verb removed.
         if !self.contains(uuid) {
@@ -165,7 +189,7 @@ impl<T: Encode + Decode + Clone + HasUuid> Container<T> {
         }
         Some(Self(self.0.iter().filter(|v| v.uuid() != uuid).cloned().collect()))
     }
-    pub(crate) fn with_updated<F: Fn(&T) -> T>(&mut self, uuid: Uuid, f: F) -> Option<Self> {
+    pub(crate) fn with_updated<F: Fn(&T) -> T>(&self, uuid: Uuid, f: F) -> Option<Self> {
         // Return None if the uuid isn't found, otherwise return a copy with the updated verb.
         let mut found = false;
         let mut new = vec![];
@@ -181,7 +205,7 @@ impl<T: Encode + Decode + Clone + HasUuid> Container<T> {
     }
 }
 
-impl<T: Encode + Decode + Clone + HasUuid> Index<usize> for Container<T> {
+impl<T: Encode + Decode + Clone + HasUuid + Named> Index<usize> for Defs<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -189,10 +213,9 @@ impl<T: Encode + Decode + Clone + HasUuid> Index<usize> for Container<T> {
     }
 }
 
-impl<T: Encode + Decode + Clone + HasUuid> From<Vec<T>> for Container<T> {
+impl<T: Encode + Decode + Clone + HasUuid + Named> From<Vec<T>> for Defs<T> {
     fn from(v: Vec<T>) -> Self {
         Self(v)
     }
 }
-
 

@@ -8,7 +8,7 @@ use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
 use moor_value::var::{v_none, Var};
-use moor_value::BINCODE_CONFIG;
+use moor_value::AsByteBuffer;
 use tracing::{info, trace};
 use uuid::Uuid;
 
@@ -21,10 +21,7 @@ impl<'a> RocksDbTx<'a> {
         let props_bytes = self.tx.get_cf(cf, ok)?;
         let props = match props_bytes {
             None => PropDefs::empty(),
-            Some(prop_bytes) => {
-                let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
-                props
-            }
+            Some(props_bytes) => PropDefs::from_byte_vector(props_bytes)
         };
         Ok(props)
     }
@@ -37,14 +34,14 @@ impl<'a> RocksDbTx<'a> {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
         };
-        let (var, _) = bincode::decode_from_slice(&var_bytes, *BINCODE_CONFIG)?;
+        let var = Var::from_byte_vector(var_bytes);
         Ok(var)
     }
     #[tracing::instrument(skip(self))]
     pub fn set_property_value(&self, o: Objid, u: Uuid, v: Var) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let ok = composite_key(o, u.as_bytes());
-        let var_bytes = bincode::encode_to_vec(v, *BINCODE_CONFIG)?;
+        let var_bytes = v.as_byte_buffer();
         self.tx.put_cf(cf, ok, var_bytes)?;
         Ok(())
     }
@@ -64,9 +61,7 @@ impl<'a> RocksDbTx<'a> {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
         };
-        let (mut props, _): (PropDefs, _) =
-            bincode::decode_from_slice(&props_bytes, *BINCODE_CONFIG)?;
-
+        let props = PropDefs::from_byte_vector(props_bytes);
         let Some(new_props) = props.with_updated(u, |p| {
             let mut new_p = p.clone();
             if let Some(new_owner) = new_owner {
@@ -95,8 +90,7 @@ impl<'a> RocksDbTx<'a> {
         let Some(props_bytes) = props_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
-        let (props, _): (PropDefs, _) =
-            bincode::decode_from_slice(&props_bytes, *BINCODE_CONFIG)?;
+        let props = PropDefs::from_byte_vector(props_bytes);
         let Some(new_props) = props.with_removed(u) else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
@@ -154,10 +148,7 @@ impl<'a> RocksDbTx<'a> {
             let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
             let mut props: PropDefs = match props_bytes {
                 None => PropDefs::empty(),
-                Some(prop_bytes) => {
-                    let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
-                    props
-                }
+                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes)
             };
 
             // Verify we don't already have a property with this name. If we do, return an error.
@@ -181,7 +172,7 @@ impl<'a> RocksDbTx<'a> {
         if let Some(value) = value {
             let value_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
             let propkey = composite_key(definer, u.as_bytes());
-            let prop_bytes = bincode::encode_to_vec(value, *BINCODE_CONFIG)?;
+            let prop_bytes = value.as_byte_buffer();
             self.tx.put_cf(value_cf, propkey, prop_bytes)?;
         }
 
@@ -231,8 +222,7 @@ impl<'a> RocksDbTx<'a> {
         new_props: PropDefs,
     ) -> Result<(), anyhow::Error> {
         let propdefs_cf = self.cf_handles[((ColumnFamilies::ObjectPropDefs) as u8) as usize];
-        let props_bytes = bincode::encode_to_vec(new_props, *BINCODE_CONFIG)?;
-        self.tx.put_cf(propdefs_cf, oid_key(obj), props_bytes)?;
+        self.tx.put_cf(propdefs_cf, oid_key(obj), new_props.as_byte_buffer())?;
         Ok(())
     }
 
@@ -250,16 +240,9 @@ impl<'a> RocksDbTx<'a> {
 
             let props: PropDefs = match self.tx.get_cf(ov_cf, ok.clone())? {
                 None => PropDefs::empty(),
-                Some(prop_bytes) => {
-                    let (props, _) = bincode::decode_from_slice(&prop_bytes, *BINCODE_CONFIG)?;
-                    props
-                }
+                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes)
             };
-            let prop = props
-                .iter()
-                .find(|vh| vh.name.to_lowercase() == n.to_lowercase());
-
-            if let Some(prop) = prop {
+            if let Some(prop) = props.find_named(n.as_str()) {
                 trace!(?prop, parent = ?search_o, "found property");
                 return Ok(Some(prop.clone()));
             }

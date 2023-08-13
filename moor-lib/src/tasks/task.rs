@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{bail, Error};
-use bincode::{decode_from_slice, encode_to_vec};
 use metrics_macros::increment_counter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -27,7 +26,7 @@ use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag, VerbInfo};
 use moor_value::model::world_state::WorldState;
 use moor_value::model::CommitResult;
-use moor_value::BINCODE_CONFIG;
+use moor_value::AsByteBuffer;
 
 /// Messages sent to tasks from the scheduler to tell the task to do things.
 pub(crate) enum TaskControlMsg {
@@ -393,7 +392,7 @@ impl Task {
 
                     let program = Self::decode_program(
                         resolved_verb.attrs.binary_type,
-                        resolved_verb.attrs.binary.as_ref().unwrap(),
+                        resolved_verb.attrs.binary.clone().unwrap(),
                     )?;
 
                     let call_request = VerbExecutionRequest {
@@ -547,20 +546,19 @@ impl Task {
 
     fn decode_program(
         binary_type: BinaryType,
-        binary_bytes: &[u8],
+        binary_bytes: Vec<u8>,
     ) -> Result<Program, anyhow::Error> {
         match binary_type {
             BinaryType::LambdaMoo18X => {
-                let (binary, _) = decode_from_slice(binary_bytes, *BINCODE_CONFIG)?;
-                Ok(binary)
+                Ok(Program::from_byte_vector(binary_bytes.to_vec()))
             }
             _ => bail!("Unsupported binary type {:?}", binary_type),
         }
     }
 
     fn encode_program(binary: &Program) -> Result<Vec<u8>, anyhow::Error> {
-        let encoded = encode_to_vec(binary, *BINCODE_CONFIG)?;
-        Ok(encoded)
+        // TODO 'binary' should be Bytes instead of Vec<u8>, really.
+        Ok(binary.as_byte_buffer().to_vec())
     }
 
     /// Entry point (from the scheduler) for beginning a command execution in this VM.
@@ -571,7 +569,7 @@ impl Task {
         command: ParsedCommand,
         permissions: PermissionsContext,
     ) -> Result<VerbExecutionRequest, Error> {
-        let binary = Self::decode_program(vi.attrs.binary_type, vi.attrs.binary.as_ref().unwrap())?;
+        let binary = Self::decode_program(vi.attrs.binary_type, vi.attrs.binary.clone().unwrap())?;
 
         let call_request = VerbExecutionRequest {
             permissions,
@@ -601,7 +599,7 @@ impl Task {
 
         let binary = Self::decode_program(
             verb_info.attrs.binary_type,
-            verb_info.attrs.binary.as_ref().unwrap(),
+            verb_info.attrs.binary.clone().unwrap(),
         )?;
 
         let call_request = VerbExecutionRequest {

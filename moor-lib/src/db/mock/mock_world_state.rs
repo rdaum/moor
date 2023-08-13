@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Error;
 use async_trait::async_trait;
 
-use moor_value::AsBytes;
+use moor_value::AsByteBuffer;
 use uuid::Uuid;
 
 use moor_value::util::bitenum::BitEnum;
@@ -29,7 +29,7 @@ struct MockStore {
 }
 impl MockStore {
     fn set_verb(&mut self, o: Objid, name: &str, program: &Program) {
-        let binary = program.as_bytes();
+        let binary = program.as_byte_buffer();
         self.verbs.insert(
             (o, name.to_string()),
             VerbInfo {

@@ -4,14 +4,13 @@ mod tests {
 
     use anyhow::Error;
     use async_trait::async_trait;
-    use bincode::decode_from_slice;
+    use moor_value::AsByteBuffer;
     use tokio::sync::RwLock;
 
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::{Objid, NOTHING};
     use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
-    use moor_value::BINCODE_CONFIG;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
@@ -90,8 +89,7 @@ mod tests {
             caller: NOTHING,
         };
         let verb = state.get_verb(perms.clone(), o, verb_name).await.unwrap();
-        let (program, _) =
-            decode_from_slice(verb.attrs.binary.as_ref().unwrap(), *BINCODE_CONFIG).unwrap();
+        let program = Program::from_byte_vector(verb.attrs.binary.clone().unwrap());
         let cr = VerbExecutionRequest {
             permissions: perms,
             resolved_verb: verb,
@@ -131,11 +129,7 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let (decoded_verb, _) = bincode::decode_from_slice(
-                        resolved_verb.attrs.binary.as_ref().unwrap(),
-                        *BINCODE_CONFIG,
-                    )
-                    .unwrap();
+                    let decoded_verb = Program::from_byte_vector(resolved_verb.attrs.binary.clone().unwrap());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,
@@ -865,11 +859,8 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let (decoded_verb, _) = bincode::decode_from_slice(
-                        resolved_verb.attrs.binary.as_ref().unwrap(),
-                        *BINCODE_CONFIG,
-                    )
-                    .unwrap();
+                    let decoded_verb =
+                        Program::from_byte_vector(resolved_verb.attrs.binary.clone().unwrap());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,

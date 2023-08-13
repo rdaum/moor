@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use moor_value::BINCODE_CONFIG;
+use moor_value::AsByteBuffer;
 use rocksdb::ErrorKind;
 use tracing::trace;
 use uuid::Uuid;
@@ -11,7 +11,6 @@ use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::{CommitResult, WorldStateError};
 use moor_value::util::bitenum::BitEnum;
-use moor_value::util::verbname_cmp;
 use moor_value::var::objid::{Objid, NOTHING};
 
 impl<'a> RocksDbTx<'a> {
@@ -22,10 +21,7 @@ impl<'a> RocksDbTx<'a> {
         let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs = match verbs_bytes {
             None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+            Some(verbs_bytes) => VerbDefs::from_byte_vector(verbs_bytes)
         };
         Ok(verbs)
     }
@@ -46,10 +42,7 @@ impl<'a> RocksDbTx<'a> {
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let mut verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+            Some(verbs_bytes) => VerbDefs::from_byte_vector(verbs_bytes)
         };
 
         // Generate a new verb ID.
@@ -64,9 +57,8 @@ impl<'a> RocksDbTx<'a> {
             args,
         };
         verbs.push(verb);
-        let verbs_v = bincode::encode_to_vec(&verbs, *BINCODE_CONFIG)?;
         self.tx
-            .put_cf(cf, ok, verbs_v)
+            .put_cf(cf, ok, verbs.as_byte_buffer())
             .with_context(|| format!("failure to write verbdef: {}:{:?}", oid, names.clone()))?;
 
         // Now set the program.
@@ -84,17 +76,13 @@ impl<'a> RocksDbTx<'a> {
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+            Some(verbs_bytes) => VerbDefs::from_byte_vector(verbs_bytes)
         };
         let Some(verbs) = verbs.with_removed(v) else {
             let v_uuid_str = v.to_string();
             return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
         };
-        let verbs_v = bincode::encode_to_vec(verbs, *BINCODE_CONFIG)?;
-        self.tx.put_cf(cf, ok, verbs_v)?;
+        self.tx.put_cf(cf, ok, verbs.as_byte_buffer())?;
 
         // Delete the program.
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
@@ -110,10 +98,7 @@ impl<'a> RocksDbTx<'a> {
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+            Some(verbs_bytes) => VerbDefs::from_byte_vector(verbs_bytes)
         };
         let verb = verbs.iter().find(|vh| &vh.uuid == v.as_bytes());
         let Some(verb) = verb else {
@@ -126,18 +111,11 @@ impl<'a> RocksDbTx<'a> {
     pub fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbDef, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
-        let verbs: VerbDefs = match verbs_bytes {
-            None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+        let Some(verbs_bytes) = self.tx.get_cf(cf, ok.clone())? else {
+            return Err(WorldStateError::VerbNotFound(o, n).into());
         };
-        let verb = verbs
-            .iter()
-            .find(|vh| match_in_verb_names(&vh.names, &n).is_some());
-        let Some(verb) = verb else {
+        let verbs = VerbDefs::from_byte_vector(verbs_bytes);
+        let Some(verb) = verbs.find_named(n.as_str()) else {
             return Err(WorldStateError::VerbNotFound(o, n).into());
         };
         Ok(verb.clone())
@@ -149,10 +127,7 @@ impl<'a> RocksDbTx<'a> {
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+            Some(verbs_bytes) => VerbDefs::from_byte_vector(verbs_bytes)
         };
         if i >= verbs.len() {
             return Err(WorldStateError::VerbNotFound(o, format!("{}", i)).into());
@@ -184,24 +159,15 @@ impl<'a> RocksDbTx<'a> {
         loop {
             let ok = oid_key(search_o);
 
-            let verbs: VerbDefs = match self.tx.get_cf(ov_cf, ok.clone())? {
-                None => VerbDefs::empty(),
-                Some(verb_bytes) => {
-                    let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                    verbs
-                }
+            let Some(verbs_bytes) = self.tx.get_cf(ov_cf, ok.clone())? else {
+                return Err(WorldStateError::VerbNotFound(search_o, n).into());
             };
-            let verb = verbs.iter().find(|vh| {
-                if match_in_verb_names(&vh.names, &n).is_some() {
-                    return if let Some(a) = a { a.matches(&a) } else { true };
-                }
-                false
-            });
+            let verbs = VerbDefs::from_byte_vector(verbs_bytes);
+
             // If we found the verb, return it.
-            if let Some(verb) = verb {
-                trace!(?verb, ?search_o, "resolved verb");
+            if let Some(verb) = verbs.find_named(n.as_str()) {
                 return Ok(verb.clone());
-            }
+            };
 
             // Otherwise, find our parent.  If it's, then set o to it and continue unless we've
             // hit the end of the chain.
@@ -220,21 +186,13 @@ impl<'a> RocksDbTx<'a> {
     pub fn retrieve_verb(&self, o: Objid, v: String) -> Result<(Vec<u8>, VerbDef), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
-        let verbs: VerbDefs = match verbs_bytes {
-            None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
-        };
-        let verb = verbs
-            .iter()
-            .find(|vh| match_in_verb_names(&vh.names, &v).is_some());
-        let Some(verb) = verb else {
+        let Some(verbs_bytes) = self.tx.get_cf(cf, ok.clone())? else {
             return Err(WorldStateError::VerbNotFound(o, v.clone()).into())
         };
-
+        let verbs = VerbDefs::from_byte_vector(verbs_bytes);
+        let Some(verb) = verbs.find_named(v.as_str()) else {
+            return Err(WorldStateError::VerbNotFound(o, v.clone()).into())
+        };
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let vk = composite_key(o, &verb.uuid);
         let prg_bytes = self.tx.get_cf(cf, vk)?;
@@ -256,12 +214,9 @@ impl<'a> RocksDbTx<'a> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
         let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
-        let mut verbs: VerbDefs = match verbs_bytes {
+        let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
-            Some(verb_bytes) => {
-                let (verbs, _) = bincode::decode_from_slice(&verb_bytes, *BINCODE_CONFIG)?;
-                verbs
-            }
+            Some(verbs_bytes) => VerbDefs::from_byte_vector(verbs_bytes)
         };
         let Some(new_verbs) = verbs.with_updated(v, |ov| {
             let mut nv = ov.clone();
@@ -283,9 +238,7 @@ impl<'a> RocksDbTx<'a> {
             return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
         };
 
-        let verbs_v = bincode::encode_to_vec(new_verbs, *BINCODE_CONFIG)?;
-
-        self.tx.put_cf(cf, ok, verbs_v)?;
+        self.tx.put_cf(cf, ok, new_verbs.as_byte_buffer())?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
@@ -303,10 +256,4 @@ impl<'a> RocksDbTx<'a> {
         self.tx.rollback()?;
         Ok(())
     }
-}
-
-fn match_in_verb_names<'a>(verb_names: &'a [String], word: &str) -> Option<&'a String> {
-    verb_names
-        .iter()
-        .find(|&verb| verbname_cmp(verb.to_lowercase().as_str(), word.to_lowercase().as_str()))
 }

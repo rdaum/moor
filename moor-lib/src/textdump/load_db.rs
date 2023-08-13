@@ -5,6 +5,7 @@ use std::io::BufReader;
 use anyhow::Context;
 use metrics_macros::increment_counter;
 use tracing::{info, span, trace, warn};
+use moor_value::AsByteBuffer;
 
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
@@ -18,7 +19,6 @@ use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_value::model::verbs::VerbFlag;
-use moor_value::BINCODE_CONFIG;
 
 struct RProp {
     definer: Objid,
@@ -205,7 +205,7 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
                 continue;
             };
 
-            let binary = compile(verb.program.as_str()).with_context(|| {
+            let program = compile(verb.program.as_str()).with_context(|| {
                 format!(
                     "Compile error in #{}/{} ({:?}): {:?}",
                     objid.0, vn, names, verb.program
@@ -213,8 +213,7 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
             })?;
 
             // Encode the binary (for now using bincode)
-            let binary = bincode::encode_to_vec(&binary, *BINCODE_CONFIG)
-                .with_context(|| "Unable to encode MOO program")?;
+            let binary = program.as_byte_buffer().to_vec();
 
             ldr.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
                 .await

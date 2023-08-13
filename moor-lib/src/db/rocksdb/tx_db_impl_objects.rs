@@ -8,7 +8,7 @@ use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
-use moor_value::BINCODE_CONFIG;
+use moor_value::AsByteBuffer;
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
@@ -211,15 +211,13 @@ impl<'a> RocksDbTx<'a> {
         let Some(name_bytes) = name_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
-        let (attrs, _) = bincode::decode_from_slice(&name_bytes, *BINCODE_CONFIG)?;
-        Ok(attrs)
+        Ok(String::from_byte_vector(name_bytes))
     }
     #[tracing::instrument(skip(self))]
-    pub fn set_object_name(&self, o: Objid, names: String) -> Result<(), anyhow::Error> {
+    pub fn set_object_name(&self, o: Objid, name: String) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = oid_key(o);
-        let name_v = bincode::encode_to_vec(names, *BINCODE_CONFIG)?;
-        self.tx.put_cf(cf, ok, name_v)?;
+        self.tx.put_cf(cf, ok, name.as_byte_buffer())?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
@@ -230,15 +228,13 @@ impl<'a> RocksDbTx<'a> {
         let Some(flag_bytes) = flag_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
-        let (flags, _) = bincode::decode_from_slice(&flag_bytes, *BINCODE_CONFIG)?;
-        Ok(flags)
+        Ok(BitEnum::from_byte_vector(flag_bytes))
     }
     #[tracing::instrument(skip(self))]
     pub fn set_object_flags(&self, o: Objid, flags: BitEnum<ObjFlag>) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = oid_key(o);
-        let flag_v = bincode::encode_to_vec(flags, *BINCODE_CONFIG)?;
-        self.tx.put_cf(cf, ok, flag_v)?;
+        self.tx.put_cf(cf, ok, flags.as_byte_buffer())?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
