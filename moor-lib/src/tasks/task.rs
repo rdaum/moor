@@ -21,7 +21,6 @@ use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag, VerbInfo};
 use moor_value::model::world_state::WorldState;
@@ -78,7 +77,7 @@ pub(crate) struct Task {
     pub(crate) vm: VM,
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
     pub(crate) world_state: Box<dyn WorldState>,
-    pub(crate) perms: PermissionsContext,
+    pub(crate) perms: Objid,
     pub(crate) running_method: bool,
     pub(crate) tmp_verb: Option<(Objid, String)>,
     /// The maximum stack detph for this task
@@ -118,10 +117,13 @@ impl Task {
                 match vm_exec_result {
                     SchedulerControlMsg::TaskSuccess(ref result) => {
                         increment_counter!("tasks.success_complete");
-                        drop_tmp_verb(self.world_state.as_mut(), &self.perms, &self.tmp_verb).await;
+                        drop_tmp_verb(self.world_state.as_mut(), self.perms, &self.tmp_verb).await;
 
-                        trace!(self.task_id, result = ?result, "Task complete");
-                        self.world_state.commit().await.unwrap();
+                        // TODO: restart the whole task on conflict.
+                        let CommitResult::Success = self.world_state.commit().await.expect("Could not attempt commit") else {
+                            unimplemented!("Task restart on conflict")
+                        };
+                        trace!(self.task_id, result = ?result, "Task complete, committed");
 
                         self.scheduler_control_sender
                             .send(vm_exec_result)
@@ -200,8 +202,7 @@ impl Task {
                     args: command.args.clone(),
                     caller: NOTHING,
                 };
-                let cr =
-                    self.start_call_command_verb(verbinfo, call, command, self.perms.clone())?;
+                let cr = self.start_call_command_verb(verbinfo, call, command, self.perms)?;
                 self.scheduled_start_time = None;
                 self.vm.start_time = Some(SystemTime::now());
                 self.vm.tick_count = 0;
@@ -260,7 +261,7 @@ impl Task {
                 let tmp_name = Uuid::new_v4().to_string();
                 self.world_state
                     .add_verb(
-                        self.perms.clone(),
+                        self.perms,
                         player,
                         vec![tmp_name.clone()],
                         player,
@@ -324,7 +325,7 @@ impl Task {
                 let description = TaskDescription {
                     task_id: self.task_id,
                     start_time: self.scheduled_start_time,
-                    permissions: self.vm.top().permissions.clone(),
+                    permissions: self.vm.top().permissions,
                     verb_name: self.vm.top().verb_name.clone(),
                     verb_definer: self.vm.top().verb_definer(),
                     // TODO: when we have proper decompilation support
@@ -565,7 +566,7 @@ impl Task {
         vi: VerbInfo,
         verb_call: VerbCall,
         command: ParsedCommand,
-        permissions: PermissionsContext,
+        permissions: Objid,
     ) -> Result<VerbExecutionRequest, Error> {
         let binary = Self::decode_program(vi.attrs.binary_type, vi.attrs.binary.clone().unwrap())?;
 
@@ -588,11 +589,7 @@ impl Task {
         // Find the callable verb ...
         let verb_info = self
             .world_state
-            .find_method_verb_on(
-                self.perms.clone(),
-                verb_call.this,
-                verb_call.verb_name.as_str(),
-            )
+            .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
             .await?;
 
         let binary = Self::decode_program(
@@ -601,7 +598,7 @@ impl Task {
         )?;
 
         let call_request = VerbExecutionRequest {
-            permissions: self.perms.clone(),
+            permissions: self.perms,
             resolved_verb: verb_info.clone(),
             call: verb_call,
             command: None,
@@ -614,14 +611,11 @@ impl Task {
 
 async fn drop_tmp_verb(
     state: &mut dyn WorldState,
-    perms: &PermissionsContext,
+    perms: Objid,
     tmp_verb: &Option<(Objid, String)>,
 ) {
     if let Some((player, verb_name)) = tmp_verb {
-        if let Err(e) = state
-            .remove_verb(perms.clone(), *player, verb_name.as_str())
-            .await
-        {
+        if let Err(e) = state.remove_verb(perms, *player, verb_name.as_str()).await {
             error!(error = ?e, "Could not remove temp verb");
         }
     }

@@ -12,9 +12,16 @@ use crate::vm::builtin::{BfCallState, BfRet};
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-use moor_value::model::permissions::Perms;
+
 use moor_value::model::world_state::WorldState;
 use moor_value::model::WorldStateError;
+
+pub(crate) fn args_literal(args: &[Var]) -> String {
+    args.iter()
+        .map(|v| v.to_literal())
+        .collect::<Vec<String>>()
+        .join(", ")
+}
 
 impl VM {
     /// Entry point for preparing a verb call for execution, invoked from the CallVerb opcode
@@ -39,7 +46,15 @@ impl VM {
             // unless we're a builtin, in which case we're #-1.
             caller: self.caller(),
         };
-        debug!(this = ?this, verb = verb_name, args = ?args, caller = ?call.caller, "Preparing verb call");
+        debug!(
+            "Verb call: {}:{}({}) caller_perms: {} caller: {} this: {}",
+            this,
+            verb_name,
+            args_literal(args),
+            self.top().permissions,
+            self.caller(),
+            this
+        );
 
         let self_valid = state.valid(this).await?;
         if !self_valid {
@@ -47,7 +62,7 @@ impl VM {
         }
         // Find the callable verb ...
         let verb_info = match state
-            .find_method_verb_on(self.top().permissions.clone(), this, verb_name)
+            .find_method_verb_on(self.top().permissions, this, verb_name)
             .await
         {
             Ok(vi) => vi,
@@ -67,14 +82,8 @@ impl VM {
             }
         };
 
-        // Derive permissions for the new activation from the current one + the verb's owner
-        // permissions.
-        let verb_owner = verb_info.attrs.owner.unwrap();
-        let next_task_perms = state.flags_of(verb_owner).await?;
-        let permissions = self
-            .top()
-            .permissions
-            .mk_child_perms(Perms::new(verb_owner, next_task_perms));
+        // Permissions for the activation are the verb's owner.
+        let permissions = verb_info.attrs.owner.unwrap();
 
         Ok(ExecutionResult::ContinueVerb {
             permissions,
@@ -96,15 +105,15 @@ impl VM {
     ) -> Result<ExecutionResult, anyhow::Error> {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
-        let permissions = self.top().permissions.clone();
-        let parent = state.parent_of(permissions.clone(), definer).await?;
+        let permissions = self.top().permissions;
+        let parent = state.parent_of(permissions, definer).await?;
         let verb = self.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
         trace!(task_id = self.top().task_id, verb, ?definer, ?parent);
 
         let Ok(vi) = state.find_method_verb_on(
-            permissions.clone(),
+            permissions,
             parent,
             verb.as_str(),
         ).await else {
@@ -195,10 +204,10 @@ impl VM {
         let bf = self.builtins[bf_func_num].clone();
 
         debug!(
-            bf_name = BUILTIN_DESCRIPTORS[bf_func_num].name,
-            bf_func_num,
-            ?args,
-            "Calling builtin function"
+            "Calling builtin: {}({}) caller_perms: {}",
+            BUILTIN_DESCRIPTORS[bf_func_num].name,
+            args_literal(args),
+            self.top().permissions
         );
         let span = span!(
             Level::TRACE,
@@ -224,7 +233,6 @@ impl VM {
             // behaviour below.
             flags,
             self.top().player,
-            self.top().permissions.clone(),
             span.id(),
         ));
         let mut bf_args = BfCallState {

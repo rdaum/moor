@@ -17,7 +17,6 @@ use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
 use crate::vm::opcode::Program;
 use crate::vm::vm_unwind::FinallyReason;
-use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::verbs::VerbInfo;
 
 pub(crate) mod opcode;
@@ -59,7 +58,7 @@ pub struct ForkRequest {
     /// explicit
     pub(crate) player: Objid,
     /// The permissions context for the forked task.
-    pub(crate) perms: PermissionsContext,
+    pub(crate) progr: Objid,
     /// The task ID of the task that forked us
     pub(crate) parent_task_id: usize,
     /// The time to delay before starting the forked task, if any.
@@ -78,8 +77,8 @@ pub struct ForkRequest {
 /// The set of parameters for a VM-requested *resolved* verb method dispatch.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbExecutionRequest {
-    /// The applicable permissions context.
-    pub permissions: PermissionsContext,
+    /// The applicable permissions.
+    pub permissions: Objid,
     /// The resolved verb.
     pub resolved_verb: VerbInfo,
     /// The call parameters that were used to resolve the verb.
@@ -101,7 +100,7 @@ pub enum ExecutionResult {
     /// Request dispatch to another verb
     ContinueVerb {
         /// The applicable permissions context.
-        permissions: PermissionsContext,
+        permissions: Objid,
         /// The requested verb.
         resolved_verb: VerbInfo,
         /// The call parameters that were used to resolve the verb.

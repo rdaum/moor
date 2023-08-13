@@ -28,7 +28,7 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
     };
     let property_info = bf_args
         .world_state
-        .get_property_info(bf_args.perms().clone(), *obj, prop_name.as_str())
+        .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await?;
     let owner = property_info.owner.unwrap();
     let flags = property_info.flags.unwrap();
@@ -115,7 +115,7 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
 
     bf_args
         .world_state
-        .set_property_info(bf_args.perms().clone(), *obj, prop_name.as_str(), attrs)
+        .set_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str(), attrs)
         .await?;
     Ok(Ret(v_list(vec![])))
 }
@@ -133,7 +133,7 @@ async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
     };
     let is_clear = bf_args
         .world_state
-        .is_property_clear(bf_args.perms().clone(), *obj, prop_name.as_str())
+        .is_property_clear(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await?;
     Ok(Ret(v_bool(is_clear)))
 }
@@ -151,7 +151,7 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, a
     };
     bf_args
         .world_state
-        .clear_property(bf_args.perms().clone(), *obj, prop_name.as_str())
+        .clear_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await?;
     Ok(Ret(v_list(vec![])))
 }
@@ -178,11 +178,11 @@ async fn bf_add_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
     bf_args
         .world_state
         .define_property(
-            bf_args.perms().clone(),
+            bf_args.task_perms_who(),
             *location,
             *location,
             name.as_str(),
-            bf_args.perms().task_perms().obj,
+            bf_args.caller_perms(),
             attrs.flags.unwrap(),
             Some(value),
         )
@@ -203,7 +203,7 @@ async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     };
     bf_args
         .world_state
-        .delete_property(bf_args.perms().clone(), *obj, prop_name.as_str())
+        .delete_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await?;
     Ok(Ret(v_list(vec![])))
 }

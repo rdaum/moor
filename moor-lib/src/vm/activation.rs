@@ -11,7 +11,6 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
 use crate::vm::opcode::{Op, Program, EMPTY_PROGRAM};
 use crate::vm::VerbExecutionRequest;
-use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
@@ -19,9 +18,6 @@ use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
 pub struct Caller {
     pub this: Objid,
     pub verb_name: String,
-    pub perms: PermissionsContext,
-    // For verb calls this should usually be the same as perms.task_perms.objid. But for builtins
-    // this is #-1, which is one of the way that MOO cores can tell that a call is a builtin. Sigh.
     pub programmer: Objid,
     pub definer: Objid,
     pub player: Objid,
@@ -62,9 +58,11 @@ pub(crate) struct Activation {
     pub(crate) verb_name: String,
     /// The extended information about the verb that is currently being executed.
     pub(crate) verb_info: VerbInfo,
-    /// Set initially to verb owner, what set_task_perms() can override, caller_perms() returns the
-    /// value of the parent stack frame (or #-1 if none)
-    pub(crate) progr: Objid,
+    /// This is the "task perms" for the current activation. It is the "who" the verb is acting on
+    /// behalf-of in terms of permissions in the world.
+    /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
+    /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
+    pub(crate) permissions: Objid,
     /// The values of the variables currently in scope, by their offset.
     pub(crate) environment: Vec<Var>,
     /// The value stack.
@@ -75,8 +73,6 @@ pub(crate) struct Activation {
     pub(crate) pc: usize,
     /// Scratch space for PushTemp and PutTemp opcodes.
     pub(crate) temp: Var,
-    /// The permissions context for this verb call.
-    pub(crate) permissions: PermissionsContext,
     /// The command that triggered this verb call, if any.
     pub(crate) command: Option<ParsedCommand>,
     /// If the activation is a call to a built-in function, the index of that function, in which
@@ -111,7 +107,6 @@ impl Activation {
             temp: v_none(),
             this: verb_call_request.call.this,
             player: verb_call_request.call.player,
-            permissions: verb_call_request.permissions,
             verb_info: verb_call_request.resolved_verb,
             verb_name: verb_call_request.call.verb_name.clone(),
             command: verb_call_request.command.clone(),
@@ -120,7 +115,7 @@ impl Activation {
             bf_trampoline_arg: None,
             span_id,
             args: verb_call_request.call.args.clone(),
-            progr: verb_owner,
+            permissions: verb_owner,
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
@@ -173,7 +168,6 @@ impl Activation {
         args: Vec<Var>,
         verb_flags: BitEnum<VerbFlag>,
         player: Objid,
-        permissions: PermissionsContext,
         span_id: Option<tracing::span::Id>,
     ) -> Self {
         let verb_info = VerbInfo {
@@ -199,7 +193,6 @@ impl Activation {
             temp: v_none(),
             this: NOTHING,
             player,
-            permissions,
             verb_info,
             verb_name: bf_name.to_string(),
             command: None,
@@ -208,7 +201,7 @@ impl Activation {
             bf_trampoline_arg: None,
             span_id,
             args,
-            progr: NOTHING,
+            permissions: NOTHING,
         }
     }
 

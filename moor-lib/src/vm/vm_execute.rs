@@ -474,7 +474,7 @@ impl VM {
                 let new_activation = self.top().clone();
                 let fork = ForkRequest {
                     player: self.top().player,
-                    perms: self.top().permissions.clone(),
+                    progr: self.top().permissions,
                     parent_task_id: self.top().task_id,
                     delay,
                     activation: new_activation,

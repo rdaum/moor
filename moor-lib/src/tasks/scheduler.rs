@@ -11,10 +11,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
-use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_PERM};
 use moor_value::var::objid::Objid;
-use moor_value::var::variant::Variant;
+
 use moor_value::var::{v_err, v_int, v_none, Var};
 
 use crate::compiler::codegen::compile;
@@ -25,8 +24,8 @@ use crate::tasks::task::{Task, TaskControlMsg};
 use crate::tasks::{Sessions, TaskId};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ForkRequest, VM};
-use moor_value::model::objects::ObjFlag;
-use moor_value::model::permissions::PermissionsContext;
+
+use moor_value::model::permissions::Perms;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
@@ -59,7 +58,7 @@ pub struct Inner {
 pub struct TaskDescription {
     pub task_id: TaskId,
     pub start_time: Option<SystemTime>,
-    pub permissions: PermissionsContext,
+    pub permissions: Objid,
     pub verb_name: String,
     pub verb_definer: Objid,
     pub line_number: usize,
@@ -87,18 +86,18 @@ pub enum SchedulerControlMsg {
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,
-        sender_permissions: PermissionsContext,
+        sender_permissions: Perms,
         result_sender: oneshot::Sender<Var>,
     },
     ResumeTask {
         queued_task_id: TaskId,
-        sender_permissions: PermissionsContext,
+        sender_permissions: Perms,
         return_value: Var,
         result_sender: oneshot::Sender<Var>,
     },
     BootPlayer {
         player: Objid,
-        sender_permissions: PermissionsContext,
+        sender_permissions: Perms,
     },
 }
 
@@ -140,8 +139,8 @@ pub enum SchedulerError {
 }
 
 // TODO cache
-async fn max_vm_values(ws: &mut dyn WorldState, is_background: bool) -> (usize, u64, usize) {
-    let (mut max_ticks, mut max_seconds, mut max_stack_depth) = if is_background {
+async fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize, u64, usize) {
+    let (max_ticks, max_seconds, max_stack_depth) = if is_background {
         (
             DEFAULT_BG_TICKS,
             DEFAULT_BG_SECONDS,
@@ -155,40 +154,46 @@ async fn max_vm_values(ws: &mut dyn WorldState, is_background: bool) -> (usize, 
         )
     };
 
-    // Look up fg_ticks, fg_seconds, and max_stack_depth on $server_options.
-    // These are optional properties, and if they are not set, we use the defaults.
-    let wizperms = PermissionsContext::root_for(Objid(2), BitEnum::new_with(ObjFlag::Wizard));
-    if let Ok(server_options) = ws
-        .retrieve_property(wizperms.clone(), Objid(0), "server_options")
-        .await
-    {
-        if let Variant::Obj(server_options) = server_options.variant() {
-            if let Ok(v) = ws
-                .retrieve_property(wizperms.clone(), *server_options, "fg_ticks")
-                .await
-            {
-                if let Variant::Int(v) = v.variant() {
-                    max_ticks = *v as usize;
-                }
-            }
-            if let Ok(v) = ws
-                .retrieve_property(wizperms.clone(), *server_options, "fg_seconds")
-                .await
-            {
-                if let Variant::Int(v) = v.variant() {
-                    max_seconds = *v as u64;
-                }
-            }
-            if let Ok(v) = ws
-                .retrieve_property(wizperms, *server_options, "max_stack_depth")
-                .await
-            {
-                if let Variant::Int(v) = v.variant() {
-                    max_stack_depth = *v as usize;
-                }
-            }
-        }
-    }
+    // TODO: revisit this -- we need a way to look up and cache these without having to fake wizard
+    //   permissions to get them, which probably means not going through worldstate. I don't want to
+    //   have to guess what $wizard is, and some cores may not have this even defined.
+    //   I think the scheduler will need a handle on some access to the DB that bypasses perms?
+
+    //
+    // // Look up fg_ticks, fg_seconds, and max_stack_depth on $server_options.
+    // // These are optional properties, and if they are not set, we use the defaults.
+    // let wizperms = PermissionsContext::root_for(Objid(2), BitEnum::new_with(ObjFlag::Wizard));
+    // if let Ok(server_options) = ws
+    //     .retrieve_property(wizperms.clone(), Objid(0), "server_options")
+    //     .await
+    // {
+    //     if let Variant::Obj(server_options) = server_options.variant() {
+    //         if let Ok(v) = ws
+    //             .retrieve_property(wizperms.clone(), *server_options, "fg_ticks")
+    //             .await
+    //         {
+    //             if let Variant::Int(v) = v.variant() {
+    //                 max_ticks = *v as usize;
+    //             }
+    //         }
+    //         if let Ok(v) = ws
+    //             .retrieve_property(wizperms.clone(), *server_options, "fg_seconds")
+    //             .await
+    //         {
+    //             if let Variant::Int(v) = v.variant() {
+    //                 max_seconds = *v as u64;
+    //             }
+    //         }
+    //         if let Ok(v) = ws
+    //             .retrieve_property(wizperms, *server_options, "max_stack_depth")
+    //             .await
+    //         {
+    //             if let Variant::Int(v) = v.variant() {
+    //                 max_stack_depth = *v as usize;
+    //             }
+    //         }
+    //     }
+    // }
     (max_ticks, max_seconds, max_stack_depth)
 }
 
@@ -263,26 +268,25 @@ impl Scheduler {
 
         let mut inner = self.inner.write().await;
 
-        let (vloc, vi, command, perms) = {
+        let (vloc, vi, command) = {
             let mut ss = inner.state_source.write().await;
             let mut ws = ss.new_world_state().await?;
             // Get perms for environment search. Player's perms.
-            let player_flags = ws.flags_of(player).await?;
-            let perms = PermissionsContext::root_for(player, player_flags);
+            let _player_flags = ws.flags_of(player).await?;
             let me = DBMatchEnvironment {
                 ws: ws.as_mut(),
-                perms: perms.clone(),
+                perms: player,
             };
             let matcher = MatchEnvironmentParseMatcher { env: me, player };
             let pc = parse_command(command, matcher).await?;
-            let loc = ws.location_of(perms.clone(), player).await?;
+            let loc = ws.location_of(player, player).await?;
 
             let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
             let mut found = None;
             for target in targets_to_search {
                 if let Some(vi) = ws
                     .find_command_verb_on(
-                        perms.clone(),
+                        player,
                         target,
                         pc.verb.as_str(),
                         pc.dobj,
@@ -301,7 +305,7 @@ impl Scheduler {
                                     pc
                                 )));
             };
-            (target, vi, pc, perms)
+            (target, vi, pc)
         };
         let state_source = inner.state_source.clone();
         let task_id = inner
@@ -311,7 +315,7 @@ impl Scheduler {
                 sessions,
                 None,
                 self.clone(),
-                perms,
+                player,
                 false,
             )
             .await?;
@@ -346,7 +350,7 @@ impl Scheduler {
         vloc: Objid,
         verb: String,
         args: Vec<Var>,
-        perms: PermissionsContext,
+        perms: Objid,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.submit_verb_task");
@@ -388,7 +392,7 @@ impl Scheduler {
     pub async fn submit_eval_task(
         &self,
         player: Objid,
-        perms: PermissionsContext,
+        perms: Objid,
         code: String,
         sessions: Arc<RwLock<dyn Sessions>>,
     ) -> Result<TaskId, anyhow::Error> {
@@ -477,7 +481,7 @@ impl Inner {
                 sessions,
                 fork_request.delay,
                 scheduler_ref,
-                fork_request.perms.clone(),
+                fork_request.progr,
                 false,
             )
             .await?;
@@ -759,10 +763,12 @@ impl Inner {
             //   The either have to be the owner of the task (task.programmer == sender_permissions.task_perms)
             //   Or they have to be a wizard.
             // TODO: Will have to verify that it's enough that .player on task control can
-            // be considered "owner" of the task, or there needs to be some more
-            // elaborate consideration here?
-            if !sender_permissions.has_flag(ObjFlag::Wizard)
-                && sender_permissions.task_perms().obj != victim_task.player
+            //   be considered "owner" of the task, or there needs to be some more
+            //   elaborate consideration here?
+            if !sender_permissions
+                .check_is_wizard()
+                .expect("Could not check wizard status for kill request")
+                && sender_permissions.who != victim_task.player
             {
                 result_sender
                     .send(v_err(E_PERM))
@@ -805,8 +811,10 @@ impl Inner {
             };
 
             // No permissions.
-            if !sender_permissions.has_flag(ObjFlag::Wizard)
-                && sender_permissions.task_perms().obj != queued_task.player
+            if !sender_permissions
+                .check_is_wizard()
+                .expect("Could not check wizard status for resume request")
+                && sender_permissions.who != queued_task.player
             {
                 result_sender
                     .send(v_err(E_PERM))
@@ -881,7 +889,7 @@ impl Inner {
         sessions: Arc<RwLock<dyn Sessions>>,
         delay_start: Option<Duration>,
         scheduler_ref: Scheduler,
-        perms: PermissionsContext,
+        perms: Objid,
         background: bool,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.new_task");

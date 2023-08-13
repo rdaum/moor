@@ -22,7 +22,6 @@ use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
 use moor_value::model::objects::ObjFlag;
 use moor_value::model::WorldStateError;
-use moor_value::var::objid::NOTHING;
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     increment_counter!("vm.bf_noop.calls");
@@ -47,8 +46,8 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args
-        .perms()
-        .task_perms()
+        .terk_perms()
+        .await?
         .check_obj_owner_perms(*player)?;
 
     if let Err(send_error) = bf_args
@@ -111,7 +110,7 @@ async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
         return Ok(Error(E_INVARG));
     }
 
-    Ok(Ret(v_objid(bf_args.vm.caller_perms())))
+    Ok(Ret(v_objid(bf_args.caller_perms())))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
@@ -123,18 +122,11 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, a
         return Ok(Error(E_TYPE));
     };
 
-    // Get parent stack frame and check its verb owner. That is, who is calling us.
-    if !bf_args.perms().task_perms().check_is_wizard()? {
-        let Some(top_stack) = bf_args.vm.non_bf_top() else {
-            return Ok(Error(E_PERM));
-        };
-        let progr = top_stack.verb_info.attrs.owner.unwrap();
-        if progr != perms_for {
-            return Ok(Error(E_PERM));
-        }
+    // If the caller is not a wizard, perms_for must be the caller
+    let perms = bf_args.terk_perms().await?;
+    if !perms.check_is_wizard()? && perms_for != perms.who {
+        return Ok(Error(E_PERM));
     }
-    let flags = bf_args.world_state.flags_of(perms_for).await?;
-    bf_args.perms_mut().set_task_perms(perms_for, flags);
     bf_args.vm.set_task_perms(perms_for);
 
     Ok(Ret(v_none()))
@@ -230,8 +222,8 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         return Ok(Error(E_TYPE));
     };
 
-    let caller = bf_args.vm.non_bf_top().map(|a| a.this).unwrap_or(NOTHING);
-    if !bf_args.perms().task_perms().check_is_wizard()? && caller != *player {
+    let caller = bf_args.caller_perms();
+    if !bf_args.terk_perms().await?.check_is_wizard()? && caller != *player {
         return Ok(Error(E_PERM));
     }
 
@@ -257,7 +249,7 @@ async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
         Some(msg.as_str().to_string())
     };
 
-    bf_args.perms().task_perms().check_wizard()?;
+    bf_args.terk_perms().await?.check_wizard()?;
     bf_args.sessions.write().await.shutdown(msg).await.unwrap();
 
     Ok(Ret(v_none()))
@@ -380,7 +372,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
             };
             let x = v_none();
             let y = v_none();
-            let programmer = v_objid(task.permissions.task_perms().obj);
+            let programmer = v_objid(task.permissions);
             let verb_loc = v_objid(task.verb_definer);
             let verb_name = v_string(task.verb_name.clone());
             let line = v_int(task.line_number as i64);
@@ -421,7 +413,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
         .scheduler_sender
         .send(SchedulerControlMsg::KillTask {
             victim_task_id,
-            sender_permissions: bf_args.vm.top().permissions.clone(),
+            sender_permissions: bf_args.terk_perms().await?,
             result_sender: send,
         })
         .expect("scheduler is not listening");
@@ -462,7 +454,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         .scheduler_sender
         .send(SchedulerControlMsg::ResumeTask {
             queued_task_id: task_id,
-            sender_permissions: bf_args.vm.top().permissions.clone(),
+            sender_permissions: bf_args.terk_perms().await?,
             return_value,
             result_sender: send,
         })
@@ -519,7 +511,8 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyh
         return Ok(Error(E_TYPE));
     };
 
-    if !bf_args.perms().has_flag(ObjFlag::Wizard) && bf_args.perms().task_perms().obj != *player {
+    let task_perms = bf_args.terk_perms().await?;
+    if task_perms.who != *player && !task_perms.check_is_wizard()? {
         return Ok(Error(E_PERM));
     }
 
@@ -527,7 +520,7 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyh
         .scheduler_sender
         .send(SchedulerControlMsg::BootPlayer {
             player: *player,
-            sender_permissions: bf_args.vm.top().permissions.clone(),
+            sender_permissions: task_perms,
         })
         .expect("scheduler is not listening");
 
@@ -588,7 +581,7 @@ async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
         false
     };
 
-    if !bf_args.perms().has_flag(ObjFlag::Wizard) {
+    if !bf_args.terk_perms().await?.check_is_wizard()? {
         return Ok(Error(E_PERM));
     }
 

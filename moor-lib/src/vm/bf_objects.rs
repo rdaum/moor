@@ -46,7 +46,7 @@ async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     }
     let parent = bf_args
         .world_state
-        .parent_of(bf_args.perms().clone(), *obj)
+        .parent_of(bf_args.task_perms_who(), *obj)
         .await?;
     Ok(Ret(v_objid(parent)))
 }
@@ -64,7 +64,7 @@ async fn bf_chparent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
     };
     bf_args
         .world_state
-        .change_parent(bf_args.perms().clone(), *obj, *new_parent)
+        .change_parent(bf_args.task_perms_who(), *obj, *new_parent)
         .await?;
     Ok(Ret(v_none()))
 }
@@ -79,7 +79,7 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
     };
     let children = bf_args
         .world_state
-        .children_of(bf_args.perms().clone(), *obj)
+        .children_of(bf_args.task_perms_who(), *obj)
         .await?;
     debug!("Children: {:?} {:?}", obj, children);
     let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
@@ -107,7 +107,7 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         };
         *owner
     } else {
-        bf_args.perms().task_perms().obj
+        bf_args.task_perms_who()
     };
 
     let tramp = bf_args
@@ -120,14 +120,14 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
             let new_obj = bf_args
                 .world_state
-                .create_object(bf_args.perms().clone(), *parent, owner)
+                .create_object(bf_args.task_perms_who(), *parent, owner)
                 .await?;
 
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
             let Ok(initialize) = bf_args.world_state.find_method_verb_on(
-                bf_args.perms().clone(),
+                bf_args.task_perms_who(),
                 new_obj,
                 "initialize",
             ).await else {
@@ -135,7 +135,7 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
             };
 
             return Ok(VmInstr(ContinueVerb {
-                permissions: bf_args.perms().clone(),
+                permissions: bf_args.task_perms_who(),
                 resolved_verb: initialize,
                 call: VerbCall {
                     verb_name: "initialize".to_string(),
@@ -214,18 +214,20 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
         .bf_trampoline
         .unwrap_or(BF_MOVE_TRAMPOLINE_START_ACCEPT);
     trace!(what = ?what, where_to = ?*whereto, tramp, "move: looking up :accept verb");
+
+    let perms = bf_args.terk_perms().await?;
     let mut shortcircuit = false;
     loop {
         match tramp {
             BF_MOVE_TRAMPOLINE_START_ACCEPT => {
                 match bf_args
                     .world_state
-                    .find_method_verb_on(bf_args.perms().clone(), *whereto, "accept")
+                    .find_method_verb_on(bf_args.task_perms_who(), *whereto, "accept")
                     .await
                 {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
-                            permissions: bf_args.perms().clone(),
+                            permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
                                 verb_name: "accept".to_string(),
@@ -241,7 +243,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                         }));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
-                        if !bf_args.perms().has_flag(ObjFlag::Wizard) {
+                        if !perms.check_is_wizard()? {
                             return Ok(Error(E_NACC));
                         }
                         // Short-circuit fake-tramp state change.
@@ -266,7 +268,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                     v_int(0)
                 };
                 // If the result is false, and we're not a wizard, then raise E_NACC.
-                if !result.is_true() && !bf_args.perms().has_flag(ObjFlag::Wizard) {
+                if !result.is_true() && !perms.check_is_wizard()? {
                     return Ok(Error(E_NACC));
                 }
 
@@ -275,13 +277,13 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
 
                 let original_location = bf_args
                     .world_state
-                    .location_of(bf_args.perms().clone(), *what)
+                    .location_of(bf_args.task_perms_who(), *what)
                     .await?;
 
                 // Failure here is likely due to permissions, so we'll just propagate that error.
                 bf_args
                     .world_state
-                    .move_object(bf_args.perms().clone(), *what, *whereto)
+                    .move_object(bf_args.task_perms_who(), *what, *whereto)
                     .await?;
 
                 // If the object has no location, then we can move on to the enterfunc.
@@ -293,12 +295,12 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                 // Call exitfunc...
                 match bf_args
                     .world_state
-                    .find_method_verb_on(bf_args.perms().clone(), original_location, "exitfunc")
+                    .find_method_verb_on(bf_args.task_perms_who(), original_location, "exitfunc")
                     .await
                 {
                     Ok(dispatch) => {
                         let continuation = ContinueVerb {
-                            permissions: bf_args.perms().clone(),
+                            permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
                                 verb_name: "exitfunc".to_string(),
@@ -336,12 +338,12 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                 // :enterfunc on the destination.
                 match bf_args
                     .world_state
-                    .find_method_verb_on(bf_args.perms().clone(), *whereto, "enterfunc")
+                    .find_method_verb_on(bf_args.task_perms_who(), *whereto, "enterfunc")
                     .await
                 {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
-                            permissions: bf_args.perms().clone(),
+                            permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
                                 verb_name: "enterfunc".to_string(),
@@ -391,7 +393,7 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
     };
     let verbs = bf_args
         .world_state
-        .verbs(bf_args.perms().clone(), *obj)
+        .verbs(bf_args.task_perms_who(), *obj)
         .await?;
     let verbs = verbs
         .iter()
@@ -414,7 +416,7 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
     };
     let props = bf_args
         .world_state
-        .properties(bf_args.perms().clone(), *obj)
+        .properties(bf_args.task_perms_who(), *obj)
         .await?;
     let props = props.iter().map(|p| v_str(&p.0)).collect();
     Ok(Ret(v_list(props)))
@@ -433,7 +435,7 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     let f = *f == 1;
 
     // User must be a wizard.
-    bf_args.perms().task_perms().check_wizard()?;
+    bf_args.terk_perms().await?.check_wizard()?;
 
     // Get and set object flags
     let mut flags = bf_args.world_state.flags_of(*obj).await?;
@@ -446,13 +448,12 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
 
     bf_args
         .world_state
-        .set_flags_of(bf_args.perms().clone(), *obj, flags)
+        .set_flags_of(bf_args.task_perms_who(), *obj, flags)
         .await?;
 
     // If the object was player, update the VM's copy of the perms.
-    if *obj == bf_args.perms().task_perms().obj {
-        let _perms = bf_args.vm.top_mut().permissions.clone();
-        bf_args.vm.top_mut().permissions.set_task_perms(*obj, flags);
+    if *obj == bf_args.terk_perms().await?.who {
+        bf_args.vm.set_task_perms(*obj);
     }
 
     Ok(Ret(v_none()))

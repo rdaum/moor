@@ -1,6 +1,7 @@
-use rocksdb::ColumnFamily;
+use anyhow::bail;
+use rocksdb::{ColumnFamily, ErrorKind};
 
-use moor_value::model::WorldStateError;
+use moor_value::model::{CommitResult, WorldStateError};
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
 use moor_value::AsByteBuffer;
 
@@ -93,6 +94,24 @@ pub(crate) fn err_is_objnjf(e: &anyhow::Error) -> bool {
 pub(crate) struct RocksDbTx<'a> {
     pub(crate) tx: rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     pub(crate) cf_handles: Vec<&'a ColumnFamily>,
+}
+
+impl<'a> RocksDbTx<'a> {
+    #[tracing::instrument(skip(self))]
+    pub fn commit(self) -> Result<CommitResult, anyhow::Error> {
+        match self.tx.commit() {
+            Ok(()) => Ok(CommitResult::Success),
+            Err(e) if e.kind() == ErrorKind::Busy || e.kind() == ErrorKind::TryAgain => {
+                Ok(CommitResult::ConflictRetry)
+            }
+            Err(e) => bail!(e),
+        }
+    }
+    #[tracing::instrument(skip(self))]
+    pub fn rollback(self) -> Result<(), anyhow::Error> {
+        self.tx.rollback()?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

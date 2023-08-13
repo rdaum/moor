@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::props::{PropAttrs, PropFlag};
 use moor_value::model::r#match::{PrepSpec, VerbArgsSpec};
 use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
@@ -52,34 +51,30 @@ pub struct MockState(Arc<Mutex<MockStore>>);
 
 #[async_trait]
 impl WorldState for MockState {
-    async fn owner_of(&mut self, _obj: Objid) -> Result<Objid, WorldStateError> {
+    async fn owner_of(&self, _obj: Objid) -> Result<Objid, WorldStateError> {
         todo!()
     }
 
-    async fn flags_of(&mut self, _obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+    async fn flags_of(&self, _obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         Ok(BitEnum::all())
     }
 
     async fn set_flags_of(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _flags: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
         todo!()
     }
 
-    async fn location_of(
-        &mut self,
-        _perms: PermissionsContext,
-        _obj: Objid,
-    ) -> Result<Objid, WorldStateError> {
+    async fn location_of(&self, _perms: Objid, _obj: Objid) -> Result<Objid, WorldStateError> {
         todo!()
     }
 
     async fn create_object(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _parent: Objid,
         _owner: Objid,
     ) -> Result<Objid, WorldStateError> {
@@ -88,24 +83,20 @@ impl WorldState for MockState {
 
     async fn move_object(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _new_loc: Objid,
     ) -> Result<(), WorldStateError> {
         todo!()
     }
 
-    async fn contents_of(
-        &mut self,
-        _perms: PermissionsContext,
-        _obj: Objid,
-    ) -> Result<ObjSet, WorldStateError> {
+    async fn contents_of(&mut self, _perms: Objid, _obj: Objid) -> Result<ObjSet, WorldStateError> {
         todo!()
     }
 
     async fn verbs(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
     ) -> Result<Vec<VerbInfo>, WorldStateError> {
         todo!()
@@ -113,7 +104,7 @@ impl WorldState for MockState {
 
     async fn properties(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
     ) -> Result<Vec<(String, PropAttrs)>, WorldStateError> {
         todo!()
@@ -121,7 +112,7 @@ impl WorldState for MockState {
 
     async fn retrieve_property(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         obj: Objid,
         pname: &str,
     ) -> Result<Var, WorldStateError> {
@@ -135,7 +126,7 @@ impl WorldState for MockState {
 
     async fn get_property_info(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _pname: &str,
     ) -> Result<PropAttrs, WorldStateError> {
@@ -144,7 +135,7 @@ impl WorldState for MockState {
 
     async fn set_property_info(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _pname: &str,
         _attrs: PropAttrs,
@@ -154,7 +145,7 @@ impl WorldState for MockState {
 
     async fn update_property(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         obj: Objid,
         pname: &str,
         value: &Var,
@@ -168,7 +159,7 @@ impl WorldState for MockState {
 
     async fn is_property_clear(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _pname: &str,
     ) -> Result<bool, WorldStateError> {
@@ -177,7 +168,7 @@ impl WorldState for MockState {
 
     async fn clear_property(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _pname: &str,
     ) -> Result<(), WorldStateError> {
@@ -186,7 +177,7 @@ impl WorldState for MockState {
 
     async fn define_property(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _definer: Objid,
         obj: Objid,
         pname: &str,
@@ -204,7 +195,7 @@ impl WorldState for MockState {
 
     async fn delete_property(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _pname: &str,
     ) -> Result<(), WorldStateError> {
@@ -213,7 +204,7 @@ impl WorldState for MockState {
 
     async fn add_verb(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _names: Vec<String>,
         _owner: Objid,
@@ -227,7 +218,7 @@ impl WorldState for MockState {
 
     async fn remove_verb(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _vname: &str,
     ) -> Result<(), WorldStateError> {
@@ -236,7 +227,7 @@ impl WorldState for MockState {
 
     async fn set_verb_info(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _vname: &str,
         _owner: Option<Objid>,
@@ -249,7 +240,7 @@ impl WorldState for MockState {
 
     async fn set_verb_info_at_index(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _vidx: usize,
         _owner: Option<Objid>,
@@ -262,7 +253,7 @@ impl WorldState for MockState {
 
     async fn get_verb(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
@@ -277,7 +268,7 @@ impl WorldState for MockState {
 
     async fn get_verb_at_index(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _vidx: usize,
     ) -> Result<VerbInfo, WorldStateError> {
@@ -286,7 +277,7 @@ impl WorldState for MockState {
 
     async fn find_method_verb_on(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
@@ -300,7 +291,7 @@ impl WorldState for MockState {
 
     async fn find_command_verb_on(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _command_verb: &str,
         _dobj: Objid,
@@ -310,28 +301,20 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn parent_of(
-        &mut self,
-        _perms: PermissionsContext,
-        _obj: Objid,
-    ) -> Result<Objid, WorldStateError> {
+    async fn parent_of(&mut self, _perms: Objid, _obj: Objid) -> Result<Objid, WorldStateError> {
         todo!()
     }
 
     async fn change_parent(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
         _new_parent: Objid,
     ) -> Result<(), WorldStateError> {
         todo!()
     }
 
-    async fn children_of(
-        &mut self,
-        _perms: PermissionsContext,
-        _obj: Objid,
-    ) -> Result<ObjSet, WorldStateError> {
+    async fn children_of(&mut self, _perms: Objid, _obj: Objid) -> Result<ObjSet, WorldStateError> {
         todo!()
     }
 
@@ -341,7 +324,7 @@ impl WorldState for MockState {
 
     async fn names_of(
         &mut self,
-        _perms: PermissionsContext,
+        _perms: Objid,
         _obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError> {
         todo!()

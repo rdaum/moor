@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use moor_value::model::permissions::Perms;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 
@@ -11,8 +12,8 @@ use moor_value::var::Var;
 use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::Sessions;
 use crate::vm::{ExecutionResult, VM};
-use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::world_state::WorldState;
+use moor_value::var::objid::Objid;
 
 /// The arguments and other state passed to a built-in function.
 pub(crate) struct BfCallState<'a> {
@@ -34,12 +35,18 @@ pub(crate) struct BfCallState<'a> {
     pub(crate) time_left: Option<Duration>,
 }
 
-impl<'a> BfCallState<'a> {
-    pub fn perms_mut(&mut self) -> &mut PermissionsContext {
-        &mut self.vm.top_mut().permissions
+impl BfCallState<'_> {
+    pub fn caller_perms(&self) -> Objid {
+        self.vm.caller_perms()
     }
-    pub fn perms(&self) -> &PermissionsContext {
-        &self.vm.top().permissions
+
+    pub fn task_perms_who(&self) -> Objid {
+        self.vm.task_perms()
+    }
+    pub async fn terk_perms(&self) -> Result<Perms, anyhow::Error> {
+        let who = self.task_perms_who();
+        let flags = self.world_state.flags_of(who).await?;
+        Ok(Perms { who, flags })
     }
 }
 

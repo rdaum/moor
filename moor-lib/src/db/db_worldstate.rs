@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::permissions::PermissionsContext;
+use moor_value::model::permissions::Perms;
 use moor_value::model::props::{PropAttrs, PropFlag};
 use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
@@ -58,61 +58,59 @@ fn prophandle_to_propattrs(ph: &PropDef, value: Option<Var>) -> PropAttrs {
     }
 }
 
+impl DbTxWorldState {
+    async fn perms(&self, who: Objid) -> Result<Perms, WorldStateError> {
+        let flags = self.flags_of(who).await?;
+        Ok(Perms { who, flags })
+    }
+}
 #[async_trait]
 impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
-    async fn owner_of(&mut self, obj: Objid) -> Result<Objid, WorldStateError> {
+    async fn owner_of(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         self.client.get_object_owner(obj).await
     }
 
     #[tracing::instrument(skip(self))]
-    async fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+    async fn flags_of(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         self.client.get_object_flags(obj).await
     }
 
     async fn set_flags_of(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         new_flags: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
         // Owner or wizard only.
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, flags, ObjFlag::Write)?;
         self.client.set_object_flags(obj, new_flags).await
     }
 
     #[tracing::instrument(skip(self))]
-    async fn location_of(
-        &mut self,
-        perms: PermissionsContext,
-        obj: Objid,
-    ) -> Result<Objid, WorldStateError> {
-        let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
-            .check_object_allows(owner, flags, ObjFlag::Read)?;
-
+    async fn location_of(&self, _perms: Objid, obj: Objid) -> Result<Objid, WorldStateError> {
+        // MOO permits location query even if the object is unreadable!
         self.client.get_location_of(obj).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn create_object(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         parent: Objid,
         owner: Objid,
     ) -> Result<Objid, WorldStateError> {
         let (flags, parent_owner) = (self.flags_of(parent).await?, self.owner_of(parent).await?);
         // TODO check_object_allows should take a BitEnum arg for `allows` and do both of these at
         // once.
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(parent_owner, flags, ObjFlag::Read)?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(parent_owner, flags, ObjFlag::Fertile)?;
 
         let owner = (owner != NOTHING).then_some(owner);
@@ -135,41 +133,33 @@ impl WorldState for DbTxWorldState {
 
     async fn move_object(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         new_loc: Objid,
     ) -> Result<(), WorldStateError> {
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, flags, ObjFlag::Write)?;
 
         self.client.set_location_of(obj, new_loc).await
     }
 
     #[tracing::instrument(skip(self))]
-    async fn contents_of(
-        &mut self,
-        perms: PermissionsContext,
-        obj: Objid,
-    ) -> Result<ObjSet, WorldStateError> {
+    async fn contents_of(&mut self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
         self.client.get_contents_of(obj).await
     }
 
     #[tracing::instrument(skip(self))]
-    async fn verbs(
-        &mut self,
-        perms: PermissionsContext,
-        obj: Objid,
-    ) -> Result<Vec<VerbInfo>, WorldStateError> {
+    async fn verbs(&mut self, perms: Objid, obj: Objid) -> Result<Vec<VerbInfo>, WorldStateError> {
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
         Ok(self
@@ -184,12 +174,12 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn properties(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
     ) -> Result<Vec<(String, PropAttrs)>, WorldStateError> {
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
         let properties = self.client.get_properties(obj).await?;
@@ -208,7 +198,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn retrieve_property(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
     ) -> Result<Var, WorldStateError> {
@@ -252,15 +242,15 @@ impl WorldState for DbTxWorldState {
         }
 
         let (ph, value) = self.client.resolve_property(obj, pname.to_string()).await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
         Ok(value)
     }
 
     async fn get_property_info(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
     ) -> Result<PropAttrs, WorldStateError> {
@@ -268,8 +258,8 @@ impl WorldState for DbTxWorldState {
         let ph = properties
             .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
 
         let attrs = prophandle_to_propattrs(ph, None);
@@ -278,7 +268,7 @@ impl WorldState for DbTxWorldState {
 
     async fn set_property_info(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
         attrs: PropAttrs,
@@ -288,8 +278,8 @@ impl WorldState for DbTxWorldState {
             .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
         // TODO Also keep a close eye on 'clear' & perms:
@@ -306,7 +296,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn update_property(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
         value: &Var,
@@ -319,8 +309,8 @@ impl WorldState for DbTxWorldState {
         if pname == "name" || pname == "owner" {
             let (flags, objowner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
             // User is either wizard or owner
-            perms
-                .task_perms()
+            self.perms(perms)
+                .await?
                 .check_object_allows(objowner, flags, ObjFlag::Write)?;
             if pname == "name" {
                 let Variant::Str(name) = value.variant() else {
@@ -341,7 +331,7 @@ impl WorldState for DbTxWorldState {
 
         if pname == "programmer" || pname == "wizard" {
             // Caller *must* be a wizard for either of these.
-            perms.task_perms().check_wizard()?;
+            self.perms(perms).await?.check_wizard()?;
 
             // Gott get and then set flags
             let mut flags = self.flags_of(obj).await?;
@@ -360,8 +350,8 @@ impl WorldState for DbTxWorldState {
             .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
         self.client
@@ -372,7 +362,7 @@ impl WorldState for DbTxWorldState {
 
     async fn is_property_clear(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
     ) -> Result<bool, WorldStateError> {
@@ -380,8 +370,8 @@ impl WorldState for DbTxWorldState {
         let ph = properties
             .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
 
         // Now RetrieveProperty and if it's not there, it's clear.
@@ -397,7 +387,7 @@ impl WorldState for DbTxWorldState {
 
     async fn clear_property(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
     ) -> Result<(), WorldStateError> {
@@ -407,8 +397,8 @@ impl WorldState for DbTxWorldState {
         let ph = properties
             .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
         self.client.clear_property(obj, ph.uuid()).await?;
@@ -418,7 +408,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn define_property(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         definer: Objid,
         location: Objid,
         pname: &str,
@@ -432,10 +422,10 @@ impl WorldState for DbTxWorldState {
             self.flags_of(location).await?,
             self.owner_of(location).await?,
         );
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(objowner, flags, ObjFlag::Write)?;
-        perms.task_perms().check_obj_owner_perms(propowner)?;
+        self.perms(perms).await?.check_obj_owner_perms(propowner)?;
 
         self.client
             .define_property(
@@ -453,7 +443,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn delete_property(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         pname: &str,
     ) -> Result<(), WorldStateError> {
@@ -461,8 +451,8 @@ impl WorldState for DbTxWorldState {
         let ph = properties
             .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
         self.client.delete_property(obj, ph.uuid()).await
@@ -471,7 +461,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn add_verb(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         names: Vec<String>,
         _owner: Objid,
@@ -481,8 +471,8 @@ impl WorldState for DbTxWorldState {
         binary_type: BinaryType,
     ) -> Result<(), WorldStateError> {
         let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
 
         self.client
@@ -494,13 +484,13 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn remove_verb(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         vname: &str,
     ) -> Result<(), WorldStateError> {
         let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
 
         self.client.delete_verb(obj, vh.uuid()).await?;
@@ -510,7 +500,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn set_verb_info(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         vname: &str,
         owner: Option<Objid>,
@@ -519,8 +509,8 @@ impl WorldState for DbTxWorldState {
         args: Option<VerbArgsSpec>,
     ) -> Result<(), WorldStateError> {
         let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
         self.client
             .set_verb_info(obj, vh.uuid(), owner, flags, names, args)
@@ -530,7 +520,7 @@ impl WorldState for DbTxWorldState {
 
     async fn set_verb_info_at_index(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         vidx: usize,
         owner: Option<Objid>,
@@ -539,8 +529,8 @@ impl WorldState for DbTxWorldState {
         args: Option<VerbArgsSpec>,
     ) -> Result<(), WorldStateError> {
         let vh = self.client.get_verb_by_index(obj, vidx).await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
         self.client
             .set_verb_info(obj, vh.uuid(), owner, flags, names, args)
@@ -551,13 +541,13 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn get_verb(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
         let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
         let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
@@ -566,13 +556,13 @@ impl WorldState for DbTxWorldState {
 
     async fn get_verb_at_index(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         vidx: usize,
     ) -> Result<VerbInfo, WorldStateError> {
         let vh = self.client.get_verb_by_index(obj, vidx).await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
         let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
         Ok(verbhandle_to_verbinfo(&vh, Some(binary)))
@@ -581,7 +571,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn find_method_verb_on(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
@@ -589,8 +579,8 @@ impl WorldState for DbTxWorldState {
             .client
             .resolve_verb(obj, vname.to_string(), None)
             .await?;
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
         let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
@@ -600,7 +590,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn find_command_verb_on(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         command_verb: &str,
         dobj: Objid,
@@ -612,8 +602,8 @@ impl WorldState for DbTxWorldState {
         }
 
         let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, objflags, ObjFlag::Read)?;
 
         let spec_for_fn = |oid, pco| -> ArgSpec {
@@ -644,8 +634,8 @@ impl WorldState for DbTxWorldState {
             }
         };
 
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
         let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
@@ -653,17 +643,13 @@ impl WorldState for DbTxWorldState {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn parent_of(
-        &mut self,
-        _perms: PermissionsContext,
-        obj: Objid,
-    ) -> Result<Objid, WorldStateError> {
+    async fn parent_of(&mut self, _perms: Objid, obj: Objid) -> Result<Objid, WorldStateError> {
         self.client.get_parent(obj).await
     }
 
     async fn change_parent(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
         new_parent: Objid,
     ) -> Result<(), WorldStateError> {
@@ -678,29 +664,29 @@ impl WorldState for DbTxWorldState {
                 self.flags_of(new_parent).await?,
                 self.owner_of(new_parent).await?,
             );
-            perms
-                .task_perms()
-                .check_object_allows(parentowner, parentflags, ObjFlag::Write)?;
-            perms
-                .task_perms()
-                .check_object_allows(parentowner, parentflags, ObjFlag::Fertile)?;
+            self.perms(perms).await?.check_object_allows(
+                parentowner,
+                parentflags,
+                ObjFlag::Write,
+            )?;
+            self.perms(perms).await?.check_object_allows(
+                parentowner,
+                parentflags,
+                ObjFlag::Fertile,
+            )?;
         }
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
 
         self.client.set_parent(obj, new_parent).await
     }
 
     #[tracing::instrument(skip(self))]
-    async fn children_of(
-        &mut self,
-        perms: PermissionsContext,
-        obj: Objid,
-    ) -> Result<ObjSet, WorldStateError> {
+    async fn children_of(&mut self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
+        self.perms(perms)
+            .await?
             .check_object_allows(owner, objflags, ObjFlag::Read)?;
 
         self.client.get_children(obj).await
@@ -714,7 +700,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn names_of(
         &mut self,
-        perms: PermissionsContext,
+        perms: Objid,
         obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError> {
         // Another thing that MOO allows lookup of without permissions.

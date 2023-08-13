@@ -20,7 +20,6 @@ mod tests {
     use crate::vm::opcode::{Op, Program};
     use crate::vm::vm_execute::VmExecParams;
     use crate::vm::{ExecutionResult, VerbExecutionRequest, VM};
-    use moor_value::model::permissions::PermissionsContext;
     use moor_value::model::props::PropFlag;
     use moor_value::model::world_state::{WorldState, WorldStateSource};
 
@@ -72,12 +71,7 @@ mod tests {
         }
     }
 
-    async fn call_verb(
-        state: &mut dyn WorldState,
-        perms: PermissionsContext,
-        verb_name: &str,
-        vm: &mut VM,
-    ) {
+    async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
         let o = Objid(0);
 
         let call = VerbCall {
@@ -88,10 +82,10 @@ mod tests {
             args: vec![],
             caller: NOTHING,
         };
-        let verb = state.get_verb(perms.clone(), o, verb_name).await.unwrap();
+        let verb = state.get_verb(o, o, verb_name).await.unwrap();
         let program = Program::from_byte_vector(verb.attrs.binary.clone().unwrap());
         let cr = VerbExecutionRequest {
-            permissions: perms,
+            permissions: o,
             resolved_verb: verb,
             call,
             command: None,
@@ -154,10 +148,6 @@ mod tests {
         }
     }
 
-    fn mock_perms() -> PermissionsContext {
-        PermissionsContext::root_for(Objid(0), BitEnum::all())
-    }
-
     #[tokio::test]
     async fn test_simple_vm_execute() {
         let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
@@ -165,7 +155,7 @@ mod tests {
         let mut state = state_src.new_world_state().await.unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_none());
     }
@@ -185,7 +175,7 @@ mod tests {
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("e"));
     }
@@ -211,7 +201,7 @@ mod tests {
         .await
         .unwrap();
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("ell"));
     }
@@ -231,7 +221,7 @@ mod tests {
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(222));
     }
@@ -262,7 +252,7 @@ mod tests {
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![222.into(), 333.into()]));
     }
@@ -306,7 +296,7 @@ mod tests {
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![111.into(), 321.into(), 123.into()]));
     }
@@ -321,7 +311,7 @@ mod tests {
             .unwrap();
         let mut vm = VM::new();
         let _args = binary.find_var("args");
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![2.into(), 3.into(), 4.into()]));
     }
@@ -334,7 +324,7 @@ mod tests {
             .await
             .unwrap();
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
@@ -350,7 +340,7 @@ mod tests {
             .await
             .unwrap();
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(1));
     }
@@ -390,7 +380,7 @@ mod tests {
         .unwrap();
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("manbozorian"));
     }
@@ -411,7 +401,7 @@ mod tests {
         {
             state
                 .define_property(
-                    mock_perms(),
+                    Objid(0),
                     Objid(0),
                     Objid(0),
                     "test_prop",
@@ -424,7 +414,7 @@ mod tests {
         }
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
@@ -463,7 +453,7 @@ mod tests {
         let mut vm = VM::new();
 
         // Invoke the second verb
-        call_verb(state.as_mut(), mock_perms(), "test_call_verb", &mut vm).await;
+        call_verb(state.as_mut(), "test_call_verb", &mut vm).await;
 
         let result = exec_vm(state.as_mut(), &mut vm).await;
 
@@ -483,7 +473,7 @@ mod tests {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(3));
     }
@@ -495,7 +485,7 @@ mod tests {
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(75));
     }
@@ -507,7 +497,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
@@ -519,7 +509,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
@@ -542,7 +532,7 @@ mod tests {
         "#;
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
@@ -554,7 +544,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
@@ -566,7 +556,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
@@ -578,7 +568,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)]));
     }
@@ -590,7 +580,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
@@ -611,7 +601,7 @@ mod tests {
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
@@ -631,7 +621,7 @@ mod tests {
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         // MOO has  {#2, #70, #70, #-1, #-1, {}} for this equiv in JHCore parse_parties, and does not
         // actually invoke `_locations` (where i've subbed 666) for these values.
@@ -648,7 +638,7 @@ mod tests {
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(5)]));
     }
@@ -660,7 +650,7 @@ mod tests {
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(1), v_int(2), v_int(3)]));
     }
@@ -672,7 +662,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(2));
     }
@@ -684,7 +674,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
     }
@@ -696,7 +686,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_err(E_VERBNF));
     }
@@ -708,7 +698,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
@@ -720,7 +710,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
@@ -743,7 +733,7 @@ mod tests {
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(2), v_int(1)]));
     }
@@ -763,7 +753,7 @@ mod tests {
         "#;
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(6));
     }
@@ -773,7 +763,7 @@ mod tests {
         let program = "a={1,2,3,4}; a[1..2] = {3,4}; return a;";
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]));
     }
@@ -784,7 +774,7 @@ mod tests {
         let program = r#"a = "you"; a[1] = "Y"; return a;"#;
         let mut state = world_with_test_program(program).await;
         let mut vm = VM::new();
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("You"));
     }
@@ -892,7 +882,7 @@ mod tests {
 
         let mut vm = VM::new();
 
-        call_verb(state.as_mut(), mock_perms(), "test", &mut vm).await;
+        call_verb(state.as_mut(), "test", &mut vm).await;
 
         let client_connection = Arc::new(RwLock::new(MockClientConnection::new()));
         let result =

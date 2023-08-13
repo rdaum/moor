@@ -20,9 +20,6 @@ use tracing::{error, info, instrument, trace, warn};
 
 use moor_lib::tasks::scheduler::{Scheduler, TaskWaiterResult};
 use moor_lib::tasks::Sessions;
-use moor_value::model::objects::ObjFlag;
-use moor_value::model::permissions::PermissionsContext;
-use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{Objid, SYSTEM_OBJECT};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_objid, v_str};
@@ -320,8 +317,6 @@ impl WebSocketServer {
             // Call the scheduler to initiate $do_login_command
             let inner = self.inner.read().await;
             let sessions = inner.sessions.clone();
-            let permissions =
-                PermissionsContext::root_for(Objid(0), BitEnum::new_with(ObjFlag::Wizard));
             let task_id = inner
                 .scheduler
                 .submit_verb_task(
@@ -333,7 +328,7 @@ impl WebSocketServer {
                         v_str(auth.username()),
                         v_str(auth.password()),
                     ],
-                    permissions,
+                    SYSTEM_OBJECT,
                     sessions,
                 )
                 .await
@@ -448,7 +443,7 @@ impl WebSocketServer {
                 SYSTEM_OBJECT,
                 connected_verb,
                 vec![v_objid(player)],
-                PermissionsContext::root_for(player, BitEnum::new_with(ObjFlag::Read)),
+                SYSTEM_OBJECT,
                 sessions,
             )
             .await

@@ -1,11 +1,10 @@
-use anyhow::{bail, Context};
-use rocksdb::ErrorKind;
+use anyhow::Context;
 use tracing::trace;
 use uuid::Uuid;
 
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
-use moor_value::model::{CommitResult, WorldStateError};
+use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::AsByteBuffer;
@@ -240,21 +239,6 @@ impl<'a> RocksDbTx<'a> {
         };
 
         self.tx.put_cf(cf, ok, new_verbs.as_byte_buffer())?;
-        Ok(())
-    }
-    #[tracing::instrument(skip(self))]
-    pub fn commit(self) -> Result<CommitResult, anyhow::Error> {
-        match self.tx.commit() {
-            Ok(()) => Ok(CommitResult::Success),
-            Err(e) if e.kind() == ErrorKind::Busy || e.kind() == ErrorKind::TryAgain => {
-                Ok(CommitResult::ConflictRetry)
-            }
-            Err(e) => bail!(e),
-        }
-    }
-    #[tracing::instrument(skip(self))]
-    pub fn rollback(&self) -> Result<(), anyhow::Error> {
-        self.tx.rollback()?;
         Ok(())
     }
 }

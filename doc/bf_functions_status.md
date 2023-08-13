@@ -88,7 +88,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | property_info     | &check;  |       |
 | set_property_info | &check;  |       |
 | add_property      | &check;  |       |
-| delete_property   |          |       |
+| delete_property   | &check;  |       |
 | clear_property    | &check;  |       |
 | is_clear_property | &check;  |       |
 

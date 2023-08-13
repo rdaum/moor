@@ -27,7 +27,7 @@ impl VM {
         };
 
         let result = state
-            .retrieve_property(self.top().permissions.clone(), *obj, propname.as_str())
+            .retrieve_property(self.top().permissions, *obj, propname.as_str())
             .await;
         let v = match result {
             Ok(v) => v,
@@ -56,12 +56,7 @@ impl VM {
         };
 
         let update_result = state
-            .update_property(
-                self.top().permissions.clone(),
-                *obj,
-                propname.as_str(),
-                &value,
-            )
+            .update_property(self.top().permissions, *obj, propname.as_str(), &value)
             .await;
 
         match update_result {
@@ -87,11 +82,11 @@ impl VM {
             let player = activation.player;
             let line_number = 0; // TODO: fix after decompilation support
             let this = activation.this;
-            let perms = activation.permissions.clone();
+            let perms = activation.permissions;
             let programmer = if activation.bf_index.is_some() {
                 NOTHING
             } else {
-                perms.task_perms().obj
+                perms
             };
             callers.push(Caller {
                 verb_name,
@@ -99,7 +94,6 @@ impl VM {
                 player,
                 line_number,
                 this,
-                perms,
                 programmer,
             });
         }
@@ -114,23 +108,20 @@ impl VM {
         self.stack.last().expect("activation stack underflow")
     }
 
-    // MOO does this annoying thing where callers() returns the builtin functions as if they
-    // were on the stack. but they're kinda not really on the stack? and caller_perms() and
-    // caller don't use the values from the builtin functions? so we have to special case
-    // for some cases, and skip the frames from builtin functions.
-    pub(crate) fn non_bf_top(&self) -> Option<&Activation> {
-        let stack_iter = self.stack.iter().rev();
-        let mut non_bf_frames = stack_iter.filter(|a| a.bf_index.is_none());
-        non_bf_frames.next()?; // skip the top activation, that's our current frame
-        non_bf_frames.next()
+    pub(crate) fn caller_perms(&self) -> Objid {
+        let mut stack_iter = self.stack.iter().rev().filter(|a| a.bf_index.is_none());
+        // caller is just past us...
+        stack_iter.next();
+        stack_iter.next().map(|a| a.permissions).unwrap_or(NOTHING)
     }
 
-    pub(crate) fn caller_perms(&self) -> Objid {
-        return self.non_bf_top().map(|a| a.progr).unwrap_or(NOTHING);
+    pub(crate) fn task_perms(&self) -> Objid {
+        let stack_top = self.stack.iter().rev().find(|a| a.bf_index.is_none());
+        stack_top.map(|a| a.permissions).unwrap_or(NOTHING)
     }
 
     pub(crate) fn set_task_perms(&mut self, perms: Objid) {
-        self.top_mut().progr = perms;
+        self.top_mut().permissions = perms;
     }
 
     pub(crate) fn caller(&self) -> Objid {
