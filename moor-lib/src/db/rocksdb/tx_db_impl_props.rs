@@ -1,16 +1,18 @@
-use crate::db::rocksdb::tx_db_impl::{
-    composite_key, get_oid_or_nothing, get_oid_value, oid_key, RocksDbTx,
-};
-use crate::db::rocksdb::ColumnFamilies;
-use crate::db::{PropDef, PropDefs};
+use tracing::{info, trace};
+use uuid::Uuid;
+
 use moor_value::model::props::PropFlag;
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
 use moor_value::var::{v_none, Var};
 use moor_value::AsByteBuffer;
-use tracing::{info, trace};
-use uuid::Uuid;
+
+use crate::db::rocksdb::tx_db_impl::{
+    composite_key, get_oid_or_nothing, get_oid_value, oid_key, RocksDbTx,
+};
+use crate::db::rocksdb::ColumnFamilies;
+use crate::db::{PropDef, PropDefs};
 
 // Methods related to properties; definitions and values.
 impl<'a> RocksDbTx<'a> {
@@ -21,7 +23,7 @@ impl<'a> RocksDbTx<'a> {
         let props_bytes = self.tx.get_cf(cf, ok)?;
         let props = match props_bytes {
             None => PropDefs::empty(),
-            Some(props_bytes) => PropDefs::from_byte_vector(props_bytes)
+            Some(props_bytes) => PropDefs::from_byte_vector(props_bytes),
         };
         Ok(props)
     }
@@ -146,9 +148,9 @@ impl<'a> RocksDbTx<'a> {
         for location in locations.iter() {
             let ok = oid_key(*location);
             let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
-            let mut props: PropDefs = match props_bytes {
+            let props: PropDefs = match props_bytes {
                 None => PropDefs::empty(),
-                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes)
+                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes),
             };
 
             // Verify we don't already have a property with this name. If we do, return an error.
@@ -164,8 +166,7 @@ impl<'a> RocksDbTx<'a> {
                 owner,
                 perms,
             };
-            props.push(prop.clone());
-            self.update_propdefs(*location, props)?;
+            self.update_propdefs(*location, props.with_added(prop))?;
         }
         // If we have an initial value, set it (NOTE: if propagate_to_children is set, this does not
         // go down the inheritance tree, the value is left "clear" on all children)
@@ -222,7 +223,8 @@ impl<'a> RocksDbTx<'a> {
         new_props: PropDefs,
     ) -> Result<(), anyhow::Error> {
         let propdefs_cf = self.cf_handles[((ColumnFamilies::ObjectPropDefs) as u8) as usize];
-        self.tx.put_cf(propdefs_cf, oid_key(obj), new_props.as_byte_buffer())?;
+        self.tx
+            .put_cf(propdefs_cf, oid_key(obj), new_props.as_byte_buffer())?;
         Ok(())
     }
 
@@ -240,7 +242,7 @@ impl<'a> RocksDbTx<'a> {
 
             let props: PropDefs = match self.tx.get_cf(ov_cf, ok.clone())? {
                 None => PropDefs::empty(),
-                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes)
+                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes),
             };
             if let Some(prop) = props.find_named(n.as_str()) {
                 trace!(?prop, parent = ?search_o, "found property");

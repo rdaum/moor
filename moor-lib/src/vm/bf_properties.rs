@@ -191,6 +191,23 @@ async fn bf_add_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
 }
 bf_declare!(add_property, bf_add_property);
 
+async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 2 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+    let Variant::Str(prop_name) = bf_args.args[1].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+    bf_args
+        .world_state
+        .delete_property(bf_args.perms().clone(), *obj, prop_name.as_str())
+        .await?;
+    Ok(Ret(v_list(vec![])))
+}
+bf_declare!(delete_property, bf_delete_property);
 impl VM {
     pub(crate) fn register_bf_properties(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("property_info")] = Arc::new(Box::new(BfPropertyInfo {}));
@@ -201,6 +218,8 @@ impl VM {
         self.builtins[offset_for_builtin("clear_property")] =
             Arc::new(Box::new(BfSetClearProperty {}));
         self.builtins[offset_for_builtin("add_property")] = Arc::new(Box::new(BfAddProperty {}));
+        self.builtins[offset_for_builtin("delete_property")] =
+            Arc::new(Box::new(BfDeleteProperty {}));
 
         Ok(())
     }

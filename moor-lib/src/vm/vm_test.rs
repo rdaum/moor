@@ -129,7 +129,8 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let decoded_verb = Program::from_byte_vector(resolved_verb.attrs.binary.clone().unwrap());
+                    let decoded_verb =
+                        Program::from_byte_vector(resolved_verb.attrs.binary.clone().unwrap());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,

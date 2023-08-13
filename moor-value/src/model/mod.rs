@@ -64,12 +64,8 @@ pub enum WorldStateError {
     AmbiguousMatch(String),
 
     // Catch-alls for system level object DB errors.
-    #[error("Object DB error for {0}: {1}")]
-    ObjectDbError(Objid, String),
-    #[error("Object DB error for {0}.{1}: {2}")]
-    PropertyDbError(Objid, String, String),
-    #[error("Object DB error for {0}:{1}: {2}")]
-    VerbDbError(Objid, String, String),
+    #[error("DB communications error: {0}")]
+    CommunicationError(String),
 }
 
 impl WorldStateError {

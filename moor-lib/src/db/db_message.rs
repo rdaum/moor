@@ -1,21 +1,20 @@
 use tokio::sync::oneshot::Sender;
 use uuid::Uuid;
 
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid};
-use moor_value::var::Var;
-
-use crate::db::{PropDef, PropDefs, VerbDef, VerbDefs};
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{ObjSet, Objid};
+use moor_value::var::Var;
+
+use crate::db::{PropDef, PropDefs, VerbDef, VerbDefs};
 
 /// The set of messages that DbTxWorldState sends to the underlying physical database to execute
 /// storage/retrieval of object attributes, properties, and verbs.
-#[allow(dead_code)] // TODO Not all of these are used yet, but they will be. For now shut up the compiler.
 pub(crate) enum DbMessage {
     CreateObject {
         id: Option<Objid>,
@@ -37,8 +36,6 @@ pub(crate) enum DbMessage {
 
     /// Get information about all verbs declared on a given object
     GetVerbs(Objid, Sender<Result<VerbDefs, WorldStateError>>),
-    /// Get information about a specific verb on a given object by its unique id
-    GetVerb(Objid, Uuid, Sender<Result<VerbDef, WorldStateError>>),
     /// Get information about a specific verb on a given object by one of its names
     GetVerbByName(Objid, String, Sender<Result<VerbDef, WorldStateError>>),
     /// Get information about a specific verb on a given object by its index in the list of verbs
@@ -47,12 +44,12 @@ pub(crate) enum DbMessage {
     GetVerbBinary(Objid, Uuid, Sender<Result<Vec<u8>, WorldStateError>>),
     /// Search the inheritance hierarchy of an object to find a verb by name & argspec
     /// (If argspec is not specified, then "this none this" is assumed.)
-    ResolveVerb(
-        Objid,
-        String,
-        Option<VerbArgsSpec>,
-        Sender<Result<VerbDef, WorldStateError>>,
-    ),
+    ResolveVerb {
+        location: Objid,
+        name: String,
+        argspec: Option<VerbArgsSpec>,
+        reply: Sender<Result<VerbDef, WorldStateError>>,
+    },
     /// Update (non-program) data about a verb.
     SetVerbInfo {
         obj: Objid,
@@ -63,7 +60,6 @@ pub(crate) enum DbMessage {
         args: Option<VerbArgsSpec>,
         reply: Sender<Result<(), WorldStateError>>,
     },
-
     /// Add a verb on an object
     AddVerb {
         location: Objid,
@@ -81,11 +77,6 @@ pub(crate) enum DbMessage {
         uuid: Uuid,
         reply: Sender<Result<(), WorldStateError>>,
     },
-    RetrieveVerb(
-        Objid,
-        String,
-        Sender<Result<(Vec<u8>, VerbDef), WorldStateError>>,
-    ),
 
     /// Retrieve the list of properties defined on this object.
     GetProperties(Objid, Sender<Result<PropDefs, WorldStateError>>),

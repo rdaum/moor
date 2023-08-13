@@ -4,8 +4,8 @@ use std::io::BufReader;
 
 use anyhow::Context;
 use metrics_macros::increment_counter;
-use tracing::{info, span, trace, warn};
 use moor_value::AsByteBuffer;
+use tracing::{info, span, trace, warn};
 
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;

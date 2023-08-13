@@ -3,16 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
 use async_trait::async_trait;
-
-use moor_value::AsByteBuffer;
 use uuid::Uuid;
 
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid};
-use moor_value::var::{v_none, Var};
-
-use crate::db::LoaderInterface;
-use crate::vm::opcode::Program;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::props::{PropAttrs, PropFlag};
@@ -22,6 +14,13 @@ use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
 use moor_value::model::WorldStateError::{PropertyNotFound, VerbNotFound};
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{ObjSet, Objid};
+use moor_value::var::{v_none, Var};
+use moor_value::AsByteBuffer;
+
+use crate::db::LoaderInterface;
+use crate::vm::opcode::Program;
 
 struct MockStore {
     verbs: HashMap<(Objid, String), VerbInfo>,
@@ -66,7 +65,7 @@ impl WorldState for MockState {
         _perms: PermissionsContext,
         _obj: Objid,
         _flags: BitEnum<ObjFlag>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
@@ -201,6 +200,15 @@ impl WorldState for MockState {
             .properties
             .insert((obj, pname.to_string()), initial_value.unwrap_or(v_none()));
         Ok(())
+    }
+
+    async fn delete_property(
+        &mut self,
+        _perms: PermissionsContext,
+        _obj: Objid,
+        _pname: &str,
+    ) -> Result<(), WorldStateError> {
+        todo!()
     }
 
     async fn add_verb(

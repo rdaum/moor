@@ -2,17 +2,16 @@ use anyhow::Context;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
-
-use crate::db::db_message::DbMessage;
-use crate::db::{DbTxWorldState, LoaderInterface};
 use moor_value::model::objects::ObjAttrs;
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::CommitResult;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::Objid;
+use moor_value::var::Var;
+
+use crate::db::{DbTxWorldState, LoaderInterface};
 
 #[async_trait]
 impl LoaderInterface for DbTxWorldState {
@@ -21,36 +20,17 @@ impl LoaderInterface for DbTxWorldState {
         objid: Option<Objid>,
         attrs: &ObjAttrs,
     ) -> Result<Objid, anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::CreateObject {
-            id: objid,
-            attrs: attrs.clone(),
-            reply: send,
-        })?;
-        let oid = receive.await??;
-        Ok(oid)
+        Ok(self.client.create_object(objid, attrs.clone()).await?)
     }
     async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::SetParent(obj, parent, send))?;
-        receive.await??;
-        Ok(())
+        Ok(self.client.set_parent(obj, parent).await?)
     }
     async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetLocationOf(o, location, send))?;
-        receive.await??;
-        Ok(())
+        Ok(self.client.set_location_of(o, location).await?)
     }
     async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetObjectOwner(obj, owner, send))?;
-        receive.await??;
-        Ok(())
+        Ok(self.client.set_object_owner(obj, owner).await?)
     }
-
     async fn add_verb(
         &self,
         obj: Objid,
@@ -60,30 +40,26 @@ impl LoaderInterface for DbTxWorldState {
         args: VerbArgsSpec,
         binary: Vec<u8>,
     ) -> Result<(), anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::AddVerb {
-            location: obj,
-            owner,
-            names: names.iter().map(|s| s.to_string()).collect(),
-            binary_type: BinaryType::LambdaMoo18X,
-            binary,
-            flags,
-            args,
-            reply: send,
-        })?;
-        receive.await??;
+        self.client
+            .add_verb(
+                obj,
+                owner,
+                names.iter().map(|s| s.to_string()).collect(),
+                BinaryType::LambdaMoo18X,
+                binary,
+                flags,
+                args,
+            )
+            .await?;
         Ok(())
     }
     async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::GetProperties(obj, send))?;
-        let properties = receive.await??;
-        for vh in properties.iter() {
-            if vh.name == pname {
-                return Ok(Some(Uuid::from_bytes(vh.uuid)));
-            }
-        }
-        Ok(None)
+        Ok(self
+            .client
+            .get_properties(obj)
+            .await?
+            .find_named(pname)
+            .map(|p| Uuid::from_bytes(p.uuid)))
     }
     async fn define_property(
         &self,
@@ -94,17 +70,9 @@ impl LoaderInterface for DbTxWorldState {
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::DefineProperty {
-            definer,
-            location: objid,
-            name: propname.to_string(),
-            owner,
-            perms: flags,
-            value,
-            reply: send,
-        })?;
-        receive.await??;
+        self.client
+            .define_property(definer, objid, propname.to_string(), owner, flags, value)
+            .await?;
         Ok(())
     }
     async fn set_update_property(
@@ -116,52 +84,36 @@ impl LoaderInterface for DbTxWorldState {
         value: Option<Var>,
     ) -> Result<(), anyhow::Error> {
         // First find the property.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::ResolveProperty(
-            objid,
-            propname.to_string(),
-            send,
-        ))?;
-        let (propdef, _) = receive.await?.with_context(|| {
-            format!("Error resolving property {} on object {}", propname, objid)
-        })?;
+        let (propdef, _) = self
+            .client
+            .resolve_property(objid, propname.to_string())
+            .await
+            .with_context(|| {
+                format!("Error resolving property {} on object {}", propname, objid)
+            })?;
         let uuid = Uuid::from_bytes(propdef.uuid);
 
         // Now set the value if provided.
         if let Some(value) = value {
-            let (send, receive) = tokio::sync::oneshot::channel();
-            self.mailbox
-                .send(DbMessage::SetProperty(objid, uuid, value, send))?;
-            receive
-                .await?
+            self.client
+                .set_property(objid, uuid, value)
+                .await
                 .with_context(|| format!("Error setting value for {}.{}", objid, propname))?;
         }
 
         // And then set the flags and owner the child had.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetPropertyInfo {
-                obj: objid,
-                uuid,
-                new_owner: Some(owner),
-                new_flags: Some(flags),
-                new_name: None,
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive
-            .await?
+        self.client
+            .set_property_info(objid, uuid, Some(owner), Some(flags), None)
+            .await
             .with_context(|| format!("Error setting property info for {}.{}", objid, propname))?;
         Ok(())
     }
 
     async fn commit(self) -> Result<CommitResult, anyhow::Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::Commit(send))?;
-        let cr = receive.await?;
+        let cr = self.client.commit().await?;
         self.join_handle
             .join()
-            .expect("Error completing transaction");
+            .expect("Error joining on client thread");
         Ok(cr)
     }
 }

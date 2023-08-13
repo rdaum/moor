@@ -1,11 +1,10 @@
 use rocksdb::ColumnFamily;
 
+use moor_value::model::WorldStateError;
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+use moor_value::AsByteBuffer;
 
 use crate::db::rocksdb::ColumnFamilies;
-
-use moor_value::model::WorldStateError;
-use moor_value::AsByteBuffer;
 
 pub(crate) fn oid_key(o: Objid) -> Vec<u8> {
     o.0.to_be_bytes().to_vec()
@@ -105,16 +104,16 @@ mod tests {
     use tempdir::TempDir;
     use uuid::Uuid;
 
+    use moor_value::model::objects::ObjAttrs;
+    use moor_value::model::r#match::VerbArgsSpec;
+    use moor_value::model::verbs::BinaryType;
+    use moor_value::model::WorldStateError;
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::objid::{ObjSet, Objid, NOTHING};
     use moor_value::var::v_str;
 
     use crate::db::rocksdb::tx_db_impl::RocksDbTx;
     use crate::db::rocksdb::ColumnFamilies;
-    use moor_value::model::objects::ObjAttrs;
-    use moor_value::model::r#match::VerbArgsSpec;
-    use moor_value::model::verbs::BinaryType;
-    use moor_value::model::WorldStateError;
 
     struct TestDb {
         db: Arc<OptimisticTransactionDB>,

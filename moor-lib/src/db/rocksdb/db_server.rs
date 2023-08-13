@@ -7,10 +7,12 @@ use metrics_macros::increment_counter;
 use strum::VariantNames;
 use tracing::error;
 
+use moor_value::model::world_state::{WorldState, WorldStateSource};
+
+use crate::db::db_client::DbTxClient;
 use crate::db::rocksdb::tx_server::run_tx_server;
 use crate::db::rocksdb::ColumnFamilies;
 use crate::db::DbTxWorldState;
-use moor_value::model::world_state::{WorldState, WorldStateSource};
 
 // Rocks implementation of 'WorldStateSource' -- opens the physical database and provides
 // transactional 'WorldState' implementations for each new transaction.
@@ -54,7 +56,7 @@ impl RocksDbServer {
         });
         Ok(DbTxWorldState {
             join_handle: jh,
-            mailbox: send,
+            client: DbTxClient::new(send),
         })
     }
 }

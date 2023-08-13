@@ -1,4 +1,3 @@
-use anyhow::Error;
 use async_trait::async_trait;
 
 use crate::util::bitenum::BitEnum;
@@ -40,7 +39,7 @@ pub trait WorldState: Send + Sync {
         perms: PermissionsContext,
         obj: Objid,
         flags: BitEnum<ObjFlag>,
-    ) -> Result<(), Error>;
+    ) -> Result<(), WorldStateError>;
 
     /// Get the location of the given object.
     async fn location_of(
@@ -150,6 +149,12 @@ pub trait WorldState: Send + Sync {
         owner: Objid,
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
+    ) -> Result<(), WorldStateError>;
+    async fn delete_property(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        pname: &str,
     ) -> Result<(), WorldStateError>;
 
     /// Add a verb to the given object.

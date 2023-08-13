@@ -1,11 +1,11 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 
+use moor_value::model::WorldStateError;
 use moor_value::var::objid::{ObjSet, FAILED_MATCH};
 use moor_value::var::objid::{Objid, AMBIGUOUS, NOTHING};
 
 use crate::tasks::command_parse::ParseMatcher;
-use moor_value::model::WorldStateError;
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.

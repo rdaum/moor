@@ -1,22 +1,25 @@
 use std::ops::Index;
-use crate::db::db_message::DbMessage;
+use std::thread;
+
 use async_trait::async_trait;
 use bincode::{Decode, Encode};
-use crossbeam_channel::Sender;
+use uuid::Uuid;
+
 use moor_value::model::objects::ObjAttrs;
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::CommitResult;
 use moor_value::util::bitenum::BitEnum;
+use moor_value::util::verbname_cmp;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
-use std::thread;
-use uuid::Uuid;
-use moor_value::util::verbname_cmp;
+
+use crate::db::db_client::DbTxClient;
 
 pub mod matching;
 
+mod db_client;
 mod db_loader_client;
 mod db_message;
 mod db_worldstate;
@@ -47,7 +50,7 @@ pub const PREP_LIST: [&str; 15] = [
 
 pub struct DbTxWorldState {
     pub(crate) join_handle: thread::JoinHandle<()>,
-    pub(crate) mailbox: Sender<DbMessage>,
+    pub(crate) client: DbTxClient,
 }
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
@@ -131,10 +134,9 @@ pub(crate) struct PropDef {
     pub(crate) owner: Objid,
 }
 
-
 impl Named for PropDef {
     fn matches_name(&self, name: &str) -> bool {
-        verbname_cmp(self.name.to_lowercase().as_str(), name.to_lowercase().as_str())
+        self.name.to_lowercase().as_str() == name.to_lowercase().as_str()
     }
 }
 impl HasUuid for PropDef {
@@ -160,9 +162,9 @@ impl HasUuid for VerbDef {
 }
 
 /// A container for verb or property defs.
-/// Immutable, and can be iterated over in sequence, or indexed by uuid.
+/// Immutable, and can be iterated over in sequence, or searched by name.
 #[derive(Debug, Encode, Decode, Clone)]
-pub(crate) struct Defs<T: Encode + Decode + Clone + Sized + HasUuid  + Named + 'static>(Vec<T>);
+pub(crate) struct Defs<T: Encode + Decode + Clone + Sized + HasUuid + Named + 'static>(Vec<T>);
 impl<T: Encode + Decode + Clone + HasUuid + Named> Defs<T> {
     pub fn empty() -> Self {
         Self(vec![])
@@ -172,9 +174,6 @@ impl<T: Encode + Decode + Clone + HasUuid + Named> Defs<T> {
     }
     pub(crate) fn len(&self) -> usize {
         self.0.len()
-    }
-    pub(crate) fn push(&mut self, v: T) {
-        self.0.push(v)
     }
     pub(crate) fn contains(&self, uuid: Uuid) -> bool {
         self.0.iter().any(|p| p.uuid() == uuid)
@@ -187,7 +186,23 @@ impl<T: Encode + Decode + Clone + HasUuid + Named> Defs<T> {
         if !self.contains(uuid) {
             return None;
         }
-        Some(Self(self.0.iter().filter(|v| v.uuid() != uuid).cloned().collect()))
+        Some(Self(
+            self.0
+                .iter()
+                .filter(|v| v.uuid() != uuid)
+                .cloned()
+                .collect(),
+        ))
+    }
+    pub(crate) fn with_added(&self, v: T) -> Self {
+        let mut new = self.0.clone();
+        new.push(v);
+        Self(new)
+    }
+    pub(crate) fn with_added_vec(&self, v: Vec<T>) -> Self {
+        let mut new = self.0.clone();
+        new.extend(v);
+        Self(new)
     }
     pub(crate) fn with_updated<F: Fn(&T) -> T>(&self, uuid: Uuid, f: F) -> Option<Self> {
         // Return None if the uuid isn't found, otherwise return a copy with the updated verb.
@@ -218,4 +233,3 @@ impl<T: Encode + Decode + Clone + HasUuid + Named> From<Vec<T>> for Defs<T> {
         Self(v)
     }
 }
-

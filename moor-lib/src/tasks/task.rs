@@ -549,9 +549,7 @@ impl Task {
         binary_bytes: Vec<u8>,
     ) -> Result<Program, anyhow::Error> {
         match binary_type {
-            BinaryType::LambdaMoo18X => {
-                Ok(Program::from_byte_vector(binary_bytes.to_vec()))
-            }
+            BinaryType::LambdaMoo18X => Ok(Program::from_byte_vector(binary_bytes.to_vec())),
             _ => bail!("Unsupported binary type {:?}", binary_type),
         }
     }

@@ -1,16 +1,19 @@
+use std::collections::{HashMap, HashSet};
+
+use tracing::info;
+
+use moor_value::model::objects::{ObjAttrs, ObjFlag};
+use moor_value::model::WorldStateError;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+use moor_value::AsByteBuffer;
+
 use crate::db::rocksdb::tx_db_impl::{
     cf_for, composite_key, err_is_objnjf, get_objset, get_oid_or_nothing, get_oid_value, oid_key,
     set_objset, set_oid_value, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
 use crate::db::{PropDef, PropDefs};
-use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::WorldStateError;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
-use moor_value::AsByteBuffer;
-use std::collections::{HashMap, HashSet};
-use tracing::info;
 
 // Methods for manipulation of objects, their owners, flags, contents, parents, etc.
 impl<'a> RocksDbTx<'a> {
@@ -109,7 +112,8 @@ impl<'a> RocksDbTx<'a> {
         let new_props: Vec<PropDef> = old_props
             .iter()
             .filter(|p| !delort_props.contains(&p.uuid))
-            .cloned().collect();
+            .cloned()
+            .collect();
         self.update_propdefs(o, PropDefs::from(new_props))?;
 
         // Now walk all-my-children and destroy all the properties whose definer is me or any
@@ -129,10 +133,13 @@ impl<'a> RocksDbTx<'a> {
                 }
             }
             // And update the property list to not include them
-            let new_props = PropDefs::from(old_props
-                .iter()
-                .filter(|p| inherited_props.contains(&p.uuid))
-                .cloned().collect::<Vec<_>>());
+            let new_props = PropDefs::from(
+                old_props
+                    .iter()
+                    .filter(|p| inherited_props.contains(&p.uuid))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
 
             // We're not actually going to *set* these yet because we are going to add, later.
             descendant_props.insert(c, new_props);
@@ -186,14 +193,11 @@ impl<'a> RocksDbTx<'a> {
         let descendants = self.descendants(o)?;
         for c in descendants.iter().chain(std::iter::once(&o)) {
             // Check if we have a cached/modified copy from above in descendant_props
-            let mut c_props = match descendant_props.remove(&c) {
+            let c_props = match descendant_props.remove(&c) {
                 None => self.get_propdefs(*c)?,
                 Some(props) => props,
             };
-            for p in &new_props {
-                let ph = p.clone();
-                c_props.push(ph);
-            }
+            let c_props = c_props.with_added_vec(new_props.clone());
             self.update_propdefs(o, c_props)?;
         }
         Ok(())

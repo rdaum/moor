@@ -1,15 +1,6 @@
 use anyhow::Error;
 use async_trait::async_trait;
-use tracing::debug;
-use uuid::Uuid;
 
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
-use moor_value::var::variant::Variant;
-use moor_value::var::{v_int, v_list, v_objid, Var};
-
-use crate::db::db_message::DbMessage;
-use crate::db::{DbTxWorldState, PropDef, VerbDef};
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::permissions::PermissionsContext;
 use moor_value::model::props::{PropAttrs, PropFlag};
@@ -18,6 +9,12 @@ use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
 use moor_value::model::world_state::WorldState;
 use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+use moor_value::var::variant::Variant;
+use moor_value::var::{v_int, v_list, v_objid, Var};
+
+use crate::db::{DbTxWorldState, HasUuid, PropDef, VerbDef};
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.
@@ -65,22 +62,12 @@ fn prophandle_to_propattrs(ph: &PropDef, value: Option<Var>) -> PropAttrs {
 impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn owner_of(&mut self, obj: Objid) -> Result<Objid, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetObjectOwner(obj, send))
-            .expect("Error sending message");
-        let oid = receive.await.expect("Error receiving message")?;
-        Ok(oid)
+        self.client.get_object_owner(obj).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn flags_of(&mut self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetObjectFlagsOf(obj, send))
-            .expect("Error sending message");
-        let flags = receive.await.expect("Error receiving message")?;
-        Ok(flags)
+        self.client.get_object_flags(obj).await
     }
 
     async fn set_flags_of(
@@ -88,18 +75,13 @@ impl WorldState for DbTxWorldState {
         perms: PermissionsContext,
         obj: Objid,
         new_flags: BitEnum<ObjFlag>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), WorldStateError> {
         // Owner or wizard only.
         let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
         perms
             .task_perms()
             .check_object_allows(owner, flags, ObjFlag::Write)?;
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetObjectFlagsOf(obj, new_flags, send))
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
-        Ok(())
+        self.client.set_object_flags(obj, new_flags).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -113,12 +95,7 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetLocationOf(obj, send))
-            .expect("Error sending message");
-        let oid = receive.await.expect("Error receiving message")?;
-        Ok(oid)
+        self.client.get_location_of(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -146,7 +123,6 @@ impl WorldState for DbTxWorldState {
             as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
             object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
         */
-
         let attrs = ObjAttrs {
             owner,
             name: None,
@@ -154,16 +130,7 @@ impl WorldState for DbTxWorldState {
             location: None,
             flags: None,
         };
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::CreateObject {
-                id: None,
-                attrs,
-                reply: send,
-            })
-            .expect("Error sending message");
-        let oid = receive.await.expect("Error receiving message")?;
-        Ok(oid)
+        self.client.create_object(None, attrs).await
     }
 
     async fn move_object(
@@ -177,12 +144,7 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, flags, ObjFlag::Write)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetLocationOf(obj, new_loc, send))
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
-        Ok(())
+        self.client.set_location_of(obj, new_loc).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -196,12 +158,7 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetContentsOf(obj, send))
-            .expect("Error sending message");
-        let contents = receive.await.expect("Error receiving message")?;
-        Ok(contents)
+        self.client.get_contents_of(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -215,17 +172,12 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbs(obj, send))
-            .expect("Error sending message");
-        let verbs = receive.await.expect("Error receiving message")?;
-        Ok(verbs
+        Ok(self
+            .client
+            .get_verbs(obj)
+            .await?
             .iter()
-            .map(|vh| {
-                // TODO: is definer correct here? I forget if MOO has a Cold-like definer-is-not-location concept
-                verbhandle_to_verbinfo(vh, None)
-            })
+            .map(|vh| verbhandle_to_verbinfo(vh, None))
             .collect())
     }
 
@@ -240,11 +192,7 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetProperties(obj, send))
-            .expect("Error sending message");
-        let properties = receive.await.expect("Error receiving message")?;
+        let properties = self.client.get_properties(obj).await?;
         Ok(properties
             .iter()
             .filter_map(|ph| {
@@ -303,16 +251,10 @@ impl WorldState for DbTxWorldState {
             };
         }
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::ResolveProperty(obj, pname.into(), send))
-            .expect("Error sending message");
-        let (ph, value) = receive.await.expect("Error receiving message")?;
-
+        let (ph, value) = self.client.resolve_property(obj, pname.to_string()).await?;
         perms
             .task_perms()
             .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
-
         Ok(value)
     }
 
@@ -322,16 +264,10 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         pname: &str,
     ) -> Result<PropAttrs, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetProperties(obj, send))
-            .expect("Error sending message");
-        let properties = receive.await.expect("Error receiving message")?;
+        let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .iter()
-            .find(|ph| ph.name == pname)
+            .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-
         perms
             .task_perms()
             .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
@@ -347,37 +283,23 @@ impl WorldState for DbTxWorldState {
         pname: &str,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetProperties(obj, send))
-            .expect("Error sending message");
-        let properties = receive.await.expect("Error receiving message")?;
+        let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .iter()
-            .find(|ph| ph.name == pname)
+            .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
         perms
             .task_perms()
             .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
-        // Also keep a close eye on 'clear':
+        // TODO Also keep a close eye on 'clear' & perms:
         //  "raises `E_INVARG' if <owner> is not valid" & If <object> is the definer of the property
         //   <prop-name>, as opposed to an inheritor of the property, then `clear_property()' raises
         //   `E_INVARG'
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetPropertyInfo {
-                obj,
-                uuid: Uuid::from_bytes(ph.uuid),
-                new_owner: attrs.owner,
-                new_flags: attrs.flags,
-                new_name: attrs.name,
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        self.client
+            .set_property_info(obj, ph.uuid(), attrs.owner, attrs.flags, attrs.name)
+            .await?;
         Ok(())
     }
 
@@ -404,15 +326,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                let (send, receive) = tokio::sync::oneshot::channel();
-                self.mailbox
-                    .send(DbMessage::SetObjectNameOf(
-                        obj,
-                        name.as_str().to_string(),
-                        send,
-                    ))
-                    .expect("Error sending message");
-                receive.await.expect("Error receiving message")?;
+                self.client.set_object_name(obj, name.to_string()).await?;
                 return Ok(());
             }
 
@@ -420,11 +334,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                let (send, receive) = tokio::sync::oneshot::channel();
-                self.mailbox
-                    .send(DbMessage::SetObjectOwner(obj, *owner, send))
-                    .expect("Error sending message");
-                receive.await.expect("Error receiving message")?;
+                self.client.set_object_owner(obj, *owner).await?;
                 return Ok(());
             }
         }
@@ -441,67 +351,41 @@ impl WorldState for DbTxWorldState {
                 flags.set(ObjFlag::Wizard);
             }
 
-            let (send, receive) = tokio::sync::oneshot::channel();
-            self.mailbox
-                .send(DbMessage::SetObjectFlagsOf(obj, flags, send))
-                .expect("Error sending message");
-            receive.await.expect("Error receiving message")?;
+            self.client.set_object_flags(obj, flags).await?;
             return Ok(());
         }
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetProperties(obj, send))
-            .expect("Error sending message");
-        let properties = receive.await.expect("Error receiving message")?;
+        let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .iter()
-            .find(|ph| ph.name == pname)
+            .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
         perms
             .task_perms()
             .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetProperty(
-                ph.location,
-                Uuid::from_bytes(ph.uuid),
-                value.clone(),
-                send,
-            ))
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        self.client
+            .set_property(obj, ph.uuid(), value.clone())
+            .await?;
         Ok(())
     }
 
     async fn is_property_clear(
         &mut self,
-        _perms: PermissionsContext,
+        perms: PermissionsContext,
         obj: Objid,
         pname: &str,
     ) -> Result<bool, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetProperties(obj, send))
-            .expect("Error sending message");
-        let properties = receive.await.expect("Error receiving message")?;
+        let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .iter()
-            .find(|ph| ph.name == pname)
+            .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Read)?;
 
         // Now RetrieveProperty and if it's not there, it's clear.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::RetrieveProperty(
-                ph.location,
-                Uuid::from_bytes(ph.uuid),
-                send,
-            ))
-            .expect("Error sending message");
-        let result = receive.await.expect("Error receiving message");
+        let result = self.client.retrieve_property(ph.location, ph.uuid()).await;
         // What we want is an ObjectError::PropertyNotFound, that will tell us if it's clear.
         let is_clear = match result {
             Err(WorldStateError::PropertyNotFound(_, _)) => true,
@@ -513,31 +397,21 @@ impl WorldState for DbTxWorldState {
 
     async fn clear_property(
         &mut self,
-        _perms: PermissionsContext,
+        perms: PermissionsContext,
         obj: Objid,
         pname: &str,
     ) -> Result<(), WorldStateError> {
         // This is just deleting the local *value* portion of the property.
         // First seek the property handle.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetProperties(obj, send))
-            .expect("Error sending message");
-        let properties = receive.await.expect("Error receiving message")?;
+        let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .iter()
-            .find(|ph| ph.name == pname)
+            .find_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-        // Then ask the db to remove the value.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::ClearProperty(
-                ph.location,
-                Uuid::from_bytes(ph.uuid),
-                send,
-            ))
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
+
+        self.client.clear_property(obj, ph.uuid()).await?;
         Ok(())
     }
 
@@ -563,20 +437,35 @@ impl WorldState for DbTxWorldState {
             .check_object_allows(objowner, flags, ObjFlag::Write)?;
         perms.task_perms().check_obj_owner_perms(propowner)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::DefineProperty {
+        self.client
+            .define_property(
                 definer,
                 location,
-                name: pname.into(),
-                owner: propowner,
-                perms: prop_flags,
-                value: initial_value,
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+                pname.to_string(),
+                propowner,
+                prop_flags,
+                initial_value,
+            )
+            .await?;
         Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn delete_property(
+        &mut self,
+        perms: PermissionsContext,
+        obj: Objid,
+        pname: &str,
+    ) -> Result<(), WorldStateError> {
+        let properties = self.client.get_properties(obj).await?;
+        let ph = properties
+            .find_named(pname)
+            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+        perms
+            .task_perms()
+            .check_property_allows(ph.owner, ph.perms, PropFlag::Write)?;
+
+        self.client.delete_property(obj, ph.uuid()).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -596,20 +485,9 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::AddVerb {
-                location: obj,
-                owner,
-                names,
-                binary_type,
-                binary,
-                flags,
-                args,
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        self.client
+            .add_verb(obj, owner, names, binary_type, binary, flags, args)
+            .await?;
         Ok(())
     }
 
@@ -620,31 +498,12 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vname: &str,
     ) -> Result<(), WorldStateError> {
-        let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        perms
-            .task_perms()
-            .check_object_allows(owner, objflags, ObjFlag::Write)?;
-
-        // Find the verb uuid & permissions.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbByName(obj, vname.to_string(), send))
-            .expect("Error sending message");
-        let vh = receive.await.expect("Error receiving message")?;
-
+        let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
         perms
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::DeleteVerb {
-                location: obj,
-                uuid: Uuid::from_bytes(vh.uuid),
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        self.client.delete_verb(obj, vh.uuid()).await?;
         Ok(())
     }
 
@@ -659,28 +518,13 @@ impl WorldState for DbTxWorldState {
         flags: Option<BitEnum<VerbFlag>>,
         args: Option<VerbArgsSpec>,
     ) -> Result<(), WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbByName(obj, vname.to_string(), send))
-            .expect("Error sending message");
-        let vh = receive.await.expect("Error receiving message")?;
-
+        let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
         perms
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetVerbInfo {
-                obj,
-                uuid: Uuid::from_bytes(vh.uuid),
-                owner,
-                names,
-                flags,
-                args,
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        self.client
+            .set_verb_info(obj, vh.uuid(), owner, flags, names, args)
+            .await?;
         Ok(())
     }
 
@@ -694,31 +538,13 @@ impl WorldState for DbTxWorldState {
         flags: Option<BitEnum<VerbFlag>>,
         args: Option<VerbArgsSpec>,
     ) -> Result<(), WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbs(obj, send))
-            .expect("Error sending message");
-        let verbs = receive.await.expect("Error receiving message")?;
-        if vidx >= verbs.len() {
-            return Err(WorldStateError::VerbNotFound(obj, format!("{}", vidx)));
-        }
-        let vh = verbs[vidx].clone();
+        let vh = self.client.get_verb_by_index(obj, vidx).await?;
         perms
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetVerbInfo {
-                obj,
-                uuid: Uuid::from_bytes(vh.uuid),
-                owner,
-                names,
-                flags,
-                args,
-                reply: send,
-            })
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
+        self.client
+            .set_verb_info(obj, vh.uuid(), owner, flags, names, args)
+            .await?;
         Ok(())
     }
 
@@ -729,25 +555,12 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbByName(obj, vname.to_string(), send))
-            .expect("Error sending message");
-        let vh = receive.await.expect("Error receiving message")?;
-
+        let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
         perms
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbBinary(
-                vh.location,
-                Uuid::from_bytes(vh.uuid),
-                send,
-            ))
-            .expect("Error sending message");
-        let binary = receive.await.expect("Error receiving message")?;
+        let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
         Ok(verbhandle_to_verbinfo(&vh, Some(binary)))
     }
 
@@ -757,25 +570,11 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vidx: usize,
     ) -> Result<VerbInfo, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbByIndex(obj, vidx, send))
-            .expect("Error sending message");
-        let vh = receive.await.expect("Error receiving message")?;
-
+        let vh = self.client.get_verb_by_index(obj, vidx).await?;
         perms
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
-
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbBinary(
-                vh.location,
-                Uuid::from_bytes(vh.uuid),
-                send,
-            ))
-            .expect("Error sending message");
-        let binary = receive.await.expect("Error receiving message")?;
+        let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
         Ok(verbhandle_to_verbinfo(&vh, Some(binary)))
     }
 
@@ -786,27 +585,15 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
-        // We were mistakenly doing a perms check on the object itself.  turns out that it's the
-        // verbthat purely determenis permsisions.
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::ResolveVerb(obj, vname.to_string(), None, send))
-            .expect("Error sending message");
-        let vh = receive.await.expect("Error receiving message")?;
-
+        let vh = self
+            .client
+            .resolve_verb(obj, vname.to_string(), None)
+            .await?;
         perms
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbBinary(
-                vh.location,
-                Uuid::from_bytes(vh.uuid),
-                send,
-            ))
-            .expect("Error sending message");
-        let binary = receive.await.expect("Error receiving message")?;
+        let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
         Ok(verbhandle_to_verbinfo(&vh, Some(binary)))
     }
 
@@ -843,17 +630,10 @@ impl WorldState for DbTxWorldState {
         let iobj = spec_for_fn(obj, iobj);
         let argspec = VerbArgsSpec { dobj, prep, iobj };
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::ResolveVerb(
-                obj,
-                command_verb.to_string(),
-                Some(argspec),
-                send,
-            ))
-            .expect("Error sending message");
-
-        let vh = receive.await.expect("Error receiving message");
+        let vh = self
+            .client
+            .resolve_verb(obj, command_verb.to_string(), Some(argspec))
+            .await;
         let vh = match vh {
             Ok(vh) => vh,
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -868,15 +648,7 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetVerbBinary(
-                vh.location,
-                Uuid::from_bytes(vh.uuid),
-                send,
-            ))
-            .expect("Error sending message");
-        let binary = receive.await.expect("Error receiving message")?;
+        let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
         Ok(Some(verbhandle_to_verbinfo(&vh, Some(binary))))
     }
 
@@ -886,13 +658,7 @@ impl WorldState for DbTxWorldState {
         _perms: PermissionsContext,
         obj: Objid,
     ) -> Result<Objid, WorldStateError> {
-        // TODO: MOO does not check permissions on this. Should it?
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetParentOf(obj, send))
-            .expect("Error sending message");
-        let oid = receive.await.expect("Error receiving message")?;
-        Ok(oid)
+        self.client.get_parent(obj).await
     }
 
     async fn change_parent(
@@ -923,12 +689,7 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::SetParent(obj, new_parent, send))
-            .expect("Error sending message");
-        receive.await.expect("Error receiving message")?;
-        Ok(())
+        self.client.set_parent(obj, new_parent).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -942,23 +703,12 @@ impl WorldState for DbTxWorldState {
             .task_perms()
             .check_object_allows(owner, objflags, ObjFlag::Read)?;
 
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::GetChildrenOf(obj, send))
-            .expect("Error sending message");
-        let children = receive.await.expect("Error receiving message")?;
-        debug!("Children: {:?} {:?}", obj, children);
-        Ok(children)
+        self.client.get_children(obj).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn valid(&mut self, obj: Objid) -> Result<bool, WorldStateError> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox
-            .send(DbMessage::Valid(obj, send))
-            .expect("Error sending message");
-        let valid = receive.await.expect("Error receiving message");
-        Ok(valid)
+        self.client.valid(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -968,13 +718,8 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError> {
         // Another thing that MOO allows lookup of without permissions.
-        let (send, receive) = tokio::sync::oneshot::channel();
-
         // First get name
-        self.mailbox
-            .send(DbMessage::GetObjectNameOf(obj, send))
-            .expect("Error sending message");
-        let name = receive.await.expect("Error receiving message")?;
+        let name = self.client.get_object_name(obj).await?;
 
         // Then grab aliases property.
         let aliases = match self.retrieve_property(perms, obj, "aliases").await {
@@ -994,23 +739,11 @@ impl WorldState for DbTxWorldState {
 
     #[tracing::instrument(skip(self))]
     async fn commit(&mut self) -> Result<CommitResult, Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::Commit(send))?;
-        let cr = receive.await?;
-        // self.join_handle
-        //     .join()
-        //     .expect("Error completing transaction");
-        Ok(cr)
+        Ok(self.client.commit().await?)
     }
 
     #[tracing::instrument(skip(self))]
     async fn rollback(&mut self) -> Result<(), Error> {
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.mailbox.send(DbMessage::Rollback(send))?;
-        receive.await?;
-        // self.join_handle
-        //     .join()
-        //     .expect("Error rolling back transaction");
-        Ok(())
+        Ok(self.client.rollback().await?)
     }
 }

@@ -5,9 +5,10 @@ use metrics_macros::increment_counter;
 use rocksdb::ColumnFamily;
 use tracing::warn;
 
+use moor_value::model::WorldStateError;
+
 use crate::db::db_message::DbMessage;
 use crate::db::rocksdb::tx_db_impl::RocksDbTx;
-use moor_value::model::WorldStateError;
 
 fn respond<V: Send + Sync + 'static>(
     r: tokio::sync::oneshot::Sender<Result<V, WorldStateError>>,
@@ -114,10 +115,6 @@ pub(crate) fn run_tx_server<'a>(
             } => {
                 respond(r, tx.delete_object_verb(o, v))?;
             }
-            // Get information about a specific verb by its unique verb ID.
-            DbMessage::GetVerb(o, v, r) => {
-                respond(r, tx.get_verb(o, v))?;
-            }
             DbMessage::GetVerbByName(o, v, r) => {
                 respond(r, tx.get_verb_by_name(o, v))?;
             }
@@ -127,11 +124,13 @@ pub(crate) fn run_tx_server<'a>(
             DbMessage::GetVerbBinary(o, v, r) => {
                 respond(r, tx.get_binary(o, v))?;
             }
-            DbMessage::ResolveVerb(o, n, a, r) => {
+            DbMessage::ResolveVerb {
+                location: o,
+                name: n,
+                argspec: a,
+                reply: r,
+            } => {
                 respond(r, tx.resolve_verb(o, n, a))?;
-            }
-            DbMessage::RetrieveVerb(o, v, r) => {
-                respond(r, tx.retrieve_verb(o, v))?;
             }
             DbMessage::GetProperties(o, r) => {
                 respond(r, tx.get_propdefs(o))?;
