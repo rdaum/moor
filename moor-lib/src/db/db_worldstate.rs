@@ -239,6 +239,27 @@ impl WorldState for DbTxWorldState {
             } else {
                 Ok(v_int(0))
             };
+        } else if pname == "r" {
+            let flags = self.flags_of(obj).await?;
+            return if flags.contains(ObjFlag::Read) {
+                Ok(v_int(1))
+            } else {
+                Ok(v_int(0))
+            };
+        } else if pname == "w" {
+            let flags = self.flags_of(obj).await?;
+            return if flags.contains(ObjFlag::Write) {
+                Ok(v_int(1))
+            } else {
+                Ok(v_int(0))
+            };
+        } else if pname == "f" {
+            let flags = self.flags_of(obj).await?;
+            return if flags.contains(ObjFlag::Fertile) {
+                Ok(v_int(1))
+            } else {
+                Ok(v_int(0))
+            };
         }
 
         let (ph, value) = self.client.resolve_property(obj, pname.to_string()).await?;
@@ -306,8 +327,9 @@ impl WorldState for DbTxWorldState {
             return Err(WorldStateError::PropertyPermissionDenied);
         }
 
-        if pname == "name" || pname == "owner" {
-            let (flags, objowner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+        if pname == "name" || pname == "owner" || pname =="r" || pname == "w" || pname == "f" {
+            let (mut flags, objowner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+
             // User is either wizard or owner
             self.perms(perms)
                 .await?
@@ -327,7 +349,46 @@ impl WorldState for DbTxWorldState {
                 self.client.set_object_owner(obj, *owner).await?;
                 return Ok(());
             }
-        }
+
+            if pname == "r" {
+                let Variant::Int(v) = value.variant() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                if *v == 1 {
+                    flags.set(ObjFlag::Read);
+                } else {
+                    flags.clear(ObjFlag::Read);
+                }
+                self.client.set_object_flags(obj, flags).await?;
+                return Ok(());
+            }
+
+            if pname == "w" {
+                let Variant::Int(v) = value.variant() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                if *v == 1 {
+                    flags.set(ObjFlag::Write);
+                } else {
+                    flags.clear(ObjFlag::Write);
+                }
+                self.client.set_object_flags(obj, flags).await?;
+                return Ok(());
+            }
+
+            if pname == "f" {
+                let Variant::Int(v) = value.variant() else {
+                    return Err(WorldStateError::PropertyTypeMismatch);
+                };
+                if *v == 1 {
+                    flags.set(ObjFlag::Fertile);
+                } else {
+                    flags.clear(ObjFlag::Fertile);
+                }
+                self.client.set_object_flags(obj, flags).await?;
+                return Ok(());
+            }
+         }
 
         if pname == "programmer" || pname == "wizard" {
             // Caller *must* be a wizard for either of these.

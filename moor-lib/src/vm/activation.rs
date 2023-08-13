@@ -64,7 +64,7 @@ pub(crate) struct Activation {
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Objid,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: Vec<Var>,
+    pub(crate) environment: Vec<Option<Var>>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active error handlers, each relative to a position in the valstack.
@@ -94,7 +94,7 @@ impl Activation {
         span_id: Option<tracing::span::Id>,
     ) -> Result<Self, anyhow::Error> {
         let program = verb_call_request.program;
-        let environment = vec![v_none(); program.var_names.width()];
+        let environment = vec![None; program.var_names.width()];
 
         let verb_owner = verb_call_request.resolved_verb.attrs.owner.unwrap();
         let mut a = Self {
@@ -220,7 +220,7 @@ impl Activation {
     pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
         let n = self.program.var_names.find_name_offset(name);
         if let Some(n) = n {
-            self.environment[n] = value;
+            self.environment[n] = Some(value);
             Ok(())
         } else {
             Err(E_VARNF)
@@ -231,7 +231,7 @@ impl Activation {
         if offset.0 as usize >= self.environment.len() {
             return Err(E_VARNF);
         }
-        self.environment[offset.0 as usize] = value;
+        self.environment[offset.0 as usize] = Some(value);
         Ok(())
     }
 

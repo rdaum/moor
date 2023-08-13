@@ -345,11 +345,10 @@ impl VM {
                 }
             }
             Op::Push(ident) => {
-                let v = self.get_env(ident);
-                match v.variant() {
-                    Variant::None => return self.push_error(E_VARNF),
-                    _ => self.push(&v),
-                }
+                let Some(v) = self.get_env(ident) else {
+                    return self.push_error(E_VARNF);
+                };
+                self.push(&v.clone());
             }
             Op::Put(ident) => {
                 let v = self.peek_top();
@@ -419,13 +418,10 @@ impl VM {
                 self.set_env(id, &self.peek_top());
             }
             Op::GPush { id } => {
-                let v = self.get_env(id);
-                match v.variant() {
-                    Variant::None => return self.push_error(E_VARNF),
-                    _ => {
-                        self.push(&v);
-                    }
-                }
+                let Some(v) = self.get_env(id) else {
+                    return self.push_error(E_VARNF);
+                };
+                self.push(&v.clone());
             }
             Op::Length(offset) => {
                 let vsr = &self.top().valstack;
