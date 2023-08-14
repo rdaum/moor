@@ -132,15 +132,6 @@ impl<'a> RocksDbTx<'a> {
         let descendants = self.descendants(location)?;
         locations.append(descendants);
 
-        if name == "builtins" {
-            info!(
-                ?location,
-                ?definer,
-                ?locations,
-                "define_property: name is 'builtins'"
-            );
-        }
-
         // Generate a new property ID. This will get shared all the way down the pipe.
         // But the key for the actual value is always composite of oid,uuid
         let u = Uuid::new_v4();
