@@ -650,9 +650,20 @@ impl Decompile {
             Op::Length(_) => {
                 self.push_expr(Expr::Length);
             }
-            Op::IfQues(_) => {
+            Op::IfQues(label) => {
                 let condition = self.pop_expr();
-                self.decompile()?;
+                let label_position = self.find_jump(&label)?.position.0;
+                let (_, _) =
+                    self.decompile_statements_until_match(|position, o| {
+                        if position == label_position {
+                            return true;
+                        }
+                        if let Op::Jump { label } = o {
+                            label == label
+                        } else {
+                            false
+                        }
+                    })?;
                 let consequent = self.pop_expr();
                 self.decompile()?;
                 let alternate = self.pop_expr();
