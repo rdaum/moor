@@ -138,20 +138,24 @@ pub(crate) fn run_tx_server<'a>(
             DbMessage::RetrieveProperty(o, u, r) => {
                 respond(r, tx.retrieve_property(o, u))?;
             }
-            DbMessage::SetVerbInfo {
+            DbMessage::UpdateVerbDef {
                 obj,
                 uuid,
                 names,
                 owner,
-                args,
+                binary_type, args,
                 flags,
                 reply,
             } => {
                 respond(
                     reply,
-                    tx.set_verb_info(obj, uuid, owner, flags, names, args),
+                    tx.set_verb_info(obj, uuid, owner, flags, names, args, binary_type),
                 )?;
             }
+            DbMessage::SetVerbBinary { obj, uuid, binary, reply } => {
+                respond(reply, tx.set_verb_binary(obj, uuid, binary))?;
+            }
+
             DbMessage::SetProperty(o, u, v, r) => {
                 respond(r, tx.set_property_value(o, u, v))?;
             }

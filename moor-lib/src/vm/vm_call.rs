@@ -1,6 +1,8 @@
 use anyhow::Context;
 use tracing::{debug, span, trace, Level};
 
+use moor_value::model::world_state::WorldState;
+use moor_value::model::WorldStateError;
 use moor_value::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_int, Var};
@@ -12,9 +14,6 @@ use crate::vm::builtin::{BfCallState, BfRet};
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-
-use moor_value::model::world_state::WorldState;
-use moor_value::model::WorldStateError;
 
 pub(crate) fn args_literal(args: &[Var]) -> String {
     args.iter()
@@ -83,7 +82,7 @@ impl VM {
         };
 
         // Permissions for the activation are the verb's owner.
-        let permissions = verb_info.attrs.owner.unwrap();
+        let permissions = verb_info.verbdef.owner;
 
         Ok(ExecutionResult::ContinueVerb {
             permissions,
@@ -223,7 +222,7 @@ impl VM {
         let args = args.to_vec();
 
         // Push an activation frame for the builtin function.
-        let flags = self.top().verb_info.attrs.flags.unwrap();
+        let flags = self.top().verb_info.verbdef.flags;
         self.stack.push(Activation::for_bf_call(
             self.top().task_id,
             bf_func_num,

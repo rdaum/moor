@@ -1,5 +1,7 @@
 use tracing::trace;
 
+use moor_value::model::r#match::VerbArgsSpec;
+use moor_value::model::verbs::{BinaryType, VerbDef, VerbFlag, VerbInfo};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::E_VARNF;
@@ -11,7 +13,6 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
 use crate::vm::opcode::{Op, Program, EMPTY_PROGRAM};
 use crate::vm::VerbExecutionRequest;
-use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -96,7 +97,7 @@ impl Activation {
         let program = verb_call_request.program;
         let environment = vec![None; program.var_names.width()];
 
-        let verb_owner = verb_call_request.resolved_verb.attrs.owner.unwrap();
+        let verb_owner = verb_call_request.resolved_verb.verbdef.owner;
         let mut a = Self {
             task_id,
             program,
@@ -166,20 +167,21 @@ impl Activation {
         bf_index: usize,
         bf_name: &str,
         args: Vec<Var>,
-        verb_flags: BitEnum<VerbFlag>,
+        _verb_flags: BitEnum<VerbFlag>,
         player: Objid,
         span_id: Option<tracing::span::Id>,
     ) -> Self {
         let verb_info = VerbInfo {
-            names: vec![],
-            attrs: VerbAttrs {
-                definer: None,
-                owner: None,
-                flags: Some(verb_flags),
-                args_spec: None,
+            verbdef: VerbDef {
+                uuid: [0; 16],
+                location: NOTHING,
+                owner: NOTHING,
+                names: vec![bf_name.to_string()],
+                flags: BitEnum::new_with(VerbFlag::Exec),
                 binary_type: BinaryType::None,
-                binary: None,
+                args: VerbArgsSpec::this_none_this(),
             },
+            binary: vec![],
         };
 
         trace!(bf_name, bf_index, ?args, "for_bf_call");
@@ -207,14 +209,14 @@ impl Activation {
 
     pub fn verb_definer(&self) -> Objid {
         if self.bf_index.is_none() {
-            self.verb_info.attrs.definer.unwrap()
+            self.verb_info.verbdef.location
         } else {
             NOTHING
         }
     }
 
     pub fn verb_owner(&self) -> Objid {
-        self.verb_info.attrs.owner.unwrap()
+        self.verb_info.verbdef.owner
     }
 
     pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {

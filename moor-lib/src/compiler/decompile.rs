@@ -653,17 +653,16 @@ impl Decompile {
             Op::IfQues(label) => {
                 let condition = self.pop_expr();
                 let label_position = self.find_jump(&label)?.position.0;
-                let (_, _) =
-                    self.decompile_statements_until_match(|position, o| {
-                        if position == label_position {
-                            return true;
-                        }
-                        if let Op::Jump { label } = o {
-                            label == label
-                        } else {
-                            false
-                        }
-                    })?;
+                let (_, _) = self.decompile_statements_until_match(|position, o| {
+                    if position == label_position {
+                        return true;
+                    }
+                    if let Op::Jump { label } = o {
+                        label == label
+                    } else {
+                        false
+                    }
+                })?;
                 let consequent = self.pop_expr();
                 self.decompile()?;
                 let alternate = self.pop_expr();
@@ -676,16 +675,14 @@ impl Decompile {
             }
             Op::CheckListForSplice => {
                 let sp_expr = self.pop_expr()?;
-                let e = Expr::List(
-                    vec![Arg::Splice(sp_expr)],
-                );
+                let e = Expr::List(vec![Arg::Splice(sp_expr)]);
                 self.push_expr(e);
             }
             Op::GPut { id } => {
-               let e = Expr::Assign {
-                   left: Box::new(Expr::Id(id)),
-                   right: Box::new(self.pop_expr()?),
-               };
+                let e = Expr::Assign {
+                    left: Box::new(Expr::Id(id)),
+                    right: Box::new(self.pop_expr()?),
+                };
                 self.push_expr(e);
             }
             Op::GPush { id } => {
@@ -708,7 +705,7 @@ impl Decompile {
             Op::Jump { .. } | Op::PushTemp => {
                 unreachable!("should have been handled other decompilation branches")
             }
-            Op::EndCatch(_) | Op::Continue | Op::EndExcept(_) | Op::EndFinally  => {
+            Op::EndCatch(_) | Op::Continue | Op::EndExcept(_) | Op::EndFinally => {
                 // Early exit; main logic is in TRY_FINALLY or CATCH etc case, above
                 // TODO: MOO has "return ptr - 2;"  -- doing something with the iteration, that
                 //   I may not be able to do with the current structure. See if I need to
@@ -741,12 +738,12 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use tracing_test::traced_test;
     use crate::compiler::codegen::compile;
     use crate::compiler::decompile::program_to_tree;
     use crate::compiler::parse::parse_program;
     use crate::compiler::parse::Parse;
     use crate::vm::opcode::Program;
+    use tracing_test::traced_test;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse, Program) {
         let parse_1 = parse_program(program_text).unwrap();

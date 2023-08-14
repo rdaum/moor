@@ -356,8 +356,9 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::bf_list_sets::substitute;
     use regexpr_binding::Pattern;
+
+    use crate::vm::bf_list_sets::substitute;
 
     #[test]
     fn test_match_substitute() {

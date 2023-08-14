@@ -3,16 +3,16 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::PropFlag;
+use moor_value::model::props::{PropDef, PropDefs, PropFlag};
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbFlag};
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbFlag};
 use moor_value::model::{CommitResult, WorldStateError};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid};
 use moor_value::var::Var;
 
 use crate::db::db_message::DbMessage;
-use crate::db::{PropDef, PropDefs, VerbDef, VerbDefs};
+use moor_value::model::verbs::VerbDefs;
 
 pub(crate) struct DbTxClient {
     pub(crate) mailbox: Sender<DbMessage>,
@@ -196,26 +196,35 @@ impl DbTxClient {
         let verbdef = get_reply(receive).await?;
         Ok(verbdef)
     }
-    pub async fn set_verb_info(
+    pub async fn update_verb(
         &self,
         obj: Objid,
         uuid: Uuid,
-        owner: Option<Objid>,
-        flags: Option<BitEnum<VerbFlag>>,
-        names: Option<Vec<String>>,
-        args: Option<VerbArgsSpec>,
+        verb_attrs: VerbAttrs
     ) -> Result<(), WorldStateError> {
         let (send, receive) = oneshot::channel();
-        self.send(DbMessage::SetVerbInfo {
+        self.send(DbMessage::UpdateVerbDef {
             obj,
             uuid,
-            owner,
-            names,
-            flags,
-            args,
+            owner: verb_attrs.owner,
+            names: verb_attrs.names,
+            flags: verb_attrs.flags,
+            binary_type: verb_attrs.binary_type,
+            args: verb_attrs.args_spec,
             reply: send,
         })?;
         get_reply(receive).await?;
+
+        if let Some(binary) = verb_attrs.binary {
+            let (send, receive) = oneshot::channel();
+            self.send(DbMessage::SetVerbBinary {
+                obj,
+                uuid,
+                binary,
+                reply: send,
+            })?;
+            get_reply(receive).await?;
+        }
         Ok(())
     }
     pub async fn add_verb(

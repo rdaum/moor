@@ -1,9 +1,11 @@
-use crate::var::variant::Variant;
-use crate::var::{v_empty_list, Var};
-use bincode::{Decode, Encode};
 use std::cmp::min;
 use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
 use std::sync::Arc;
+
+use bincode::{Decode, Encode};
+
+use crate::var::variant::Variant;
+use crate::var::{v_empty_list, Var};
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct List {

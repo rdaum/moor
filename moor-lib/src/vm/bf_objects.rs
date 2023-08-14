@@ -3,7 +3,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::{debug, error, trace};
 
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::WorldStateError;
 use moor_value::var::error::Error::{E_INVARG, E_NACC, E_TYPE};
+use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
 
@@ -14,9 +17,6 @@ use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
-use moor_value::model::objects::ObjFlag;
-use moor_value::model::WorldStateError;
-use moor_value::var::objid::NOTHING;
 
 /*
 Function: int valid (obj object)
@@ -418,7 +418,7 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
         .world_state
         .properties(bf_args.task_perms_who(), *obj)
         .await?;
-    let props = props.iter().map(|p| v_str(&p.0)).collect();
+    let props = props.iter().map(|p| v_str(&p.name)).collect();
     Ok(Ret(v_list(props)))
 }
 bf_declare!(properties, bf_properties);

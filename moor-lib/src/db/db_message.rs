@@ -2,16 +2,16 @@ use tokio::sync::oneshot::Sender;
 use uuid::Uuid;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::PropFlag;
+use moor_value::model::props::{PropDef, PropDefs, PropFlag};
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbFlag};
+use moor_value::model::verbs::{BinaryType, VerbDef, VerbFlag};
 use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid};
 use moor_value::var::Var;
 
-use crate::db::{PropDef, PropDefs, VerbDef, VerbDefs};
+use moor_value::model::verbs::VerbDefs;
 
 /// The set of messages that DbTxWorldState sends to the underlying physical database to execute
 /// storage/retrieval of object attributes, properties, and verbs.
@@ -51,13 +51,21 @@ pub(crate) enum DbMessage {
         reply: Sender<Result<VerbDef, WorldStateError>>,
     },
     /// Update (non-program) data about a verb.
-    SetVerbInfo {
+    UpdateVerbDef {
         obj: Objid,
         uuid: Uuid,
         owner: Option<Objid>,
         names: Option<Vec<String>>,
         flags: Option<BitEnum<VerbFlag>>,
+        binary_type: Option<BinaryType>,
         args: Option<VerbArgsSpec>,
+        reply: Sender<Result<(), WorldStateError>>,
+    },
+    /// Update the program for a verb.
+    SetVerbBinary {
+        obj: Objid,
+        uuid: Uuid,
+        binary: Vec<u8>,
         reply: Sender<Result<(), WorldStateError>>,
     },
     /// Add a verb on an object

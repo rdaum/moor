@@ -1,15 +1,14 @@
 use async_trait::async_trait;
 
+use crate::model::objects::ObjFlag;
+use crate::model::props::{PropAttrs, PropDef, PropDefs, PropFlag};
+use crate::model::r#match::{PrepSpec, VerbArgsSpec};
+use crate::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbDefs, VerbFlag, VerbInfo};
+use crate::model::CommitResult;
+use crate::model::WorldStateError;
 use crate::util::bitenum::BitEnum;
 use crate::var::objid::{ObjSet, Objid};
 use crate::var::Var;
-
-use crate::model::objects::ObjFlag;
-use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::r#match::{PrepSpec, VerbArgsSpec};
-use crate::model::verbs::{BinaryType, VerbFlag, VerbInfo};
-use crate::model::CommitResult;
-use crate::model::WorldStateError;
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's
 /// environment during verb execution. This includes the location of objects, their contents,
@@ -63,22 +62,18 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), WorldStateError>;
 
     /// Get the contents of a given object.
-    async fn contents_of(&mut self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError>;
+    async fn contents_of(&self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError>;
 
     /// Get the names of all the verbs on the given object.
-    async fn verbs(&mut self, perms: Objid, obj: Objid) -> Result<Vec<VerbInfo>, WorldStateError>;
+    async fn verbs(&self, perms: Objid, obj: Objid) -> Result<VerbDefs, WorldStateError>;
 
     /// Gets a list of the names of the properties defined directly on the given object, not
     /// inherited from its parent.
-    async fn properties(
-        &mut self,
-        perms: Objid,
-        obj: Objid,
-    ) -> Result<Vec<(String, PropAttrs)>, WorldStateError>;
+    async fn properties(&self, perms: Objid, obj: Objid) -> Result<PropDefs, WorldStateError>;
 
     /// Retrieve a property from the given object, walking transitively up its inheritance chain.
     async fn retrieve_property(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         pname: &str,
@@ -86,11 +81,11 @@ pub trait WorldState: Send + Sync {
 
     /// Get information about a property, without walking the inheritance tree.
     async fn get_property_info(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         pname: &str,
-    ) -> Result<PropAttrs, WorldStateError>;
+    ) -> Result<PropDef, WorldStateError>;
 
     async fn set_property_info(
         &mut self,
@@ -111,7 +106,7 @@ pub trait WorldState: Send + Sync {
 
     /// Check if a property is 'clear' (value is purely inherited)
     async fn is_property_clear(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         pname: &str,
@@ -137,6 +132,7 @@ pub trait WorldState: Send + Sync {
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
     ) -> Result<(), WorldStateError>;
+
     async fn delete_property(
         &mut self,
         perms: Objid,
@@ -166,48 +162,42 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), WorldStateError>;
 
     /// Update data about a verb on the given object.
-    async fn set_verb_info(
+    async fn update_verb(
         &mut self,
         perms: Objid,
         obj: Objid,
         vname: &str,
-        owner: Option<Objid>,
-        names: Option<Vec<String>>,
-        flags: Option<BitEnum<VerbFlag>>,
-        args: Option<VerbArgsSpec>,
+        verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError>;
 
     /// Update data about a verb on the given object at a numbered offset.
-    async fn set_verb_info_at_index(
+    async fn update_verb_at_index(
         &mut self,
         perms: Objid,
         obj: Objid,
         vidx: usize,
-        owner: Option<Objid>,
-        names: Option<Vec<String>>,
-        flags: Option<BitEnum<VerbFlag>>,
-        args: Option<VerbArgsSpec>,
+        verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError>;
 
     /// Get the verb with the given name on the given object. Without doing inheritance resolution.
     async fn get_verb(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         vname: &str,
-    ) -> Result<VerbInfo, WorldStateError>;
+    ) -> Result<VerbDef, WorldStateError>;
 
     /// Get the verb at numbered offset on the given object.
     async fn get_verb_at_index(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         vidx: usize,
-    ) -> Result<VerbInfo, WorldStateError>;
+    ) -> Result<VerbDef, WorldStateError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
     async fn find_method_verb_on(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         vname: &str,
@@ -215,7 +205,7 @@ pub trait WorldState: Send + Sync {
 
     /// Seek the verb referenced by the given command on the given object.
     async fn find_command_verb_on(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
         command_verb: &str,
@@ -225,7 +215,7 @@ pub trait WorldState: Send + Sync {
     ) -> Result<Option<VerbInfo>, WorldStateError>;
 
     /// Get the object that is the parent of the given object.
-    async fn parent_of(&mut self, perms: Objid, obj: Objid) -> Result<Objid, WorldStateError>;
+    async fn parent_of(&self, perms: Objid, obj: Objid) -> Result<Objid, WorldStateError>;
 
     /// Change the parent of the given object.
     async fn change_parent(
@@ -236,14 +226,14 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), WorldStateError>;
 
     /// Get the children of the given object.
-    async fn children_of(&mut self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError>;
+    async fn children_of(&self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError>;
 
     /// Check the validity of an object.
-    async fn valid(&mut self, obj: Objid) -> Result<bool, WorldStateError>;
+    async fn valid(&self, obj: Objid) -> Result<bool, WorldStateError>;
 
     /// Get the name & aliases of an object.
     async fn names_of(
-        &mut self,
+        &self,
         perms: Objid,
         obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError>;

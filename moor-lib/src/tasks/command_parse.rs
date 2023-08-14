@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_str, Var};
 
-use crate::db::PREP_LIST;
 use moor_value::model::r#match::PrepSpec;
+use moor_value::model::PREP_LIST;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {

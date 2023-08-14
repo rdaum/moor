@@ -1,12 +1,11 @@
-
 #[cfg(test)]
 mod tests {
     use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
+    use crate::compiler::codegen::{compile, CompileError};
+    use crate::compiler::labels::{Label, Name, Offset};
     use moor_value::var::error::Error::{E_INVARG, E_PERM, E_PROPNF};
     use moor_value::var::objid::Objid;
     use moor_value::var::{v_int, v_obj};
-    use crate::compiler::codegen::{compile, CompileError};
-    use crate::compiler::labels::{Label, Name, Offset};
 
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::ScatterLabel;
@@ -1452,31 +1451,29 @@ mod tests {
         endtry
         "#,
         )
-            .unwrap();
+        .unwrap();
 
         /*
-  0: 100 000               PUSH_LITERAL E_RANGE
-  2: 016                 * MAKE_SINGLETON_LIST
-  3: 112 002 020           PUSH_LABEL 20
-  6: 112 008 001         * TRY_EXCEPT 1
-  9: 100 001               PUSH_LITERAL "hello world"
- 11: 125                   NUM 2
- 12: 112 001 003           LENGTH 3
- 15: 015                 * RANGE
- 16: 108                   RETURN
- 17: 112 004 021           END_EXCEPT 21
- 20: 111                   POP
- 33: 110                   DONE
-         */
+         0: 100 000               PUSH_LITERAL E_RANGE
+         2: 016                 * MAKE_SINGLETON_LIST
+         3: 112 002 020           PUSH_LABEL 20
+         6: 112 008 001         * TRY_EXCEPT 1
+         9: 100 001               PUSH_LITERAL "hello world"
+        11: 125                   NUM 2
+        12: 112 001 003           LENGTH 3
+        15: 015                 * RANGE
+        16: 108                   RETURN
+        17: 112 004 021           END_EXCEPT 21
+        20: 111                   POP
+        33: 110                   DONE
+                */
         assert_eq!(
             program.main_vector,
             vec![
                 Imm(0.into()),
                 MakeSingletonList,
                 PushLabel(Label(0)),
-                TryExcept {
-                    num_excepts: 1,
-                },
+                TryExcept { num_excepts: 1 },
                 Imm(1.into()),
                 Imm(2.into()),
                 // Our offset is different because we don't count PushLabel in the stack.
@@ -1486,6 +1483,7 @@ mod tests {
                 EndExcept(Label(1)),
                 Pop,
                 Done
-            ]);
+            ]
+        );
     }
 }

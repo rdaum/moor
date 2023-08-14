@@ -1,14 +1,15 @@
+use tracing::debug;
+
+use moor_value::model::world_state::WorldState;
 use moor_value::var::error::Error::{E_INVIND, E_TYPE};
 use moor_value::var::objid::{Objid, NOTHING};
 use moor_value::var::variant::Variant;
 use moor_value::var::Var;
-use tracing::debug;
 
 use crate::compiler::labels::{Label, Name};
 use crate::vm::activation::{Activation, Caller};
 use crate::vm::opcode::Op;
 use crate::vm::{ExecutionResult, VM};
-use moor_value::model::world_state::WorldState;
 
 impl VM {
     /// VM-level property resolution.

@@ -7,6 +7,8 @@ use metrics_macros::increment_counter;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
+use moor_value::model::objects::ObjFlag;
+use moor_value::model::WorldStateError;
 use moor_value::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
@@ -20,8 +22,6 @@ use crate::tasks::TaskId;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
-use moor_value::model::objects::ObjFlag;
-use moor_value::model::WorldStateError;
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     increment_counter!("vm.bf_noop.calls");
@@ -45,10 +45,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
-    bf_args
-        .terk_perms()
-        .await?
-        .check_obj_owner_perms(*player)?;
+    bf_args.terk_perms().await?.check_obj_owner_perms(*player)?;
 
     if let Err(send_error) = bf_args
         .sessions

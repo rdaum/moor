@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use moor_value::model::r#match::{ArgSpec, VerbArgsSpec};
+use moor_value::model::verbs::{VerbAttrs, VerbFlag};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
@@ -13,8 +15,6 @@ use crate::tasks::command_parse::{parse_preposition_string, preposition_to_strin
 use crate::vm::builtin::BfRet::{Error, Ret};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_value::model::r#match::{ArgSpec, VerbArgsSpec};
-use moor_value::model::verbs::VerbFlag;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
@@ -47,8 +47,8 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
             return Ok(Error(E_TYPE));
         }
     };
-    let owner = verb_info.attrs.owner.unwrap();
-    let perms = verb_info.attrs.flags.unwrap();
+    let owner = verb_info.owner;
+    let perms = verb_info.flags;
     let names = verb_info.names;
 
     let mut perms_string = String::new();
@@ -111,18 +111,24 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                 .map(|s| s.into())
                 .collect::<Vec<_>>();
 
+            let update_attrs = VerbAttrs {
+                definer: None,
+                owner: Some(*owner),
+                names: Some(name_strings),
+                flags: Some(perms),
+                args_spec: None,
+                binary_type: None,
+                binary: None,
+            };
             match bf_args.args[1].variant() {
                 Variant::Str(verb_name) => {
                     bf_args
                         .world_state
-                        .set_verb_info(
+                        .update_verb(
                             bf_args.task_perms_who(),
                             *obj,
                             verb_name.as_str(),
-                            Some(*owner),
-                            Some(name_strings),
-                            Some(perms),
-                            None,
+                            update_attrs
                         )
                         .await?;
                 }
@@ -134,14 +140,11 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                     let verb_index = (verb_index as usize) - 1;
                     bf_args
                         .world_state
-                        .set_verb_info_at_index(
+                        .update_verb_at_index(
                             bf_args.task_perms_who(),
                             *obj,
                             verb_index,
-                            Some(*owner),
-                            Some(name_strings),
-                            Some(perms),
-                            None,
+                            update_attrs,
                         )
                         .await?;
                 }
@@ -169,7 +172,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
                 .world_state
                 .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
                 .await?;
-            verb_info.attrs.args_spec.unwrap()
+            verb_info.args
         }
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -181,7 +184,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
                 .world_state
                 .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
                 .await?;
-            verb_info.attrs.args_spec.unwrap()
+            verb_info.args
         }
         _ => return Ok(Error(E_TYPE)),
     };
@@ -223,18 +226,24 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                 return Ok(Error(E_INVARG));
             };
             let args = VerbArgsSpec { dobj, prep, iobj };
+            let update_attrs = VerbAttrs {
+                definer: None,
+                owner: None,
+                names: None,
+                flags: None,
+                args_spec: Some(args),
+                binary_type: None,
+                binary: None,
+            };
             match bf_args.args[1].variant() {
                 Variant::Str(verb_name) => {
                     bf_args
                         .world_state
-                        .set_verb_info(
+                        .update_verb(
                             bf_args.task_perms_who(),
                             *obj,
                             verb_name.as_str(),
-                            None,
-                            None,
-                            None,
-                            Some(args),
+                            update_attrs,
                         )
                         .await?;
                 }
@@ -246,14 +255,11 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                     let verb_index = (verb_index as usize) - 1;
                     bf_args
                         .world_state
-                        .set_verb_info_at_index(
+                        .update_verb_at_index(
                             bf_args.task_perms_who(),
                             *obj,
                             verb_index,
-                            None,
-                            None,
-                            None,
-                            Some(args),
+                            update_attrs,
                         )
                         .await?;
                 }

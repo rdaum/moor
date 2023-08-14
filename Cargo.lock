@@ -1449,6 +1449,7 @@ dependencies = [
  "lazy_static",
  "num-traits",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]

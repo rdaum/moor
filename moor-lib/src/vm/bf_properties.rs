@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use moor_value::model::props::{PropAttrs, PropFlag};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_TYPE};
 use moor_value::var::variant::Variant;
@@ -12,7 +13,6 @@ use crate::compiler::builtins::offset_for_builtin;
 use crate::vm::builtin::BfRet::{Error, Ret};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_value::model::props::{PropAttrs, PropFlag};
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }
@@ -30,8 +30,8 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
         .world_state
         .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await?;
-    let owner = property_info.owner.unwrap();
-    let flags = property_info.flags.unwrap();
+    let owner = property_info.owner;
+    let flags = property_info.flags;
 
     // Turn perm flags into string: r w c
     let mut perms = String::new();

@@ -3,6 +3,8 @@ use std::collections::{HashMap, HashSet};
 use tracing::info;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
+use moor_value::model::props::PropDef;
+use moor_value::model::props::PropDefs;
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
@@ -13,7 +15,6 @@ use crate::db::rocksdb::tx_db_impl::{
     set_objset, set_oid_value, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
-use crate::db::{PropDef, PropDefs};
 
 // Methods for manipulation of objects, their owners, flags, contents, parents, etc.
 impl<'a> RocksDbTx<'a> {

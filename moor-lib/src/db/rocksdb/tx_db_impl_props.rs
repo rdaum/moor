@@ -1,7 +1,8 @@
-use tracing::{info, trace};
+use tracing::trace;
 use uuid::Uuid;
 
-use moor_value::model::props::PropFlag;
+use moor_value::model::props::PropDefs;
+use moor_value::model::props::{PropDef, PropFlag};
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid, NOTHING};
@@ -12,7 +13,6 @@ use crate::db::rocksdb::tx_db_impl::{
     composite_key, get_oid_or_nothing, get_oid_value, oid_key, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
-use crate::db::{PropDef, PropDefs};
 
 // Methods related to properties; definitions and values.
 impl<'a> RocksDbTx<'a> {
@@ -70,7 +70,7 @@ impl<'a> RocksDbTx<'a> {
                 new_p.owner = new_owner;
             }
             if let Some(new_perms) = new_perms {
-                new_p.perms = new_perms;
+                new_p.flags = new_perms;
             }
             if let Some(new_name) = &new_name {
                 new_p.name = new_name.clone();
@@ -155,7 +155,7 @@ impl<'a> RocksDbTx<'a> {
                 location: *location,
                 name: name.clone(),
                 owner,
-                perms,
+                flags: perms,
             };
             self.update_propdefs(*location, props.with_added(prop))?;
         }

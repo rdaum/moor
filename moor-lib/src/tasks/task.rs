@@ -392,8 +392,8 @@ impl Task {
                     self.vm.top_mut().bf_trampoline = trampoline;
 
                     let program = Self::decode_program(
-                        resolved_verb.attrs.binary_type,
-                        resolved_verb.attrs.binary.clone().unwrap(),
+                        resolved_verb.verbdef.binary_type,
+                        &resolved_verb.binary,
                     )?;
 
                     let call_request = VerbExecutionRequest {
@@ -547,7 +547,7 @@ impl Task {
 
     fn decode_program(
         binary_type: BinaryType,
-        binary_bytes: Vec<u8>,
+        binary_bytes: &[u8],
     ) -> Result<Program, anyhow::Error> {
         match binary_type {
             BinaryType::LambdaMoo18X => Ok(Program::from_byte_vector(binary_bytes.to_vec())),
@@ -568,7 +568,7 @@ impl Task {
         command: ParsedCommand,
         permissions: Objid,
     ) -> Result<VerbExecutionRequest, Error> {
-        let binary = Self::decode_program(vi.attrs.binary_type, vi.attrs.binary.clone().unwrap())?;
+        let binary = Self::decode_program(vi.verbdef.binary_type, &vi.binary)?;
 
         let call_request = VerbExecutionRequest {
             permissions,
@@ -592,10 +592,7 @@ impl Task {
             .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
             .await?;
 
-        let binary = Self::decode_program(
-            verb_info.attrs.binary_type,
-            verb_info.attrs.binary.clone().unwrap(),
-        )?;
+        let binary = Self::decode_program(verb_info.verbdef.binary_type, &verb_info.binary)?;
 
         let call_request = VerbExecutionRequest {
             permissions: self.perms,

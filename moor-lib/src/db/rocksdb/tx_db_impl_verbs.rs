@@ -3,7 +3,8 @@ use tracing::trace;
 use uuid::Uuid;
 
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbFlag};
+use moor_value::model::verbs::VerbDefs;
+use moor_value::model::verbs::{BinaryType, VerbDef, VerbFlag};
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{Objid, NOTHING};
@@ -11,7 +12,6 @@ use moor_value::AsByteBuffer;
 
 use crate::db::rocksdb::tx_db_impl::{composite_key, get_oid_value, oid_key, RocksDbTx};
 use crate::db::rocksdb::ColumnFamilies;
-use crate::db::{VerbDef, VerbDefs};
 
 impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
@@ -210,6 +210,7 @@ impl<'a> RocksDbTx<'a> {
         new_perms: Option<BitEnum<VerbFlag>>,
         new_names: Option<Vec<String>>,
         new_args: Option<VerbArgsSpec>,
+        new_binary_type: Option<BinaryType>,
     ) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
@@ -232,6 +233,9 @@ impl<'a> RocksDbTx<'a> {
             if let Some(new_args) = &new_args {
                 nv.args = *new_args;
             }
+            if let Some(new_binary_type) = &new_binary_type {
+                nv.binary_type = *new_binary_type;
+            }
             nv
         }) else {
             let v_uuid_str = v.to_string();
@@ -239,6 +243,18 @@ impl<'a> RocksDbTx<'a> {
         };
 
         self.tx.put_cf(cf, ok, new_verbs.as_byte_buffer())?;
+        Ok(())
+    }
+    #[tracing::instrument(skip(self))]
+    pub fn set_verb_binary(
+        &self,
+        o: Objid,
+        v: Uuid,
+        new_binary: Vec<u8>,
+    ) -> Result<(), anyhow::Error> {
+        let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
+        let vk = composite_key(o, v.as_bytes());
+        self.tx.put_cf(cf, vk, new_binary)?;
         Ok(())
     }
 }

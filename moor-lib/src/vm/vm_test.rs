@@ -4,13 +4,15 @@ mod tests {
 
     use anyhow::Error;
     use async_trait::async_trait;
-    use moor_value::AsByteBuffer;
     use tokio::sync::RwLock;
 
+    use moor_value::model::props::PropFlag;
+    use moor_value::model::world_state::{WorldState, WorldStateSource};
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::{Objid, NOTHING};
     use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
+    use moor_value::AsByteBuffer;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
@@ -20,8 +22,6 @@ mod tests {
     use crate::vm::opcode::{Op, Program};
     use crate::vm::vm_execute::VmExecParams;
     use crate::vm::{ExecutionResult, VerbExecutionRequest, VM};
-    use moor_value::model::props::PropFlag;
-    use moor_value::model::world_state::{WorldState, WorldStateSource};
 
     struct NoopClientConnection {}
     impl NoopClientConnection {
@@ -82,8 +82,8 @@ mod tests {
             args: vec![],
             caller: NOTHING,
         };
-        let verb = state.get_verb(o, o, verb_name).await.unwrap();
-        let program = Program::from_byte_vector(verb.attrs.binary.clone().unwrap());
+        let verb = state.find_method_verb_on(o, o, verb_name).await.unwrap();
+        let program = Program::from_byte_vector(verb.binary.clone());
         let cr = VerbExecutionRequest {
             permissions: o,
             resolved_verb: verb,
@@ -123,8 +123,7 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let decoded_verb =
-                        Program::from_byte_vector(resolved_verb.attrs.binary.clone().unwrap());
+                    let decoded_verb = Program::from_byte_vector(resolved_verb.binary.clone());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,
@@ -914,8 +913,7 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let decoded_verb =
-                        Program::from_byte_vector(resolved_verb.attrs.binary.clone().unwrap());
+                    let decoded_verb = Program::from_byte_vector(resolved_verb.binary.clone());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,

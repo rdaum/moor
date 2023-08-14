@@ -6,13 +6,13 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::{PropAttrs, PropFlag};
+use moor_value::model::props::{PropAttrs, PropDef, PropDefs, PropFlag};
 use moor_value::model::r#match::{PrepSpec, VerbArgsSpec};
-use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag, VerbInfo};
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbDefs, VerbFlag, VerbInfo};
 use moor_value::model::world_state::{WorldState, WorldStateSource};
-use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
 use moor_value::model::WorldStateError::{PropertyNotFound, VerbNotFound};
+use moor_value::model::{CommitResult, HasUuid};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::{ObjSet, Objid};
 use moor_value::var::{v_none, Var};
@@ -22,28 +22,26 @@ use crate::db::LoaderInterface;
 use crate::vm::opcode::Program;
 
 struct MockStore {
-    verbs: HashMap<(Objid, String), VerbInfo>,
+    verbdefs: HashMap<(Objid, String), VerbDef>,
+    verb_programs: HashMap<Uuid, Vec<u8>>,
     properties: HashMap<(Objid, String), Var>,
 }
 impl MockStore {
     fn set_verb(&mut self, o: Objid, name: &str, program: &Program) {
-        let binary = program.as_byte_buffer();
-        self.verbs.insert(
-            (o, name.to_string()),
-            VerbInfo {
-                names: vec![name.to_string()],
-                attrs: VerbAttrs {
-                    definer: Some(o),
-                    owner: Some(o),
-                    flags: Some(
-                        BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug,
-                    ),
-                    args_spec: Some(VerbArgsSpec::this_none_this()),
-                    binary_type: BinaryType::LambdaMoo18X,
-                    binary: Some(binary.to_vec()),
-                },
-            },
-        );
+        let _binary = program.as_byte_buffer();
+        let uuid = Uuid::new_v4();
+        let vd = VerbDef {
+            uuid: uuid.into_bytes(),
+            location: o,
+            owner: o,
+            names: vec![name.to_string()],
+            flags: BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug,
+            binary_type: BinaryType::LambdaMoo18X,
+            args: VerbArgsSpec::this_none_this(),
+        };
+        self.verbdefs.insert((o, name.to_string()), vd);
+        self.verb_programs
+            .insert(uuid, program.as_byte_buffer().to_vec());
     }
 }
 
@@ -90,28 +88,20 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn contents_of(&mut self, _perms: Objid, _obj: Objid) -> Result<ObjSet, WorldStateError> {
+    async fn contents_of(&self, _perms: Objid, _obj: Objid) -> Result<ObjSet, WorldStateError> {
         todo!()
     }
 
-    async fn verbs(
-        &mut self,
-        _perms: Objid,
-        _obj: Objid,
-    ) -> Result<Vec<VerbInfo>, WorldStateError> {
+    async fn verbs(&self, _perms: Objid, _obj: Objid) -> Result<VerbDefs, WorldStateError> {
         todo!()
     }
 
-    async fn properties(
-        &mut self,
-        _perms: Objid,
-        _obj: Objid,
-    ) -> Result<Vec<(String, PropAttrs)>, WorldStateError> {
+    async fn properties(&self, _perms: Objid, _obj: Objid) -> Result<PropDefs, WorldStateError> {
         todo!()
     }
 
     async fn retrieve_property(
-        &mut self,
+        &self,
         _perms: Objid,
         obj: Objid,
         pname: &str,
@@ -125,11 +115,11 @@ impl WorldState for MockState {
     }
 
     async fn get_property_info(
-        &mut self,
+        &self,
         _perms: Objid,
         _obj: Objid,
         _pname: &str,
-    ) -> Result<PropAttrs, WorldStateError> {
+    ) -> Result<PropDef, WorldStateError> {
         todo!()
     }
 
@@ -158,7 +148,7 @@ impl WorldState for MockState {
     }
 
     async fn is_property_clear(
-        &mut self,
+        &self,
         _perms: Objid,
         _obj: Objid,
         _pname: &str,
@@ -225,72 +215,61 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn set_verb_info(
-        &mut self,
-        _perms: Objid,
-        _obj: Objid,
-        _vname: &str,
-        _owner: Option<Objid>,
-        _names: Option<Vec<String>>,
-        _flags: Option<BitEnum<VerbFlag>>,
-        _args: Option<VerbArgsSpec>,
-    ) -> Result<(), WorldStateError> {
+    async fn update_verb(&mut self, _perms: Objid, _obj: Objid, _vname: &str, _verb_attrs: VerbAttrs) -> Result<(), WorldStateError> {
         todo!()
     }
 
-    async fn set_verb_info_at_index(
-        &mut self,
-        _perms: Objid,
-        _obj: Objid,
-        _vidx: usize,
-        _owner: Option<Objid>,
-        _names: Option<Vec<String>>,
-        _flags: Option<BitEnum<VerbFlag>>,
-        _args: Option<VerbArgsSpec>,
-    ) -> Result<(), WorldStateError> {
+    async fn update_verb_at_index(&mut self, _perms: Objid, _obj: Objid, _vidx: usize, _verb_attrs: VerbAttrs) -> Result<(), WorldStateError> {
         todo!()
     }
+
 
     async fn get_verb(
-        &mut self,
+        &self,
         _perms: Objid,
         _obj: Objid,
         _vname: &str,
-    ) -> Result<VerbInfo, WorldStateError> {
+    ) -> Result<VerbDef, WorldStateError> {
         self.0
             .lock()
             .unwrap()
-            .verbs
+            .verbdefs
             .get(&(_obj, _vname.to_string()))
             .cloned()
             .ok_or_else(|| VerbNotFound(_obj, _vname.to_string()))
     }
 
     async fn get_verb_at_index(
-        &mut self,
+        &self,
         _perms: Objid,
         _obj: Objid,
         _vidx: usize,
-    ) -> Result<VerbInfo, WorldStateError> {
+    ) -> Result<VerbDef, WorldStateError> {
         todo!()
     }
 
     async fn find_method_verb_on(
-        &mut self,
+        &self,
         _perms: Objid,
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
         let store = self.0.lock().unwrap();
-        let v = store.verbs.get(&(obj, vname.to_string()));
+        let v = store.verbdefs.get(&(obj, vname.to_string()));
         match v {
             None => Err(VerbNotFound(obj, vname.to_string())),
-            Some(v) => Ok(v.clone()),
+            Some(v) => {
+                let prg = store.verb_programs.get(&v.uuid()).unwrap();
+                Ok(VerbInfo {
+                    verbdef: v.clone(),
+                    binary: prg.clone(),
+                })
+            }
         }
     }
 
     async fn find_command_verb_on(
-        &mut self,
+        &self,
         _perms: Objid,
         _obj: Objid,
         _command_verb: &str,
@@ -301,7 +280,7 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn parent_of(&mut self, _perms: Objid, _obj: Objid) -> Result<Objid, WorldStateError> {
+    async fn parent_of(&self, _perms: Objid, _obj: Objid) -> Result<Objid, WorldStateError> {
         todo!()
     }
 
@@ -314,16 +293,16 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn children_of(&mut self, _perms: Objid, _obj: Objid) -> Result<ObjSet, WorldStateError> {
+    async fn children_of(&self, _perms: Objid, _obj: Objid) -> Result<ObjSet, WorldStateError> {
         todo!()
     }
 
-    async fn valid(&mut self, _obj: Objid) -> Result<bool, WorldStateError> {
-        Ok(true)
+    async fn valid(&self, _obj: Objid) -> Result<bool, WorldStateError> {
+        return Ok(true);
     }
 
     async fn names_of(
-        &mut self,
+        &self,
         _perms: Objid,
         _obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError> {
@@ -410,7 +389,8 @@ impl MockWorldStateSource {
     #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         let store = MockStore {
-            verbs: Default::default(),
+            verbdefs: Default::default(),
+            verb_programs: Default::default(),
             properties: Default::default(),
         };
         Self(Arc::new(Mutex::new(store)))
@@ -418,7 +398,8 @@ impl MockWorldStateSource {
 
     pub fn new_with_verb(name: &str, binary: &Program) -> Self {
         let mut store = MockStore {
-            verbs: Default::default(),
+            verbdefs: Default::default(),
+            verb_programs: Default::default(),
             properties: Default::default(),
         };
         store.set_verb(Objid(0), name, binary);
@@ -427,7 +408,8 @@ impl MockWorldStateSource {
 
     pub fn new_with_verbs(verbs: Vec<(&str, &Program)>) -> Self {
         let mut store = MockStore {
-            verbs: Default::default(),
+            verbdefs: Default::default(),
+            verb_programs: Default::default(),
             properties: Default::default(),
         };
         for (v, b) in verbs {

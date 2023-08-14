@@ -5,6 +5,7 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use moor_value::model::verbs::VerbInfo;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
@@ -17,7 +18,6 @@ use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
 use crate::vm::opcode::Program;
 use crate::vm::vm_unwind::FinallyReason;
-use moor_value::model::verbs::VerbInfo;
 
 pub(crate) mod opcode;
 pub(crate) mod vm_call;

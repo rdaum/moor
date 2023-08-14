@@ -1,17 +1,5 @@
 #![allow(non_camel_case_types, non_snake_case)]
 
-use crate::util::quote_str;
-use crate::var::error::Error;
-use crate::var::error::Error::{E_RANGE, E_TYPE};
-use crate::var::objid::Objid;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
-use decorum::R64;
-use int_enum::IntEnum;
-use lazy_static::lazy_static;
-use num_traits::Zero;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -21,15 +9,28 @@ use std::ops::Neg;
 use std::ops::Sub;
 use std::str::FromStr;
 
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
+use decorum::R64;
+use int_enum::IntEnum;
+use lazy_static::lazy_static;
+use num_traits::Zero;
+
+use crate::util::quote_str;
+use crate::var::error::Error;
+use crate::var::error::Error::{E_RANGE, E_TYPE};
+use crate::var::list::List;
+use crate::var::objid::Objid;
+use crate::var::string::Str;
+use crate::var::variant::Variant;
+
 pub mod error;
 pub mod list;
 pub mod objid;
 pub mod string;
 pub mod variant;
-
-use crate::var::list::List;
-use crate::var::string::Str;
-use crate::var::variant::Variant;
 
 lazy_static! {
     static ref VAR_NONE: Var = Var::new(Variant::None);
