@@ -1,18 +1,25 @@
 use anyhow::Error;
 use async_trait::async_trait;
 
+use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
+use moor_value::model::objset::ObjSet;
 use moor_value::model::permissions::Perms;
-use moor_value::model::props::{PropAttrs, PropDef, PropDefs, PropFlag};
+use moor_value::model::propdef::{PropDef, PropDefs};
+use moor_value::model::props::{PropAttrs, PropFlag};
 use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbDefs, VerbFlag, VerbInfo};
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbdef::{VerbDef, VerbDefs};
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use moor_value::model::world_state::WorldState;
+use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
-use moor_value::model::{CommitResult, HasUuid};
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+use moor_value::util::slice_ref::SliceRef;
+use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, v_list, v_objid, Var};
+use moor_value::NOTHING;
 
 use crate::db::DbTxWorldState;
 
@@ -176,7 +183,7 @@ impl WorldState for DbTxWorldState {
                 .contents_of(perms, obj)
                 .await?
                 .iter()
-                .map(|o| v_objid(*o))
+                .map(v_objid)
                 .collect();
             return Ok(v_list(contents));
         } else if pname == "owner" {
@@ -222,7 +229,7 @@ impl WorldState for DbTxWorldState {
         let (ph, value) = self.client.resolve_property(obj, pname.to_string()).await?;
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Read)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
         Ok(value)
     }
 
@@ -238,7 +245,7 @@ impl WorldState for DbTxWorldState {
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Read)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
 
         Ok(ph.clone())
     }
@@ -257,7 +264,7 @@ impl WorldState for DbTxWorldState {
 
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Write)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
         // TODO Also keep a close eye on 'clear' & perms:
         //  "raises `E_INVARG' if <owner> is not valid" & If <object> is the definer of the property
@@ -369,7 +376,7 @@ impl WorldState for DbTxWorldState {
 
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Write)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
         self.client
             .set_property(obj, ph.uuid(), value.clone())
@@ -389,10 +396,13 @@ impl WorldState for DbTxWorldState {
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Read)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
 
         // Now RetrieveProperty and if it's not there, it's clear.
-        let result = self.client.retrieve_property(ph.location, ph.uuid()).await;
+        let result = self
+            .client
+            .retrieve_property(ph.location(), ph.uuid())
+            .await;
         // What we want is an ObjectError::PropertyNotFound, that will tell us if it's clear.
         let is_clear = match result {
             Err(WorldStateError::PropertyNotFound(_, _)) => true,
@@ -416,7 +426,7 @@ impl WorldState for DbTxWorldState {
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Write)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
         self.client.clear_property(obj, ph.uuid()).await?;
         Ok(())
@@ -470,7 +480,7 @@ impl WorldState for DbTxWorldState {
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
-            .check_property_allows(ph.owner, ph.flags, PropFlag::Write)?;
+            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
         self.client.delete_property(obj, ph.uuid()).await
     }
@@ -508,7 +518,7 @@ impl WorldState for DbTxWorldState {
         let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
 
         self.client.delete_verb(obj, vh.uuid()).await?;
         Ok(())
@@ -525,10 +535,8 @@ impl WorldState for DbTxWorldState {
         let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
-        self.client
-            .update_verb(obj, vh.uuid(), verb_attrs)
-            .await?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
+        self.client.update_verb(obj, vh.uuid(), verb_attrs).await?;
         Ok(())
     }
 
@@ -542,10 +550,8 @@ impl WorldState for DbTxWorldState {
         let vh = self.client.get_verb_by_index(obj, vidx).await?;
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Write)?;
-        self.client
-            .update_verb(obj, vh.uuid(), verb_attrs)
-            .await?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
+        self.client.update_verb(obj, vh.uuid(), verb_attrs).await?;
         Ok(())
     }
 
@@ -559,7 +565,7 @@ impl WorldState for DbTxWorldState {
         let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
         Ok(vh)
     }
@@ -573,7 +579,7 @@ impl WorldState for DbTxWorldState {
         let vh = self.client.get_verb_by_index(obj, vidx).await?;
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
         Ok(vh)
     }
 
@@ -590,13 +596,13 @@ impl WorldState for DbTxWorldState {
             .await?;
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
-        Ok(VerbInfo {
-            verbdef: vh,
-            binary,
-        })
+        let binary = self
+            .client
+            .get_verb_binary(vh.location(), vh.uuid())
+            .await?;
+        Ok(VerbInfo::new(vh, SliceRef::from_vec(binary)))
     }
 
     #[tracing::instrument(skip(self))]
@@ -648,13 +654,13 @@ impl WorldState for DbTxWorldState {
 
         self.perms(perms)
             .await?
-            .check_verb_allows(vh.owner, vh.flags, VerbFlag::Read)?;
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self.client.get_verb_binary(vh.location, vh.uuid()).await?;
-        Ok(Some(VerbInfo {
-            verbdef: vh,
-            binary,
-        }))
+        let binary = self
+            .client
+            .get_verb_binary(vh.location(), vh.uuid())
+            .await?;
+        Ok(Some(VerbInfo::new(vh, SliceRef::from_vec(binary))))
     }
 
     #[tracing::instrument(skip(self))]

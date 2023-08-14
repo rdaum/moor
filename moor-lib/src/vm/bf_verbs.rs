@@ -47,9 +47,9 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
             return Ok(Error(E_TYPE));
         }
     };
-    let owner = verb_info.owner;
-    let perms = verb_info.flags;
-    let names = verb_info.names;
+    let owner = verb_info.owner();
+    let perms = verb_info.flags();
+    let names = verb_info.names();
 
     let mut perms_string = String::new();
     if perms.contains(VerbFlag::Read) {
@@ -128,7 +128,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
                             bf_args.task_perms_who(),
                             *obj,
                             verb_name.as_str(),
-                            update_attrs
+                            update_attrs,
                         )
                         .await?;
                 }
@@ -172,7 +172,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
                 .world_state
                 .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
                 .await?;
-            verb_info.args
+            verb_info.args()
         }
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -184,7 +184,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
                 .world_state
                 .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
                 .await?;
-            verb_info.args
+            verb_info.args()
         }
         _ => return Ok(Error(E_TYPE)),
     };

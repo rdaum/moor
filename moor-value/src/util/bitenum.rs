@@ -7,7 +7,7 @@ use num_traits::ToPrimitive;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Encode, Decode)]
 pub struct BitEnum<T: ToPrimitive> {
-    value: u64,
+    value: u16,
     phantom: PhantomData<T>,
 }
 
@@ -18,13 +18,13 @@ impl<T: ToPrimitive> BitEnum<T> {
             phantom: PhantomData,
         }
     }
-    pub fn to_u64(&self) -> u64 {
+    pub fn to_u16(&self) -> u16 {
         self.value
     }
 
     pub fn from_u8(value: u8) -> Self {
         Self {
-            value: value as u64,
+            value: value as u16,
             phantom: PhantomData,
         }
     }
@@ -40,7 +40,7 @@ impl<T: ToPrimitive> BitEnum<T> {
 
     pub fn all() -> Self {
         Self {
-            value: u64::MAX,
+            value: u16::MAX,
             phantom: PhantomData,
         }
     }

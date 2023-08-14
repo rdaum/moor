@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
+use moor_value::model::objset::ObjSet;
 
 use moor_value::model::world_state::WorldState;
-use moor_value::var::objid::{ObjSet, Objid};
+use moor_value::var::objid::Objid;
 
 use crate::db::matching::MatchEnvironment;
 
@@ -26,9 +27,11 @@ impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
 
     async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, anyhow::Error> {
         let location = self.ws.location_of(self.perms, player).await?;
-        let mut surroundings = self.ws.contents_of(self.perms, location).await?;
-        surroundings.insert(location);
-        surroundings.insert(player);
+        let surroundings = self
+            .ws
+            .contents_of(self.perms, location)
+            .await?
+            .with_appended(&[location, player]);
 
         Ok(surroundings)
     }

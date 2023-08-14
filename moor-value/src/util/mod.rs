@@ -1,6 +1,7 @@
 use anyhow::bail;
 
 pub mod bitenum;
+pub mod slice_ref;
 
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'

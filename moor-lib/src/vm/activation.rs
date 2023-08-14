@@ -1,11 +1,16 @@
+use moor_value::NOTHING;
 use tracing::trace;
+use uuid::Uuid;
 
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbDef, VerbFlag, VerbInfo};
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbdef::VerbDef;
+use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::util::bitenum::BitEnum;
+use moor_value::util::slice_ref::SliceRef;
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::E_VARNF;
-use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::objid::Objid;
 use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType};
 
 use crate::compiler::labels::{Label, Name};
@@ -97,7 +102,7 @@ impl Activation {
         let program = verb_call_request.program;
         let environment = vec![None; program.var_names.width()];
 
-        let verb_owner = verb_call_request.resolved_verb.verbdef.owner;
+        let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
         let mut a = Self {
             task_id,
             program,
@@ -171,18 +176,19 @@ impl Activation {
         player: Objid,
         span_id: Option<tracing::span::Id>,
     ) -> Self {
-        let verb_info = VerbInfo {
-            verbdef: VerbDef {
-                uuid: [0; 16],
-                location: NOTHING,
-                owner: NOTHING,
-                names: vec![bf_name.to_string()],
-                flags: BitEnum::new_with(VerbFlag::Exec),
-                binary_type: BinaryType::None,
-                args: VerbArgsSpec::this_none_this(),
-            },
-            binary: vec![],
-        };
+        let verb_info = VerbInfo::new(
+            // Fake verbdef. Not sure how I feel about this.
+            VerbDef::new(
+                Uuid::new_v4(),
+                NOTHING,
+                NOTHING,
+                &[bf_name],
+                BitEnum::new_with(VerbFlag::Exec),
+                BinaryType::None,
+                VerbArgsSpec::this_none_this(),
+            ),
+            SliceRef::empty(),
+        );
 
         trace!(bf_name, bf_index, ?args, "for_bf_call");
         Self {
@@ -209,14 +215,14 @@ impl Activation {
 
     pub fn verb_definer(&self) -> Objid {
         if self.bf_index.is_none() {
-            self.verb_info.verbdef.location
+            self.verb_info.verbdef().location()
         } else {
             NOTHING
         }
     }
 
     pub fn verb_owner(&self) -> Objid {
-        self.verb_info.verbdef.owner
+        self.verb_info.verbdef().owner()
     }
 
     pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {

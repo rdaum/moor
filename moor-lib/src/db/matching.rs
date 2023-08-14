@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
+use moor_value::model::objset::ObjSet;
+use moor_value::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 use moor_value::model::WorldStateError;
-use moor_value::var::objid::{ObjSet, FAILED_MATCH};
-use moor_value::var::objid::{Objid, AMBIGUOUS, NOTHING};
+use moor_value::var::objid::Objid;
 
 use crate::tasks::command_parse::ParseMatcher;
 
@@ -78,12 +79,12 @@ pub async fn match_contents<M: MatchEnvironment + Send + Sync>(
 
     let search = env.get_surroundings(player).await?; // location, contents, player
     for oid in search.iter() {
-        if !env.obj_valid(*oid).await? {
+        if !env.obj_valid(oid).await? {
             continue;
         }
 
-        let object_names = env.get_names(*oid).await?;
-        let result = do_match_object_names(*oid, &mut match_data, object_names, object_name)?;
+        let object_names = env.get_names(oid).await?;
+        let result = do_match_object_names(oid, &mut match_data, object_names, object_name)?;
         if result == AMBIGUOUS {
             return Ok(Some(AMBIGUOUS));
         }
@@ -138,8 +139,8 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
 
 #[cfg(test)]
 mod tests {
-    use moor_value::var::objid::FAILED_MATCH;
-    use moor_value::var::objid::{Objid, NOTHING};
+    use moor_value::var::objid::Objid;
+    use moor_value::{FAILED_MATCH, NOTHING};
 
     use crate::db::matching::{do_match_object_names, MatchData, MatchEnvironmentParseMatcher};
     use crate::db::mock::mock_matching_env::{

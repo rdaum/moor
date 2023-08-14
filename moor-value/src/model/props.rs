@@ -1,11 +1,8 @@
-use bincode::{Decode, Encode};
-use enum_primitive_derive::Primitive;
-use uuid::Uuid;
-
-use crate::model::{Defs, HasUuid, Named};
 use crate::util::bitenum::BitEnum;
 use crate::var::objid::Objid;
 use crate::var::Var;
+use bincode::{Decode, Encode};
+use enum_primitive_derive::Primitive;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
 pub enum PropFlag {
@@ -53,27 +50,3 @@ impl Default for PropAttrs {
         Self::new()
     }
 }
-
-#[derive(Debug, Encode, Decode, Clone)]
-pub struct PropDef {
-    pub uuid: [u8; 16],
-    pub definer: Objid,
-    pub location: Objid,
-    pub name: String,
-    pub flags: BitEnum<PropFlag>,
-    pub owner: Objid,
-}
-
-impl Named for PropDef {
-    fn matches_name(&self, name: &str) -> bool {
-        self.name.to_lowercase().as_str() == name.to_lowercase().as_str()
-    }
-}
-
-impl HasUuid for PropDef {
-    fn uuid(&self) -> Uuid {
-        Uuid::from_bytes(self.uuid)
-    }
-}
-
-pub type PropDefs = Defs<PropDef>;

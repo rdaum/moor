@@ -242,8 +242,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_value::var::objid::NOTHING;
     use moor_value::var::v_str;
+    use moor_value::NOTHING;
 
     use crate::db::matching::MatchEnvironmentParseMatcher;
     use crate::db::mock::mock_matching_env::{

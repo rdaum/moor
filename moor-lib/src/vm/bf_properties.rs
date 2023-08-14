@@ -30,8 +30,8 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
         .world_state
         .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await?;
-    let owner = property_info.owner;
-    let flags = property_info.flags;
+    let owner = property_info.owner();
+    let flags = property_info.flags();
 
     // Turn perm flags into string: r w c
     let mut perms = String::new();

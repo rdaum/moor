@@ -143,7 +143,8 @@ pub(crate) fn run_tx_server<'a>(
                 uuid,
                 names,
                 owner,
-                binary_type, args,
+                binary_type,
+                args,
                 flags,
                 reply,
             } => {
@@ -152,7 +153,12 @@ pub(crate) fn run_tx_server<'a>(
                     tx.set_verb_info(obj, uuid, owner, flags, names, args, binary_type),
                 )?;
             }
-            DbMessage::SetVerbBinary { obj, uuid, binary, reply } => {
+            DbMessage::SetVerbBinary {
+                obj,
+                uuid,
+                binary,
+                reply,
+            } => {
                 respond(reply, tx.set_verb_binary(obj, uuid, binary))?;
             }
 

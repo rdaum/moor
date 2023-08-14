@@ -10,7 +10,7 @@ use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, Var};
 
@@ -22,10 +22,13 @@ use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbFlag, VerbInfo};
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::world_state::WorldState;
 use moor_value::model::CommitResult;
+use moor_value::util::slice_ref::SliceRef;
 use moor_value::AsByteBuffer;
+use moor_value::NOTHING;
 
 /// Messages sent to tasks from the scheduler to tell the task to do things.
 pub(crate) enum TaskControlMsg {
@@ -392,8 +395,8 @@ impl Task {
                     self.vm.top_mut().bf_trampoline = trampoline;
 
                     let program = Self::decode_program(
-                        resolved_verb.verbdef.binary_type,
-                        &resolved_verb.binary,
+                        resolved_verb.verbdef().binary_type(),
+                        resolved_verb.binary().as_slice(),
                     )?;
 
                     let call_request = VerbExecutionRequest {
@@ -550,14 +553,15 @@ impl Task {
         binary_bytes: &[u8],
     ) -> Result<Program, anyhow::Error> {
         match binary_type {
-            BinaryType::LambdaMoo18X => Ok(Program::from_byte_vector(binary_bytes.to_vec())),
+            BinaryType::LambdaMoo18X => {
+                Ok(Program::from_sliceref(SliceRef::from_bytes(binary_bytes)))
+            }
             _ => bail!("Unsupported binary type {:?}", binary_type),
         }
     }
 
     fn encode_program(binary: &Program) -> Result<Vec<u8>, anyhow::Error> {
-        // TODO 'binary' should be Bytes instead of Vec<u8>, really.
-        Ok(binary.as_byte_buffer().to_vec())
+        Ok(binary.make_copy_as_vec())
     }
 
     /// Entry point (from the scheduler) for beginning a command execution in this VM.
@@ -568,7 +572,7 @@ impl Task {
         command: ParsedCommand,
         permissions: Objid,
     ) -> Result<VerbExecutionRequest, Error> {
-        let binary = Self::decode_program(vi.verbdef.binary_type, &vi.binary)?;
+        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary().as_slice())?;
 
         let call_request = VerbExecutionRequest {
             permissions,
@@ -592,7 +596,10 @@ impl Task {
             .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
             .await?;
 
-        let binary = Self::decode_program(verb_info.verbdef.binary_type, &verb_info.binary)?;
+        let binary = Self::decode_program(
+            verb_info.verbdef().binary_type(),
+            verb_info.binary().as_slice(),
+        )?;
 
         let call_request = VerbExecutionRequest {
             permissions: self.perms,

@@ -2,9 +2,9 @@ use tracing::{debug, trace};
 
 use moor_value::model::verbs::VerbFlag;
 use moor_value::var::error::{Error, ErrorPack};
-use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
+use moor_value::NOTHING;
 
 use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 use crate::compiler::labels::{Label, Offset};
@@ -116,7 +116,7 @@ impl VM {
                 None => {
                     vec![
                         v_objid(a.this),
-                        v_str(a.verb_info.verbdef.names.join(" ").as_str()),
+                        v_str(a.verb_info.verbdef().names().join(" ").as_str()),
                         v_objid(a.verb_definer()),
                         v_objid(a.verb_owner()),
                         v_objid(a.player),
@@ -207,7 +207,12 @@ impl VM {
         self.push(&v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
-            if activation.verb_info.verbdef.flags.contains(VerbFlag::Debug) {
+            if activation
+                .verb_info
+                .verbdef()
+                .flags()
+                .contains(VerbFlag::Debug)
+            {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
@@ -225,7 +230,12 @@ impl VM {
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
-            if activation.verb_info.verbdef.flags.contains(VerbFlag::Debug) {
+            if activation
+                .verb_info
+                .verbdef()
+                .flags()
+                .contains(VerbFlag::Debug)
+            {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
@@ -245,7 +255,12 @@ impl VM {
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
-            if activation.verb_info.verbdef.flags.contains(VerbFlag::Debug) {
+            if activation
+                .verb_info
+                .verbdef()
+                .flags()
+                .contains(VerbFlag::Debug)
+            {
                 return self.raise_error_pack(code.make_error_pack(Some(msg)));
             }
         }

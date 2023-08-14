@@ -1,12 +1,8 @@
+use crate::model::r#match::VerbArgsSpec;
+use crate::util::bitenum::BitEnum;
+use crate::var::objid::Objid;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
-use uuid::Uuid;
-
-use crate::model::r#match::VerbArgsSpec;
-use crate::model::{Defs, HasUuid, Named};
-use crate::util::bitenum::BitEnum;
-use crate::util::verbname_cmp;
-use crate::var::objid::Objid;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum VerbFlag {
@@ -16,6 +12,32 @@ pub enum VerbFlag {
     Debug = 3,
 }
 
+impl VerbFlag {
+    pub fn rwxd() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b1111)
+    }
+    pub fn rwx() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b0111)
+    }
+    pub fn rw() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b0011)
+    }
+    pub fn rx() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b0110)
+    }
+    pub fn r() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b0001)
+    }
+    pub fn w() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b0010)
+    }
+    pub fn x() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b0100)
+    }
+    pub fn d() -> BitEnum<VerbFlag> {
+        BitEnum::from_u8(0b1000)
+    }
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Encode, Decode)]
 pub struct Vid(pub i64);
 
@@ -30,6 +52,7 @@ pub enum VerbAttr {
 
 /// The program type encoded for a verb.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Encode, Decode, Primitive)]
+#[repr(u8)]
 pub enum BinaryType {
     /// For builtin functions in stack frames -- or empty code blobs.
     None = 0,
@@ -47,36 +70,3 @@ pub struct VerbAttrs {
     pub binary_type: Option<BinaryType>,
     pub binary: Option<Vec<u8>>,
 }
-
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
-pub struct VerbInfo {
-    pub verbdef: VerbDef,
-    pub binary: Vec<u8>,
-}
-
-#[derive(Debug, Encode, Decode, Clone, Eq, PartialEq)]
-pub struct VerbDef {
-    pub uuid: [u8; 16],
-    pub location: Objid,
-    pub owner: Objid,
-    pub names: Vec<String>,
-    pub flags: BitEnum<VerbFlag>,
-    pub binary_type: BinaryType,
-    pub args: VerbArgsSpec,
-}
-
-impl Named for VerbDef {
-    fn matches_name(&self, name: &str) -> bool {
-        self.names
-            .iter()
-            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.to_lowercase().as_str()))
-    }
-}
-
-impl HasUuid for VerbDef {
-    fn uuid(&self) -> Uuid {
-        Uuid::from_bytes(self.uuid)
-    }
-}
-
-pub type VerbDefs = Defs<VerbDef>;

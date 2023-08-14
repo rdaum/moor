@@ -10,9 +10,10 @@ mod tests {
     use moor_value::model::world_state::{WorldState, WorldStateSource};
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_VERBNF;
-    use moor_value::var::objid::{Objid, NOTHING};
+    use moor_value::var::objid::Objid;
     use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use moor_value::AsByteBuffer;
+    use moor_value::NOTHING;
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
@@ -83,7 +84,7 @@ mod tests {
             caller: NOTHING,
         };
         let verb = state.find_method_verb_on(o, o, verb_name).await.unwrap();
-        let program = Program::from_byte_vector(verb.binary.clone());
+        let program = Program::from_sliceref(verb.binary());
         let cr = VerbExecutionRequest {
             permissions: o,
             resolved_verb: verb,
@@ -123,7 +124,7 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let decoded_verb = Program::from_byte_vector(resolved_verb.binary.clone());
+                    let decoded_verb = Program::from_sliceref(resolved_verb.binary());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,
@@ -913,7 +914,7 @@ mod tests {
                     trampoline: _,
                     trampoline_arg: _,
                 }) => {
-                    let decoded_verb = Program::from_byte_vector(resolved_verb.binary.clone());
+                    let decoded_verb = Program::from_sliceref(resolved_verb.binary());
                     let cr = VerbExecutionRequest {
                         permissions,
                         resolved_verb,

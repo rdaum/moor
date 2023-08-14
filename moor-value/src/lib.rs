@@ -1,17 +1,25 @@
-use bincode::de::read::Reader;
+use crate::util::slice_ref::SliceRef;
+use crate::var::objid::Objid;
 use bincode::enc::write::Writer;
-use bincode::error::{DecodeError, EncodeError};
+use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-use bytes::{Buf, Bytes};
 use lazy_static::lazy_static;
 
 pub mod model;
 pub mod util;
 pub mod var;
 
-lazy_static! {
-    static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
-}
+/// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
+/// from where $name style references hang off of. A bit like the Lobby in Self.
+pub const SYSTEM_OBJECT: Objid = Objid(0);
+
+/// Used throughout to refer to a missing object value.
+pub const NOTHING: Objid = Objid(-1);
+/// Used in matching to indicate that the match was ambiguous on multiple objects in the
+/// environment.
+pub const AMBIGUOUS: Objid = Objid(-2);
+/// Used in matching to indicate that the match failed to find any objects in the environment.
+pub const FAILED_MATCH: Objid = Objid(-3);
 
 /// A trait for all values that can be stored in the database. (e.g. all of them).
 /// To abstract away from the underlying serialization format, we use this trait.
@@ -20,11 +28,17 @@ pub trait AsByteBuffer {
     /// For now assume this is a costly operation.
     fn size_bytes(&self) -> usize;
     /// Return the bytes representing this value.
-    fn as_byte_buffer(&self) -> Bytes;
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, f: F) -> R;
+    // When you give up on zero-copy.
+    fn make_copy_as_vec(&self) -> Vec<u8>;
     /// Create a value from the given bytes.
     /// Either takes ownership or moves.
-    fn from_byte_vector(bytes: Vec<u8>) -> Self;
+    fn from_sliceref(bytes: SliceRef) -> Self;
     // TODO from_byte_buffer (Bytes) ? may not be needed.
+}
+
+lazy_static! {
+    static ref BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 }
 
 struct CountingWriter {
@@ -33,15 +47,6 @@ struct CountingWriter {
 impl Writer for CountingWriter {
     fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
         self.count += bytes.len();
-        Ok(())
-    }
-}
-
-struct BytesBufReader(Bytes);
-
-impl Reader for BytesBufReader {
-    fn read(&mut self, bytes: &mut [u8]) -> Result<(), DecodeError> {
-        self.0.copy_to_slice(bytes);
         Ok(())
     }
 }
@@ -61,19 +66,26 @@ impl<T: Encode + Decode + Sized> AsByteBuffer for T {
         cw.count
     }
 
-    fn as_byte_buffer(&self) -> Bytes
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> R
     where
         Self: Sized + Encode,
     {
         let v = bincode::encode_to_vec(self, *BINCODE_CONFIG).expect("bincode to bytes");
-        Bytes::from(v)
+        f(&v[..])
     }
 
-    fn from_byte_vector(bytes: Vec<u8>) -> Self
+    fn make_copy_as_vec(&self) -> Vec<u8>
+    where
+        Self: Sized + Encode,
+    {
+        bincode::encode_to_vec(self, *BINCODE_CONFIG).expect("bincode to bytes")
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Self
     where
         Self: Sized + Decode,
     {
-        bincode::decode_from_slice(&bytes[..], *BINCODE_CONFIG)
+        bincode::decode_from_slice(bytes.as_slice(), *BINCODE_CONFIG)
             .expect("bincode from bytes")
             .0
     }

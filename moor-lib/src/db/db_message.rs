@@ -2,16 +2,19 @@ use tokio::sync::oneshot::Sender;
 use uuid::Uuid;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::{PropDef, PropDefs, PropFlag};
+use moor_value::model::objset::ObjSet;
+use moor_value::model::propdef::{PropDef, PropDefs};
+use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbDef, VerbFlag};
+use moor_value::model::verbdef::VerbDef;
+use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid};
+use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
-use moor_value::model::verbs::VerbDefs;
+use moor_value::model::verbdef::VerbDefs;
 
 /// The set of messages that DbTxWorldState sends to the underlying physical database to execute
 /// storage/retrieval of object attributes, properties, and verbs.

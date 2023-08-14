@@ -2,6 +2,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::ObjAttrs;
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
@@ -59,7 +60,7 @@ impl LoaderInterface for DbTxWorldState {
             .get_properties(obj)
             .await?
             .find_named(pname)
-            .map(|p| Uuid::from_bytes(p.uuid)))
+            .map(|p| p.uuid()))
     }
     async fn define_property(
         &self,
@@ -91,19 +92,18 @@ impl LoaderInterface for DbTxWorldState {
             .with_context(|| {
                 format!("Error resolving property {} on object {}", propname, objid)
             })?;
-        let uuid = Uuid::from_bytes(propdef.uuid);
 
         // Now set the value if provided.
         if let Some(value) = value {
             self.client
-                .set_property(objid, uuid, value)
+                .set_property(objid, propdef.uuid(), value)
                 .await
                 .with_context(|| format!("Error setting value for {}.{}", objid, propname))?;
         }
 
         // And then set the flags and owner the child had.
         self.client
-            .set_property_info(objid, uuid, Some(owner), Some(flags), None)
+            .set_property_info(objid, propdef.uuid(), Some(owner), Some(flags), None)
             .await
             .with_context(|| format!("Error setting property info for {}.{}", objid, propname))?;
         Ok(())

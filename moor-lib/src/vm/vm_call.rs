@@ -82,7 +82,7 @@ impl VM {
         };
 
         // Permissions for the activation are the verb's owner.
-        let permissions = verb_info.verbdef.owner;
+        let permissions = verb_info.verbdef().owner();
 
         Ok(ExecutionResult::ContinueVerb {
             permissions,
@@ -222,7 +222,7 @@ impl VM {
         let args = args.to_vec();
 
         // Push an activation frame for the builtin function.
-        let flags = self.top().verb_info.verbdef.flags;
+        let flags = self.top().verb_info.verbdef().flags();
         self.stack.push(Activation::for_bf_call(
             self.top().task_id,
             bf_func_num,

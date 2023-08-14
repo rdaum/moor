@@ -1,13 +1,17 @@
 use async_trait::async_trait;
 
 use crate::model::objects::ObjFlag;
-use crate::model::props::{PropAttrs, PropDef, PropDefs, PropFlag};
+use crate::model::objset::ObjSet;
+use crate::model::propdef::{PropDef, PropDefs};
+use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::r#match::{PrepSpec, VerbArgsSpec};
-use crate::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbDefs, VerbFlag, VerbInfo};
+use crate::model::verb_info::VerbInfo;
+use crate::model::verbdef::{VerbDef, VerbDefs};
+use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::CommitResult;
 use crate::model::WorldStateError;
 use crate::util::bitenum::BitEnum;
-use crate::var::objid::{ObjSet, Objid};
+use crate::var::objid::Objid;
 use crate::var::Var;
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's

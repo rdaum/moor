@@ -1,8 +1,9 @@
+use moor_value::NOTHING;
 use tracing::debug;
 
 use moor_value::model::world_state::WorldState;
 use moor_value::var::error::Error::{E_INVIND, E_TYPE};
-use moor_value::var::objid::{Objid, NOTHING};
+use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::Var;
 

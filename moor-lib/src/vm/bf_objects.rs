@@ -6,9 +6,9 @@ use tracing::{debug, error, trace};
 use moor_value::model::objects::ObjFlag;
 use moor_value::model::WorldStateError;
 use moor_value::var::error::Error::{E_INVARG, E_NACC, E_TYPE};
-use moor_value::var::objid::NOTHING;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
+use moor_value::NOTHING;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -82,7 +82,7 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
         .children_of(bf_args.task_perms_who(), *obj)
         .await?;
     debug!("Children: {:?} {:?}", obj, children);
-    let children = children.iter().map(|c| v_objid(*c)).collect::<Vec<_>>();
+    let children = children.iter().map(v_objid).collect::<Vec<_>>();
     debug!("Children: {:?} {:?}", obj, children);
     Ok(Ret(v_list(children)))
 }
@@ -397,7 +397,7 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         .await?;
     let verbs = verbs
         .iter()
-        .map(|v| v_str(v.names.first().unwrap()))
+        .map(|v| v_str(v.names().first().unwrap()))
         .collect();
     Ok(Ret(v_list(verbs)))
 }
@@ -418,7 +418,7 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
         .world_state
         .properties(bf_args.task_perms_who(), *obj)
         .await?;
-    let props = props.iter().map(|p| v_str(&p.name)).collect();
+    let props = props.iter().map(|p| v_str(p.name())).collect();
     Ok(Ret(v_list(props)))
 }
 bf_declare!(properties, bf_properties);

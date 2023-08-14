@@ -2,17 +2,19 @@ use std::collections::{HashMap, HashSet};
 
 use tracing::info;
 
+use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::PropDef;
-use moor_value::model::props::PropDefs;
+use moor_value::model::objset::ObjSet;
+use moor_value::{AsByteBuffer, NOTHING};
+
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
-use moor_value::AsByteBuffer;
+use moor_value::util::slice_ref::SliceRef;
+use moor_value::var::objid::Objid;
 
 use crate::db::rocksdb::tx_db_impl::{
-    cf_for, composite_key, err_is_objnjf, get_objset, get_oid_or_nothing, get_oid_value, oid_key,
-    set_objset, set_oid_value, RocksDbTx,
+    cf_for, composite_key_for, err_is_objnjf, get_objset, get_oid_or_nothing, get_oid_value,
+    oid_key, set_objset, set_oid_value, write_cf, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
 
@@ -104,18 +106,14 @@ impl<'a> RocksDbTx<'a> {
         let old_props = self.get_propdefs(o)?;
         let mut delort_props = vec![];
         for p in old_props.iter() {
-            if old_ancestors.contains(&p.definer) {
-                delort_props.push(p.uuid);
-                let vk = composite_key(o, &p.uuid);
+            if old_ancestors.contains(&p.definer()) {
+                delort_props.push(p.uuid());
+                let vk = composite_key_for(o, &p);
                 self.tx.delete_cf(property_value_cf, vk)?;
             }
         }
-        let new_props: Vec<PropDef> = old_props
-            .iter()
-            .filter(|p| !delort_props.contains(&p.uuid))
-            .cloned()
-            .collect();
-        self.update_propdefs(o, PropDefs::from(new_props))?;
+        let new_props = old_props.with_all_removed(&delort_props);
+        self.update_propdefs(o, new_props)?;
 
         // Now walk all-my-children and destroy all the properties whose definer is me or any
         // of my ancestors not shared by the new parent.
@@ -125,22 +123,16 @@ impl<'a> RocksDbTx<'a> {
         for c in descendants.iter() {
             let mut inherited_props = vec![];
             // Remove the set values.
-            let old_props = self.get_propdefs(*c)?;
+            let old_props = self.get_propdefs(c)?;
             for p in old_props.iter() {
-                if old_ancestors.contains(&p.definer) {
-                    inherited_props.push(p.uuid);
-                    let vk = composite_key(*c, &p.uuid);
+                if old_ancestors.contains(&p.definer()) {
+                    inherited_props.push(p.uuid());
+                    let vk = composite_key_for(c, &p);
                     self.tx.delete_cf(property_value_cf, vk)?;
                 }
             }
             // And update the property list to not include them
-            let new_props = PropDefs::from(
-                old_props
-                    .iter()
-                    .filter(|p| inherited_props.contains(&p.uuid))
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            );
+            let new_props = old_props.with_all_removed(&inherited_props);
 
             // We're not actually going to *set* these yet because we are going to add, later.
             descendant_props.insert(c, new_props);
@@ -157,7 +149,7 @@ impl<'a> RocksDbTx<'a> {
                     // Prune us out of the old parent's children list.
                     let old_children = self.get_object_children(old_parent)?;
                     let new_children =
-                        ObjSet::from(old_children.iter().filter(|&x| *x != o).cloned().collect());
+                        ObjSet::from_oid_iter(old_children.iter().filter(|&x| x != o));
                     self.update_object_children(old_parent, new_children)?;
                 }
             }
@@ -172,8 +164,7 @@ impl<'a> RocksDbTx<'a> {
         if new_parent == NOTHING {
             return Ok(());
         }
-        let mut new_children = self.get_object_children(new_parent)?;
-        new_children.insert(o);
+        let new_children = self.get_object_children(new_parent)?.with_inserted(o);
         self.update_object_children(new_parent, new_children)?;
 
         // Now walk all my new descendants and give them the properties that derive from any
@@ -184,7 +175,7 @@ impl<'a> RocksDbTx<'a> {
         for a in new_ancestors {
             let props = self.get_propdefs(a)?;
             for p in props.iter() {
-                if p.definer == a {
+                if p.definer() == a {
                     new_props.push(p.clone())
                 }
             }
@@ -192,13 +183,13 @@ impl<'a> RocksDbTx<'a> {
         // Then put clear copies on each of the descendants ... and me.
         // This really just means defining the property with no value, which is what we do.
         let descendants = self.descendants(o)?;
-        for c in descendants.iter().chain(std::iter::once(&o)) {
+        for c in descendants.iter().chain(std::iter::once(o)) {
             // Check if we have a cached/modified copy from above in descendant_props
             let c_props = match descendant_props.remove(&c) {
-                None => self.get_propdefs(*c)?,
+                None => self.get_propdefs(c)?,
                 Some(props) => props,
             };
-            let c_props = c_props.with_added_vec(new_props.clone());
+            let c_props = c_props.with_all_added(&new_props);
             self.update_propdefs(o, c_props)?;
         }
         Ok(())
@@ -216,13 +207,13 @@ impl<'a> RocksDbTx<'a> {
         let Some(name_bytes) = name_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
-        Ok(String::from_byte_vector(name_bytes))
+        Ok(String::from_sliceref(SliceRef::from_bytes(&name_bytes)))
     }
     #[tracing::instrument(skip(self))]
     pub fn set_object_name(&self, o: Objid, name: String) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = oid_key(o);
-        self.tx.put_cf(cf, ok, name.as_byte_buffer())?;
+        write_cf(&self.tx, cf, &ok, &name)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
@@ -233,13 +224,13 @@ impl<'a> RocksDbTx<'a> {
         let Some(flag_bytes) = flag_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
-        Ok(BitEnum::from_byte_vector(flag_bytes))
+        Ok(BitEnum::from_sliceref(SliceRef::from_bytes(&flag_bytes)))
     }
     #[tracing::instrument(skip(self))]
     pub fn set_object_flags(&self, o: Objid, flags: BitEnum<ObjFlag>) -> Result<(), anyhow::Error> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = oid_key(o);
-        self.tx.put_cf(cf, ok, flags.as_byte_buffer())?;
+        write_cf(&self.tx, cf, &ok, &flags)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
@@ -303,13 +294,7 @@ impl<'a> RocksDbTx<'a> {
                 if old_location != NOTHING {
                     let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
                     let old_contents = get_objset(c_cf, &self.tx, old_location)?;
-                    let old_contents = ObjSet::from(
-                        old_contents
-                            .iter()
-                            .filter(|&x| *x != what)
-                            .cloned()
-                            .collect(),
-                    );
+                    let old_contents = old_contents.with_removed(what);
                     set_objset(c_cf, &self.tx, old_location, old_contents)?;
                 }
             }
@@ -325,9 +310,9 @@ impl<'a> RocksDbTx<'a> {
         }
 
         // Get and add to contents of new location.
-        let mut new_contents =
-            get_objset(c_cf, &self.tx, new_location).unwrap_or_else(|_| ObjSet::new());
-        new_contents.insert(what);
+        let new_contents = get_objset(c_cf, &self.tx, new_location)
+            .unwrap_or_else(|_| ObjSet::new())
+            .with_inserted(what);
         set_objset(c_cf, &self.tx, new_location, new_contents)?;
         Ok(())
     }
@@ -429,19 +414,26 @@ impl<'a> RocksDbTx<'a> {
     }
 
     pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, anyhow::Error> {
-        let mut all_children = vec![];
         let mut search_queue = vec![obj];
 
-        while let Some(search_obj) = search_queue.pop() {
-            let new_children = self.get_object_children(search_obj)?;
+        let all_children = std::iter::from_fn(move || {
+            while let Some(search_obj) = search_queue.pop() {
+                match self.get_object_children(search_obj) {
+                    Ok(new_children) => {
+                        // Add new children to the search queue
+                        search_queue.extend(new_children.iter());
 
-            // Add new children to the search queue
-            search_queue.extend(new_children.iter().cloned());
+                        // Extend the iterator with new children
+                        return Some(new_children.iter());
+                    }
+                    Err(_) => continue,
+                }
+            }
+            None
+        })
+        .flatten();
 
-            // Add new children to the all_children list
-            all_children.extend(new_children.iter().cloned());
-        }
-        Ok(ObjSet::from(all_children))
+        Ok(ObjSet::from_oid_iter(all_children))
     }
 
     fn update_object_children(

@@ -4,6 +4,7 @@ use std::rc::Rc;
 /// This is the main entry point for parsing.
 use std::str::FromStr;
 
+use moor_value::SYSTEM_OBJECT;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 
@@ -12,7 +13,7 @@ use moor_value::var::error::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA,
     E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_value::var::objid::{Objid, SYSTEM_OBJECT};
+use moor_value::var::objid::Objid;
 use moor_value::var::{v_err, v_float, v_int, v_objid, v_str};
 
 use crate::compiler::ast::{

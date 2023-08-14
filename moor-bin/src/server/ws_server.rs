@@ -20,9 +20,10 @@ use tracing::{error, info, instrument, trace, warn};
 
 use moor_lib::tasks::scheduler::{Scheduler, TaskWaiterResult};
 use moor_lib::tasks::Sessions;
-use moor_value::var::objid::{Objid, SYSTEM_OBJECT};
+use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_objid, v_str};
+use moor_value::SYSTEM_OBJECT;
 
 struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,

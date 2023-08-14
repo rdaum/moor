@@ -2,8 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use moor_value::model::objset::ObjSet;
+use moor_value::NOTHING;
 
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+use moor_value::var::objid::Objid;
 
 use crate::db::matching::MatchEnvironment;
 
@@ -55,7 +57,7 @@ impl MatchEnvironment for MockMatchEnvironment {
                 result.extend(location_obj.contents.iter().cloned());
             }
         }
-        Ok(ObjSet::from(result))
+        Ok(ObjSet::from(&result))
     }
 
     async fn location_of(&mut self, oid: Objid) -> Result<Objid, anyhow::Error> {
@@ -77,7 +79,7 @@ fn create_mock_object(
         oid,
         MockObject {
             location,
-            contents: contents.iter().cloned().collect(),
+            contents: contents.iter().collect(),
             names,
         },
     );
@@ -97,14 +99,14 @@ pub fn setup_mock_environment() -> MockMatchEnvironment {
         &mut env,
         MOCK_ROOM1,
         NOTHING,
-        ObjSet::from(vec![MOCK_THING1, MOCK_THING2]),
+        ObjSet::from(&[MOCK_THING1, MOCK_THING2]),
         vec!["room1".to_string(), "r1".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_ROOM2,
         NOTHING,
-        ObjSet::from(vec![MOCK_THING3]),
+        ObjSet::from(&[MOCK_THING3]),
         vec!["room2".to_string()],
     );
     create_mock_object(

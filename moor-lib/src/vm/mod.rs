@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use moor_value::model::verbs::VerbInfo;
+use moor_value::model::verb_info::VerbInfo;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 

@@ -1,9 +1,14 @@
 use anyhow::bail;
 use rocksdb::{ColumnFamily, ErrorKind};
+use std::sync::Arc;
+use uuid::Uuid;
 
+use moor_value::model::defset::HasUuid;
+use moor_value::model::objset::ObjSet;
 use moor_value::model::{CommitResult, WorldStateError};
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
-use moor_value::AsByteBuffer;
+use moor_value::util::slice_ref::SliceRef;
+use moor_value::var::objid::Objid;
+use moor_value::{AsByteBuffer, NOTHING};
 
 use crate::db::rocksdb::ColumnFamilies;
 
@@ -11,9 +16,15 @@ pub(crate) fn oid_key(o: Objid) -> Vec<u8> {
     o.0.to_be_bytes().to_vec()
 }
 
-pub(crate) fn composite_key(o: Objid, uuid: &uuid::Bytes) -> Vec<u8> {
+pub(crate) fn composite_key_for<E: HasUuid>(o: Objid, entity: &E) -> Vec<u8> {
     let mut key = oid_key(o);
-    key.extend_from_slice(&uuid[..]);
+    key.extend_from_slice(&entity.uuid().as_bytes()[..]);
+    key
+}
+
+pub(crate) fn composite_key_uuid(o: Objid, uuid: &Uuid) -> Vec<u8> {
+    let mut key = oid_key(o);
+    key.extend_from_slice(&uuid.as_bytes()[..]);
     key
 }
 
@@ -65,7 +76,7 @@ pub(crate) fn get_objset<'a>(
     let ok = oid_key(o);
     let bytes = tx.get_cf(cf, ok)?;
     let bytes = bytes.ok_or(WorldStateError::ObjectNotFound(o))?;
-    let ov = ObjSet::from_byte_vector(bytes);
+    let ov = ObjSet::from_sliceref(SliceRef::new(Arc::new(bytes)));
     Ok(ov)
 }
 
@@ -76,7 +87,9 @@ pub(crate) fn set_objset<'a>(
     v: ObjSet,
 ) -> Result<(), WorldStateError> {
     let ok = oid_key(o);
-    tx.put_cf(cf, ok, v.as_byte_buffer()).unwrap();
+    v.with_byte_buffer(|d| {
+        tx.put_cf(cf, &ok, d).unwrap();
+    });
     Ok(())
 }
 
@@ -89,6 +102,16 @@ pub(crate) fn err_is_objnjf(e: &anyhow::Error) -> bool {
         return true;
     }
     false
+}
+
+pub(crate) fn write_cf<W: AsByteBuffer>(
+    tx: &rocksdb::Transaction<'_, rocksdb::OptimisticTransactionDB>,
+    cf: &ColumnFamily,
+    key: &[u8],
+    w: &W,
+) -> Result<(), anyhow::Error> {
+    w.with_byte_buffer(|d| tx.put_cf(cf, key, d))?;
+    Ok(())
 }
 
 pub(crate) struct RocksDbTx<'a> {
@@ -121,15 +144,17 @@ mod tests {
     use rocksdb::OptimisticTransactionDB;
     use strum::VariantNames;
     use tempdir::TempDir;
-    use uuid::Uuid;
 
+    use moor_value::model::defset::HasUuid;
     use moor_value::model::objects::ObjAttrs;
+    use moor_value::model::objset::ObjSet;
     use moor_value::model::r#match::VerbArgsSpec;
     use moor_value::model::verbs::BinaryType;
     use moor_value::model::WorldStateError;
     use moor_value::util::bitenum::BitEnum;
-    use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+    use moor_value::var::objid::Objid;
     use moor_value::var::v_str;
+    use moor_value::NOTHING;
 
     use crate::db::rocksdb::tx_db_impl::RocksDbTx;
     use crate::db::rocksdb::ColumnFamilies;
@@ -224,7 +249,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(tx.get_object_parent(b).unwrap(), a);
-        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(vec![b]));
+        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[b]));
 
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::new());
@@ -244,7 +269,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(tx.get_object_parent(c).unwrap(), a);
-        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(vec![b, c]));
+        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[b, c]));
 
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::new());
@@ -265,8 +290,8 @@ mod tests {
 
         tx.set_object_parent(b, d).unwrap();
         assert_eq!(tx.get_object_parent(b).unwrap(), d);
-        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(vec![c]));
-        assert_eq!(tx.get_object_children(d).unwrap(), ObjSet::from(vec![b]));
+        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[c]));
+        assert_eq!(tx.get_object_children(d).unwrap(), ObjSet::from(&[b]));
     }
 
     #[test]
@@ -325,17 +350,17 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(tx.descendants(a).unwrap(), ObjSet::from(vec![b, c, d]));
+        assert_eq!(tx.descendants(a).unwrap(), ObjSet::from(&[b, c, d]));
         assert_eq!(tx.descendants(b).unwrap(), ObjSet::new());
-        assert_eq!(tx.descendants(c).unwrap(), ObjSet::from(vec![d]));
+        assert_eq!(tx.descendants(c).unwrap(), ObjSet::from(&[d]));
 
         // Now reparent d to b
         tx.set_object_parent(d, b).unwrap();
-        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(vec![b, c]));
-        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from(vec![d]));
+        assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[b, c]));
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from(&[d]));
         assert_eq!(tx.get_object_children(c).unwrap(), ObjSet::new());
-        assert_eq!(tx.descendants(a).unwrap(), ObjSet::from(vec![b, c, d]));
-        assert_eq!(tx.descendants(b).unwrap(), ObjSet::from(vec![d]));
+        assert_eq!(tx.descendants(a).unwrap(), ObjSet::from(&[b, c, d]));
+        assert_eq!(tx.descendants(b).unwrap(), ObjSet::from(&[d]));
         assert_eq!(tx.descendants(c).unwrap(), ObjSet::new());
     }
 
@@ -370,7 +395,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(tx.get_object_location(b).unwrap(), a);
-        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(vec![b]));
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[b]));
 
         assert_eq!(tx.get_object_location(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::new());
@@ -391,7 +416,7 @@ mod tests {
         tx.set_object_location(b, c).unwrap();
         assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::new());
-        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(vec![b]));
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
 
         let d = tx
             .create_object(
@@ -406,14 +431,11 @@ mod tests {
             )
             .unwrap();
         tx.set_object_location(d, c).unwrap();
-        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(vec![b, d]));
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b, d]));
         assert_eq!(tx.get_object_location(d).unwrap(), c);
 
         tx.set_object_location(a, c).unwrap();
-        assert_eq!(
-            tx.get_object_contents(c).unwrap(),
-            ObjSet::from(vec![b, d, a])
-        );
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b, d, a]));
         assert_eq!(tx.get_object_location(a).unwrap(), c);
 
         // Validate recursive move detection.
@@ -474,7 +496,7 @@ mod tests {
         )
         .unwrap();
         let (prop, v) = tx.resolve_property(oid, "test".into()).unwrap();
-        assert_eq!(prop.name, "test");
+        assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test"));
     }
 
@@ -518,7 +540,7 @@ mod tests {
         )
         .unwrap();
         let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
-        assert_eq!(prop.name, "test");
+        assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test_value"));
 
         // Verify we *don't* get this property for an unrelated, unhinged object by reparenting b
@@ -589,7 +611,7 @@ mod tests {
         )
         .unwrap();
         let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
-        assert_eq!(prop.name, "test");
+        assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test_value"));
 
         // Define the property again, but on the object 'b',
@@ -632,19 +654,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            tx.resolve_verb(a, "test".into(), None).unwrap().names,
+            tx.resolve_verb(a, "test".into(), None).unwrap().names(),
             vec!["test"]
         );
 
         assert_eq!(
             tx.resolve_verb(a, "test".into(), Some(VerbArgsSpec::this_none_this()))
                 .unwrap()
-                .names,
+                .names(),
             vec!["test"]
         );
 
-        let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid;
-        let v_uuid = Uuid::from_bytes(v_uuid);
+        let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
         assert_eq!(tx.get_binary(a, v_uuid).unwrap(), vec![]);
     }
 
@@ -665,11 +686,11 @@ mod tests {
             )
             .unwrap();
 
-        let verb_names = vec!["dname*c".into(), "iname*c".into()];
+        let verb_names = vec!["dname*c", "iname*c"];
         tx.add_object_verb(
             a,
             a,
-            verb_names.clone(),
+            verb_names.iter().map(|s| s.to_string()).collect(),
             vec![],
             BinaryType::LambdaMoo18X,
             BitEnum::new(),
@@ -678,22 +699,22 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            tx.resolve_verb(a, "dname".into(), None).unwrap().names,
+            tx.resolve_verb(a, "dname".into(), None).unwrap().names(),
             verb_names
         );
 
         assert_eq!(
-            tx.resolve_verb(a, "dnamec".into(), None).unwrap().names,
+            tx.resolve_verb(a, "dnamec".into(), None).unwrap().names(),
             verb_names
         );
 
         assert_eq!(
-            tx.resolve_verb(a, "iname".into(), None).unwrap().names,
+            tx.resolve_verb(a, "iname".into(), None).unwrap().names(),
             verb_names
         );
 
         assert_eq!(
-            tx.resolve_verb(a, "inamec".into(), None).unwrap().names,
+            tx.resolve_verb(a, "inamec".into(), None).unwrap().names(),
             verb_names
         );
     }

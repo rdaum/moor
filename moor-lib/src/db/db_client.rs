@@ -3,16 +3,19 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::{PropDef, PropDefs, PropFlag};
+use moor_value::model::objset::ObjSet;
+use moor_value::model::propdef::{PropDef, PropDefs};
+use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbFlag};
+use moor_value::model::verbdef::VerbDef;
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use moor_value::model::{CommitResult, WorldStateError};
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid};
+use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 use crate::db::db_message::DbMessage;
-use moor_value::model::verbs::VerbDefs;
+use moor_value::model::verbdef::VerbDefs;
 
 pub(crate) struct DbTxClient {
     pub(crate) mailbox: Sender<DbMessage>,
@@ -149,6 +152,9 @@ impl DbTxClient {
         Ok(verbs)
     }
 
+    // TODO: this could return SliceRef or an Arc<Vec<u8>>, to potentially avoid copying. Though
+    //   for RocksDB I don't think it matters, since I don't think it will let us avoid copying
+    //   anyway.
     pub async fn get_verb_binary(
         &self,
         obj: Objid,
@@ -200,7 +206,7 @@ impl DbTxClient {
         &self,
         obj: Objid,
         uuid: Uuid,
-        verb_attrs: VerbAttrs
+        verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::UpdateVerbDef {

@@ -1,16 +1,20 @@
+use std::sync::Arc;
 use tracing::trace;
 use uuid::Uuid;
 
-use moor_value::model::props::PropDefs;
-use moor_value::model::props::{PropDef, PropFlag};
+use moor_value::model::defset::{HasUuid, Named};
+use moor_value::model::objset::ObjSet;
+use moor_value::model::propdef::{PropDef, PropDefs};
+use moor_value::model::props::PropFlag;
 use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid, NOTHING};
+use moor_value::util::slice_ref::SliceRef;
+use moor_value::var::objid::Objid;
 use moor_value::var::{v_none, Var};
-use moor_value::AsByteBuffer;
+use moor_value::{AsByteBuffer, NOTHING};
 
 use crate::db::rocksdb::tx_db_impl::{
-    composite_key, get_oid_or_nothing, get_oid_value, oid_key, RocksDbTx,
+    composite_key_uuid, get_oid_or_nothing, get_oid_value, oid_key, write_cf, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
 
@@ -23,28 +27,27 @@ impl<'a> RocksDbTx<'a> {
         let props_bytes = self.tx.get_cf(cf, ok)?;
         let props = match props_bytes {
             None => PropDefs::empty(),
-            Some(props_bytes) => PropDefs::from_byte_vector(props_bytes),
+            Some(props_bytes) => PropDefs::from_sliceref(SliceRef::new(Arc::new(props_bytes))),
         };
         Ok(props)
     }
     #[tracing::instrument(skip(self))]
     pub fn retrieve_property(&self, o: Objid, u: Uuid) -> Result<Var, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-        let ok = composite_key(o, u.as_bytes());
+        let ok = composite_key_uuid(o, &u);
         let var_bytes = self.tx.get_cf(cf, ok)?;
         let Some(var_bytes) = var_bytes else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
         };
-        let var = Var::from_byte_vector(var_bytes);
+        let var = Var::from_sliceref(SliceRef::from_bytes(&var_bytes));
         Ok(var)
     }
     #[tracing::instrument(skip(self))]
     pub fn set_property_value(&self, o: Objid, u: Uuid, v: Var) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-        let ok = composite_key(o, u.as_bytes());
-        let var_bytes = v.as_byte_buffer();
-        self.tx.put_cf(cf, ok, var_bytes)?;
+        let ok = composite_key_uuid(o, &u);
+        write_cf(&self.tx, cf, &ok, &v)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
@@ -63,19 +66,19 @@ impl<'a> RocksDbTx<'a> {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
         };
-        let props = PropDefs::from_byte_vector(props_bytes);
+        let props = PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes));
         let Some(new_props) = props.with_updated(u, |p| {
-            let mut new_p = p.clone();
-            if let Some(new_owner) = new_owner {
-                new_p.owner = new_owner;
-            }
-            if let Some(new_perms) = new_perms {
-                new_p.flags = new_perms;
-            }
-            if let Some(new_name) = &new_name {
-                new_p.name = new_name.clone();
-            }
-            new_p
+            let name = match &new_name {
+                None => p.name(),
+                Some(s) => s.as_str()
+            };
+            PropDef::new(u,
+                p.definer(),
+                p.location(),
+                name,
+                new_perms.unwrap_or(p.flags()),
+                new_owner.unwrap_or(p.owner()),
+            )
         }) else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
@@ -92,7 +95,7 @@ impl<'a> RocksDbTx<'a> {
         let Some(props_bytes) = props_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
-        let props = PropDefs::from_byte_vector(props_bytes);
+        let props = PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes));
         let Some(new_props) = props.with_removed(u) else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
@@ -101,7 +104,7 @@ impl<'a> RocksDbTx<'a> {
 
         // Need to also delete the property value.
         let pv_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-        let uk = composite_key(o, u.as_bytes());
+        let uk = composite_key_uuid(o, &u);
         self.tx.delete_cf(pv_cf, uk)?;
 
         Ok(())
@@ -110,7 +113,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn clear_property(&self, o: Objid, u: Uuid) -> Result<(), anyhow::Error> {
         // Just delete the property value.
         let pv_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-        let uk = composite_key(o, u.as_bytes());
+        let uk = composite_key_uuid(o, &u);
         self.tx.delete_cf(pv_cf, uk)?;
 
         Ok(())
@@ -128,44 +131,35 @@ impl<'a> RocksDbTx<'a> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
 
         // We have to propagate the propdef down to all my children
-        let mut locations = ObjSet::from(vec![location]);
         let descendants = self.descendants(location)?;
-        locations.append(descendants);
+        let locations = ObjSet::from(&[location]).with_concatenated(descendants);
 
         // Generate a new property ID. This will get shared all the way down the pipe.
         // But the key for the actual value is always composite of oid,uuid
         let u = Uuid::new_v4();
 
         for location in locations.iter() {
-            let ok = oid_key(*location);
+            let ok = oid_key(location);
             let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
             let props: PropDefs = match props_bytes {
                 None => PropDefs::empty(),
-                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes),
+                Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
             };
 
             // Verify we don't already have a property with this name. If we do, return an error.
-            if props.iter().any(|prop| prop.name == name) {
-                return Err(WorldStateError::DuplicatePropertyDefinition(*location, name).into());
+            if props.iter().any(|prop| prop.matches_name(name.as_str())) {
+                return Err(WorldStateError::DuplicatePropertyDefinition(location, name).into());
             }
 
-            let prop = PropDef {
-                uuid: *u.as_bytes(),
-                definer,
-                location: *location,
-                name: name.clone(),
-                owner,
-                flags: perms,
-            };
-            self.update_propdefs(*location, props.with_added(prop))?;
+            let prop = PropDef::new(u, definer, location, name.as_str(), perms, owner);
+            self.update_propdefs(location, props.with_added(prop))?;
         }
         // If we have an initial value, set it (NOTE: if propagate_to_children is set, this does not
         // go down the inheritance tree, the value is left "clear" on all children)
         if let Some(value) = value {
             let value_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
-            let propkey = composite_key(definer, u.as_bytes());
-            let prop_bytes = value.as_byte_buffer();
-            self.tx.put_cf(value_cf, propkey, prop_bytes)?;
+            let propkey = composite_key_uuid(definer, &u);
+            write_cf(&self.tx, value_cf, &propkey, &value)?;
         }
 
         Ok(u)
@@ -185,7 +179,7 @@ impl<'a> RocksDbTx<'a> {
         let mut search_obj = obj;
         loop {
             // Look for the value. If we're not 'clear', we can return straight away. that's our thing.
-            if let Ok(found) = self.retrieve_property(search_obj, Uuid::from_bytes(propdef.uuid)) {
+            if let Ok(found) = self.retrieve_property(search_obj, propdef.uuid()) {
                 return Ok((propdef, found));
             }
 
@@ -214,8 +208,7 @@ impl<'a> RocksDbTx<'a> {
         new_props: PropDefs,
     ) -> Result<(), anyhow::Error> {
         let propdefs_cf = self.cf_handles[((ColumnFamilies::ObjectPropDefs) as u8) as usize];
-        self.tx
-            .put_cf(propdefs_cf, oid_key(obj), new_props.as_byte_buffer())?;
+        write_cf(&self.tx, propdefs_cf, &oid_key(obj), &new_props)?;
         Ok(())
     }
 
@@ -233,7 +226,7 @@ impl<'a> RocksDbTx<'a> {
 
             let props: PropDefs = match self.tx.get_cf(ov_cf, ok.clone())? {
                 None => PropDefs::empty(),
-                Some(props_bytes) => PropDefs::from_byte_vector(props_bytes),
+                Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
             };
             if let Some(prop) = props.find_named(n.as_str()) {
                 trace!(?prop, parent = ?search_o, "found property");

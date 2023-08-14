@@ -5,16 +5,22 @@ use anyhow::Error;
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
-use moor_value::model::props::{PropAttrs, PropDef, PropDefs, PropFlag};
+use moor_value::model::objset::ObjSet;
+use moor_value::model::propdef::{PropDef, PropDefs};
+use moor_value::model::props::{PropAttrs, PropFlag};
 use moor_value::model::r#match::{PrepSpec, VerbArgsSpec};
-use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbDef, VerbDefs, VerbFlag, VerbInfo};
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbdef::{VerbDef, VerbDefs};
+use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError;
 use moor_value::model::WorldStateError::{PropertyNotFound, VerbNotFound};
-use moor_value::model::{CommitResult, HasUuid};
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::{ObjSet, Objid};
+use moor_value::util::slice_ref::SliceRef;
+use moor_value::var::objid::Objid;
 use moor_value::var::{v_none, Var};
 use moor_value::AsByteBuffer;
 
@@ -28,20 +34,19 @@ struct MockStore {
 }
 impl MockStore {
     fn set_verb(&mut self, o: Objid, name: &str, program: &Program) {
-        let _binary = program.as_byte_buffer();
+        let binary = program.make_copy_as_vec();
         let uuid = Uuid::new_v4();
-        let vd = VerbDef {
-            uuid: uuid.into_bytes(),
-            location: o,
-            owner: o,
-            names: vec![name.to_string()],
-            flags: BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug,
-            binary_type: BinaryType::LambdaMoo18X,
-            args: VerbArgsSpec::this_none_this(),
-        };
+        let vd = VerbDef::new(
+            uuid,
+            o,
+            o,
+            &[name],
+            BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Read | VerbFlag::Debug,
+            BinaryType::LambdaMoo18X,
+            VerbArgsSpec::this_none_this(),
+        );
         self.verbdefs.insert((o, name.to_string()), vd);
-        self.verb_programs
-            .insert(uuid, program.as_byte_buffer().to_vec());
+        self.verb_programs.insert(uuid, binary);
     }
 }
 
@@ -215,14 +220,25 @@ impl WorldState for MockState {
         todo!()
     }
 
-    async fn update_verb(&mut self, _perms: Objid, _obj: Objid, _vname: &str, _verb_attrs: VerbAttrs) -> Result<(), WorldStateError> {
+    async fn update_verb(
+        &mut self,
+        _perms: Objid,
+        _obj: Objid,
+        _vname: &str,
+        _verb_attrs: VerbAttrs,
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
 
-    async fn update_verb_at_index(&mut self, _perms: Objid, _obj: Objid, _vidx: usize, _verb_attrs: VerbAttrs) -> Result<(), WorldStateError> {
+    async fn update_verb_at_index(
+        &mut self,
+        _perms: Objid,
+        _obj: Objid,
+        _vidx: usize,
+        _verb_attrs: VerbAttrs,
+    ) -> Result<(), WorldStateError> {
         todo!()
     }
-
 
     async fn get_verb(
         &self,
@@ -260,10 +276,7 @@ impl WorldState for MockState {
             None => Err(VerbNotFound(obj, vname.to_string())),
             Some(v) => {
                 let prg = store.verb_programs.get(&v.uuid()).unwrap();
-                Ok(VerbInfo {
-                    verbdef: v.clone(),
-                    binary: prg.clone(),
-                })
+                Ok(VerbInfo::new(v.clone(), SliceRef::from_vec(prg.clone())))
             }
         }
     }

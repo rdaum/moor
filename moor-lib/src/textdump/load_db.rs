@@ -213,7 +213,7 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
             })?;
 
             // Encode the binary (for now using bincode)
-            let binary = program.as_byte_buffer().to_vec();
+            let binary = program.with_byte_buffer(|d| Vec::from(d));
 
             ldr.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
                 .await
