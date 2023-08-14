@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use tracing::trace;
+use tracing::{debug, trace};
 
 use moor_value::var::variant::Variant;
 use moor_value::var::Var;
@@ -78,12 +78,14 @@ impl Decompile {
         let old_len = self.s.len();
         while self.position < self.program.main_vector.len() {
             let op = &self.program.main_vector[self.position];
+            trace!("check: {}: {:?}", self.position, op);
             if predicate(self.position, op) {
                 // We'll need a copy of the matching opcode we terminated at.
                 let final_op = self.next()?;
                 if self.s.len() > old_len {
                     return Ok((self.s.split_off(old_len), final_op));
                 } else {
+                    trace!("Stopping @ {}: {:?}", self.position, final_op);
                     return Ok((vec![], final_op));
                 };
             }
@@ -164,10 +166,9 @@ impl Decompile {
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
-        trace!("decompile @ pos {}: {:?}", self.position, opcode);
+        debug!("decompile @ pos {}: {:?}", self.position, opcode);
         match opcode {
             Op::If(otherwise_label) => {
-                trace!("Begin if statement @ pos {}", self.position);
                 let cond = self.pop_expr()?;
 
                 // decompile statements until the position marked in `label`, which is the
@@ -277,6 +278,22 @@ impl Decompile {
                 } else {
                     self.s.push(Stmt::Break { exit: None });
                 }
+            }
+            Op::ExitId(label) => {
+                let jump_label = self.find_jump(&label)?;
+                // Whether it's a break or a continue depends on whether the jump is forward or
+                // backward from the current position.
+                let s = if jump_label.position.0 < self.position {
+                    Stmt::Continue {
+                        exit: Some(jump_label.name.unwrap()),
+                    }
+                } else {
+                    Stmt::Break {
+                        exit: Some(jump_label.name.unwrap()),
+                    }
+                };
+
+                self.s.push(s);
             }
             Op::Fork { .. } => {
                 unimplemented!("decompile fork");
@@ -572,9 +589,13 @@ impl Decompile {
                                 false
                             }
                         })?;
+                    trace!("Decompiled up to pos {}", self.position);
                     arm.statements = statements;
                 }
 
+                // We need to rewind the position by one opcode, it seems.
+                // TODO this is not the most elegant. we're being too greedy above
+                self.position -= 1;
                 self.s.push(Stmt::TryExcept {
                     body,
                     excepts: except_arms,
@@ -630,40 +651,57 @@ impl Decompile {
                 self.push_expr(Expr::Length);
             }
             Op::IfQues(_) => {
-                unimplemented!()
-            }
-            Op::Jump { .. } => {
-                unimplemented!()
+                let condition = self.pop_expr();
+                self.decompile()?;
+                let consequent = self.pop_expr();
+                self.decompile()?;
+                let alternate = self.pop_expr();
+                let e = Expr::Cond {
+                    condition: Box::new(condition?),
+                    consequence: Box::new(consequent?),
+                    alternative: Box::new(alternate?),
+                };
+                self.push_expr(e);
             }
             Op::CheckListForSplice => {
-                unimplemented!()
+                let sp_expr = self.pop_expr()?;
+                let e = Expr::List(
+                    vec![Arg::Splice(sp_expr)],
+                );
+                self.push_expr(e);
             }
-            Op::PushTemp => {
-                unimplemented!()
+            Op::GPut { id } => {
+               let e = Expr::Assign {
+                   left: Box::new(Expr::Id(id)),
+                   right: Box::new(self.pop_expr()?),
+               };
+                self.push_expr(e);
             }
-            Op::GPut { .. } => {
-                unimplemented!()
-            }
-            Op::GPush { .. } => {
-                unimplemented!()
+            Op::GPush { id } => {
+                let e = Expr::Id(id);
+                self.push_expr(e)
             }
             Op::PutProp => {
-                unimplemented!()
+                let rvalue = self.pop_expr()?;
+                let propname = self.pop_expr()?;
+                let e = self.pop_expr()?;
+                let assign = Expr::Assign {
+                    left: Box::new(Expr::Prop {
+                        location: Box::new(e),
+                        property: Box::new(propname),
+                    }),
+                    right: Box::new(rvalue),
+                };
+                self.push_expr(assign);
             }
-            Op::EndCatch(_) => {
-                unimplemented!()
+            Op::Jump { .. } | Op::PushTemp => {
+                unreachable!("should have been handled other decompilation branches")
             }
-            Op::EndExcept(_) => {
-                unimplemented!()
-            }
-            Op::EndFinally => {
-                unimplemented!()
-            }
-            Op::Continue => {
-                unimplemented!()
-            }
-            Op::ExitId(_) => {
-                unimplemented!()
+            Op::EndCatch(_) | Op::Continue | Op::EndExcept(_) | Op::EndFinally  => {
+                // Early exit; main logic is in TRY_FINALLY or CATCH etc case, above
+                // TODO: MOO has "return ptr - 2;"  -- doing something with the iteration, that
+                //   I may not be able to do with the current structure. See if I need to
+                unreachable!("should have been handled other decompilation branches")
             }
         }
         Ok(())
@@ -692,6 +730,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use tracing_test::traced_test;
     use crate::compiler::codegen::compile;
     use crate::compiler::decompile::program_to_tree;
     use crate::compiler::parse::parse_program;
@@ -974,6 +1013,116 @@ mod tests {
     #[test]
     fn test_index_set() {
         let program = "a[1] = {3,4};";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_if_ques() {
+        let program = "1 ? 2 | 3;";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_prop_assign() {
+        let program = "x.y = 1;";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_labelled_break() {
+        let program = "while bozo (1) break bozo; tostr(5);  endwhile;";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_labelled_continue() {
+        let program = "while bozo (1) continue bozo; tostr(5); endwhile;";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_if_after_try() {
+        let program = "try return x; except (E_VARNF) endtry; if (x) return 1; endif;";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_a_complicated_function() {
+        let program = r#"
+        brief = args && args[1];
+        player:tell(this:namec_for_look_self(brief));
+        things = this:visible_of(setremove(this:contents(), player));
+        integrate = {};
+        try
+            if (this.integration_enabled)
+              for i in (things)
+                if (this:ok_to_integrate(i) && (!brief || !is_player(i)))
+                  integrate = {@integrate, i};
+                  things = setremove(things, i);
+                endif
+              endfor
+              "for i in (this:obvious_exits(player))";
+              for i in (this:exits())
+                if (this:ok_to_integrate(i))
+                  integrate = setadd(integrate, i);
+                  "changed so prevent exits from being integrated twice in the case of doors and the like";
+                endif
+              endfor
+            endif
+        except (E_INVARG)
+            player:tell("Error in integration: ");
+        endtry
+        if (!brief)
+          desc = this:description(integrate);
+          if (desc)
+            player:tell_lines(desc);
+          else
+            player:tell("You see nothing special.");
+          endif
+        endif
+        "there's got to be a better way to do this, but.";
+        if (topic = this:topic_msg())
+          if (0)
+            this.topic_sign:show_topic();
+          else
+            player:tell(this.topic_sign:integrate_room_msg());
+          endif
+        endif
+        "this:tell_contents(things, this.ctype);";
+        this:tell_contents(things);
+        "#;
         let (parse, decompiled, binary) = parse_decompile(program);
         assert_eq!(
             parse.stmts, decompiled.stmts,

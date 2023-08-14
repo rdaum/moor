@@ -564,7 +564,7 @@ impl CodegenState {
                 body,
             } => {
                 let loop_start_label = self.make_label(*id);
-                let loop_end_label = self.make_label(None);
+                let loop_end_label = self.make_label(*id);
                 self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While(loop_end_label)),
