@@ -8,28 +8,28 @@ moor-lib = { path = "../moor-lib" }
 moor-value = { path = "../moor-value" }
 
 ## Command line arguments parsing.
-clap = "4.0.29"
-clap_derive = "4.0.21"
+clap = "4.3.19"
+clap_derive = "4.3.12"
 
 #
-anyhow = "1.0.70"
+anyhow = "*"
 futures = "0.3.28"
 futures-util = { version = "0.3.28", features = ["sink", "std"] }
-async-trait = "0.1.68"
+async-trait = "*"
 tower-http = { version = "0.4.3", features = ["add-extension", "auth", "compression-full", "trace"] }
 
 ## Asynchronous transaction processing & networking
-tokio = { version = "1.27.0", features = ["full"] }
+tokio = { version = "*", features = ["full"] }
 axum = { version = "0.6.19", features = ["ws", "headers"] }
 
 tungstenite = "*"           # Websockets
 tokio-tungstenite = "*"
 
 ## Logging & tracing
-tracing = "0.1.29"
-tracing-subscriber = "0.3"
+tracing = "*"
+tracing-subscriber = "0.3.17"
 tracing-chrome = "0.7.1"
 metrics-exporter-prometheus = "0.12.1"
-metrics = "0.21.1"
-metrics-util = { version = "0.15.1",  default-features = false, features = ["recency", "registry", "summary"] }
-metrics-macros = "0.7.0"
+metrics = "*"
+metrics-util = { version = "*",  default-features = false, features = ["recency", "registry", "summary"] }
+metrics-macros = "*"

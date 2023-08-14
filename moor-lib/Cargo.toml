@@ -7,23 +7,22 @@ edition = "2021"
 tempdir = "0.3.7"
 
 [dependencies]
+
 ## Own
 regexpr-binding = { path = "../regexpr-binding" }
 moor-value = { path = "../moor-value"}
 
 ## General usefullness
 itertools = "0.11.0"
-lazy_static = "1.4.0"
-enum-primitive-derive = "0.2.2"
-async-trait = "0.1.72"
-decorum = "0.3.1"  # For ordering & comparing our floats
-num-traits = "0.2.15"  # Needed for my BitEnum
+lazy_static = "*"
+enum-primitive-derive = "*"
+async-trait = "*"
+decorum = "*"  # For ordering & comparing our floats
 text_io = "0.1.12" # Used for reading text dumps.
-int-enum = "0.5.0"
-bytes = "1.4.0"
-smallvec = "1.10.0"
+int-enum = "*"
+bytes = "*"
 strum = { version = "0.25.0", features = ["derive"] }
-uuid = { version = "1.4.1", features = ["v4"] }
+uuid = { version = "*", features = ["v4"] }
 chrono = "0.4.26"
 
 ## Required for MOO builtins.
@@ -36,13 +35,13 @@ pest = "2.6.0"
 pest_derive = "2.6.0"
 
 ## Error declaration/ handling
-anyhow = { version = "1.0.71", features = ["backtrace"] }
-thiserror = "1.0.40"
+anyhow = { version = "*", features = ["backtrace"] }
+thiserror = "*"
 
 ## For macro-ing
 paste = "1.0.12"
 
-## Asynchronous transaction processing & networking
+## Asynchrony and/or networking
 tokio = { version = "1.28.2", features = ["full"] }
 tokio-test = "0.4.2"
 
