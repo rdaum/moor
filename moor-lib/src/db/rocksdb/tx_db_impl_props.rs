@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use tracing::trace;
 use uuid::Uuid;
 
@@ -27,7 +26,7 @@ impl<'a> RocksDbTx<'a> {
         let props_bytes = self.tx.get_cf(cf, ok)?;
         let props = match props_bytes {
             None => PropDefs::empty(),
-            Some(props_bytes) => PropDefs::from_sliceref(SliceRef::new(Arc::new(props_bytes))),
+            Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_vec(props_bytes)),
         };
         Ok(props)
     }

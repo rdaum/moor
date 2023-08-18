@@ -6,7 +6,6 @@ use crate::var::objid::Objid;
 use crate::AsByteBuffer;
 use bytes::BufMut;
 use std::ops::Range;
-use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -50,7 +49,7 @@ impl PropDef {
 
         assert!(name.len() < 256);
         buf.put_slice(name.as_bytes());
-        Self(SliceRef::new(Arc::new(buf)))
+        Self(SliceRef::from_vec(buf))
     }
 
     pub fn definer(&self) -> Objid {

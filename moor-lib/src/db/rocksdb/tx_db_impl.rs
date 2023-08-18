@@ -1,6 +1,5 @@
 use anyhow::bail;
 use rocksdb::{ColumnFamily, ErrorKind};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use moor_value::model::defset::HasUuid;
@@ -76,7 +75,7 @@ pub(crate) fn get_objset<'a>(
     let ok = oid_key(o);
     let bytes = tx.get_cf(cf, ok)?;
     let bytes = bytes.ok_or(WorldStateError::ObjectNotFound(o))?;
-    let ov = ObjSet::from_sliceref(SliceRef::new(Arc::new(bytes)));
+    let ov = ObjSet::from_sliceref(SliceRef::from_vec(bytes));
     Ok(ov)
 }
 

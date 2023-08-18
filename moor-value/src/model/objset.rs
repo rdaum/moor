@@ -5,7 +5,6 @@ use bytes::BufMut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::fmt::{Debug, Display, Formatter};
-use std::sync::Arc;
 
 lazy_static! {
     static ref EMPTY_OBJSET: ObjSet = ObjSet(SliceRef::empty());
@@ -89,7 +88,7 @@ impl ObjSet {
         for i in oids.iter() {
             v.put_i64_le(i.0);
         }
-        Self(SliceRef::new(Arc::new(v)))
+        Self(SliceRef::from_vec(v))
     }
 
     pub fn from_oid_iter<I: Iterator<Item = Objid>>(i: I) -> Self {
@@ -104,7 +103,7 @@ impl ObjSet {
         if total == 0 {
             return EMPTY_OBJSET.clone();
         }
-        Self(SliceRef::new(Arc::new(v)))
+        Self(SliceRef::from_vec(v))
     }
 
     pub fn iter(&self) -> ObjSetIter {
@@ -133,7 +132,7 @@ impl ObjSet {
         let _capacity = self.len();
         let mut new_buf = self.0.as_slice().to_vec();
         new_buf.put_i64_le(oid.0);
-        Self(SliceRef::new(Arc::new(new_buf)))
+        Self(SliceRef::from_vec(new_buf))
     }
     pub fn with_removed(&self, oid: Objid) -> Self {
         if self.0.is_empty() {
@@ -151,7 +150,7 @@ impl ObjSet {
         if !found {
             return self.clone();
         }
-        Self(SliceRef::new(Arc::new(new_buf)))
+        Self(SliceRef::from_vec(new_buf))
     }
     pub fn with_all_removed(&self, oids: &[Objid]) -> Self {
         if self.0.is_empty() {
@@ -169,7 +168,7 @@ impl ObjSet {
         if !found {
             return self.clone();
         }
-        Self(SliceRef::new(Arc::new(new_buf)))
+        Self(SliceRef::from_vec(new_buf))
     }
     pub fn contains(&self, oid: Objid) -> bool {
         // O(N) operation. Which we're fine with, really. We're a vector.
@@ -184,7 +183,7 @@ impl ObjSet {
         let mut new_buf = Vec::with_capacity(std::mem::size_of::<Objid>() * new_len);
         new_buf.put_slice(self.0.as_slice());
         new_buf.put_slice(other.0.as_slice());
-        Self(SliceRef::new(Arc::new(new_buf)))
+        Self(SliceRef::from_vec(new_buf))
     }
 
     pub fn with_appended(&self, values: &[Objid]) -> Self {
@@ -199,7 +198,7 @@ impl ObjSet {
         for i in values {
             new_buf.put_i64_le(i.0);
         }
-        Self(SliceRef::new(Arc::new(new_buf)))
+        Self(SliceRef::from_vec(new_buf))
     }
 }
 

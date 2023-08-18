@@ -9,7 +9,6 @@ use crate::AsByteBuffer;
 use bytes::BufMut;
 use num_traits::FromPrimitive;
 use std::ops::Range;
-use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -65,7 +64,7 @@ impl VerbDef {
             buffer.put_slice(name.as_bytes());
         }
 
-        Self(SliceRef::new(Arc::new(buffer)))
+        Self(SliceRef::from_vec(buffer))
     }
 
     pub fn location(&self) -> Objid {
@@ -151,7 +150,6 @@ mod tests {
     use crate::util::slice_ref::SliceRef;
     use crate::var::objid::Objid;
     use crate::AsByteBuffer;
-    use std::sync::Arc;
 
     #[test]
     fn test_bitflags() {
@@ -183,7 +181,7 @@ mod tests {
         );
 
         let bytes = vd.with_byte_buffer(|bb| bb.to_vec());
-        let vd2 = VerbDef::from_sliceref(SliceRef::new(Arc::new(bytes)));
+        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes));
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());
@@ -225,7 +223,7 @@ mod tests {
 
         let vds = VerbDefs::from_items(&[vd1, vd2]);
         let bytes = vds.with_byte_buffer(|bb| bb.to_vec());
-        let vds2 = VerbDefs::from_sliceref(SliceRef::new(Arc::new(bytes)));
+        let vds2 = VerbDefs::from_sliceref(SliceRef::from_vec(bytes));
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
         assert_eq!(rvd1.uuid(), vd1_id);
@@ -268,7 +266,7 @@ mod tests {
         );
 
         let bytes = vd1.with_byte_buffer(|bb| bb.to_vec());
-        let vd2 = VerbDef::from_sliceref(SliceRef::new(Arc::new(bytes)));
+        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes));
         assert_eq!(vd1, vd2);
         assert_eq!(vd1.names(), Vec::<String>::new());
     }
