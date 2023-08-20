@@ -7,3 +7,76 @@ members = [
   "regexpr-binding",
   "moor-repl",
 ]
+
+[workspace.dependencies]
+## Command line arguments parsing.
+clap = "4.3.19"
+clap_derive = "4.3.12"
+
+#
+futures = "0.3.28"
+futures-util = { version = "0.3.28", features = ["sink", "std"] }
+async-trait = "0.1.73"
+tower-http = { version = "0.4.3", features = ["add-extension", "auth", "compression-full", "trace"] }
+
+## Asynchronous transaction processing & networking
+axum = { version = "0.6.19", features = ["ws", "headers"] }
+tokio = { version = "1.28.2", features = ["full"] }
+tokio-test = "0.4.2"
+
+tungstenite = "0.20.0"           # Websockets
+tokio-tungstenite = "0.20.0"
+
+## Logging & tracing
+tracing = "0.1.37"
+tracing-test = "0.2.4"
+tracing-subscriber = "0.3.17"
+tracing-chrome = "0.7.1"
+metrics-exporter-prometheus = "0.12.1"
+metrics = "0.21.1"
+metrics-util = { version = "0.15.1",  default-features = false, features = ["recency", "registry", "summary"] }
+metrics-macros = "0.7.0"
+
+binary-layout = "3.1.3"
+bytes = "1.4.0"
+chrono = "0.4.26"
+decorum = "0.3.1"  # For ordering & comparing our floats
+enum-primitive-derive = "0.2.2"
+int-enum = "0.5.0"
+itertools = "0.11.0"
+lazy_static = "1.4.0"
+num-traits = "0.2.16"
+once_cell = "1.17.2"
+rustyline-async = "0.3.2"
+strum = { version = "0.25.0", features = ["derive"] }
+text_io = "0.1.12" # Used for reading text dumps.
+uuid = { version = "1.4.1", features = ["v4"] }
+yoke = "0.7.1"
+
+## Required for MOO builtins.
+pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
+md5 = "0.7.0" # For MOO's "string_hash"
+rand = "0.8.5"
+
+## Compiler grammar/parser
+pest = "2.6.0"
+pest_derive = "2.6.0"
+
+## Error declaration/ handling
+anyhow = { version = "1.0.75", features = ["backtrace"] }
+thiserror = "1.0.47"
+
+## For macro-ing
+paste = "1.0.12"
+
+# For the DB layer.
+rocksdb = "0.21.0"
+crossbeam-channel = "0.5.8"
+bincode = "2.0.0-rc.3"
+
+# Dev dependencies
+tempdir = "0.3.7"
+
+# Bindings
+cc = { version = "1.0", features = ["parallel"] }
+bindgen = "0.65.1"
