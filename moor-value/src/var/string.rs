@@ -2,13 +2,14 @@ use std::fmt::{Display, Formatter};
 use std::ops::Range;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::hash::Hash;
 
 use bincode::{Decode, Encode};
 
 use crate::var::error::Error;
 use crate::var::{v_err, v_str, v_string, Var};
 
-#[derive(Clone, Encode, Decode, Ord, PartialOrd, Hash)]
+#[derive(Clone, Encode, Decode, Ord, PartialOrd)]
 pub struct Str {
     inner: Arc<String>,
 }
@@ -79,6 +80,12 @@ impl PartialEq for Str {
     }
 }
 impl Eq for Str {}
+
+impl Hash for Str {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.to_lowercase().hash(state)
+    }
+}
 
 impl FromStr for Str {
     type Err = anyhow::Error;
