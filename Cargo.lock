@@ -270,6 +270,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
 
 [[package]]
+name = "binary-layout"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa4c433028853a658404bdc739b91a0017133e65967fc3ecfdce71f6bdaea83e"
+dependencies = [
+ "doc-comment",
+ "paste",
+]
+
+[[package]]
 name = "bincode"
 version = "2.0.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -644,6 +654,12 @@ dependencies = [
  "block-buffer 0.10.4",
  "crypto-common",
 ]
+
+[[package]]
+name = "doc-comment"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "either"
@@ -1438,6 +1454,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "binary-layout",
  "bincode",
  "bytes",
  "decorum",

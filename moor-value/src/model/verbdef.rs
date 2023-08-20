@@ -5,23 +5,30 @@ use crate::util::bitenum::BitEnum;
 use crate::util::slice_ref::SliceRef;
 use crate::util::verbname_cmp;
 use crate::var::objid::Objid;
-use crate::AsByteBuffer;
+use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
+use binary_layout::define_layout;
 use bytes::BufMut;
 use num_traits::FromPrimitive;
-use std::ops::Range;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbDef(SliceRef);
 
-const UUID_RANGE: Range<usize> = 0..16;
-const LOCATION_RANGE: Range<usize> = 16..24;
-const OWNER_RANGE: Range<usize> = 24..32;
-const FLAGS_POS: usize = 32;
-const BINARY_TYPE_POS: usize = 33;
-const ARGS_RANGE: Range<usize> = 34..38;
-const NUM_NAMES_POSITION: usize = 38;
-const NAMES_START: usize = 48;
+define_layout!(verbdef_header, LittleEndian, {
+    data_version: u8,
+    uuid: [u8; 16],
+    location: i64,
+    owner: i64,
+    flags: u8,
+    binary_type: u8,
+    args: [u8; 4],
+    num_names: u8,
+});
+
+define_layout!(verbdef, LittleEndian, {
+    header: verbdef_header::NestedView,
+    names: [u8],
+});
 
 impl VerbDef {
     fn from_bytes(bytes: SliceRef) -> Self {
@@ -37,61 +44,71 @@ impl VerbDef {
         binary_type: BinaryType,
         args: VerbArgsSpec,
     ) -> Self {
-        // We can't know the header length because of the dynamic portion at the end. The framework
-        // won't let us.
-        // So we have to calculate it ourselves:
-        //    uuid: 16, location: 8, owner: 8, flags: 1, binary_type: 1, args: 4, num_names: 1
-        // Which ends up being 39 bytes.
-        // We'll pad that out to 48 bytes to make it a nice round number and reserve some room?
-        let header_size = 48;
+        let header_size = verbdef_header::SIZE.unwrap();
         let num_names = names.len();
-        let names_region_size = names.iter().map(|_n| num_names).sum::<usize>() + num_names;
+        let names_region_size = names.iter().map(|n| n.len()).sum::<usize>() + num_names;
         let total_size = header_size + names_region_size;
 
-        let mut buffer = Vec::with_capacity(total_size);
-        buffer.put_slice(uuid.as_bytes());
-        buffer.put_i64_le(location.0);
-        buffer.put_i64_le(owner.0);
-        buffer.put_u8(flags.to_u16() as u8);
-        buffer.put_u8(binary_type as u8);
-        buffer.put_slice(&args.to_bytes());
-        buffer.put_u8(names.len() as u8);
-        // Pad out the rest of the header, future expansion.
-        buffer.put_slice(&[0; 9]);
-        // Now append the names.
+        let mut buffer = vec![0; total_size];
+
+        let mut verbdef_layout = verbdef::View::new(&mut buffer);
+        let mut header_view = verbdef_layout.header_mut();
+        header_view.data_version_mut().write(DATA_LAYOUT_VERSION);
+        header_view.uuid_mut().copy_from_slice(uuid.as_bytes());
+        header_view.location_mut().write(location.0);
+        header_view.owner_mut().write(owner.0);
+        header_view.flags_mut().write(flags.to_u16() as u8);
+        header_view.binary_type_mut().write(binary_type as u8);
+        header_view.args_mut().copy_from_slice(&args.to_bytes());
+        header_view.num_names_mut().write(names.len() as u8);
+
+        // Now write the names, into the names region.
+        let mut names_buf = verbdef_layout.names_mut();
         for name in names {
-            buffer.put_u8(name.len() as u8);
-            buffer.put_slice(name.as_bytes());
+            names_buf.put_u8(name.len() as u8);
+            names_buf.put_slice(name.as_bytes());
         }
 
         Self(SliceRef::from_vec(buffer))
     }
 
+    fn get_header_view(&self) -> verbdef::View<&[u8]> {
+        let view = verbdef::View::new(self.0.as_slice());
+        assert_eq!(
+            view.header().data_version().read(),
+            DATA_LAYOUT_VERSION,
+            "Unsupported data layout version: {}",
+            view.header().data_version().read()
+        );
+        view
+    }
+
     pub fn location(&self) -> Objid {
-        let slice = &self.0.as_slice()[LOCATION_RANGE];
-        Objid(i64::from_le_bytes(slice.try_into().unwrap()))
+        let view = self.get_header_view();
+        Objid(view.header().location().read())
     }
     pub fn owner(&self) -> Objid {
-        let slice = &self.0.as_slice()[OWNER_RANGE];
-        Objid(i64::from_le_bytes(slice.try_into().unwrap()))
+        let view = self.get_header_view();
+        Objid(view.header().owner().read())
     }
     pub fn flags(&self) -> BitEnum<VerbFlag> {
-        let flag_byte = &self.0.as_slice()[FLAGS_POS];
-        BitEnum::from_u8(*flag_byte)
+        let view = self.get_header_view();
+        BitEnum::from_u8(view.header().flags().read())
     }
     pub fn binary_type(&self) -> BinaryType {
-        let binary_type_byte = &self.0.as_slice()[BINARY_TYPE_POS];
-        BinaryType::from_u8(*binary_type_byte).unwrap()
+        let view = self.get_header_view();
+        BinaryType::from_u8(view.header().binary_type().read()).unwrap()
     }
     pub fn args(&self) -> VerbArgsSpec {
-        let args_slice = &self.0.as_slice()[ARGS_RANGE];
-        VerbArgsSpec::from_bytes(args_slice.try_into().unwrap())
+        let view = self.get_header_view();
+        VerbArgsSpec::from_bytes(view.header().args().clone())
     }
 
     pub fn names(&self) -> Vec<&str> {
-        let num_names = self.0.as_slice()[NUM_NAMES_POSITION] as usize;
-
-        let slice = &self.0.as_slice()[NAMES_START..];
+        let view = self.get_header_view();
+        let num_names = view.header().num_names().read() as usize;
+        let offset = verbdef_header::SIZE.unwrap();
+        let slice = &self.0.as_slice()[offset..];
         let mut position = 0;
         let mut names = Vec::with_capacity(num_names);
         for _ in 0..num_names {
@@ -115,8 +132,8 @@ impl Named for VerbDef {
 
 impl HasUuid for VerbDef {
     fn uuid(&self) -> Uuid {
-        let uuid_bytes = &self.0.as_slice()[UUID_RANGE];
-        Uuid::from_bytes(uuid_bytes.try_into().unwrap())
+        let view = self.get_header_view();
+        Uuid::from_bytes(view.header().uuid().clone())
     }
 }
 

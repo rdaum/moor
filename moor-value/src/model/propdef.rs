@@ -3,22 +3,27 @@ use crate::model::props::PropFlag;
 use crate::util::bitenum::BitEnum;
 use crate::util::slice_ref::SliceRef;
 use crate::var::objid::Objid;
-use crate::AsByteBuffer;
-use bytes::BufMut;
-use std::ops::Range;
+use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
+use bytes::{Buf, BufMut};
+use binary_layout::define_layout;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct PropDef(SliceRef);
 
-const UUID_RANGE: Range<usize> = 0..16;
-const DEFINER_RANGE: Range<usize> = 16..24;
-const LOCATION_RANGE: Range<usize> = 24..32;
-const OWNER_RANGE: Range<usize> = 32..40;
+define_layout!(propdef, LittleEndian, {
+    header: propdef_header::NestedView,
+    name: [u8],
+});
 
-const FLAGS_POS: usize = 40;
-
-const NAMESTART_POS: usize = 41;
+define_layout!(propdef_header, LittleEndian, {
+    data_version: u8,
+    uuid: [u8; 16],
+    definer: i64,
+    location: i64,
+    owner: i64,
+    flags: u8,
+});
 
 impl PropDef {
     fn from_bytes(bytes: SliceRef) -> Self {
@@ -33,47 +38,52 @@ impl PropDef {
         flags: BitEnum<PropFlag>,
         owner: Objid,
     ) -> Self {
-        // Buffer composition:
-        //    16 bytes uuid
-        //    8 definer
-        //    8 location
-        //    8 owner
-        //    1 flag
-        //    name: dynamic, 8-bit length-prefixed.
-        let mut buf = Vec::with_capacity(25 + name.len());
-        buf.put_slice(uuid.as_bytes());
-        buf.put_i64_le(definer.0);
-        buf.put_i64_le(location.0);
-        buf.put_i64_le(owner.0);
-        buf.put_u8(flags.to_u16() as u8);
+        let header_size = propdef_header::SIZE.unwrap();
+        let mut buf = vec![0; header_size + name.len() + 8];
+        let mut propdef_view = propdef::View::new(&mut buf);
+        propdef_view.header_mut().data_version_mut().write(DATA_LAYOUT_VERSION);
+        propdef_view.header_mut().uuid_mut().copy_from_slice(uuid.as_bytes());
+        propdef_view.header_mut().definer_mut().write(definer.0);
+        propdef_view.header_mut().location_mut().write(location.0);
+        propdef_view.header_mut().owner_mut().write(owner.0);
+        propdef_view.header_mut().flags_mut().write(flags.to_u16() as u8);
 
-        assert!(name.len() < 256);
-        buf.put_slice(name.as_bytes());
+        let mut name_buf = propdef_view.name_mut();
+        name_buf.put_u8(name.len() as u8);
+        name_buf.put_slice(name.as_bytes());
+
         Self(SliceRef::from_vec(buf))
     }
 
-    pub fn definer(&self) -> Objid {
-        Objid(i64::from_le_bytes(
-            self.0.as_slice()[DEFINER_RANGE].try_into().unwrap(),
-        ))
-    }
-    pub fn location(&self) -> Objid {
-        Objid(i64::from_le_bytes(
-            self.0.as_slice()[LOCATION_RANGE].try_into().unwrap(),
-        ))
-    }
-    pub fn owner(&self) -> Objid {
-        Objid(i64::from_le_bytes(
-            self.0.as_slice()[OWNER_RANGE].try_into().unwrap(),
-        ))
-    }
-    pub fn flags(&self) -> BitEnum<PropFlag> {
-        BitEnum::from_u8(self.0.as_slice()[FLAGS_POS])
+    fn get_header_view(&self) -> propdef_header::View<&[u8]> {
+        let view = propdef_header::View::new(self.0.as_slice());
+        assert_eq!(
+            view.data_version().read(),
+            DATA_LAYOUT_VERSION,
+            "Unsupported data layout version: {}",
+            view.data_version().read()
+        );
+        view
     }
 
+    pub fn definer(&self) -> Objid {
+        Objid(self.get_header_view().definer().read())
+    }
+    pub fn location(&self) -> Objid {
+        Objid(self.get_header_view().location().read())
+    }
+    pub fn owner(&self) -> Objid {
+        Objid(self.get_header_view().owner().read())
+    }
+    pub fn flags(&self) -> BitEnum<PropFlag> {
+        BitEnum::from_u8(self.get_header_view().flags().read())
+    }
     pub fn name(&self) -> &str {
-        let slice = &self.0.as_slice()[NAMESTART_POS..];
-        return std::str::from_utf8(slice).unwrap();
+        let names_offset = propdef_header::SIZE.unwrap();
+        let mut names_buf = &self.0.as_slice()[names_offset..];
+        let name_len = names_buf.get_u8() as usize;
+        let name_slice = names_buf.get(..name_len).unwrap();
+        return std::str::from_utf8(name_slice).unwrap();
     }
 }
 
@@ -103,7 +113,8 @@ impl Named for PropDef {
 
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
-        Uuid::from_bytes(self.0.as_slice()[UUID_RANGE].try_into().unwrap())
+        let view = propdef::View::new(self.0.as_slice());
+        Uuid::from_bytes(view.header().uuid().clone())
     }
 }
 
