@@ -65,16 +65,16 @@ impl ByteSource for EmptyByteSource {
 
 impl SliceRef {
     pub fn empty() -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(EmptyByteSource)), |b| &b.as_slice()[..]))
+        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(EmptyByteSource)), |b| b.as_slice()))
     }
     pub fn from_byte_source(byte_source: Box<dyn ByteSource>) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(byte_source), |b| &b.as_slice()[..]))
+        SliceRef(Yoke::attach_to_cart(Arc::new(byte_source), |b| b.as_slice()))
     }
     pub fn from_bytes(buf: &[u8]) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(VectorByteSource(buf.to_vec()))), |b| &b.as_slice()[..]))
+        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(VectorByteSource(buf.to_vec()))), |b| b.as_slice()))
     }
     pub fn from_vec(buf: Vec<u8>) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(VectorByteSource(buf))), |b| &b.as_slice()[..]))
+        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(VectorByteSource(buf))), |b| b.as_slice()))
     }
     pub fn split_at(&self, offset: usize) -> (SliceRef, SliceRef) {
         self.0.backing_cart().touch();

@@ -101,7 +101,7 @@ impl VerbDef {
     }
     pub fn args(&self) -> VerbArgsSpec {
         let view = self.get_header_view();
-        VerbArgsSpec::from_bytes(view.header().args().clone())
+        VerbArgsSpec::from_bytes(*view.header().args())
     }
 
     pub fn names(&self) -> Vec<&str> {
@@ -133,7 +133,7 @@ impl Named for VerbDef {
 impl HasUuid for VerbDef {
     fn uuid(&self) -> Uuid {
         let view = self.get_header_view();
-        Uuid::from_bytes(view.header().uuid().clone())
+        Uuid::from_bytes(*view.header().uuid())
     }
 }
 

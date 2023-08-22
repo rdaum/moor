@@ -114,7 +114,7 @@ impl Named for PropDef {
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
         let view = propdef::View::new(self.0.as_slice());
-        Uuid::from_bytes(view.header().uuid().clone())
+        Uuid::from_bytes(*view.header().uuid())
     }
 }
 
