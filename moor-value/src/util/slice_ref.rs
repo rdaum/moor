@@ -15,7 +15,12 @@ pub struct SliceRef(Yoke<&'static [u8], Arc<Box<dyn ByteSource>>>);
 
 impl Debug for SliceRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SliceRef(len: {}/store: {})", self.len(), self.0.get().len())
+        write!(
+            f,
+            "SliceRef(len: {}/store: {})",
+            self.len(),
+            self.0.get().len()
+        )
     }
 }
 impl PartialEq for SliceRef {
@@ -31,7 +36,7 @@ impl Display for SliceRef {
     }
 }
 
-pub trait ByteSource : Send + Sync {
+pub trait ByteSource: Send + Sync {
     fn as_slice(&self) -> &[u8];
     fn len(&self) -> usize;
     fn touch(&self);
@@ -46,8 +51,7 @@ impl ByteSource for VectorByteSource {
         self.0.len()
     }
 
-    fn touch(&self) {
-    }
+    fn touch(&self) {}
 }
 
 struct EmptyByteSource;
@@ -58,23 +62,32 @@ impl ByteSource for EmptyByteSource {
     fn len(&self) -> usize {
         0
     }
-    fn touch(&self) {
-
-    }
+    fn touch(&self) {}
 }
 
 impl SliceRef {
     pub fn empty() -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(EmptyByteSource)), |b| b.as_slice()))
+        SliceRef(Yoke::attach_to_cart(
+            Arc::new(Box::new(EmptyByteSource)),
+            |b| b.as_slice(),
+        ))
     }
     pub fn from_byte_source(byte_source: Box<dyn ByteSource>) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(byte_source), |b| b.as_slice()))
+        SliceRef(Yoke::attach_to_cart(Arc::new(byte_source), |b| {
+            b.as_slice()
+        }))
     }
     pub fn from_bytes(buf: &[u8]) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(VectorByteSource(buf.to_vec()))), |b| b.as_slice()))
+        SliceRef(Yoke::attach_to_cart(
+            Arc::new(Box::new(VectorByteSource(buf.to_vec()))),
+            |b| b.as_slice(),
+        ))
     }
     pub fn from_vec(buf: Vec<u8>) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(Box::new(VectorByteSource(buf))), |b| b.as_slice()))
+        SliceRef(Yoke::attach_to_cart(
+            Arc::new(Box::new(VectorByteSource(buf))),
+            |b| b.as_slice(),
+        ))
     }
     pub fn split_at(&self, offset: usize) -> (SliceRef, SliceRef) {
         self.0.backing_cart().touch();
@@ -117,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_buffer_ref_split() {
-        let backing_buffer =b"Hello, World!";
+        let backing_buffer = b"Hello, World!";
         let buf = SliceRef::from_bytes(&backing_buffer[..]);
         let (left, right) = buf.split_at(5);
         assert_eq!(left.as_slice(), b"Hello");
@@ -126,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_buffer_ref_slice() {
-        let backing_buffer =b"Hello, World!";
+        let backing_buffer = b"Hello, World!";
         let buf = SliceRef::from_bytes(&backing_buffer[..]);
         assert_eq!(buf.slice(1..5).as_slice(), b"ello");
         assert_eq!(buf.slice(1..=5).as_slice(), b"ello,");
