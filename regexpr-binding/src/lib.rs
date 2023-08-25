@@ -70,19 +70,13 @@ impl Display for MatchError {
 
 static CASEFOLD_ARRAY: Lazy<[u8; 256]> = Lazy::new(mk_casefold);
 fn mk_casefold() -> [u8; 256] {
-    let mut casefold = [0u8; 256];
-    for (i, c) in casefold.iter_mut().enumerate() {
-        let char = i as u8;
-        if char.is_ascii_uppercase() {
-            *c = char.to_ascii_lowercase();
-        } else {
-            *c = char;
-        }
-    }
-    casefold
+    (0..=255).map(|c: u8| c.to_ascii_lowercase()).collect::<Vec<_>>().try_into().unwrap()
 }
 
 impl Error for MatchError {}
+type Span = (isize, isize);
+type MatchSpans = (Span, Vec<Span>);
+
 
 impl Pattern {
     pub fn new(pattern_string: &str, case_matters: bool) -> Result<Self, CompileError> {
@@ -139,7 +133,7 @@ impl Pattern {
         &self,
         string: &str,
         is_reverse: bool,
-    ) -> Result<((isize, isize), Vec<(isize, isize)>), MatchError> {
+    ) -> Result<MatchSpans, MatchError> {
         let mut regs = re_registers {
             start: [0; 100],
             end: [0; 100],
@@ -181,14 +175,14 @@ impl Pattern {
     pub fn match_pattern(
         &self,
         string: &str,
-    ) -> Result<((isize, isize), Vec<(isize, isize)>), MatchError> {
+    ) -> Result<MatchSpans, MatchError> {
         self.do_match_pattern(string, false)
     }
 
     pub fn reverse_match_pattern(
         &self,
         string: &str,
-    ) -> Result<((isize, isize), Vec<(isize, isize)>), MatchError> {
+    ) -> Result<MatchSpans, MatchError> {
         self.do_match_pattern(string, true)
     }
 }
