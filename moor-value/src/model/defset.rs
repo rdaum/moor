@@ -79,25 +79,13 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             _phantom: Default::default(),
         }
     }
+    // Provides the number of items in the buffer.
     pub fn len(&self) -> usize {
-        // This is an O(N) operation.
-        let mut position = 0;
-        let mut count = 0;
-        loop {
-            if position >= self.bytes.len() {
-                return count;
-            }
-            // Read length prefix
-            let len = u32::from_le_bytes(
-                self.bytes.as_slice()[position..position + 4]
-                    .try_into()
-                    .unwrap(),
-            ) as usize;
-            position += 4;
-            // Skip the bytes for the next item.
-            position += len;
-            count += 1;
-        }
+        self.iter().count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.iter().next().is_none()
     }
 
     pub fn contains(&self, uuid: Uuid) -> bool {
@@ -118,30 +106,26 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         }
         // Construct a brand new buffer.
         let mut buf = Vec::with_capacity(self.bytes.len());
-        for v in self.iter() {
-            if v.uuid() != uuid {
-                v.with_byte_buffer(|bytes| {
-                    // Write the length prefix.
-                    buf.put_u32_le(bytes.len() as u32);
-                    // Write the bytes for the item.
-                    buf.put_slice(bytes);
-                });
-            }
+        for v in self.iter().filter(|v| v.uuid() != uuid) {
+            v.with_byte_buffer(|bytes| {
+                // Write the length prefix.
+                buf.put_u32_le(bytes.len() as u32);
+                // Write the bytes for the item.
+                buf.put_slice(bytes);
+            });
         }
         Some(Self::from_sliceref(SliceRef::from_bytes(&buf)))
     }
 
     pub fn with_all_removed(&self, uuids: &[Uuid]) -> Self {
         let mut buf = Vec::with_capacity(self.bytes.len());
-        for v in self.iter() {
-            if !uuids.contains(&v.uuid()) {
-                v.with_byte_buffer(|bytes| {
-                    // Write the length prefix.
-                    buf.put_u32_le(bytes.len() as u32);
-                    // Write the bytes for the item.
-                    buf.put_slice(bytes);
-                });
-            }
+        for v in self.iter().filter(|v| !uuids.contains(&v.uuid())) {
+            v.with_byte_buffer(|bytes| {
+                // Write the length prefix.
+                buf.put_u32_le(bytes.len() as u32);
+                // Write the bytes for the item.
+                buf.put_slice(bytes);
+            });
         }
         Self::from_sliceref(SliceRef::from_bytes(&buf))
     }

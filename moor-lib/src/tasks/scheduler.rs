@@ -661,7 +661,7 @@ impl Inner {
         for (task_id, result) in to_notify {
             let task = self.tasks.get_mut(&task_id).unwrap();
             for subscriber in task.subscribers.drain(..) {
-                if let Err(_) = subscriber.send(result.clone()) {
+                if subscriber.send(result.clone()).is_err() {
                     error!("Notify to subscriber on task {} failed", task_id);
                 }
             }

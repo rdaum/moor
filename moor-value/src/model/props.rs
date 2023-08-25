@@ -14,7 +14,6 @@ pub enum PropFlag {
 /// Property definitions are the definition of a given property by the property original owner
 /// creator.
 /// Property values (see below) can be overriden in children, but the definition remains.
-
 #[derive(Debug, Clone, Copy, Primitive)]
 pub enum PropAttr {
     Value = 0,

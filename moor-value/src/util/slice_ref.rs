@@ -39,13 +39,16 @@ impl Display for SliceRef {
 pub trait ByteSource: Send + Sync {
     fn as_slice(&self) -> &[u8];
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     fn touch(&self);
 }
 
 struct VectorByteSource(Vec<u8>);
 impl ByteSource for VectorByteSource {
     fn as_slice(&self) -> &[u8] {
-        &self.0[..]
+        self.0.as_slice()
     }
     fn len(&self) -> usize {
         self.0.len()
