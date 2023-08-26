@@ -13,28 +13,28 @@ pub enum VerbFlag {
 }
 
 impl VerbFlag {
-    pub fn rwxd() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn rwxd() -> BitEnum<Self> {
         BitEnum::from_u8(0b1111)
     }
-    pub fn rwx() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn rwx() -> BitEnum<Self> {
         BitEnum::from_u8(0b0111)
     }
-    pub fn rw() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn rw() -> BitEnum<Self> {
         BitEnum::from_u8(0b0011)
     }
-    pub fn rx() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn rx() -> BitEnum<Self> {
         BitEnum::from_u8(0b0110)
     }
-    pub fn r() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn r() -> BitEnum<Self> {
         BitEnum::from_u8(0b0001)
     }
-    pub fn w() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn w() -> BitEnum<Self> {
         BitEnum::from_u8(0b0010)
     }
-    pub fn x() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn x() -> BitEnum<Self> {
         BitEnum::from_u8(0b0100)
     }
-    pub fn d() -> BitEnum<VerbFlag> {
+    #[must_use] pub fn d() -> BitEnum<Self> {
         BitEnum::from_u8(0b1000)
     }
 }

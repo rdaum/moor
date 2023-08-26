@@ -262,7 +262,7 @@ impl WebSocketServer {
                 increment_counter!("ws_server.submit_error");
 
                 error!("Error submitting command ({}): {:?}", cmd, e);
-                self.send_error(player, format!("{:?}", e)).await.unwrap();
+                self.send_error(player, format!("{e:?}")).await.unwrap();
                 continue;
             }
         }
@@ -535,7 +535,7 @@ impl Sessions for WebSocketSessions {
         Ok(self
             .connections
             .keys()
-            .cloned()
+            .copied()
             .filter(|c| c.0 >= 0)
             .collect())
     }

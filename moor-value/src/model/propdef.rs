@@ -30,7 +30,7 @@ impl PropDef {
         Self(bytes)
     }
 
-    pub fn new(
+    #[must_use] pub fn new(
         uuid: Uuid,
         definer: Objid,
         location: Objid,
@@ -75,19 +75,19 @@ impl PropDef {
         view
     }
 
-    pub fn definer(&self) -> Objid {
+    #[must_use] pub fn definer(&self) -> Objid {
         Objid(self.get_header_view().definer().read())
     }
-    pub fn location(&self) -> Objid {
+    #[must_use] pub fn location(&self) -> Objid {
         Objid(self.get_header_view().location().read())
     }
-    pub fn owner(&self) -> Objid {
+    #[must_use] pub fn owner(&self) -> Objid {
         Objid(self.get_header_view().owner().read())
     }
-    pub fn flags(&self) -> BitEnum<PropFlag> {
+    #[must_use] pub fn flags(&self) -> BitEnum<PropFlag> {
         BitEnum::from_u8(self.get_header_view().flags().read())
     }
-    pub fn name(&self) -> &str {
+    #[must_use] pub fn name(&self) -> &str {
         let names_offset = propdef_header::SIZE.unwrap();
         let mut names_buf = &self.0.as_slice()[names_offset..];
         let name_len = names_buf.get_u8() as usize;
@@ -110,7 +110,7 @@ impl AsByteBuffer for PropDef {
     }
 
     fn from_sliceref(bytes: SliceRef) -> Self {
-        PropDef::from_bytes(bytes)
+        Self::from_bytes(bytes)
     }
 }
 
@@ -172,7 +172,7 @@ mod tests {
             Objid(3),
         );
 
-        let bytes = test_pd.with_byte_buffer(|b| b.to_vec());
+        let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec);
         let re_pd = PropDef::from_sliceref(SliceRef::from_bytes(&bytes));
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
@@ -206,7 +206,7 @@ mod tests {
         let pd1 = pds.find_named("test").unwrap();
         assert_eq!(pd1.uuid(), test_pd1.uuid());
 
-        let byte_vec = pds.with_byte_buffer(|b| b.to_vec());
+        let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec);
         let pds2 = PropDefs::from_sliceref(SliceRef::from_vec(byte_vec));
         let pd2 = pds2.find_named("test2").unwrap();
         assert_eq!(pd2.uuid(), test_pd2.uuid());

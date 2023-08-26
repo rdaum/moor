@@ -35,7 +35,7 @@ impl VerbDef {
         Self(bytes)
     }
 
-    pub fn new(
+    #[must_use] pub fn new(
         uuid: Uuid,
         location: Objid,
         owner: Objid,
@@ -83,28 +83,28 @@ impl VerbDef {
         view
     }
 
-    pub fn location(&self) -> Objid {
+    #[must_use] pub fn location(&self) -> Objid {
         let view = self.get_header_view();
         Objid(view.header().location().read())
     }
-    pub fn owner(&self) -> Objid {
+    #[must_use] pub fn owner(&self) -> Objid {
         let view = self.get_header_view();
         Objid(view.header().owner().read())
     }
-    pub fn flags(&self) -> BitEnum<VerbFlag> {
+    #[must_use] pub fn flags(&self) -> BitEnum<VerbFlag> {
         let view = self.get_header_view();
         BitEnum::from_u8(view.header().flags().read())
     }
-    pub fn binary_type(&self) -> BinaryType {
+    #[must_use] pub fn binary_type(&self) -> BinaryType {
         let view = self.get_header_view();
         BinaryType::from_u8(view.header().binary_type().read()).unwrap()
     }
-    pub fn args(&self) -> VerbArgsSpec {
+    #[must_use] pub fn args(&self) -> VerbArgsSpec {
         let view = self.get_header_view();
         VerbArgsSpec::from_bytes(*view.header().args())
     }
 
-    pub fn names(&self) -> Vec<&str> {
+    #[must_use] pub fn names(&self) -> Vec<&str> {
         let view = self.get_header_view();
         let num_names = view.header().num_names().read() as usize;
         let offset = verbdef_header::SIZE.unwrap();
@@ -151,7 +151,7 @@ impl AsByteBuffer for VerbDef {
     }
 
     fn from_sliceref(bytes: SliceRef) -> Self {
-        VerbDef::from_bytes(bytes)
+        Self::from_bytes(bytes)
     }
 }
 
@@ -197,7 +197,7 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd.with_byte_buffer(|bb| bb.to_vec());
+        let bytes = vd.with_byte_buffer(<[u8]>::to_vec);
         let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes));
 
         assert_eq!(vd, vd2);
@@ -239,7 +239,7 @@ mod tests {
         let vd2_id = vd2.uuid();
 
         let vds = VerbDefs::from_items(&[vd1, vd2]);
-        let bytes = vds.with_byte_buffer(|bb| bb.to_vec());
+        let bytes = vds.with_byte_buffer(<[u8]>::to_vec);
         let vds2 = VerbDefs::from_sliceref(SliceRef::from_vec(bytes));
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
@@ -282,7 +282,7 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd1.with_byte_buffer(|bb| bb.to_vec());
+        let bytes = vd1.with_byte_buffer(<[u8]>::to_vec);
         let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes));
         assert_eq!(vd1, vd2);
         assert_eq!(vd1.names(), Vec::<String>::new());

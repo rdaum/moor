@@ -63,7 +63,7 @@ impl Sessions for ReplSession {
     }
 
     async fn connection_name(&self, player: Objid) -> Result<String, Error> {
-        Ok(format!("REPL:{}", player))
+        Ok(format!("REPL:{player}"))
     }
 
     async fn disconnect(&mut self, player: Objid) -> Result<(), Error> {
@@ -150,7 +150,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     rl.add_history_entry(line.clone());
                     eval_sessions.write().await.last_activity = std::time::Instant::now();
                     if let Err(e) = do_eval(Objid(2), scheduler.clone(), line, eval_sessions.clone()).await {
-                        writeln!(stdout, "Error: {:?}", e)?;
+                        writeln!(stdout, "Error: {e:?}")?;
                     }
                 }
                 Err(ReadlineError::Eof) => {

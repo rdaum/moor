@@ -30,11 +30,11 @@ pub enum ObjAttr {
 impl Display for ObjAttr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ObjAttr::Owner => f.write_str("owner"),
-            ObjAttr::Name => f.write_str("name"),
-            ObjAttr::Parent => f.write_str("parent"),
-            ObjAttr::Location => f.write_str("location"),
-            ObjAttr::Flags => f.write_str("flags"),
+            Self::Owner => f.write_str("owner"),
+            Self::Name => f.write_str("name"),
+            Self::Parent => f.write_str("parent"),
+            Self::Location => f.write_str("location"),
+            Self::Flags => f.write_str("flags"),
         }
     }
 }
@@ -46,7 +46,7 @@ impl Default for ObjAttrs {
 }
 
 impl ObjAttrs {
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self {
             owner: None,
             name: None,
@@ -55,23 +55,23 @@ impl ObjAttrs {
             flags: None,
         }
     }
-    pub fn owner(&mut self, o: Objid) -> &mut ObjAttrs {
+    pub fn owner(&mut self, o: Objid) -> &mut Self {
         self.owner = Some(o);
         self
     }
-    pub fn location(&mut self, o: Objid) -> &mut ObjAttrs {
+    pub fn location(&mut self, o: Objid) -> &mut Self {
         self.location = Some(o);
         self
     }
-    pub fn parent(&mut self, o: Objid) -> &mut ObjAttrs {
+    pub fn parent(&mut self, o: Objid) -> &mut Self {
         self.parent = Some(o);
         self
     }
-    pub fn name(&mut self, s: &str) -> &mut ObjAttrs {
+    pub fn name(&mut self, s: &str) -> &mut Self {
         self.name = Some(String::from(s));
         self
     }
-    pub fn flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut ObjAttrs {
+    pub fn flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut Self {
         self.flags = Some(flags);
         self
     }

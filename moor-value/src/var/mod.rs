@@ -63,7 +63,7 @@ macro_rules! binary_numeric_coercion_op {
     };
 }
 
-/// Integer encoding of values as represented in a LambdaMOO textdump, and by bf_typeof
+/// Integer encoding of values as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
 pub enum VarType {
@@ -83,7 +83,7 @@ pub struct Var {
 }
 
 impl Var {
-    pub fn new(value: Variant) -> Self {
+    #[must_use] pub fn new(value: Variant) -> Self {
         Self { value }
     }
 }
@@ -98,71 +98,71 @@ impl Encode for Var {
 impl Decode for Var {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let inner = Variant::decode(decoder)?;
-        Ok(Var::new(inner))
+        Ok(Self::new(inner))
     }
 }
 
 impl<'de> BorrowDecode<'de> for Var {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let inner = Variant::borrow_decode(decoder)?;
-        Ok(Var::new(inner))
+        Ok(Self::new(inner))
     }
 }
 
-pub fn v_bool(b: bool) -> Var {
-    Var::new(Variant::Int(if b { 1 } else { 0 }))
+#[must_use] pub fn v_bool(b: bool) -> Var {
+    Var::new(Variant::Int(i64::from(b)))
 }
 
-pub fn v_int(i: i64) -> Var {
+#[must_use] pub fn v_int(i: i64) -> Var {
     Var::new(Variant::Int(i))
 }
 
-pub fn v_float(f: f64) -> Var {
+#[must_use] pub fn v_float(f: f64) -> Var {
     Var::new(Variant::Float(f))
 }
 
-pub fn v_str(s: &str) -> Var {
+#[must_use] pub fn v_str(s: &str) -> Var {
     Var::new(Variant::Str(Str::from_str(s).unwrap()))
 }
 
-pub fn v_string(s: String) -> Var {
+#[must_use] pub fn v_string(s: String) -> Var {
     Var::new(Variant::Str(Str::from_string(s)))
 }
 
-pub fn v_objid(o: Objid) -> Var {
+#[must_use] pub fn v_objid(o: Objid) -> Var {
     Var::new(Variant::Obj(o))
 }
 
-pub fn v_obj(o: i64) -> Var {
+#[must_use] pub fn v_obj(o: i64) -> Var {
     Var::new(Variant::Obj(Objid(o)))
 }
 
-pub fn v_err(e: Error) -> Var {
+#[must_use] pub fn v_err(e: Error) -> Var {
     Var::new(Variant::Err(e))
 }
 
-pub fn v_list(l: Vec<Var>) -> Var {
+#[must_use] pub fn v_list(l: Vec<Var>) -> Var {
     Var::new(Variant::List(List::from_vec(l)))
 }
 
-pub fn v_empty_list() -> Var {
+#[must_use] pub fn v_empty_list() -> Var {
     VAR_EMPTY_LIST.clone()
 }
 
-pub fn v_empty_str() -> Var {
+#[must_use] pub fn v_empty_str() -> Var {
     VAR_EMPTY_STR.clone()
 }
 
-pub fn v_none() -> Var {
+#[must_use] pub fn v_none() -> Var {
     VAR_NONE.clone()
 }
 
 impl Var {
-    pub fn variant(&self) -> &Variant {
+    #[must_use] pub fn variant(&self) -> &Variant {
         &self.value
     }
 
-    pub fn type_id(&self) -> VarType {
+    #[must_use] pub fn type_id(&self) -> VarType {
         match self.variant() {
             Variant::None => VarType::TYPE_NONE,
             Variant::Str(_) => VarType::TYPE_STR,
@@ -174,13 +174,13 @@ impl Var {
         }
     }
 
-    pub fn to_literal(&self) -> String {
+    #[must_use] pub fn to_literal(&self) -> String {
         match self.variant() {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
             Variant::Float(f) => f.to_string(),
             Variant::Str(s) => quote_str(s.as_str()),
-            Variant::Obj(o) => format!("{}", o),
+            Variant::Obj(o) => format!("{o}"),
             Variant::List(l) => {
                 let mut result = String::new();
                 result.push('{');
@@ -292,7 +292,7 @@ impl Hash for Var {
 impl Eq for Var {}
 
 impl Var {
-    pub fn is_true(&self) -> bool {
+    #[must_use] pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::Str(s) => !s.is_empty(),
             Variant::Int(i) => *i != 0,
@@ -302,7 +302,7 @@ impl Var {
         }
     }
 
-    pub fn has_member(&self, v: &Var) -> Var {
+    #[must_use] pub fn has_member(&self, v: &Self) -> Self {
         let Variant::List(l) = self.variant() else {
             return v_err(E_TYPE);
         };
@@ -312,7 +312,7 @@ impl Var {
 
     /// 1-indexed position of the first occurrence of `v` in `self`, or `E_TYPE` if `self` is not a
     /// list.
-    pub fn index_in(&self, v: &Var) -> Var {
+    #[must_use] pub fn index_in(&self, v: &Self) -> Self {
         let Variant::List(l) = self.variant() else {
             return v_err(E_TYPE);
         };
@@ -327,7 +327,7 @@ impl Var {
     binary_numeric_coercion_op!(div);
     binary_numeric_coercion_op!(sub);
 
-    pub fn add(&self, v: &Var) -> Result<Var, Error> {
+    pub fn add(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l + *r)),
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l + r)),
@@ -338,7 +338,7 @@ impl Var {
         }
     }
 
-    pub fn negative(&self) -> Result<Var, Error> {
+    pub fn negative(&self) -> Result<Self, Error> {
         match self.variant() {
             Variant::Int(l) => Ok(v_int(-*l)),
             Variant::Float(f) => Ok(v_float(f.neg())),
@@ -346,7 +346,7 @@ impl Var {
         }
     }
 
-    pub fn modulus(&self, v: &Var) -> Result<Var, Error> {
+    pub fn modulus(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l % *r)),
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l % r)),
@@ -356,7 +356,7 @@ impl Var {
         }
     }
 
-    pub fn pow(&self, v: &Var) -> Result<Var, Error> {
+    pub fn pow(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
             (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.pow(*r as u32))),
@@ -366,7 +366,7 @@ impl Var {
         }
     }
 
-    pub fn index(&self, idx: usize) -> Result<Var, Error> {
+    pub fn index(&self, idx: usize) -> Result<Self, Error> {
         match self.variant() {
             Variant::List(l) => match l.get(idx) {
                 None => Ok(v_err(E_RANGE)),
@@ -374,13 +374,13 @@ impl Var {
             },
             Variant::Str(s) => match s.get(idx) {
                 None => Ok(v_err(E_RANGE)),
-                Some(v) => Ok(v.clone()),
+                Some(v) => Ok(v),
             },
             _ => Ok(v_err(E_TYPE)),
         }
     }
 
-    pub fn range(&self, from: i64, to: i64) -> Result<Var, Error> {
+    pub fn range(&self, from: i64, to: i64) -> Result<Self, Error> {
         match self.variant() {
             Variant::Str(s) => {
                 let len = s.len() as i64;
@@ -411,7 +411,7 @@ impl Var {
         }
     }
 
-    pub fn rangeset(&self, value: Var, from: i64, to: i64) -> Result<Var, Error> {
+    pub fn rangeset(&self, value: Self, from: i64, to: i64) -> Result<Self, Error> {
         let (base_len, val_len) = match (self.variant(), value.variant()) {
             (Variant::Str(base_str), Variant::Str(val_str)) => {
                 (base_str.len() as i64, val_str.len() as i64)
@@ -444,7 +444,7 @@ impl Var {
                 )?
             }
             (Variant::List(base_list), Variant::List(value_list)) => {
-                let mut ans: Vec<Var> = Vec::with_capacity(newsize as usize);
+                let mut ans: Vec<Self> = Vec::with_capacity(newsize as usize);
                 ans.extend_from_slice(&base_list[..from - 1]);
                 ans.extend(value_list.iter().cloned());
                 ans.extend_from_slice(&base_list[to..]);
@@ -487,8 +487,8 @@ impl From<Objid> for Var {
     }
 }
 
-impl From<Vec<Var>> for Var {
-    fn from(l: Vec<Var>) -> Self {
+impl From<Vec<Self>> for Var {
+    fn from(l: Vec<Self>) -> Self {
         v_list(l)
     }
 }

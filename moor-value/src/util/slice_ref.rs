@@ -69,61 +69,61 @@ impl ByteSource for EmptyByteSource {
 }
 
 impl SliceRef {
-    pub fn empty() -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(
+    #[must_use] pub fn empty() -> Self {
+        Self(Yoke::attach_to_cart(
             Arc::new(Box::new(EmptyByteSource)),
             |b| b.as_slice(),
         ))
     }
-    pub fn from_byte_source(byte_source: Box<dyn ByteSource>) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(Arc::new(byte_source), |b| {
+    #[must_use] pub fn from_byte_source(byte_source: Box<dyn ByteSource>) -> Self {
+        Self(Yoke::attach_to_cart(Arc::new(byte_source), |b| {
             b.as_slice()
         }))
     }
-    pub fn from_bytes(buf: &[u8]) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(
+    #[must_use] pub fn from_bytes(buf: &[u8]) -> Self {
+        Self(Yoke::attach_to_cart(
             Arc::new(Box::new(VectorByteSource(buf.to_vec()))),
             |b| b.as_slice(),
         ))
     }
-    pub fn from_vec(buf: Vec<u8>) -> SliceRef {
-        SliceRef(Yoke::attach_to_cart(
+    #[must_use] pub fn from_vec(buf: Vec<u8>) -> Self {
+        Self(Yoke::attach_to_cart(
             Arc::new(Box::new(VectorByteSource(buf))),
             |b| b.as_slice(),
         ))
     }
-    pub fn split_at(&self, offset: usize) -> (SliceRef, SliceRef) {
+    #[must_use] pub fn split_at(&self, offset: usize) -> (Self, Self) {
         self.0.backing_cart().touch();
-        let left = SliceRef(self.0.map_project_cloned(|sl, _| &sl[..offset]));
-        let right = SliceRef(self.0.map_project_cloned(|sl, _| &sl[offset..]));
+        let left = Self(self.0.map_project_cloned(|sl, _| &sl[..offset]));
+        let right = Self(self.0.map_project_cloned(|sl, _| &sl[offset..]));
         (left, right)
     }
-    pub fn as_slice(&self) -> &[u8] {
+    #[must_use] pub fn as_slice(&self) -> &[u8] {
         self.0.backing_cart().touch();
         self.0.get()
     }
-    pub fn len(&self) -> usize {
+    #[must_use] pub fn len(&self) -> usize {
         self.0.backing_cart().touch();
         self.0.get().len()
     }
-    pub fn is_empty(&self) -> bool {
+    #[must_use] pub fn is_empty(&self) -> bool {
         self.0.backing_cart().touch();
         self.0.get().is_empty()
     }
-    pub fn derive_empty(&self) -> SliceRef {
+    #[must_use] pub fn derive_empty(&self) -> Self {
         self.0.backing_cart().touch();
-        SliceRef(Yoke::attach_to_cart(self.0.backing_cart().clone(), |_b| {
+        Self(Yoke::attach_to_cart(self.0.backing_cart().clone(), |_b| {
             &[] as &[u8]
         }))
     }
 
-    pub fn slice<'a, R>(&'a self, range: R) -> SliceRef
+    pub fn slice<'a, R>(&'a self, range: R) -> Self
     where
         R: RangeBounds<usize> + 'a + std::slice::SliceIndex<[u8], Output = [u8]>,
     {
         self.0.backing_cart().touch();
         let result = self.0.map_project_cloned(move |sl, _| &sl[range]);
-        SliceRef(result)
+        Self(result)
     }
 }
 
