@@ -4,8 +4,8 @@ use crate::util::bitenum::BitEnum;
 use crate::util::slice_ref::SliceRef;
 use crate::var::objid::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use bytes::{Buf, BufMut};
 use binary_layout::define_layout;
+use bytes::{Buf, BufMut};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -41,12 +41,21 @@ impl PropDef {
         let header_size = propdef_header::SIZE.unwrap();
         let mut buf = vec![0; header_size + name.len() + 8];
         let mut propdef_view = propdef::View::new(&mut buf);
-        propdef_view.header_mut().data_version_mut().write(DATA_LAYOUT_VERSION);
-        propdef_view.header_mut().uuid_mut().copy_from_slice(uuid.as_bytes());
+        propdef_view
+            .header_mut()
+            .data_version_mut()
+            .write(DATA_LAYOUT_VERSION);
+        propdef_view
+            .header_mut()
+            .uuid_mut()
+            .copy_from_slice(uuid.as_bytes());
         propdef_view.header_mut().definer_mut().write(definer.0);
         propdef_view.header_mut().location_mut().write(location.0);
         propdef_view.header_mut().owner_mut().write(owner.0);
-        propdef_view.header_mut().flags_mut().write(flags.to_u16() as u8);
+        propdef_view
+            .header_mut()
+            .flags_mut()
+            .write(flags.to_u16() as u8);
 
         let mut name_buf = propdef_view.name_mut();
         name_buf.put_u8(name.len() as u8);
@@ -114,7 +123,7 @@ impl Named for PropDef {
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
         let view = propdef::View::new(self.0.as_slice());
-        Uuid::from_bytes(view.header().uuid().clone())
+        Uuid::from_bytes(*view.header().uuid())
     }
 }
 

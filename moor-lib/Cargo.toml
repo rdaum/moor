@@ -1,7 +1,7 @@
 [package]
 name = "moor-lib"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dev-dependencies]
 tempdir.workspace = true

@@ -11,7 +11,7 @@ pub mod var;
 
 /// When encoding or decoding types to/from data or network, this is a version tag put into headers
 /// for validity / version checking.
-pub const DATA_LAYOUT_VERSION : u8 = 1;
+pub const DATA_LAYOUT_VERSION: u8 = 1;
 
 /// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
 /// from where $name style references hang off of. A bit like the Lobby in Self.
