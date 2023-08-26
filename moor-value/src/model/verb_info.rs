@@ -3,12 +3,12 @@ use crate::util::slice_ref::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
 
-/// The binding of both a VerbDef and the binary (program) associated with it.
+/// The binding of both a `VerbDef` and the binary (program) associated with it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VerbInfo(SliceRef);
 
 impl VerbInfo {
-    pub fn new(verbdef: VerbDef, binary: SliceRef) -> Self {
+    #[must_use] pub fn new(verbdef: VerbDef, binary: SliceRef) -> Self {
         let mut storage = Vec::new();
         // Both values we hold are variable sized, but the program is always at the end, so we can
         // just append it without a length prefix.
@@ -19,12 +19,12 @@ impl VerbInfo {
         storage.put_slice(binary.as_slice());
         Self(SliceRef::from_bytes(&storage))
     }
-    pub fn verbdef(&self) -> VerbDef {
+    #[must_use] pub fn verbdef(&self) -> VerbDef {
         let vd_len = u32::from_le_bytes(self.0.as_slice()[0..4].try_into().unwrap()) as usize;
         VerbDef::from_sliceref(self.0.slice(4..4 + vd_len))
     }
 
-    pub fn binary(&self) -> SliceRef {
+    #[must_use] pub fn binary(&self) -> SliceRef {
         // The binary is after the verbdef, which is prefixed with a u32 length.
         let vd_len = u32::from_le_bytes(self.0.as_slice()[0..4].try_into().unwrap()) as usize;
         self.0.slice(4 + vd_len..)

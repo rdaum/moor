@@ -11,7 +11,7 @@ impl Display for Objid {
 }
 
 impl Objid {
-    pub fn to_literal(&self) -> String {
+    #[must_use] pub fn to_literal(&self) -> String {
         format!("#{}", self.0)
     }
 }

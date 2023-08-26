@@ -15,16 +15,16 @@ pub struct Str {
 }
 
 impl Str {
-    pub fn from_string(s: String) -> Self {
+    #[must_use] pub fn from_string(s: String) -> Self {
         Self { inner: Arc::new(s) }
     }
 
     pub fn get(&self, offset: usize) -> Option<Var> {
-        let r = self.inner.get(offset..offset + 1);
+        let r = self.inner.get(offset..=offset);
         r.map(v_str)
     }
 
-    pub fn set(&self, offset: usize, r: &Str) -> Var {
+    #[must_use] pub fn set(&self, offset: usize, r: &Self) -> Var {
         if r.len() != 1 {
             return v_err(Error::E_RANGE);
         }
@@ -32,7 +32,7 @@ impl Str {
             return v_err(Error::E_RANGE);
         }
         let mut s = self.inner.as_str().to_string();
-        s.replace_range(offset..offset + 1, r.as_str());
+        s.replace_range(offset..=offset, r.as_str());
         v_string(s)
     }
 
@@ -41,31 +41,31 @@ impl Str {
         r.map(v_str)
     }
 
-    pub fn append(&self, other: &Str) -> Var {
+    #[must_use] pub fn append(&self, other: &Self) -> Var {
         v_string(format!("{}{}", self.inner, other.inner))
     }
 
-    pub fn append_str(&self, other: &str) -> Var {
+    #[must_use] pub fn append_str(&self, other: &str) -> Var {
         v_string(format!("{}{}", self.inner, other))
     }
 
-    pub fn append_string(&self, other: String) -> Var {
+    #[must_use] pub fn append_string(&self, other: String) -> Var {
         v_string(format!("{}{}", self.inner, other))
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use] pub fn len(&self) -> usize {
         self.inner.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
-    pub fn as_str(&self) -> &str {
+    #[must_use] pub fn as_str(&self) -> &str {
         self.inner.as_str()
     }
 
-    pub fn substring(&self, range: Range<usize>) -> Self {
+    #[must_use] pub fn substring(&self, range: Range<usize>) -> Self {
         Self {
             inner: Arc::new(self.inner[range].to_string()),
         }

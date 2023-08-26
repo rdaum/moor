@@ -33,14 +33,14 @@ pub enum CompileError {
 
 impl Debug for CompileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self))
+        f.write_fmt(format_args!("{self}"))
     }
 }
 
 impl Display for CompileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompileError::FailedCompile(msg) => write!(f, "Failed to compile pattern: {}", msg),
+            Self::FailedCompile(msg) => write!(f, "Failed to compile pattern: {msg}"),
         }
     }
 }
@@ -55,15 +55,15 @@ pub enum MatchError {
 
 impl Debug for MatchError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self))
+        f.write_fmt(format_args!("{self}"))
     }
 }
 
 impl Display for MatchError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MatchError::Failed => write!(f, "Failed"),
-            MatchError::Aborted => write!(f, "Aborted"),
+            Self::Failed => write!(f, "Failed"),
+            Self::Aborted => write!(f, "Aborted"),
         }
     }
 }
@@ -121,11 +121,11 @@ impl Pattern {
                 let err_msg = str_slice.to_string();
                 return Err(CompileError::FailedCompile(err_msg));
             }
-            (*pattern_ptr).fastmap = fastmap_ptr as _;
+            (*pattern_ptr).fastmap = fastmap_ptr.cast();
 
             re_compile_fastmap(pattern_ptr);
         }
-        Ok(Pattern {
+        Ok(Self {
             _pattern_str: pattern_str_c,
             pattern_ptr,
             fastmap_ptr,
@@ -147,7 +147,7 @@ impl Pattern {
                 len,
                 startpos,
                 range,
-                &mut regs as *mut _,
+                std::ptr::addr_of_mut!(regs),
             )
         };
         if match_result >= 0 {
@@ -166,7 +166,7 @@ impl Pattern {
             match match_result {
                 -1 => Err(MatchError::Failed),
                 -2 => Err(MatchError::Aborted),
-                _ => panic!("Unexpected return value from re_search: {}", match_result),
+                _ => panic!("Unexpected return value from re_search: {match_result}"),
             }
         }
     }
@@ -273,7 +273,7 @@ mod tests {
 
             let pattern_str = r#"^The.*Spain$"#;
             let pattern_string = CString::new(pattern_str).unwrap();
-            let pattern_ptr = &mut pattern as *mut _;
+            let pattern_ptr = std::ptr::addr_of_mut!(pattern);
             let compile_result = re_compile_pattern(
                 pattern_string.as_ptr() as _,
                 pattern_str.len() as _,
@@ -283,7 +283,7 @@ mod tests {
             if !compile_result.is_null() {
                 let c_str = std::ffi::CStr::from_ptr(compile_result);
                 let str_slice = c_str.to_str().unwrap();
-                panic!("re_compile_pattern failed: {}", str_slice);
+                panic!("re_compile_pattern failed: {str_slice}");
             }
             pattern.fastmap = fastmap.as_mut_ptr();
 
@@ -304,9 +304,9 @@ mod tests {
                 len,
                 0,
                 len,
-                &mut regs as *mut _,
+                std::ptr::addr_of_mut!(regs),
             );
-            assert!(match_result >= 0, "re_search failed: {}", match_result);
+            assert!(match_result >= 0, "re_search failed: {match_result}");
             let (start, end) = (regs.start[0], regs.end[0]);
             assert_eq!((start, end), (0, 17));
         }

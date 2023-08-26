@@ -29,7 +29,7 @@ impl AsByteBuffer for ObjSet {
     }
 
     fn from_sliceref(bytes: SliceRef) -> Self {
-        Self(bytes.clone())
+        Self(bytes)
     }
 }
 
@@ -76,11 +76,11 @@ impl Iterator for ObjSetIter {
 }
 
 impl ObjSet {
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         EMPTY_OBJSET.clone()
     }
 
-    pub fn from(oids: &[Objid]) -> Self {
+    #[must_use] pub fn from(oids: &[Objid]) -> Self {
         if oids.is_empty() {
             return EMPTY_OBJSET.clone();
         }
@@ -106,25 +106,25 @@ impl ObjSet {
         Self(SliceRef::from_vec(v))
     }
 
-    pub fn iter(&self) -> ObjSetIter {
+    #[must_use] pub fn iter(&self) -> ObjSetIter {
         ObjSetIter {
             position: 0,
             buffer: self.0.clone(),
         }
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use] pub fn len(&self) -> usize {
         if self.0.is_empty() {
             return 0;
         }
         self.0.len() / std::mem::size_of::<Objid>()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    pub fn with_inserted(&self, oid: Objid) -> Self {
+    #[must_use] pub fn with_inserted(&self, oid: Objid) -> Self {
         if self.0.is_empty() {
             return Self::from(&[oid]);
         }
@@ -134,7 +134,7 @@ impl ObjSet {
         new_buf.put_i64_le(oid.0);
         Self(SliceRef::from_vec(new_buf))
     }
-    pub fn with_removed(&self, oid: Objid) -> Self {
+    #[must_use] pub fn with_removed(&self, oid: Objid) -> Self {
         if self.0.is_empty() {
             return EMPTY_OBJSET.clone();
         }
@@ -152,7 +152,7 @@ impl ObjSet {
         }
         Self(SliceRef::from_vec(new_buf))
     }
-    pub fn with_all_removed(&self, oids: &[Objid]) -> Self {
+    #[must_use] pub fn with_all_removed(&self, oids: &[Objid]) -> Self {
         if self.0.is_empty() {
             return EMPTY_OBJSET.clone();
         }
@@ -170,14 +170,14 @@ impl ObjSet {
         }
         Self(SliceRef::from_vec(new_buf))
     }
-    pub fn contains(&self, oid: Objid) -> bool {
+    #[must_use] pub fn contains(&self, oid: Objid) -> bool {
         // O(N) operation. Which we're fine with, really. We're a vector.
         self.iter().any(|o| o == oid)
     }
 
-    pub fn with_concatenated(&self, other: Self) -> Self {
+    #[must_use] pub fn with_concatenated(&self, other: Self) -> Self {
         if self.0.is_empty() {
-            return other.clone();
+            return other;
         }
         let new_len = other.len() + self.len();
         let mut new_buf = Vec::with_capacity(std::mem::size_of::<Objid>() * new_len);
@@ -186,7 +186,7 @@ impl ObjSet {
         Self(SliceRef::from_vec(new_buf))
     }
 
-    pub fn with_appended(&self, values: &[Objid]) -> Self {
+    #[must_use] pub fn with_appended(&self, values: &[Objid]) -> Self {
         if self.0.is_empty() {
             return Self::from(values);
         }
@@ -204,6 +204,6 @@ impl ObjSet {
 
 impl Default for ObjSet {
     fn default() -> Self {
-        ObjSet::new()
+        Self::new()
     }
 }

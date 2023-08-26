@@ -76,18 +76,18 @@ pub enum WorldStateError {
 impl WorldStateError {
     pub fn to_error_code(&self) -> Result<Error, anyhow::Error> {
         match self {
-            WorldStateError::ObjectNotFound(_) => Ok(Error::E_INVARG),
-            WorldStateError::ObjectPermissionDenied => Ok(Error::E_PERM),
-            WorldStateError::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
-            WorldStateError::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
-            WorldStateError::VerbPermissionDenied => Ok(Error::E_PERM),
-            WorldStateError::InvalidVerb(_) => Ok(Error::E_VERBNF),
-            WorldStateError::DuplicateVerb(_, _) => Ok(Error::E_INVARG),
-            WorldStateError::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
-            WorldStateError::PropertyPermissionDenied => Ok(Error::E_PERM),
-            WorldStateError::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
-            WorldStateError::DuplicatePropertyDefinition(_, _) => Ok(Error::E_INVARG),
-            WorldStateError::PropertyTypeMismatch => Ok(Error::E_TYPE),
+            Self::ObjectNotFound(_) => Ok(Error::E_INVARG),
+            Self::ObjectPermissionDenied => Ok(Error::E_PERM),
+            Self::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
+            Self::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
+            Self::VerbPermissionDenied => Ok(Error::E_PERM),
+            Self::InvalidVerb(_) => Ok(Error::E_VERBNF),
+            Self::DuplicateVerb(_, _) => Ok(Error::E_INVARG),
+            Self::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
+            Self::PropertyPermissionDenied => Ok(Error::E_PERM),
+            Self::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
+            Self::DuplicatePropertyDefinition(_, _) => Ok(Error::E_INVARG),
+            Self::PropertyTypeMismatch => Ok(Error::E_TYPE),
             _ => {
                 bail!("Unhandled error code: {:?}", self);
             }

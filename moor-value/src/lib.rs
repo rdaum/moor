@@ -55,7 +55,7 @@ impl Writer for CountingWriter {
     }
 }
 
-/// Implementation of AsBytes for all types that are binpackable.
+/// Implementation of `AsBytes` for all types that are binpackable.
 impl<T: Encode + Decode + Sized> AsByteBuffer for T {
     fn size_bytes(&self) -> usize
     where

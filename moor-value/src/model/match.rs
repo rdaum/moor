@@ -10,18 +10,18 @@ pub enum ArgSpec {
 }
 
 impl ArgSpec {
-    pub fn to_string(&self) -> &str {
+    #[must_use] pub fn to_string(&self) -> &str {
         match self {
-            ArgSpec::None => "none",
-            ArgSpec::Any => "any",
-            ArgSpec::This => "this",
+            Self::None => "none",
+            Self::Any => "any",
+            Self::This => "this",
         }
     }
-    pub fn from_string(repr: &str) -> Option<ArgSpec> {
+    #[must_use] pub fn from_string(repr: &str) -> Option<Self> {
         match repr {
-            "none" => Some(ArgSpec::None),
-            "any" => Some(ArgSpec::Any),
-            "this" => Some(ArgSpec::This),
+            "none" => Some(Self::None),
+            "any" => Some(Self::Any),
+            "this" => Some(Self::This),
             _ => None,
         }
     }
@@ -37,19 +37,19 @@ pub enum PrepSpec {
 }
 
 impl PrepSpec {
-    pub fn from_bytes(bytes: [u8; 2]) -> PrepSpec {
+    #[must_use] pub fn from_bytes(bytes: [u8; 2]) -> Self {
         let int_value = i16::from_le_bytes(bytes);
         match int_value {
-            -2 => PrepSpec::Any,
-            -1 => PrepSpec::None,
-            _ => PrepSpec::Other(int_value as u16),
+            -2 => Self::Any,
+            -1 => Self::None,
+            _ => Self::Other(int_value as u16),
         }
     }
-    pub fn to_bytes(&self) -> [u8; 2] {
+    #[must_use] pub fn to_bytes(&self) -> [u8; 2] {
         match self {
-            PrepSpec::Any => (-2i16).to_le_bytes(),
-            PrepSpec::None => (-1i16).to_le_bytes(),
-            PrepSpec::Other(id) => (*id as i16).to_le_bytes(),
+            Self::Any => (-2i16).to_le_bytes(),
+            Self::None => (-1i16).to_le_bytes(),
+            Self::Other(id) => (*id as i16).to_le_bytes(),
         }
     }
 }
@@ -62,19 +62,19 @@ pub struct VerbArgsSpec {
 }
 
 impl VerbArgsSpec {
-    pub fn this_none_this() -> Self {
-        VerbArgsSpec {
+    #[must_use] pub fn this_none_this() -> Self {
+        Self {
             dobj: ArgSpec::This,
             prep: PrepSpec::None,
             iobj: ArgSpec::This,
         }
     }
-    pub fn matches(&self, v: &Self) -> bool {
+    #[must_use] pub fn matches(&self, v: &Self) -> bool {
         (self.dobj == ArgSpec::Any || self.dobj == v.dobj)
             && (self.prep == PrepSpec::Any || self.prep == v.prep)
             && (self.iobj == ArgSpec::Any || self.iobj == v.iobj)
     }
-    pub fn to_bytes(&self) -> [u8; 4] {
+    #[must_use] pub fn to_bytes(&self) -> [u8; 4] {
         let mut bytes = [0u8; 4];
         bytes[0] = self.dobj as u8;
         bytes[1] = self.iobj as u8;
@@ -82,10 +82,10 @@ impl VerbArgsSpec {
         bytes
     }
     // TODO Actually keep the args spec encoded as bytes and use setters/getters instead
-    pub fn from_bytes(bytes: [u8; 4]) -> Self {
+    #[must_use] pub fn from_bytes(bytes: [u8; 4]) -> Self {
         let dobj = ArgSpec::from_int(bytes[0]).unwrap();
         let iobj = ArgSpec::from_int(bytes[1]).unwrap();
         let prep = PrepSpec::from_bytes([bytes[2], bytes[3]]);
-        VerbArgsSpec { dobj, iobj, prep }
+        Self { dobj, prep, iobj }
     }
 }

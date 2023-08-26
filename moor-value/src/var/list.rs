@@ -13,39 +13,39 @@ pub struct List {
 }
 
 impl List {
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Self {
             inner: Arc::new(Vec::new()),
         }
     }
 
-    pub fn from_vec(vec: Vec<Var>) -> Self {
+    #[must_use] pub fn from_vec(vec: Vec<Var>) -> Self {
         Self {
             inner: Arc::new(vec),
         }
     }
 
-    pub fn push(&self, v: &Var) -> Var {
+    #[must_use] pub fn push(&self, v: &Var) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() + 1);
         new_list.extend_from_slice(&self.inner);
         new_list.push(v.clone());
         Var::new(Variant::List(Self::from_vec(new_list)))
     }
 
-    pub fn pop(&self) -> Var {
+    #[must_use] pub fn pop(&self) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() - 1);
         new_list.extend_from_slice(&self.inner[..self.inner.len() - 1]);
         Var::new(Variant::List(Self::from_vec(new_list)))
     }
 
-    pub fn append(&self, other: &List) -> Var {
+    #[must_use] pub fn append(&self, other: &Self) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() + other.inner.len());
         new_list.extend_from_slice(&self.inner);
         new_list.extend_from_slice(&other.inner);
         Var::new(Variant::List(Self::from_vec(new_list)))
     }
 
-    pub fn remove_at(&self, index: usize) -> Var {
+    #[must_use] pub fn remove_at(&self, index: usize) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() - 1);
         new_list.extend_from_slice(&self.inner[..index]);
         new_list.extend_from_slice(&self.inner[index + 1..]);
@@ -53,7 +53,7 @@ impl List {
     }
 
     /// Remove the first found instance of the given value from the list.
-    pub fn setremove(&self, value: &Var) -> Var {
+    #[must_use] pub fn setremove(&self, value: &Var) -> Var {
         if self.inner.is_empty() {
             return v_empty_list();
         }
@@ -69,7 +69,7 @@ impl List {
         Var::new(Variant::List(Self::from_vec(new_list)))
     }
 
-    pub fn insert(&self, index: isize, v: &Var) -> Var {
+    #[must_use] pub fn insert(&self, index: isize, v: &Var) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() + 1);
         let index = if index < 0 {
             0
@@ -82,21 +82,21 @@ impl List {
         Var::new(Variant::List(Self::from_vec(new_list)))
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use] pub fn len(&self) -> usize {
         self.inner.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
     // "in" operator is case insensitive...
-    pub fn contains(&self, v: &Var) -> bool {
+    #[must_use] pub fn contains(&self, v: &Var) -> bool {
         self.inner.contains(v)
     }
 
     // but bf_is_member is not... sigh.
-    pub fn contains_case_sensitive(&self, v: &Var) -> bool {
+    #[must_use] pub fn contains_case_sensitive(&self, v: &Var) -> bool {
         if let Variant::Str(s) = v.variant() {
             for item in self.inner.iter() {
                 if let Variant::Str(s2) = item.variant() {
@@ -110,11 +110,11 @@ impl List {
         self.inner.contains(v)
     }
 
-    pub fn get(&self, index: usize) -> Option<&Var> {
+    #[must_use] pub fn get(&self, index: usize) -> Option<&Var> {
         self.inner.get(index)
     }
 
-    pub fn set(&self, index: usize, value: &Var) -> Var {
+    #[must_use] pub fn set(&self, index: usize, value: &Var) -> Var {
         let mut new_vec = self.inner.as_slice().to_vec();
         new_vec[index] = value.clone();
         Var::new(Variant::List(Self::from_vec(new_vec)))
