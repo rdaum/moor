@@ -142,7 +142,7 @@ mod tests {
 
     use rocksdb::OptimisticTransactionDB;
     use strum::VariantNames;
-    use tempdir::TempDir;
+    use tempfile::tempdir;
 
     use moor_value::model::defset::HasUuid;
     use moor_value::model::objects::ObjAttrs;
@@ -179,8 +179,10 @@ mod tests {
     }
 
     fn mk_test_db() -> TestDb {
-        let tmp_dir = TempDir::new("test_db").unwrap();
-        let db_path = tmp_dir.path().join("test_db");
+        let Ok(tmp_root) = tempdir() else {
+            panic!("Failed to create tempdir");
+        };
+        let db_path = tmp_root.path().join("test_db");
         let mut options = rocksdb::Options::default();
         options.create_if_missing(true);
         options.create_missing_column_families(true);

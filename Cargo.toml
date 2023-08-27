@@ -82,7 +82,7 @@ crossbeam-channel = "0.5.8"
 bincode = "2.0.0-rc.3"
 
 # Dev dependencies
-tempdir = "0.3.7"
+tempfile = "3.8.0"
 
 # Bindings
 cc = { version = "1.0", features = ["parallel"] }
