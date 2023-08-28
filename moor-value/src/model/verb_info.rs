@@ -2,6 +2,7 @@ use crate::model::verbdef::VerbDef;
 use crate::util::slice_ref::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
+use std::convert::TryInto;
 
 /// The binding of both a `VerbDef` and the binary (program) associated with it.
 #[derive(Clone, Debug, Eq, PartialEq)]

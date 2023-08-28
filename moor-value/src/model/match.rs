@@ -23,12 +23,16 @@ impl LayoutAs<u8> for ArgSpec {
 impl ArgSpec {
     #[must_use]
     pub fn to_string(&self) -> &str {
+    #[must_use]
+    pub fn to_string(&self) -> &str {
         match self {
             Self::None => "none",
             Self::Any => "any",
             Self::This => "this",
         }
     }
+    #[must_use]
+    pub fn from_string(repr: &str) -> Option<Self> {
     #[must_use]
     pub fn from_string(repr: &str) -> Option<Self> {
         match repr {
@@ -90,20 +94,23 @@ pub enum PrepSpec {
     Other(Preposition),
 }
 
-impl LayoutAs<i16> for PrepSpec {
-    fn read(v: i16) -> Self {
-        match v {
+impl PrepSpec {
+    #[must_use]
+    pub fn from_bytes(bytes: [u8; 2]) -> Self {
+        let int_value = i16::from_le_bytes(bytes);
+        match int_value {
             -2 => Self::Any,
             -1 => Self::None,
             p => Self::Other(Preposition::from_repr(p as u16).expect("Invalid preposition")),
         }
     }
 
-    fn write(v: Self) -> i16 {
-        match v {
-            Self::Any => -2,
-            Self::None => -1,
-            Self::Other(p) => p as i16,
+    #[must_use]
+    pub fn to_bytes(&self) -> [u8; 2] {
+        match self {
+            Self::Any => (-2i16).to_le_bytes(),
+            Self::None => (-1i16).to_le_bytes(),
+            Self::Other(id) => (*id as i16).to_le_bytes(),
         }
     }
 }
@@ -118,6 +125,8 @@ pub struct VerbArgsSpec {
 impl VerbArgsSpec {
     #[must_use]
     pub fn this_none_this() -> Self {
+    #[must_use]
+    pub fn this_none_this() -> Self {
         Self {
             dobj: ArgSpec::This,
             prep: PrepSpec::None,
@@ -126,20 +135,26 @@ impl VerbArgsSpec {
     }
     #[must_use]
     pub fn matches(&self, v: &Self) -> bool {
+    #[must_use]
+    pub fn matches(&self, v: &Self) -> bool {
         (self.dobj == ArgSpec::Any || self.dobj == v.dobj)
             && (self.prep == PrepSpec::Any || self.prep == v.prep)
             && (self.iobj == ArgSpec::Any || self.iobj == v.iobj)
     }
-}
-
-impl LayoutAs<u32> for VerbArgsSpec {
-    fn read(v: u32) -> Self {
-        let dobj_value = v & 0x000000ff;
-        let prep_value = ((v >> 8) & 0x0000ffff) as i16;
-        let iobj_value = (v >> 24) & 0x000000ff;
-        let dobj = ArgSpec::read(dobj_value as u8);
-        let prep = PrepSpec::read(prep_value);
-        let iobj = ArgSpec::read(iobj_value as u8);
+    #[must_use]
+    pub fn to_bytes(&self) -> [u8; 4] {
+        let mut bytes = [0u8; 4];
+        bytes[0] = self.dobj as u8;
+        bytes[1] = self.iobj as u8;
+        bytes[2..4].copy_from_slice(&self.prep.to_bytes());
+        bytes
+    }
+    // TODO Actually keep the args spec encoded as bytes and use setters/getters instead
+    #[must_use]
+    pub fn from_bytes(bytes: [u8; 4]) -> Self {
+        let dobj = ArgSpec::from_int(bytes[0]).unwrap();
+        let iobj = ArgSpec::from_int(bytes[1]).unwrap();
+        let prep = PrepSpec::from_bytes([bytes[2], bytes[3]]);
         Self { dobj, prep, iobj }
     }
 

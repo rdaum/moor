@@ -2,6 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
+use std::convert::TryInto;
 use std::error::Error;
 use std::ffi::{c_int, CString};
 use std::fmt::{Debug, Display, Formatter};

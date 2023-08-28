@@ -1,5 +1,6 @@
 use anyhow::bail;
 use rocksdb::{ColumnFamily, ErrorKind};
+use std::convert::TryInto;
 use uuid::Uuid;
 
 use moor_value::model::defset::HasUuid;

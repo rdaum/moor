@@ -4,6 +4,7 @@ use crate::AsByteBuffer;
 use bytes::BufMut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
 
 lazy_static! {

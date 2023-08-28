@@ -8,9 +8,12 @@ members = [
   "regexpr-binding",
   "moor-repl",
 ]
+resolver = "2"
 
 [workspace.package]
 edition = "2021"
+repository = "https://github.com/rdaum/moor.git"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 ## Command line arguments parsing.

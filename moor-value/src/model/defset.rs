@@ -1,6 +1,7 @@
 use crate::util::slice_ref::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
+use std::convert::TryInto;
 use uuid::Uuid;
 
 pub trait HasUuid {
