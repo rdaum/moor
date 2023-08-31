@@ -112,7 +112,7 @@ impl Pattern {
             re_set_syntax(RE_CONTEXT_INDEP_OPS as _);
 
             let compile_result = re_compile_pattern(
-                pattern_str_c.as_ptr() as _,
+                pattern_str_c.as_ptr().cast_mut(),
                 pattern_str_len as _,
                 pattern_ptr,
             );
@@ -145,7 +145,7 @@ impl Pattern {
         let match_result = unsafe {
             re_search(
                 self.pattern_ptr,
-                string_c_str.as_ptr() as _,
+                string_c_str.as_ptr().cast_mut(),
                 len,
                 startpos,
                 range,
@@ -277,7 +277,7 @@ mod tests {
             let pattern_string = CString::new(pattern_str).unwrap();
             let pattern_ptr = std::ptr::addr_of_mut!(pattern);
             let compile_result = re_compile_pattern(
-                pattern_string.as_ptr() as _,
+                pattern_string.as_ptr().cast_mut(),
                 pattern_str.len() as _,
                 pattern_ptr,
             );
@@ -302,7 +302,7 @@ mod tests {
             let len: c_int = str.len() as _;
             let match_result = re_search(
                 pattern_ptr,
-                match_string.as_ptr() as _,
+                match_string.as_ptr().cast_mut(),
                 len,
                 0,
                 len,

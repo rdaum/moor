@@ -16,7 +16,7 @@ pub enum VerbFlag {
 
 impl LayoutAs<u8> for VerbFlag {
     fn read(v: u8) -> Self {
-        VerbFlag::from_u8(v).unwrap()
+        Self::from_u8(v).unwrap()
     }
 
     fn write(v: Self) -> u8 {
@@ -82,7 +82,7 @@ pub enum BinaryType {
 
 impl LayoutAs<u8> for BinaryType {
     fn read(v: u8) -> Self {
-        BinaryType::from_u8(v).unwrap()
+        Self::from_u8(v).unwrap()
     }
 
     fn write(v: Self) -> u8 {

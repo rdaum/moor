@@ -103,7 +103,7 @@ mod tests {
     fn test_string_unquote() {
         assert_eq!(unquote_str(r#""foo""#).unwrap(), "foo");
         assert_eq!(unquote_str(r#""foo\"bar""#).unwrap(), r#"foo"bar"#);
-        assert_eq!(unquote_str(r#""foo\\bar""#).unwrap(), r#"foo\bar"#);
+        assert_eq!(unquote_str(r#""foo\\bar""#).unwrap(), r"foo\bar");
         // Does not support \t, \n, etc.  They just turn into n, t, etc.
         assert_eq!(unquote_str(r#""foo\tbar""#).unwrap(), r#"footbar"#);
     }

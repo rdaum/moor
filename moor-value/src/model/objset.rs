@@ -87,7 +87,7 @@ impl ObjSet {
             return EMPTY_OBJSET.clone();
         }
         let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
-        for i in oids.iter() {
+        for i in oids {
             v.put_i64_le(i.0);
         }
         Self(SliceRef::from_vec(v))

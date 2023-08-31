@@ -30,7 +30,7 @@ pub enum Error {
 
 impl LayoutAs<u8> for Error {
     fn read(v: u8) -> Self {
-        Error::from_int(v).unwrap()
+        Self::from_int(v).unwrap()
     }
 
     fn write(v: Self) -> u8 {
