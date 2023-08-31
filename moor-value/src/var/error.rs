@@ -1,3 +1,4 @@
+use binary_layout::LayoutAs;
 use std::fmt::{Display, Formatter};
 
 use bincode::{Decode, Encode};
@@ -25,6 +26,16 @@ pub enum Error {
     E_INVARG = 13,
     E_QUOTA = 14,
     E_FLOAT = 15,
+}
+
+impl LayoutAs<u8> for Error {
+    fn read(v: u8) -> Self {
+        Error::from_int(v).unwrap()
+    }
+
+    fn write(v: Self) -> u8 {
+        v as u8
+    }
 }
 
 impl Display for Error {

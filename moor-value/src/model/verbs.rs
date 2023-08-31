@@ -1,8 +1,10 @@
 use crate::model::r#match::VerbArgsSpec;
 use crate::util::bitenum::BitEnum;
 use crate::var::objid::Objid;
+use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
+use num_traits::FromPrimitive;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum VerbFlag {
@@ -10,6 +12,16 @@ pub enum VerbFlag {
     Write = 1,
     Exec = 2,
     Debug = 3,
+}
+
+impl LayoutAs<u8> for VerbFlag {
+    fn read(v: u8) -> Self {
+        VerbFlag::from_u8(v).unwrap()
+    }
+
+    fn write(v: Self) -> u8 {
+        v as u8
+    }
 }
 
 impl VerbFlag {
@@ -58,6 +70,16 @@ pub enum BinaryType {
     None = 0,
     /// Opcodes match almost 1:1 with LambdaMOO 1.8.x, but is not "binary" compatible.
     LambdaMoo18X = 1,
+}
+
+impl LayoutAs<u8> for BinaryType {
+    fn read(v: u8) -> Self {
+        BinaryType::from_u8(v).unwrap()
+    }
+
+    fn write(v: Self) -> u8 {
+        v as u8
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]

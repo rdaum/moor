@@ -1,3 +1,4 @@
+use binary_layout::LayoutAs;
 use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
 
@@ -9,6 +10,19 @@ use num_traits::ToPrimitive;
 pub struct BitEnum<T: ToPrimitive> {
     value: u16,
     phantom: PhantomData<T>,
+}
+
+impl<T: ToPrimitive> LayoutAs<u16> for BitEnum<T> {
+    fn read(v: u16) -> Self {
+        Self {
+            value: v,
+            phantom: PhantomData,
+        }
+    }
+
+    fn write(v: Self) -> u16 {
+        v.to_u16()
+    }
 }
 
 impl<T: ToPrimitive> BitEnum<T> {

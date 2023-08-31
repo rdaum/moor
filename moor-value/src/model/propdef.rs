@@ -19,10 +19,10 @@ define_layout!(propdef, LittleEndian, {
 define_layout!(propdef_header, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
-    definer: i64,
-    location: i64,
-    owner: i64,
-    flags: u8,
+    definer: Objid as i64,
+    location: Objid as i64,
+    owner: Objid as i64,
+    flags: BitEnum<PropFlag> as u16,
 });
 
 impl PropDef {
@@ -49,13 +49,13 @@ impl PropDef {
             .header_mut()
             .uuid_mut()
             .copy_from_slice(uuid.as_bytes());
-        propdef_view.header_mut().definer_mut().write(definer.0);
-        propdef_view.header_mut().location_mut().write(location.0);
-        propdef_view.header_mut().owner_mut().write(owner.0);
+        propdef_view.header_mut().definer_mut().write(definer);
+        propdef_view.header_mut().location_mut().write(location);
+        propdef_view.header_mut().owner_mut().write(owner);
         propdef_view
             .header_mut()
             .flags_mut()
-            .write(flags.to_u16() as u8);
+            .write(flags);
 
         let mut name_buf = propdef_view.name_mut();
         name_buf.put_u8(name.len() as u8);
@@ -76,16 +76,16 @@ impl PropDef {
     }
 
     #[must_use] pub fn definer(&self) -> Objid {
-        Objid(self.get_header_view().definer().read())
+        self.get_header_view().definer().read()
     }
     #[must_use] pub fn location(&self) -> Objid {
-        Objid(self.get_header_view().location().read())
+        self.get_header_view().location().read()
     }
     #[must_use] pub fn owner(&self) -> Objid {
-        Objid(self.get_header_view().owner().read())
+        self.get_header_view().owner().read()
     }
     #[must_use] pub fn flags(&self) -> BitEnum<PropFlag> {
-        BitEnum::from_u8(self.get_header_view().flags().read())
+        self.get_header_view().flags().read()
     }
     #[must_use] pub fn name(&self) -> &str {
         let names_offset = propdef_header::SIZE.unwrap();

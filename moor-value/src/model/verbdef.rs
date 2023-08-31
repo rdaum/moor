@@ -8,7 +8,6 @@ use crate::var::objid::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::define_layout;
 use bytes::BufMut;
-use num_traits::FromPrimitive;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -17,10 +16,10 @@ pub struct VerbDef(SliceRef);
 define_layout!(verbdef_header, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
-    location: i64,
-    owner: i64,
-    flags: u8,
-    binary_type: u8,
+    location: Objid as i64,
+    owner: Objid as i64,
+    flags: BitEnum::<VerbFlag> as u16,
+    binary_type: BinaryType as u8,
     args: [u8; 4],
     num_names: u8,
 });
@@ -55,10 +54,10 @@ impl VerbDef {
         let mut header_view = verbdef_layout.header_mut();
         header_view.data_version_mut().write(DATA_LAYOUT_VERSION);
         header_view.uuid_mut().copy_from_slice(uuid.as_bytes());
-        header_view.location_mut().write(location.0);
-        header_view.owner_mut().write(owner.0);
-        header_view.flags_mut().write(flags.to_u16() as u8);
-        header_view.binary_type_mut().write(binary_type as u8);
+        header_view.location_mut().write(location);
+        header_view.owner_mut().write(owner);
+        header_view.flags_mut().write(flags);
+        header_view.binary_type_mut().write(binary_type);
         header_view.args_mut().copy_from_slice(&args.to_bytes());
         header_view.num_names_mut().write(names.len() as u8);
 
@@ -85,19 +84,19 @@ impl VerbDef {
 
     #[must_use] pub fn location(&self) -> Objid {
         let view = self.get_header_view();
-        Objid(view.header().location().read())
+        view.header().location().read()
     }
     #[must_use] pub fn owner(&self) -> Objid {
         let view = self.get_header_view();
-        Objid(view.header().owner().read())
+        view.header().owner().read()
     }
     #[must_use] pub fn flags(&self) -> BitEnum<VerbFlag> {
         let view = self.get_header_view();
-        BitEnum::from_u8(view.header().flags().read())
+        view.header().flags().read()
     }
     #[must_use] pub fn binary_type(&self) -> BinaryType {
         let view = self.get_header_view();
-        BinaryType::from_u8(view.header().binary_type().read()).unwrap()
+        view.header().binary_type().read()
     }
     #[must_use] pub fn args(&self) -> VerbArgsSpec {
         let view = self.get_header_view();
