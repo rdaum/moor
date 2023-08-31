@@ -22,7 +22,8 @@ impl Display for Objid {
 }
 
 impl Objid {
-    #[must_use] pub fn to_literal(&self) -> String {
+    #[must_use]
+    pub fn to_literal(&self) -> String {
         format!("#{}", self.0)
     }
 }

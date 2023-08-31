@@ -289,7 +289,7 @@ impl VM {
                 // Check the handler stack to see if we've hit a finally or catch handler that
                 // was registered for this position in the value stack.
                 let Some(handler) = a.pop_applicable_handler() else {
-                    continue
+                    continue;
                 };
 
                 match handler.handler_type {
@@ -307,7 +307,7 @@ impl VM {
                     }
                     HandlerType::Catch(_) => {
                         let FinallyReason::Raise { code, .. } = &why else {
-                            continue
+                            continue;
                         };
 
                         let mut found = false;

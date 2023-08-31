@@ -186,17 +186,17 @@ impl<'a> RocksDbTx<'a> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
         let Some(verbs_bytes) = self.tx.get_cf(cf, ok.clone())? else {
-            return Err(WorldStateError::VerbNotFound(o, v.clone()).into())
+            return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
         };
         let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
         let Some(verb) = verbs.find_named(v.as_str()) else {
-            return Err(WorldStateError::VerbNotFound(o, v.clone()).into())
+            return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
         };
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let vk = composite_key_for(o, &verb);
         let prg_bytes = self.tx.get_cf(cf, vk)?;
         let Some(prg_bytes) = prg_bytes else {
-            return Err(WorldStateError::VerbNotFound(o, v.clone()).into())
+            return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
         };
         Ok((prg_bytes, verb.clone()))
     }

@@ -34,7 +34,8 @@ impl VerbDef {
         Self(bytes)
     }
 
-    #[must_use] pub fn new(
+    #[must_use]
+    pub fn new(
         uuid: Uuid,
         location: Objid,
         owner: Objid,
@@ -82,28 +83,34 @@ impl VerbDef {
         view
     }
 
-    #[must_use] pub fn location(&self) -> Objid {
+    #[must_use]
+    pub fn location(&self) -> Objid {
         let view = self.get_header_view();
         view.header().location().read()
     }
-    #[must_use] pub fn owner(&self) -> Objid {
+    #[must_use]
+    pub fn owner(&self) -> Objid {
         let view = self.get_header_view();
         view.header().owner().read()
     }
-    #[must_use] pub fn flags(&self) -> BitEnum<VerbFlag> {
+    #[must_use]
+    pub fn flags(&self) -> BitEnum<VerbFlag> {
         let view = self.get_header_view();
         view.header().flags().read()
     }
-    #[must_use] pub fn binary_type(&self) -> BinaryType {
+    #[must_use]
+    pub fn binary_type(&self) -> BinaryType {
         let view = self.get_header_view();
         view.header().binary_type().read()
     }
-    #[must_use] pub fn args(&self) -> VerbArgsSpec {
+    #[must_use]
+    pub fn args(&self) -> VerbArgsSpec {
         let view = self.get_header_view();
         VerbArgsSpec::from_bytes(*view.header().args())
     }
 
-    #[must_use] pub fn names(&self) -> Vec<&str> {
+    #[must_use]
+    pub fn names(&self) -> Vec<&str> {
         let view = self.get_header_view();
         let num_names = view.header().num_names().read() as usize;
         let offset = verbdef_header::SIZE.unwrap();

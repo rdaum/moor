@@ -5,7 +5,8 @@ pub mod slice_ref;
 
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'
-#[must_use] pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
+#[must_use]
+pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
     let mut v_iter = vname.chars().peekable();
     let mut w_iter = candidate.chars().peekable();
 
@@ -39,7 +40,8 @@ pub mod slice_ref;
 // Simple MOO quasi-C style string quoting.
 // In MOO, there's just \" and \\, no \n, \t, etc.
 // So no need to produce anything else.
-#[must_use] pub fn quote_str(s: &str) -> String {
+#[must_use]
+pub fn quote_str(s: &str) -> String {
     let output = String::from("\"");
     let mut output = s.chars().fold(output, |mut acc, c| {
         match c {

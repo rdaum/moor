@@ -542,7 +542,10 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
 
     // Find the function id for the given function name.
     let func_name: &str = func_name.as_str();
-    let Some(func_offset) = BUILTIN_DESCRIPTORS.iter().position(|bf| bf.name == func_name) else {
+    let Some(func_offset) = BUILTIN_DESCRIPTORS
+        .iter()
+        .position(|bf| bf.name == func_name)
+    else {
         return Ok(Error(E_INVARG));
     };
 

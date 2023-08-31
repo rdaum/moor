@@ -30,7 +30,8 @@ impl PropDef {
         Self(bytes)
     }
 
-    #[must_use] pub fn new(
+    #[must_use]
+    pub fn new(
         uuid: Uuid,
         definer: Objid,
         location: Objid,
@@ -52,10 +53,7 @@ impl PropDef {
         propdef_view.header_mut().definer_mut().write(definer);
         propdef_view.header_mut().location_mut().write(location);
         propdef_view.header_mut().owner_mut().write(owner);
-        propdef_view
-            .header_mut()
-            .flags_mut()
-            .write(flags);
+        propdef_view.header_mut().flags_mut().write(flags);
 
         let mut name_buf = propdef_view.name_mut();
         name_buf.put_u8(name.len() as u8);
@@ -75,19 +73,24 @@ impl PropDef {
         view
     }
 
-    #[must_use] pub fn definer(&self) -> Objid {
+    #[must_use]
+    pub fn definer(&self) -> Objid {
         self.get_header_view().definer().read()
     }
-    #[must_use] pub fn location(&self) -> Objid {
+    #[must_use]
+    pub fn location(&self) -> Objid {
         self.get_header_view().location().read()
     }
-    #[must_use] pub fn owner(&self) -> Objid {
+    #[must_use]
+    pub fn owner(&self) -> Objid {
         self.get_header_view().owner().read()
     }
-    #[must_use] pub fn flags(&self) -> BitEnum<PropFlag> {
+    #[must_use]
+    pub fn flags(&self) -> BitEnum<PropFlag> {
         self.get_header_view().flags().read()
     }
-    #[must_use] pub fn name(&self) -> &str {
+    #[must_use]
+    pub fn name(&self) -> &str {
         let names_offset = propdef_header::SIZE.unwrap();
         let mut names_buf = &self.0.as_slice()[names_offset..];
         let name_len = names_buf.get_u8() as usize;

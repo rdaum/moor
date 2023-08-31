@@ -84,7 +84,9 @@ type MatchSpans = (Span, Vec<Span>);
 impl Pattern {
     pub fn new(pattern_string: &str, case_matters: bool) -> Result<Self, CompileError> {
         let Some(pattern_string) = translate_pattern(pattern_string) else {
-            return Err(CompileError::FailedCompile("bad pattern translation".to_string()));
+            return Err(CompileError::FailedCompile(
+                "bad pattern translation".to_string(),
+            ));
         };
         let pattern_str_len = pattern_string.len();
         let fastmap = Box::new([0i8; 256]);
@@ -186,7 +188,7 @@ fn translate_pattern(pattern: &str) -> Option<String> {
     let mut s = String::with_capacity(pattern.len());
     let mut c_iter = pattern.chars();
     loop {
-        let Some(mut c) = c_iter.next() else{
+        let Some(mut c) = c_iter.next() else {
             break;
         };
         if c == '%' {

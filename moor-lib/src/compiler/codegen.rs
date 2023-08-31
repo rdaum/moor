@@ -117,8 +117,10 @@ impl CodegenState {
             Some(label) => {
                 let l = self.loops.iter().find(|l| l.top_label == label.id);
                 let Some(l) = l else {
-                      return Err(anyhow!(CompileError::UnknownLoopLabel(loop_label.0.to_string())));
-                    };
+                    return Err(anyhow!(CompileError::UnknownLoopLabel(
+                        loop_label.0.to_string()
+                    )));
+                };
                 Ok(l)
             }
         }

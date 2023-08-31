@@ -53,7 +53,8 @@ pub struct ErrorPack {
 }
 
 impl Error {
-    #[must_use] pub fn message(&self) -> &str {
+    #[must_use]
+    pub fn message(&self) -> &str {
         match self {
             Self::E_NONE => "No error",
             Self::E_TYPE => "Type mismatch",
@@ -74,7 +75,8 @@ impl Error {
         }
     }
 
-    #[must_use] pub fn name(&self) -> &str {
+    #[must_use]
+    pub fn name(&self) -> &str {
         match self {
             Self::E_NONE => "E_NONE",
             Self::E_TYPE => "E_TYPE",
@@ -95,7 +97,8 @@ impl Error {
         }
     }
 
-    #[must_use] pub fn make_raise_pack(&self, msg: String, value: Var) -> ErrorPack {
+    #[must_use]
+    pub fn make_raise_pack(&self, msg: String, value: Var) -> ErrorPack {
         ErrorPack {
             code: *self,
             msg,
@@ -103,7 +106,8 @@ impl Error {
         }
     }
 
-    #[must_use] pub fn make_error_pack(&self, msg: Option<String>) -> ErrorPack {
+    #[must_use]
+    pub fn make_error_pack(&self, msg: Option<String>) -> ErrorPack {
         ErrorPack {
             code: *self,
             msg: msg.unwrap_or(self.message().to_string()),

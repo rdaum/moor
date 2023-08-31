@@ -126,11 +126,11 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
-            let Ok(initialize) = bf_args.world_state.find_method_verb_on(
-                bf_args.task_perms_who(),
-                new_obj,
-                "initialize",
-            ).await else {
+            let Ok(initialize) = bf_args
+                .world_state
+                .find_method_verb_on(bf_args.task_perms_who(), new_obj, "initialize")
+                .await
+            else {
                 return Ok(Ret(v_objid(new_obj)));
             };
 
@@ -428,7 +428,9 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         return Ok(Error(E_INVARG));
     }
 
-    let (Variant::Obj(obj), Variant::Int(f)) = (bf_args.args[0].variant(), bf_args.args[1].variant()) else {
+    let (Variant::Obj(obj), Variant::Int(f)) =
+        (bf_args.args[0].variant(), bf_args.args[1].variant())
+    else {
         return Ok(Error(E_INVARG));
     };
 

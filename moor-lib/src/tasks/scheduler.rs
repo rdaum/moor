@@ -301,9 +301,9 @@ impl Scheduler {
             }
             let Some((target, vi, pc)) = found else {
                 return Err(anyhow!(SchedulerError::NoCommandMatch(
-                                    command.to_string(),
-                                    pc
-                                )));
+                    command.to_string(),
+                    pc
+                )));
             };
             (target, vi, pc)
         };

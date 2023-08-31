@@ -25,28 +25,36 @@ impl LayoutAs<u8> for VerbFlag {
 }
 
 impl VerbFlag {
-    #[must_use] pub fn rwxd() -> BitEnum<Self> {
+    #[must_use]
+    pub fn rwxd() -> BitEnum<Self> {
         BitEnum::from_u8(0b1111)
     }
-    #[must_use] pub fn rwx() -> BitEnum<Self> {
+    #[must_use]
+    pub fn rwx() -> BitEnum<Self> {
         BitEnum::from_u8(0b0111)
     }
-    #[must_use] pub fn rw() -> BitEnum<Self> {
+    #[must_use]
+    pub fn rw() -> BitEnum<Self> {
         BitEnum::from_u8(0b0011)
     }
-    #[must_use] pub fn rx() -> BitEnum<Self> {
+    #[must_use]
+    pub fn rx() -> BitEnum<Self> {
         BitEnum::from_u8(0b0110)
     }
-    #[must_use] pub fn r() -> BitEnum<Self> {
+    #[must_use]
+    pub fn r() -> BitEnum<Self> {
         BitEnum::from_u8(0b0001)
     }
-    #[must_use] pub fn w() -> BitEnum<Self> {
+    #[must_use]
+    pub fn w() -> BitEnum<Self> {
         BitEnum::from_u8(0b0010)
     }
-    #[must_use] pub fn x() -> BitEnum<Self> {
+    #[must_use]
+    pub fn x() -> BitEnum<Self> {
         BitEnum::from_u8(0b0100)
     }
-    #[must_use] pub fn d() -> BitEnum<Self> {
+    #[must_use]
+    pub fn d() -> BitEnum<Self> {
         BitEnum::from_u8(0b1000)
     }
 }

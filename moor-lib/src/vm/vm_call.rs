@@ -111,11 +111,10 @@ impl VM {
         // call verb on parent, but with our current 'this'
         trace!(task_id = self.top().task_id, verb, ?definer, ?parent);
 
-        let Ok(vi) = state.find_method_verb_on(
-            permissions,
-            parent,
-            verb.as_str(),
-        ).await else {
+        let Ok(vi) = state
+            .find_method_verb_on(permissions, parent, verb.as_str())
+            .await
+        else {
             return self.raise_error(E_VERBNF);
         };
 
@@ -277,7 +276,7 @@ impl VM {
         let Some(_) = self.top_mut().bf_trampoline else {
             let return_value = self.top_mut().pop().unwrap();
 
-            return self.unwind_stack(FinallyReason::Return(return_value))
+            return self.unwind_stack(FinallyReason::Return(return_value));
         };
 
         let bf = self.builtins[self.top().bf_index.unwrap()].clone();

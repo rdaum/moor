@@ -83,7 +83,8 @@ pub struct Var {
 }
 
 impl Var {
-    #[must_use] pub fn new(value: Variant) -> Self {
+    #[must_use]
+    pub fn new(value: Variant) -> Self {
         Self { value }
     }
 }
@@ -109,60 +110,74 @@ impl<'de> BorrowDecode<'de> for Var {
     }
 }
 
-#[must_use] pub fn v_bool(b: bool) -> Var {
+#[must_use]
+pub fn v_bool(b: bool) -> Var {
     Var::new(Variant::Int(i64::from(b)))
 }
 
-#[must_use] pub fn v_int(i: i64) -> Var {
+#[must_use]
+pub fn v_int(i: i64) -> Var {
     Var::new(Variant::Int(i))
 }
 
-#[must_use] pub fn v_float(f: f64) -> Var {
+#[must_use]
+pub fn v_float(f: f64) -> Var {
     Var::new(Variant::Float(f))
 }
 
-#[must_use] pub fn v_str(s: &str) -> Var {
+#[must_use]
+pub fn v_str(s: &str) -> Var {
     Var::new(Variant::Str(Str::from_str(s).unwrap()))
 }
 
-#[must_use] pub fn v_string(s: String) -> Var {
+#[must_use]
+pub fn v_string(s: String) -> Var {
     Var::new(Variant::Str(Str::from_string(s)))
 }
 
-#[must_use] pub fn v_objid(o: Objid) -> Var {
+#[must_use]
+pub fn v_objid(o: Objid) -> Var {
     Var::new(Variant::Obj(o))
 }
 
-#[must_use] pub fn v_obj(o: i64) -> Var {
+#[must_use]
+pub fn v_obj(o: i64) -> Var {
     Var::new(Variant::Obj(Objid(o)))
 }
 
-#[must_use] pub fn v_err(e: Error) -> Var {
+#[must_use]
+pub fn v_err(e: Error) -> Var {
     Var::new(Variant::Err(e))
 }
 
-#[must_use] pub fn v_list(l: Vec<Var>) -> Var {
+#[must_use]
+pub fn v_list(l: Vec<Var>) -> Var {
     Var::new(Variant::List(List::from_vec(l)))
 }
 
-#[must_use] pub fn v_empty_list() -> Var {
+#[must_use]
+pub fn v_empty_list() -> Var {
     VAR_EMPTY_LIST.clone()
 }
 
-#[must_use] pub fn v_empty_str() -> Var {
+#[must_use]
+pub fn v_empty_str() -> Var {
     VAR_EMPTY_STR.clone()
 }
 
-#[must_use] pub fn v_none() -> Var {
+#[must_use]
+pub fn v_none() -> Var {
     VAR_NONE.clone()
 }
 
 impl Var {
-    #[must_use] pub fn variant(&self) -> &Variant {
+    #[must_use]
+    pub fn variant(&self) -> &Variant {
         &self.value
     }
 
-    #[must_use] pub fn type_id(&self) -> VarType {
+    #[must_use]
+    pub fn type_id(&self) -> VarType {
         match self.variant() {
             Variant::None => VarType::TYPE_NONE,
             Variant::Str(_) => VarType::TYPE_STR,
@@ -174,7 +189,8 @@ impl Var {
         }
     }
 
-    #[must_use] pub fn to_literal(&self) -> String {
+    #[must_use]
+    pub fn to_literal(&self) -> String {
         match self.variant() {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
@@ -292,7 +308,8 @@ impl Hash for Var {
 impl Eq for Var {}
 
 impl Var {
-    #[must_use] pub fn is_true(&self) -> bool {
+    #[must_use]
+    pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::Str(s) => !s.is_empty(),
             Variant::Int(i) => *i != 0,
@@ -302,7 +319,8 @@ impl Var {
         }
     }
 
-    #[must_use] pub fn has_member(&self, v: &Self) -> Self {
+    #[must_use]
+    pub fn has_member(&self, v: &Self) -> Self {
         let Variant::List(l) = self.variant() else {
             return v_err(E_TYPE);
         };
@@ -312,7 +330,8 @@ impl Var {
 
     /// 1-indexed position of the first occurrence of `v` in `self`, or `E_TYPE` if `self` is not a
     /// list.
-    #[must_use] pub fn index_in(&self, v: &Self) -> Self {
+    #[must_use]
+    pub fn index_in(&self, v: &Self) -> Self {
         let Variant::List(l) = self.variant() else {
             return v_err(E_TYPE);
         };

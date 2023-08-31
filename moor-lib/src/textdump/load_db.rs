@@ -201,7 +201,10 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
 
             let Some(verb) = td.verbs.get(&(*objid, vn)) else {
                 increment_counter!("textdump.missing_programs");
-                warn!("Missing program for defined verb #{}/{} ({:?})", objid.0, vn, names);
+                warn!(
+                    "Missing program for defined verb #{}/{} ({:?})",
+                    objid.0, vn, names
+                );
                 continue;
             };
 

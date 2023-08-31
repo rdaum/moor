@@ -47,13 +47,15 @@ impl<T: AsByteBuffer> Iterator for DefsIter<T> {
 }
 
 impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
-    #[must_use] pub fn empty() -> Self {
+    #[must_use]
+    pub fn empty() -> Self {
         Self {
             bytes: SliceRef::empty(),
             _phantom: Default::default(),
         }
     }
-    #[must_use] pub fn from_sliceref(bytes: SliceRef) -> Self {
+    #[must_use]
+    pub fn from_sliceref(bytes: SliceRef) -> Self {
         Self {
             bytes,
             _phantom: Default::default(),
@@ -80,24 +82,30 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         }
     }
     // Provides the number of items in the buffer.
-    #[must_use] pub fn len(&self) -> usize {
+    #[must_use]
+    pub fn len(&self) -> usize {
         self.iter().count()
     }
 
-    #[must_use] pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
         self.iter().next().is_none()
     }
 
-    #[must_use] pub fn contains(&self, uuid: Uuid) -> bool {
+    #[must_use]
+    pub fn contains(&self, uuid: Uuid) -> bool {
         self.iter().any(|p| p.uuid() == uuid)
     }
-    #[must_use] pub fn find(&self, uuid: &Uuid) -> Option<T> {
+    #[must_use]
+    pub fn find(&self, uuid: &Uuid) -> Option<T> {
         self.iter().find(|p| &p.uuid() == uuid)
     }
-    #[must_use] pub fn find_named(&self, name: &str) -> Option<T> {
+    #[must_use]
+    pub fn find_named(&self, name: &str) -> Option<T> {
         self.iter().find(|p| p.matches_name(name))
     }
-    #[must_use] pub fn with_removed(&self, uuid: Uuid) -> Option<Self> {
+    #[must_use]
+    pub fn with_removed(&self, uuid: Uuid) -> Option<Self> {
         // Return None if the uuid isn't found, otherwise return a copy with the verb removed.
         // This is an O(N) operation, and then we do another O(N) operation to copy the buffer, but
         // if we didn't do this, we'd waste a buffer, so...
@@ -117,7 +125,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         Some(Self::from_sliceref(SliceRef::from_bytes(&buf)))
     }
 
-    #[must_use] pub fn with_all_removed(&self, uuids: &[Uuid]) -> Self {
+    #[must_use]
+    pub fn with_all_removed(&self, uuids: &[Uuid]) -> Self {
         let mut buf = Vec::with_capacity(self.bytes.len());
         for v in self.iter().filter(|v| !uuids.contains(&v.uuid())) {
             v.with_byte_buffer(|bytes| {

@@ -163,8 +163,12 @@ async fn bf_add_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
         return Ok(Error(E_INVARG));
     }
 
-    let (Variant::Obj(location), Variant::Str(name), value, Variant::List(info)) = (bf_args.args[0].variant(),
-        bf_args.args[1].variant(), bf_args.args[2].clone(), bf_args.args[3].variant()) else {
+    let (Variant::Obj(location), Variant::Str(name), value, Variant::List(info)) = (
+        bf_args.args[0].variant(),
+        bf_args.args[1].variant(),
+        bf_args.args[2].clone(),
+        bf_args.args[3].variant(),
+    ) else {
         return Ok(Error(E_INVARG));
     };
 

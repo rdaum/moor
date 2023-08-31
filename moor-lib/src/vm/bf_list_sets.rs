@@ -168,11 +168,11 @@ async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
 
     // TODO: pattern cache?
     let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
-        return  Ok(Error(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
     let Ok((overall, match_vec)) = pattern.match_pattern(subject.as_str()) else {
-        return  Ok(Ret(v_empty_list()));
+        return Ok(Ret(v_empty_list()));
     };
 
     let subs = v_list(
@@ -210,11 +210,11 @@ async fn bf_rmatch<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
 
     // TODO: pattern cache?
     let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
-        return  Ok(Error(E_INVARG));
+        return Ok(Error(E_INVARG));
     };
 
-    let Ok((overall, match_vec))  = pattern.reverse_match_pattern(subject.as_str()) else {
-        return  Ok(Ret(v_empty_list()));
+    let Ok((overall, match_vec)) = pattern.reverse_match_pattern(subject.as_str()) else {
+        return Ok(Ret(v_empty_list()));
     };
 
     let subs = v_list(

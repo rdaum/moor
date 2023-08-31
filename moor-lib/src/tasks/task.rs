@@ -123,7 +123,12 @@ impl Task {
                         drop_tmp_verb(self.world_state.as_mut(), self.perms, &self.tmp_verb).await;
 
                         // TODO: restart the whole task on conflict.
-                        let CommitResult::Success = self.world_state.commit().await.expect("Could not attempt commit") else {
+                        let CommitResult::Success = self
+                            .world_state
+                            .commit()
+                            .await
+                            .expect("Could not attempt commit")
+                        else {
                             unimplemented!("Task restart on conflict")
                         };
                         trace!(self.task_id, result = ?result, "Task complete, committed");

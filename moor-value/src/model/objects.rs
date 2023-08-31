@@ -46,7 +46,8 @@ impl Default for ObjAttrs {
 }
 
 impl ObjAttrs {
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             owner: None,
             name: None,

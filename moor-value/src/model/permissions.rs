@@ -15,7 +15,8 @@ pub struct Perms {
 }
 
 impl Perms {
-    #[must_use] pub fn new(obj: Objid, flags: BitEnum<ObjFlag>) -> Self {
+    #[must_use]
+    pub fn new(obj: Objid, flags: BitEnum<ObjFlag>) -> Self {
         Self { who: obj, flags }
     }
 

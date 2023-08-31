@@ -149,8 +149,10 @@ impl Decompile {
         }
         // Next opcode must be the jump to the end of the whole branch
         let opcode = self.next()?;
-        let Op::Jump {label} = opcode else {
-            return Err(MalformedProgram("expected jump opcode at branch end".to_string()));
+        let Op::Jump { label } = opcode else {
+            return Err(MalformedProgram(
+                "expected jump opcode at branch end".to_string(),
+            ));
         };
         trace!(
             "seek done @ pos {}: {} stmts",
@@ -189,9 +191,11 @@ impl Decompile {
                 // Decompile to the 'end_of_otherwise' label to get the statements for the
                 // otherwise branch.
                 let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
-                let Some(Stmt::Cond{arms:_, otherwise}) = self.s.last_mut() else {
+                let Some(Stmt::Cond { arms: _, otherwise }) = self.s.last_mut() else {
                     trace!("s: {:?}", self.s);
-                    return Err(MalformedProgram("expected Cond as working tree".to_string()));
+                    return Err(MalformedProgram(
+                        "expected Cond as working tree".to_string(),
+                    ));
                 };
                 *otherwise = otherwise_stmts;
             }
@@ -207,9 +211,11 @@ impl Decompile {
                     statements: cond_statements,
                 };
                 // Add the arm
-                let Some(Stmt::Cond{arms, otherwise: _}) = self.s.last_mut() else {
+                let Some(Stmt::Cond { arms, otherwise: _ }) = self.s.last_mut() else {
                     trace!("s: {:?}", self.s);
-                    return Err(MalformedProgram("expected Cond as working tree".to_string()));
+                    return Err(MalformedProgram(
+                        "expected Cond as working tree".to_string(),
+                    ));
                 };
                 arms.push(cond_arm);
             }
@@ -219,10 +225,14 @@ impl Decompile {
             } => {
                 let one = self.pop_expr()?;
                 let Expr::VarExpr(v) = one else {
-                    return Err(MalformedProgram("expected literal '0' in for loop".to_string()));
+                    return Err(MalformedProgram(
+                        "expected literal '0' in for loop".to_string(),
+                    ));
                 };
                 let Variant::Int(0) = v.variant() else {
-                    return Err(MalformedProgram("expected literal '0' in for loop".to_string()));
+                    return Err(MalformedProgram(
+                        "expected literal '0' in for loop".to_string(),
+                    ));
                 };
                 let list = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&label)?;
@@ -507,8 +517,11 @@ impl Decompile {
                         },
                         ScatterLabel::Optional(id, assign_id) => {
                             let opt_assign = if let Some(_label_b) = assign_id {
-                                let Expr::Assign {left: _, right} = self.pop_expr()? else {
-                                    return Err(MalformedProgram("expected assign for optional scatter assignment".to_string()));
+                                let Expr::Assign { left: _, right } = self.pop_expr()? else {
+                                    return Err(MalformedProgram(
+                                        "expected assign for optional scatter assignment"
+                                            .to_string(),
+                                    ));
                                 };
                                 Some(*right)
                             } else {

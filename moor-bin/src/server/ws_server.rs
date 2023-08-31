@@ -420,7 +420,10 @@ impl WebSocketServer {
         let connections = &mut inner.sessions.write().await.connections;
         // TODO: properly handle reconnects.
         let Some(connection) = connections.remove(&connection_object) else {
-            trace!(?connection_object, "connection already removed / no connection for object");
+            trace!(
+                ?connection_object,
+                "connection already removed / no connection for object"
+            );
             return;
         };
         info!(player = ?connection_object, peer = ?connection.peer_addr, "disconnected");

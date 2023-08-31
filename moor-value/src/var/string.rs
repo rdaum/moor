@@ -15,7 +15,8 @@ pub struct Str {
 }
 
 impl Str {
-    #[must_use] pub fn from_string(s: String) -> Self {
+    #[must_use]
+    pub fn from_string(s: String) -> Self {
         Self { inner: Arc::new(s) }
     }
 
@@ -24,7 +25,8 @@ impl Str {
         r.map(v_str)
     }
 
-    #[must_use] pub fn set(&self, offset: usize, r: &Self) -> Var {
+    #[must_use]
+    pub fn set(&self, offset: usize, r: &Self) -> Var {
         if r.len() != 1 {
             return v_err(Error::E_RANGE);
         }
@@ -41,31 +43,38 @@ impl Str {
         r.map(v_str)
     }
 
-    #[must_use] pub fn append(&self, other: &Self) -> Var {
+    #[must_use]
+    pub fn append(&self, other: &Self) -> Var {
         v_string(format!("{}{}", self.inner, other.inner))
     }
 
-    #[must_use] pub fn append_str(&self, other: &str) -> Var {
+    #[must_use]
+    pub fn append_str(&self, other: &str) -> Var {
         v_string(format!("{}{}", self.inner, other))
     }
 
-    #[must_use] pub fn append_string(&self, other: String) -> Var {
+    #[must_use]
+    pub fn append_string(&self, other: String) -> Var {
         v_string(format!("{}{}", self.inner, other))
     }
 
-    #[must_use] pub fn len(&self) -> usize {
+    #[must_use]
+    pub fn len(&self) -> usize {
         self.inner.len()
     }
 
-    #[must_use] pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
-    #[must_use] pub fn as_str(&self) -> &str {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
         self.inner.as_str()
     }
 
-    #[must_use] pub fn substring(&self, range: Range<usize>) -> Self {
+    #[must_use]
+    pub fn substring(&self, range: Range<usize>) -> Self {
         Self {
             inner: Arc::new(self.inner[range].to_string()),
         }

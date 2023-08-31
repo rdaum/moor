@@ -69,9 +69,10 @@ impl<'a> RocksDbTx<'a> {
         let Some(new_props) = props.with_updated(u, |p| {
             let name = match &new_name {
                 None => p.name(),
-                Some(s) => s.as_str()
+                Some(s) => s.as_str(),
             };
-            PropDef::new(u,
+            PropDef::new(
+                u,
                 p.definer(),
                 p.location(),
                 name,

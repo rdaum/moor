@@ -26,17 +26,20 @@ impl<T: ToPrimitive> LayoutAs<u16> for BitEnum<T> {
 }
 
 impl<T: ToPrimitive> BitEnum<T> {
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             value: 0,
             phantom: PhantomData,
         }
     }
-    #[must_use] pub fn to_u16(&self) -> u16 {
+    #[must_use]
+    pub fn to_u16(&self) -> u16 {
         self.value
     }
 
-    #[must_use] pub fn from_u8(value: u8) -> Self {
+    #[must_use]
+    pub fn from_u8(value: u8) -> Self {
         Self {
             value: u16::from(value),
             phantom: PhantomData,
@@ -52,7 +55,8 @@ impl<T: ToPrimitive> BitEnum<T> {
         s
     }
 
-    #[must_use] pub fn all() -> Self {
+    #[must_use]
+    pub fn all() -> Self {
         Self {
             value: u16::MAX,
             phantom: PhantomData,
