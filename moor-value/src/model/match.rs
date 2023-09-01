@@ -1,3 +1,4 @@
+use crate::model::Preposition;
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
@@ -33,9 +34,7 @@ impl ArgSpec {
 pub enum PrepSpec {
     Any,
     None,
-    Other(
-        u16, /* matches Prep 'id' as returned from match_preposition, matching offset into PREP_LIST */
-    ),
+    Other(Preposition),
 }
 
 impl PrepSpec {
@@ -45,7 +44,7 @@ impl PrepSpec {
         match int_value {
             -2 => Self::Any,
             -1 => Self::None,
-            _ => Self::Other(int_value as u16),
+            _ => Self::Other(Preposition::from_int(int_value as u16).unwrap()),
         }
     }
     #[must_use]
@@ -53,7 +52,7 @@ impl PrepSpec {
         match self {
             Self::Any => (-2i16).to_le_bytes(),
             Self::None => (-1i16).to_le_bytes(),
-            Self::Other(id) => (*id as i16).to_le_bytes(),
+            Self::Other(id) => id.int_value().to_le_bytes(),
         }
     }
 }

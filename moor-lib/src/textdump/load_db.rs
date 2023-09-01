@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 use anyhow::Context;
+use int_enum::IntEnum;
 use metrics_macros::increment_counter;
 use moor_value::AsByteBuffer;
 use tracing::{info, span, trace, warn};
@@ -19,6 +20,7 @@ use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::props::PropFlag;
 use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_value::model::verbs::VerbFlag;
+use moor_value::model::Preposition;
 
 struct RProp {
     definer: Objid,
@@ -68,7 +70,7 @@ fn cv_prep_flag(vprep: i16) -> PrepSpec {
     match vprep {
         PREP_ANY => PrepSpec::Any,
         PREP_NONE => PrepSpec::None,
-        _ => PrepSpec::Other(vprep as u16),
+        _ => PrepSpec::Other(Preposition::from_int(vprep as u16).expect("Unsupported preposition")),
     }
 }
 
@@ -77,7 +79,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
         VF_ASPEC_NONE => ArgSpec::None,
         VF_ASPEC_ANY => ArgSpec::Any,
         VF_ASPEC_THIS => ArgSpec::This,
-        _ => panic!("Unsupported argpsec"),
+        _ => panic!("Unsupported argsec"),
     }
 }
 

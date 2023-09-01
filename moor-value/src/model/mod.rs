@@ -1,4 +1,6 @@
 use anyhow::bail;
+use bincode::{Decode, Encode};
+use int_enum::IntEnum;
 
 use thiserror::Error;
 
@@ -95,9 +97,31 @@ impl WorldStateError {
     }
 }
 
-// TODO: not sure this is the most appropriate place; used to be in tasks/command_parse.rs, but
-// is needed elsewhere (by verb_args, etc)
-// Putting here in DB because it's kinda version/DB specific, but not sure it's the best place.
+/// The set of prepositions that are valid for verbs, corresponding to the set of string constants
+/// in PREP_LIST, and for now at least much 1:1 with LambdaMOO's built-in prepositions, and
+/// are referred to in the database.
+/// TODO: Long run a proper table with some sort of dynamic look up and a way to add new ones and
+///   internationalize and so on.
+#[repr(u16)]
+#[derive(Copy, Clone, Debug, IntEnum, Eq, PartialEq, Hash, Encode, Decode, Ord, PartialOrd)]
+pub enum Preposition {
+    WithUsing = 0,
+    AtTo = 1,
+    InFrontOf = 2,
+    IntoIn = 3,
+    OnTopOfOn = 4,
+    OutOf = 5,
+    Over = 6,
+    Through = 7,
+    Under = 8,
+    Behind = 9,
+    Beside = 10,
+    ForAbout = 11,
+    Is = 12,
+    As = 13,
+    OffOf = 14,
+}
+
 pub const PREP_LIST: [&str; 15] = [
     "with/using",
     "at/to",

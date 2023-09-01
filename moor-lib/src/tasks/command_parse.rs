@@ -1,13 +1,29 @@
 use std::string::ToString;
-use std::sync::Once;
 
 use async_trait::async_trait;
+use int_enum::IntEnum;
+use lazy_static::lazy_static;
 
+use moor_value::model::r#match::PrepSpec;
+use moor_value::model::{Preposition, PREP_LIST};
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_str, Var};
 
-use moor_value::model::r#match::PrepSpec;
-use moor_value::model::PREP_LIST;
+lazy_static! {
+    static ref PREPOSITIONS: Vec<Prep> = {
+        PREP_LIST
+            .iter()
+            .enumerate()
+            .map(|(id, phrase)| {
+                let phrases = phrase
+                    .split('/')
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<&str>>();
+                Prep { id, phrases }
+            })
+            .collect::<Vec<Prep>>()
+    };
+}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ParsedCommand {
@@ -31,30 +47,12 @@ pub struct Prep {
     phrases: Vec<&'static str>,
 }
 
-pub const PREPOSITION_WITH_USING: u16 = 0;
-pub const PREPOSITION_AT_TO: u16 = 1;
-pub const PREPOSITION_IN_FRONT_OF: u16 = 2;
-pub const PREPOSITION_INTO_IN: u16 = 3;
-pub const PREPOSITION_ON_TOP_OF_ON: u16 = 4;
-pub const PREPOSITION_OUT_OF: u16 = 5;
-pub const PREPOSITION_OVER: u16 = 6;
-pub const PREPOSITION_THROUGH: u16 = 7;
-pub const PREPOSITION_UNDER: u16 = 8;
-pub const PREPOSITION_BEHIND: u16 = 9;
-pub const PREPOSITION_BESIDE: u16 = 10;
-pub const PREPOSITION_FOR_ABOUT: u16 = 11;
-pub const PREPOSITION_IS: u16 = 12;
-pub const PREPOSITION_AS: u16 = 13;
-pub const PREPOSITION_OFF_OF: u16 = 14;
-
-static mut PREPOSITIONS: Vec<Prep> = vec![];
-static INIT: Once = Once::new();
-
 pub fn parse_preposition_string(repr: &str) -> Option<PrepSpec> {
     match repr {
         "any" => Some(PrepSpec::Any),
         "none" => Some(PrepSpec::None),
-        _ => match_preposition(repr).map(|p| PrepSpec::Other(p.id as u16)),
+        _ => match_preposition(repr)
+            .map(|p| PrepSpec::Other(Preposition::from_int(p.id as u16).unwrap())),
     }
 }
 
@@ -67,25 +65,10 @@ pub fn preposition_to_string(ps: &PrepSpec) -> &str {
 }
 
 pub fn match_preposition(prep: &str) -> Option<Prep> {
-    INIT.call_once(|| unsafe {
-        PREPOSITIONS = PREP_LIST
-            .iter()
-            .enumerate()
-            .map(|(id, phrase)| {
-                let phrases = phrase
-                    .split('/')
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<&str>>();
-                Prep { id, phrases }
-            })
-            .collect::<Vec<Prep>>()
-    });
-    unsafe {
-        PREPOSITIONS
-            .iter()
-            .find(|p| p.phrases.iter().any(|t| t == &prep))
-            .cloned()
-    }
+    PREPOSITIONS
+        .iter()
+        .find(|p| p.phrases.iter().any(|t| t == &prep))
+        .cloned()
 }
 
 fn parse_into_words(input: &str) -> Vec<String> {
@@ -197,7 +180,7 @@ where
         if let Some(p) = match_preposition(word) {
             prep_index = Some(j);
             prepstr = word.to_string();
-            prep = PrepSpec::Other(p.id as u16);
+            prep = PrepSpec::Other(Preposition::from_int(p.id as u16).unwrap());
             break;
         }
     }
@@ -242,6 +225,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use moor_value::model::Preposition;
     use moor_value::var::v_str;
     use moor_value::NOTHING;
 
@@ -334,7 +318,7 @@ mod tests {
         assert_eq!(parsed.dobjstr, "obj");
         assert_eq!(parsed.dobj, Objid(1));
         assert_eq!(parsed.prepstr, "to");
-        assert_eq!(parsed.prep, PrepSpec::Other(PREPOSITION_AT_TO));
+        assert_eq!(parsed.prep, PrepSpec::Other(Preposition::AtTo));
         assert_eq!(parsed.iobjstr, "player");
         assert_eq!(parsed.iobj, Objid(2));
         assert_eq!(
@@ -470,7 +454,7 @@ mod tests {
         assert_eq!(result.dobjstr, "thing1".to_string());
         assert_eq!(result.dobj, MOCK_THING1);
         assert_eq!(result.prepstr, "in".to_string());
-        assert_eq!(result.prep, PrepSpec::Other(PREPOSITION_INTO_IN));
+        assert_eq!(result.prep, PrepSpec::Other(Preposition::IntoIn));
         assert_eq!(result.iobjstr, "t2".to_string());
         assert_eq!(result.iobj, MOCK_THING2);
     }
@@ -492,7 +476,7 @@ mod tests {
         assert_eq!(result.dobjstr, "".to_string());
         assert_eq!(result.dobj, NOTHING);
         assert_eq!(result.prepstr, "at".to_string());
-        assert_eq!(result.prep, PrepSpec::Other(PREPOSITION_AT_TO));
+        assert_eq!(result.prep, PrepSpec::Other(Preposition::AtTo));
         assert_eq!(result.iobjstr, "here".to_string());
         assert_eq!(result.iobj, MOCK_ROOM1);
     }
