@@ -6,9 +6,10 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use moor_value::model::world_state::WorldState;
+use moor_value::var::error::Error;
 use moor_value::var::error::Error::{E_ARGS, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj};
+use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
 
 use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::Sessions;
@@ -45,6 +46,17 @@ pub struct VmExecParams<'a> {
     pub max_stack_depth: usize,
     pub ticks_left: usize,
     pub time_left: Option<Duration>,
+}
+
+pub(crate) fn one_to_zero_index(v: &Var) -> Result<usize, Error> {
+    let Variant::Int(index) = v.variant() else {
+        return Err(E_TYPE);
+    };
+    let index = index - 1;
+    if index < 0 {
+        return Err(E_RANGE);
+    }
+    Ok(index as usize)
 }
 
 impl VM {
@@ -212,10 +224,7 @@ impl VM {
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-                    let mut new_vec = Vec::with_capacity(list.len() + 1);
-                    new_vec.extend(list.iter().cloned());
-                    new_vec.push(tail);
-                    self.push(&v_list(new_vec))
+                    self.push(&list.push(&tail));
                 }
                 Op::ListAppend => {
                     let tail = self.pop();
@@ -235,41 +244,24 @@ impl VM {
                 Op::IndexSet => {
                     // collection[index] = value
                     let value = self.pop(); /* rhs value */
-                    let index = self.pop(); /* index, must be int */
+
+                    // Index into range, must be int.
+                    let index = self.pop();
+
                     let lhs = self.pop(); /* lhs except last index, should be list or str */
 
-                    let nval = match (lhs.variant(), index.variant()) {
-                        (Variant::List(l), Variant::Int(i)) => {
-                            // Adjust for 1 indexing.
-                            let i = *i - 1;
-                            if i < 0 || i >= l.len() as i64 {
-                                return self.push_error(E_RANGE);
-                            }
-
-                            l.set(i as usize, &value)
-                        }
-                        (Variant::Str(s), Variant::Int(i)) => {
-                            // Adjust for 1 indexing.
-                            let i = *i - 1;
-                            if i < 0 || i >= s.len() as i64 {
-                                return self.push_error(E_RANGE);
-                            }
-
-                            let Variant::Str(value) = value.variant() else {
-                                return self.push_error(E_INVARG);
-                            };
-
-                            if value.len() != 1 {
-                                return self.push_error(E_INVARG);
-                            }
-
-                            s.set(i as usize, value)
-                        }
-                        (_, _) => {
-                            return self.push_error(E_TYPE);
-                        }
+                    let i = match one_to_zero_index(&index) {
+                        Ok(i) => i,
+                        Err(e) => return self.push_error(e),
                     };
-                    self.push(&nval);
+                    match lhs.index_set(i, &value) {
+                        Ok(v) => {
+                            self.push(&v);
+                        }
+                        Err(e) => {
+                            return self.push_error(e);
+                        }
+                    }
                 }
                 Op::MakeSingletonList => {
                     let v = self.pop();
@@ -368,31 +360,22 @@ impl VM {
                 Op::PushRef => {
                     let peek = self.peek(2);
                     let (index, list) = (peek[1].clone(), peek[0].clone());
-                    let v = match (index.variant(), list.variant()) {
-                        (Variant::Int(index), Variant::List(list)) => {
-                            // MOO is 1-indexed, it's easier if we adjust in advance.
-                            if *index < 1 {
-                                return self.push_error(E_RANGE);
-                            }
-                            let index = ((*index) - 1) as usize;
-                            if index >= list.len() {
-                                return self.push_error(E_RANGE);
-                            } else {
-                                list[index].clone()
-                            }
-                        }
-                        (_, _) => return self.push_error(E_TYPE),
+                    let index = match one_to_zero_index(&index) {
+                        Ok(i) => i,
+                        Err(e) => return self.push_error(e),
                     };
-                    self.push(&v);
+                    match list.index(index) {
+                        Err(e) => return self.push_error(e),
+                        Ok(v) => self.push(&v),
+                    }
                 }
                 Op::Ref => {
                     let index = self.pop();
                     let l = self.pop();
-                    let Variant::Int(index) = index.variant() else {
-                        return self.push_error(E_TYPE);
+                    let index = match one_to_zero_index(&index) {
+                        Ok(i) => i,
+                        Err(e) => return self.push_error(e),
                     };
-                    // MOO is 1-indexed.
-                    let index = (index - 1) as usize;
                     match l.index(index) {
                         Err(e) => return self.push_error(e),
                         Ok(v) => self.push(&v),
@@ -401,13 +384,10 @@ impl VM {
                 Op::RangeRef => {
                     let (to, from, base) = (self.pop(), self.pop(), self.pop());
                     match (to.variant(), from.variant()) {
-                        (Variant::Int(to), Variant::Int(from)) => {
-                            // MOO is 1-indexed. Adjust.
-                            match base.range(*from, *to) {
-                                Err(e) => return self.push_error(e),
-                                Ok(v) => self.push(&v),
-                            }
-                        }
+                        (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
+                            Err(e) => return self.push_error(e),
+                            Ok(v) => self.push(&v),
+                        },
                         (_, _) => return self.push_error(E_TYPE),
                     };
                 }
@@ -437,12 +417,9 @@ impl VM {
                 Op::Length(offset) => {
                     let vsr = &self.top().valstack;
                     let v = &vsr[offset.0];
-                    match v.variant() {
-                        Variant::Str(s) => self.push(&v_int(s.len() as i64)),
-                        Variant::List(l) => self.push(&v_int(l.len() as i64)),
-                        _ => {
-                            return self.push_error(E_TYPE);
-                        }
+                    match v.len() {
+                        Ok(v) => self.push(&v),
+                        Err(e) => return self.push_error(e),
                     }
                 }
                 Op::GetProp => {
@@ -474,11 +451,7 @@ impl VM {
                     if *time < 0 {
                         return self.push_error(E_INVARG);
                     }
-                    let delay = if *time == 0 {
-                        None
-                    } else {
-                        Some(Duration::from_secs(*time as u64))
-                    };
+                    let delay = (*time == 0).then(|| Duration::from_secs(*time as u64));
                     let new_activation = self.top().clone();
                     let fork = ForkRequest {
                         player: self.top().player,
@@ -508,8 +481,6 @@ impl VM {
                             return self.push_error(E_TYPE);
                         }
                     };
-                    // TODO: check obj for validity, return E_INVIND if not
-
                     return self
                         .prepare_call_verb(exec_params.world_state, *obj, verb.as_str(), &args[..])
                         .await;
@@ -552,17 +523,15 @@ impl VM {
                 Op::EndCatch(label) | Op::EndExcept(label) => {
                     let is_catch = op == Op::EndCatch(label);
                     let v = if is_catch { self.pop() } else { v_none() };
-                    let num_excepts = match self.top_mut().pop_applicable_handler() {
-                        None => {
-                            panic!("Missing handler for try/catch/except");
-                        }
-                        Some(handler) => {
-                            let HandlerType::Catch(num_excepts) = handler.handler_type else {
-                                panic!("Handler is not a catch handler")
-                            };
-                            num_excepts
-                        }
+
+                    let handler = self
+                        .top_mut()
+                        .pop_applicable_handler()
+                        .expect("Missing handler for try/catch/except");
+                    let HandlerType::Catch(num_excepts) = handler.handler_type else {
+                        panic!("Handler is not a catch handler");
                     };
+
                     for _i in 0..num_excepts {
                         self.pop(); /* code list */
                     }
