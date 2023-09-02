@@ -56,17 +56,17 @@ async fn bf_listappend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
         return Ok(Error(E_INVARG));
     }
     let (list, value) = (&bf_args.args[0], &bf_args.args[1]);
-    let Variant::List(list) = list.variant() else {
+    let Variant::List(list) = list.variant().clone() else {
         return Ok(Error(E_TYPE));
     };
     let new_list = if bf_args.args.len() == 2 {
         list.push(value)
     } else {
-        let index = match one_to_zero_index(&bf_args.args[2]) {
-            Ok(i) => i,
-            Err(e) => return Ok(Error(e)),
+        let index = bf_args.args[2].variant();
+        let Variant::Int(index) = index else {
+            return Ok(Error(E_TYPE));
         };
-        list.insert(index as isize, value)
+        list.insert(*index as isize, value)
     };
     Ok(Ret(new_list))
 }
@@ -236,52 +236,53 @@ fn substitute(
     // see a non-digit, then we'll parse the number and look it up in `subs`.
     let mut chars = template.chars();
     while let Some(c) = chars.next() {
-        if c == '%' {
-            // We've seen a %, so we'll start lexing a number. But if the next char is a %, we'll
-            // just append a % to `result` and continue.
-            let mut number = String::new();
-            for c in chars.by_ref() {
-                if c.is_ascii_digit() {
-                    number.push(c);
-                } else {
-                    // We've seen a non-digit, so we'll stop lexing.
-                    // But if the non-digit is a %, we'll append a % to `result`.
-                    if c == '%' {
-                        result.push('%');
-                    }
-                    break;
-                }
-            }
-            // Now we'll parse the number.
-            let Ok(number) = number.parse::<usize>() else {
-                // If we can't parse the number, we'll raise an error.
-                return Err(E_INVARG);
-            };
-
-            // If the number is out of range, we'll raise an E_INVARG. E_RANGE would be nice, but
-            // that's not what MOO does.
-            if number > subs.len() {
-                return Err(E_INVARG);
-            }
-
-            // We're 1-indexed, so we'll subtract 1 from the number.
-            let number = number - 1;
-
-            // And look it up in `subs`. Again 1-indexed.
-            let (start, end) = (subs[number].0 - 1, subs[number].1);
-
-            // Now validate the range in the source string, and raise an E_INVARG if it's invalid.
-            if start < 0 || start > end || end >= (source.len() as isize) {
-                return Err(E_INVARG);
-            }
-
-            let (start, end) = (start as usize, end as usize);
-            // Now append the corresponding substring to `result`.
-            result.push_str(&source[start..=end]);
-        } else {
+        if c != '%' {
             // We've seen a non-%, so we'll just append it to `result`.
             result.push(c);
+            continue;
         }
+
+        // We've seen a %, so we'll start lexing a number. But if the next char is a %, we'll
+        // just append a % to `result` and continue.
+        let mut number = String::new();
+        for c in chars.by_ref() {
+            if c.is_ascii_digit() {
+                number.push(c);
+            } else {
+                // We've seen a non-digit, so we'll stop lexing.
+                // But if the non-digit is a %, we'll append a % to `result`.
+                if c == '%' {
+                    result.push('%');
+                }
+                break;
+            }
+        }
+        // Now we'll parse the number.
+        let Ok(number) = number.parse::<usize>() else {
+            // If we can't parse the number, we'll raise an error.
+            return Err(E_INVARG);
+        };
+
+        // If the number is out of range, we'll raise an E_INVARG. E_RANGE would be nice, but
+        // that's not what MOO does.
+        if number > subs.len() {
+            return Err(E_INVARG);
+        }
+
+        // We're 1-indexed, so we'll subtract 1 from the number.
+        let number = number - 1;
+
+        // And look it up in `subs`. Again 1-indexed.
+        let (start, end) = (subs[number].0 - 1, subs[number].1);
+
+        // Now validate the range in the source string, and raise an E_INVARG if it's invalid.
+        if start < 0 || start > end || end >= (source.len() as isize) {
+            return Err(E_INVARG);
+        }
+
+        let (start, end) = (start as usize, end as usize);
+        // Now append the corresponding substring to `result`.
+        result.push_str(&source[start..=end]);
     }
     Ok(result)
 }
