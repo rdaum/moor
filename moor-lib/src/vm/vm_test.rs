@@ -109,7 +109,7 @@ mod tests {
                 ticks_left: 90_000,
                 time_left: None,
             };
-            match vm.exec(vm_exec_params).await {
+            match vm.exec(vm_exec_params, 1_000000).await {
                 Ok(ExecutionResult::More) => continue,
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),
@@ -899,7 +899,7 @@ mod tests {
                 ticks_left: 90_000,
                 time_left: None,
             };
-            match vm.exec(vm_exec_params).await {
+            match vm.exec(vm_exec_params, 1000).await {
                 Ok(ExecutionResult::More) => continue,
                 Ok(ExecutionResult::Complete(a)) => return a,
                 Err(e) => panic!("error during execution: {:?}", e),

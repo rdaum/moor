@@ -381,9 +381,16 @@ impl Task {
             ticks_left: self.max_ticks - self.vm.tick_count,
             time_left,
         };
-        let mut result = self.vm.exec(exec_params).await?;
+        let pre_exec_tick_count = self.vm.tick_count;
+        let mut result = self.vm.exec(exec_params, self.max_ticks).await?;
+        let post_exec_tick_count = self.vm.tick_count;
+        trace!(
+            task_id = self.task_id,
+            executed_ticks = post_exec_tick_count - pre_exec_tick_count,
+            ?result,
+            "Executed ticks",
+        );
         loop {
-            self.vm.tick_count += 1;
             match result {
                 ExecutionResult::More => return Ok(None),
                 ExecutionResult::ContinueVerb {
