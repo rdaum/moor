@@ -20,7 +20,7 @@ define_layout!(verbdef_header, LittleEndian, {
     owner: Objid as i64,
     flags: BitEnum::<VerbFlag> as u16,
     binary_type: BinaryType as u8,
-    args: [u8; 4],
+    args: VerbArgsSpec as u32,
     num_names: u8,
 });
 
@@ -59,7 +59,7 @@ impl VerbDef {
         header_view.owner_mut().write(owner);
         header_view.flags_mut().write(flags);
         header_view.binary_type_mut().write(binary_type);
-        header_view.args_mut().copy_from_slice(&args.to_bytes());
+        header_view.args_mut().write(args);
         header_view.num_names_mut().write(names.len() as u8);
 
         // Now write the names, into the names region.
@@ -106,7 +106,7 @@ impl VerbDef {
     #[must_use]
     pub fn args(&self) -> VerbArgsSpec {
         let view = self.get_header_view();
-        VerbArgsSpec::from_bytes(*view.header().args())
+        view.header().args().read()
     }
 
     #[must_use]

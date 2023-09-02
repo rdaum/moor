@@ -18,9 +18,9 @@ use crate::db::LoaderInterface;
 use crate::textdump::{Object, TextdumpReader};
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::props::PropFlag;
+use moor_value::model::r#match::Preposition;
 use moor_value::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_value::model::verbs::VerbFlag;
-use moor_value::model::Preposition;
 
 struct RProp {
     definer: Objid,

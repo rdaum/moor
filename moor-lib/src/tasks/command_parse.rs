@@ -4,8 +4,7 @@ use async_trait::async_trait;
 use int_enum::IntEnum;
 use lazy_static::lazy_static;
 
-use moor_value::model::r#match::PrepSpec;
-use moor_value::model::{Preposition, PREP_LIST};
+use moor_value::model::r#match::{PrepSpec, Preposition, PREP_LIST};
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_str, Var};
 
@@ -225,7 +224,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_value::model::Preposition;
+    use moor_value::model::r#match::Preposition;
     use moor_value::var::v_str;
     use moor_value::NOTHING;
 

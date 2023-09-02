@@ -1,4 +1,4 @@
-use crate::model::Preposition;
+use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use int_enum::IntEnum;
 
@@ -8,6 +8,16 @@ pub enum ArgSpec {
     None = 0,
     Any = 1,
     This = 2,
+}
+
+impl LayoutAs<u8> for ArgSpec {
+    fn read(v: u8) -> Self {
+        ArgSpec::from_int(v).expect("Invalid ArgSpec value")
+    }
+
+    fn write(v: Self) -> u8 {
+        v.int_value()
+    }
 }
 
 impl ArgSpec {
@@ -30,6 +40,49 @@ impl ArgSpec {
     }
 }
 
+/// The set of prepositions that are valid for verbs, corresponding to the set of string constants
+/// in PREP_LIST, and for now at least much 1:1 with LambdaMOO's built-in prepositions, and
+/// are referred to in the database.
+/// TODO: Long run a proper table with some sort of dynamic look up and a way to add new ones and
+///   internationalize and so on.
+#[repr(u16)]
+#[derive(Copy, Clone, Debug, IntEnum, Eq, PartialEq, Hash, Encode, Decode, Ord, PartialOrd)]
+pub enum Preposition {
+    WithUsing = 0,
+    AtTo = 1,
+    InFrontOf = 2,
+    IntoIn = 3,
+    OnTopOfOn = 4,
+    OutOf = 5,
+    Over = 6,
+    Through = 7,
+    Under = 8,
+    Behind = 9,
+    Beside = 10,
+    ForAbout = 11,
+    Is = 12,
+    As = 13,
+    OffOf = 14,
+}
+
+pub const PREP_LIST: [&str; 15] = [
+    "with/using",
+    "at/to",
+    "in front of",
+    "in/inside/into",
+    "on top of/on/onto/upon",
+    "out of/from inside/from",
+    "over",
+    "through",
+    "under/underneath/beneath",
+    "behind",
+    "beside",
+    "for/about",
+    "is",
+    "as",
+    "off/off of",
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]
 pub enum PrepSpec {
     Any,
@@ -37,22 +90,20 @@ pub enum PrepSpec {
     Other(Preposition),
 }
 
-impl PrepSpec {
-    #[must_use]
-    pub fn from_bytes(bytes: [u8; 2]) -> Self {
-        let int_value = i16::from_le_bytes(bytes);
-        match int_value {
+impl LayoutAs<i16> for PrepSpec {
+    fn read(v: i16) -> Self {
+        match v {
             -2 => Self::Any,
             -1 => Self::None,
-            _ => Self::Other(Preposition::from_int(int_value as u16).unwrap()),
+            p => Self::Other(Preposition::from_int(p as u16).expect("Invalid preposition")),
         }
     }
-    #[must_use]
-    pub fn to_bytes(&self) -> [u8; 2] {
-        match self {
-            Self::Any => (-2i16).to_le_bytes(),
-            Self::None => (-1i16).to_le_bytes(),
-            Self::Other(id) => id.int_value().to_le_bytes(),
+
+    fn write(v: Self) -> i16 {
+        match v {
+            Self::Any => -2,
+            Self::None => -1,
+            Self::Other(p) => p.int_value() as i16,
         }
     }
 }
@@ -79,20 +130,45 @@ impl VerbArgsSpec {
             && (self.prep == PrepSpec::Any || self.prep == v.prep)
             && (self.iobj == ArgSpec::Any || self.iobj == v.iobj)
     }
-    #[must_use]
-    pub fn to_bytes(&self) -> [u8; 4] {
-        let mut bytes = [0u8; 4];
-        bytes[0] = self.dobj as u8;
-        bytes[1] = self.iobj as u8;
-        bytes[2..4].copy_from_slice(&self.prep.to_bytes());
-        bytes
-    }
-    // TODO Actually keep the args spec encoded as bytes and use setters/getters instead
-    #[must_use]
-    pub fn from_bytes(bytes: [u8; 4]) -> Self {
-        let dobj = ArgSpec::from_int(bytes[0]).unwrap();
-        let iobj = ArgSpec::from_int(bytes[1]).unwrap();
-        let prep = PrepSpec::from_bytes([bytes[2], bytes[3]]);
+}
+
+impl LayoutAs<u32> for VerbArgsSpec {
+    fn read(v: u32) -> Self {
+        let dobj_value = v & 0x000000ff;
+        let prep_value = ((v >> 8) & 0x0000ffff) as i16;
+        let iobj_value = (v >> 24) & 0x000000ff;
+        let dobj = ArgSpec::read(dobj_value as u8);
+        let prep = PrepSpec::read(prep_value);
+        let iobj = ArgSpec::read(iobj_value as u8);
         Self { dobj, prep, iobj }
+    }
+
+    fn write(v: Self) -> u32 {
+        let mut r: u32 = 0;
+        let dobj_value = ArgSpec::write(v.dobj);
+        r |= dobj_value as u32;
+        let prep_value = PrepSpec::write(v.prep);
+        r |= (prep_value as u32 & 0xffff) << 8;
+        let iobj_value = ArgSpec::write(v.iobj);
+        r |= (iobj_value as u32) << 24;
+        r
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use binary_layout::LayoutAs;
+
+    #[test]
+    fn verbargs_spec_to_from_u32() {
+        use super::{ArgSpec, PrepSpec, VerbArgsSpec};
+        let spec = VerbArgsSpec {
+            dobj: ArgSpec::This,
+            prep: PrepSpec::None,
+            iobj: ArgSpec::This,
+        };
+        let v = VerbArgsSpec::write(spec);
+        let spec2 = VerbArgsSpec::read(v);
+        assert_eq!(spec, spec2);
     }
 }
