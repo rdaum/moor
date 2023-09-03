@@ -18,7 +18,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::RwLock;
 use tracing::{error, info, instrument, trace, warn};
 
-use moor_lib::tasks::scheduler::{Scheduler, TaskWaiterResult};
+use moor_lib::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_lib::tasks::Sessions;
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
@@ -261,8 +261,28 @@ impl WebSocketServer {
             if let Err(e) = task_id {
                 increment_counter!("ws_server.submit_error");
 
-                error!("Error submitting command ({}): {:?}", cmd, e);
-                self.send_error(player, format!("{e:?}")).await.unwrap();
+                match e {
+                    SchedulerError::CouldNotParseCommand(_)
+                    | SchedulerError::NoCommandMatch(_, _) => {
+                        self.send_error(player, format!("I don't understand that."))
+                            .await
+                            .unwrap();
+                    }
+                    SchedulerError::PermissionDenied => {
+                        self.send_error(player, format!("You can't do that."))
+                            .await
+                            .unwrap();
+                    }
+                    _ => {
+                        self.send_error(
+                            player,
+                            format!("Internal error. Let your nearest wizard know"),
+                        )
+                        .await
+                        .unwrap();
+                        error!(player=?player, command=cmd, error=?e, "Internal error in command submission");
+                    }
+                }
                 continue;
             }
         }

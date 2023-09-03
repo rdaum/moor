@@ -5,9 +5,9 @@ use std::thread::spawn;
 use async_trait::async_trait;
 use metrics_macros::increment_counter;
 use strum::VariantNames;
-use tracing::error;
 
 use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::WorldStateError;
 
 use crate::db::db_client::DbTxClient;
 use crate::db::rocksdb::tx_server::run_tx_server;
@@ -36,7 +36,7 @@ impl RocksDbServer {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn start_transaction(&self) -> Result<DbTxWorldState, anyhow::Error> {
+    pub fn start_transaction(&self) -> Result<DbTxWorldState, WorldStateError> {
         // Spawn a thread to handle the transaction, and return a mailbox to it.
         let (send, receive) = crossbeam_channel::unbounded();
         let db = self.db.clone();
@@ -49,10 +49,7 @@ impl RocksDbServer {
 
             let tx = db.transaction();
             increment_counter!("rocksdb.start_transaction_server");
-            let e = run_tx_server(receive, tx, column_families.collect());
-            if let Err(e) = e {
-                error!("System error in database transaction: {:?}", e);
-            }
+            run_tx_server(receive, tx, column_families.collect()).expect("Error running tx server");
         });
         Ok(DbTxWorldState {
             join_handle: jh,
@@ -64,7 +61,7 @@ impl RocksDbServer {
 #[async_trait]
 impl WorldStateSource for RocksDbServer {
     #[tracing::instrument(skip(self))]
-    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, anyhow::Error> {
+    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, WorldStateError> {
         // Return a transaction wrapped by the higher level RocksDbWorldState.
         let tx = self.start_transaction()?;
         Ok(Box::new(tx))

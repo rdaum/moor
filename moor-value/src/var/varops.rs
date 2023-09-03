@@ -56,9 +56,7 @@ impl Var {
 
                 Ok(s.set(i, value))
             }
-            _ => {
-                Err(E_TYPE)
-            }
+            _ => Err(E_TYPE),
         }
     }
 

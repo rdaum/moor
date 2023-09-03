@@ -25,8 +25,10 @@ use crate::tasks::{Sessions, TaskId};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ForkRequest, VM};
 
+use crate::tasks::scheduler::SchedulerError::{CouldNotParseCommand, DatabaseError, TaskNotFound};
 use moor_value::model::permissions::Perms;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::WorldStateError;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);
@@ -132,10 +134,20 @@ struct TaskControl {
     subscribers: Vec<oneshot::Sender<TaskWaiterResult>>,
 }
 
-#[derive(Debug, Eq, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum SchedulerError {
+    #[error("Could not parse command: {0}")]
+    CouldNotParseCommand(Error),
     #[error("Could not find match for command '{0}': {1:?}")]
     NoCommandMatch(String, ParsedCommand),
+    #[error("Could not start transaction due to database error: {0}")]
+    DatabaseError(WorldStateError),
+    #[error("Permission denied")]
+    PermissionDenied,
+    #[error("Task not found: {0:?}")]
+    TaskNotFound(TaskId),
+    #[error("Could not start task: {0}")]
+    CouldNotStartTask(Error),
 }
 
 // TODO cache
@@ -263,28 +275,33 @@ impl Scheduler {
         player: Objid,
         command: &str,
         sessions: Arc<RwLock<dyn Sessions>>,
-    ) -> Result<TaskId, anyhow::Error> {
+    ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_command_task");
 
         let mut inner = self.inner.write().await;
 
         let (vloc, vi, command) = {
             let mut ss = inner.state_source.write().await;
-            let mut ws = ss.new_world_state().await?;
+            let mut ws = ss.new_world_state().await.map_err(|e| DatabaseError(e))?;
+
             // Get perms for environment search. Player's perms.
-            let _player_flags = ws.flags_of(player).await?;
             let me = DBMatchEnvironment {
                 ws: ws.as_mut(),
                 perms: player,
             };
             let matcher = MatchEnvironmentParseMatcher { env: me, player };
-            let pc = parse_command(command, matcher).await?;
-            let loc = ws.location_of(player, player).await?;
+            let pc = parse_command(command, matcher)
+                .await
+                .map_err(|e| CouldNotParseCommand(e))?;
+            let loc = match ws.location_of(player, player).await {
+                Ok(loc) => loc,
+                Err(e) => return Err(DatabaseError(e)),
+            };
 
             let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
             let mut found = None;
             for target in targets_to_search {
-                if let Some(vi) = ws
+                let match_result = ws
                     .find_command_verb_on(
                         player,
                         target,
@@ -293,17 +310,18 @@ impl Scheduler {
                         pc.prep,
                         pc.iobj,
                     )
-                    .await?
-                {
+                    .await;
+                let match_result = match match_result {
+                    Ok(m) => m,
+                    Err(e) => return Err(DatabaseError(e)),
+                };
+                if let Some(vi) = match_result {
                     found = Some((target, vi, pc.clone()));
                     break;
                 }
             }
             let Some((target, vi, pc)) = found else {
-                return Err(anyhow!(SchedulerError::NoCommandMatch(
-                    command.to_string(),
-                    pc
-                )));
+                return Err(SchedulerError::NoCommandMatch(command.to_string(), pc));
             };
             (target, vi, pc)
         };
@@ -321,7 +339,7 @@ impl Scheduler {
             .await?;
 
         let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
-            return Err(anyhow!("Could not find task with id {:?}", task_id));
+            return Err(TaskNotFound(task_id));
         };
 
         trace!(
@@ -337,7 +355,8 @@ impl Scheduler {
                 vloc,
                 verbinfo: vi,
                 command,
-            })?;
+            })
+            .map_err(|e| SchedulerError::CouldNotStartTask(anyhow!(e)))?;
 
         Ok(task_id)
     }
@@ -891,11 +910,14 @@ impl Inner {
         scheduler_ref: Scheduler,
         perms: Objid,
         background: bool,
-    ) -> Result<TaskId, anyhow::Error> {
+    ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.new_task");
         let mut world_state = {
             let mut state_source = state_source.write().await;
-            state_source.new_world_state().await?
+            state_source
+                .new_world_state()
+                .await
+                .map_err(|e| DatabaseError(e))?
         };
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in

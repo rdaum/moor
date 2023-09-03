@@ -11,8 +11,8 @@ use moor_value::model::objset::ObjSet;
 use moor_value::model::propdef::{PropDef, PropDefs};
 use moor_value::model::verbdef::{VerbDef, VerbDefs};
 use moor_value::model::world_state::{WorldState, WorldStateSource};
-use moor_value::model::CommitResult;
 use moor_value::model::WorldStateError::{ObjectNotFound, PropertyNotFound, VerbNotFound};
+use moor_value::model::{CommitResult, WorldStateError};
 use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
@@ -538,7 +538,7 @@ fn inmem_db_server(
 }
 
 impl InMemTransientDatabase {
-    pub fn tx(&mut self) -> Result<Box<DbTxWorldState>, anyhow::Error> {
+    pub fn tx(&mut self) -> Result<Box<DbTxWorldState>, WorldStateError> {
         let (tx, rx) = crossbeam_channel::unbounded();
         let tx_client = DbTxClient { mailbox: tx };
         let join_handle = inmem_db_server(self.db.clone(), rx);
@@ -553,7 +553,7 @@ impl InMemTransientDatabase {
 #[async_trait]
 impl WorldStateSource for InMemTransientDatabase {
     #[tracing::instrument(skip(self))]
-    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, anyhow::Error> {
+    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.tx()?;
         Ok(tx)
     }
