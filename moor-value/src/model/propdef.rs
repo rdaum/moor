@@ -4,7 +4,7 @@ use crate::util::bitenum::BitEnum;
 use crate::util::slice_ref::SliceRef;
 use crate::var::objid::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::define_layout;
+use binary_layout::{define_layout, Field};
 use bytes::{Buf, BufMut};
 use uuid::Uuid;
 
@@ -12,17 +12,13 @@ use uuid::Uuid;
 pub struct PropDef(SliceRef);
 
 define_layout!(propdef, LittleEndian, {
-    header: propdef_header::NestedView,
-    name: [u8],
-});
-
-define_layout!(propdef_header, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
     definer: Objid as i64,
     location: Objid as i64,
     owner: Objid as i64,
     flags: BitEnum<PropFlag> as u16,
+    name: [u8],
 });
 
 impl PropDef {
@@ -39,21 +35,15 @@ impl PropDef {
         flags: BitEnum<PropFlag>,
         owner: Objid,
     ) -> Self {
-        let header_size = propdef_header::SIZE.unwrap();
+        let header_size = propdef::name::OFFSET;
         let mut buf = vec![0; header_size + name.len() + 8];
         let mut propdef_view = propdef::View::new(&mut buf);
-        propdef_view
-            .header_mut()
-            .data_version_mut()
-            .write(DATA_LAYOUT_VERSION);
-        propdef_view
-            .header_mut()
-            .uuid_mut()
-            .copy_from_slice(uuid.as_bytes());
-        propdef_view.header_mut().definer_mut().write(definer);
-        propdef_view.header_mut().location_mut().write(location);
-        propdef_view.header_mut().owner_mut().write(owner);
-        propdef_view.header_mut().flags_mut().write(flags);
+        propdef_view.data_version_mut().write(DATA_LAYOUT_VERSION);
+        propdef_view.uuid_mut().copy_from_slice(uuid.as_bytes());
+        propdef_view.definer_mut().write(definer);
+        propdef_view.location_mut().write(location);
+        propdef_view.owner_mut().write(owner);
+        propdef_view.flags_mut().write(flags);
 
         let mut name_buf = propdef_view.name_mut();
         name_buf.put_u8(name.len() as u8);
@@ -62,8 +52,8 @@ impl PropDef {
         Self(SliceRef::from_vec(buf))
     }
 
-    fn get_header_view(&self) -> propdef_header::View<&[u8]> {
-        let view = propdef_header::View::new(self.0.as_slice());
+    fn get_layout_view(&self) -> propdef::View<&[u8]> {
+        let view = propdef::View::new(self.0.as_slice());
         assert_eq!(
             view.data_version().read(),
             DATA_LAYOUT_VERSION,
@@ -75,23 +65,23 @@ impl PropDef {
 
     #[must_use]
     pub fn definer(&self) -> Objid {
-        self.get_header_view().definer().read()
+        self.get_layout_view().definer().read()
     }
     #[must_use]
     pub fn location(&self) -> Objid {
-        self.get_header_view().location().read()
+        self.get_layout_view().location().read()
     }
     #[must_use]
     pub fn owner(&self) -> Objid {
-        self.get_header_view().owner().read()
+        self.get_layout_view().owner().read()
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        self.get_header_view().flags().read()
+        self.get_layout_view().flags().read()
     }
     #[must_use]
     pub fn name(&self) -> &str {
-        let names_offset = propdef_header::SIZE.unwrap();
+        let names_offset = propdef::name::OFFSET;
         let mut names_buf = &self.0.as_slice()[names_offset..];
         let name_len = names_buf.get_u8() as usize;
         let name_slice = names_buf.get(..name_len).unwrap();
@@ -126,7 +116,7 @@ impl Named for PropDef {
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
         let view = propdef::View::new(self.0.as_slice());
-        Uuid::from_bytes(*view.header().uuid())
+        Uuid::from_bytes(*view.uuid())
     }
 }
 
