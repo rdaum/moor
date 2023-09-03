@@ -1,4 +1,6 @@
+use crate::compiler::GlobalName;
 use bincode::{Decode, Encode};
+use strum::IntoEnumIterator;
 
 /// A JumpLabel is what a labels resolve to in the program.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
@@ -60,25 +62,9 @@ impl From<usize> for Offset {
 impl Names {
     pub fn new() -> Self {
         let mut names = Self { names: vec![] };
-
-        names.find_or_add_name("NUM");
-        names.find_or_add_name("OBJ");
-        names.find_or_add_name("STR");
-        names.find_or_add_name("LIST");
-        names.find_or_add_name("ERR");
-        names.find_or_add_name("INT");
-        names.find_or_add_name("FLOAT");
-        names.find_or_add_name("player");
-        names.find_or_add_name("this");
-        names.find_or_add_name("caller");
-        names.find_or_add_name("verb");
-        names.find_or_add_name("args");
-        names.find_or_add_name("argstr");
-        names.find_or_add_name("dobj");
-        names.find_or_add_name("dobjstr");
-        names.find_or_add_name("prepstr");
-        names.find_or_add_name("iobj");
-        names.find_or_add_name("iobjstr");
+        for global in GlobalName::iter() {
+            names.find_or_add_name(global.to_string().as_str());
+        }
         names
     }
 

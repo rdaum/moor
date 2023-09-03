@@ -2,6 +2,7 @@ use moor_value::NOTHING;
 use tracing::trace;
 use uuid::Uuid;
 
+use crate::compiler::GlobalName;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verb_info::VerbInfo;
 use moor_value::model::verbdef::VerbDef;
@@ -127,44 +128,37 @@ impl Activation {
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
-        a.set_var("this", v_objid(verb_call_request.call.this))
-            .unwrap();
-        a.set_var("player", v_objid(verb_call_request.call.player))
-            .unwrap();
-        a.set_var("caller", v_objid(verb_call_request.call.caller))
-            .unwrap();
-        a.set_var("NUM", v_int(VarType::TYPE_INT as i64)).unwrap();
-        a.set_var("OBJ", v_int(VarType::TYPE_OBJ as i64)).unwrap();
-        a.set_var("STR", v_int(VarType::TYPE_STR as i64)).unwrap();
-        a.set_var("ERR", v_int(VarType::TYPE_ERR as i64)).unwrap();
-        a.set_var("LIST", v_int(VarType::TYPE_LIST as i64)).unwrap();
-        a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
-        a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
-            .unwrap();
-        a.set_var("verb", v_str(verb_call_request.call.verb_name.as_str()))
-            .unwrap();
-        a.set_var("args", v_list(verb_call_request.call.args))
-            .unwrap();
+        a.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
+        a.set_gvar(GlobalName::player, v_objid(verb_call_request.call.player));
+        a.set_gvar(GlobalName::caller, v_objid(verb_call_request.call.caller));
+        a.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
+        a.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
+        a.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
+        a.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
+        a.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
+        a.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
+        a.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
+        a.set_gvar(
+            GlobalName::verb,
+            v_str(verb_call_request.call.verb_name.as_str()),
+        );
+        a.set_gvar(GlobalName::args, v_list(verb_call_request.call.args));
 
         // From the command, if any...
         if let Some(command) = verb_call_request.command {
-            a.set_var("argstr", v_string(command.argstr.clone()))
-                .unwrap();
-            a.set_var("dobj", v_objid(command.dobj)).unwrap();
-            a.set_var("dobjstr", v_string(command.dobjstr.clone()))
-                .unwrap();
-            a.set_var("prepstr", v_string(command.prepstr.clone()))
-                .unwrap();
-            a.set_var("iobj", v_objid(command.iobj)).unwrap();
-            a.set_var("iobjstr", v_string(command.iobjstr.clone()))
-                .unwrap();
+            a.set_gvar(GlobalName::argstr, v_string(command.argstr.clone()));
+            a.set_gvar(GlobalName::dobj, v_objid(command.dobj));
+            a.set_gvar(GlobalName::dobjstr, v_string(command.dobjstr.clone()));
+            a.set_gvar(GlobalName::prepstr, v_string(command.prepstr.clone()));
+            a.set_gvar(GlobalName::iobj, v_objid(command.iobj));
+            a.set_gvar(GlobalName::iobjstr, v_string(command.iobjstr.clone()));
         } else {
-            a.set_var("argstr", v_str("")).unwrap();
-            a.set_var("dobj", v_objid(NOTHING)).unwrap();
-            a.set_var("dobjstr", v_str("")).unwrap();
-            a.set_var("prepstr", v_str("")).unwrap();
-            a.set_var("iobj", v_objid(NOTHING)).unwrap();
-            a.set_var("iobjstr", v_str("")).unwrap();
+            a.set_gvar(GlobalName::argstr, v_str(""));
+            a.set_gvar(GlobalName::dobj, v_objid(NOTHING));
+            a.set_gvar(GlobalName::dobjstr, v_str(""));
+            a.set_gvar(GlobalName::prepstr, v_str(""));
+            a.set_gvar(GlobalName::iobj, v_objid(NOTHING));
+            a.set_gvar(GlobalName::iobjstr, v_str(""));
         }
         Ok(a)
     }
@@ -215,25 +209,24 @@ impl Activation {
         };
 
         // TODO use pre-set constant offsets for these like LambdaMOO does.
-        a.set_var("this", v_objid(player)).unwrap();
-        a.set_var("player", v_objid(player)).unwrap();
-        a.set_var("caller", v_objid(player)).unwrap();
-        a.set_var("NUM", v_int(VarType::TYPE_INT as i64)).unwrap();
-        a.set_var("OBJ", v_int(VarType::TYPE_OBJ as i64)).unwrap();
-        a.set_var("STR", v_int(VarType::TYPE_STR as i64)).unwrap();
-        a.set_var("ERR", v_int(VarType::TYPE_ERR as i64)).unwrap();
-        a.set_var("LIST", v_int(VarType::TYPE_LIST as i64)).unwrap();
-        a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
-        a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
-            .unwrap();
-        a.set_var("verb", v_str("eval")).unwrap();
-        a.set_var("args", v_empty_list()).unwrap();
-        a.set_var("argstr", v_str("")).unwrap();
-        a.set_var("dobj", v_objid(NOTHING)).unwrap();
-        a.set_var("dobjstr", v_str("")).unwrap();
-        a.set_var("prepstr", v_str("")).unwrap();
-        a.set_var("iobj", v_objid(NOTHING)).unwrap();
-        a.set_var("iobjstr", v_str("")).unwrap();
+        a.set_gvar(GlobalName::this, v_objid(player));
+        a.set_gvar(GlobalName::player, v_objid(player));
+        a.set_gvar(GlobalName::caller, v_objid(player));
+        a.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
+        a.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
+        a.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
+        a.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
+        a.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
+        a.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
+        a.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
+        a.set_gvar(GlobalName::verb, v_str("eval"));
+        a.set_gvar(GlobalName::args, v_empty_list());
+        a.set_gvar(GlobalName::argstr, v_str(""));
+        a.set_gvar(GlobalName::dobj, v_objid(NOTHING));
+        a.set_gvar(GlobalName::dobjstr, v_str(""));
+        a.set_gvar(GlobalName::prepstr, v_str(""));
+        a.set_gvar(GlobalName::iobj, v_objid(NOTHING));
+        a.set_gvar(GlobalName::iobjstr, v_str(""));
         Ok(a)
     }
     pub fn for_bf_call(
@@ -294,14 +287,8 @@ impl Activation {
         self.verb_info.verbdef().owner()
     }
 
-    pub fn set_var(&mut self, name: &str, value: Var) -> Result<(), Error> {
-        let n = self.program.var_names.find_name_offset(name);
-        if let Some(n) = n {
-            self.environment[n] = Some(value);
-            Ok(())
-        } else {
-            Err(E_VARNF)
-        }
+    pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
+        self.environment[gname as usize] = Some(value);
     }
 
     pub fn set_var_offset(&mut self, offset: Name, value: Var) -> Result<(), Error> {
