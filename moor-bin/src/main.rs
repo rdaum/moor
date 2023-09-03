@@ -11,6 +11,7 @@ use axum::{routing::get, Router};
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
+use moor_lib::db::LoaderInterface;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::RwLock;
@@ -96,15 +97,21 @@ async fn main() -> Result<(), anyhow::Error> {
         });
     }
 
-    let mut src = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
+    let src = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
-        textdump_load(&mut src, textdump.to_str().unwrap())
+        let mut tx = src
+            .start_transaction()
+            .expect("Unable to start transaction");
+        textdump_load(&mut tx, textdump.to_str().unwrap())
             .await
             .unwrap();
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
+        tx.commit()
+            .await
+            .expect("Failure to commit loaded database...");
     }
 
     let state_src = Arc::new(RwLock::new(src));

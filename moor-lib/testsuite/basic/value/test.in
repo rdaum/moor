@@ -1,0 +1,28 @@
+typeof(3) == INT
+typeof("abc") == STR
+typeof(1.0) == FLOAT
+typeof({"foo"}) == LIST
+typeof(#0) == OBJ
+tostr(17)
+tostr(3.0)
+tostr(#0)
+tostr({1, 2})
+toliteral(17)
+toliteral(3.0)
+toliteral(#0)
+toliteral({1, 2})
+toint(10)
+toint(3.0)
+toint(#2)
+toint("-34")
+toobj("2")
+toobj(2)
+toobj("foo")
+tofloat(34)
+tofloat("34.7")
+tofloat(7.3)
+equal(1 + 1, 2)
+equal("Foo", "foo")
+equal("foo", "foo")
+equal({1, 2}, {1, 2})
+equal({1, 2}, {1, 3})

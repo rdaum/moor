@@ -176,7 +176,7 @@ impl Var {
         match self.variant() {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
-            Variant::Float(f) => f.to_string(),
+            Variant::Float(f) => format!("{:?}", f).to_string(),
             Variant::Str(s) => quote_str(s.as_str()),
             Variant::Obj(o) => format!("{o}"),
             Variant::List(l) => {

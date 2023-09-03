@@ -108,25 +108,31 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Moor REPL starting..");
 
-    let mut src = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
+    let db = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
-        textdump_load(&mut src, textdump.to_str().unwrap())
+        let mut tx = db
+            .start_transaction()
+            .expect("Could not start DB transaction for textdump load");
+        textdump_load(&mut tx, textdump.to_str().unwrap())
             .await
             .unwrap();
+        tx.commit()
+            .await
+            .expect("Failure to commit loaded database...");
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
     }
 
-    let tx = src.start_transaction().unwrap();
+    let tx = db.start_transaction().unwrap();
 
     // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
     // match against.
     tx.set_object_location(Objid(2), Objid(70)).await.unwrap();
     tx.commit().await.unwrap();
 
-    let state_src = Arc::new(RwLock::new(src));
+    let state_src = Arc::new(RwLock::new(db));
     let scheduler = Scheduler::new(state_src.clone());
 
     let eval_sessions = Arc::new(RwLock::new(ReplSession {

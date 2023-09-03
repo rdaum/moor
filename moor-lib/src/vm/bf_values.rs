@@ -27,7 +27,7 @@ async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         match arg.variant() {
             Variant::None => result.push_str("None"),
             Variant::Int(i) => result.push_str(&i.to_string()),
-            Variant::Float(f) => result.push_str(&f.to_string()),
+            Variant::Float(f) => result.push_str(format!("{:?}", f).as_str()),
             Variant::Str(s) => result.push_str(s.as_str()),
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
@@ -54,6 +54,7 @@ async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(*i))),
         Variant::Float(f) => Ok(Ret(v_int(*f as i64))),
+        Variant::Obj(o) => Ok(Ret(v_int(o.0))),
         Variant::Str(s) => {
             let i = s.as_str().parse::<f64>();
             match i {
@@ -118,9 +119,7 @@ async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         return Ok(Error(E_INVARG));
     }
     let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Str(s1), Variant::Str(s2)) => {
-            s1.as_str().to_lowercase() == s2.as_str().to_lowercase()
-        }
+        (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str().to_lowercase(),
         _ => bf_args.args[0] == bf_args.args[1],
     };
     Ok(Ret(v_bool(result)))
@@ -187,7 +186,6 @@ impl VM {
         self.builtins[offset_for_builtin("value_bytes")] = Arc::new(Box::new(BfValueBytes {}));
         self.builtins[offset_for_builtin("object_bytes")] = Arc::new(Box::new(BfObjectBytes {}));
         self.builtins[offset_for_builtin("value_hash")] = Arc::new(Box::new(BfValueHash {}));
-
         self.builtins[offset_for_builtin("length")] = Arc::new(Box::new(BfLength {}));
         Ok(())
     }

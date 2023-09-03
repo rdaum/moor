@@ -54,6 +54,7 @@ pub trait WorldState: Send + Sync {
         perms: Objid,
         parent: Objid,
         owner: Objid,
+        flags: BitEnum<ObjFlag>,
     ) -> Result<Objid, WorldStateError>;
 
     /// Move an object to a new location.

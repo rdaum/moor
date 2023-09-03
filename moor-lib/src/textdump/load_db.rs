@@ -13,7 +13,6 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 use crate::compiler::codegen::compile;
-use crate::db::rocksdb::db_server::RocksDbServer;
 use crate::db::LoaderInterface;
 use crate::textdump::{Object, TextdumpReader};
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
@@ -83,8 +82,8 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 
-#[tracing::instrument(skip(s))]
-pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyhow::Error> {
+#[tracing::instrument(skip(ldr))]
+pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<(), anyhow::Error> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
 
@@ -92,8 +91,6 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
     let br = BufReader::new(jhcore);
     let mut tdr = TextdumpReader::new(br);
     let td = tdr.read_textdump()?;
-
-    let ldr = s.start_transaction().expect("Unable to start transaction");
 
     info!("Instantiating objects");
     for (objid, o) in &td.objects {
@@ -228,8 +225,6 @@ pub async fn textdump_load(s: &mut RocksDbServer, path: &str) -> Result<(), anyh
         }
     }
     info!("Verbs defined.");
-
-    ldr.commit().await?;
 
     info!("Import complete.");
 

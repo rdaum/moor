@@ -39,7 +39,7 @@ impl Var {
                     return Err(E_RANGE);
                 }
 
-                Ok(l.set(i as usize, &value))
+                Ok(l.set(i, value))
             }
             Variant::Str(s) => {
                 if !i < s.len() {
@@ -54,10 +54,10 @@ impl Var {
                     return Err(E_INVARG);
                 }
 
-                Ok(s.set(i as usize, value))
+                Ok(s.set(i, value))
             }
             _ => {
-                return Err(E_TYPE);
+                Err(E_TYPE)
             }
         }
     }

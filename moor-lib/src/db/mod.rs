@@ -21,6 +21,7 @@ mod db_client;
 mod db_loader_client;
 mod db_message;
 mod db_worldstate;
+pub mod inmemtransient;
 pub mod match_env;
 pub mod mock;
 pub mod rocksdb;

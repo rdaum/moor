@@ -5,6 +5,7 @@ use tracing::{debug, error, trace};
 
 use moor_value::model::objects::ObjFlag;
 use moor_value::model::WorldStateError;
+use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_NACC, E_TYPE};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
@@ -120,7 +121,7 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
             let new_obj = bf_args
                 .world_state
-                .create_object(bf_args.task_perms_who(), *parent, owner)
+                .create_object(bf_args.task_perms_who(), *parent, owner, BitEnum::new())
                 .await?;
 
             // We're going to try to call :initialize on the new object.

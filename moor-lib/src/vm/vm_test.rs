@@ -6,18 +6,21 @@ mod tests {
     use async_trait::async_trait;
     use tokio::sync::RwLock;
 
+    
     use moor_value::model::props::PropFlag;
+    use moor_value::model::r#match::VerbArgsSpec;
+    use moor_value::model::verbs::{BinaryType, VerbFlag};
     use moor_value::model::world_state::{WorldState, WorldStateSource};
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::Objid;
     use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
-    use moor_value::AsByteBuffer;
     use moor_value::NOTHING;
+    use moor_value::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::mock::mock_world_state::MockWorldStateSource;
+    use crate::db::inmemtransient::InMemTransientDatabase;
     use crate::tasks::{Sessions, VerbCall};
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
@@ -148,11 +151,52 @@ mod tests {
         }
     }
 
+    // Create an in memory db with a single object (#0) containing a single provided verb.
+    async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemTransientDatabase {
+        let mut state = InMemTransientDatabase::new();
+        let mut tx = state.new_world_state().await.unwrap();
+        let sysobj = tx
+            .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
+            .await
+            .unwrap();
+        tx.update_property(SYSTEM_OBJECT, sysobj, "name", &v_str("system"))
+            .await
+            .unwrap();
+        tx.update_property(SYSTEM_OBJECT, sysobj, "programmer", &v_int(1))
+            .await
+            .unwrap();
+        tx.update_property(SYSTEM_OBJECT, sysobj, "wizard", &v_int(1))
+            .await
+            .unwrap();
+
+        for (verb_name, program) in verbs {
+            let binary = program.make_copy_as_vec();
+            tx.add_verb(
+                SYSTEM_OBJECT,
+                sysobj,
+                vec![verb_name.to_string()],
+                sysobj,
+                VerbFlag::rxd(),
+                VerbArgsSpec::this_none_this(),
+                binary,
+                BinaryType::LambdaMoo18X,
+            )
+            .await
+            .unwrap();
+        }
+        tx.commit().await.unwrap();
+        state
+    }
+
+    async fn test_db_with_verb(verb_name: &str, program: &Program) -> InMemTransientDatabase {
+        test_db_with_verbs(&[(verb_name, program)]).await
+    }
+
     #[tokio::test]
     async fn test_simple_vm_execute() {
         let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
-        let mut state_src = MockWorldStateSource::new_with_verb("test", &program);
-        let mut state = state_src.new_world_state().await.unwrap();
+        let mut state_source = test_db_with_verb("test", &program).await;
+        let mut state = state_source.new_world_state().await.unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm).await;
@@ -162,7 +206,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_string_value_simple_indexing() {
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state_source = test_db_with_verb(
             "test",
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
@@ -170,9 +214,8 @@ mod tests {
                 Names::new(),
             ),
         )
-        .new_world_state()
-        .await
-        .unwrap();
+        .await;
+        let mut state = state_source.new_world_state().await.unwrap();
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm).await;
@@ -182,7 +225,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_string_value_range_indexing() {
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![
@@ -197,6 +240,7 @@ mod tests {
                 Names::new(),
             ),
         )
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -208,7 +252,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_value_simple_indexing() {
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
@@ -216,6 +260,7 @@ mod tests {
                 Names::new(),
             ),
         )
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -228,7 +273,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_value_range_indexing() {
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![
@@ -247,6 +292,7 @@ mod tests {
                 Names::new(),
             ),
         )
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -261,7 +307,7 @@ mod tests {
     async fn test_list_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![
@@ -291,6 +337,7 @@ mod tests {
                 var_names,
             ),
         )
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -305,7 +352,8 @@ mod tests {
     async fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program).unwrap();
-        let mut state = MockWorldStateSource::new_with_verb("test", &binary)
+        let mut state = test_db_with_verb("test", &binary)
+            .await
             .new_world_state()
             .await
             .unwrap();
@@ -319,7 +367,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_range_length() {
         let program = "return {{1,2,3}[2..$], {1}[$]};";
-        let mut state = MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
+        let mut state = test_db_with_verb("test", &compile(program).unwrap())
+            .await
             .new_world_state()
             .await
             .unwrap();
@@ -335,7 +384,8 @@ mod tests {
     #[tokio::test]
     async fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
-        let mut state = MockWorldStateSource::new_with_verb("test", &compile(program).unwrap())
+        let mut state = test_db_with_verb("test", &compile(program).unwrap())
+            .await
             .new_world_state()
             .await
             .unwrap();
@@ -350,7 +400,7 @@ mod tests {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
 
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![
@@ -375,6 +425,7 @@ mod tests {
                 var_names,
             ),
         )
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -387,7 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_property_retrieval() {
-        let mut state = MockWorldStateSource::new_with_verb(
+        let mut state = test_db_with_verb(
             "test",
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
@@ -395,6 +446,7 @@ mod tests {
                 Names::new(),
             ),
         )
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -443,10 +495,11 @@ mod tests {
             vec![v_obj(0), v_str("test_return_verb"), v_empty_list()],
             Names::new(),
         );
-        let mut state = MockWorldStateSource::new_with_verbs(vec![
+        let mut state = test_db_with_verbs(&[
             ("test_return_verb", &return_verb_binary),
             ("test_call_verb", &call_verb_binary),
         ])
+        .await
         .new_world_state()
         .await
         .unwrap();
@@ -462,7 +515,8 @@ mod tests {
 
     async fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
         let binary = compile(program).unwrap();
-        MockWorldStateSource::new_with_verb("test", &binary)
+        test_db_with_verb("test", &binary)
+            .await
             .new_world_state()
             .await
             .unwrap()
@@ -809,7 +863,7 @@ mod tests {
         assert_eq!(result, v_str("ello world"));
     }
 
-    // And try/finally..
+    // And try/finally.
     #[tokio::test]
     async fn test_regression_length_expr_inside_finally() {
         let program = r#"

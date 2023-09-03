@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_parse_into_words_backslash() {
-        let input = r#"hello\ world frankly"#;
+        let input = r"hello\ world frankly";
         let expected_output = vec!["hello world", "frankly"];
         assert_eq!(parse_into_words(input), expected_output);
     }

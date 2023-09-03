@@ -5,6 +5,11 @@ edition.workspace = true
 
 [dev-dependencies]
 tempdir.workspace = true
+inventory = "0.3.11"
+
+[[test]]
+name = "basic-testsuite"
+path = "testsuite/basic/basic_suite.rs"
 
 [dependencies]
 

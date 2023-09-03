@@ -1,0 +1,17 @@
+eval("add_property(#0, \"temp\", 0, { #3, \"rwc\" }); return 0;")
+eval("add_property(#0, \"temp0\", 0, { #3, \"rwc\" }); return 0;")
+eval("$temp = create(#1); return parent($temp);")
+eval("$temp0 = create($temp); return parent($temp0) == $temp;")
+eval("add_property($temp, \"test\", 1, { #3, \"rwc\" }); return 0;")
+$temp.test
+is_clear_property($temp0, "test")
+eval("$temp0.test = 2; return $temp0.test;")
+is_clear_property($temp0, "test")
+$temp0.test
+properties($temp)
+properties($temp0)
+eval("clear_property($temp0, \"test\"); return 0;")
+is_clear_property($temp0, "test")
+$temp0.test
+eval("delete_property(#0, \"temp\"); return 0;")
+eval("delete_property(#0, \"temp0\"); return 0;")

@@ -19,9 +19,9 @@ use crate::vm::builtin::BuiltinFunction;
 use crate::vm::opcode::Program;
 use crate::vm::vm_unwind::FinallyReason;
 
-pub(crate) mod opcode;
-pub(crate) mod vm_call;
-pub(crate) mod vm_execute;
+pub mod opcode;
+pub mod vm_call;
+pub mod vm_execute;
 pub(crate) mod vm_unwind;
 pub(crate) mod vm_util;
 

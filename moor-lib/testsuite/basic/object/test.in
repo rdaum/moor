@@ -1,0 +1,13 @@
+parent(create(#2))
+create(#2).name
+create(#2).location
+create(#2).contents
+create(#2).programmer
+create(#2).wizard
+create(#2).r
+create(#2).w
+create(#2).f
+is_player(create(#2))
+valid(#-1)
+valid(#0)
+children(#0)

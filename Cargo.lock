@@ -1073,6 +1073,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1be380c410bf0595e94992a648ea89db4dd3f3354ba54af206fd2a68cf5ac8e"
+
+[[package]]
 name = "io-lifetimes"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1407,6 +1413,7 @@ dependencies = [
  "decorum",
  "enum-primitive-derive",
  "int-enum",
+ "inventory",
  "itertools",
  "lazy_static",
  "md5",

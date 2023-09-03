@@ -41,6 +41,9 @@ impl VerbFlag {
     pub fn rx() -> BitEnum<Self> {
         BitEnum::from_u8(0b0110)
     }
+    pub fn rxd() -> BitEnum<Self> {
+        BitEnum::from_u8(0b1011)
+    }
     #[must_use]
     pub fn r() -> BitEnum<Self> {
         BitEnum::from_u8(0b0001)

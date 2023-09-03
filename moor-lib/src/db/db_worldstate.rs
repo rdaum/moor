@@ -85,16 +85,20 @@ impl WorldState for DbTxWorldState {
         perms: Objid,
         parent: Objid,
         owner: Objid,
+        flags: BitEnum<ObjFlag>,
     ) -> Result<Objid, WorldStateError> {
-        let (flags, parent_owner) = (self.flags_of(parent).await?, self.owner_of(parent).await?);
-        // TODO check_object_allows should take a BitEnum arg for `allows` and do both of these at
-        // once.
-        self.perms(perms)
-            .await?
-            .check_object_allows(parent_owner, flags, ObjFlag::Read)?;
-        self.perms(perms)
-            .await?
-            .check_object_allows(parent_owner, flags, ObjFlag::Fertile)?;
+        if parent != NOTHING {
+            let (flags, parent_owner) =
+                (self.flags_of(parent).await?, self.owner_of(parent).await?);
+            // TODO check_object_allows should take a BitEnum arg for `allows` and do both of these at
+            // once.
+            self.perms(perms)
+                .await?
+                .check_object_allows(parent_owner, flags, ObjFlag::Read)?;
+            self.perms(perms)
+                .await?
+                .check_object_allows(parent_owner, flags, ObjFlag::Fertile)?;
+        }
 
         let owner = (owner != NOTHING).then_some(owner);
 
@@ -109,7 +113,7 @@ impl WorldState for DbTxWorldState {
             name: None,
             parent: Some(parent),
             location: None,
-            flags: None,
+            flags: Some(flags),
         };
         self.client.create_object(None, attrs).await
     }
@@ -491,16 +495,16 @@ impl WorldState for DbTxWorldState {
         perms: Objid,
         obj: Objid,
         names: Vec<String>,
-        _owner: Objid,
+        owner: Objid,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
         binary: Vec<u8>,
         binary_type: BinaryType,
     ) -> Result<(), WorldStateError> {
-        let (objflags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+        let (objflags, obj_owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
         self.perms(perms)
             .await?
-            .check_object_allows(owner, objflags, ObjFlag::Write)?;
+            .check_object_allows(obj_owner, objflags, ObjFlag::Write)?;
 
         self.client
             .add_verb(obj, owner, names, binary_type, binary, flags, args)
