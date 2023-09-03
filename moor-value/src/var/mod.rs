@@ -10,8 +10,8 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use decorum::R64;
-use int_enum::IntEnum;
 use lazy_static::lazy_static;
+use strum::FromRepr;
 
 use crate::util::quote_str;
 use crate::var::error::Error;
@@ -46,7 +46,7 @@ macro_rules! v_lst {
 
 /// Integer encoding of values as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr)]
 pub enum VarType {
     TYPE_INT = 0,
     TYPE_OBJ = 1,

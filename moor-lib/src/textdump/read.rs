@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::io::{BufRead, Read};
 
 use anyhow::anyhow;
-use int_enum::IntEnum;
 use text_io::scan;
 use tracing::info;
 
@@ -53,14 +52,14 @@ impl<R: Read> TextdumpReader<R> {
         })
     }
     fn read_var_value(&mut self, t_num: i64) -> Result<Var, anyhow::Error> {
-        let vtype: VarType = VarType::from_int(t_num as u8)?;
+        let vtype: VarType = VarType::from_repr(t_num as u8).expect("Invalid var type");
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
             VarType::TYPE_OBJ => v_objid(self.read_objid()?),
             VarType::TYPE_STR => v_str(&self.read_string()?),
             VarType::TYPE_ERR => {
                 let e_num = self.read_num()?;
-                let etype: Error = Error::from_int(e_num as u8)?;
+                let etype: Error = Error::from_repr(e_num as u8).expect("Invalid error code");
                 v_err(etype)
             }
             VarType::TYPE_LIST => {

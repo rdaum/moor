@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::BufReader;
 
 use anyhow::Context;
-use int_enum::IntEnum;
 use metrics_macros::increment_counter;
 use moor_value::AsByteBuffer;
 use tracing::{info, span, trace, warn};
@@ -69,7 +68,9 @@ fn cv_prep_flag(vprep: i16) -> PrepSpec {
     match vprep {
         PREP_ANY => PrepSpec::Any,
         PREP_NONE => PrepSpec::None,
-        _ => PrepSpec::Other(Preposition::from_int(vprep as u16).expect("Unsupported preposition")),
+        _ => {
+            PrepSpec::Other(Preposition::from_repr(vprep as u16).expect("Unsupported preposition"))
+        }
     }
 }
 

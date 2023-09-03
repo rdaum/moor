@@ -2,12 +2,12 @@ use binary_layout::LayoutAs;
 use std::fmt::{Display, Formatter};
 
 use bincode::{Decode, Encode};
-use int_enum::IntEnum;
+use strum::FromRepr;
 
 use crate::var::{v_none, Var};
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Ord, PartialOrd, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Ord, PartialOrd, Hash, Encode, Decode)]
 #[allow(non_camel_case_types)]
 pub enum Error {
     E_NONE = 0,
@@ -30,7 +30,7 @@ pub enum Error {
 
 impl LayoutAs<u8> for Error {
     fn read(v: u8) -> Self {
-        Self::from_int(v).unwrap()
+        Self::from_repr(v).unwrap()
     }
 
     fn write(v: Self) -> u8 {

@@ -24,7 +24,6 @@ enum-primitive-derive.workspace = true
 async-trait.workspace = true
 decorum.workspace = true
 text_io.workspace = true
-int-enum.workspace = true
 bytes.workspace = true
 strum.workspace = true
 uuid.workspace = true

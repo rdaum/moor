@@ -1,8 +1,8 @@
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
-use int_enum::IntEnum;
+use strum::FromRepr;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, IntEnum, Hash, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd, Encode, Decode)]
 #[repr(u8)]
 pub enum ArgSpec {
     None = 0,
@@ -12,11 +12,11 @@ pub enum ArgSpec {
 
 impl LayoutAs<u8> for ArgSpec {
     fn read(v: u8) -> Self {
-        ArgSpec::from_int(v).expect("Invalid ArgSpec value")
+        ArgSpec::from_repr(v).expect("Invalid ArgSpec value")
     }
 
     fn write(v: Self) -> u8 {
-        v.int_value()
+        v as u8
     }
 }
 
@@ -46,7 +46,7 @@ impl ArgSpec {
 /// TODO: Long run a proper table with some sort of dynamic look up and a way to add new ones and
 ///   internationalize and so on.
 #[repr(u16)]
-#[derive(Copy, Clone, Debug, IntEnum, Eq, PartialEq, Hash, Encode, Decode, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, FromRepr, Eq, PartialEq, Hash, Encode, Decode, Ord, PartialOrd)]
 pub enum Preposition {
     WithUsing = 0,
     AtTo = 1,
@@ -95,7 +95,7 @@ impl LayoutAs<i16> for PrepSpec {
         match v {
             -2 => Self::Any,
             -1 => Self::None,
-            p => Self::Other(Preposition::from_int(p as u16).expect("Invalid preposition")),
+            p => Self::Other(Preposition::from_repr(p as u16).expect("Invalid preposition")),
         }
     }
 
@@ -103,7 +103,7 @@ impl LayoutAs<i16> for PrepSpec {
         match v {
             Self::Any => -2,
             Self::None => -1,
-            Self::Other(p) => p.int_value() as i16,
+            Self::Other(p) => p as i16,
         }
     }
 }

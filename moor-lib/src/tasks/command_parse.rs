@@ -1,7 +1,6 @@
 use std::string::ToString;
 
 use async_trait::async_trait;
-use int_enum::IntEnum;
 use lazy_static::lazy_static;
 
 use moor_value::model::r#match::{PrepSpec, Preposition, PREP_LIST};
@@ -51,7 +50,7 @@ pub fn parse_preposition_string(repr: &str) -> Option<PrepSpec> {
         "any" => Some(PrepSpec::Any),
         "none" => Some(PrepSpec::None),
         _ => match_preposition(repr)
-            .map(|p| PrepSpec::Other(Preposition::from_int(p.id as u16).unwrap())),
+            .map(|p| PrepSpec::Other(Preposition::from_repr(p.id as u16).unwrap())),
     }
 }
 
@@ -179,7 +178,7 @@ where
         if let Some(p) = match_preposition(word) {
             prep_index = Some(j);
             prepstr = word.to_string();
-            prep = PrepSpec::Other(Preposition::from_int(p.id as u16).unwrap());
+            prep = PrepSpec::Other(Preposition::from_repr(p.id as u16).unwrap());
             break;
         }
     }
