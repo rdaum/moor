@@ -104,7 +104,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | add_verb      |          |                                          |
 | delete_verb   |          |                                          |
 | set_verb_code |          |                                          |
-| eval          |          |                                          |
+| eval          | &check;  |                                          |
 | disassemble   |          | Requires implementation of decompilation |
 | verb_code     |          | "                                        |
 

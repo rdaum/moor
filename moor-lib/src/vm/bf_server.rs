@@ -17,6 +17,7 @@ use crate::bf_declare;
 use crate::compiler::builtins::{
     offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS,
 };
+use crate::compiler::codegen::compile;
 use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
@@ -550,7 +551,7 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, an
     };
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
-    Ok(BfRet::VmInstr(ExecutionResult::ContinueBuiltin {
+    Ok(VmInstr(ExecutionResult::ContinueBuiltin {
         bf_func_num: func_offset,
         arguments: args[..].to_vec(),
     }))
@@ -663,6 +664,32 @@ async fn bf_listeners<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
 }
 bf_declare!(listeners, bf_listeners);
 
+async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 1 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Str(program_code) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    let program_code = program_code.as_str();
+    let program = match compile(program_code) {
+        Ok(program) => program,
+        // TODO: this should be returning list of errors with line numbers, etc which we do not
+        //   currently support.
+        Err(e) => return Ok(Ret(v_list(vec![v_int(0), v_string(e.to_string())]))),
+    };
+
+    // Now we have to construct things to set up for eval. Which means tramping through with a
+    // setup-for-eval result here.
+    return Ok(VmInstr(ExecutionResult::PerformEval {
+        permissions: bf_args.task_perms_who(),
+        player: bf_args.vm.top().player,
+        program,
+    }));
+}
+bf_declare!(eval, bf_eval);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("notify")] = Arc::new(Box::new(BfNotify {}));
@@ -695,6 +722,7 @@ impl VM {
         self.builtins[offset_for_builtin("server_log")] = Arc::new(Box::new(BfServerLog {}));
         self.builtins[offset_for_builtin("function_info")] = Arc::new(Box::new(BfFunctionInfo {}));
         self.builtins[offset_for_builtin("listeners")] = Arc::new(Box::new(BfListeners {}));
+        self.builtins[offset_for_builtin("eval")] = Arc::new(Box::new(BfEval {}));
 
         Ok(())
     }

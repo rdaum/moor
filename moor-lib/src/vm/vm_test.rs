@@ -5,13 +5,16 @@ mod tests {
     use anyhow::Error;
     use async_trait::async_trait;
     use tokio::sync::RwLock;
+    use uuid::Uuid;
 
-    
     use moor_value::model::props::PropFlag;
     use moor_value::model::r#match::VerbArgsSpec;
+    use moor_value::model::verb_info::VerbInfo;
+    use moor_value::model::verbdef::VerbDef;
     use moor_value::model::verbs::{BinaryType, VerbFlag};
     use moor_value::model::world_state::{WorldState, WorldStateSource};
     use moor_value::util::bitenum::BitEnum;
+    use moor_value::util::slice_ref::SliceRef;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::Objid;
     use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
@@ -99,13 +102,26 @@ mod tests {
     }
 
     async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
-        let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
-        // Call repeatedly into exec until we ge either an error or Complete.
+        exec_vm_loop(
+            vm,
+            state,
+            Arc::new(RwLock::new(NoopClientConnection::new())),
+        )
+        .await
+    }
 
+    // TODO: move this up into a testing utility. But also factor out common code with Task's loop
+    //  so that we aren't duplicating and failing to keep in sync.
+    async fn exec_vm_loop(
+        vm: &mut VM,
+        world_state: &mut dyn WorldState,
+        client_connection: Arc<RwLock<dyn Sessions>>,
+    ) -> Var {
+        // Call repeatedly into exec until we ge either an error or Complete.
         loop {
             let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
             let vm_exec_params = VmExecParams {
-                world_state: state,
+                world_state,
                 sessions: client_connection.clone(),
                 scheduler_sender: sched_send.clone(),
                 max_stack_depth: 50,
@@ -136,6 +152,42 @@ mod tests {
                         program: decoded_verb,
                     };
                     vm.exec_call_request(0, cr).await.unwrap();
+                }
+                Ok(ExecutionResult::PerformEval {
+                    permissions,
+                    player,
+                    program,
+                }) => {
+                    let verb_info = VerbInfo::new(
+                        VerbDef::new(
+                            Uuid::new_v4(),
+                            NOTHING,
+                            NOTHING,
+                            &["eval"],
+                            BitEnum::new_with(VerbFlag::Exec),
+                            BinaryType::None,
+                            VerbArgsSpec::this_none_this(),
+                        ),
+                        SliceRef::empty(),
+                    );
+
+                    let call_request = VerbExecutionRequest {
+                        permissions,
+                        resolved_verb: verb_info,
+                        call: VerbCall {
+                            verb_name: "eval".to_string(),
+                            location: player,
+                            this: player,
+                            player,
+                            args: vec![],
+                            caller: player,
+                        },
+                        command: None,
+                        program,
+                    };
+                    vm.exec_call_request(0, call_request)
+                        .await
+                        .expect("Could not set up VM for verb execution");
                 }
                 Ok(ExecutionResult::DispatchFork(_)) => {
                     panic!("fork not implemented in test VM")
@@ -897,6 +949,17 @@ mod tests {
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_obj(2));
     }
+
+    #[tokio::test]
+    async fn test_eval() {
+        let program = r#"return eval("return 5;");"#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_int(5));
+    }
+
     struct MockClientConnection {
         received: Vec<String>,
     }
@@ -937,61 +1000,6 @@ mod tests {
         }
     }
 
-    async fn exec_vm_with_mock_client_connection(
-        vm: &mut VM,
-        state: &mut dyn WorldState,
-        client_connection: Arc<RwLock<MockClientConnection>>,
-    ) -> Var {
-        // Call repeatedly into exec until we ge either an error or Complete.
-        loop {
-            let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
-            let vm_exec_params = VmExecParams {
-                world_state: state,
-                sessions: client_connection.clone(),
-                scheduler_sender: sched_send.clone(),
-                max_stack_depth: 50,
-                ticks_left: 90_000,
-                time_left: None,
-            };
-            match vm.exec(vm_exec_params, 1000).await {
-                Ok(ExecutionResult::More) => continue,
-                Ok(ExecutionResult::Complete(a)) => return a,
-                Err(e) => panic!("error during execution: {:?}", e),
-                Ok(ExecutionResult::Exception(e)) => {
-                    panic!("MOO exception {:?}", e);
-                }
-                Ok(ExecutionResult::ContinueVerb {
-                    permissions,
-                    resolved_verb,
-                    call,
-                    command,
-                    trampoline: _,
-                    trampoline_arg: _,
-                }) => {
-                    let decoded_verb = Program::from_sliceref(resolved_verb.binary());
-                    let cr = VerbExecutionRequest {
-                        permissions,
-                        resolved_verb,
-                        call,
-                        command,
-                        program: decoded_verb,
-                    };
-                    vm.exec_call_request(0, cr).await.unwrap();
-                }
-                Ok(ExecutionResult::DispatchFork(_)) => {
-                    panic!("dispatch fork not supported in this test");
-                }
-                Ok(ExecutionResult::Suspend(_)) => {
-                    panic!("suspend not supported in this test");
-                }
-                Ok(ExecutionResult::ContinueBuiltin {
-                    bf_func_num: _,
-                    arguments: _,
-                }) => {}
-            }
-        }
-    }
-
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_builtin() {
         let program = "return notify(#1, \"test\");";
@@ -1002,9 +1010,7 @@ mod tests {
         call_verb(state.as_mut(), "test", &mut vm).await;
 
         let client_connection = Arc::new(RwLock::new(MockClientConnection::new()));
-        let result =
-            exec_vm_with_mock_client_connection(&mut vm, state.as_mut(), client_connection.clone())
-                .await;
+        let result = exec_vm_loop(&mut vm, state.as_mut(), client_connection.clone()).await;
         assert_eq!(result, v_int(1));
 
         assert_eq!(

@@ -8,8 +8,12 @@ use moor_lib::vm::opcode::Program;
 use moor_lib::vm::vm_execute::VmExecParams;
 use moor_lib::vm::{ExecutionResult, VerbExecutionRequest, VM};
 use moor_value::model::r#match::VerbArgsSpec;
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbdef::VerbDef;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::util::bitenum::BitEnum;
+use moor_value::util::slice_ref::SliceRef;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 use moor_value::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
@@ -17,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing_test::traced_test;
+use uuid::Uuid;
 
 struct NoopClientConnection {}
 impl NoopClientConnection {
@@ -114,6 +119,11 @@ async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
     assert!(vm.exec_call_request(0, cr).await.is_ok());
 }
 
+// TODO: this loop is starting to look like boilerplate copy of large parts of what's in Task, and
+//  introduces significant possibility of functionality-drift from the real thing. We should factor
+//  out the pieces from Task so they can be re-used here without pulling in all of scheduler.
+//  This is also totally copy and pasted from the same in vm_test.rs
+//  So the whole thing is majorly due for a cleanup.
 async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
     let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
     // Call repeatedly into exec until we ge either an error or Complete.
@@ -152,6 +162,42 @@ async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
                     program: decoded_verb,
                 };
                 vm.exec_call_request(0, cr).await.unwrap();
+            }
+            Ok(ExecutionResult::PerformEval {
+                permissions,
+                player,
+                program,
+            }) => {
+                let verb_info = VerbInfo::new(
+                    VerbDef::new(
+                        Uuid::new_v4(),
+                        NOTHING,
+                        NOTHING,
+                        &["eval"],
+                        BitEnum::new_with(VerbFlag::Exec),
+                        BinaryType::None,
+                        VerbArgsSpec::this_none_this(),
+                    ),
+                    SliceRef::empty(),
+                );
+
+                let call_request = VerbExecutionRequest {
+                    permissions,
+                    resolved_verb: verb_info,
+                    call: VerbCall {
+                        verb_name: "eval".to_string(),
+                        location: player,
+                        this: player,
+                        player,
+                        args: vec![],
+                        caller: player,
+                    },
+                    command: None,
+                    program,
+                };
+                vm.exec_call_request(0, call_request)
+                    .await
+                    .expect("Could not set up VM for verb execution");
             }
             Ok(ExecutionResult::DispatchFork(_)) => {
                 panic!("fork not implemented in test VM")

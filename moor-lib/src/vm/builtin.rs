@@ -62,9 +62,8 @@ pub(crate) enum BfRet {
     Ret(Var),
     /// An error occurred, which should be raised.
     Error(Error),
-    /// VM wants to call another builtin.
     /// BF wants to return control back to the VM, with specific instructions to things like
-    /// `suspend` or dispatch to a verb call.
+    /// `suspend` or dispatch to a verb call or execute eval.
     VmInstr(ExecutionResult),
 }
 

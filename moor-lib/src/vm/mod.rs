@@ -74,7 +74,7 @@ pub struct ForkRequest {
     pub task_id: Option<Name>,
 }
 
-/// The set of parameters for a VM-requested *resolved* verb method dispatch.
+/// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbExecutionRequest {
     /// The applicable permissions.
@@ -130,6 +130,16 @@ pub enum ExecutionResult {
     /// If the duration is None, then the task is suspended indefinitely, until it is killed or
     /// resumed using `resume()` or `kill_task()`.
     Suspend(Option<Duration>),
+    /// Request `eval` execution, which is a kind of special activation creation where we've already
+    /// been given the program to execute instead of having to look it up.
+    PerformEval {
+        /// The permissions context for the eval.
+        permissions: Objid,
+        /// The player who is performing the eval.
+        player: Objid,
+        /// The program to execute.
+        program: Program,
+    },
 }
 
 impl Default for VM {

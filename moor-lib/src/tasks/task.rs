@@ -23,6 +23,7 @@ use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbdef::VerbDef;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::world_state::WorldState;
 use moor_value::model::CommitResult;
@@ -422,7 +423,47 @@ impl Task {
                     self.vm
                         .exec_call_request(self.task_id, call_request)
                         .await
-                        .expect("Could not set up VM for command execution");
+                        .expect("Could not set up VM for verb execution");
+                    return Ok(None);
+                }
+                ExecutionResult::PerformEval {
+                    permissions,
+                    player,
+                    program,
+                } => {
+                    let verb_info = VerbInfo::new(
+                        // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
+                        // Might need to clean up the requirement for a VerbInfo in Activation.
+                        VerbDef::new(
+                            Uuid::new_v4(),
+                            NOTHING,
+                            NOTHING,
+                            &["eval"],
+                            BitEnum::new_with(VerbFlag::Exec),
+                            BinaryType::None,
+                            VerbArgsSpec::this_none_this(),
+                        ),
+                        SliceRef::empty(),
+                    );
+
+                    let call_request = VerbExecutionRequest {
+                        permissions,
+                        resolved_verb: verb_info,
+                        call: VerbCall {
+                            verb_name: "eval".to_string(),
+                            location: player,
+                            this: player,
+                            player,
+                            args: vec![],
+                            caller: player,
+                        },
+                        command: None,
+                        program,
+                    };
+                    self.vm
+                        .exec_call_request(self.task_id, call_request)
+                        .await
+                        .expect("Could not set up VM for verb execution");
                     return Ok(None);
                 }
                 ExecutionResult::ContinueBuiltin {
