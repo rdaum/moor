@@ -369,10 +369,7 @@ fn inmem_db_server(
                     reply,
                 } => {
                     let mut db = db.write().unwrap();
-                    let verbdefs = db
-                        .verbdefs
-                        .entry(location)
-                        .or_insert_with(VerbDefs::empty);
+                    let verbdefs = db.verbdefs.entry(location).or_insert_with(VerbDefs::empty);
                     let uuid = Uuid::new_v4();
                     let new_verbs = verbdefs.with_added(VerbDef::new(
                         uuid,
@@ -393,10 +390,7 @@ fn inmem_db_server(
                     reply,
                 } => {
                     let mut db = db.write().unwrap();
-                    let verbdefs = db
-                        .verbdefs
-                        .entry(location)
-                        .or_insert_with(VerbDefs::empty);
+                    let verbdefs = db.verbdefs.entry(location).or_insert_with(VerbDefs::empty);
                     let new_verbs = verbdefs.with_removed(uuid).unwrap();
                     db.verbdefs.insert(location, new_verbs);
                     db.verb_programs.remove(&(location, uuid));
@@ -435,10 +429,7 @@ fn inmem_db_server(
                     let locations = ObjSet::from(&[location]).with_concatenated(descendants);
                     let uuid = Uuid::new_v4();
                     for location in locations.iter() {
-                        let propdefs = db
-                            .propdefs
-                            .entry(definer)
-                            .or_insert_with(PropDefs::empty);
+                        let propdefs = db.propdefs.entry(definer).or_insert_with(PropDefs::empty);
                         let new_propdefs = propdefs.with_added(PropDef::new(
                             uuid,
                             location,
@@ -501,7 +492,7 @@ fn inmem_db_server(
                     let db = db.read().unwrap();
                     // First find the propdef, then seek up the parent tree for the first value.
                     let Some(propdefs) = db.propdefs.get(&o) else {
-                        let _ = r.send(Err(ObjectNotFound(o)));
+                        let _ = r.send(Err(PropertyNotFound(o, n)));
                         continue;
                     };
                     let Some(propdef) = propdefs.find_named(n.as_str()) else {

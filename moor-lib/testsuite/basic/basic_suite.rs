@@ -2,6 +2,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use moor_lib::compiler::codegen::compile;
 use moor_lib::db::inmemtransient::InMemTransientDatabase;
+use moor_lib::db::DbTxWorldState;
 use moor_lib::tasks::{Sessions, VerbCall};
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::vm::opcode::Program;
@@ -9,7 +10,7 @@ use moor_lib::vm::vm_execute::VmExecParams;
 use moor_lib::vm::{ExecutionResult, VerbExecutionRequest, VM};
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
-use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::world_state::WorldState;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 use moor_value::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
@@ -61,9 +62,11 @@ fn testsuite_dir() -> PathBuf {
 }
 
 // Create a minimal Db to support the test harness.
-async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemTransientDatabase {
-    let mut state = InMemTransientDatabase::new();
-    let mut tx = state.tx().unwrap();
+async fn test_db_with_verbs(
+    db: &mut InMemTransientDatabase,
+    verbs: &[(&str, &Program)],
+) -> Box<DbTxWorldState> {
+    let mut tx = db.tx().unwrap();
     textdump_load(
         tx.as_mut(),
         testsuite_dir().join("Minimal.db").to_str().unwrap(),
@@ -78,7 +81,7 @@ async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemTransientDatabas
             SYSTEM_OBJECT,
             vec![verb_name.to_string()],
             Objid(3),
-            VerbFlag::rxd(),
+            VerbFlag::rx(),
             VerbArgsSpec::this_none_this(),
             binary,
             BinaryType::LambdaMoo18X,
@@ -86,8 +89,7 @@ async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemTransientDatabas
         .await
         .unwrap();
     }
-    tx.commit().await.unwrap();
-    state
+    tx
 }
 
 async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
@@ -180,16 +182,14 @@ async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
     }
 }
 
-async fn eval(expression: &str) -> Result<Var, anyhow::Error> {
+async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Result<Var, anyhow::Error> {
     let binary = compile(format!("return {};", expression).as_str()).unwrap();
-    let mut state = test_db_with_verbs(&[("test", &binary)])
-        .await
-        .new_world_state()
-        .await?;
+    let mut state = test_db_with_verbs(db, &[("test", &binary)]).await;
     let mut vm = VM::new();
     let _args = binary.find_var("args");
     call_verb(state.as_mut(), "test", &mut vm).await;
     let result = exec_vm(state.as_mut(), &mut vm).await;
+    state.commit().await?;
     Ok(result)
 }
 
@@ -214,9 +214,12 @@ async fn run_basic_test(test_dir: &str) {
     // Zip
     let zipped = in_lines.zip(out_lines);
 
+    // Frustratingly the tests are not independent, so we need to run them in a single database.
+    let mut db = InMemTransientDatabase::new();
+
     for (line_num, (input, expected_output)) in zipped.enumerate() {
-        let evaluated = eval(input).await.unwrap();
-        let output = eval(expected_output).await.unwrap();
+        let evaluated = eval(&mut db, input).await.unwrap();
+        let output = eval(&mut db, expected_output).await.unwrap();
         assert_eq!(
             evaluated, output,
             "{}: line {}: {}",

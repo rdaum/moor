@@ -11,7 +11,9 @@ use moor_value::util::slice_ref::SliceRef;
 use moor_value::var::error::Error;
 use moor_value::var::error::Error::E_VARNF;
 use moor_value::var::objid::Objid;
-use moor_value::var::{v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType};
+use moor_value::var::{
+    v_empty_list, v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType,
+};
 
 use crate::compiler::labels::{Label, Name};
 use crate::tasks::command_parse::ParsedCommand;
@@ -167,6 +169,73 @@ impl Activation {
         Ok(a)
     }
 
+    pub fn for_eval(
+        task_id: TaskId,
+        permissions: Objid,
+        player: Objid,
+        program: Program,
+        span_id: Option<tracing::span::Id>,
+    ) -> Result<Self, anyhow::Error> {
+        let environment = vec![None; program.var_names.width()];
+
+        let verb_info = VerbInfo::new(
+            // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
+            // Might need to clean up the requirement for a VerbInfo in Activation.
+            VerbDef::new(
+                Uuid::new_v4(),
+                NOTHING,
+                NOTHING,
+                &["eval"],
+                BitEnum::new_with(VerbFlag::Exec),
+                BinaryType::None,
+                VerbArgsSpec::this_none_this(),
+            ),
+            SliceRef::empty(),
+        );
+
+        let mut a = Self {
+            task_id,
+            program,
+            environment,
+            valstack: vec![],
+            handler_stack: vec![],
+            pc: 0,
+            temp: v_none(),
+            this: player,
+            player,
+            verb_info,
+            verb_name: "eval".to_string(),
+            command: None,
+            bf_index: None,
+            bf_trampoline: None,
+            bf_trampoline_arg: None,
+            span_id,
+            args: vec![],
+            permissions,
+        };
+
+        // TODO use pre-set constant offsets for these like LambdaMOO does.
+        a.set_var("this", v_objid(player)).unwrap();
+        a.set_var("player", v_objid(player)).unwrap();
+        a.set_var("caller", v_objid(player)).unwrap();
+        a.set_var("NUM", v_int(VarType::TYPE_INT as i64)).unwrap();
+        a.set_var("OBJ", v_int(VarType::TYPE_OBJ as i64)).unwrap();
+        a.set_var("STR", v_int(VarType::TYPE_STR as i64)).unwrap();
+        a.set_var("ERR", v_int(VarType::TYPE_ERR as i64)).unwrap();
+        a.set_var("LIST", v_int(VarType::TYPE_LIST as i64)).unwrap();
+        a.set_var("INT", v_int(VarType::TYPE_INT as i64)).unwrap();
+        a.set_var("FLOAT", v_int(VarType::TYPE_FLOAT as i64))
+            .unwrap();
+        a.set_var("verb", v_str("eval")).unwrap();
+        a.set_var("args", v_empty_list()).unwrap();
+        a.set_var("argstr", v_str("")).unwrap();
+        a.set_var("dobj", v_objid(NOTHING)).unwrap();
+        a.set_var("dobjstr", v_str("")).unwrap();
+        a.set_var("prepstr", v_str("")).unwrap();
+        a.set_var("iobj", v_objid(NOTHING)).unwrap();
+        a.set_var("iobjstr", v_str("")).unwrap();
+        Ok(a)
+    }
     pub fn for_bf_call(
         task_id: TaskId,
         bf_index: usize,

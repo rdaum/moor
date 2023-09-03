@@ -190,6 +190,19 @@ mod tests {
             .await
             .unwrap();
 
+        // Add $test
+        tx.define_property(
+            SYSTEM_OBJECT,
+            sysobj,
+            sysobj,
+            "test",
+            SYSTEM_OBJECT,
+            BitEnum::all(),
+            Some(v_int(1)),
+        )
+        .await
+        .unwrap();
+
         for (verb_name, program) in verbs {
             let binary = program.make_copy_as_vec();
             tx.add_verb(
@@ -927,6 +940,20 @@ mod tests {
         call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_bool(true), v_int(5)]));
+    }
+
+    // $sysprop style references were returning E_INVARG but only inside eval.
+    #[tokio::test]
+    async fn test_regression_sysprops() {
+        let program = r#"return {1, eval("return $test;")};"#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(
+            result,
+            v_list(vec![v_bool(true), v_list(vec![v_int(1), v_int(1)])])
+        );
     }
 
     struct MockClientConnection {
