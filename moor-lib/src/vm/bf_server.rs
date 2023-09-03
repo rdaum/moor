@@ -664,6 +664,9 @@ async fn bf_listeners<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
 }
 bf_declare!(listeners, bf_listeners);
 
+pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
+pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
+
 async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
     if bf_args.args.len() != 1 {
         return Ok(Error(E_INVARG));
@@ -672,21 +675,37 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
         return Ok(Error(E_TYPE));
     };
 
-    let program_code = program_code.as_str();
-    let program = match compile(program_code) {
-        Ok(program) => program,
-        // TODO: this should be returning list of errors with line numbers, etc which we do not
-        //   currently support.
-        Err(e) => return Ok(Ret(v_list(vec![v_int(0), v_string(e.to_string())]))),
-    };
+    let tramp = bf_args
+        .vm
+        .top()
+        .bf_trampoline
+        .unwrap_or(BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE);
 
-    // Now we have to construct things to set up for eval. Which means tramping through with a
-    // setup-for-eval result here.
-    return Ok(VmInstr(ExecutionResult::PerformEval {
-        permissions: bf_args.task_perms_who(),
-        player: bf_args.vm.top().player,
-        program,
-    }));
+    match tramp {
+        BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
+            let program_code = program_code.as_str();
+            let program = match compile(program_code) {
+                Ok(program) => program,
+                Err(e) => return Ok(Ret(v_list(vec![v_int(0), v_string(e.to_string())]))),
+            };
+
+            // Now we have to construct things to set up for eval. Which means tramping through with a
+            // setup-for-eval result here.
+            return Ok(VmInstr(ExecutionResult::PerformEval {
+                permissions: bf_args.task_perms_who(),
+                player: bf_args.vm.top().player,
+                program,
+            }));
+        }
+        BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
+            // Value must be on stack,  and we then wrap that up in the {success, value} tuple.
+            let value = bf_args.vm.pop();
+            return Ok(Ret(v_list(vec![v_bool(true), value])));
+        }
+        _ => {
+            panic!("Invalid trampoline value for bf_eval: {}", tramp);
+        }
+    }
 }
 bf_declare!(eval, bf_eval);
 

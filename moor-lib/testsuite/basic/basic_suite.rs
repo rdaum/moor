@@ -8,20 +8,14 @@ use moor_lib::vm::opcode::Program;
 use moor_lib::vm::vm_execute::VmExecParams;
 use moor_lib::vm::{ExecutionResult, VerbExecutionRequest, VM};
 use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verb_info::VerbInfo;
-use moor_value::model::verbdef::VerbDef;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::world_state::{WorldState, WorldStateSource};
-use moor_value::util::bitenum::BitEnum;
-use moor_value::util::slice_ref::SliceRef;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 use moor_value::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing_test::traced_test;
-use uuid::Uuid;
 
 struct NoopClientConnection {}
 impl NoopClientConnection {
@@ -168,34 +162,7 @@ async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
                 player,
                 program,
             }) => {
-                let verb_info = VerbInfo::new(
-                    VerbDef::new(
-                        Uuid::new_v4(),
-                        NOTHING,
-                        NOTHING,
-                        &["eval"],
-                        BitEnum::new_with(VerbFlag::Exec),
-                        BinaryType::None,
-                        VerbArgsSpec::this_none_this(),
-                    ),
-                    SliceRef::empty(),
-                );
-
-                let call_request = VerbExecutionRequest {
-                    permissions,
-                    resolved_verb: verb_info,
-                    call: VerbCall {
-                        verb_name: "eval".to_string(),
-                        location: player,
-                        this: player,
-                        player,
-                        args: vec![],
-                        caller: player,
-                    },
-                    command: None,
-                    program,
-                };
-                vm.exec_call_request(0, call_request)
+                vm.exec_eval_request(0, permissions, player, program)
                     .await
                     .expect("Could not set up VM for verb execution");
             }
@@ -260,37 +227,31 @@ async fn run_basic_test(test_dir: &str) {
 
 fn main() {}
 #[tokio::test]
-#[traced_test]
 async fn basic_arithmetic() {
     run_basic_test("arithmetic").await;
 }
 
 #[tokio::test]
-#[traced_test]
 async fn basic_value() {
     run_basic_test("value").await;
 }
 
 #[tokio::test]
-#[traced_test]
 async fn basic_string() {
     run_basic_test("string").await;
 }
 
 #[tokio::test]
-#[traced_test]
 async fn basic_list() {
     run_basic_test("list").await;
 }
 
 #[tokio::test]
-#[traced_test]
 async fn basic_property() {
     run_basic_test("property").await;
 }
 
 #[tokio::test]
-#[traced_test]
 async fn basic_object() {
     run_basic_test("object").await;
 }

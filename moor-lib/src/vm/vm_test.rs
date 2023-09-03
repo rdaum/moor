@@ -5,19 +5,15 @@ mod tests {
     use anyhow::Error;
     use async_trait::async_trait;
     use tokio::sync::RwLock;
-    use uuid::Uuid;
 
     use moor_value::model::props::PropFlag;
     use moor_value::model::r#match::VerbArgsSpec;
-    use moor_value::model::verb_info::VerbInfo;
-    use moor_value::model::verbdef::VerbDef;
     use moor_value::model::verbs::{BinaryType, VerbFlag};
     use moor_value::model::world_state::{WorldState, WorldStateSource};
     use moor_value::util::bitenum::BitEnum;
-    use moor_value::util::slice_ref::SliceRef;
     use moor_value::var::error::Error::E_VERBNF;
     use moor_value::var::objid::Objid;
-    use moor_value::var::{v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
+    use moor_value::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use moor_value::NOTHING;
     use moor_value::{AsByteBuffer, SYSTEM_OBJECT};
 
@@ -158,34 +154,7 @@ mod tests {
                     player,
                     program,
                 }) => {
-                    let verb_info = VerbInfo::new(
-                        VerbDef::new(
-                            Uuid::new_v4(),
-                            NOTHING,
-                            NOTHING,
-                            &["eval"],
-                            BitEnum::new_with(VerbFlag::Exec),
-                            BinaryType::None,
-                            VerbArgsSpec::this_none_this(),
-                        ),
-                        SliceRef::empty(),
-                    );
-
-                    let call_request = VerbExecutionRequest {
-                        permissions,
-                        resolved_verb: verb_info,
-                        call: VerbCall {
-                            verb_name: "eval".to_string(),
-                            location: player,
-                            this: player,
-                            player,
-                            args: vec![],
-                            caller: player,
-                        },
-                        command: None,
-                        program,
-                    };
-                    vm.exec_call_request(0, call_request)
+                    vm.exec_eval_request(0, permissions, player, program)
                         .await
                         .expect("Could not set up VM for verb execution");
                 }
@@ -957,7 +926,7 @@ mod tests {
         let mut vm = VM::new();
         call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
-        assert_eq!(result, v_int(5));
+        assert_eq!(result, v_list(vec![v_bool(true), v_int(5)]));
     }
 
     struct MockClientConnection {

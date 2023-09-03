@@ -1,16 +1,26 @@
 use anyhow::Context;
+use moor_value::model::r#match::VerbArgsSpec;
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::verbdef::VerbDef;
+use moor_value::model::verbs::{BinaryType, VerbFlag};
 use tracing::{debug, span, trace, Level};
+use uuid::Uuid;
 
 use moor_value::model::world_state::WorldState;
 use moor_value::model::WorldStateError;
+use moor_value::util::bitenum::BitEnum;
+use moor_value::util::slice_ref::SliceRef;
 use moor_value::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_int, Var};
+use moor_value::NOTHING;
 
 use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::Activation;
+use crate::vm::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
 use crate::vm::builtin::{BfCallState, BfRet};
+use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
@@ -148,6 +158,59 @@ impl VM {
     ) -> Result<(), anyhow::Error> {
         let span = span!(Level::TRACE, "VC", task_id, ?call_request);
         let span_id = span.id();
+
+        let a = Activation::for_call(task_id, call_request, span_id.clone())?;
+
+        self.stack.push(a);
+
+        tracing_enter_span(&span_id, &None);
+
+        Ok(())
+    }
+
+    pub async fn exec_eval_request(
+        &mut self,
+        task_id: TaskId,
+        permissions: Objid,
+        player: Objid,
+        program: Program,
+    ) -> Result<(), anyhow::Error> {
+        let span = span!(Level::TRACE, "EVAL", task_id, ?program);
+        let span_id = span.id();
+
+        let verb_info = VerbInfo::new(
+            // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
+            // Might need to clean up the requirement for a VerbInfo in Activation.
+            VerbDef::new(
+                Uuid::new_v4(),
+                NOTHING,
+                NOTHING,
+                &["eval"],
+                BitEnum::new_with(VerbFlag::Exec),
+                BinaryType::None,
+                VerbArgsSpec::this_none_this(),
+            ),
+            SliceRef::empty(),
+        );
+
+        let call_request = VerbExecutionRequest {
+            permissions,
+            resolved_verb: verb_info,
+            call: VerbCall {
+                verb_name: "eval".to_string(),
+                location: player,
+                this: player,
+                player,
+                args: vec![],
+                caller: player,
+            },
+            command: None,
+            program,
+        };
+
+        // We need to set up a trampoline to return back into `bf_eval`
+        self.top_mut().bf_trampoline_arg = None;
+        self.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
 
         let a = Activation::for_call(task_id, call_request, span_id.clone())?;
 
