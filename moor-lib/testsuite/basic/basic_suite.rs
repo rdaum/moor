@@ -68,7 +68,7 @@ async fn test_db_with_verbs(
 ) -> Box<DbTxWorldState> {
     let mut tx = db.tx().unwrap();
     textdump_load(
-        tx.as_mut(),
+        &mut tx,
         testsuite_dir().join("Minimal.db").to_str().unwrap(),
     )
     .await
@@ -89,7 +89,7 @@ async fn test_db_with_verbs(
         .await
         .unwrap();
     }
-    tx
+    Box::new(tx)
 }
 
 async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
