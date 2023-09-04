@@ -66,8 +66,8 @@ md5 = "0.7.0" # For MOO's "string_hash"
 rand = "0.8.5"
 
 ## Compiler grammar/parser
-pest = "2.6.0"
-pest_derive = "2.6.0"
+pest = "2.7.1"
+pest_derive = "2.7.1"
 
 ## Error declaration/ handling
 anyhow = { version = "1.0.75", features = ["backtrace"] }
