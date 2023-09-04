@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use tracing::info;
-
 use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::objset::ObjSet;
@@ -78,11 +76,8 @@ impl<'a> RocksDbTx<'a> {
         let parent_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectParent);
         let property_value_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectPropertyValue);
 
-        if o.0 == 0 {
-            info!("Setting parent of #0 to {}", new_parent);
-        }
         // TODO this is all very wasteful for net-new objects, which have no children or properties
-        // to move around.
+        //   to move around.
 
         // Steps for object re-parenting:
 
@@ -98,7 +93,7 @@ impl<'a> RocksDbTx<'a> {
         // This will find a) our shared ancestor, b) all ancestors not shared with new ancestor,
         // c) all the new ancestors we'd have after the reparenting, all in one go. Hopefully.
         // TODO: the argument order seems backward here. I was able to make it work by flipping
-        // new_parent and o, but I need to get to the bottom of this and fix it properly.
+        //   new_parent and o, but I need to get to the bottom of this and fix it properly.
         let (_shared_ancestor, new_ancestors, old_ancestors) =
             self.closest_common_ancestor_with_ancestors(new_parent, o)?;
 

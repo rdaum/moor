@@ -1,12 +1,13 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use moor_value::SYSTEM_OBJECT;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
+use tracing::instrument;
 
 use moor_value::util::unquote_str;
 use moor_value::var::error::Error::{
@@ -16,6 +17,7 @@ use moor_value::var::error::Error::{
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_err, v_float, v_int, v_objid, v_str};
 
+use crate::compiler::ast::Arg::{Normal, Splice};
 use crate::compiler::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
 };
@@ -105,12 +107,12 @@ fn parse_exprlist(
         match pair.as_rule() {
             Rule::argument => {
                 let arg = if pair.as_str().starts_with('@') {
-                    Arg::Splice(parse_expr(
+                    Splice(parse_expr(
                         names.clone(),
                         pair.into_inner().next().unwrap().into_inner(),
                     )?)
                 } else {
-                    Arg::Normal(parse_expr(
+                    Normal(parse_expr(
                         names.clone(),
                         pair.into_inner().next().unwrap().into_inner(),
                     )?)
@@ -476,8 +478,7 @@ fn parse_statement(
         Rule::while_statement => {
             let mut parts = pair.into_inner();
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let mut body = vec![];
-            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::While {
                 id: None,
                 condition,
@@ -490,8 +491,7 @@ fn parse_statement(
                 .borrow_mut()
                 .find_or_add_name(parts.next().unwrap().as_str());
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let mut body = vec![];
-            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::While {
                 id: Some(id),
                 condition,
@@ -503,8 +503,7 @@ fn parse_statement(
             let mut arms = vec![];
             let mut otherwise = vec![];
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let mut body = vec![];
-            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
             arms.push(CondArm {
                 condition,
                 statements: body,
@@ -518,12 +517,8 @@ fn parse_statement(
                         let mut parts = remainder.into_inner();
                         let condition =
                             parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-                        let mut body = vec![];
-                        parse_statements(
-                            names.clone(),
-                            parts.next().unwrap().into_inner(),
-                            &mut body,
-                        )?;
+                        let body =
+                            parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
                         arms.push(CondArm {
                             condition,
                             statements: body,
@@ -531,11 +526,8 @@ fn parse_statement(
                     }
                     Rule::else_clause => {
                         let mut parts = remainder.into_inner();
-                        parse_statements(
-                            names.clone(),
-                            parts.next().unwrap().into_inner(),
-                            &mut otherwise,
-                        )?;
+                        otherwise =
+                            parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
                     }
                     _ => panic!("Unimplemented if clause: {:?}", remainder),
                 }
@@ -569,8 +561,7 @@ fn parse_statement(
                 .borrow_mut()
                 .find_or_add_name(parts.next().unwrap().as_str());
             let clause = parts.next().unwrap();
-            let mut body = vec![];
-            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
             match clause.as_rule() {
                 Rule::for_range_clause => {
                     let mut clause_inner = clause.into_inner();
@@ -591,16 +582,13 @@ fn parse_statement(
         }
         Rule::try_finally_statement => {
             let mut parts = pair.into_inner();
-            let mut body = vec![];
-            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
-            let mut handler = vec![];
-            parse_statements(names, parts.next().unwrap().into_inner(), &mut handler)?;
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+            let handler = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::TryFinally { body, handler }))
         }
         Rule::try_except_statement => {
             let mut parts = pair.into_inner();
-            let mut body = vec![];
-            parse_statements(names.clone(), parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
             let mut excepts = vec![];
             for except in parts {
                 match except.as_rule() {
@@ -630,11 +618,9 @@ fn parse_statement(
                             }
                             _ => panic!("Unimplemented except clause: {:?}", clause),
                         };
-                        let mut statements = vec![];
-                        parse_statements(
+                        let statements = parse_statements(
                             names.clone(),
                             except_clause_parts.next().unwrap().into_inner(),
-                            &mut statements,
                         )?;
 
                         excepts.push(ExceptArm {
@@ -651,8 +637,7 @@ fn parse_statement(
         Rule::fork_statement => {
             let mut parts = pair.into_inner();
             let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let mut body = vec![];
-            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::Fork {
                 id: None,
                 time,
@@ -665,8 +650,7 @@ fn parse_statement(
                 .borrow_mut()
                 .find_or_add_name(parts.next().unwrap().as_str());
             let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let mut body = vec![];
-            parse_statements(names, parts.next().unwrap().into_inner(), &mut body)?;
+            let body = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::Fork {
                 id: Some(id),
                 time,
@@ -680,8 +664,8 @@ fn parse_statement(
 fn parse_statements(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
-    statements: &mut Vec<Stmt>,
-) -> Result<(), anyhow::Error> {
+) -> Result<Vec<Stmt>, anyhow::Error> {
+    let mut statements = vec![];
     for pair in pairs {
         match pair.as_rule() {
             Rule::statement => {
@@ -695,27 +679,24 @@ fn parse_statements(
             }
         }
     }
-    Ok(())
+    Ok(statements)
 }
 
+#[instrument(skip(program_text))]
 pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
-    let parse_program_span = tracing::trace_span!("parse_program");
-    let _enter = parse_program_span.enter();
+    let pairs = MooParser::parse(Rule::program, program_text)?;
 
-    let pairs = MooParser::parse(moo::Rule::program, program_text)?;
-
-    let mut program = Vec::new();
-    // This has to be tossed into an Arc because the precedence parser uses it in multiple closures,
-    // causing multiple borrows.
     let names = Rc::new(RefCell::new(Names::new()));
+    let mut program = Vec::new();
     for pair in pairs {
         match pair.as_rule() {
-            moo::Rule::program => {
+            Rule::program => {
                 let inna = pair.into_inner().next().unwrap();
 
                 match inna.as_rule() {
                     Rule::statements => {
-                        parse_statements(names.clone(), inna.into_inner(), &mut program)?;
+                        let parsed_statements = parse_statements(names.clone(), inna.into_inner())?;
+                        program.extend(parsed_statements);
                     }
 
                     _ => {
@@ -741,11 +722,10 @@ mod tests {
     use moor_value::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
     use moor_value::var::{v_err, v_float, v_int, v_obj, v_str};
 
-    use crate::compiler::ast::Arg::Normal;
+    use crate::compiler::ast::Arg::{Normal, Splice};
     use crate::compiler::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
     use crate::compiler::ast::{
-        Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-        UnaryOp,
+        BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
     };
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
@@ -758,14 +738,14 @@ mod tests {
         assert_eq!(parsed.stmts.len(), 1);
         assert_eq!(
             parsed.stmts,
-            vec![Stmt::Expr(Expr::Verb {
-                location: Box::new(Expr::VarExpr(v_obj(0))),
-                verb: Box::new(Expr::VarExpr(v_str("test_verb"))),
+            vec![Stmt::Expr(Verb {
+                location: Box::new(VarExpr(v_obj(0))),
+                verb: Box::new(VarExpr(v_str("test_verb"))),
                 args: vec![
-                    Arg::Normal(Expr::VarExpr(v_int(1))),
-                    Arg::Normal(Expr::VarExpr(v_int(2))),
-                    Arg::Normal(Expr::VarExpr(v_int(3))),
-                    Arg::Normal(Expr::VarExpr(v_str("test")))
+                    Normal(VarExpr(v_int(1))),
+                    Normal(VarExpr(v_int(2))),
+                    Normal(VarExpr(v_int(3))),
+                    Normal(VarExpr(v_str("test")))
                 ]
             })]
         );
@@ -799,7 +779,7 @@ mod tests {
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
             parse.stmts[0],
-            Stmt::Expr(Expr::Call {
+            Stmt::Expr(Call {
                 function: "notify".to_string(),
                 args: vec![Normal(VarExpr(v_str("test")))],
             })
@@ -912,10 +892,10 @@ mod tests {
             Stmt::Return {
                 expr: Some(Expr::Unary(
                     UnaryOp::Not,
-                    Box::new(Expr::Verb {
-                        location: Box::new(Expr::VarExpr(v_obj(2))),
-                        verb: Box::new(Expr::VarExpr(v_str("move"))),
-                        args: vec![Normal(Expr::VarExpr(v_int(5)))],
+                    Box::new(Verb {
+                        location: Box::new(VarExpr(v_obj(2))),
+                        verb: Box::new(VarExpr(v_str("move"))),
+                        args: vec![Normal(VarExpr(v_int(5)))],
                     })
                 )),
             }
@@ -938,10 +918,10 @@ mod tests {
                 arms: vec![CondArm {
                     condition: Expr::Unary(
                         UnaryOp::Not,
-                        Box::new(Expr::Verb {
-                            location: Box::new(Expr::Prop {
-                                location: Box::new(Expr::VarExpr(v_obj(0))),
-                                property: Box::new(Expr::VarExpr(v_str("network"))),
+                        Box::new(Verb {
+                            location: Box::new(Prop {
+                                location: Box::new(VarExpr(v_obj(0))),
+                                property: Box::new(VarExpr(v_str("network"))),
                             }),
                             verb: Box::new(VarExpr(v_str("is_connected"))),
                             args: vec![Normal(Id(parse.names.find_name("this").unwrap())),],
@@ -966,15 +946,15 @@ mod tests {
             Stmt::ForList {
                 id: x,
                 expr: Expr::List(vec![
-                    Arg::Normal(VarExpr(v_int(1))),
-                    Arg::Normal(VarExpr(v_int(2))),
-                    Arg::Normal(VarExpr(v_int(3))),
+                    Normal(VarExpr(v_int(1))),
+                    Normal(VarExpr(v_int(2))),
+                    Normal(VarExpr(v_int(3))),
                 ]),
                 body: vec![Stmt::Expr(Expr::Assign {
-                    left: Box::new(Expr::Id(b)),
+                    left: Box::new(Id(b)),
                     right: Box::new(Expr::Binary(
                         BinaryOp::Add,
-                        Box::new(Expr::Id(x)),
+                        Box::new(Id(x)),
                         Box::new(VarExpr(v_int(5))),
                     )),
                 })],
@@ -1019,17 +999,17 @@ mod tests {
             parse.stmts,
             vec![
                 Stmt::Expr(Expr::Assign {
-                    left: Box::new(Expr::Id(a)),
+                    left: Box::new(Id(a)),
                     right: Box::new(Expr::List(vec![
-                        Arg::Normal(VarExpr(v_int(1))),
-                        Arg::Normal(VarExpr(v_int(2))),
-                        Arg::Normal(VarExpr(v_int(3))),
+                        Normal(VarExpr(v_int(1))),
+                        Normal(VarExpr(v_int(2))),
+                        Normal(VarExpr(v_int(3))),
                     ])),
                 }),
                 Stmt::Expr(Expr::Assign {
-                    left: Box::new(Expr::Id(b)),
+                    left: Box::new(Id(b)),
                     right: Box::new(Expr::Range {
-                        base: Box::new(Expr::Id(a)),
+                        base: Box::new(Id(a)),
                         from: Box::new(VarExpr(v_int(2))),
                         to: Box::new(Expr::Length),
                     }),
@@ -1051,10 +1031,10 @@ mod tests {
                 condition: VarExpr(v_int(1)),
                 body: vec![
                     Stmt::Expr(Expr::Assign {
-                        left: Box::new(Expr::Id(x)),
+                        left: Box::new(Id(x)),
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
-                            Box::new(Expr::Id(x)),
+                            Box::new(Id(x)),
                             Box::new(VarExpr(v_int(1))),
                         )),
                     }),
@@ -1062,7 +1042,7 @@ mod tests {
                         arms: vec![CondArm {
                             condition: Expr::Binary(
                                 BinaryOp::Gt,
-                                Box::new(Expr::Id(x)),
+                                Box::new(Id(x)),
                                 Box::new(VarExpr(v_int(5))),
                             ),
                             statements: vec![Stmt::Break { exit: None }],
@@ -1120,13 +1100,13 @@ mod tests {
         let test_string = parse.names.find_name("test_string").unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::Verb {
+            vec![Stmt::Expr(Verb {
                 location: Box::new(Prop {
                     location: Box::new(VarExpr(v_obj(0))),
                     property: Box::new(VarExpr(v_str("string_utils"))),
                 }),
                 verb: Box::new(VarExpr(v_str("from_list"))),
-                args: vec![Arg::Normal(Id(test_string))],
+                args: vec![Normal(Id(test_string))],
             })]
         );
     }
@@ -1184,9 +1164,9 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Index(
                 Box::new(Expr::List(vec![
-                    Arg::Normal(Id(a)),
-                    Arg::Normal(Id(b)),
-                    Arg::Normal(Id(c)),
+                    Normal(Id(a)),
+                    Normal(Id(b)),
+                    Normal(Id(c)),
                 ])),
                 Box::new(VarExpr(v_int(1))),
             ))]
@@ -1206,9 +1186,9 @@ mod tests {
                 left: Box::new(Id(a)),
                 right: Box::new(Expr::Index(
                     Box::new(Expr::List(vec![
-                        Arg::Normal(Id(a)),
-                        Arg::Normal(Id(b)),
-                        Arg::Normal(Id(c)),
+                        Normal(Id(a)),
+                        Normal(Id(b)),
+                        Normal(Id(c)),
                     ])),
                     Box::new(VarExpr(v_int(1))),
                 )),
@@ -1248,9 +1228,9 @@ mod tests {
                 Stmt::ForList {
                     id: i,
                     expr: Expr::List(vec![
-                        Arg::Normal(VarExpr(v_int(1))),
-                        Arg::Normal(VarExpr(v_int(2))),
-                        Arg::Normal(VarExpr(v_int(3))),
+                        Normal(VarExpr(v_int(1))),
+                        Normal(VarExpr(v_int(2))),
+                        Normal(VarExpr(v_int(3))),
                     ]),
                     body: vec![],
                 },
@@ -1314,10 +1294,10 @@ mod tests {
             parse.stmts,
             vec![Stmt::Return {
                 expr: Some(Expr::List(vec![
-                    Arg::Splice(Id(results)),
-                    Arg::Normal(Expr::Call {
+                    Splice(Id(results)),
+                    Normal(Call {
                         function: "frozzbozz".to_string(),
-                        args: vec![Arg::Splice(Id(args))],
+                        args: vec![Splice(Id(args))],
                     }),
                 ])),
             }]
@@ -1334,7 +1314,7 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::VarExpr(v_str(r#"n t r " \"#)))]
+            vec![Stmt::Expr(VarExpr(v_str(r#"n t r " \"#)))]
         );
     }
 
@@ -1368,9 +1348,9 @@ mod tests {
                 Stmt::ForList {
                     id: a,
                     expr: Expr::List(vec![
-                        Arg::Normal(VarExpr(v_int(1))),
-                        Arg::Normal(VarExpr(v_int(2))),
-                        Arg::Normal(VarExpr(v_int(3))),
+                        Normal(VarExpr(v_int(1))),
+                        Normal(VarExpr(v_int(2))),
+                        Normal(VarExpr(v_int(3))),
                     ]),
                     body: vec![],
                 },
@@ -1469,9 +1449,9 @@ mod tests {
                         BinaryOp::In,
                         Box::new(VarExpr(v_int(5))),
                         Box::new(Expr::List(vec![
-                            Arg::Normal(VarExpr(v_int(1))),
-                            Arg::Normal(VarExpr(v_int(2))),
-                            Arg::Normal(VarExpr(v_int(3))),
+                            Normal(VarExpr(v_int(1))),
+                            Normal(VarExpr(v_int(2))),
+                            Normal(VarExpr(v_int(3))),
                         ])),
                     ),
                     statements: vec![],
@@ -1493,10 +1473,10 @@ mod tests {
         assert_eq!(
             parse.stmts,
             vec![Stmt::TryExcept {
-                body: vec![Stmt::Expr(Expr::VarExpr(v_int(5)))],
+                body: vec![Stmt::Expr(VarExpr(v_int(5)))],
                 excepts: vec![ExceptArm {
                     id: None,
-                    codes: CatchCodes::Codes(vec![Arg::Normal(VarExpr(v_err(E_PROPNF)))]),
+                    codes: CatchCodes::Codes(vec![Normal(VarExpr(v_err(E_PROPNF)))]),
                     statements: vec![Stmt::Return { expr: None }],
                 }],
             }]
@@ -1507,10 +1487,7 @@ mod tests {
     fn test_float() {
         let program = "10000.0;";
         let parse = parse_program(program).unwrap();
-        assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::VarExpr(v_float(10000.0)))]
-        );
+        assert_eq!(parse.stmts, vec![Stmt::Expr(VarExpr(v_float(10000.0)))]);
     }
 
     #[test]
@@ -1524,9 +1501,9 @@ mod tests {
                 BinaryOp::In,
                 Box::new(Id(a)),
                 Box::new(Expr::List(vec![
-                    Arg::Normal(VarExpr(v_int(1))),
-                    Arg::Normal(VarExpr(v_int(2))),
-                    Arg::Normal(VarExpr(v_int(3))),
+                    Normal(VarExpr(v_int(1))),
+                    Normal(VarExpr(v_int(2))),
+                    Normal(VarExpr(v_int(3))),
                 ])),
             ))]
         );
@@ -1549,9 +1526,9 @@ mod tests {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
                 verb: Box::new(VarExpr(v_str("verb"))),
                 args: vec![
-                    Arg::Normal(VarExpr(v_int(1))),
-                    Arg::Normal(VarExpr(v_int(2))),
-                    Arg::Normal(VarExpr(v_int(3))),
+                    Normal(VarExpr(v_int(1))),
+                    Normal(VarExpr(v_int(2))),
+                    Normal(VarExpr(v_int(3))),
                 ],
             })]
         );
@@ -1563,7 +1540,7 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::Prop {
+            vec![Stmt::Expr(Prop {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
                 property: Box::new(VarExpr(v_str("prop"))),
             })]
@@ -1596,9 +1573,9 @@ mod tests {
                 Box::new(VarExpr(v_int(2))),
                 Box::new(Expr::Assign {
                     left: Box::new(Id(len)),
-                    right: Box::new(Expr::Call {
+                    right: Box::new(Call {
                         function: "length".to_string(),
-                        args: vec![Arg::Normal(Id(text))],
+                        args: vec![Normal(Id(text))],
                     }),
                 }),
             ))]
@@ -1634,7 +1611,7 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Binary(
                 BinaryOp::Eq,
-                Box::new(Expr::List(vec![Arg::Normal(Id(parse
+                Box::new(Expr::List(vec![Normal(Id(parse
                     .names
                     .find_name("what")
                     .unwrap())),])),
@@ -1651,9 +1628,9 @@ mod tests {
 
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Expr(Expr::Call {
+            vec![Stmt::Expr(Call {
                 function: "raise".to_string(),
-                args: vec![Arg::Normal(Id(parse.names.find_name("E_PERMS").unwrap()))]
+                args: vec![Normal(Id(parse.names.find_name("E_PERMS").unwrap()))]
             })]
         );
     }
@@ -1671,9 +1648,9 @@ mod tests {
                 Stmt::ForList {
                     id: parse.names.find_name("line").unwrap(),
                     expr: Expr::List(vec![
-                        Arg::Normal(VarExpr(v_int(1))),
-                        Arg::Normal(VarExpr(v_int(2))),
-                        Arg::Normal(VarExpr(v_int(3))),
+                        Normal(VarExpr(v_int(1))),
+                        Normal(VarExpr(v_int(2))),
+                        Normal(VarExpr(v_int(3))),
                     ]),
                     body: vec![],
                 },
@@ -1687,11 +1664,11 @@ mod tests {
         let program = "return {`x ! e_varnf => 666'};";
         let parse = parse_program(program).unwrap();
 
-        let varnf = Arg::Normal(VarExpr(v_err(E_VARNF)));
+        let varnf = Normal(VarExpr(v_err(E_VARNF)));
         assert_eq!(
             parse.stmts,
             vec![Stmt::Return {
-                expr: Some(Expr::List(vec![Arg::Normal(Expr::Catch {
+                expr: Some(Expr::List(vec![Normal(Expr::Catch {
                     trye: Box::new(Id(parse.names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
                     except: Some(Box::new(VarExpr(v_int(666)))),
@@ -1704,7 +1681,7 @@ mod tests {
     fn try_catch_any_expr() {
         let program = "`raise(E_INVARG) ! ANY';";
         let parse = parse_program(program).unwrap();
-        let invarg = Arg::Normal(VarExpr(v_err(E_INVARG)));
+        let invarg = Normal(VarExpr(v_err(E_INVARG)));
 
         assert_eq!(
             parse.stmts,
@@ -1728,12 +1705,12 @@ mod tests {
             parse.stmts,
             vec![Stmt::Expr(Expr::Catch {
                 trye: Box::new(Verb {
-                    location: Box::new(Expr::Prop {
+                    location: Box::new(Prop {
                         location: Box::new(VarExpr(v_obj(0))),
                         property: Box::new(VarExpr(v_str("ftp_client"))),
                     }),
                     verb: Box::new(VarExpr(v_str("finish_get"))),
-                    args: vec![Arg::Normal(Expr::Prop {
+                    args: vec![Normal(Prop {
                         location: Box::new(Id(parse.names.find_name("this").unwrap())),
                         property: Box::new(VarExpr(v_str("connection"))),
                     })],
@@ -1760,9 +1737,7 @@ mod tests {
                 Stmt::Expr(Expr::Assign {
                     left: Box::new(Id(parse.names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
-                        args: vec![Arg::Splice(Expr::Id(
-                            parse.names.find_name("args").unwrap()
-                        ))],
+                        args: vec![Splice(Id(parse.names.find_name("args").unwrap()))],
                     }),
                 }),
                 Stmt::Expr(Expr::Assign {
@@ -1773,10 +1748,10 @@ mod tests {
                     left: Box::new(Id(parse.names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
                         args: vec![
-                            Arg::Normal(VarExpr(v_int(1))),
-                            Arg::Normal(VarExpr(v_int(2))),
-                            Arg::Normal(VarExpr(v_int(3))),
-                            Arg::Normal(VarExpr(v_int(4))),
+                            Normal(VarExpr(v_int(1))),
+                            Normal(VarExpr(v_int(2))),
+                            Normal(VarExpr(v_int(3))),
+                            Normal(VarExpr(v_int(4))),
                         ],
                     }),
                 }),
