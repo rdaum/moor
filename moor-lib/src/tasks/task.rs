@@ -1,31 +1,27 @@
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
-use anyhow::{bail, Error};
 use metrics_macros::increment_counter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, instrument, trace, warn};
 
+use moor_value::model::verb_info::VerbInfo;
+use moor_value::model::world_state::WorldState;
+use moor_value::model::CommitResult;
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, Var};
+use moor_value::NOTHING;
 
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::scheduler::{AbortLimitReason, SchedulerControlMsg, TaskDescription};
+use crate::tasks::moo_vm_host::MooVmHost;
+use crate::tasks::scheduler::{SchedulerControlMsg, TaskDescription};
+use crate::tasks::vm_host::{VMHost, VMHostResponse};
 use crate::tasks::{Sessions, TaskId, VerbCall};
 use crate::vm::opcode::Program;
-use crate::vm::vm_execute::VmExecParams;
-use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-use moor_value::model::verb_info::VerbInfo;
-use moor_value::model::verbs::BinaryType;
-use moor_value::model::world_state::WorldState;
-use moor_value::model::CommitResult;
-use moor_value::util::slice_ref::SliceRef;
-use moor_value::AsByteBuffer;
-use moor_value::NOTHING;
+use crate::vm::ForkRequest;
 
 /// Messages sent to tasks from the scheduler to tell the task to do things.
 pub(crate) enum TaskControlMsg {
@@ -64,58 +60,121 @@ pub(crate) enum TaskControlMsg {
     Abort,
 }
 
+/// A task is a concurrent, transactionally isolated, thread of execution. It starts with the
+/// execution of a 'verb' (or 'command verb' or 'eval' etc) and runs through to completion or
+/// suspension or abort.
+/// Within the task many verbs may be executed as subroutine calls from the root verb/command
+/// Each task has its own VM host which is responsible for executing the program.
+/// Each task has its own isolated transactional world state.
+/// Each task is given a semi-isolated "sessions" object through which I/O is performed.
+/// When a task fails, both the world state and I/O should be rolled back.
+/// A task is generally tied 1:1 with a player connection, and usually come from one command, but
+/// they can also be 'forked' from other tasks.
 pub(crate) struct Task {
+    /// My unique task id.
     pub(crate) task_id: TaskId,
     /// When this task will begin execution.
     /// For currently execution tasks this is when the task actually began running.
     /// For tasks in suspension, this is when they will wake up.
     /// If the task is in indefinite suspension, this is None.
     pub(crate) scheduled_start_time: Option<SystemTime>,
+    /// The channel to receive control messages from the scheduler.
     pub(crate) task_control_receiver: UnboundedReceiver<TaskControlMsg>,
+    /// The channel to send control messages to the scheduler.
+    /// This sender is unique for our task, but is passed around all over the place down into the
+    /// VM host and into the VM itself.
     pub(crate) scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
+    /// The 'player' this task is running as.
     pub(crate) player: Objid,
-    pub(crate) vm: VM,
+    /// The sessions object for connection mgmt and sending messages to players
     pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    /// The transactionally isolated world state for this task.
     pub(crate) world_state: Box<dyn WorldState>,
+    /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
     pub(crate) perms: Objid,
-    pub(crate) running_method: bool,
-    /// The maximum stack detph for this task
-    pub(crate) max_stack_depth: usize,
-    /// The amount of ticks (opcode executions) allotted to this task
-    pub(crate) max_ticks: usize,
-    /// The maximum amount of time allotted to this task
-    pub(crate) max_time: Duration,
+    /// The actual VM host which is managing the execution of this task.
+    pub(crate) vm_host: MooVmHost,
 }
 
 impl Task {
     #[instrument(skip(self), name = "task_run")]
     pub(crate) async fn run(mut self) {
         loop {
-            // Ideally we'd use tokio::select! to wait on both futures simultaneously, but this
-            // leads to a concurrent borrowing issue for two mutable references to `self` and
-            // everything it contains.
-            // I could get around that by shoving everything into Arc<RwLock or similar, but it
-            // starts to get gross.
-            // For now I will just run the futures in sequence (in priority)
-            if self.running_method {
-                let vm_exec_result = self.exec_interpreter().await;
-                let vm_exec_result = match vm_exec_result {
-                    Ok(Some(result)) => result,
-                    Ok(None) => continue,
-                    Err(err) => {
-                        increment_counter!("tasks.error.exec");
-                        self.world_state.rollback().await.unwrap();
-                        error!(task_id = self.task_id, error = ?err, "Task error");
-
-                        self.scheduler_control_sender
-                            .send(SchedulerControlMsg::TaskAbortError(err))
-                            .expect("Could not send error response");
-                        return;
-                    }
-                };
+            // We have two potential sources of concurrent action here:
+            //    * The VM host, which is running the VM and may need to suspend or abort or do
+            //      something else.
+            //    * The reception channel from the scheduler, which may be telling us to do
+            //      something
+            //
+            // Ideally we'd use tokio::select! to wait on both futures simultaneously
+            // but this leads to a concurrent borrowing nightmare for two mutable references to
+            // `self` and everything it contains.
+            // There are probably ways around this by further splitting up 'Task' into more
+            // constituent pieces. but for now I will just run the futures in sequence
+            // in priority order: execute as many VM opcodes in the loop as we can, and then
+            // wait for a message from the scheduler.
+            // This would not work for VM hosts that block. They would need to live on their own
+            // thread.
+            if self.vm_host.is_running() {
+                let vm_exec_result = self
+                    .vm_host
+                    .exec_interpreter(self.task_id, self.world_state.as_mut())
+                    .await;
                 match vm_exec_result {
-                    SchedulerControlMsg::TaskSuccess(ref result) => {
-                        increment_counter!("tasks.success_complete");
+                    Ok(VMHostResponse::DispatchFork(fork_request)) => {
+                        trace!(task_id = self.task_id, ?fork_request, "Task fork");
+                        // To fork a new task, we need to get the scheduler to do some work for us. So we'll
+                        // send a message back asking it to fork the task and return the new task id on a
+                        // reply channel.
+                        // We will then take the new task id and send it back to the caller.
+                        let (send, reply) = tokio::sync::oneshot::channel();
+                        let task_id_var = fork_request.task_id;
+                        self.scheduler_control_sender
+                            .send(SchedulerControlMsg::TaskRequestFork(fork_request, send))
+                            .expect("Could not send fork request");
+                        let task_id = reply.await.expect("Could not get fork reply");
+                        if let Some(task_id_var) = task_id_var {
+                            self.vm_host
+                                .set_variable(task_id_var, v_int(task_id as i64));
+                        }
+                    }
+                    Ok(VMHostResponse::Suspend(delay)) => {
+                        trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
+
+                        // VMHost is now suspended for execution, and we'll be waiting for a Resume
+
+                        // Attempt commit...
+                        // TODO: what to do on conflict? The whole thing needs to be retried, but we have
+                        // not implemented that at any other level yet, so we'll just abort for now.
+                        let commit_result = self
+                            .world_state
+                            .commit()
+                            .await
+                            .expect("Could not commit world state before suspend");
+                        if let CommitResult::ConflictRetry = commit_result {
+                            error!("Conflict during commit before suspend");
+                            self.scheduler_control_sender
+                                .send(SchedulerControlMsg::TaskAbortCancelled)
+                                .expect("Could not send suspend response");
+
+                            // TODO: We terminate by exiting the loop here... is this right?
+                            return;
+                        }
+
+                        // Let the scheduler know about our suspension, which can be of the form:
+                        //      * Indefinite, wake-able only with Resume
+                        //      * Scheduled, a duration is given, and we'll wake up after that duration
+                        // In both cases we'll rely on the scheduler to wake us up in its processing loop
+                        // rather than sleep here, which would make this thread unresponsive to other
+                        // messages.
+                        let resume_time = delay.map(|delay| SystemTime::now() + delay);
+                        self.scheduler_control_sender
+                            .send(SchedulerControlMsg::TaskSuspend(resume_time))
+                            .expect("Could not send suspend response");
+                    }
+                    Ok(VMHostResponse::ContinueOk) => continue,
+                    Ok(VMHostResponse::CompleteSuccess(result)) => {
+                        trace!(task_id = self.task_id, result = ?result, "Task complete, success");
 
                         // TODO: restart the whole task on conflict.
                         let CommitResult::Success = self
@@ -129,25 +188,84 @@ impl Task {
                         trace!(self.task_id, result = ?result, "Task complete, committed");
 
                         self.scheduler_control_sender
-                            .send(vm_exec_result)
+                            .send(SchedulerControlMsg::TaskSuccess(result))
                             .expect("Could not send success response");
                         return;
                     }
-                    _ => {
-                        increment_counter!("tasks.error.unknown");
-                        trace!(task_id = self.task_id, "Task end, error");
-                        self.world_state.rollback().await.unwrap();
+                    Ok(VMHostResponse::CompleteAbort) => {
+                        error!(task_id = self.task_id, "Task aborted");
+                        if let Err(send_error) = self
+                            .sessions
+                            .write()
+                            .await
+                            .send_text(self.player, format!("Aborted.").as_str())
+                            .await
+                        {
+                            warn!("Could not send abort message to player: {:?}", send_error);
+                        };
+
+                        self.world_state
+                            .rollback()
+                            .await
+                            .expect("Could not rollback");
 
                         self.scheduler_control_sender
-                            .send(vm_exec_result)
-                            .expect("Could not send success response");
+                            .send(SchedulerControlMsg::TaskAbortCancelled)
+                            .expect("Could not send abort response");
+                    }
+                    Ok(VMHostResponse::CompleteException(exception)) => {
+                        // Compose a string out of the backtrace
+                        let mut traceback = vec![];
+                        for frame in exception.backtrace.iter() {
+                            let Variant::Str(s) = frame.variant() else {
+                                continue;
+                            };
+                            traceback.push(format!("{:}\n", s));
+                        }
+
+                        for l in traceback.iter() {
+                            if let Err(send_error) = self
+                                .sessions
+                                .write()
+                                .await
+                                .send_text(self.player, l.as_str())
+                                .await
+                            {
+                                warn!("Could not send traceback to player: {:?}", send_error);
+                            }
+                        }
+
+                        self.world_state
+                            .rollback()
+                            .await
+                            .expect("Could not rollback");
+
+                        self.scheduler_control_sender
+                            .send(SchedulerControlMsg::TaskException(exception))
+                            .expect("Could not send abort response");
                         return;
                     }
-                }
+                    Err(err) => {
+                        increment_counter!("tasks.error.exec");
+                        self.world_state.rollback().await.unwrap();
+                        error!(task_id = self.task_id, error = ?err, "Task error");
+
+                        self.scheduler_control_sender
+                            .send(SchedulerControlMsg::TaskAbortError(err))
+                            .expect("Could not send error response");
+                        return;
+                    }
+                    Ok(VMHostResponse::AbortLimit(reason)) => {
+                        self.scheduler_control_sender
+                            .send(SchedulerControlMsg::TaskAbortLimitsReached(reason))
+                            .expect("Could not send error response");
+                        return;
+                    }
+                };
             }
 
             // If we're not running a method, we block here instead.
-            let control_msg = if self.running_method {
+            let control_msg = if self.vm_host.is_running() {
                 match self.task_control_receiver.try_recv() {
                     Ok(control_msg) => control_msg,
                     Err(TryRecvError::Empty) => continue,
@@ -195,7 +313,7 @@ impl Task {
                 increment_counter!("task.start_command");
 
                 // We should never be asked to start a command while we're already running one.
-                assert!(!self.running_method);
+                assert!(!self.vm_host.is_running());
                 trace!(?command, ?player, ?vloc, ?verbinfo, "Starting command");
                 let call = VerbCall {
                     verb_name: command.verb.clone(),
@@ -205,15 +323,9 @@ impl Task {
                     args: command.args.clone(),
                     caller: NOTHING,
                 };
-                let cr = self.start_call_command_verb(verbinfo, call, command, self.perms)?;
-                self.scheduled_start_time = None;
-                self.vm.start_time = Some(SystemTime::now());
-                self.vm.tick_count = 0;
-                self.vm
-                    .exec_call_request(self.task_id, cr)
-                    .await
-                    .expect("Unable to exec verb");
-                self.running_method = true;
+                self.vm_host
+                    .start_call_command_verb(self.task_id, verbinfo, call, command, self.perms)
+                    .await?;
             }
 
             TaskControlMsg::StartVerb {
@@ -224,10 +336,10 @@ impl Task {
             } => {
                 increment_counter!("task.start_verb");
                 // We should never be asked to start a command while we're already running one.
-                assert!(!self.running_method);
+                assert!(!self.vm_host.is_running());
                 trace!(?verb, ?player, ?vloc, ?args, "Starting verb");
 
-                let call = VerbCall {
+                let verb_call = VerbCall {
                     verb_name: verb,
                     location: vloc,
                     this: vloc,
@@ -235,39 +347,38 @@ impl Task {
                     args,
                     caller: NOTHING,
                 };
-                let cr = self.start_call_method_verb(call).await?;
-                self.scheduled_start_time = None;
-                self.vm.start_time = Some(SystemTime::now());
-                self.vm.tick_count = 0;
-                self.vm.exec_call_request(self.task_id, cr).await?;
-                self.running_method = true;
+                // Find the callable verb ...
+                let verb_info = self
+                    .world_state
+                    .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
+                    .await?;
+
+                self.vm_host
+                    .start_call_method_verb(self.task_id, self.perms, verb_info, verb_call)
+                    .await?;
             }
             TaskControlMsg::StartFork {
                 task_id,
                 fork_request,
                 suspended,
             } => {
-                assert!(!self.running_method);
+                assert!(!self.vm_host.is_running());
                 trace!(?task_id, "Setting up fork");
                 self.scheduled_start_time = None;
-                self.vm.start_time = Some(SystemTime::now());
-                self.vm.tick_count = 0;
-                self.vm.exec_fork_vector(fork_request, task_id).await?;
-                self.running_method = !suspended;
+
+                self.vm_host
+                    .start_fork(task_id, fork_request, suspended)
+                    .await?;
             }
             TaskControlMsg::StartEval { player, program } => {
                 increment_counter!("task.start_eval");
 
-                assert!(!self.running_method);
+                assert!(!self.vm_host.is_running());
 
                 self.scheduled_start_time = None;
-                self.vm.start_time = Some(SystemTime::now());
-                self.vm.tick_count = 0;
-                self.running_method = true;
-                self.vm
-                    .exec_eval_request(self.task_id, player, player, program)
-                    .await
-                    .expect("Could not set up VM for verb execution");
+                self.vm_host
+                    .start_eval(self.task_id, player, program)
+                    .await?;
             }
             TaskControlMsg::Resume(world_state, value) => {
                 increment_counter!("task.resume");
@@ -278,326 +389,39 @@ impl Task {
                     "Resuming task, getting new transaction"
                 );
                 self.world_state = world_state;
-                // suspend needs a return value.
-                self.vm.top_mut().push(value);
                 self.scheduled_start_time = None;
-                self.vm.start_time = Some(SystemTime::now());
-                self.vm.tick_count = 0;
-                debug!(task_id = self.task_id, "Resuming task...");
-                self.running_method = true;
+                self.vm_host.resume_execution(value).await?;
                 return Ok(None);
             }
-            // We've been asked to die.
             TaskControlMsg::Abort => {
+                // We've been asked to die. Go tell the VM host to abort, and roll back the
+                // transaction.
                 increment_counter!("task.abort");
-
-                trace!("Aborting task");
+                trace!(task_id = self.task_id, "Aborting task");
+                self.vm_host.stop();
                 self.world_state.rollback().await?;
 
+                // And now tell the scheduler we're done, as we exit.
                 return Ok(Some(SchedulerControlMsg::TaskAbortCancelled));
             }
             TaskControlMsg::Describe(reply_sender) => {
                 increment_counter!("task.describe");
 
-                trace!("Received and responding to describe request");
                 let description = TaskDescription {
                     task_id: self.task_id,
                     start_time: self.scheduled_start_time,
-                    permissions: self.vm.top().permissions,
-                    verb_name: self.vm.top().verb_name.clone(),
-                    verb_definer: self.vm.top().verb_definer(),
-                    // TODO: when we have proper decompilation support
-                    line_number: 0,
-                    this: self.vm.top().this,
+                    permissions: self.vm_host.permissions(),
+                    verb_name: self.vm_host.verb_name(),
+                    verb_definer: self.vm_host.verb_definer(),
+                    line_number: self.vm_host.line_number(),
+                    this: self.vm_host.this(),
                 };
                 reply_sender
                     .send(description)
                     .expect("Could not send task description");
-                trace!("Sent task description back to scheduler");
                 return Ok(None);
             }
         }
         Ok(None)
-    }
-
-    async fn exec_interpreter(&mut self) -> Result<Option<SchedulerControlMsg>, anyhow::Error> {
-        if !self.running_method {
-            return Ok(None);
-        }
-
-        // Check ticks and seconds, and abort the task if we've exceeded the limits.
-        let time_left = match self.vm.start_time {
-            Some(start_time) => {
-                let elapsed = start_time.elapsed()?;
-                if elapsed > self.max_time {
-                    return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(
-                        AbortLimitReason::Time(elapsed),
-                    )));
-                }
-                Some(self.max_time - elapsed)
-            }
-            None => None,
-        };
-        if self.vm.tick_count >= self.max_ticks {
-            return Ok(Some(SchedulerControlMsg::TaskAbortLimitsReached(
-                AbortLimitReason::Ticks(self.vm.tick_count),
-            )));
-        }
-        let exec_params = VmExecParams {
-            world_state: self.world_state.as_mut(),
-            sessions: self.sessions.clone(),
-            scheduler_sender: self.scheduler_control_sender.clone(),
-            max_stack_depth: self.max_stack_depth,
-            ticks_left: self.max_ticks - self.vm.tick_count,
-            time_left,
-        };
-        let pre_exec_tick_count = self.vm.tick_count;
-        let mut result = self.vm.exec(exec_params, self.max_ticks).await?;
-        let post_exec_tick_count = self.vm.tick_count;
-        trace!(
-            task_id = self.task_id,
-            executed_ticks = post_exec_tick_count - pre_exec_tick_count,
-            ?result,
-            "Executed ticks",
-        );
-        loop {
-            match result {
-                ExecutionResult::More => return Ok(None),
-                ExecutionResult::ContinueVerb {
-                    permissions,
-                    resolved_verb,
-                    call,
-                    command,
-                    trampoline,
-                    trampoline_arg,
-                } => {
-                    trace!(task_id = self.task_id, call = ?call, "Task continue, call into verb");
-
-                    self.vm.top_mut().bf_trampoline_arg = trampoline_arg;
-                    self.vm.top_mut().bf_trampoline = trampoline;
-
-                    let program = Self::decode_program(
-                        resolved_verb.verbdef().binary_type(),
-                        resolved_verb.binary().as_slice(),
-                    )?;
-
-                    let call_request = VerbExecutionRequest {
-                        permissions,
-                        resolved_verb,
-                        call,
-                        command,
-                        program,
-                    };
-
-                    self.vm
-                        .exec_call_request(self.task_id, call_request)
-                        .await
-                        .expect("Could not set up VM for verb execution");
-                    return Ok(None);
-                }
-                ExecutionResult::PerformEval {
-                    permissions,
-                    player,
-                    program,
-                } => {
-                    self.vm
-                        .exec_eval_request(0, permissions, player, program)
-                        .await
-                        .expect("Could not set up VM for verb execution");
-                    return Ok(None);
-                }
-                ExecutionResult::ContinueBuiltin {
-                    bf_func_num: bf_offset,
-                    arguments: args,
-                } => {
-                    let mut exec_params = VmExecParams {
-                        world_state: self.world_state.as_mut(),
-                        sessions: self.sessions.clone(),
-                        scheduler_sender: self.scheduler_control_sender.clone(),
-                        max_stack_depth: self.max_stack_depth,
-                        ticks_left: self.max_ticks - self.vm.tick_count,
-                        time_left,
-                    };
-                    // Ask the VM to execute the builtin function.
-                    // This will push the result onto the stack.
-                    // After this we will loop around and check the result.
-                    result = self
-                        .vm
-                        .call_builtin_function(bf_offset, &args, &mut exec_params)
-                        .await
-                        .expect("Could not perform builtin execution");
-                    continue;
-                }
-                ExecutionResult::DispatchFork(fork_request) => {
-                    // To fork a new task, we need to get the scheduler to do some work for us. So we'll
-                    // send a message back asking it to fork the task and return the new task id on a
-                    // reply channel.
-                    // We will then take the new task id and send it back to the caller.
-                    let (send, reply) = tokio::sync::oneshot::channel();
-                    let task_id_var = fork_request.task_id;
-                    self.scheduler_control_sender
-                        .send(SchedulerControlMsg::TaskRequestFork(fork_request, send))
-                        .expect("Could not send fork request");
-                    let task_id = reply.await.expect("Could not get fork reply");
-                    if let Some(task_id_var) = task_id_var {
-                        self.vm
-                            .top_mut()
-                            .set_var_offset(task_id_var, v_int(task_id as i64))
-                            .expect("Could not set forked task id");
-                    }
-                    return Ok(None);
-                }
-                ExecutionResult::Suspend(delay) => {
-                    trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
-                    // Attempt commit...
-                    // TODO: what to do on conflict? The whole thing needs to be retried, but we have
-                    // not implemented that at any other level yet, so we'll just abort for now.
-                    let commit_result = self
-                        .world_state
-                        .commit()
-                        .await
-                        .expect("Could not commit world state before suspend");
-                    if let CommitResult::ConflictRetry = commit_result {
-                        error!("Conflict during commit before suspend");
-                        return Ok(Some(SchedulerControlMsg::TaskAbortCancelled));
-                    }
-
-                    // Let the scheduler know about our suspension, which can be of the form:
-                    //      * Indefinite, wake-able only with Resume
-                    //      * Scheduled, a duration is given, and we'll wake up after that duration
-                    // In both cases we'll rely on the scheduler to wake us up in its processing loop
-                    // rather than sleep here, which would make this thread unresponsive to other
-                    // messages.
-                    let resume_time = delay.map(|delay| SystemTime::now() + delay);
-                    self.scheduler_control_sender
-                        .send(SchedulerControlMsg::TaskSuspend(resume_time))
-                        .expect("Could not send suspend response");
-
-                    // Turn off VM execution and now only listen on messages.
-                    self.running_method = false;
-                    return Ok(None);
-                }
-                ExecutionResult::Complete(a) => {
-                    trace!(task_id = self.task_id, result = ?a, "Task complete");
-                    return Ok(Some(SchedulerControlMsg::TaskSuccess(a)));
-                }
-                ExecutionResult::Exception(fr) => {
-                    trace!(task_id = self.task_id, result = ?fr, "Task exception");
-
-                    return match &fr {
-                        FinallyReason::Abort => {
-                            error!(task_id = self.task_id, "Task aborted");
-                            if let Err(send_error) = self
-                                .sessions
-                                .write()
-                                .await
-                                .send_text(self.player, format!("Aborted: {:?}", fr).as_str())
-                                .await
-                            {
-                                warn!("Could not send abort message to player: {:?}", send_error);
-                            };
-
-                            Ok(Some(SchedulerControlMsg::TaskAbortCancelled))
-                        }
-                        FinallyReason::Uncaught {
-                            code: _,
-                            msg: _,
-                            value: _,
-                            stack: _,
-                            backtrace,
-                        } => {
-                            // Compose a string out of the backtrace
-                            let mut traceback = vec![];
-                            for frame in backtrace.iter() {
-                                let Variant::Str(s) = frame.variant() else {
-                                    continue;
-                                };
-                                traceback.push(format!("{:}\n", s));
-                            }
-
-                            for l in traceback.iter() {
-                                if let Err(send_error) = self
-                                    .sessions
-                                    .write()
-                                    .await
-                                    .send_text(self.player, l.as_str())
-                                    .await
-                                {
-                                    warn!("Could not send traceback to player: {:?}", send_error);
-                                }
-                            }
-
-                            Ok(Some(SchedulerControlMsg::TaskException(fr)))
-                        }
-                        _ => {
-                            unreachable!(
-                                "Invalid FinallyReason {:?} reached for task {} in scheduler",
-                                fr, self.task_id
-                            );
-                        }
-                    };
-                }
-            }
-        }
-    }
-
-    fn decode_program(
-        binary_type: BinaryType,
-        binary_bytes: &[u8],
-    ) -> Result<Program, anyhow::Error> {
-        match binary_type {
-            BinaryType::LambdaMoo18X => {
-                Ok(Program::from_sliceref(SliceRef::from_bytes(binary_bytes)))
-            }
-            _ => bail!("Unsupported binary type {:?}", binary_type),
-        }
-    }
-
-    /// Entry point (from the scheduler) for beginning a command execution in this VM.
-    fn start_call_command_verb(
-        &mut self,
-        vi: VerbInfo,
-        verb_call: VerbCall,
-        command: ParsedCommand,
-        permissions: Objid,
-    ) -> Result<VerbExecutionRequest, Error> {
-        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary().as_slice())?;
-
-        let call_request = VerbExecutionRequest {
-            permissions,
-            resolved_verb: vi,
-            call: verb_call,
-            command: Some(command),
-            program: binary,
-        };
-
-        Ok(call_request)
-    }
-
-    /// Entry point (from the scheduler) for beginning a verb execution in this VM.
-    pub async fn start_call_method_verb(
-        &mut self,
-        verb_call: VerbCall,
-    ) -> Result<VerbExecutionRequest, Error> {
-        // Find the callable verb ...
-        let verb_info = self
-            .world_state
-            .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
-            .await?;
-
-        let binary = Self::decode_program(
-            verb_info.verbdef().binary_type(),
-            verb_info.binary().as_slice(),
-        )?;
-
-        let call_request = VerbExecutionRequest {
-            permissions: self.perms,
-            resolved_verb: verb_info.clone(),
-            call: verb_call,
-            command: None,
-            program: binary,
-        };
-
-        Ok(call_request)
     }
 }

@@ -13,6 +13,15 @@ use crate::vm::vm_call::tracing_exit_vm_span;
 use crate::vm::{ExecutionResult, VM};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct UncaughtException {
+    pub code: Error,
+    pub msg: String,
+    pub value: Var,
+    pub stack: Vec<Var>,
+    pub backtrace: Vec<Var>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum FinallyReason {
     Fallthrough,
     Raise {
@@ -20,13 +29,7 @@ pub enum FinallyReason {
         msg: String,
         stack: Vec<Var>,
     },
-    Uncaught {
-        code: Error,
-        msg: String,
-        value: Var,
-        stack: Vec<Var>,
-        backtrace: Vec<Var>,
-    },
+    Uncaught(UncaughtException),
     Return(Var),
     Abort,
     Exit {
@@ -46,7 +49,7 @@ impl FinallyReason {
         match *self {
             FinallyReason::Fallthrough => FINALLY_REASON_RAISE,
             FinallyReason::Raise { .. } => FINALLY_REASON_RAISE,
-            FinallyReason::Uncaught { .. } => FINALLY_REASON_UNCAUGHT,
+            FinallyReason::Uncaught(UncaughtException { .. }) => FINALLY_REASON_UNCAUGHT,
             FinallyReason::Return(_) => FINALLY_REASON_RETURN,
             FinallyReason::Abort => FINALLY_REASON_ABORT,
             FinallyReason::Exit { .. } => FINALLY_REASON_EXIT,
@@ -189,13 +192,13 @@ impl VM {
                 stack: self.make_stack_list(&self.stack, handler_active_num),
             }
         } else {
-            FinallyReason::Uncaught {
+            FinallyReason::Uncaught(UncaughtException {
                 code: p.code,
                 msg: p.msg.clone(),
                 value: p.value,
                 stack: self.make_stack_list(&self.stack, 0),
                 backtrace: self.error_backtrace_list(p.msg.as_str()),
-            }
+            })
         };
 
         self.unwind_stack(why)
@@ -361,13 +364,13 @@ impl VM {
                 }
             }
 
-            if let FinallyReason::Uncaught {
+            if let FinallyReason::Uncaught(UncaughtException {
                 code,
                 msg: _,
                 value: _,
                 stack: _,
                 backtrace: _,
-            } = &why
+            }) = &why
             {
                 tracing_exit_vm_span(&self.top().span_id, &why, &v_err(*code));
                 return Ok(ExecutionResult::Exception(why));

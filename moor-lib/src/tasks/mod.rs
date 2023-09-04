@@ -4,8 +4,10 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 pub mod command_parse;
+mod moo_vm_host;
 pub mod scheduler;
 mod task;
+mod vm_host;
 
 /// The interface for managing the user connection side of state, exposed by the scheduler to the VM
 /// during execution.

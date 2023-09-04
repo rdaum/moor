@@ -1,7 +1,7 @@
 use moor_value::var::variant::Variant;
-use moor_value::var::Var;
+use moor_value::var::{v_float, v_int, v_list, v_none, v_string, Var};
 use serde_derive::{Deserialize, Serialize};
-use serde_json::{json, Number};
+use serde_json::{json, Number, Value};
 
 pub mod routes;
 pub mod ws_server;
@@ -15,12 +15,12 @@ struct Error {
     msg: String,
 }
 
-pub fn var_as_json(v: &Var) -> serde_json::Value {
+pub fn var_as_json(v: &Var) -> Value {
     match v.variant() {
-        Variant::None => serde_json::Value::Null,
-        Variant::Str(s) => serde_json::Value::String(s.to_string()),
+        Variant::None => Value::Null,
+        Variant::Str(s) => Value::String(s.to_string()),
         Variant::Obj(o) => json!(OID(o.0)),
-        Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
+        Variant::Int(i) => Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),
         Variant::Err(e) => json!(Error {
             code: (*e) as u8,
@@ -31,7 +31,33 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             for e in l.iter() {
                 v.push(var_as_json(e));
             }
-            serde_json::Value::Array(v)
+            Value::Array(v)
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub fn json_as_var(v: &Value) -> Result<Var, anyhow::Error> {
+    match v {
+        Value::Null => Ok(v_none()),
+        Value::Bool(b) => Ok(v_int(if *b { 1 } else { 0 })),
+        Value::Number(n) => {
+            if n.is_f64() {
+                Ok(v_float(n.as_f64().unwrap()))
+            } else {
+                Ok(v_int(n.as_i64().unwrap()))
+            }
+        }
+        Value::String(s) => Ok(v_string(s.clone())),
+        Value::Array(a) => {
+            let mut l = Vec::new();
+            for e in a {
+                l.push(json_as_var(e)?);
+            }
+            Ok(v_list(l))
+        }
+        Value::Object(_) => {
+            return Err(anyhow::anyhow!("Object not supported yet"));
         }
     }
 }

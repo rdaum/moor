@@ -11,24 +11,23 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
+use moor_value::model::permissions::Perms;
+use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::WorldStateError;
 use moor_value::var::error::Error::{E_INVARG, E_PERM};
 use moor_value::var::objid::Objid;
-
 use moor_value::var::{v_err, v_int, v_none, Var};
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::MatchEnvironmentParseMatcher;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
+use crate::tasks::moo_vm_host::MooVmHost;
+use crate::tasks::scheduler::SchedulerError::{CouldNotParseCommand, DatabaseError, TaskNotFound};
 use crate::tasks::task::{Task, TaskControlMsg};
 use crate::tasks::{Sessions, TaskId};
-use crate::vm::vm_unwind::FinallyReason;
+use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::{ForkRequest, VM};
-
-use crate::tasks::scheduler::SchedulerError::{CouldNotParseCommand, DatabaseError, TaskNotFound};
-use moor_value::model::permissions::Perms;
-use moor_value::model::world_state::{WorldState, WorldStateSource};
-use moor_value::model::WorldStateError;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);
@@ -76,7 +75,7 @@ pub enum AbortLimitReason {
 /// The messages that can be sent from tasks (or VM) to the scheduler.
 pub enum SchedulerControlMsg {
     TaskSuccess(Var),
-    TaskException(FinallyReason),
+    TaskException(UncaughtException),
     TaskAbortError(Error),
     TaskRequestFork(ForkRequest, oneshot::Sender<TaskId>),
     TaskAbortCancelled,
@@ -108,7 +107,7 @@ pub enum SchedulerControlMsg {
 #[derive(Clone)]
 pub enum TaskWaiterResult {
     Success(Var),
-    Exception(FinallyReason),
+    Exception(UncaughtException),
     AbortTimeout(AbortLimitReason),
     AbortCancelled,
     AbortError,
@@ -594,11 +593,11 @@ impl Inner {
                         to_notify.push((*task_id, TaskWaiterResult::AbortTimeout(limit_reason)));
                         to_remove.push(*task_id);
                     }
-                    SchedulerControlMsg::TaskException(finally_reason) => {
+                    SchedulerControlMsg::TaskException(exception) => {
                         increment_counter!("scheduler.task_exception");
 
-                        warn!(task = task.task_id, finally_reason = ?finally_reason, "Task threw exception");
-                        to_notify.push((*task_id, TaskWaiterResult::Exception(finally_reason)));
+                        warn!(task = task.task_id, finally_reason = ?exception, "Task threw exception");
+                        to_notify.push((*task_id, TaskWaiterResult::Exception(exception)));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskSuccess(value) => {
@@ -968,16 +967,20 @@ impl Inner {
                 task_id,
                 scheduled_start_time: None,
                 task_control_receiver,
-                scheduler_control_sender,
+                scheduler_control_sender: scheduler_control_sender.clone(),
                 player,
-                vm,
+                vm_host: MooVmHost::new(
+                    vm,
+                    false,
+                    max_stack_depth,
+                    max_ticks,
+                    Duration::from_secs(max_seconds),
+                    sessions.clone(),
+                    scheduler_control_sender,
+                ),
                 sessions: sessions.clone(),
                 world_state,
                 perms,
-                running_method: false,
-                max_stack_depth,
-                max_ticks,
-                max_time: Duration::from_secs(max_seconds),
             };
             debug!("Starting up task: {:?}", task_id);
             task.run().await;

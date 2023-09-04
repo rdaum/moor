@@ -15,7 +15,7 @@ use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::Sessions;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
-use crate::vm::vm_unwind::FinallyReason;
+use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{ExecutionResult, ForkRequest, VM};
 
 macro_rules! binary_bool_op {
@@ -562,7 +562,7 @@ impl VM {
                             continue;
                         }
                         FinallyReason::Raise { .. }
-                        | FinallyReason::Uncaught { .. }
+                        | FinallyReason::Uncaught(UncaughtException { .. })
                         | FinallyReason::Return(_)
                         | FinallyReason::Exit { .. } => {
                             return self.unwind_stack(why);
