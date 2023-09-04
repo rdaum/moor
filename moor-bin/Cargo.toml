@@ -10,6 +10,7 @@ moor-value = { path = "../moor-value" }
 ## Command line arguments parsing.
 clap.workspace = true
 clap_derive.workspace = true
+strum.workspace = true
 
 #
 anyhow.workspace = true

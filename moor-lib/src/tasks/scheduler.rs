@@ -50,7 +50,7 @@ pub struct Scheduler {
 
 pub struct Inner {
     running: bool,
-    state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
+    state_source: Arc<dyn WorldStateSource>,
     next_task_id: usize,
     tasks: HashMap<TaskId, TaskControl>,
 }
@@ -123,7 +123,7 @@ struct TaskControl {
     task_control_sender: UnboundedSender<TaskControlMsg>,
     /// (Per-task) receiver for messages from the task to the scheduler.
     scheduler_control_receiver: UnboundedReceiver<SchedulerControlMsg>,
-    state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
+    state_source: Arc<dyn WorldStateSource>,
     sessions: Arc<RwLock<dyn Sessions>>,
     suspended: bool,
     resume_time: Option<SystemTime>,
@@ -211,7 +211,7 @@ async fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize,
 
 /// Public facing interface for the scheduler.
 impl Scheduler {
-    pub fn new(state_source: Arc<RwLock<dyn WorldStateSource + Sync + Send>>) -> Self {
+    pub fn new(state_source: Arc<dyn WorldStateSource>) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 running: Default::default(),
@@ -281,8 +281,11 @@ impl Scheduler {
         let mut inner = self.inner.write().await;
 
         let (vloc, vi, command) = {
-            let mut ss = inner.state_source.write().await;
-            let mut ws = ss.new_world_state().await.map_err(|e| DatabaseError(e))?;
+            let mut ws = inner
+                .state_source
+                .new_world_state()
+                .await
+                .map_err(DatabaseError)?;
 
             // Get perms for environment search. Player's perms.
             let me = DBMatchEnvironment {
@@ -292,7 +295,7 @@ impl Scheduler {
             let matcher = MatchEnvironmentParseMatcher { env: me, player };
             let pc = parse_command(command, matcher)
                 .await
-                .map_err(|e| CouldNotParseCommand(e))?;
+                .map_err(CouldNotParseCommand)?;
             let loc = match ws.location_of(player, player).await {
                 Ok(loc) => loc,
                 Err(e) => return Err(DatabaseError(e)),
@@ -488,7 +491,7 @@ impl Inner {
     async fn submit_fork_task(
         &mut self,
         fork_request: ForkRequest,
-        state_source: Arc<RwLock<dyn WorldStateSource + Sync + Send>>,
+        state_source: Arc<dyn WorldStateSource>,
         sessions: Arc<RwLock<dyn Sessions>>,
         scheduler_ref: Scheduler,
     ) -> Result<TaskId, anyhow::Error> {
@@ -691,7 +694,7 @@ impl Inner {
             let task = self.tasks.get_mut(&task_id).unwrap();
             task.suspended = false;
 
-            let world_state = self.state_source.write().await.new_world_state().await?;
+            let world_state = self.state_source.new_world_state().await?;
 
             task.task_control_sender
                 .send(TaskControlMsg::Resume(world_state, v_int(0)))?;
@@ -850,7 +853,7 @@ impl Inner {
             }
 
             // Follow the usual task resume logic.
-            let world_state = self.state_source.write().await.new_world_state().await?;
+            let world_state = self.state_source.new_world_state().await?;
 
             queued_task.suspended = false;
             queued_task
@@ -904,7 +907,7 @@ impl Inner {
     async fn new_task(
         &mut self,
         player: Objid,
-        state_source: Arc<RwLock<dyn WorldStateSource + Send + Sync>>,
+        state_source: Arc<dyn WorldStateSource>,
         sessions: Arc<RwLock<dyn Sessions>>,
         delay_start: Option<Duration>,
         scheduler_ref: Scheduler,
@@ -913,11 +916,10 @@ impl Inner {
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.new_task");
         let mut world_state = {
-            let mut state_source = state_source.write().await;
-            state_source
+            self.state_source
                 .new_world_state()
                 .await
-                .map_err(|e| DatabaseError(e))?
+                .map_err(DatabaseError)?
         };
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in

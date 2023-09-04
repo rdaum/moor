@@ -12,7 +12,8 @@ use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
-use crate::db::{DbTxWorldState, LoaderInterface};
+use crate::db::loader::LoaderInterface;
+use crate::db::DbTxWorldState;
 
 #[async_trait]
 impl LoaderInterface for DbTxWorldState {
@@ -109,11 +110,8 @@ impl LoaderInterface for DbTxWorldState {
         Ok(())
     }
 
-    async fn commit(self) -> Result<CommitResult, anyhow::Error> {
+    async fn commit(&self) -> Result<CommitResult, anyhow::Error> {
         let cr = self.client.commit().await?;
-        self.join_handle
-            .join()
-            .expect("Error joining on client thread");
         Ok(cr)
     }
 }

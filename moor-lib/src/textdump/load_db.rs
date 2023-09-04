@@ -12,7 +12,7 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 use crate::compiler::codegen::compile;
-use crate::db::LoaderInterface;
+use crate::db::loader::LoaderInterface;
 use crate::textdump::{Object, TextdumpReader};
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
 use moor_value::model::props::PropFlag;

@@ -700,7 +700,7 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
             // Value must be on stack,  and we then wrap that up in the {success, value} tuple.
             let value = bf_args.vm.pop();
-            return Ok(Ret(v_list(vec![v_bool(true), value])));
+            Ok(Ret(v_list(vec![v_bool(true), value])))
         }
         _ => {
             panic!("Invalid trampoline value for bf_eval: {}", tramp);

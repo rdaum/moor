@@ -670,8 +670,8 @@ impl Decompile {
                     if position == label_position {
                         return true;
                     }
-                    if let Op::Jump { label } = o {
-                        label == label
+                    if let Op::Jump { .. } = o {
+                        true
                     } else {
                         false
                     }

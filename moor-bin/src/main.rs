@@ -2,7 +2,6 @@ extern crate core;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::future::ready;
@@ -11,44 +10,47 @@ use axum::{routing::get, Router};
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
-use moor_lib::db::LoaderInterface;
+use moor_lib::db::{DatabaseBuilder, DatabaseType};
+use moor_lib::tasks::scheduler::Scheduler;
+use moor_lib::textdump::load_db::textdump_load;
+use strum::VariantNames;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::RwLock;
 use tower_http::trace;
 use tower_http::trace::TraceLayer;
 use tracing::{info, Level};
 use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 
-use moor_lib::db::rocksdb::db_server::RocksDbServer;
-use moor_lib::tasks::scheduler::Scheduler;
-use moor_lib::textdump::load_db::textdump_load;
-
 use crate::server::ws_server::{ws_connect_handler, ws_create_handler, WebSocketServer};
 
 mod server;
+
+#[macro_export]
+macro_rules! clap_enum_variants {
+    ($e: ty) => {{
+        use clap::builder::TypedValueParser;
+        clap::builder::PossibleValuesParser::new(<$e>::VARIANTS).map(|s| s.parse::<$e>().unwrap())
+    }};
+}
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
     #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
     db: PathBuf,
 
-    // TODO likely this should be removed when we stabilize more.
-    // (The reason this is here is because importing a textdump into an existing DB = bad.)
-    #[arg(
-        short,
-        long,
-        value_name = "discard_db",
-        help = "DANGEROUS; discard existing database; typically used for development when loading from textdump"
-    )]
-    development_discard_db: bool,
-
     #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
     textdump: Option<PathBuf>,
 
     #[arg(value_name = "listen", help = "Listen address")]
     listen_address: Option<String>,
+
+    #[arg(long,
+        value_name = "db-type", help = "Type of database backend to use",
+        value_parser = clap_enum_variants!(DatabaseType),
+        default_value = "RocksDb"
+    )]
+    db_type: DatabaseType,
 
     #[arg(
         long,
@@ -89,33 +91,30 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     info!("Moor Server starting...");
+    let db_source_builder = DatabaseBuilder::new()
+        .with_db_type(args.db_type)
+        .with_path(args.db.clone());
+    let mut db_source = db_source_builder.open_db().unwrap();
+    info!(db_type = ?args.db_type, path = ?args.db, "Opened database");
 
-    if args.development_discard_db {
-        info!("Discarding existing database...");
-        std::fs::remove_dir_all(&args.db).unwrap_or_else(|_| {
-            info!("Failed to remove existing database, continuing...");
-        });
-    }
-
-    let src = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
-        let mut tx = src
-            .start_transaction()
-            .expect("Unable to start transaction");
-        textdump_load(&mut tx, textdump.to_str().unwrap())
+        let mut loader_interface = db_source
+            .loader_client()
+            .expect("Unable to get loader interface from database");
+        textdump_load(loader_interface.as_mut(), textdump.to_str().unwrap())
             .await
             .unwrap();
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
-        tx.commit()
+        loader_interface
+            .commit()
             .await
             .expect("Failure to commit loaded database...");
     }
 
-    let state_src = Arc::new(RwLock::new(src));
-    let scheduler = Scheduler::new(state_src.clone());
+    let scheduler = Scheduler::new(db_source.world_state_source().unwrap());
 
     let addr = args
         .listen_address

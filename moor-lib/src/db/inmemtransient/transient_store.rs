@@ -62,7 +62,7 @@ impl TransientStore {
             parent: NOTHING,
             children: ObjSet::new(),
         };
-        let id = id.unwrap_or_else(|| Objid(self.objects.len() as i64));
+        let id = id.unwrap_or(Objid(self.objects.len() as i64));
         self.objects.insert(id, obj);
 
         if let Some(parent) = attrs.parent {
@@ -100,7 +100,7 @@ impl TransientStore {
                 break;
             }
             if oid == o {
-                return Err(WorldStateError::RecursiveMove(o, loc).into());
+                return Err(WorldStateError::RecursiveMove(o, loc));
             }
             oid = self.get_object_location(oid).unwrap_or(NOTHING);
         }
@@ -452,7 +452,7 @@ impl TransientStore {
             if let Some(propdefs) = self.propdefs.get_mut(&location) {
                 // Verify we don't already have a property with this name. If we do, return an error.
                 if propdefs.find_named(name.as_str()).is_some() {
-                    return Err(WorldStateError::DuplicatePropertyDefinition(location, name).into());
+                    return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
                 }
 
                 *propdefs = propdefs.with_added(new_propdef);

@@ -1,19 +1,15 @@
+use anyhow::bail;
+use std::sync::Arc;
 use std::thread;
 
-use async_trait::async_trait;
-
-use uuid::Uuid;
-
-use moor_value::model::objects::ObjAttrs;
-use moor_value::model::props::PropFlag;
-use moor_value::model::r#match::VerbArgsSpec;
-use moor_value::model::verbs::VerbFlag;
-use moor_value::model::CommitResult;
-use moor_value::util::bitenum::BitEnum;
-use moor_value::var::objid::Objid;
-use moor_value::var::Var;
+use strum::{Display, EnumIter, EnumString, EnumVariantNames};
 
 use crate::db::db_client::DbTxClient;
+use crate::db::inmemtransient::InMemTransientDatabase;
+use crate::db::loader::LoaderInterface;
+use crate::db::rocksdb::db_server::RocksDbServer;
+use moor_value::model::world_state::WorldStateSource;
+use moor_value::model::WorldStateError;
 
 pub mod matching;
 
@@ -22,6 +18,7 @@ mod db_loader_client;
 mod db_message;
 mod db_worldstate;
 pub mod inmemtransient;
+pub mod loader;
 pub mod match_env;
 pub mod mock;
 pub mod rocksdb;
@@ -31,48 +28,55 @@ pub struct DbTxWorldState {
     client: DbTxClient,
 }
 
-/// Interface exposed to be used by the textdump loader. Overlap of functionality with what
-/// WorldState could provide, but potentially different constraints/semantics.
-#[async_trait]
-pub trait LoaderInterface {
-    async fn create_object(
-        &self,
-        objid: Option<Objid>,
-        attrs: &ObjAttrs,
-    ) -> Result<Objid, anyhow::Error>;
-    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error>;
+/// Enumeration of potential database backends.
+#[derive(Debug, Display, EnumString, EnumVariantNames, EnumIter, Clone, Copy)]
+pub enum DatabaseType {
+    /// Persistent transactional RocksDB backend.
+    RocksDb,
+    /// Transient, non-transactional, in-memory only. Useful for testing only.
+    InMemTransient,
+}
 
-    async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error>;
-    async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), anyhow::Error>;
+pub struct DatabaseBuilder {
+    db_type: DatabaseType,
+    path: Option<std::path::PathBuf>,
+}
 
-    async fn add_verb(
-        &self,
-        obj: Objid,
-        names: Vec<&str>,
-        owner: Objid,
-        flags: BitEnum<VerbFlag>,
-        args: VerbArgsSpec,
-        binary: Vec<u8>,
-    ) -> Result<(), anyhow::Error>;
+pub trait Database {
+    fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
+    fn world_state_source(self: Box<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError>;
+}
 
-    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, anyhow::Error>;
-    async fn define_property(
-        &self,
-        definer: Objid,
-        objid: Objid,
-        propname: &str,
-        owner: Objid,
-        flags: BitEnum<PropFlag>,
-        value: Option<Var>,
-    ) -> Result<(), anyhow::Error>;
-    async fn set_update_property(
-        &self,
-        objid: Objid,
-        propname: &str,
-        owner: Objid,
-        flags: BitEnum<PropFlag>,
-        value: Option<Var>,
-    ) -> Result<(), anyhow::Error>;
+impl DatabaseBuilder {
+    pub fn new() -> Self {
+        Self {
+            db_type: DatabaseType::RocksDb,
+            path: None,
+        }
+    }
 
-    async fn commit(self) -> Result<CommitResult, anyhow::Error>;
+    pub fn with_db_type(mut self, db_type: DatabaseType) -> Self {
+        self.db_type = db_type;
+        self
+    }
+    pub fn with_path(mut self, path: std::path::PathBuf) -> Self {
+        self.path = Some(path);
+        self
+    }
+
+    pub fn open_db(&self) -> Result<Box<dyn Database>, anyhow::Error> {
+        match self.db_type {
+            DatabaseType::RocksDb => {
+                let Some(path) = self.path.clone() else {
+                    bail!("Must specify path for RocksDB");
+                };
+                let db = RocksDbServer::new(path)?;
+                Ok(Box::new(db))
+            }
+            DatabaseType::InMemTransient => {
+                let db = InMemTransientDatabase::new();
+                Ok(Box::new(db))
+            }
+        }
+    }
 }

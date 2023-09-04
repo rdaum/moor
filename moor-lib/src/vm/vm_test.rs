@@ -174,7 +174,7 @@ mod tests {
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
     async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemTransientDatabase {
-        let mut state = InMemTransientDatabase::new();
+        let state = InMemTransientDatabase::new();
         let mut tx = state.new_world_state().await.unwrap();
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
@@ -229,7 +229,7 @@ mod tests {
     #[tokio::test]
     async fn test_simple_vm_execute() {
         let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
-        let mut state_source = test_db_with_verb("test", &program).await;
+        let state_source = test_db_with_verb("test", &program).await;
         let mut state = state_source.new_world_state().await.unwrap();
         let mut vm = VM::new();
 
@@ -240,7 +240,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_string_value_simple_indexing() {
-        let mut state_source = test_db_with_verb(
+        let state_source = test_db_with_verb(
             "test",
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],

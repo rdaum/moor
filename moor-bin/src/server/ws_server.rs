@@ -264,19 +264,19 @@ impl WebSocketServer {
                 match e {
                     SchedulerError::CouldNotParseCommand(_)
                     | SchedulerError::NoCommandMatch(_, _) => {
-                        self.send_error(player, format!("I don't understand that."))
+                        self.send_error(player, "I don't understand that.".to_string())
                             .await
                             .unwrap();
                     }
                     SchedulerError::PermissionDenied => {
-                        self.send_error(player, format!("You can't do that."))
+                        self.send_error(player, "You can't do that.".to_string())
                             .await
                             .unwrap();
                     }
                     _ => {
                         self.send_error(
                             player,
-                            format!("Internal error. Let your nearest wizard know"),
+                            "Internal error. Let your nearest wizard know".to_string(),
                         )
                         .await
                         .unwrap();

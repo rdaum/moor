@@ -9,25 +9,47 @@ use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
 use rustyline_async::{Readline, ReadlineError, SharedWriter};
+use strum::VariantNames;
 
+use moor_lib::db::{DatabaseBuilder, DatabaseType};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use moor_lib::db::rocksdb::db_server::RocksDbServer;
-use moor_lib::db::LoaderInterface;
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::tasks::Sessions;
 use moor_lib::textdump::load_db::textdump_load;
 
 use moor_value::var::objid::Objid;
 
+#[macro_export]
+macro_rules! clap_enum_variants {
+    ($e: ty) => {{
+        use clap::builder::TypedValueParser;
+        clap::builder::PossibleValuesParser::new(<$e>::VARIANTS).map(|s| s.parse::<$e>().unwrap())
+    }};
+}
+
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
     #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
-    db: std::path::PathBuf,
+    db: PathBuf,
 
-    #[arg(value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
-    textdump: Option<std::path::PathBuf>,
+    #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
+    textdump: Option<PathBuf>,
+
+    #[arg(long,
+        value_name = "db-type", help = "Type of database backend to use",
+        value_parser = clap_enum_variants!(DatabaseType),
+        default_value = "RocksDb"
+    )]
+    db_type: DatabaseType,
+
+    #[arg(
+        long,
+        value_name = "perfetto_tracing",
+        help = "Enable perfetto/chromium tracing output"
+    )]
+    perfetto_tracing: Option<bool>,
 }
 
 async fn do_eval(
@@ -107,33 +129,33 @@ async fn main() -> Result<(), anyhow::Error> {
     let args: Args = Args::parse();
 
     info!("Moor REPL starting..");
+    let db_source_builder = DatabaseBuilder::new()
+        .with_db_type(args.db_type)
+        .with_path(args.db.clone());
+    let mut db_source = db_source_builder.open_db().unwrap();
+    info!(db_type = ?args.db_type, path = ?args.db, "Opened database");
 
-    let db = RocksDbServer::new(PathBuf::from(args.db.to_str().unwrap())).unwrap();
     if let Some(textdump) = args.textdump {
         info!("Loading textdump...");
         let start = std::time::Instant::now();
-        let mut tx = db
-            .start_transaction()
-            .expect("Could not start DB transaction for textdump load");
-        textdump_load(&mut tx, textdump.to_str().unwrap())
+        let mut loader_interface = db_source
+            .loader_client()
+            .expect("Unable to get loader interface from database");
+        textdump_load(loader_interface.as_mut(), textdump.to_str().unwrap())
             .await
             .unwrap();
-        tx.commit()
-            .await
-            .expect("Failure to commit loaded database...");
         let duration = start.elapsed();
         info!("Loaded textdump in {:?}", duration);
+        loader_interface
+            .commit()
+            .await
+            .expect("Failure to commit loaded database...");
     }
 
-    let tx = db.start_transaction().unwrap();
-
-    // Move wizard (#2) into first room (#70) for purpose of testing, so that there's something to
-    // match against.
-    tx.set_object_location(Objid(2), Objid(70)).await.unwrap();
-    tx.commit().await.unwrap();
-
-    let state_src = Arc::new(RwLock::new(db));
-    let scheduler = Scheduler::new(state_src.clone());
+    let state_source = db_source
+        .world_state_source()
+        .expect("Unable to get world state source from database");
+    let scheduler = Scheduler::new(state_source);
 
     let eval_sessions = Arc::new(RwLock::new(ReplSession {
         player: Objid(2),

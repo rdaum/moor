@@ -251,8 +251,8 @@ pub trait WorldState: Send + Sync {
 }
 
 #[async_trait]
-pub trait WorldStateSource {
+pub trait WorldStateSource: Send + Sync {
     /// Create a new world state for the given player.
     /// Returns the world state, and a permissions context for the player.
-    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, WorldStateError>;
+    async fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError>;
 }

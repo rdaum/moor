@@ -10,9 +10,10 @@ use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::model::WorldStateError;
 
 use crate::db::db_client::DbTxClient;
+use crate::db::loader::LoaderInterface;
 use crate::db::rocksdb::tx_server::run_tx_server;
 use crate::db::rocksdb::ColumnFamilies;
-use crate::db::DbTxWorldState;
+use crate::db::{Database, DbTxWorldState};
 
 // Rocks implementation of 'WorldStateSource' -- opens the physical database and provides
 // transactional 'WorldState' implementations for each new transaction.
@@ -61,9 +62,19 @@ impl RocksDbServer {
 #[async_trait]
 impl WorldStateSource for RocksDbServer {
     #[tracing::instrument(skip(self))]
-    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, WorldStateError> {
+    async fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         // Return a transaction wrapped by the higher level RocksDbWorldState.
         let tx = self.start_transaction()?;
         Ok(Box::new(tx))
+    }
+}
+
+impl Database for RocksDbServer {
+    fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
+        Ok(Box::new(self.start_transaction()?))
+    }
+
+    fn world_state_source(self: Box<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
+        Ok(Arc::new(*self))
     }
 }

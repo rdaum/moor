@@ -3,7 +3,8 @@
 use crate::db::db_client::DbTxClient;
 use crate::db::db_message::DbMessage;
 use crate::db::inmemtransient::transient_store::TransientStore;
-use crate::db::DbTxWorldState;
+use crate::db::loader::LoaderInterface;
+use crate::db::{Database, DbTxWorldState};
 use async_trait::async_trait;
 use crossbeam_channel::Receiver;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
@@ -241,7 +242,7 @@ fn inmem_db_server(
 }
 
 impl InMemTransientDatabase {
-    pub fn tx(&mut self) -> Result<Box<DbTxWorldState>, WorldStateError> {
+    pub fn tx(&self) -> Result<DbTxWorldState, WorldStateError> {
         let (tx, rx) = crossbeam_channel::unbounded();
         let tx_client = DbTxClient { mailbox: tx };
         let join_handle = inmem_db_server(self.db.clone(), rx);
@@ -249,15 +250,26 @@ impl InMemTransientDatabase {
             join_handle,
             client: tx_client,
         };
-        Ok(Box::new(tx_world_state))
+        Ok(tx_world_state)
     }
 }
 
 #[async_trait]
 impl WorldStateSource for InMemTransientDatabase {
     #[tracing::instrument(skip(self))]
-    async fn new_world_state(&mut self) -> Result<Box<dyn WorldState>, WorldStateError> {
+    async fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.tx()?;
-        Ok(tx)
+        Ok(Box::new(tx))
+    }
+}
+
+impl Database for InMemTransientDatabase {
+    fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
+        let tx = self.tx()?;
+        Ok(Box::new(tx))
+    }
+
+    fn world_state_source(self: Box<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
+        Ok(Arc::new(*self))
     }
 }
