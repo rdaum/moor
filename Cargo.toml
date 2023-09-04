@@ -23,8 +23,12 @@ futures-util = { version = "0.3.28", features = ["sink", "std"] }
 async-trait = "0.1.73"
 tower-http = { version = "0.4.3", features = ["add-extension", "auth", "compression-full", "trace"] }
 
-## Asynchronous transaction processing & networking
+## HTTP/websockets front-end
 axum = { version = "0.6.19", features = ["ws", "headers"] }
+serde_json = "1.0.104"
+serde = "1.0.178"
+
+## Asynchronous transaction processing & networking
 tokio = { version = "1.28.2", features = ["full"] }
 tokio-test = "0.4.2"
 
@@ -83,3 +87,4 @@ tempdir = "0.3.7"
 # Bindings
 cc = { version = "1.0", features = ["parallel"] }
 bindgen = "0.65.1"
+

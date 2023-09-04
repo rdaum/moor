@@ -3,26 +3,22 @@ extern crate core;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use std::future::ready;
-
-use axum::{routing::get, Router};
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
-use moor_lib::db::{DatabaseBuilder, DatabaseType};
-use moor_lib::tasks::scheduler::Scheduler;
-use moor_lib::textdump::load_db::textdump_load;
 use strum::VariantNames;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
-use tower_http::trace;
-use tower_http::trace::TraceLayer;
-use tracing::{info, Level};
+use tracing::info;
 use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 
-use crate::server::ws_server::{ws_connect_handler, ws_create_handler, WebSocketServer};
+use moor_lib::db::{DatabaseBuilder, DatabaseType};
+use moor_lib::tasks::scheduler::Scheduler;
+use moor_lib::textdump::load_db::textdump_load;
+
+use crate::server::routes::mk_routes;
+use crate::server::ws_server::WebSocketServer;
 
 mod server;
 
@@ -58,10 +54,6 @@ struct Args {
         help = "Enable perfetto/chromium tracing output"
     )]
     perfetto_tracing: Option<bool>,
-}
-
-fn setup_metrics_recorder() -> PrometheusHandle {
-    PrometheusBuilder::new().install_recorder().unwrap()
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -119,7 +111,8 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
 
-    let scheduler = Scheduler::new(db_source.world_state_source().unwrap());
+    let state_source = db_source.world_state_source().unwrap();
+    let scheduler = Scheduler::new(state_source.clone());
 
     let addr = args
         .listen_address
@@ -137,26 +130,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let loop_scheduler = scheduler.clone();
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
-    let recorder_handle = setup_metrics_recorder();
-
-    let web_router = Router::new()
-        .route("/ws/connect", get(ws_connect_handler))
-        .route("/ws/create", get(ws_create_handler))
-        .with_state(ws_server)
-        .layer(
-            TraceLayer::new_for_http().make_span_with(
-                trace::DefaultMakeSpan::new()
-                    .level(Level::TRACE)
-                    .include_headers(true),
-            ),
-        )
-        .route("/metrics", get(move || ready(recorder_handle.render())));
+    let main_router = mk_routes(state_source, ws_server);
 
     let address = &addr.parse::<SocketAddr>().unwrap();
     info!(address=?address, "Listening");
     let axum_server = tokio::spawn(
         axum::Server::bind(address)
-            .serve(web_router.into_make_service_with_connect_info::<SocketAddr>()),
+            .serve(main_router.into_make_service_with_connect_info::<SocketAddr>()),
     );
 
     loop {
