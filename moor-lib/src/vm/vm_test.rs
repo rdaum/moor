@@ -956,6 +956,16 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_negation_precedence() {
+        let program = r#"return (!1 || 1);"#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_int(1));
+    }
+
     struct MockClientConnection {
         received: Vec<String>,
     }
