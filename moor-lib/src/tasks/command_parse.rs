@@ -1,3 +1,4 @@
+use anyhow::bail;
 use std::string::ToString;
 
 use async_trait::async_trait;
@@ -141,6 +142,9 @@ where
 
     // Get word list
     let words = parse_into_words(&command);
+    if words.is_empty() {
+        bail!("Empty command");
+    }
 
     // Check for built-in commands
     let i = 0;
@@ -162,7 +166,7 @@ where
     .contains(&verb.as_str())
     {
         // TODO: Handle built-in commands
-        unimplemented!("Built-in commands not implemented");
+        bail!("Built-in commands not implemented");
     }
     // Split into verb and argument string
     let mut parts = command.splitn(2, ' ');
@@ -197,12 +201,12 @@ where
 
     // Get indirect object object
     if prep != PrepSpec::None && !iobjstr.is_empty() {
-        iobj = command_environment.match_object(&iobjstr).await.unwrap();
+        iobj = command_environment.match_object(&iobjstr).await?;
     }
 
     // Get direct object object
     if !dobjstr.is_empty() {
-        dobj = command_environment.match_object(&dobjstr).await.unwrap();
+        dobj = command_environment.match_object(&dobjstr).await?;
     }
 
     // Build and return ParsedCommand
