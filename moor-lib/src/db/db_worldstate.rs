@@ -403,10 +403,7 @@ impl WorldState for DbTxWorldState {
             .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
 
         // Now RetrieveProperty and if it's not there, it's clear.
-        let result = self
-            .client
-            .retrieve_property(ph.location(), ph.uuid())
-            .await;
+        let result = self.client.retrieve_property(obj, ph.uuid()).await;
         // What we want is an ObjectError::PropertyNotFound, that will tell us if it's clear.
         let is_clear = match result {
             Err(WorldStateError::PropertyNotFound(_, _)) => true,
