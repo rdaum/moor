@@ -973,7 +973,6 @@ impl Inner {
                 world_state,
                 perms,
                 running_method: false,
-                tmp_verb: None,
                 max_stack_depth,
                 max_ticks,
                 max_time: Duration::from_secs(max_seconds),

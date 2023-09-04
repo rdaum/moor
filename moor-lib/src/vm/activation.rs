@@ -127,7 +127,6 @@ impl Activation {
             permissions: verb_owner,
         };
 
-        // TODO use pre-set constant offsets for these like LambdaMOO does.
         a.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
         a.set_gvar(GlobalName::player, v_objid(verb_call_request.call.player));
         a.set_gvar(GlobalName::caller, v_objid(verb_call_request.call.caller));
@@ -208,7 +207,6 @@ impl Activation {
             permissions,
         };
 
-        // TODO use pre-set constant offsets for these like LambdaMOO does.
         a.set_gvar(GlobalName::this, v_objid(player));
         a.set_gvar(GlobalName::player, v_objid(player));
         a.set_gvar(GlobalName::caller, v_objid(player));

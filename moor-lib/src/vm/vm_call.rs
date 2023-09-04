@@ -170,9 +170,11 @@ impl VM {
         let span = span!(Level::TRACE, "EVAL", task_id, ?program);
         let span_id = span.id();
 
-        // We need to set up a trampoline to return back into `bf_eval`
-        self.top_mut().bf_trampoline_arg = None;
-        self.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
+        if !self.stack.is_empty() {
+            // We need to set up a trampoline to return back into `bf_eval`
+            self.top_mut().bf_trampoline_arg = None;
+            self.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
+        }
 
         let a = Activation::for_eval(task_id, permissions, player, program, span_id.clone())?;
 

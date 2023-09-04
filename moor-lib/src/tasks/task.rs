@@ -7,9 +7,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, instrument, trace, warn};
-use uuid::Uuid;
 
-use moor_value::util::bitenum::BitEnum;
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_int, Var};
@@ -21,9 +19,8 @@ use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verb_info::VerbInfo;
-use moor_value::model::verbs::{BinaryType, VerbFlag};
+use moor_value::model::verbs::BinaryType;
 use moor_value::model::world_state::WorldState;
 use moor_value::model::CommitResult;
 use moor_value::util::slice_ref::SliceRef;
@@ -82,7 +79,6 @@ pub(crate) struct Task {
     pub(crate) world_state: Box<dyn WorldState>,
     pub(crate) perms: Objid,
     pub(crate) running_method: bool,
-    pub(crate) tmp_verb: Option<(Objid, String)>,
     /// The maximum stack detph for this task
     pub(crate) max_stack_depth: usize,
     /// The amount of ticks (opcode executions) allotted to this task
@@ -120,7 +116,6 @@ impl Task {
                 match vm_exec_result {
                     SchedulerControlMsg::TaskSuccess(ref result) => {
                         increment_counter!("tasks.success_complete");
-                        drop_tmp_verb(self.world_state.as_mut(), self.perms, &self.tmp_verb).await;
 
                         // TODO: restart the whole task on conflict.
                         let CommitResult::Success = self
@@ -264,40 +259,15 @@ impl Task {
                 increment_counter!("task.start_eval");
 
                 assert!(!self.running_method);
-                trace!(?player, ?program, "Starting eval");
-                // Stick the binary into the player object under a temp name.
-                let tmp_name = Uuid::new_v4().to_string();
-                self.world_state
-                    .add_verb(
-                        self.perms,
-                        player,
-                        vec![tmp_name.clone()],
-                        player,
-                        BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec | VerbFlag::Debug,
-                        VerbArgsSpec::this_none_this(),
-                        Self::encode_program(&program)?,
-                        BinaryType::LambdaMoo18X,
-                    )
-                    .await?;
 
-                let call = VerbCall {
-                    verb_name: tmp_name.clone(),
-                    location: player,
-                    this: player,
-                    player,
-                    args: vec![],
-                    caller: NOTHING,
-                };
-                let cr = self.start_call_method_verb(call).await?;
                 self.scheduled_start_time = None;
                 self.vm.start_time = Some(SystemTime::now());
                 self.vm.tick_count = 0;
-                self.vm.exec_call_request(self.task_id, cr).await?;
                 self.running_method = true;
-
-                // Set up to remove the eval verb later...
-                self.tmp_verb = Some((player, tmp_name.clone()));
-                return Ok(None);
+                self.vm
+                    .exec_eval_request(self.task_id, player, player, program)
+                    .await
+                    .expect("Could not set up VM for verb execution");
             }
             TaskControlMsg::Resume(world_state, value) => {
                 increment_counter!("task.resume");
@@ -583,10 +553,6 @@ impl Task {
         }
     }
 
-    fn encode_program(binary: &Program) -> Result<Vec<u8>, anyhow::Error> {
-        Ok(binary.make_copy_as_vec())
-    }
-
     /// Entry point (from the scheduler) for beginning a command execution in this VM.
     fn start_call_command_verb(
         &mut self,
@@ -633,17 +599,5 @@ impl Task {
         };
 
         Ok(call_request)
-    }
-}
-
-async fn drop_tmp_verb(
-    state: &mut dyn WorldState,
-    perms: Objid,
-    tmp_verb: &Option<(Objid, String)>,
-) {
-    if let Some((player, verb_name)) = tmp_verb {
-        if let Err(e) = state.remove_verb(perms, *player, verb_name.as_str()).await {
-            error!(error = ?e, "Could not remove temp verb");
-        }
     }
 }
