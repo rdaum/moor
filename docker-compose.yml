@@ -1,8 +1,9 @@
 # Docker composition for starting up the Moor server in cargo-watch mode, with VictoriaMetrics and VMagent for metrics
 # collection, and Grafana for visualization.
 
-# NOTE: This image will always import from a fresh textdump on start, with flags to discard any existing database.
-# If you want to keep your database, remove the `development_discard_db` flags from the command line in the moor service.
+# The first time the image starts, it will import JHCORE-DEV-2.db from the root of the repository. This is a recent
+# JaysHouseCore database, with no modifications. After import, `development.db` will contain the (RocksDb) database
+# that resulted. To re-import the textdump, simply delete this directory.
 
 # This composition is not intended for production use, but for development and testing, but could be used as a template
 # production once we're in a better place.
@@ -35,7 +36,7 @@ services:
     environment:
       - CARGO_TARGET_DIR=/root/target
     working_dir: /moor
-    command: sh -c "cargo watch -w moor-lib -w moor-bin -w  -x 'run -p moor-bin -- development.db --development-discard-db --textdump JHCore-DEV-2.db 0.0.0.0:8080'"
+    command: sh -c "cargo watch -w moor-lib -w moor-bin -w  -x 'run -p moor-bin -- development.db --textdump JHCore-DEV-2.db 0.0.0.0:8080'"
     ports:
       - "8080:8080"
     networks:

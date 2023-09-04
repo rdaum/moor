@@ -11,18 +11,18 @@ use moor_value::{AsByteBuffer, NOTHING};
 
 use crate::db::rocksdb::ColumnFamilies;
 
-pub(crate) fn oid_key(o: Objid) -> Vec<u8> {
-    o.0.to_be_bytes().to_vec()
+pub fn oid_key(o: Objid) -> [u8; 8] {
+    o.0.to_be_bytes()
 }
 
 pub(crate) fn composite_key_for<E: HasUuid>(o: Objid, entity: &E) -> Vec<u8> {
-    let mut key = oid_key(o);
+    let mut key = oid_key(o).to_vec();
     key.extend_from_slice(&entity.uuid().as_bytes()[..]);
     key
 }
 
 pub(crate) fn composite_key_uuid(o: Objid, uuid: &Uuid) -> Vec<u8> {
-    let mut key = oid_key(o);
+    let mut key = oid_key(o).to_vec();
     key.extend_from_slice(&uuid.as_bytes()[..]);
     key
 }

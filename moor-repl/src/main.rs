@@ -132,26 +132,29 @@ async fn main() -> Result<(), anyhow::Error> {
     let db_source_builder = DatabaseBuilder::new()
         .with_db_type(args.db_type)
         .with_path(args.db.clone());
-    let mut db_source = db_source_builder.open_db().unwrap();
+    let (mut db_source, freshly_made) = db_source_builder.open_db().unwrap();
     info!(db_type = ?args.db_type, path = ?args.db, "Opened database");
 
     if let Some(textdump) = args.textdump {
-        info!("Loading textdump...");
-        let start = std::time::Instant::now();
-        let mut loader_interface = db_source
-            .loader_client()
-            .expect("Unable to get loader interface from database");
-        textdump_load(loader_interface.as_mut(), textdump.to_str().unwrap())
-            .await
-            .unwrap();
-        let duration = start.elapsed();
-        info!("Loaded textdump in {:?}", duration);
-        loader_interface
-            .commit()
-            .await
-            .expect("Failure to commit loaded database...");
+        if !freshly_made {
+            info!("Database already exists, skipping textdump import");
+        } else {
+            info!("Loading textdump...");
+            let start = std::time::Instant::now();
+            let mut loader_interface = db_source
+                .loader_client()
+                .expect("Unable to get loader interface from database");
+            textdump_load(loader_interface.as_mut(), textdump.to_str().unwrap())
+                .await
+                .unwrap();
+            let duration = start.elapsed();
+            info!("Loaded textdump in {:?}", duration);
+            loader_interface
+                .commit()
+                .await
+                .expect("Failure to commit loaded database...");
+        }
     }
-
     let state_source = db_source
         .world_state_source()
         .expect("Unable to get world state source from database");

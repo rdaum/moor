@@ -8,9 +8,11 @@ use strum::VariantNames;
 
 use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::model::WorldStateError;
+use moor_value::SYSTEM_OBJECT;
 
 use crate::db::db_client::DbTxClient;
 use crate::db::loader::LoaderInterface;
+use crate::db::rocksdb::tx_db_impl::oid_key;
 use crate::db::rocksdb::tx_server::run_tx_server;
 use crate::db::rocksdb::ColumnFamilies;
 use crate::db::{Database, DbTxWorldState};
@@ -25,7 +27,7 @@ pub struct RocksDbServer {
 
 impl RocksDbServer {
     #[tracing::instrument()]
-    pub fn new(path: PathBuf) -> Result<Self, anyhow::Error> {
+    pub fn new(path: PathBuf) -> Result<(Self, bool), anyhow::Error> {
         let mut options = rocksdb::Options::default();
         options.create_if_missing(true);
         options.create_missing_column_families(true);
@@ -33,7 +35,15 @@ impl RocksDbServer {
         let db: rocksdb::OptimisticTransactionDB =
             rocksdb::OptimisticTransactionDB::open_cf(&options, path, column_families)?;
 
-        Ok(Self { db: Arc::new(db) })
+        // Check if the database was created by looking for objid #0. If that's present, we assume
+        // the database was already created.
+        let op_cf = db
+            .cf_handle(column_families[ColumnFamilies::ObjectFlags as usize])
+            .unwrap();
+
+        let was_created = db.get_cf(op_cf, oid_key(SYSTEM_OBJECT))?.is_none();
+
+        Ok((Self { db: Arc::new(db) }, was_created))
     }
 
     #[tracing::instrument(skip(self))]

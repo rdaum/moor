@@ -64,18 +64,20 @@ impl DatabaseBuilder {
         self
     }
 
-    pub fn open_db(&self) -> Result<Box<dyn Database>, anyhow::Error> {
+    /// Returns a new database instance. The second value in the result tuple is true if the
+    /// database was newly created, and false if it was already present.
+    pub fn open_db(&self) -> Result<(Box<dyn Database>, bool), anyhow::Error> {
         match self.db_type {
             DatabaseType::RocksDb => {
                 let Some(path) = self.path.clone() else {
                     bail!("Must specify path for RocksDB");
                 };
-                let db = RocksDbServer::new(path)?;
-                Ok(Box::new(db))
+                let (db, fresh) = RocksDbServer::new(path)?;
+                Ok((Box::new(db), fresh))
             }
             DatabaseType::InMemTransient => {
                 let db = InMemTransientDatabase::new();
-                Ok(Box::new(db))
+                Ok((Box::new(db), true))
             }
         }
     }
