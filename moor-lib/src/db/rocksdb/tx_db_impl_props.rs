@@ -1,7 +1,7 @@
 use tracing::trace;
 use uuid::Uuid;
 
-use moor_value::model::defset::{HasUuid, Named};
+use moor_value::model::defset::HasUuid;
 use moor_value::model::objset::ObjSet;
 use moor_value::model::propdef::{PropDef, PropDefs};
 use moor_value::model::props::PropFlag;
@@ -147,7 +147,7 @@ impl<'a> RocksDbTx<'a> {
             };
 
             // Verify we don't already have a property with this name. If we do, return an error.
-            if props.iter().any(|prop| prop.matches_name(name.as_str())) {
+            if props.find_named(name.as_str()).is_some() {
                 return Err(WorldStateError::DuplicatePropertyDefinition(location, name).into());
             }
 

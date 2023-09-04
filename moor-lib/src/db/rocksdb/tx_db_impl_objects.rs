@@ -259,6 +259,7 @@ impl<'a> RocksDbTx<'a> {
         what: Objid,
         new_location: Objid,
     ) -> Result<(), anyhow::Error> {
+        // Detect recursive move
         let mut oid = new_location;
         loop {
             if oid == NOTHING {
