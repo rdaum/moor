@@ -1,7 +1,5 @@
 use std::collections::{HashMap, VecDeque};
 
-use tracing::{debug, trace};
-
 use moor_value::var::variant::Variant;
 use moor_value::var::Var;
 
@@ -78,14 +76,12 @@ impl Decompile {
         let old_len = self.s.len();
         while self.position < self.program.main_vector.len() {
             let op = &self.program.main_vector[self.position];
-            trace!("check: {}: {:?}", self.position, op);
             if predicate(self.position, op) {
                 // We'll need a copy of the matching opcode we terminated at.
                 let final_op = self.next()?;
                 if self.s.len() > old_len {
                     return Ok((self.s.split_off(old_len), final_op));
                 } else {
-                    trace!("Stopping @ {}: {:?}", self.position, final_op);
                     return Ok((vec![], final_op));
                 };
             }
@@ -98,15 +94,9 @@ impl Decompile {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.s.len();
 
-        trace!("seek up to pos {}", jump_label.position.0);
         while self.position + 1 < jump_label.position.0 {
             self.decompile()?;
         }
-        trace!(
-            "seek done @ pos {}: {} stmts",
-            self.position,
-            self.s.len() - old_len
-        );
         if self.s.len() > old_len {
             Ok(self.s.split_off(old_len))
         } else {
@@ -120,15 +110,9 @@ impl Decompile {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.s.len();
 
-        trace!("seek up to pos {}", jump_label.position.0);
         while self.position < jump_label.position.0 {
             self.decompile()?;
         }
-        trace!(
-            "seek done @ pos {}: {} stmts",
-            self.position,
-            self.s.len() - old_len
-        );
         if self.s.len() > old_len {
             Ok(self.s.split_off(old_len))
         } else {
@@ -143,7 +127,6 @@ impl Decompile {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.s.len();
 
-        trace!("seek up to pos {}", jump_label.position.0);
         while self.position + 1 < jump_label.position.0 {
             self.decompile()?;
         }
@@ -154,11 +137,6 @@ impl Decompile {
                 "expected jump opcode at branch end".to_string(),
             ));
         };
-        trace!(
-            "seek done @ pos {}: {} stmts",
-            self.position,
-            self.s.len() - old_len
-        );
         if self.s.len() > old_len {
             Ok((self.s.split_off(old_len), label))
         } else {
@@ -168,7 +146,6 @@ impl Decompile {
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
-        debug!("decompile @ pos {}: {:?}", self.position, opcode);
         match opcode {
             Op::If(otherwise_label) => {
                 let cond = self.pop_expr()?;
@@ -192,7 +169,6 @@ impl Decompile {
                 // otherwise branch.
                 let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
                 let Some(Stmt::Cond { arms: _, otherwise }) = self.s.last_mut() else {
-                    trace!("s: {:?}", self.s);
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
                     ));
@@ -200,8 +176,6 @@ impl Decompile {
                 *otherwise = otherwise_stmts;
             }
             Op::Eif(end_label) => {
-                trace!("Begin elseif branch @ pos {}", self.position);
-
                 let cond = self.pop_expr()?;
                 // decompile statements until the position marked in `label`, which is the
                 // end of the branch statement
@@ -212,7 +186,6 @@ impl Decompile {
                 };
                 // Add the arm
                 let Some(Stmt::Cond { arms, otherwise: _ }) = self.s.last_mut() else {
-                    trace!("s: {:?}", self.s);
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
                     ));
@@ -589,7 +562,6 @@ impl Decompile {
                     };
 
                     // Scan forward until the jump, decompiling as we go.
-                    trace!("Decompiling except arm @ pos {}", self.position);
                     let end_label_position = self.find_jump(&end_label)?.position.0;
                     let (statements, _) =
                         self.decompile_statements_until_match(|position, o| {
@@ -602,7 +574,6 @@ impl Decompile {
                                 false
                             }
                         })?;
-                    trace!("Decompiled up to pos {}", self.position);
                     arm.statements = statements;
                 }
 
