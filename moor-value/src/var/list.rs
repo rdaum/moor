@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
 use std::sync::Arc;
 
@@ -32,14 +33,14 @@ impl List {
         let mut new_list = Vec::with_capacity(self.inner.len() + 1);
         new_list.extend_from_slice(&self.inner);
         new_list.push(v.clone());
-        Var::new(Variant::List(Self::from_vec(new_list)))
+        Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
     pub fn pop(&self) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() - 1);
         new_list.extend_from_slice(&self.inner[..self.inner.len() - 1]);
-        Var::new(Variant::List(Self::from_vec(new_list)))
+        Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
@@ -47,7 +48,7 @@ impl List {
         let mut new_list = Vec::with_capacity(self.inner.len() + other.inner.len());
         new_list.extend_from_slice(&self.inner);
         new_list.extend_from_slice(&other.inner);
-        Var::new(Variant::List(Self::from_vec(new_list)))
+        Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
@@ -55,7 +56,7 @@ impl List {
         let mut new_list = Vec::with_capacity(self.inner.len() - 1);
         new_list.extend_from_slice(&self.inner[..index]);
         new_list.extend_from_slice(&self.inner[index + 1..]);
-        Var::new(Variant::List(Self::from_vec(new_list)))
+        Variant::List(Self::from_vec(new_list)).into()
     }
 
     /// Remove the first found instance of the given value from the list.
@@ -73,7 +74,7 @@ impl List {
             }
             new_list.push(v.clone());
         }
-        Var::new(Variant::List(Self::from_vec(new_list)))
+        Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
@@ -87,7 +88,7 @@ impl List {
         new_list.extend_from_slice(&self.inner[..index]);
         new_list.push(v.clone());
         new_list.extend_from_slice(&self.inner[index..]);
-        Var::new(Variant::List(Self::from_vec(new_list)))
+        Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
@@ -131,7 +132,7 @@ impl List {
     pub fn set(&self, index: usize, value: &Var) -> Var {
         let mut new_vec = self.inner.as_slice().to_vec();
         new_vec[index] = value.clone();
-        Var::new(Variant::List(Self::from_vec(new_vec)))
+        Variant::List(Self::from_vec(new_vec)).into()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Var> {
@@ -191,10 +192,25 @@ impl Index<RangeFull> for List {
     }
 }
 
+impl Display for List {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{{")?;
+        let mut first = true;
+        for v in self.inner.iter() {
+            if !first {
+                write!(f, ", ")?;
+            }
+            first = false;
+            write!(f, "{v}")?;
+        }
+        write!(f, "}}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::var::list::List;
-    use crate::var::{v_int, v_list};
+    use crate::var::{v_int, v_list, v_string};
 
     #[test]
     pub fn weird_moo_insert_scenarios() {
@@ -211,5 +227,11 @@ mod tests {
             list.insert(100, &v_int(0)),
             v_list(vec![v_int(1), v_int(2), v_int(3), v_int(0)])
         );
+    }
+
+    #[test]
+    pub fn list_display() {
+        let list = List::from_vec(vec![v_int(1), v_string("foo".into()), v_int(3)]);
+        assert_eq!(format!("{}", list), "{1, \"foo\", 3}");
     }
 }
