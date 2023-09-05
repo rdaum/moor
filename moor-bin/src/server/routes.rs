@@ -39,8 +39,6 @@ pub fn mk_routes(state_source: Arc<dyn WorldStateSource>, ws_server: WebSocketSe
         .route("/:object/:property", get(prop_get_handler))
         .with_state(state_source.clone());
 
-    
-
     Router::new()
         .nest("/ws", websocket_router)
         .nest("/properties", property_router)

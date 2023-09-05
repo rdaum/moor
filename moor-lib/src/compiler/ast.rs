@@ -6,27 +6,27 @@ use moor_value::var::Var;
 use crate::compiler::labels::Name;
 use crate::vm::opcode::Op;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Arg {
     Normal(Expr),
     Splice(Expr),
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ScatterKind {
     Required,
     Optional,
     Rest,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ScatterItem {
     pub kind: ScatterKind,
     pub id: Name,
     pub expr: Option<Expr>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -84,7 +84,7 @@ impl Display for BinaryOp {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum UnaryOp {
     Neg,
     Not,
@@ -99,13 +99,13 @@ impl Display for UnaryOp {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum CatchCodes {
     Codes(Vec<Arg>),
     Any,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expr {
     Assign {
         left: Box<Expr>,
@@ -154,21 +154,29 @@ pub enum Expr {
     Length,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct CondArm {
     pub condition: Expr,
     pub statements: Vec<Stmt>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ExceptArm {
     pub id: Option<Name>,
     pub codes: CatchCodes,
     pub statements: Vec<Stmt>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum Stmt {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Stmt(pub StmtNode, pub usize /* line # */);
+
+impl Stmt {
+    pub fn new(node: StmtNode, line: usize) -> Self {
+        Stmt(node, line)
+    }
+}
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum StmtNode {
     Cond {
         arms: Vec<CondArm>,
         otherwise: Vec<Stmt>,

@@ -1,9 +1,8 @@
 use moor_value::util::quote_str;
 use moor_value::var::variant::Variant;
 
-
 use crate::compiler::ast;
-use crate::compiler::ast::Stmt;
+use crate::compiler::ast::{Stmt, StmtNode};
 use crate::compiler::parse::Parse;
 
 use super::labels::Names;
@@ -15,13 +14,13 @@ struct Unparse {
 }
 
 impl ast::Expr {
-    fn precident(&self) -> u8 {
-        // Returns the presedence of the operator. Higher values should be evaluated first.
+    fn precedence(&self) -> u8 {
+        // Returns the precedence of the operator. Higher values should be evaluated first.
         match self {
             ast::Expr::Assign { .. } => 1,
             ast::Expr::Cond { .. } => 2,
             ast::Expr::And(_, _) => 6,
-            ast::Expr::Or(_, _) => 6,
+            ast::Expr::Or(_, _) => 5,
             ast::Expr::Binary(op, _, _) => match op {
                 ast::BinaryOp::Eq => 4,
                 ast::BinaryOp::NEq => 4,
@@ -106,7 +105,7 @@ impl Unparse {
 
     fn unparse_expr(&self, current_expr: &ast::Expr) -> Result<String, anyhow::Error> {
         let brace_if_lower = |expr: &ast::Expr| -> String {
-            if expr.precident() < current_expr.precident() {
+            if expr.precedence() < current_expr.precedence() {
                 format!("({})", self.unparse_expr(expr).unwrap())
             } else {
                 self.unparse_expr(expr).unwrap()
@@ -260,51 +259,57 @@ impl Unparse {
     fn unparse_stmt(&self, stmt: &ast::Stmt, indent: usize) -> Result<String, anyhow::Error> {
         let mut base_str = String::new();
         // Statements should not end in a newline, but should be terminated with a semicolon.
-        match stmt {
-            Stmt::Cond { arms, otherwise } => {
+        match &stmt.0 {
+            StmtNode::Cond { arms, otherwise } => {
                 let cond_frag = self.unparse_expr(&arms[0].condition).unwrap();
                 let stmt_frag = self.unparse_stmts(&arms[0].statements, indent + 4).unwrap();
                 base_str.push_str(format!("if ({})\n{}", cond_frag, stmt_frag).as_str());
                 for arm in arms.iter().skip(1) {
                     let cond_frag = self.unparse_expr(&arm.condition)?;
                     let stmt_frag = self.unparse_stmts(&arm.statements, indent + 4)?;
+                    base_str.push_str(" ".repeat(indent).as_str());
                     base_str.push_str(format!("elseif ({})\n{}", cond_frag, stmt_frag).as_str());
                 }
                 if !otherwise.is_empty() {
                     let stmt_frag = self.unparse_stmts(otherwise, indent + 4).unwrap();
+                    base_str.push_str(" ".repeat(indent).as_str());
                     base_str.push_str(format!("else\n{}", stmt_frag).as_str());
                 }
+                base_str.push_str(" ".repeat(indent).as_str());
                 base_str.push_str("endif");
             }
-            Stmt::ForList { id, expr, body } => {
+            StmtNode::ForList { id, expr, body } => {
                 let expr_frag = self.unparse_expr(expr)?;
                 let stmt_frag = self.unparse_stmts(body, indent + 4)?;
                 base_str.push_str(
                     format!(
-                        "for {} in ({})\n{}endfor",
+                        "for {} in ({})\n{}{}endfor",
                         self.names.name_of(id).unwrap(),
                         expr_frag,
-                        stmt_frag
+                        stmt_frag,
+                        " ".repeat(indent)
                     )
                     .as_str(),
                 );
             }
-            Stmt::ForRange { id, from, to, body } => {
+            StmtNode::ForRange { id, from, to, body } => {
                 let from_frag = self.unparse_expr(from)?;
                 let to_frag = self.unparse_expr(to)?;
                 let stmt_frag = self.unparse_stmts(body, indent + 4)?;
+
                 base_str.push_str(
                     format!(
-                        "for {} in [{}..{}]\n{}endfor",
+                        "for {} in [{}..{}]\n{}{}endfor",
                         self.names.name_of(id).unwrap(),
                         from_frag,
                         to_frag,
-                        stmt_frag
+                        stmt_frag,
+                        " ".repeat(indent)
                     )
                     .as_str(),
                 );
             }
-            Stmt::While {
+            StmtNode::While {
                 id,
                 condition,
                 body,
@@ -317,7 +322,7 @@ impl Unparse {
                 }
                 base_str.push_str(format!("({})\n{}endwhile", cond_frag, stmt_frag).as_str());
             }
-            Stmt::Fork { id, time, body } => {
+            StmtNode::Fork { id, time, body } => {
                 let delay_frag = self.unparse_expr(time)?;
                 let stmt_frag = self.unparse_stmts(body, indent + 4)?;
                 base_str.push_str("fork ");
@@ -326,7 +331,7 @@ impl Unparse {
                 }
                 base_str.push_str(format!("({})\n{}\nendfork", delay_frag, stmt_frag).as_str());
             }
-            Stmt::TryExcept { body, excepts } => {
+            StmtNode::TryExcept { body, excepts } => {
                 let stmt_frag = self.unparse_stmts(body, indent + 4)?;
                 base_str.push_str(format!("try\n{}", stmt_frag).as_str());
                 for except in excepts {
@@ -341,13 +346,13 @@ impl Unparse {
                 }
                 base_str.push_str("endtry");
             }
-            Stmt::TryFinally { body, handler } => {
+            StmtNode::TryFinally { body, handler } => {
                 let stmt_frag = self.unparse_stmts(body, indent + 4)?;
                 let handler_frag = self.unparse_stmts(handler, indent + 4)?;
                 base_str
                     .push_str(format!("try\n{stmt_frag}finally\n{handler_frag}endtry").as_str());
             }
-            Stmt::Break { exit } => {
+            StmtNode::Break { exit } => {
                 base_str.push_str("break");
                 if let Some(exit) = &exit {
                     base_str.push(' ');
@@ -355,7 +360,7 @@ impl Unparse {
                 }
                 base_str.push(';');
             }
-            Stmt::Continue { exit } => {
+            StmtNode::Continue { exit } => {
                 base_str.push_str("continue");
                 if let Some(exit) = &exit {
                     base_str.push(' ');
@@ -363,7 +368,7 @@ impl Unparse {
                 }
                 base_str.push(';');
             }
-            Stmt::Return { expr } => {
+            StmtNode::Return { expr } => {
                 base_str.push_str("return");
                 if let Some(ret_expr) = &expr {
                     base_str.push(' ');
@@ -371,7 +376,7 @@ impl Unparse {
                 }
                 base_str.push(';');
             }
-            Stmt::Expr(expr) => {
+            StmtNode::Expr(expr) => {
                 base_str.push_str(self.unparse_expr(expr).unwrap().as_str());
                 base_str.push(';');
             }
@@ -384,7 +389,8 @@ impl Unparse {
         let results = stms
             .iter()
             .map(|s| {
-                self.unparse_stmt(s, indent).map(|line| format!("{prefix}{line}"))
+                self.unparse_stmt(s, indent)
+                    .map(|line| format!("{prefix}{line}"))
             })
             .collect::<Result<Vec<String>, anyhow::Error>>()?;
 

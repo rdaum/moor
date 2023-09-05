@@ -30,6 +30,7 @@ mod tests {
             var_names,
             main_vector,
             fork_vectors: vec![],
+            line_number_spans: vec![],
         }
     }
 

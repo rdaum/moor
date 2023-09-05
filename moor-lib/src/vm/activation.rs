@@ -273,6 +273,22 @@ impl Activation {
         }
     }
 
+    pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
+        if self.program.line_number_spans.is_empty() {
+            return None;
+        }
+        // Seek through the line # spans looking for the first offset (first part of tuple) which is
+        // equal to or higher than `pc`. If we don't find one, return the last one.
+        let mut last_line_num = 1;
+        for (offset, line_no) in &self.program.line_number_spans {
+            if *offset >= pc {
+                return Some(last_line_num);
+            }
+            last_line_num = *line_no
+        }
+        Some(last_line_num)
+    }
+
     pub fn verb_definer(&self) -> Objid {
         if self.bf_index.is_none() {
             self.verb_info.verbdef().location()

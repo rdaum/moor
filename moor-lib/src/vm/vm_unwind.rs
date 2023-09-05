@@ -115,6 +115,10 @@ impl VM {
             // Produce traceback line for each activation frame and append to stack_list
             // Should include line numbers (if possible), the name of the currently running verb,
             // its definer, its location, and the current player, and 'this'.
+            let line_no = match a.find_line_no(a.pc) {
+                None => v_none(),
+                Some(l) => v_int(l as i64),
+            };
             let traceback_entry = match a.bf_index {
                 None => {
                     vec![
@@ -123,7 +127,7 @@ impl VM {
                         v_objid(a.verb_definer()),
                         v_objid(a.verb_owner()),
                         v_objid(a.player),
-                        // TODO: find_line_number and add here.
+                        line_no,
                     ]
                 }
                 Some(bf_index) => {
@@ -133,6 +137,7 @@ impl VM {
                         v_objid(NOTHING),
                         v_objid(NOTHING),
                         v_objid(a.player),
+                        v_none(),
                     ]
                 }
             };
@@ -163,7 +168,9 @@ impl VM {
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));
             }
-            // TODO line number
+            if a.find_line_no(a.pc).is_some() {
+                pieces.push(format!(" (line {})", a.find_line_no(a.pc).unwrap()));
+            }
             if i == 0 {
                 pieces.push(format!(": {}", raise_msg));
             }

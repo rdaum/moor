@@ -57,8 +57,6 @@ pub fn json_as_var(v: &Value) -> Result<Var, anyhow::Error> {
             }
             Ok(v_list(l))
         }
-        Value::Object(_) => {
-            Err(anyhow::anyhow!("Object not supported yet"))
-        }
+        Value::Object(_) => Err(anyhow::anyhow!("Object not supported yet")),
     }
 }

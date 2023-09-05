@@ -4,7 +4,8 @@ use moor_value::var::variant::Variant;
 use moor_value::var::Var;
 
 use crate::compiler::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
+    UnaryOp,
 };
 use crate::compiler::builtins::make_labels_builtins;
 use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound};
@@ -146,9 +147,22 @@ impl Decompile {
             Ok((vec![], label))
         }
     }
+
+    fn line_num_for_position(&self) -> usize {
+        let mut last_line_num = 1;
+        for (offset, line_no) in &self.program.line_number_spans {
+            if *offset >= self.position {
+                return last_line_num;
+            }
+            last_line_num = *line_no
+        }
+        last_line_num
+    }
+
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
+        let line_num = self.line_num_for_position();
         match opcode {
             Op::If(otherwise_label) => {
                 let cond = self.pop_expr()?;
@@ -163,15 +177,20 @@ impl Decompile {
                     condition: cond,
                     statements: arm,
                 };
-                self.statements.push(Stmt::Cond {
-                    arms: vec![cond_arm],
-                    otherwise: vec![],
-                });
+                self.statements.push(Stmt::new(
+                    StmtNode::Cond {
+                        arms: vec![cond_arm],
+                        otherwise: vec![],
+                    },
+                    line_num,
+                ));
 
                 // Decompile to the 'end_of_otherwise' label to get the statements for the
                 // otherwise branch.
                 let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
-                let Some(Stmt::Cond { arms: _, otherwise }) = self.statements.last_mut() else {
+                let Some(Stmt(StmtNode::Cond { arms: _, otherwise }, _)) =
+                    self.statements.last_mut()
+                else {
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
                     ));
@@ -188,7 +207,9 @@ impl Decompile {
                     statements: cond_statements,
                 };
                 // Add the arm
-                let Some(Stmt::Cond { arms, otherwise: _ }) = self.statements.last_mut() else {
+                let Some(Stmt(StmtNode::Cond { arms, otherwise: _ }, _)) =
+                    self.statements.last_mut()
+                else {
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
                     ));
@@ -212,17 +233,23 @@ impl Decompile {
                 };
                 let list = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&label)?;
-                self.statements.push(Stmt::ForList {
-                    id,
-                    expr: list,
-                    body,
-                });
+                self.statements.push(Stmt::new(
+                    StmtNode::ForList {
+                        id,
+                        expr: list,
+                        body,
+                    },
+                    line_num,
+                ));
             }
             Op::ForRange { id, end_label } => {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&end_label)?;
-                self.statements.push(Stmt::ForRange { id, from, to, body });
+                self.statements.push(Stmt::new(
+                    StmtNode::ForRange { id, from, to, body },
+                    line_num,
+                ));
             }
             Op::While(loop_end_label) => {
                 // A "while" is actually a:
@@ -232,11 +259,14 @@ impl Decompile {
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
-                self.statements.push(Stmt::While {
-                    id: None,
-                    condition: cond,
-                    body,
-                });
+                self.statements.push(Stmt::new(
+                    StmtNode::While {
+                        id: None,
+                        condition: cond,
+                        body,
+                    },
+                    line_num,
+                ));
             }
             // Same as above, but with id.
             // TODO: we may want to consider collapsing these two VM opcodes
@@ -251,18 +281,23 @@ impl Decompile {
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
-                self.statements.push(Stmt::While {
-                    id: Some(id),
-                    condition: cond,
-                    body,
-                });
+                self.statements.push(Stmt::new(
+                    StmtNode::While {
+                        id: Some(id),
+                        condition: cond,
+                        body,
+                    },
+                    line_num,
+                ));
             }
             Op::Exit { stack: _, label } => {
                 let position = self.find_jump(&label)?.position;
                 if position.0 < self.position {
-                    self.statements.push(Stmt::Continue { exit: None });
+                    self.statements
+                        .push(Stmt::new(StmtNode::Continue { exit: None }, line_num));
                 } else {
-                    self.statements.push(Stmt::Break { exit: None });
+                    self.statements
+                        .push(Stmt::new(StmtNode::Break { exit: None }, line_num));
                 }
             }
             Op::ExitId(label) => {
@@ -270,30 +305,33 @@ impl Decompile {
                 // Whether it's a break or a continue depends on whether the jump is forward or
                 // backward from the current position.
                 let s = if jump_label.position.0 < self.position {
-                    Stmt::Continue {
+                    StmtNode::Continue {
                         exit: Some(jump_label.name.unwrap()),
                     }
                 } else {
-                    Stmt::Break {
+                    StmtNode::Break {
                         exit: Some(jump_label.name.unwrap()),
                     }
                 };
 
-                self.statements.push(s);
+                self.statements.push(Stmt::new(s, line_num));
             }
             Op::Fork { .. } => {
                 unimplemented!("decompile fork");
             }
             Op::Pop => {
                 let expr = self.pop_expr()?;
-                self.statements.push(Stmt::Expr(expr));
+                self.statements
+                    .push(Stmt::new(StmtNode::Expr(expr), line_num));
             }
             Op::Return => {
                 let expr = self.pop_expr()?;
-                self.statements.push(Stmt::Return { expr: Some(expr) });
+                self.statements
+                    .push(Stmt::new(StmtNode::Return { expr: Some(expr) }, line_num));
             }
             Op::Return0 => {
-                self.statements.push(Stmt::Return { expr: None });
+                self.statements
+                    .push(Stmt::new(StmtNode::Return { expr: None }, line_num));
             }
             Op::Done => {
                 if self.position != self.program.main_vector.len() {
@@ -583,10 +621,13 @@ impl Decompile {
                 // We need to rewind the position by one opcode, it seems.
                 // TODO this is not the most elegant. we're being too greedy above
                 self.position -= 1;
-                self.statements.push(Stmt::TryExcept {
-                    body,
-                    excepts: except_arms,
-                });
+                self.statements.push(Stmt::new(
+                    StmtNode::TryExcept {
+                        body,
+                        excepts: except_arms,
+                    },
+                    line_num,
+                ));
             }
             Op::TryFinally(_label) => {
                 // decompile body up until the EndFinally
@@ -594,7 +635,8 @@ impl Decompile {
                     self.decompile_statements_until_match(|_, op| matches!(op, Op::EndFinally))?;
                 let (handler, _) =
                     self.decompile_statements_until_match(|_, op| matches!(op, Op::Continue))?;
-                self.statements.push(Stmt::TryFinally { body, handler });
+                self.statements
+                    .push(Stmt::new(StmtNode::TryFinally { body, handler }, line_num));
             }
             Op::Catch(label) => {
                 let codes_expr = self.pop_expr()?;

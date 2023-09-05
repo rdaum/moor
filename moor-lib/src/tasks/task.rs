@@ -202,7 +202,7 @@ impl Task {
                         error!(task_id = self.task_id, "Task aborted");
                         if let Err(send_error) = self
                             .session
-                            .send_system_msg(self.player, format!("Aborted.").as_str())
+                            .send_system_msg(self.player, "Aborted.".to_string().as_str())
                             .await
                         {
                             warn!("Could not send abort message to player: {:?}", send_error);

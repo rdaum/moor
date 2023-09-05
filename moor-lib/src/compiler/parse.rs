@@ -19,7 +19,8 @@ use moor_value::var::{v_err, v_float, v_int, v_objid, v_str};
 
 use crate::compiler::ast::Arg::{Normal, Splice};
 use crate::compiler::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
+    UnaryOp,
 };
 use crate::compiler::labels::Names;
 use crate::compiler::parse::moo::{MooParser, Rule};
@@ -165,28 +166,46 @@ fn parse_expr(
     pairs: pest::iterators::Pairs<Rule>,
 ) -> Result<Expr, anyhow::Error> {
     let pratt = PrattParser::new()
-        // CondExpr is right-associative in C-ish languages, and should sit above all the infix rules
-        // to make Pratt happy, it seems.
-        .op(Op::postfix(Rule::assign))
-        .op(Op::prefix(Rule::scatter_assign))
+        // Generally following C-like precedence order as described:
+        //   https://en.cppreference.com/w/c/language/operator_precedence
+        // Precedence from lowest to highest.
+        // 14. Assignments are lowest precedence.
+        .op(Op::postfix(Rule::assign) | Op::prefix(Rule::scatter_assign))
+        // 13. Ternary conditional
         .op(Op::postfix(Rule::cond_expr))
-        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
-        .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
-        .op(Op::infix(Rule::gt, Assoc::Left) | Op::infix(Rule::lt, Assoc::Left))
-        .op(Op::infix(Rule::land, Assoc::Left) | Op::infix(Rule::lor, Assoc::Left))
-        .op(Op::infix(Rule::gte, Assoc::Left) | Op::infix(Rule::lte, Assoc::Left))
+        // 12. Logical or.
+        .op(Op::infix(Rule::lor, Assoc::Left))
+        // 11. Logical and.
+        .op(Op::infix(Rule::land, Assoc::Left))
+        // TODO: bitwise operators here (| 10, ^ XOR 9, & 8) if we ever get them.
+        // 7
+        // Equality/inequality
         .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))
+        // 6. Relational operators
+        .op(Op::infix(Rule::gt, Assoc::Left)
+            | Op::infix(Rule::lt, Assoc::Left)
+            | Op::infix(Rule::gte, Assoc::Left)
+            | Op::infix(Rule::lte, Assoc::Left))
+        // TODO 5 bitwise shiftleft/shiftright if we ever get them.
+        // 4. Add & subtract same precedence
+        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
+        // 3. * / % all same precedence
+        .op(Op::infix(Rule::mul, Assoc::Left)
+            | Op::infix(Rule::div, Assoc::Left)
+            | Op::infix(Rule::modulus, Assoc::Left))
+        // Exponent is higher than multiply/divide (not present in C)
         .op(Op::infix(Rule::pow, Assoc::Left))
-        .op(Op::infix(Rule::modulus, Assoc::Left))
+        // Not sure if this is correct
         .op(Op::infix(Rule::in_range, Assoc::Left))
-        .op(Op::prefix(Rule::neg))
-        .op(Op::prefix(Rule::not))
-        .op(Op::postfix(Rule::index_range))
-        .op(Op::postfix(Rule::index_single))
-        .op(Op::postfix(Rule::verb_call))
-        .op(Op::postfix(Rule::verb_expr_call))
-        .op(Op::postfix(Rule::prop))
-        .op(Op::postfix(Rule::prop_expr));
+        // 2. Unary negation & logical-not
+        .op(Op::prefix(Rule::neg) | Op::prefix(Rule::not))
+        // 1. Indexing/suffix operator generally.
+        .op(Op::postfix(Rule::index_range)
+            | Op::postfix(Rule::index_single)
+            | Op::postfix(Rule::verb_call)
+            | Op::postfix(Rule::verb_expr_call)
+            | Op::postfix(Rule::prop)
+            | Op::postfix(Rule::prop_expr));
 
     return pratt
         .map_primary(|primary| match primary.as_rule() {
@@ -466,12 +485,13 @@ fn parse_statement(
     names: Rc<RefCell<Names>>,
     pair: pest::iterators::Pair<Rule>,
 ) -> Result<Option<Stmt>, anyhow::Error> {
+    let line = pair.line_col().0;
     match pair.as_rule() {
         Rule::expr_statement => {
             let mut inner = pair.into_inner();
             if let Some(rule) = inner.next() {
                 let expr = parse_expr(names, rule.into_inner())?;
-                return Ok(Some(Stmt::Expr(expr)));
+                return Ok(Some(Stmt::new(StmtNode::Expr(expr), line)));
             }
             Ok(None)
         }
@@ -479,11 +499,14 @@ fn parse_statement(
             let mut parts = pair.into_inner();
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names, parts.next().unwrap().into_inner())?;
-            Ok(Some(Stmt::While {
-                id: None,
-                condition,
-                body,
-            }))
+            Ok(Some(Stmt::new(
+                StmtNode::While {
+                    id: None,
+                    condition,
+                    body,
+                },
+                line,
+            )))
         }
         Rule::labelled_while_statement => {
             let mut parts = pair.into_inner();
@@ -492,11 +515,14 @@ fn parse_statement(
                 .find_or_add_name(parts.next().unwrap().as_str());
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names, parts.next().unwrap().into_inner())?;
-            Ok(Some(Stmt::While {
-                id: Some(id),
-                condition,
-                body,
-            }))
+            Ok(Some(Stmt::new(
+                StmtNode::While {
+                    id: Some(id),
+                    condition,
+                    body,
+                },
+                line,
+            )))
         }
         Rule::if_statement => {
             let mut parts = pair.into_inner();
@@ -532,28 +558,28 @@ fn parse_statement(
                     _ => panic!("Unimplemented if clause: {:?}", remainder),
                 }
             }
-            Ok(Some(Stmt::Cond { arms, otherwise }))
+            Ok(Some(Stmt::new(StmtNode::Cond { arms, otherwise }, line)))
         }
         Rule::break_statement => {
             let mut parts = pair.into_inner();
             let label = parts
                 .next()
                 .map(|id| names.borrow_mut().find_or_add_name(id.as_str()));
-            Ok(Some(Stmt::Break { exit: label }))
+            Ok(Some(Stmt::new(StmtNode::Break { exit: label }, line)))
         }
         Rule::continue_statement => {
             let mut parts = pair.into_inner();
             let label = parts
                 .next()
                 .map(|id| names.borrow_mut().find_or_add_name(id.as_str()));
-            Ok(Some(Stmt::Continue { exit: label }))
+            Ok(Some(Stmt::new(StmtNode::Continue { exit: label }, line)))
         }
         Rule::return_statement => {
             let mut parts = pair.into_inner();
             let expr = parts
                 .next()
                 .map(|expr| parse_expr(names.clone(), expr.into_inner()).unwrap());
-            Ok(Some(Stmt::Return { expr }))
+            Ok(Some(Stmt::new(StmtNode::Return { expr }, line)))
         }
         Rule::for_statement => {
             let mut parts = pair.into_inner();
@@ -569,13 +595,16 @@ fn parse_statement(
                     let to_rule = clause_inner.next().unwrap();
                     let from = parse_expr(names.clone(), from_rule.into_inner())?;
                     let to = parse_expr(names, to_rule.into_inner())?;
-                    Ok(Some(Stmt::ForRange { id, from, to, body }))
+                    Ok(Some(Stmt::new(
+                        StmtNode::ForRange { id, from, to, body },
+                        line,
+                    )))
                 }
                 Rule::for_in_clause => {
                     let mut clause_inner = clause.into_inner();
                     let in_rule = clause_inner.next().unwrap();
                     let expr = parse_expr(names, in_rule.into_inner())?;
-                    Ok(Some(Stmt::ForList { id, expr, body }))
+                    Ok(Some(Stmt::new(StmtNode::ForList { id, expr, body }, line)))
                 }
                 _ => panic!("Unimplemented for clause: {:?}", clause),
             }
@@ -584,7 +613,10 @@ fn parse_statement(
             let mut parts = pair.into_inner();
             let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
             let handler = parse_statements(names, parts.next().unwrap().into_inner())?;
-            Ok(Some(Stmt::TryFinally { body, handler }))
+            Ok(Some(Stmt::new(
+                StmtNode::TryFinally { body, handler },
+                line,
+            )))
         }
         Rule::try_except_statement => {
             let mut parts = pair.into_inner();
@@ -632,17 +664,20 @@ fn parse_statement(
                     _ => panic!("Unimplemented except clause: {:?}", except),
                 }
             }
-            Ok(Some(Stmt::TryExcept { body, excepts }))
+            Ok(Some(Stmt::new(StmtNode::TryExcept { body, excepts }, line)))
         }
         Rule::fork_statement => {
             let mut parts = pair.into_inner();
             let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names, parts.next().unwrap().into_inner())?;
-            Ok(Some(Stmt::Fork {
-                id: None,
-                time,
-                body,
-            }))
+            Ok(Some(Stmt::new(
+                StmtNode::Fork {
+                    id: None,
+                    time,
+                    body,
+                },
+                line,
+            )))
         }
         Rule::labelled_fork_statement => {
             let mut parts = pair.into_inner();
@@ -651,11 +686,14 @@ fn parse_statement(
                 .find_or_add_name(parts.next().unwrap().as_str());
             let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names, parts.next().unwrap().into_inner())?;
-            Ok(Some(Stmt::Fork {
-                id: Some(id),
-                time,
-                body,
-            }))
+            Ok(Some(Stmt::new(
+                StmtNode::Fork {
+                    id: Some(id),
+                    time,
+                    body,
+                },
+                line,
+            )))
         }
         _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
     }
@@ -725,10 +763,15 @@ mod tests {
     use crate::compiler::ast::Arg::{Normal, Splice};
     use crate::compiler::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
     use crate::compiler::ast::{
-        BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+        BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
+        UnaryOp,
     };
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
+
+    fn stripped_stmts(statements: &Vec<Stmt>) -> Vec<StmtNode> {
+        statements.iter().map(|s| s.0.clone()).collect()
+    }
 
     #[test]
     fn test_call_verb() {
@@ -737,8 +780,8 @@ mod tests {
         let parsed = parse_program(program).unwrap();
         assert_eq!(parsed.stmts.len(), 1);
         assert_eq!(
-            parsed.stmts,
-            vec![Stmt::Expr(Verb {
+            stripped_stmts(&parsed.stmts),
+            vec![StmtNode::Expr(Verb {
                 location: Box::new(VarExpr(v_obj(0))),
                 verb: Box::new(VarExpr(v_str("test_verb"))),
                 args: vec![
@@ -759,8 +802,8 @@ mod tests {
 
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::Expr(Expr::Assign {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::Expr(Expr::Assign {
                 left: Box::new(Id(a)),
                 right: Box::new(Expr::Binary(
                     BinaryOp::Add,
@@ -778,8 +821,8 @@ mod tests {
 
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::Expr(Call {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::Expr(Call {
                 function: "notify".to_string(),
                 args: vec![Normal(VarExpr(v_str("test")))],
             })
@@ -792,8 +835,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::Cond {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::Cond {
                 arms: vec![
                     CondArm {
                         condition: Expr::Binary(
@@ -801,9 +844,12 @@ mod tests {
                             Box::new(VarExpr(v_int(1))),
                             Box::new(VarExpr(v_int(2))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(5))),
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(5))),
+                            },
+                            1
+                        )],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -811,15 +857,21 @@ mod tests {
                             Box::new(VarExpr(v_int(2))),
                             Box::new(VarExpr(v_int(3))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(3))),
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(3))),
+                            },
+                            1
+                        )],
                     },
                 ],
 
-                otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(v_int(6))),
-                }],
+                otherwise: vec![Stmt(
+                    StmtNode::Return {
+                        expr: Some(VarExpr(v_int(6))),
+                    },
+                    1
+                )],
             }
         );
     }
@@ -840,8 +892,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::Cond {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::Cond {
                 arms: vec![
                     CondArm {
                         condition: Expr::Binary(
@@ -849,9 +901,12 @@ mod tests {
                             Box::new(VarExpr(v_int(1))),
                             Box::new(VarExpr(v_int(2))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(5))),
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(5))),
+                            },
+                            3
+                        )],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -859,9 +914,12 @@ mod tests {
                             Box::new(VarExpr(v_int(2))),
                             Box::new(VarExpr(v_int(3))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(3))),
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(3))),
+                            },
+                            5
+                        )],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -869,15 +927,21 @@ mod tests {
                             Box::new(VarExpr(v_int(3))),
                             Box::new(VarExpr(v_int(4))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(4))),
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(4))),
+                            },
+                            7
+                        )],
                     },
                 ],
 
-                otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(v_int(6))),
-                }],
+                otherwise: vec![Stmt(
+                    StmtNode::Return {
+                        expr: Some(VarExpr(v_int(6))),
+                    },
+                    9
+                )],
             }
         );
     }
@@ -888,8 +952,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::Return {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::Return {
                 expr: Some(Expr::Unary(
                     UnaryOp::Not,
                     Box::new(Verb {
@@ -913,8 +977,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::Cond {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::Cond {
                 arms: vec![CondArm {
                     condition: Expr::Unary(
                         UnaryOp::Not,
@@ -927,7 +991,7 @@ mod tests {
                             args: vec![Normal(Id(parse.names.find_name("this").unwrap())),],
                         })
                     ),
-                    statements: vec![Stmt::Return { expr: None }],
+                    statements: vec![Stmt(StmtNode::Return { expr: None }, 3)],
                 }],
                 otherwise: vec![],
             }
@@ -942,22 +1006,25 @@ mod tests {
         let b = parse.names.find_name("b").unwrap();
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
-            parse.stmts[0],
-            Stmt::ForList {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::ForList {
                 id: x,
                 expr: Expr::List(vec![
                     Normal(VarExpr(v_int(1))),
                     Normal(VarExpr(v_int(2))),
                     Normal(VarExpr(v_int(3))),
                 ]),
-                body: vec![Stmt::Expr(Expr::Assign {
-                    left: Box::new(Id(b)),
-                    right: Box::new(Expr::Binary(
-                        BinaryOp::Add,
-                        Box::new(Id(x)),
-                        Box::new(VarExpr(v_int(5))),
-                    )),
-                })],
+                body: vec![Stmt(
+                    StmtNode::Expr(Expr::Assign {
+                        left: Box::new(Id(b)),
+                        right: Box::new(Expr::Binary(
+                            BinaryOp::Add,
+                            Box::new(Id(x)),
+                            Box::new(VarExpr(v_int(5))),
+                        )),
+                    }),
+                    1
+                )],
             }
         )
     }
@@ -970,19 +1037,22 @@ mod tests {
         let x = parse.names.find_name("x").unwrap();
         let b = parse.names.find_name("b").unwrap();
         assert_eq!(
-            parse.stmts[0],
-            Stmt::ForRange {
+            stripped_stmts(&parse.stmts)[0],
+            StmtNode::ForRange {
                 id: x,
                 from: VarExpr(v_int(1)),
                 to: VarExpr(v_int(5)),
-                body: vec![Stmt::Expr(Expr::Assign {
-                    left: Box::new(Id(b)),
-                    right: Box::new(Expr::Binary(
-                        BinaryOp::Add,
-                        Box::new(Id(x)),
-                        Box::new(VarExpr(v_int(5))),
-                    )),
-                })],
+                body: vec![Stmt(
+                    StmtNode::Expr(Expr::Assign {
+                        left: Box::new(Id(b)),
+                        right: Box::new(Expr::Binary(
+                            BinaryOp::Add,
+                            Box::new(Id(x)),
+                            Box::new(VarExpr(v_int(5))),
+                        )),
+                    }),
+                    1
+                )],
             }
         )
     }
@@ -996,9 +1066,9 @@ mod tests {
             parse.names.find_name("b").unwrap(),
         );
         assert_eq!(
-            parse.stmts,
+            stripped_stmts(&parse.stmts),
             vec![
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(a)),
                     right: Box::new(Expr::List(vec![
                         Normal(VarExpr(v_int(1))),
@@ -1006,7 +1076,7 @@ mod tests {
                         Normal(VarExpr(v_int(3))),
                     ])),
                 }),
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(b)),
                     right: Box::new(Expr::Range {
                         base: Box::new(Id(a)),
@@ -1025,30 +1095,36 @@ mod tests {
         let x = parse.names.find_name("x").unwrap();
 
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::While {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::While {
                 id: None,
                 condition: VarExpr(v_int(1)),
                 body: vec![
-                    Stmt::Expr(Expr::Assign {
-                        left: Box::new(Id(x)),
-                        right: Box::new(Expr::Binary(
-                            BinaryOp::Add,
-                            Box::new(Id(x)),
-                            Box::new(VarExpr(v_int(1))),
-                        )),
-                    }),
-                    Stmt::Cond {
-                        arms: vec![CondArm {
-                            condition: Expr::Binary(
-                                BinaryOp::Gt,
+                    Stmt(
+                        StmtNode::Expr(Expr::Assign {
+                            left: Box::new(Id(x)),
+                            right: Box::new(Expr::Binary(
+                                BinaryOp::Add,
                                 Box::new(Id(x)),
-                                Box::new(VarExpr(v_int(5))),
-                            ),
-                            statements: vec![Stmt::Break { exit: None }],
-                        }],
-                        otherwise: vec![],
-                    },
+                                Box::new(VarExpr(v_int(1))),
+                            )),
+                        }),
+                        1
+                    ),
+                    Stmt(
+                        StmtNode::Cond {
+                            arms: vec![CondArm {
+                                condition: Expr::Binary(
+                                    BinaryOp::Gt,
+                                    Box::new(Id(x)),
+                                    Box::new(VarExpr(v_int(5))),
+                                ),
+                                statements: vec![Stmt(StmtNode::Break { exit: None }, 1)],
+                            }],
+                            otherwise: vec![],
+                        },
+                        1
+                    ),
                 ],
             }]
         )
@@ -1062,32 +1138,41 @@ mod tests {
         let x = parse.names.find_name("x").unwrap();
 
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::While {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::While {
                 id: Some(chuckles),
                 condition: VarExpr(v_int(1)),
                 body: vec![
-                    Stmt::Expr(Expr::Assign {
-                        left: Box::new(Id(x)),
-                        right: Box::new(Expr::Binary(
-                            BinaryOp::Add,
-                            Box::new(Id(x)),
-                            Box::new(VarExpr(v_int(1))),
-                        )),
-                    }),
-                    Stmt::Cond {
-                        arms: vec![CondArm {
-                            condition: Expr::Binary(
-                                BinaryOp::Gt,
+                    Stmt(
+                        StmtNode::Expr(Expr::Assign {
+                            left: Box::new(Id(x)),
+                            right: Box::new(Expr::Binary(
+                                BinaryOp::Add,
                                 Box::new(Id(x)),
-                                Box::new(VarExpr(v_int(5))),
-                            ),
-                            statements: vec![Stmt::Break {
-                                exit: Some(chuckles)
+                                Box::new(VarExpr(v_int(1))),
+                            )),
+                        }),
+                        1
+                    ),
+                    Stmt(
+                        StmtNode::Cond {
+                            arms: vec![CondArm {
+                                condition: Expr::Binary(
+                                    BinaryOp::Gt,
+                                    Box::new(Id(x)),
+                                    Box::new(VarExpr(v_int(5))),
+                                ),
+                                statements: vec![Stmt(
+                                    StmtNode::Break {
+                                        exit: Some(chuckles)
+                                    },
+                                    1
+                                )],
                             }],
-                        }],
-                        otherwise: vec![],
-                    },
+                            otherwise: vec![],
+                        },
+                        1
+                    ),
                 ],
             }]
         )
@@ -1099,8 +1184,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         let test_string = parse.names.find_name("test_string").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Verb {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Verb {
                 location: Box::new(Prop {
                     location: Box::new(VarExpr(v_obj(0))),
                     property: Box::new(VarExpr(v_str("string_utils"))),
@@ -1125,8 +1210,8 @@ mod tests {
         }];
         let scatter_right = Box::new(Id(args));
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Scatter(scatter_items, scatter_right))]
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Scatter(scatter_items, scatter_right))]
         );
     }
 
@@ -1145,8 +1230,8 @@ mod tests {
             expr: None,
         }];
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Scatter(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Scatter(
                 scatter_items,
                 Box::new(Expr::Index(Box::new(Id(args)), Box::new(VarExpr(v_int(1))),))
             ))]
@@ -1161,8 +1246,8 @@ mod tests {
         let b = parse.names.find_name("b").unwrap();
         let c = parse.names.find_name("c").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Index(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Index(
                 Box::new(Expr::List(vec![
                     Normal(Id(a)),
                     Normal(Id(b)),
@@ -1181,8 +1266,8 @@ mod tests {
         let b = parse.names.find_name("b").unwrap();
         let c = parse.names.find_name("c").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Assign {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Assign {
                 left: Box::new(Id(a)),
                 right: Box::new(Expr::Index(
                     Box::new(Expr::List(vec![
@@ -1202,8 +1287,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         let this = parse.names.find_name("this").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Assign {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Assign {
                 left: Box::new(Expr::Index(
                     Box::new(Prop {
                         location: Box::new(Id(this)),
@@ -1223,9 +1308,9 @@ mod tests {
         let i = parse.names.find_name("i").unwrap();
         // Verify the structure of the syntax tree for a for-list loop.
         assert_eq!(
-            parse.stmts,
+            stripped_stmts(&parse.stmts),
             vec![
-                Stmt::ForList {
+                StmtNode::ForList {
                     id: i,
                     expr: Expr::List(vec![
                         Normal(VarExpr(v_int(1))),
@@ -1234,7 +1319,7 @@ mod tests {
                     ]),
                     body: vec![],
                 },
-                Stmt::Return { expr: Some(Id(i)) },
+                StmtNode::Return { expr: Some(Id(i)) },
             ]
         )
     }
@@ -1244,8 +1329,8 @@ mod tests {
         let program = "{a, b, c} = args;";
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Scatter(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Scatter(
                 vec![
                     ScatterItem {
                         kind: ScatterKind::Required,
@@ -1275,8 +1360,8 @@ mod tests {
         let house = parse.names.find_name("_house").unwrap();
         let home = parse.names.find_name("home").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Binary(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::Eq,
                 Box::new(Id(house)),
                 Box::new(Id(home)),
@@ -1291,8 +1376,8 @@ mod tests {
         let results = parse.names.find_name("results").unwrap();
         let args = parse.names.find_name("args").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Return {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Return {
                 expr: Some(Expr::List(vec![
                     Splice(Id(results)),
                     Normal(Call {
@@ -1313,8 +1398,8 @@ mod tests {
         "#;
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(VarExpr(v_str(r#"n t r " \"#)))]
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(VarExpr(v_str(r#"n t r " \"#)))]
         );
     }
 
@@ -1326,7 +1411,7 @@ mod tests {
 
         let parse = parse_program(program).unwrap();
 
-        assert_eq!(parse.stmts, vec![]);
+        assert_eq!(stripped_stmts(&parse.stmts), vec![]);
     }
     #[test]
     fn test_assign_ambiguous_w_keyword_varname() {
@@ -1343,9 +1428,9 @@ mod tests {
         let forgotten = parse.names.find_name("forgotten").unwrap();
 
         assert_eq!(
-            parse.stmts,
+            stripped_stmts(&parse.stmts),
             vec![
-                Stmt::ForList {
+                StmtNode::ForList {
                     id: a,
                     expr: Expr::List(vec![
                         Normal(VarExpr(v_int(1))),
@@ -1354,11 +1439,11 @@ mod tests {
                     ]),
                     body: vec![],
                 },
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(info)),
                     right: Box::new(VarExpr(v_int(5))),
                 }),
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(forgotten)),
                     right: Box::new(VarExpr(v_int(3))),
                 }),
@@ -1376,21 +1461,30 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt::Cond {
-                arms: vec![CondArm {
-                    condition: Expr::Binary(
-                        BinaryOp::Eq,
-                        Box::new(VarExpr(v_int(5))),
-                        Box::new(VarExpr(v_int(5))),
-                    ),
-                    statements: vec![Stmt::Return {
-                        expr: Some(VarExpr(v_int(5)))
+            vec![Stmt(
+                StmtNode::Cond {
+                    arms: vec![CondArm {
+                        condition: Expr::Binary(
+                            BinaryOp::Eq,
+                            Box::new(VarExpr(v_int(5))),
+                            Box::new(VarExpr(v_int(5))),
+                        ),
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(5)))
+                            },
+                            2
+                        )],
                     }],
-                }],
-                otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(v_int(3)))
-                }],
-            }]
+                    otherwise: vec![Stmt(
+                        StmtNode::Return {
+                            expr: Some(VarExpr(v_int(3)))
+                        },
+                        4
+                    )],
+                },
+                1
+            )]
         );
     }
 
@@ -1405,8 +1499,8 @@ mod tests {
                        endif"#;
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Cond {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Cond {
                 arms: vec![
                     CondArm {
                         condition: Expr::Binary(
@@ -1414,9 +1508,12 @@ mod tests {
                             Box::new(VarExpr(v_int(5))),
                             Box::new(VarExpr(v_int(5))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(5)))
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(5)))
+                            },
+                            2
+                        )],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -1424,14 +1521,20 @@ mod tests {
                             Box::new(VarExpr(v_int(2))),
                             Box::new(VarExpr(v_int(2))),
                         ),
-                        statements: vec![Stmt::Return {
-                            expr: Some(VarExpr(v_int(2)))
-                        }],
+                        statements: vec![Stmt(
+                            StmtNode::Return {
+                                expr: Some(VarExpr(v_int(2)))
+                            },
+                            4
+                        )],
                     },
                 ],
-                otherwise: vec![Stmt::Return {
-                    expr: Some(VarExpr(v_int(3)))
-                }],
+                otherwise: vec![Stmt(
+                    StmtNode::Return {
+                        expr: Some(VarExpr(v_int(3)))
+                    },
+                    6
+                )],
             }]
         );
     }
@@ -1442,8 +1545,8 @@ mod tests {
                        endif"#;
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Cond {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Cond {
                 arms: vec![CondArm {
                     condition: Expr::Binary(
                         BinaryOp::In,
@@ -1471,13 +1574,13 @@ mod tests {
         let parse = parse_program(program).unwrap();
 
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::TryExcept {
-                body: vec![Stmt::Expr(VarExpr(v_int(5)))],
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::TryExcept {
+                body: vec![Stmt(StmtNode::Expr(VarExpr(v_int(5))), 2)],
                 excepts: vec![ExceptArm {
                     id: None,
                     codes: CatchCodes::Codes(vec![Normal(VarExpr(v_err(E_PROPNF)))]),
-                    statements: vec![Stmt::Return { expr: None }],
+                    statements: vec![Stmt(StmtNode::Return { expr: None }, 4)],
                 }],
             }]
         );
@@ -1487,7 +1590,10 @@ mod tests {
     fn test_float() {
         let program = "10000.0;";
         let parse = parse_program(program).unwrap();
-        assert_eq!(parse.stmts, vec![Stmt::Expr(VarExpr(v_float(10000.0)))]);
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(VarExpr(v_float(10000.0)))]
+        );
     }
 
     #[test]
@@ -1496,8 +1602,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
         let a = parse.names.find_name("a").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Binary(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::In,
                 Box::new(Id(a)),
                 Box::new(Expr::List(vec![
@@ -1513,7 +1619,10 @@ mod tests {
     fn test_empty_list() {
         let program = "{};";
         let parse = parse_program(program).unwrap();
-        assert_eq!(parse.stmts, vec![Stmt::Expr(Expr::List(vec![]))]);
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::List(vec![]))]
+        );
     }
 
     #[test]
@@ -1521,8 +1630,8 @@ mod tests {
         let program = "this:(\"verb\")(1,2,3);";
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Verb {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Verb {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
                 verb: Box::new(VarExpr(v_str("verb"))),
                 args: vec![
@@ -1539,8 +1648,8 @@ mod tests {
         let program = "this.(\"prop\");";
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Prop {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Prop {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
                 property: Box::new(VarExpr(v_str("prop"))),
             })]
@@ -1552,8 +1661,8 @@ mod tests {
         let program = "!2;";
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Unary(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Unary(
                 UnaryOp::Not,
                 Box::new(VarExpr(v_int(2))),
             ))]
@@ -1567,8 +1676,8 @@ mod tests {
         let len = parse.names.find_name("len").unwrap();
         let text = parse.names.find_name("text").unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Binary(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::LtE,
                 Box::new(VarExpr(v_int(2))),
                 Box::new(Expr::Assign {
@@ -1587,8 +1696,8 @@ mod tests {
         let program = "a = (1 == 2 ? 3 | 4);";
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Assign {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Assign {
                 left: Box::new(Id(parse.names.find_name("a").unwrap())),
                 right: Box::new(Expr::Cond {
                     condition: Box::new(Expr::Binary(
@@ -1608,8 +1717,8 @@ mod tests {
         let program = "{what} == args;";
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Binary(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::Eq,
                 Box::new(Expr::List(vec![Normal(Id(parse
                     .names
@@ -1627,8 +1736,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
 
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Call {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Call {
                 function: "raise".to_string(),
                 args: vec![Normal(Id(parse.names.find_name("E_PERMS").unwrap()))]
             })]
@@ -1643,9 +1752,9 @@ mod tests {
         "#;
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
+            stripped_stmts(&parse.stmts),
             vec![
-                Stmt::ForList {
+                StmtNode::ForList {
                     id: parse.names.find_name("line").unwrap(),
                     expr: Expr::List(vec![
                         Normal(VarExpr(v_int(1))),
@@ -1654,7 +1763,7 @@ mod tests {
                     ]),
                     body: vec![],
                 },
-                Stmt::Expr(VarExpr(v_int(52))),
+                StmtNode::Expr(VarExpr(v_int(52))),
             ]
         );
     }
@@ -1666,8 +1775,8 @@ mod tests {
 
         let varnf = Normal(VarExpr(v_err(E_VARNF)));
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Return {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Return {
                 expr: Some(Expr::List(vec![Normal(Expr::Catch {
                     trye: Box::new(Id(parse.names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
@@ -1684,8 +1793,8 @@ mod tests {
         let invarg = Normal(VarExpr(v_err(E_INVARG)));
 
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Catch {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Catch {
                 trye: Box::new(Call {
                     function: "raise".to_string(),
                     args: vec![invarg]
@@ -1702,8 +1811,8 @@ mod tests {
         let parse = parse_program(program).unwrap();
 
         assert_eq!(
-            parse.stmts,
-            vec![Stmt::Expr(Expr::Catch {
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Catch {
                 trye: Box::new(Verb {
                     location: Box::new(Prop {
                         location: Box::new(VarExpr(v_obj(0))),
@@ -1722,6 +1831,35 @@ mod tests {
     }
 
     #[test]
+    fn test_paren_expr() {
+        // Verify that parenthesized expressions end up with correct precedence and nesting.
+        let program_a = r#"1 && (2 || 3);"#;
+        let parse = parse_program(program_a).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::And(
+                Box::new(VarExpr(v_int(1))),
+                Box::new(Expr::Or(
+                    Box::new(VarExpr(v_int(2))),
+                    Box::new(VarExpr(v_int(3))),
+                )),
+            ))]
+        );
+        let program_b = r#"1 && 2 || 3;"#;
+        let parse = parse_program(program_b).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Or(
+                Box::new(Expr::And(
+                    Box::new(VarExpr(v_int(1))),
+                    Box::new(VarExpr(v_int(2))),
+                )),
+                Box::new(VarExpr(v_int(3))),
+            ))]
+        );
+    }
+
+    #[test]
     fn test_pass_exprs() {
         let program = r#"
             result = pass(@args);
@@ -1732,19 +1870,19 @@ mod tests {
         "#;
         let parse = parse_program(program).unwrap();
         assert_eq!(
-            parse.stmts,
+            stripped_stmts(&parse.stmts),
             vec![
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(parse.names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
                         args: vec![Splice(Id(parse.names.find_name("args").unwrap()))],
                     }),
                 }),
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(parse.names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass { args: vec![] }),
                 }),
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(parse.names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
                         args: vec![
@@ -1755,11 +1893,11 @@ mod tests {
                         ],
                     }),
                 }),
-                Stmt::Expr(Expr::Assign {
+                StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(parse.names.find_name("pass").unwrap())),
                     right: Box::new(Id(parse.names.find_name("blop").unwrap())),
                 }),
-                Stmt::Return {
+                StmtNode::Return {
                     expr: Some(Id(parse.names.find_name("pass").unwrap())),
                 },
             ]

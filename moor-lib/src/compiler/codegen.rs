@@ -9,7 +9,7 @@ use tracing::error;
 use moor_value::var::{v_int, Var};
 
 use crate::compiler::ast::{
-    Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, UnaryOp,
+    Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
@@ -44,6 +44,7 @@ pub struct CodegenState {
     pub(crate) max_stack: usize,
     pub(crate) builtins: HashMap<String, Name>,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
+    pub(crate) line_number_spans: Vec<(usize, usize)>,
 }
 
 impl CodegenState {
@@ -59,6 +60,7 @@ impl CodegenState {
             max_stack: 0,
             builtins,
             fork_vectors: vec![],
+            line_number_spans: vec![],
         }
     }
 
@@ -486,8 +488,10 @@ impl CodegenState {
     }
 
     pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
-        match stmt {
-            Stmt::Cond { arms, otherwise } => {
+        let line_number = stmt.1;
+        self.line_number_spans.push((self.ops.len(), line_number));
+        match &stmt.0 {
+            StmtNode::Cond { arms, otherwise } => {
                 let end_label = self.make_label(None);
                 let mut is_else = false;
                 for arm in arms {
@@ -516,7 +520,7 @@ impl CodegenState {
                 }
                 self.commit_label(end_label);
             }
-            Stmt::ForList { id, expr, body } => {
+            StmtNode::ForList { id, expr, body } => {
                 self.generate_expr(expr)?;
 
                 // Note that MOO is 1-indexed, so this is counter value is 1 in LambdaMOO;
@@ -541,7 +545,7 @@ impl CodegenState {
                 self.commit_label(end_label);
                 self.pop_stack(2);
             }
-            Stmt::ForRange { from, to, id, body } => {
+            StmtNode::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
                 let loop_top = self.make_label(Some(*id));
@@ -560,7 +564,7 @@ impl CodegenState {
                 self.commit_label(end_label);
                 self.pop_stack(2);
             }
-            Stmt::While {
+            StmtNode::While {
                 id,
                 condition,
                 body,
@@ -590,7 +594,7 @@ impl CodegenState {
                 });
                 self.commit_label(loop_end_label);
             }
-            Stmt::Fork { id, body, time } => {
+            StmtNode::Fork { id, body, time } => {
                 self.generate_expr(time)?;
                 // Stash all of main vector in a temporary buffer, then begin compilation of the forked code.
                 // Once compiled, we can create a fork vector from the new buffer, and then restore the main vector.
@@ -608,7 +612,7 @@ impl CodegenState {
                 });
                 self.pop_stack(1);
             }
-            Stmt::TryExcept { body, excepts } => {
+            StmtNode::TryExcept { body, excepts } => {
                 let mut labels = vec![];
                 for ex in excepts {
                     self.generate_codes(&ex.codes)?;
@@ -641,7 +645,7 @@ impl CodegenState {
                 }
                 self.commit_label(end_label);
             }
-            Stmt::TryFinally { body, handler } => {
+            StmtNode::TryFinally { body, handler } => {
                 let handler_label = self.make_label(None);
                 self.emit(Op::TryFinally(handler_label));
                 for stmt in body {
@@ -656,29 +660,29 @@ impl CodegenState {
                 self.emit(Op::Continue);
                 self.pop_stack(2);
             }
-            Stmt::Break { exit: None } => {
+            StmtNode::Break { exit: None } => {
                 let l = self.loops.last().expect("No loop to break/continue from");
                 self.emit(Op::Exit {
                     stack: l.bottom_stack,
                     label: l.bottom_label,
                 })
             }
-            Stmt::Break { exit: Some(l) } => {
+            StmtNode::Break { exit: Some(l) } => {
                 let l = self.find_loop(l).expect("invalid loop for break/continue");
                 self.emit(Op::ExitId(l.bottom_label));
             }
-            Stmt::Continue { exit: None } => {
+            StmtNode::Continue { exit: None } => {
                 let l = self.loops.last().expect("No loop to break/continue from");
                 self.emit(Op::Exit {
                     stack: l.top_stack,
                     label: l.top_label,
                 })
             }
-            Stmt::Continue { exit: Some(l) } => {
+            StmtNode::Continue { exit: Some(l) } => {
                 let l = self.find_loop(l).expect("invalid loop for break/continue");
                 self.emit(Op::ExitId(l.top_label));
             }
-            Stmt::Return { expr } => match expr {
+            StmtNode::Return { expr } => match expr {
                 Some(expr) => {
                     self.generate_expr(expr)?;
                     self.emit(Op::Return);
@@ -688,7 +692,7 @@ impl CodegenState {
                     self.emit(Op::Return0);
                 }
             },
-            Stmt::Expr(e) => {
+            StmtNode::Expr(e) => {
                 self.generate_expr(e)?;
                 self.emit(Op::Pop);
                 self.pop_stack(1);
@@ -755,6 +759,7 @@ pub fn compile(program: &str) -> Result<Program, anyhow::Error> {
         var_names: cg_state.var_names,
         main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
+        line_number_spans: cg_state.line_number_spans,
     };
 
     Ok(binary)
