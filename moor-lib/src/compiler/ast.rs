@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use moor_value::var::Var;
 
 /// The abstract syntax tree produced by the parser and converted by codgen into opcodes.
@@ -62,10 +64,39 @@ impl BinaryOp {
     }
 }
 
+impl Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Mod => write!(f, "%"),
+            Self::Eq => write!(f, "=="),
+            Self::NEq => write!(f, "!="),
+            Self::Gt => write!(f, ">"),
+            Self::GtE => write!(f, ">="),
+            Self::Lt => write!(f, "<"),
+            Self::LtE => write!(f, "<="),
+            Self::Exp => write!(f, "^"),
+            Self::In => write!(f, "in"),
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum UnaryOp {
     Neg,
     Not,
+}
+
+impl Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg => write!(f, "-"),
+            Self::Not => write!(f, "!"),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

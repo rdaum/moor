@@ -65,23 +65,23 @@ impl PropDef {
 
     #[must_use]
     pub fn definer(&self) -> Objid {
-        self.get_header_view().definer().read()
+        self.get_layout_view().definer().read()
     }
     #[must_use]
     pub fn location(&self) -> Objid {
-        self.get_header_view().location().read()
+        self.get_layout_view().location().read()
     }
     #[must_use]
     pub fn owner(&self) -> Objid {
-        self.get_header_view().owner().read()
+        self.get_layout_view().owner().read()
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        self.get_header_view().flags().read()
+        self.get_layout_view().flags().read()
     }
     #[must_use]
     pub fn name(&self) -> &str {
-        let names_offset = propdef_header::SIZE.unwrap();
+        let names_offset = propdef::name::OFFSET;
         let mut names_buf = &self.0.as_slice()[names_offset..];
         let name_len = names_buf.get_u8() as usize;
         let name_slice = names_buf.get(..name_len).unwrap();

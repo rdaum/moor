@@ -27,14 +27,17 @@ pub enum DecompileError {
 }
 
 struct Decompile {
+    /// The program we are decompiling.
     program: Program,
+    /// The current position in the program as it is being decompiled.
     position: usize,
     expr_stack: VecDeque<Expr>,
     builtins: HashMap<Name, String>,
-    s: Vec<Stmt>,
+    statements: Vec<Stmt>,
 }
 
 impl Decompile {
+    /// Returns the next opcode in the program, or an error if the program is malformed.
     fn next(&mut self) -> Result<Op, DecompileError> {
         if self.position >= self.program.main_vector.len() {
             return Err(DecompileError::UnexpectedProgramEnd);
@@ -73,14 +76,14 @@ impl Decompile {
         &mut self,
         predicate: F,
     ) -> Result<(Vec<Stmt>, Op), DecompileError> {
-        let old_len = self.s.len();
+        let old_len = self.statements.len();
         while self.position < self.program.main_vector.len() {
             let op = &self.program.main_vector[self.position];
             if predicate(self.position, op) {
                 // We'll need a copy of the matching opcode we terminated at.
                 let final_op = self.next()?;
-                if self.s.len() > old_len {
-                    return Ok((self.s.split_off(old_len), final_op));
+                if self.statements.len() > old_len {
+                    return Ok((self.statements.split_off(old_len), final_op));
                 } else {
                     return Ok((vec![], final_op));
                 };
@@ -92,13 +95,13 @@ impl Decompile {
 
     fn decompile_statements_up_to(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
         let jump_label = self.find_jump(label)?; // check that the label exists
-        let old_len = self.s.len();
+        let old_len = self.statements.len();
 
         while self.position + 1 < jump_label.position.0 {
             self.decompile()?;
         }
-        if self.s.len() > old_len {
-            Ok(self.s.split_off(old_len))
+        if self.statements.len() > old_len {
+            Ok(self.statements.split_off(old_len))
         } else {
             Ok(vec![])
         }
@@ -108,13 +111,13 @@ impl Decompile {
     /// new statements produced.
     fn decompile_statements_until(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
         let jump_label = self.find_jump(label)?; // check that the label exists
-        let old_len = self.s.len();
+        let old_len = self.statements.len();
 
         while self.position < jump_label.position.0 {
             self.decompile()?;
         }
-        if self.s.len() > old_len {
-            Ok(self.s.split_off(old_len))
+        if self.statements.len() > old_len {
+            Ok(self.statements.split_off(old_len))
         } else {
             Ok(vec![])
         }
@@ -125,7 +128,7 @@ impl Decompile {
         label: &Label,
     ) -> Result<(Vec<Stmt>, Label), DecompileError> {
         let jump_label = self.find_jump(label)?; // check that the label exists
-        let old_len = self.s.len();
+        let old_len = self.statements.len();
 
         while self.position + 1 < jump_label.position.0 {
             self.decompile()?;
@@ -137,8 +140,8 @@ impl Decompile {
                 "expected jump opcode at branch end".to_string(),
             ));
         };
-        if self.s.len() > old_len {
-            Ok((self.s.split_off(old_len), label))
+        if self.statements.len() > old_len {
+            Ok((self.statements.split_off(old_len), label))
         } else {
             Ok((vec![], label))
         }
@@ -160,7 +163,7 @@ impl Decompile {
                     condition: cond,
                     statements: arm,
                 };
-                self.s.push(Stmt::Cond {
+                self.statements.push(Stmt::Cond {
                     arms: vec![cond_arm],
                     otherwise: vec![],
                 });
@@ -168,7 +171,7 @@ impl Decompile {
                 // Decompile to the 'end_of_otherwise' label to get the statements for the
                 // otherwise branch.
                 let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
-                let Some(Stmt::Cond { arms: _, otherwise }) = self.s.last_mut() else {
+                let Some(Stmt::Cond { arms: _, otherwise }) = self.statements.last_mut() else {
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
                     ));
@@ -185,7 +188,7 @@ impl Decompile {
                     statements: cond_statements,
                 };
                 // Add the arm
-                let Some(Stmt::Cond { arms, otherwise: _ }) = self.s.last_mut() else {
+                let Some(Stmt::Cond { arms, otherwise: _ }) = self.statements.last_mut() else {
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
                     ));
@@ -209,7 +212,7 @@ impl Decompile {
                 };
                 let list = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&label)?;
-                self.s.push(Stmt::ForList {
+                self.statements.push(Stmt::ForList {
                     id,
                     expr: list,
                     body,
@@ -219,7 +222,7 @@ impl Decompile {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&end_label)?;
-                self.s.push(Stmt::ForRange { id, from, to, body });
+                self.statements.push(Stmt::ForRange { id, from, to, body });
             }
             Op::While(loop_end_label) => {
                 // A "while" is actually a:
@@ -229,7 +232,7 @@ impl Decompile {
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
-                self.s.push(Stmt::While {
+                self.statements.push(Stmt::While {
                     id: None,
                     condition: cond,
                     body,
@@ -248,7 +251,7 @@ impl Decompile {
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
-                self.s.push(Stmt::While {
+                self.statements.push(Stmt::While {
                     id: Some(id),
                     condition: cond,
                     body,
@@ -257,9 +260,9 @@ impl Decompile {
             Op::Exit { stack: _, label } => {
                 let position = self.find_jump(&label)?.position;
                 if position.0 < self.position {
-                    self.s.push(Stmt::Continue { exit: None });
+                    self.statements.push(Stmt::Continue { exit: None });
                 } else {
-                    self.s.push(Stmt::Break { exit: None });
+                    self.statements.push(Stmt::Break { exit: None });
                 }
             }
             Op::ExitId(label) => {
@@ -276,21 +279,21 @@ impl Decompile {
                     }
                 };
 
-                self.s.push(s);
+                self.statements.push(s);
             }
             Op::Fork { .. } => {
                 unimplemented!("decompile fork");
             }
             Op::Pop => {
                 let expr = self.pop_expr()?;
-                self.s.push(Stmt::Expr(expr));
+                self.statements.push(Stmt::Expr(expr));
             }
             Op::Return => {
                 let expr = self.pop_expr()?;
-                self.s.push(Stmt::Return { expr: Some(expr) });
+                self.statements.push(Stmt::Return { expr: Some(expr) });
             }
             Op::Return0 => {
-                self.s.push(Stmt::Return { expr: None });
+                self.statements.push(Stmt::Return { expr: None });
             }
             Op::Done => {
                 if self.position != self.program.main_vector.len() {
@@ -580,7 +583,7 @@ impl Decompile {
                 // We need to rewind the position by one opcode, it seems.
                 // TODO this is not the most elegant. we're being too greedy above
                 self.position -= 1;
-                self.s.push(Stmt::TryExcept {
+                self.statements.push(Stmt::TryExcept {
                     body,
                     excepts: except_arms,
                 });
@@ -591,7 +594,7 @@ impl Decompile {
                     self.decompile_statements_until_match(|_, op| matches!(op, Op::EndFinally))?;
                 let (handler, _) =
                     self.decompile_statements_until_match(|_, op| matches!(op, Op::Continue))?;
-                self.s.push(Stmt::TryFinally { body, handler });
+                self.statements.push(Stmt::TryFinally { body, handler });
             }
             Op::Catch(label) => {
                 let codes_expr = self.pop_expr()?;
@@ -708,14 +711,14 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
         position: 0,
         expr_stack: Default::default(),
         builtins,
-        s: vec![],
+        statements: vec![],
     };
     while decompile.position < decompile.program.main_vector.len() {
         decompile.decompile()?;
     }
 
     Ok(Parse {
-        stmts: decompile.s,
+        stmts: decompile.statements,
         names: program.var_names.clone(),
     })
 }

@@ -99,12 +99,11 @@ impl LayoutAs<i16> for PrepSpec {
         }
     }
 
-    #[must_use]
-    pub fn to_bytes(&self) -> [u8; 2] {
-        match self {
-            Self::Any => (-2i16).to_le_bytes(),
-            Self::None => (-1i16).to_le_bytes(),
-            Self::Other(id) => (*id as i16).to_le_bytes(),
+    fn write(v: Self) -> i16 {
+        match v {
+            Self::Any => -2,
+            Self::None => -1,
+            Self::Other(p) => p as i16,
         }
     }
 }
