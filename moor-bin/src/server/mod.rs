@@ -5,6 +5,7 @@ use serde_json::{json, Number, Value};
 
 pub mod routes;
 pub mod ws_server;
+mod ws_sessions;
 
 #[derive(Serialize, Deserialize)]
 struct OID(i64);

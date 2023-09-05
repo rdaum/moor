@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use metrics_macros::increment_counter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::oneshot;
 use tracing::{debug, error, instrument, trace, warn};
 
 use moor_value::model::verb_info::VerbInfo;
@@ -18,8 +18,9 @@ use moor_value::NOTHING;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::moo_vm_host::MooVmHost;
 use crate::tasks::scheduler::{SchedulerControlMsg, TaskDescription};
+use crate::tasks::sessions::Session;
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
-use crate::tasks::{Sessions, TaskId, VerbCall};
+use crate::tasks::{TaskId, VerbCall};
 use crate::vm::opcode::Program;
 use crate::vm::ForkRequest;
 
@@ -66,7 +67,7 @@ pub(crate) enum TaskControlMsg {
 /// Within the task many verbs may be executed as subroutine calls from the root verb/command
 /// Each task has its own VM host which is responsible for executing the program.
 /// Each task has its own isolated transactional world state.
-/// Each task is given a semi-isolated "sessions" object through which I/O is performed.
+/// Each task is given a semi-isolated "session" object through which I/O is performed.
 /// When a task fails, both the world state and I/O should be rolled back.
 /// A task is generally tied 1:1 with a player connection, and usually come from one command, but
 /// they can also be 'forked' from other tasks.
@@ -86,8 +87,8 @@ pub(crate) struct Task {
     pub(crate) scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
     /// The 'player' this task is running as.
     pub(crate) player: Objid,
-    /// The sessions object for connection mgmt and sending messages to players
-    pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    /// The session object for connection mgmt and sending messages to players
+    pub(crate) session: Arc<dyn Session>,
     /// The transactionally isolated world state for this task.
     pub(crate) world_state: Box<dyn WorldState>,
     /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
@@ -187,6 +188,11 @@ impl Task {
                         };
                         trace!(self.task_id, result = ?result, "Task complete, committed");
 
+                        self.session
+                            .commit()
+                            .await
+                            .expect("Could not commit session...");
+
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskSuccess(result))
                             .expect("Could not send success response");
@@ -195,10 +201,8 @@ impl Task {
                     Ok(VMHostResponse::CompleteAbort) => {
                         error!(task_id = self.task_id, "Task aborted");
                         if let Err(send_error) = self
-                            .sessions
-                            .write()
-                            .await
-                            .send_text(self.player, "Aborted.".to_string().as_str())
+                            .session
+                            .send_system_msg(self.player, format!("Aborted.").as_str())
                             .await
                         {
                             warn!("Could not send abort message to player: {:?}", send_error);
@@ -207,7 +211,11 @@ impl Task {
                         self.world_state
                             .rollback()
                             .await
-                            .expect("Could not rollback");
+                            .expect("Could not rollback world state transaction");
+                        self.session
+                            .rollback()
+                            .await
+                            .expect("Could not rollback connection...");
 
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskAbortCancelled)
@@ -224,21 +232,21 @@ impl Task {
                         }
 
                         for l in traceback.iter() {
-                            if let Err(send_error) = self
-                                .sessions
-                                .write()
-                                .await
-                                .send_text(self.player, l.as_str())
-                                .await
+                            if let Err(send_error) =
+                                self.session.send_text(self.player, l.as_str()).await
                             {
                                 warn!("Could not send traceback to player: {:?}", send_error);
                             }
                         }
 
-                        self.world_state
-                            .rollback()
+                        // Commands that end in exceptions are still expected to be committed, to
+                        // conform with MOO's expectations.
+                        // We may revisit this later.
+                        self.world_state.commit().await.expect("Could not commit");
+                        self.session
+                            .commit()
                             .await
-                            .expect("Could not rollback");
+                            .expect("Could not commit connection output");
 
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskException(exception))
@@ -246,9 +254,16 @@ impl Task {
                         return;
                     }
                     Err(err) => {
+                        error!(task_id = self.task_id, error = ?err, "Task error; rollback");
                         increment_counter!("tasks.error.exec");
-                        self.world_state.rollback().await.unwrap();
-                        error!(task_id = self.task_id, error = ?err, "Task error");
+                        self.world_state
+                            .rollback()
+                            .await
+                            .expect("Could not rollback world state");
+                        self.session
+                            .rollback()
+                            .await
+                            .expect("Could not rollback connection output");
 
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskAbortError(err))
@@ -256,6 +271,14 @@ impl Task {
                         return;
                     }
                     Ok(VMHostResponse::AbortLimit(reason)) => {
+                        self.world_state
+                            .rollback()
+                            .await
+                            .expect("Could not rollback world state");
+                        self.session
+                            .rollback()
+                            .await
+                            .expect("Could not rollback connection output");
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskAbortLimitsReached(reason))
                             .expect("Could not send error response");

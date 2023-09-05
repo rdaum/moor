@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock;
 use tracing::trace;
 
 use moor_value::model::world_state::WorldState;
@@ -12,7 +11,7 @@ use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
 
 use crate::tasks::scheduler::SchedulerControlMsg;
-use crate::tasks::Sessions;
+use crate::tasks::sessions::Session;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
@@ -41,7 +40,7 @@ macro_rules! binary_var_op {
 
 pub struct VmExecParams<'a> {
     pub world_state: &'a mut dyn WorldState,
-    pub sessions: Arc<RwLock<dyn Sessions>>,
+    pub session: Arc<dyn Session>,
     pub scheduler_sender: UnboundedSender<SchedulerControlMsg>,
     pub max_stack_depth: usize,
     pub ticks_left: usize,

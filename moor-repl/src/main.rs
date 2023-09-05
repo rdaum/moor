@@ -16,7 +16,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use moor_lib::tasks::scheduler::Scheduler;
-use moor_lib::tasks::Sessions;
+use moor_lib::tasks::sessions::Session;
 use moor_lib::textdump::load_db::textdump_load;
 
 use moor_value::var::objid::Objid;
@@ -56,7 +56,7 @@ async fn do_eval(
     player: Objid,
     scheduler: Scheduler,
     program: String,
-    sessions: Arc<RwLock<ReplSession>>,
+    sessions: Arc<ReplSession>,
 ) -> Result<(), anyhow::Error> {
     let task_id = scheduler
         .submit_eval_task(player, player, program, sessions)
@@ -69,17 +69,30 @@ struct ReplSession {
     player: Objid,
     _console_writer: SharedWriter,
     connect_time: std::time::Instant,
-    last_activity: std::time::Instant,
+    last_activity: RwLock<std::time::Instant>,
 }
 
 #[async_trait]
-impl Sessions for ReplSession {
-    async fn send_text(&mut self, _player: Objid, msg: &str) -> Result<(), Error> {
-        warn!(msg, "NOTIFY");
+impl Session for ReplSession {
+    async fn commit(&self) -> Result<(), Error> {
         Ok(())
     }
 
-    async fn shutdown(&mut self, msg: Option<String>) -> Result<(), Error> {
+    async fn rollback(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn send_text(&self, _player: Objid, msg: &str) -> Result<(), Error> {
+        info!(msg, "NOTIFY");
+        Ok(())
+    }
+
+    async fn send_system_msg(&self, _player: Objid, msg: &str) -> Result<(), Error> {
+        warn!(msg, "SYSMSG");
+        Ok(())
+    }
+
+    async fn shutdown(&self, msg: Option<String>) -> Result<(), Error> {
         error!(msg, "SHUTDOWN");
         exit(0);
     }
@@ -88,24 +101,25 @@ impl Sessions for ReplSession {
         Ok(format!("REPL:{player}"))
     }
 
-    async fn disconnect(&mut self, player: Objid) -> Result<(), Error> {
+    async fn disconnect(&self, player: Objid) -> Result<(), Error> {
         error!(?player, "DISCONNECT");
         exit(0);
     }
 
-    fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
         Ok(vec![self.player])
     }
 
-    fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
+    async fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
         let now = std::time::Instant::now();
         let duration = now.duration_since(self.connect_time);
         Ok(duration.as_secs_f64())
     }
 
-    fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
+    async fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
         let now = std::time::Instant::now();
-        let duration = now.duration_since(self.last_activity);
+        let last_activity = self.last_activity.read().await;
+        let duration = now.duration_since(*last_activity);
         Ok(duration.as_secs_f64())
     }
 }
@@ -160,12 +174,12 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Unable to get world state source from database");
     let scheduler = Scheduler::new(state_source);
 
-    let eval_sessions = Arc::new(RwLock::new(ReplSession {
+    let eval_sessions = Arc::new(ReplSession {
         player: Objid(2),
         _console_writer: stdout.clone(),
         connect_time: std::time::Instant::now(),
-        last_activity: std::time::Instant::now(),
-    }));
+        last_activity: RwLock::new(std::time::Instant::now()),
+    });
 
     loop {
         let loop_scheduler = scheduler.clone();
@@ -179,7 +193,7 @@ async fn main() -> Result<(), anyhow::Error> {
             cmd = rl.readline() => match cmd {
                 Ok(line) => {
                     rl.add_history_entry(line.clone());
-                    eval_sessions.write().await.last_activity = std::time::Instant::now();
+                    (*eval_sessions.last_activity.write().await) = std::time::Instant::now();
                     if let Err(e) = do_eval(Objid(2), scheduler.clone(), line, eval_sessions.clone()).await {
                         writeln!(stdout, "Error: {e:?}")?;
                     }

@@ -2,10 +2,6 @@
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::Error;
-    use async_trait::async_trait;
-    use tokio::sync::RwLock;
-
     use moor_value::model::props::PropFlag;
     use moor_value::model::r#match::VerbArgsSpec;
     use moor_value::model::verbs::{BinaryType, VerbFlag};
@@ -20,49 +16,12 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::inmemtransient::InMemTransientDatabase;
-    use crate::tasks::{Sessions, VerbCall};
+    use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
+    use crate::tasks::VerbCall;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
     use crate::vm::vm_execute::VmExecParams;
     use crate::vm::{ExecutionResult, VerbExecutionRequest, VM};
-
-    struct NoopClientConnection {}
-    impl NoopClientConnection {
-        pub fn new() -> Self {
-            Self {}
-        }
-    }
-
-    #[async_trait]
-    impl Sessions for NoopClientConnection {
-        async fn send_text(&mut self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
-            Ok(())
-        }
-
-        async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
-            Ok(())
-        }
-
-        async fn connection_name(&self, player: Objid) -> Result<String, Error> {
-            Ok(format!("player-{}", player.0))
-        }
-
-        async fn disconnect(&mut self, _player: Objid) -> Result<(), Error> {
-            Ok(())
-        }
-
-        fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-            Ok(vec![])
-        }
-
-        fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
-            Ok(0.0)
-        }
-
-        fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
-            Ok(0.0)
-        }
-    }
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
         Program {
@@ -98,12 +57,7 @@ mod tests {
     }
 
     async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
-        exec_vm_loop(
-            vm,
-            state,
-            Arc::new(RwLock::new(NoopClientConnection::new())),
-        )
-        .await
+        exec_vm_loop(vm, state, Arc::new(NoopClientSession::new())).await
     }
 
     // TODO: move this up into a testing utility. But also factor out common code with Task's loop
@@ -111,14 +65,14 @@ mod tests {
     async fn exec_vm_loop(
         vm: &mut VM,
         world_state: &mut dyn WorldState,
-        client_connection: Arc<RwLock<dyn Sessions>>,
+        client_connection: Arc<dyn Session>,
     ) -> Var {
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
             let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
             let vm_exec_params = VmExecParams {
                 world_state,
-                sessions: client_connection.clone(),
+                session: client_connection.clone(),
                 scheduler_sender: sched_send.clone(),
                 max_stack_depth: 50,
                 ticks_left: 90_000,
@@ -966,46 +920,6 @@ mod tests {
         assert_eq!(result, v_int(1));
     }
 
-    struct MockClientConnection {
-        received: Vec<String>,
-    }
-    impl MockClientConnection {
-        pub fn new() -> Self {
-            Self { received: vec![] }
-        }
-    }
-    #[async_trait]
-    impl Sessions for MockClientConnection {
-        async fn send_text(&mut self, _player: Objid, msg: &str) -> Result<(), Error> {
-            self.received.push(String::from(msg));
-            Ok(())
-        }
-
-        async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
-            Ok(())
-        }
-
-        async fn connection_name(&self, player: Objid) -> Result<String, Error> {
-            Ok(format!("player-{}", player))
-        }
-
-        async fn disconnect(&mut self, _player: Objid) -> Result<(), Error> {
-            Ok(())
-        }
-
-        fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-            Ok(vec![])
-        }
-
-        fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
-            Ok(0.0)
-        }
-
-        fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
-            Ok(0.0)
-        }
-    }
-
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_builtin() {
         let program = "return notify(#1, \"test\");";
@@ -1015,13 +929,12 @@ mod tests {
 
         call_verb(state.as_mut(), "test", &mut vm).await;
 
-        let client_connection = Arc::new(RwLock::new(MockClientConnection::new()));
+        let client_connection = Arc::new(MockClientSession::new());
         let result = exec_vm_loop(&mut vm, state.as_mut(), client_connection.clone()).await;
         assert_eq!(result, v_int(1));
 
-        assert_eq!(
-            client_connection.read().await.received,
-            vec!["test".to_string()]
-        );
+        assert_eq!(client_connection.received(), vec!["test".to_string()]);
+        client_connection.commit().await.expect("commit failed");
+        assert_eq!(client_connection.committed(), vec!["test".to_string()]);
     }
 }

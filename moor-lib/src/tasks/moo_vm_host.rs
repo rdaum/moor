@@ -1,9 +1,10 @@
 use crate::compiler::labels::Name;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::{AbortLimitReason, SchedulerControlMsg};
+use crate::tasks::sessions::Session;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
-use crate::tasks::{Sessions, TaskId, VerbCall};
+use crate::tasks::{TaskId, VerbCall};
 use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
@@ -21,7 +22,6 @@ use moor_value::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock;
 use tracing::{trace, warn};
 
 /// A 'host' for running the MOO virtual machine inside a task.
@@ -34,7 +34,7 @@ pub(crate) struct MooVmHost {
     max_ticks: usize,
     /// The maximum amount of time allotted to this task
     max_time: Duration,
-    sessions: Arc<RwLock<dyn Sessions>>,
+    sessions: Arc<dyn Session>,
     scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
 }
 
@@ -45,7 +45,7 @@ impl MooVmHost {
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
-        sessions: Arc<RwLock<dyn Sessions>>,
+        sessions: Arc<dyn Session>,
         scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
     ) -> Self {
         Self {
@@ -173,7 +173,7 @@ impl VMHost<Program> for MooVmHost {
         }
         let exec_params = VmExecParams {
             world_state,
-            sessions: self.sessions.clone(),
+            session: self.sessions.clone(),
             scheduler_sender: self.scheduler_control_sender.clone(),
             max_stack_depth: self.max_stack_depth,
             ticks_left: self.max_ticks - self.vm.tick_count,
@@ -240,7 +240,7 @@ impl VMHost<Program> for MooVmHost {
                 } => {
                     let mut exec_params = VmExecParams {
                         world_state,
-                        sessions: self.sessions.clone(),
+                        session: self.sessions.clone(),
                         max_stack_depth: self.max_stack_depth,
                         scheduler_sender: self.scheduler_control_sender.clone(),
                         ticks_left: self.max_ticks - self.vm.tick_count,

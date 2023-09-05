@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock;
 
 use moor_value::model::permissions::Perms;
 use moor_value::model::world_state::WorldState;
@@ -12,7 +11,7 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 use crate::tasks::scheduler::SchedulerControlMsg;
-use crate::tasks::Sessions;
+use crate::tasks::sessions::Session;
 use crate::vm::{ExecutionResult, VM};
 
 /// The arguments and other state passed to a built-in function.
@@ -26,7 +25,7 @@ pub(crate) struct BfCallState<'a> {
     /// Handle to the current database transaction.
     pub(crate) world_state: &'a mut dyn WorldState,
     /// For connection / message management.
-    pub(crate) sessions: Arc<RwLock<dyn Sessions>>,
+    pub(crate) session: Arc<dyn Session>,
     /// For sending messages up to the scheduler
     pub(crate) scheduler_sender: UnboundedSender<SchedulerControlMsg>,
     /// How many ticks are left in the current task.

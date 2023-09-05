@@ -1,9 +1,8 @@
-use anyhow::Error;
-use async_trait::async_trait;
 use moor_lib::compiler::codegen::compile;
 use moor_lib::db::inmemtransient::InMemTransientDatabase;
 use moor_lib::db::DbTxWorldState;
-use moor_lib::tasks::{Sessions, VerbCall};
+use moor_lib::tasks::sessions::NoopClientSession;
+use moor_lib::tasks::VerbCall;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::vm::opcode::Program;
 use moor_lib::vm::vm_execute::VmExecParams;
@@ -16,45 +15,6 @@ use moor_value::var::Var;
 use moor_value::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
-
-struct NoopClientConnection {}
-impl NoopClientConnection {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-#[async_trait]
-impl Sessions for NoopClientConnection {
-    async fn send_text(&mut self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
-        Ok(())
-    }
-
-    async fn shutdown(&mut self, _msg: Option<String>) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn connection_name(&self, player: Objid) -> Result<String, Error> {
-        Ok(format!("player-{}", player.0))
-    }
-
-    async fn disconnect(&mut self, _player: Objid) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-        Ok(vec![])
-    }
-
-    fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
-        Ok(0.0)
-    }
-
-    fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
-        Ok(0.0)
-    }
-}
 
 fn testsuite_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -121,14 +81,14 @@ async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
 //  This is also totally copy and pasted from the same in vm_test.rs
 //  So the whole thing is majorly due for a cleanup.
 async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
-    let client_connection = Arc::new(RwLock::new(NoopClientConnection::new()));
+    let client_connection = Arc::new(NoopClientSession::new());
     // Call repeatedly into exec until we ge either an error or Complete.
 
     loop {
         let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
         let vm_exec_params = VmExecParams {
             world_state: state,
-            sessions: client_connection.clone(),
+            session: client_connection.clone(),
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
             ticks_left: 90_000,

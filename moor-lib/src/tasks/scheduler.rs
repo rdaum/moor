@@ -24,8 +24,9 @@ use crate::db::matching::MatchEnvironmentParseMatcher;
 use crate::tasks::command_parse::{parse_command, ParsedCommand};
 use crate::tasks::moo_vm_host::MooVmHost;
 use crate::tasks::scheduler::SchedulerError::{CouldNotParseCommand, DatabaseError, TaskNotFound};
+use crate::tasks::sessions::Session;
 use crate::tasks::task::{Task, TaskControlMsg};
-use crate::tasks::{Sessions, TaskId};
+use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::{ForkRequest, VM};
 
@@ -123,7 +124,7 @@ struct TaskControl {
     /// (Per-task) receiver for messages from the task to the scheduler.
     scheduler_control_receiver: UnboundedReceiver<SchedulerControlMsg>,
     state_source: Arc<dyn WorldStateSource>,
-    sessions: Arc<RwLock<dyn Sessions>>,
+    session: Arc<dyn Session>,
     suspended: bool,
     resume_time: Option<SystemTime>,
     // Self reference, used when forking tasks to pass them into the new task record. Not super
@@ -268,12 +269,12 @@ impl Scheduler {
     }
 
     /// Submit a command to the scheduler for execution.
-    #[instrument(skip(self, sessions))]
+    #[instrument(skip(self, session))]
     pub async fn submit_command_task(
         &self,
         player: Objid,
         command: &str,
-        sessions: Arc<RwLock<dyn Sessions>>,
+        session: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_command_task");
 
@@ -332,7 +333,7 @@ impl Scheduler {
             .new_task(
                 player,
                 state_source,
-                sessions,
+                session,
                 None,
                 self.clone(),
                 player,
@@ -372,7 +373,7 @@ impl Scheduler {
         verb: String,
         args: Vec<Var>,
         perms: Objid,
-        sessions: Arc<RwLock<dyn Sessions>>,
+        sessions: Arc<dyn Session>,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.submit_verb_task");
 
@@ -415,7 +416,7 @@ impl Scheduler {
         player: Objid,
         perms: Objid,
         code: String,
-        sessions: Arc<RwLock<dyn Sessions>>,
+        sessions: Arc<dyn Session>,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.submit_eval_task");
 
@@ -487,11 +488,17 @@ impl Scheduler {
 }
 
 impl Inner {
+    // TODO: the 'session' here is a problem, as it's just another reference to the same session
+    //  that started the original command that performed the fork. but the lifecycle of that session
+    //  is disjoint from this, and may already have commit revert etc. by the time the forked task
+    //  executes.
+    //  it really should be getting a new one. which would require us to have a 'session factory' or
+    //  'session state source' analogous to the world state source.
     async fn submit_fork_task(
         &mut self,
         fork_request: ForkRequest,
         state_source: Arc<dyn WorldStateSource>,
-        sessions: Arc<RwLock<dyn Sessions>>,
+        session: Arc<dyn Session>,
         scheduler_ref: Scheduler,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.forked_tasks");
@@ -499,7 +506,7 @@ impl Inner {
             .new_task(
                 fork_request.player,
                 state_source,
-                sessions,
+                session,
                 fork_request.delay,
                 scheduler_ref,
                 fork_request.progr,
@@ -615,7 +622,7 @@ impl Inner {
                             fork_request,
                             reply,
                             task.state_source.clone(),
-                            task.sessions.clone(),
+                            task.session.clone(),
                             task.scheduler.clone(),
                         ));
                     }
@@ -874,7 +881,7 @@ impl Inner {
                 };
                 // First disconnect the player...
                 warn!(?player, "Disconnecting player ...");
-                task.sessions.write().await.disconnect(player).await?;
+                task.session.disconnect(player).await?;
             }
 
             // Then abort *all* of their still-living tasks.
@@ -907,7 +914,7 @@ impl Inner {
         &mut self,
         player: Objid,
         state_source: Arc<dyn WorldStateSource>,
-        sessions: Arc<RwLock<dyn Sessions>>,
+        sessions: Arc<dyn Session>,
         delay_start: Option<Duration>,
         scheduler_ref: Scheduler,
         perms: Objid,
@@ -939,7 +946,7 @@ impl Inner {
             task_control_sender,
             scheduler_control_receiver,
             state_source: state_source.clone(),
-            sessions: sessions.clone(),
+            session: sessions.clone(),
             suspended: false,
             resume_time: None,
             scheduler: scheduler_ref.clone(),
@@ -978,7 +985,7 @@ impl Inner {
                     sessions.clone(),
                     scheduler_control_sender,
                 ),
-                sessions: sessions.clone(),
+                session: sessions.clone(),
                 world_state,
                 perms,
             };

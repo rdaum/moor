@@ -264,7 +264,7 @@ impl VM {
             vm: self,
             name: BUILTIN_DESCRIPTORS[bf_func_num].name.clone(),
             world_state: exec_args.world_state,
-            sessions: exec_args.sessions.clone(),
+            session: exec_args.session.clone(),
             args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
             ticks_left: exec_args.ticks_left,
@@ -308,13 +308,13 @@ impl VM {
 
         let bf = self.builtins[self.top().bf_index.unwrap()].clone();
         let verb_name = self.top().verb_name.clone();
-        let sessions = exec_args.sessions.clone();
+        let sessions = exec_args.session.clone();
         let args = self.top().args.clone();
         let mut bf_args = BfCallState {
             vm: self,
             name: verb_name,
             world_state: exec_args.world_state,
-            sessions,
+            session: sessions,
             args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
             ticks_left: exec_args.ticks_left,

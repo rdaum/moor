@@ -48,13 +48,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args.terk_perms().await?.check_obj_owner_perms(*player)?;
 
-    if let Err(send_error) = bf_args
-        .sessions
-        .write()
-        .await
-        .send_text(*player, msg.as_str())
-        .await
-    {
+    if let Err(send_error) = bf_args.session.send_text(*player, msg.as_str()).await {
         warn!(
             "Unable to send message to player: #{}: {}",
             player.0, send_error
@@ -73,10 +67,9 @@ async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
 
     Ok(Ret(v_list(
         bf_args
-            .sessions
-            .read()
-            .await
+            .session
             .connected_players()
+            .await
             .unwrap()
             .iter()
             .map(|p| v_objid(*p))
@@ -179,8 +172,7 @@ async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, any
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Ok(Error(E_TYPE));
     };
-    let sessions = bf_args.sessions.read().await;
-    let Ok(idle_seconds) = sessions.idle_seconds(*who) else {
+    let Ok(idle_seconds) = bf_args.session.idle_seconds(*who).await else {
         return Ok(Error(E_INVARG));
     };
 
@@ -195,8 +187,7 @@ async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Ok(Error(E_TYPE));
     };
-    let sessions = bf_args.sessions.read().await;
-    let Ok(connected_seconds) = sessions.connected_seconds(*who) else {
+    let Ok(connected_seconds) = bf_args.session.connected_seconds(*who).await else {
         return Ok(Error(E_INVARG));
     };
 
@@ -225,8 +216,7 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         return Ok(Error(E_PERM));
     }
 
-    let sessions = bf_args.sessions.read().await;
-    let Ok(connection_name) = sessions.connection_name(*player).await else {
+    let Ok(connection_name) = bf_args.session.connection_name(*player).await else {
         return Ok(Error(E_INVARG));
     };
 
@@ -248,7 +238,7 @@ async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
     };
 
     bf_args.terk_perms().await?.check_wizard()?;
-    bf_args.sessions.write().await.shutdown(msg).await.unwrap();
+    bf_args.session.shutdown(msg).await.unwrap();
 
     Ok(Ret(v_none()))
 }
