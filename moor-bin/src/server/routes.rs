@@ -39,12 +39,12 @@ pub fn mk_routes(state_source: Arc<dyn WorldStateSource>, ws_server: WebSocketSe
         .route("/:object/:property", get(prop_get_handler))
         .with_state(state_source.clone());
 
-    let main_router = Router::new()
+    
+
+    Router::new()
         .nest("/ws", websocket_router)
         .nest("/properties", property_router)
-        .route("/metrics", get(move || ready(recorder_handle.render())));
-
-    main_router
+        .route("/metrics", get(move || ready(recorder_handle.render())))
 }
 
 /// Resource handler to retrieve unauthenticated system property. Properties must be whitelisted.
@@ -115,5 +115,5 @@ async fn prop_get_handler(
             .into_response();
     };
 
-    return (StatusCode::OK, Json(var_as_json(&property_value))).into_response();
+    (StatusCode::OK, Json(var_as_json(&property_value))).into_response()
 }

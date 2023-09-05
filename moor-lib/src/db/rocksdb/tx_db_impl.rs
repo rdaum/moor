@@ -88,7 +88,7 @@ pub(crate) fn set_objset<'a>(
 ) -> Result<(), WorldStateError> {
     let ok = oid_key(o);
     v.with_byte_buffer(|d| {
-        tx.put_cf(cf, &ok, d).unwrap();
+        tx.put_cf(cf, ok, d).unwrap();
     });
     Ok(())
 }

@@ -198,7 +198,7 @@ impl Task {
                             .sessions
                             .write()
                             .await
-                            .send_text(self.player, format!("Aborted.").as_str())
+                            .send_text(self.player, "Aborted.".to_string().as_str())
                             .await
                         {
                             warn!("Could not send abort message to player: {:?}", send_error);

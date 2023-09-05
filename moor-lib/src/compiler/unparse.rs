@@ -1,6 +1,6 @@
 use moor_value::util::quote_str;
 use moor_value::var::variant::Variant;
-use moor_value::var::VarType;
+
 
 use crate::compiler::ast;
 use crate::compiler::ast::Stmt;
@@ -123,7 +123,7 @@ impl Unparse {
                 buffer.push_str("pass");
                 if !args.is_empty() {
                     buffer.push('(');
-                    buffer.push_str(self.unparse_args(&args).unwrap().as_str());
+                    buffer.push_str(self.unparse_args(args).unwrap().as_str());
                     buffer.push(')');
                 }
                 Ok(buffer)
@@ -175,9 +175,9 @@ impl Unparse {
                 args,
             } => {
                 let mut buffer = String::new();
-                buffer.push_str(brace_if_lower(&location).as_str());
-                buffer.push_str(":");
-                buffer.push_str(brace_if_lower(&verb).as_str());
+                buffer.push_str(brace_if_lower(location).as_str());
+                buffer.push(':');
+                buffer.push_str(brace_if_lower(verb).as_str());
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args)?.as_str());
                 buffer.push(')');
@@ -223,22 +223,22 @@ impl Unparse {
             )),
             ast::Expr::List(list) => {
                 let mut buffer = String::new();
-                buffer.push_str("{");
+                buffer.push('{');
                 buffer.push_str(self.unparse_args(list)?.as_str());
-                buffer.push_str("}");
+                buffer.push('}');
                 Ok(buffer)
             }
             ast::Expr::Scatter(vars, expr) => {
                 let mut buffer = String::new();
-                buffer.push_str("(");
+                buffer.push('(');
                 for var in vars {
                     match var.kind {
                         ast::ScatterKind::Required => {}
                         ast::ScatterKind::Optional => {
-                            buffer.push_str("?");
+                            buffer.push('?');
                         }
                         ast::ScatterKind::Rest => {
-                            buffer.push_str("@");
+                            buffer.push('@');
                         }
                     }
                     buffer.push_str(self.names.name_of(&var.id).unwrap());
@@ -384,8 +384,7 @@ impl Unparse {
         let results = stms
             .iter()
             .map(|s| {
-                self.unparse_stmt(s, indent)
-                    .and_then(|line| Ok(format!("{prefix}{line}")))
+                self.unparse_stmt(s, indent).map(|line| format!("{prefix}{line}"))
             })
             .collect::<Result<Vec<String>, anyhow::Error>>()?;
 
@@ -504,7 +503,7 @@ mod tests {
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, anyhow::Error> {
-        let tree = crate::compiler::parse::parse_program(&original).unwrap();
+        let tree = crate::compiler::parse::parse_program(original).unwrap();
         unparse(&tree)
     }
 }

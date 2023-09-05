@@ -43,7 +43,7 @@ impl<'a> RocksDbTx<'a> {
         // Get the old vector, add the new verb, put the new vector.
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(oid);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
+        let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -69,7 +69,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn delete_object_verb(&self, o: Objid, v: Uuid) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
+        let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -91,7 +91,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn get_verb(&self, o: Objid, v: Uuid) -> Result<VerbDef, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
+        let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -107,7 +107,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbDef, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let Some(verbs_bytes) = self.tx.get_cf(cf, ok.clone())? else {
+        let Some(verbs_bytes) = self.tx.get_cf(cf, ok)? else {
             return Err(WorldStateError::VerbNotFound(o, n).into());
         };
         let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
@@ -120,7 +120,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn get_verb_by_index(&self, o: Objid, i: usize) -> Result<VerbDef, anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
+        let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -158,7 +158,7 @@ impl<'a> RocksDbTx<'a> {
         loop {
             let ok = oid_key(search_o);
 
-            let verbs = match self.tx.get_cf(ov_cf, ok.clone())? {
+            let verbs = match self.tx.get_cf(ov_cf, ok)? {
                 None => VerbDefs::empty(),
                 Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
             };
@@ -185,7 +185,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn retrieve_verb(&self, o: Objid, v: String) -> Result<(Vec<u8>, VerbDef), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let Some(verbs_bytes) = self.tx.get_cf(cf, ok.clone())? else {
+        let Some(verbs_bytes) = self.tx.get_cf(cf, ok)? else {
             return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
         };
         let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
@@ -213,7 +213,7 @@ impl<'a> RocksDbTx<'a> {
     ) -> Result<(), anyhow::Error> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok.clone())?;
+        let verbs_bytes = self.tx.get_cf(cf, ok)?;
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),

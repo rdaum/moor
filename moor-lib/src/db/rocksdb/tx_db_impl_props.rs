@@ -60,7 +60,7 @@ impl<'a> RocksDbTx<'a> {
     ) -> Result<(), anyhow::Error> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
         let ok = oid_key(o);
-        let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
+        let props_bytes = self.tx.get_cf(p_cf, ok)?;
         let Some(props_bytes) = props_bytes else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
@@ -91,7 +91,7 @@ impl<'a> RocksDbTx<'a> {
     pub fn delete_property(&self, o: Objid, u: Uuid) -> Result<(), anyhow::Error> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
         let ok = oid_key(o);
-        let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
+        let props_bytes = self.tx.get_cf(p_cf, ok)?;
         let Some(props_bytes) = props_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
@@ -140,7 +140,7 @@ impl<'a> RocksDbTx<'a> {
 
         for location in locations.iter() {
             let ok = oid_key(location);
-            let props_bytes = self.tx.get_cf(p_cf, ok.clone())?;
+            let props_bytes = self.tx.get_cf(p_cf, ok)?;
             let props: PropDefs = match props_bytes {
                 None => PropDefs::empty(),
                 Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
@@ -224,7 +224,7 @@ impl<'a> RocksDbTx<'a> {
         loop {
             let ok = oid_key(search_o);
 
-            let props: PropDefs = match self.tx.get_cf(ov_cf, ok.clone())? {
+            let props: PropDefs = match self.tx.get_cf(ov_cf, ok)? {
                 None => PropDefs::empty(),
                 Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
             };

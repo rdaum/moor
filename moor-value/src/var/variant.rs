@@ -33,8 +33,8 @@ impl Display for Variant {
     }
 }
 
-impl Into<Var> for Variant {
-    fn into(self) -> Var {
-        Var::new(self)
+impl From<Variant> for Var {
+    fn from(val: Variant) -> Self {
+        Var::new(val)
     }
 }
