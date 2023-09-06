@@ -27,7 +27,7 @@ impl Objid {
         format!("#{}", self.0)
     }
 
-    pub fn is_root(&self) -> bool {
+    pub fn is_sysobj(&self) -> bool {
         self.0 == 0
     }
 }

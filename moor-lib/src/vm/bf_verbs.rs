@@ -4,21 +4,26 @@ use async_trait::async_trait;
 use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::ObjFlag;
 use moor_value::AsByteBuffer;
-use tracing::warn;
+use strum::EnumCount;
+use tracing::{error, warn};
 
 use moor_value::model::r#match::{ArgSpec, VerbArgsSpec};
+use moor_value::model::verbdef::VerbDef;
 use moor_value::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
+use moor_value::model::WorldStateError;
 use moor_value::util::bitenum::BitEnum;
-use moor_value::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
+use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_value::var::list::List;
+use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string};
+use moor_value::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
 use crate::compiler::codegen::compile;
 use crate::compiler::decompile::program_to_tree;
 use crate::compiler::unparse::unparse;
+use crate::compiler::GlobalName;
 use crate::tasks::command_parse::{parse_preposition_string, preposition_to_string};
 use crate::vm::builtin::BfRet::{Error, Ret};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
@@ -85,6 +90,42 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
     Ok(Ret(result))
 }
 bf_declare!(verb_info, bf_verb_info);
+
+async fn get_verbdef(
+    obj: Objid,
+    verbspec: Var,
+    bf_args: &BfCallState<'_>,
+) -> Result<VerbDef, moor_value::var::error::Error> {
+    let verbspec_result = match verbspec.variant() {
+        Variant::Str(verb_desc) => {
+            let verb_desc = verb_desc.as_str();
+            bf_args
+                .world_state
+                .get_verb(bf_args.task_perms_who(), obj, verb_desc)
+                .await
+        }
+        Variant::Int(verb_index) => {
+            let verb_index = *verb_index;
+            if verb_index < 1 {
+                return Err(E_INVARG);
+            }
+            let verb_index = (verb_index as usize) - 1;
+            bf_args
+                .world_state
+                .get_verb_at_index(bf_args.task_perms_who(), obj, verb_index)
+                .await
+        }
+        _ => return Err(E_TYPE),
+    };
+    match verbspec_result {
+        Ok(vs) => Ok(vs),
+        Err(WorldStateError::VerbNotFound(_, _)) => return Err(E_VERBNF),
+        Err(e) => {
+            error!("get_verbdef: unexpected error: {:?}", e);
+            return Err(E_INVIND);
+        }
+    }
+}
 
 fn parse_verb_info(info: &List) -> Result<VerbAttrs, anyhow::Error> {
     if info.len() != 3 {
@@ -179,29 +220,12 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Ok(Error(E_TYPE));
     };
-    let args = match bf_args.args[1].variant() {
-        Variant::Str(verb_desc) => {
-            let verb_desc = verb_desc.as_str();
-            let verb_info = bf_args
-                .world_state
-                .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
-                .await?;
-            verb_info.args()
-        }
-        Variant::Int(verb_index) => {
-            let verb_index = *verb_index;
-            if verb_index < 1 {
-                return Ok(Error(E_INVARG));
-            }
-            let verb_index = (verb_index as usize) - 1;
-            let verb_info = bf_args
-                .world_state
-                .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
-                .await?;
-            verb_info.args()
-        }
-        _ => return Ok(Error(E_TYPE)),
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+        Ok(v) => v,
+        Err(e) => return Ok(Error(e)),
     };
+    let args = verbdef.args();
+
     // Output is {dobj, prep, iobj} as strings
     let result = v_list(vec![
         v_str(args.dobj.to_string()),
@@ -307,27 +331,9 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Er
     {
         return Ok(Error(E_PERM));
     }
-
-    let verbdef = match bf_args.args[1].variant() {
-        Variant::Str(verb_desc) => {
-            let verb_desc = verb_desc.as_str();
-            bf_args
-                .world_state
-                .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
-                .await?
-        }
-        Variant::Int(verb_index) => {
-            let verb_index = *verb_index;
-            if verb_index < 1 {
-                return Ok(Error(E_INVARG));
-            }
-            let verb_index = (verb_index as usize) - 1;
-            bf_args
-                .world_state
-                .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
-                .await?
-        }
-        _ => return Ok(Error(E_TYPE)),
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+        Ok(v) => v,
+        Err(e) => return Ok(Error(e)),
     };
 
     // If the verb is not binary type MOO, we don't support decompilation or listing
@@ -396,26 +402,9 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow
         return Ok(Error(E_PERM));
     }
 
-    let verbdef = match bf_args.args[1].variant() {
-        Variant::Str(verb_desc) => {
-            let verb_desc = verb_desc.as_str();
-            bf_args
-                .world_state
-                .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
-                .await?
-        }
-        Variant::Int(verb_index) => {
-            let verb_index = *verb_index;
-            if verb_index < 1 {
-                return Ok(Error(E_INVARG));
-            }
-            let verb_index = (verb_index as usize) - 1;
-            bf_args
-                .world_state
-                .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
-                .await?
-        }
-        _ => return Ok(Error(E_TYPE)),
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+        Ok(v) => v,
+        Err(e) => return Ok(Error(e)),
     };
 
     // Right now set_verb_code is going to always compile to LambdaMOO 1.8.x. binary type.
@@ -538,26 +527,9 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::
         return Ok(Error(E_PERM));
     }
 
-    let verbdef = match bf_args.args[1].variant() {
-        Variant::Str(verb_desc) => {
-            let verb_desc = verb_desc.as_str();
-            bf_args
-                .world_state
-                .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
-                .await?
-        }
-        Variant::Int(verb_index) => {
-            let verb_index = *verb_index;
-            if verb_index < 1 {
-                return Ok(Error(E_INVARG));
-            }
-            let verb_index = (verb_index as usize) - 1;
-            bf_args
-                .world_state
-                .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
-                .await?
-        }
-        _ => return Ok(Error(E_TYPE)),
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+        Ok(v) => v,
+        Err(e) => return Ok(Error(e)),
     };
 
     bf_args
@@ -569,6 +541,83 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::
 }
 bf_declare!(delete_verb, bf_delete_verb);
 
+// Syntax:  disassemble (obj <object>, str <verb-desc>)   => list
+//
+// Returns a (longish) list of strings giving a listing of the server's internal ``compiled'' form of the verb as specified by <verb-desc>
+// on <object>.  This format is not documented and may indeed change from release to release, but some programmers may nonetheless find
+// the output of `disassemble()' interesting to peruse as a way to gain a deeper appreciation of how the server works.
+async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 2 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+        Ok(v) => v,
+        Err(e) => return Ok(Error(e)),
+    };
+
+    if verbdef.binary_type() != BinaryType::LambdaMoo18X {
+        warn!(object=?bf_args.args[0], verb=?bf_args.args[1], binary_type=?verbdef.binary_type(),
+            "disassemble: verb is not binary type MOO");
+        return Ok(Error(E_TYPE));
+    }
+
+    let verb_info = bf_args
+        .world_state
+        .retrieve_verb(bf_args.task_perms_who(), *obj, verbdef.uuid())
+        .await?;
+
+    if verb_info.binary().is_empty() {
+        return Ok(Ret(v_empty_list()));
+    }
+
+    let program = Program::from_sliceref(verb_info.binary());
+
+    // The output of disassemble is a list of strings, one for each instruction in the verb's program.
+    // But we also want some basic information on # of labels. Fork vectors. Jazz like that.
+    // But I'll just keep it simple for now.
+
+    let mut disassembly = Vec::new();
+    // Write literals indexed by their offset #
+    disassembly.push(v_str("LITERALS:"));
+    for (i, l) in program.literals.iter().enumerate() {
+        disassembly.push(v_string(format!("{: >3}: {}", i, l.to_literal())));
+    }
+
+    // Write jump labels indexed by their offset & showing position & optional name
+    disassembly.push(v_str("JUMP LABELS:"));
+    for (i, l) in program.jump_labels.iter().enumerate() {
+        if i < GlobalName::COUNT {
+            continue;
+        }
+        let name_of = match &l.name {
+            Some(name) => format!(" ({})", program.var_names.name_of(name).unwrap()),
+            None => "".to_string(),
+        };
+        disassembly.push(v_string(format!("{: >3}: {}{}", i, l.position.0, name_of)));
+    }
+
+    // Write variable names indexed by their offset
+    disassembly.push(v_str("VARIABLES:"));
+    for (i, v) in program.var_names.names.iter().enumerate() {
+        disassembly.push(v_string(format!("{: >3}: {}", i, v)));
+    }
+
+    // TODO: print fork vectors
+
+    // Display main vector (program); opcodes are indexed by their offset
+    disassembly.push(v_str("OPCODES:"));
+    for (i, op) in program.main_vector.iter().enumerate() {
+        disassembly.push(v_string(format!("{: >3}: {:?}", i, op)));
+    }
+
+    Ok(Ret(v_list(disassembly)))
+}
+bf_declare!(disassemble, bf_disassemble);
+
 impl VM {
     pub(crate) fn register_bf_verbs(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("verb_info")] = Arc::new(Box::new(BfVerbInfo {}));
@@ -579,7 +628,7 @@ impl VM {
         self.builtins[offset_for_builtin("set_verb_code")] = Arc::new(Box::new(BfSetVerbCode {}));
         self.builtins[offset_for_builtin("add_verb")] = Arc::new(Box::new(BfAddVerb {}));
         self.builtins[offset_for_builtin("delete_verb")] = Arc::new(Box::new(BfDeleteVerb {}));
-
+        self.builtins[offset_for_builtin("disassemble")] = Arc::new(Box::new(BfDisassemble {}));
         Ok(())
     }
 }

@@ -105,7 +105,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | delete_verb   | &check;  |       |
 | set_verb_code | &check;  |       |
 | eval          | &check;  |       |
-| disassemble   |          |       |
+| disassemble   | &check;  |       |
 | verb_code     | &check;  |       |
 
 ### Values / encoding
