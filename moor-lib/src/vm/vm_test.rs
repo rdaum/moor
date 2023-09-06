@@ -921,6 +921,32 @@ mod tests {
         assert_eq!(result, v_int(1));
     }
 
+    #[tokio::test]
+    async fn test_zero_bottom_rangeset() {
+        // MOO evaluates this successfully, but we E_RANGEd it:
+        // rest="me:words"; rest[0..2] = ""; return rest;
+        // 0 index in rangeset is permitted, but in rangeget it is not. 🤦
+        let program = r#"rest = "me:words"; rest[0..2] = ""; return rest;"#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_str(":words"));
+    }
+
+    #[tokio::test]
+    async fn test_zero_top_rangeset() {
+        // Likewise, MOO evaluates this successfully, but we E_RANGEd it:
+        //   Should return "me:words".
+        // rest = "me:test"; rest[1..0] = "; return rest;
+        let program = r#"rest = "me:words"; rest[1..0] = ""; return rest;"#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result = exec_vm(state.as_mut(), &mut vm).await;
+        assert_eq!(result, v_str("me:words"));
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_builtin() {
         let program = "return notify(#1, \"test\");";

@@ -187,7 +187,12 @@ impl Var {
             _ => return Ok(v_err(E_TYPE)),
         };
 
-        if from <= 0 || from > base_len + 1 || to < 1 || to > base_len {
+        // In range assignments only, MOO treats "0" for start (and even negative values) as
+        // "start of range."
+        // So we'll just min 'from' to '1' here.
+        // Does not hold for range retrievals.
+        let from = from.max(1);
+        if from > base_len + 1 || to > base_len {
             return Ok(v_err(E_RANGE));
         }
 
