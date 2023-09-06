@@ -17,7 +17,7 @@ use moor_value::NOTHING;
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::moo_vm_host::MooVmHost;
-use crate::tasks::scheduler::{SchedulerControlMsg, TaskDescription};
+use crate::tasks::scheduler::{AbortLimitReason, SchedulerControlMsg, TaskDescription};
 use crate::tasks::sessions::Session;
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
 use crate::tasks::{TaskId, VerbCall};
@@ -233,7 +233,7 @@ impl Task {
 
                         for l in traceback.iter() {
                             if let Err(send_error) =
-                                self.session.send_text(self.player, l.as_str()).await
+                                self.session.send_system_msg(self.player, l.as_str()).await
                             {
                                 warn!("Could not send traceback to player: {:?}", send_error);
                             }
@@ -271,6 +271,18 @@ impl Task {
                         return;
                     }
                     Ok(VMHostResponse::AbortLimit(reason)) => {
+                        let abort_reason_text = match reason {
+                            AbortLimitReason::Ticks(ticks) => {
+                                format!("Abort: Task exceeded ticks limit of {}", ticks)
+                            }
+                            AbortLimitReason::Time(time) => {
+                                format!("Abort: Task exceeded time limit of {:?}", time)
+                            }
+                        };
+                        self.session
+                            .send_system_msg(self.player, abort_reason_text.as_str())
+                            .await
+                            .expect("Could not send abort message to player");
                         self.world_state
                             .rollback()
                             .await
