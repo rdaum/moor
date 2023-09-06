@@ -611,7 +611,16 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::
     // Display main vector (program); opcodes are indexed by their offset
     disassembly.push(v_str("OPCODES:"));
     for (i, op) in program.main_vector.iter().enumerate() {
-        disassembly.push(v_string(format!("{: >3}: {:?}", i, op)));
+        let mut line_no_string = String::new();
+        let mut last_line_no = 0;
+        for (pc, line_no) in &program.line_number_spans {
+            if *pc == i {
+                line_no_string = format!("\t\t(line {})", last_line_no);
+                break;
+            }
+            last_line_no = *line_no;
+        }
+        disassembly.push(v_string(format!("{: >3}: {:?}{}", i, op, line_no_string)));
     }
 
     Ok(Ret(v_list(disassembly)))
