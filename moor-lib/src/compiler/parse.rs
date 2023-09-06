@@ -11,8 +11,8 @@ use tracing::instrument;
 
 use moor_value::util::unquote_str;
 use moor_value::var::error::Error::{
-    E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_PERM, E_PROPNF, E_QUOTA,
-    E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
+    E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
+    E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use moor_value::var::objid::Objid;
 use moor_value::var::{v_err, v_float, v_int, v_objid, v_str, v_string};
@@ -88,6 +88,7 @@ fn parse_atom(
                 "e_invarg" => v_err(E_INVARG),
                 "e_quota" => v_err(E_QUOTA),
                 "e_float" => v_err(E_FLOAT),
+                "e_none" => v_err(E_NONE),
                 &_ => {
                     panic!("unknown error")
                 }
