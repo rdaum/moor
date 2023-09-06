@@ -1,5 +1,6 @@
 use anyhow::Error;
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use moor_value::model::defset::HasUuid;
 use moor_value::model::objects::{ObjAttrs, ObjFlag};
@@ -582,6 +583,26 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
         Ok(vh)
+    }
+
+    async fn retrieve_verb(
+        &self,
+        perms: Objid,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<VerbInfo, WorldStateError> {
+        let verbs = self.client.get_verbs(obj).await?;
+        let vh = verbs
+            .find(&uuid)
+            .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
+        self.perms(perms)
+            .await?
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
+        let binary = self
+            .client
+            .get_verb_binary(vh.location(), vh.uuid())
+            .await?;
+        Ok(VerbInfo::new(vh, SliceRef::from_vec(binary)))
     }
 
     #[tracing::instrument(skip(self))]

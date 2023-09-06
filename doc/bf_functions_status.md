@@ -94,19 +94,19 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Verbs
 
-| Name          | Complete | Notes                                    |
-|---------------|----------|------------------------------------------|
-| verbs         | &check;  |                                          |
-| verb_info     | &check;  |                                          |
-| set_verb_info | &check;  |                                          |
-| verb_args     | &check;  |                                          |
-| set_verb_args | &check;  |                                          |
-| add_verb      |          |                                          |
-| delete_verb   |          |                                          |
-| set_verb_code |          |                                          |
-| eval          | &check;  |                                          |
-| disassemble   |          | Requires implementation of decompilation |
-| verb_code     |          | "                                        |
+| Name          | Complete | Notes |
+|---------------|----------|-------|
+| verbs         | &check;  |       |
+| verb_info     | &check;  |       |
+| set_verb_info | &check;  |       |
+| verb_args     | &check;  |       |
+| set_verb_args | &check;  |       |
+| add_verb      |          |       |
+| delete_verb   |          |       |
+| set_verb_code |          |       |
+| eval          | &check;  |       |
+| disassemble   |          |       |
+| verb_code     | &check;  |       |
 
 ### Values / encoding
 

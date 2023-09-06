@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use crate::model::objects::ObjFlag;
 use crate::model::objset::ObjSet;
@@ -184,7 +185,7 @@ pub trait WorldState: Send + Sync {
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError>;
 
-    /// Get the verb with the given name on the given object. Without doing inheritance resolution.
+    /// Get the verbdef with the given name on the given object. Without doing inheritance resolution.
     async fn get_verb(
         &self,
         perms: Objid,
@@ -192,13 +193,21 @@ pub trait WorldState: Send + Sync {
         vname: &str,
     ) -> Result<VerbDef, WorldStateError>;
 
-    /// Get the verb at numbered offset on the given object.
+    /// Get the verbdef at numbered offset on the given object.
     async fn get_verb_at_index(
         &self,
         perms: Objid,
         obj: Objid,
         vidx: usize,
     ) -> Result<VerbDef, WorldStateError>;
+
+    /// Get the verb binary for the given verbdef.
+    async fn retrieve_verb(
+        &self,
+        perms: Objid,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<VerbInfo, WorldStateError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
     async fn find_method_verb_on(

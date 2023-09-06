@@ -216,7 +216,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
         .unwrap_or(BF_MOVE_TRAMPOLINE_START_ACCEPT);
     trace!(what = ?what, where_to = ?*whereto, tramp, "move: looking up :accept verb");
 
-    let perms = bf_args.terk_perms().await?;
+    let perms = bf_args.task_perms().await?;
     let mut shortcircuit = false;
     loop {
         match tramp {
@@ -438,7 +438,7 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     let f = *f == 1;
 
     // User must be a wizard.
-    bf_args.terk_perms().await?.check_wizard()?;
+    bf_args.task_perms().await?.check_wizard()?;
 
     // Get and set object flags
     let mut flags = bf_args.world_state.flags_of(*obj).await?;
@@ -455,7 +455,7 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         .await?;
 
     // If the object was player, update the VM's copy of the perms.
-    if *obj == bf_args.terk_perms().await?.who {
+    if *obj == bf_args.task_perms().await?.who {
         bf_args.vm.set_task_perms(*obj);
     }
 

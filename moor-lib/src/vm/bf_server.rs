@@ -46,7 +46,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
-    bf_args.terk_perms().await?.check_obj_owner_perms(*player)?;
+    bf_args.task_perms().await?.check_obj_owner_perms(*player)?;
 
     if let Err(send_error) = bf_args.session.send_text(*player, msg.as_str()).await {
         warn!(
@@ -114,7 +114,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, a
     };
 
     // If the caller is not a wizard, perms_for must be the caller
-    let perms = bf_args.terk_perms().await?;
+    let perms = bf_args.task_perms().await?;
     if !perms.check_is_wizard()? && perms_for != perms.who {
         return Ok(Error(E_PERM));
     }
@@ -212,7 +212,7 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     };
 
     let caller = bf_args.caller_perms();
-    if !bf_args.terk_perms().await?.check_is_wizard()? && caller != *player {
+    if !bf_args.task_perms().await?.check_is_wizard()? && caller != *player {
         return Ok(Error(E_PERM));
     }
 
@@ -237,7 +237,7 @@ async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow:
         Some(msg.as_str().to_string())
     };
 
-    bf_args.terk_perms().await?.check_wizard()?;
+    bf_args.task_perms().await?.check_wizard()?;
     bf_args.session.shutdown(msg).await.unwrap();
 
     Ok(Ret(v_none()))
@@ -401,7 +401,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow
         .scheduler_sender
         .send(SchedulerControlMsg::KillTask {
             victim_task_id,
-            sender_permissions: bf_args.terk_perms().await?,
+            sender_permissions: bf_args.task_perms().await?,
             result_sender: send,
         })
         .expect("scheduler is not listening");
@@ -442,7 +442,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         .scheduler_sender
         .send(SchedulerControlMsg::ResumeTask {
             queued_task_id: task_id,
-            sender_permissions: bf_args.terk_perms().await?,
+            sender_permissions: bf_args.task_perms().await?,
             return_value,
             result_sender: send,
         })
@@ -499,7 +499,7 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyh
         return Ok(Error(E_TYPE));
     };
 
-    let task_perms = bf_args.terk_perms().await?;
+    let task_perms = bf_args.task_perms().await?;
     if task_perms.who != *player && !task_perms.check_is_wizard()? {
         return Ok(Error(E_PERM));
     }
@@ -572,7 +572,7 @@ async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
         false
     };
 
-    if !bf_args.terk_perms().await?.check_is_wizard()? {
+    if !bf_args.task_perms().await?.check_is_wizard()? {
         return Ok(Error(E_PERM));
     }
 

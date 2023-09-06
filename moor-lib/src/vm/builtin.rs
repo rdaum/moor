@@ -42,7 +42,7 @@ impl BfCallState<'_> {
     pub fn task_perms_who(&self) -> Objid {
         self.vm.task_perms()
     }
-    pub async fn terk_perms(&self) -> Result<Perms, anyhow::Error> {
+    pub async fn task_perms(&self) -> Result<Perms, anyhow::Error> {
         let who = self.task_perms_who();
         let flags = self.world_state.flags_of(who).await?;
         Ok(Perms { who, flags })
