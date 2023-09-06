@@ -12,7 +12,7 @@ use moor_value::util::bitenum::BitEnum;
 use moor_value::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use moor_value::var::list::List;
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_list, v_none, v_objid, v_str, v_string};
+use moor_value::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
@@ -345,6 +345,11 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Er
         .world_state
         .retrieve_verb(bf_args.task_perms_who(), *obj, verbdef.uuid())
         .await?;
+
+    // If the binary is empty, just return empty rather than try to decode it.
+    if verb_info.binary().is_empty() {
+        return Ok(Ret(v_empty_list()));
+    }
 
     // Decode.
     let program = Program::from_sliceref(verb_info.binary());
