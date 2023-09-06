@@ -48,10 +48,11 @@ impl VM {
             caller: self.caller(),
         };
         debug!(
-            "Verb call: {}:{}({}) caller_perms: {} caller: {} this: {}",
+            "Verb call: {}:{}({}) line: #{}; caller_perms: {} caller: {} this: {}",
             this,
             verb_name,
             args_literal(args),
+            self.top().find_line_no(self.top().pc).unwrap_or(0),
             self.top().permissions,
             self.caller(),
             this

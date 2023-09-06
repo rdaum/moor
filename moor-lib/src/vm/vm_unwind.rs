@@ -292,7 +292,9 @@ impl VM {
         &mut self,
         why: FinallyReason,
     ) -> Result<ExecutionResult, anyhow::Error> {
-        debug!(?why, this = ?self.top().this, from = self.top().verb_name, "unwind_stack");
+        debug!(?why, this = ?self.top().this, from = self.top().verb_name,
+               line = self.top().find_line_no(self.top().pc).unwrap_or(0),
+               "unwind_stack");
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             while a.valstack.pop().is_some() {
