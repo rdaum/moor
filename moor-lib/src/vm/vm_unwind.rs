@@ -239,7 +239,11 @@ impl VM {
         self.parent_activation_mut().push(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        if let Some(activation) = self.stack.last() {
+        // In this case we're looking for a non-bf frame. The actual verb which called the bf.
+        let verb_frame = self.stack.iter().rev().find(|a| a.bf_index.is_none());
+
+        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
+        if let Some(activation) = verb_frame {
             if activation
                 .verb_info
                 .verbdef()
