@@ -461,7 +461,9 @@ impl Decompile {
 
                 // Have to reconstruct arg list ...
                 let Expr::List(args) = args else {
-                    return Err(MalformedProgram("expected list of args".to_string()));
+                    return Err(MalformedProgram(
+                        format!("expected list of args, got {:?} instead", args).to_string(),
+                    ));
                 };
                 self.push_expr(Expr::Call {
                     function: builtin.clone(),
@@ -694,19 +696,15 @@ impl Decompile {
             }
             Op::IfQues(label) => {
                 let condition = self.pop_expr();
-                let label_position = self.find_jump(&label)?.position.0;
-                let (_, _) = self.decompile_statements_until_match(|position, o| {
-                    if position == label_position {
-                        return true;
-                    }
-                    if let Op::Jump { .. } = o {
-                        true
-                    } else {
-                        false
-                    }
-                })?;
+                // Read up to the jump, decompiling as we go.
+                self.decompile_statements_up_to(&label)?;
+                // We should be findin' a jump now.
+                let Op::Jump { label: jump_label } = self.next()? else {
+                    return Err(MalformedProgram("expected Jump".to_string()));
+                };
                 let consequent = self.pop_expr();
-                self.decompile()?;
+                // Now decompile up to and including jump_label's offset
+                self.decompile_statements_until(&jump_label)?;
                 let alternate = self.pop_expr();
                 let e = Expr::Cond {
                     condition: Box::new(condition?),
@@ -1132,6 +1130,19 @@ mod tests {
     fn test_decompile_catch_handler() {
         let program = r#"
           `1/0 ! ANY';
+        "#;
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    fn test_no_arg_builtin_in_ternary() {
+        let program = r#"
+            2 ? 0 | caller_perms();
         "#;
         let (parse, decompiled, binary) = parse_decompile(program);
         assert_eq!(
