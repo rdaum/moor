@@ -35,8 +35,8 @@ const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);
 
 // TODO allow these to be set by command line arguments, as well.
 // Note these can be overriden in-core.
-const DEFAULT_FG_TICKS: usize = 30_000;
-const DEFAULT_BG_TICKS: usize = 15_000;
+const DEFAULT_FG_TICKS: usize = 60_000;
+const DEFAULT_BG_TICKS: usize = 30_000;
 const DEFAULT_FG_SECONDS: u64 = 5;
 const DEFAULT_BG_SECONDS: u64 = 3;
 const DEFAULT_MAX_STACK_DEPTH: usize = 50;
