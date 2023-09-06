@@ -101,9 +101,9 @@ The following is a table of the status of various builtin-functions, to keep an 
 | set_verb_info | &check;  |       |
 | verb_args     | &check;  |       |
 | set_verb_args | &check;  |       |
-| add_verb      |          |       |
+| add_verb      | &check;  |       |
 | delete_verb   |          |       |
-| set_verb_code |          |       |
+| set_verb_code | &check;  |       |
 | eval          | &check;  |       |
 | disassemble   |          |       |
 | verb_code     | &check;  |       |

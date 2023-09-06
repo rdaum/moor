@@ -185,6 +185,14 @@ pub trait WorldState: Send + Sync {
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError>;
 
+    async fn update_verb_with_id(
+        &mut self,
+        perms: Objid,
+        obj: Objid,
+        uuid: Uuid,
+        verb_attrs: VerbAttrs,
+    ) -> Result<(), WorldStateError>;
+
     /// Get the verbdef with the given name on the given object. Without doing inheritance resolution.
     async fn get_verb(
         &self,

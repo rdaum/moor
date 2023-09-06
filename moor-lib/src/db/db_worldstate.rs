@@ -557,6 +557,24 @@ impl WorldState for DbTxWorldState {
         Ok(())
     }
 
+    async fn update_verb_with_id(
+        &mut self,
+        perms: Objid,
+        obj: Objid,
+        uuid: Uuid,
+        verb_attrs: VerbAttrs,
+    ) -> Result<(), WorldStateError> {
+        let verbs = self.client.get_verbs(obj).await?;
+        let vh = verbs
+            .find(&uuid)
+            .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
+        self.perms(perms)
+            .await?
+            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
+        self.client.update_verb(obj, vh.uuid(), verb_attrs).await?;
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self))]
     async fn get_verb(
         &self,
