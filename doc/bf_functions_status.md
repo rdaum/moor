@@ -102,7 +102,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | verb_args     | &check;  |       |
 | set_verb_args | &check;  |       |
 | add_verb      | &check;  |       |
-| delete_verb   |          |       |
+| delete_verb   | &check;  |       |
 | set_verb_code | &check;  |       |
 | eval          | &check;  |       |
 | disassemble   |          |       |

@@ -164,7 +164,7 @@ pub trait WorldState: Send + Sync {
         &mut self,
         perms: Objid,
         obj: Objid,
-        vname: &str,
+        verb: Uuid,
     ) -> Result<(), WorldStateError>;
 
     /// Update data about a verb on the given object.

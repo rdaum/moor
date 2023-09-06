@@ -515,9 +515,12 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        vname: &str,
+        uuid: Uuid,
     ) -> Result<(), WorldStateError> {
-        let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
+        let verbs = self.client.get_verbs(obj).await?;
+        let vh = verbs
+            .find(&uuid)
+            .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;

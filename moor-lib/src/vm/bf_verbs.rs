@@ -514,6 +514,56 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Err
 }
 bf_declare!(add_verb, bf_add_verb);
 
+//Function: none delete_verb (obj object, str verb-desc)
+async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 2 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    // Verify caller is a programmer.
+    if !bf_args
+        .task_perms()
+        .await?
+        .flags
+        .contains(ObjFlag::Programmer)
+    {
+        return Ok(Error(E_PERM));
+    }
+
+    let verbdef = match bf_args.args[1].variant() {
+        Variant::Str(verb_desc) => {
+            let verb_desc = verb_desc.as_str();
+            bf_args
+                .world_state
+                .get_verb(bf_args.task_perms_who(), *obj, verb_desc)
+                .await?
+        }
+        Variant::Int(verb_index) => {
+            let verb_index = *verb_index;
+            if verb_index < 1 {
+                return Ok(Error(E_INVARG));
+            }
+            let verb_index = (verb_index as usize) - 1;
+            bf_args
+                .world_state
+                .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
+                .await?
+        }
+        _ => return Ok(Error(E_TYPE)),
+    };
+
+    bf_args
+        .world_state
+        .remove_verb(bf_args.task_perms_who(), *obj, verbdef.uuid())
+        .await?;
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(delete_verb, bf_delete_verb);
+
 impl VM {
     pub(crate) fn register_bf_verbs(&mut self) -> Result<(), anyhow::Error> {
         self.builtins[offset_for_builtin("verb_info")] = Arc::new(Box::new(BfVerbInfo {}));
@@ -523,6 +573,7 @@ impl VM {
         self.builtins[offset_for_builtin("verb_code")] = Arc::new(Box::new(BfVerbCode {}));
         self.builtins[offset_for_builtin("set_verb_code")] = Arc::new(Box::new(BfSetVerbCode {}));
         self.builtins[offset_for_builtin("add_verb")] = Arc::new(Box::new(BfAddVerb {}));
+        self.builtins[offset_for_builtin("delete_verb")] = Arc::new(Box::new(BfDeleteVerb {}));
 
         Ok(())
     }
