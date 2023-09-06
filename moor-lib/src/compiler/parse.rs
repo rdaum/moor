@@ -15,7 +15,7 @@ use moor_value::var::error::Error::{
     E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use moor_value::var::objid::Objid;
-use moor_value::var::{v_err, v_float, v_int, v_objid, v_str};
+use moor_value::var::{v_err, v_float, v_int, v_objid, v_str, v_string};
 
 use crate::compiler::ast::Arg::{Normal, Splice};
 use crate::compiler::ast::{
@@ -224,11 +224,11 @@ fn parse_expr(
             }
             Rule::sysprop_call => {
                 let mut inner = primary.into_inner();
-                let verb = inner.next().unwrap().as_str();
+                let verb = inner.next().unwrap().as_str()[1..].to_string();
                 let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(Expr::Verb {
                     location: Box::new(Expr::VarExpr(v_objid(SYSTEM_OBJECT))),
-                    verb: Box::new(Expr::VarExpr(v_str(verb))),
+                    verb: Box::new(Expr::VarExpr(v_string(verb))),
                     args,
                 })
             }

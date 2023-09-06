@@ -7,7 +7,7 @@ mod tests {
     use moor_value::model::verbs::{BinaryType, VerbFlag};
     use moor_value::model::world_state::{WorldState, WorldStateSource};
     use moor_value::util::bitenum::BitEnum;
-    use moor_value::var::error::Error::E_VERBNF;
+    use moor_value::var::error::Error::E_DIV;
     use moor_value::var::objid::Objid;
     use moor_value::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use moor_value::NOTHING;
@@ -724,14 +724,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_catch_expr_any() {
-        let program = "return `raise(E_VERBNF) ! ANY';";
+        let program = "return `1/0 ! ANY';";
         let mut state = world_with_test_program(program).await;
 
         let mut vm = VM::new();
 
         call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
-        assert_eq!(result, v_err(E_VERBNF));
+        assert_eq!(result, v_err(E_DIV));
     }
 
     #[tokio::test]

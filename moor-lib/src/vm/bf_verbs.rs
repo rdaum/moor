@@ -356,7 +356,7 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Er
         }
     };
     let split = unparsed.split('\n');
-    let lines = split.map(|s| v_str(s)).collect::<Vec<_>>();
+    let lines = split.map(v_str).collect::<Vec<_>>();
     Ok(Ret(v_list(lines)))
 }
 bf_declare!(verb_code, bf_verb_code);

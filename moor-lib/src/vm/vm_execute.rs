@@ -6,7 +6,7 @@ use tracing::trace;
 
 use moor_value::model::world_state::WorldState;
 use moor_value::var::error::Error;
-use moor_value::var::error::Error::{E_ARGS, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
+use moor_value::var::error::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
 
@@ -308,6 +308,13 @@ impl VM {
                     binary_var_op!(self, sub);
                 }
                 Op::Div => {
+                    // Explicit division by zero check to raise E_DIV.
+                    // Note that LambdaMOO consider 1/0.0 to be E_DIV, but Rust permits it, creating
+                    // `inf`. I'll follow Rust's lead here, unless it leads to problems.
+                    let divargs = self.peek(2);
+                    if let Variant::Int(0) = divargs[1].variant() {
+                        return self.push_error(E_DIV);
+                    };
                     binary_var_op!(self, div);
                 }
                 Op::Add => {

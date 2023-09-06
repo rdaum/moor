@@ -3,7 +3,7 @@ mod tests {
     use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
     use crate::compiler::codegen::{compile, CompileError};
     use crate::compiler::labels::{Label, Name, Offset};
-    use moor_value::var::error::Error::{E_INVARG, E_PERM, E_PROPNF};
+    use moor_value::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF};
     use moor_value::var::objid::Objid;
     use moor_value::var::{v_int, v_obj};
 
@@ -962,6 +962,8 @@ mod tests {
                     id: Name(raise_num as u32)
                 },
                 EndCatch(1.into()),
+                Val(1.into()),
+                Ref,
                 Return,
                 Done
             ]
@@ -1002,6 +1004,29 @@ mod tests {
         )
     }
 
+    #[test]
+    fn test_sysverbcall() {
+        let program = "$verb_metadata(#1, 1);";
+        let binary = compile(program).unwrap();
+        let verb_metadata = binary.find_literal("verb_metadata".into());
+        let objone = binary.find_literal(Objid(1).into());
+        let one = binary.find_literal(1.into());
+        let sysobj = binary.find_literal(Objid(0).into());
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(sysobj),
+                Imm(verb_metadata),
+                Imm(objone),
+                MakeSingletonList,
+                Imm(one),
+                ListAddTail,
+                CallVerb,
+                Pop,
+                Done
+            ]
+        )
+    }
     #[test]
     fn test_basic_scatter_assign() {
         let program = "{a, b, c} = args;";
@@ -1485,5 +1510,42 @@ mod tests {
                 Done
             ]
         );
+    }
+
+    #[test]
+    fn test_catch_handler_regression() {
+        let prg = "`this ! E_INVIND';";
+        let binary = compile(prg).unwrap();
+        let this = binary.find_var("this");
+        let e_invind = binary.find_literal(E_INVIND.into());
+
+        /*
+         0: 100 000               PUSH_LITERAL E_INVIND
+         2: 016                 * MAKE_SINGLETON_LIST
+         6: 112 002 015           PUSH_LABEL 15
+         9: 112 007             * CATCH
+        11: 073                   PUSH this
+        12: 112 003 017           END_CATCH 17
+        15: 124                   NUM 1
+        16: 014                 * INDEX
+        17: 111                   POP
+        18: 123                   NUM 0
+        19: 030 023             * AND 23
+        */
+        assert_eq!(
+            binary.main_vector,
+            vec![
+                Imm(e_invind),
+                MakeSingletonList,
+                PushLabel(0.into()),
+                Catch(0.into()),
+                Push(this),
+                EndCatch(1.into()),
+                Val(1.into()),
+                Ref,
+                Pop,
+                Done
+            ]
+        )
     }
 }

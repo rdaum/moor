@@ -344,7 +344,7 @@ impl VM {
                         }
 
                         if found {
-                            a.push(v_err(*code));
+                            a.push(v_list(vec![v_err(*code)]));
                             return Ok(ExecutionResult::More);
                         }
                     }

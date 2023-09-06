@@ -48,9 +48,9 @@ impl Decompile {
         Ok(op)
     }
     fn pop_expr(&mut self) -> Result<Expr, DecompileError> {
-        self.expr_stack.pop_front().ok_or_else(|| {
-            DecompileError::MalformedProgram("expected expression on stack".to_string())
-        })
+        self.expr_stack
+            .pop_front()
+            .ok_or_else(|| MalformedProgram("expected expression on stack".to_string()))
     }
     fn push_expr(&mut self, expr: Expr) {
         self.expr_stack.push_front(expr);
@@ -654,20 +654,33 @@ impl Decompile {
                 };
                 let try_expr = self.pop_expr()?;
 
-                // There's either an except (Pop, then expr) or not (Val, Ref).
-                let except = match self.next()? {
+                // There's either an except (Pop, then expr) or not (Val(1), Ref).
+                let next = self.next()?;
+                let except = match next {
                     Op::Pop => {
                         self.decompile_statements_until(&end_label)?;
                         Some(Box::new(self.pop_expr()?))
                     }
-                    Op::Ref => {
+                    Op::Val(v) => {
+                        // V must be '1' and next opcode must be ref
+                        let Variant::Int(1) = v.variant() else {
+                            return Err(MalformedProgram(
+                                "expected literal '1' in catch".to_string(),
+                            ));
+                        };
                         let Op::Ref = self.next()? else {
                             return Err(MalformedProgram("expected Ref".to_string()));
                         };
                         None
                     }
                     _ => {
-                        return Err(MalformedProgram("bad end to catch expr".to_string()));
+                        return Err(MalformedProgram(
+                            format!(
+                                "bad end to catch expr (expected Pop or Val/Ref, got {:?}",
+                                next
+                            )
+                            .to_string(),
+                        ));
                     }
                 };
                 self.push_expr(Expr::Catch {
@@ -1106,6 +1119,20 @@ mod tests {
     #[traced_test]
     fn test_if_after_try() {
         let program = "try return x; except (E_VARNF) endtry; if (x) return 1; endif;";
+        let (parse, decompiled, binary) = parse_decompile(program);
+        assert_eq!(
+            parse.stmts, decompiled.stmts,
+            "Decompile mismatch for {}",
+            binary
+        );
+    }
+
+    #[test]
+    /// Regression test for catch handling when the "expr-2" portion is missing. This is valid MOO.
+    fn test_decompile_catch_handler() {
+        let program = r#"
+          `1/0 ! ANY';
+        "#;
         let (parse, decompiled, binary) = parse_decompile(program);
         assert_eq!(
             parse.stmts, decompiled.stmts,

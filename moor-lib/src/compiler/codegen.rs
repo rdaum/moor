@@ -470,10 +470,16 @@ impl CodegenState {
                  * instead of it being the value of the main expression, we have
                  * the exception pushed before entering the handler.
                  */
-                if let Some(except) = except {
-                    self.emit(Op::Pop);
-                    self.pop_stack(1);
-                    self.generate_expr(except.as_ref())?;
+                match except {
+                    None => {
+                        self.emit(Op::Val(v_int(1)));
+                        self.emit(Op::Ref);
+                    }
+                    Some(except) => {
+                        self.emit(Op::Pop);
+                        self.pop_stack(1);
+                        self.generate_expr(except.as_ref())?;
+                    }
                 }
                 self.commit_label(end_label);
             }

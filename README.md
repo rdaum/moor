@@ -37,12 +37,14 @@ client connectivity with websockets and such.
 
 ### Missing/ Next steps
 
-   * Bugs bugs bugs.
-   * Decompilation support (along with line numbers in tracebacks); this is about half done.
-   * Dump to textdump format. (Requires above)
+   * Bugs bugs bugs. Collect em' all.
+   * Forked tasks resumption from DB and from textdump load.
+   * Network output from forked tasks probably broken.
+   * Dump to textdump format (needed?)
    * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog slow 
      without it
-   * More builtins. See [bf_functions_status.md](./doc/bf_functions_status.md) for chart of current status.
+   * Prompt-receiving network input (needed?)
+   * Better auth.
 
 ## LambdaMOO is 30+ years old, why remain compatible?
 
