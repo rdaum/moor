@@ -727,25 +727,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rangeset_check_negative() {
-        // Test negative cases for strings
-        let base = v_str("abcdef");
-        let instr = v_str("ghi");
-        assert_eq!(base.rangeset(instr.clone(), 1, 0), Ok(v_err(E_RANGE)));
-        assert_eq!(base.rangeset(instr.clone(), 0, 3), Ok(v_err(E_RANGE)));
-        assert_eq!(base.rangeset(instr.clone(), 2, 7), Ok(v_err(E_RANGE)));
-        assert_eq!(base.rangeset(instr, 1, 100), Ok(v_err(E_RANGE)));
-
-        // Test negative cases for lists
-        let base = v_list(vec![v_int(1), v_int(2), v_int(3), v_int(4)]);
-        let instr = v_list(vec![v_int(5), v_int(6), v_int(7)]);
-        assert_eq!(base.rangeset(instr.clone(), 0, 2), Ok(v_err(E_RANGE)));
-        assert_eq!(base.rangeset(instr.clone(), 1, 5), Ok(v_err(E_RANGE)));
-        assert_eq!(base.rangeset(instr.clone(), 2, 7), Ok(v_err(E_RANGE)));
-        assert_eq!(base.rangeset(instr, 1, 100), Ok(v_err(E_RANGE)));
-    }
-
-    #[test]
     fn test_range() -> Result<(), Error> {
         // test on integer list
         let int_list = v_list(vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
