@@ -22,49 +22,53 @@ struct Unparse {
 }
 
 impl ast::Expr {
+    /// Returns the precedence of the operator. The higher the return value the higher the precedent.
     fn precedence(&self) -> u8 {
-        // Returns the precedence of the operator. Higher values should be evaluated first.
-        match self {
-            ast::Expr::Assign { .. } => 1,
-            ast::Expr::Cond { .. } => 2,
-            ast::Expr::And(_, _) => 6,
-            ast::Expr::Or(_, _) => 5,
+        // The table here is in reverse order from the return argument because the numbers are based
+        // directly on http://en.cppreference.com/w/cpp/language/operator_precedence
+        // Should be kept in sync with the pratt parser in `parse.rs`
+        // Starting from lowest to highest precedence...
+        // TODO: drive Pratt and this from one common precedence table.
+        let cpp_ref_prep = match self {
+            ast::Expr::Scatter(_, _) | ast::Expr::Assign { .. } => 14,
+            ast::Expr::Cond { .. } => 13,
+            ast::Expr::Or(_, _) => 12,
+            ast::Expr::And(_, _) => 11,
             ast::Expr::Binary(op, _, _) => match op {
-                ast::BinaryOp::Eq => 4,
-                ast::BinaryOp::NEq => 4,
-                ast::BinaryOp::Gt => 4,
-                ast::BinaryOp::GtE => 4,
-                ast::BinaryOp::Lt => 4,
-                ast::BinaryOp::LtE => 4,
-                ast::BinaryOp::In => 4,
+                ast::BinaryOp::Eq => 7,
+                ast::BinaryOp::NEq => 7,
+                ast::BinaryOp::Gt => 6,
+                ast::BinaryOp::GtE => 6,
+                ast::BinaryOp::Lt => 6,
+                ast::BinaryOp::LtE => 6,
+                ast::BinaryOp::In => 6,
 
-                ast::BinaryOp::Add => 5,
-                ast::BinaryOp::Sub => 5,
+                ast::BinaryOp::Add => 4,
+                ast::BinaryOp::Sub => 4,
 
-                ast::BinaryOp::Mul => 6,
-                ast::BinaryOp::Div => 6,
-                ast::BinaryOp::Mod => 6,
+                ast::BinaryOp::Mul => 3,
+                ast::BinaryOp::Div => 3,
+                ast::BinaryOp::Mod => 3,
 
-                ast::BinaryOp::Exp => 7,
+                ast::BinaryOp::Exp => 2,
             },
 
-            ast::Expr::Unary(_, _) => 8,
+            ast::Expr::Unary(_, _) => 1,
 
-            ast::Expr::Prop { .. } => 9,
-            ast::Expr::Verb { .. } => 9,
-            ast::Expr::Range { .. } => 9,
-            ast::Expr::Index(_, _) => 9,
+            ast::Expr::Prop { .. } => 1,
+            ast::Expr::Verb { .. } => 1,
+            ast::Expr::Range { .. } => 1,
+            ast::Expr::Index(_, _) => 2,
 
-            ast::Expr::Scatter(_, _) => 8,
-
-            ast::Expr::VarExpr(_) => 10,
-            ast::Expr::Id(_) => 10,
-            ast::Expr::List(_) => 10,
-            ast::Expr::Pass { .. } => 10,
-            ast::Expr::Call { .. } => 10,
-            ast::Expr::Length => 10,
-            ast::Expr::Catch { .. } => 10,
-        }
+            ast::Expr::VarExpr(_) => 1,
+            ast::Expr::Id(_) => 1,
+            ast::Expr::List(_) => 1,
+            ast::Expr::Pass { .. } => 1,
+            ast::Expr::Call { .. } => 1,
+            ast::Expr::Length => 1,
+            ast::Expr::Catch { .. } => 1,
+        };
+        return 15 - cpp_ref_prep;
     }
 }
 
@@ -168,23 +172,32 @@ impl Unparse {
                 };
                 Ok(format!("{location}{prop}"))
             }
-            ast::Expr::Call { function, args } => {
-                let mut buffer = String::new();
-                buffer.push_str(function);
-                buffer.push('(');
-                buffer.push_str(self.unparse_args(args)?.as_str());
-                buffer.push(')');
-                Ok(buffer)
-            }
             ast::Expr::Verb {
                 location,
                 verb,
                 args,
             } => {
+                let location = match (&**location, &**verb) {
+                    (ast::Expr::VarExpr(var), ast::Expr::Id(_)) if var.is_root() => {
+                        String::from("$")
+                    }
+                    _ => format!("{}:", self.unparse_expr(location).unwrap()),
+                };
+                let verb = match &**verb {
+                    ast::Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
+                    ast::Expr::VarExpr(var) => self.unparse_var(var, true),
+                    _ => self.unparse_expr(verb).unwrap(),
+                };
                 let mut buffer = String::new();
-                buffer.push_str(brace_if_lower(location).as_str());
-                buffer.push(':');
-                buffer.push_str(brace_if_lower(verb).as_str());
+                buffer.push_str(format!("{location}{verb}").as_str());
+                buffer.push('(');
+                buffer.push_str(self.unparse_args(args)?.as_str());
+                buffer.push(')');
+                Ok(buffer)
+            }
+            ast::Expr::Call { function, args } => {
+                let mut buffer = String::new();
+                buffer.push_str(function);
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args)?.as_str());
                 buffer.push(')');
@@ -328,7 +341,15 @@ impl Unparse {
                 if let Some(id) = id {
                     base_str.push_str(self.names.name_of(id).unwrap());
                 }
-                base_str.push_str(format!("({})\n{}endwhile", cond_frag, stmt_frag).as_str());
+                base_str.push_str(
+                    format!(
+                        "({})\n{}{}endwhile",
+                        cond_frag,
+                        stmt_frag,
+                        " ".repeat(indent)
+                    )
+                    .as_str(),
+                );
             }
             StmtNode::Fork { id, time, body } => {
                 let delay_frag = self.unparse_expr(time)?;
@@ -337,7 +358,15 @@ impl Unparse {
                 if let Some(id) = id {
                     base_str.push_str(self.names.name_of(id).unwrap());
                 }
-                base_str.push_str(format!("({})\n{}\nendfork", delay_frag, stmt_frag).as_str());
+                base_str.push_str(
+                    format!(
+                        "({})\n{}\n{}endfork",
+                        delay_frag,
+                        stmt_frag,
+                        " ".repeat(indent)
+                    )
+                    .as_str(),
+                );
             }
             StmtNode::TryExcept { body, excepts } => {
                 let stmt_frag = self.unparse_stmts(body, indent + 4)?;
@@ -352,6 +381,7 @@ impl Unparse {
                     let catch_codes = self.unparse_catch_codes(&except.codes)?;
                     base_str.push_str(format!("({catch_codes})\n{stmt_frag}").as_str());
                 }
+                base_str.push_str(" ".repeat(indent).as_str());
                 base_str.push_str("endtry");
             }
             StmtNode::TryFinally { body, handler } => {
