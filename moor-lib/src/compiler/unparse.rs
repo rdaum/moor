@@ -7,6 +7,14 @@ use crate::compiler::parse::Parse;
 
 use super::labels::Names;
 
+// TODO:
+//  - "" for empty string:
+//    MOO: rest[1..match(rest, "^ *")[2]] = "" vs
+//   MOOR: rest[1..match(rest, "^ *")[2]] = ;
+//  - sysobj calls:
+//    MOO: $bleh(foo) vs
+//   MOOR: #0.bleh(foo)
+
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
 struct Unparse {
