@@ -2,6 +2,7 @@ extern crate core;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::builder::ValueHint;
 use clap::Parser;
@@ -9,17 +10,22 @@ use clap_derive::Parser;
 use strum::VariantNames;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::RwLock;
 use tracing::info;
 use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 
+use crate::repl_session::ReplSession;
 use moor_lib::db::{DatabaseBuilder, DatabaseType};
 use moor_lib::tasks::scheduler::Scheduler;
 use moor_lib::textdump::load_db::textdump_load;
+use moor_value::model::world_state::WorldStateSource;
+use moor_value::var::objid::Objid;
 
 use crate::server::routes::mk_routes;
 use crate::server::ws_server::WebSocketServer;
 
+mod repl_session;
 mod server;
 
 #[macro_export]
@@ -38,7 +44,7 @@ struct Args {
     #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
     textdump: Option<PathBuf>,
 
-    #[arg(value_name = "listen", help = "Listen address")]
+    #[arg(value_name = "listen", help = "HTTP server listen address.")]
     listen_address: Option<String>,
 
     #[arg(long,
@@ -54,6 +60,34 @@ struct Args {
         help = "Enable perfetto/chromium tracing output"
     )]
     perfetto_tracing: Option<bool>,
+
+    #[arg(
+        long,
+        value_name = "repl",
+        help = "Start a Read-Eval-Print loop on the attached console"
+    )]
+    repl: Option<bool>,
+}
+
+async fn run_repl_if_enabled(
+    run_repl: Option<bool>,
+    scheduler: Scheduler,
+    state_source: Arc<dyn WorldStateSource>,
+) -> Option<()> {
+    if let Some(true) = run_repl {
+        info!("Starting Repl...");
+        let repl_session = Arc::new(ReplSession {
+            player: Objid(2),
+            connect_time: std::time::Instant::now(),
+            last_activity: RwLock::new(std::time::Instant::now()),
+        });
+
+        repl_session
+            .session_loop(scheduler.clone(), state_source.clone())
+            .await;
+        info!("Repl exited.");
+    }
+    None
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -66,7 +100,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .finish();
     let _perfetto_guard = match args.perfetto_tracing {
         Some(true) => {
@@ -114,11 +148,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let state_source = db_source.world_state_source().unwrap();
     let scheduler = Scheduler::new(state_source.clone());
 
-    let addr = args
-        .listen_address
-        .unwrap_or_else(|| "0.0.0.0:8080".to_string());
-
     let (shutdown_sender, mut shutdown_receiver) = tokio::sync::mpsc::channel(1);
+
+    let repl_run = run_repl_if_enabled(args.repl.clone(), scheduler.clone(), state_source.clone());
 
     let server_scheduler = scheduler.clone();
     let ws_server = WebSocketServer::new(server_scheduler, shutdown_sender);
@@ -130,8 +162,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let loop_scheduler = scheduler.clone();
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
-    let main_router = mk_routes(state_source, ws_server);
+    let main_router = mk_routes(state_source.clone(), ws_server);
 
+    let addr = args
+        .listen_address
+        .unwrap_or_else(|| "0.0.0.0:8080".to_string());
     let address = &addr.parse::<SocketAddr>().unwrap();
     info!(address=?address, "Listening");
     let axum_server = tokio::spawn(
@@ -139,30 +174,27 @@ async fn main() -> Result<(), anyhow::Error> {
             .serve(main_router.into_make_service_with_connect_info::<SocketAddr>()),
     );
 
-    loop {
-        select! {
-            _ = shutdown_receiver.recv() => {
-                info!("Shutdown received, stopping...");
-                scheduler.clone().stop().await.unwrap();
-                info!("All tasks stopped.");
-                axum_server.abort();
-                break;
-            }
-            _ = scheduler_loop => {
-                info!("Scheduler loop exited, stopping...");
-                axum_server.abort();
-                break;
-            }
-            _ = hup_signal.recv() => {
-                info!("HUP received, stopping...");
-                axum_server.abort();
-                break;
-            }
-            _ = stop_signal.recv() => {
-                info!("STOP received, stopping...");
-                axum_server.abort();
-                break;
-            }
+    select! {
+        _ = shutdown_receiver.recv() => {
+            info!("Shutdown received, stopping...");
+            scheduler.clone().stop().await.unwrap();
+            info!("All tasks stopped.");
+            axum_server.abort();
+        },
+        Some(_) = repl_run => {
+            info!("Readline loop exited");
+        },
+        _ = scheduler_loop => {
+            info!("Scheduler loop exited, stopping...");
+            axum_server.abort();
+        },
+        _ = hup_signal.recv() => {
+            info!("HUP received, stopping...");
+            axum_server.abort();
+        },
+        _ = stop_signal.recv() => {
+            info!("STOP received, stopping...");
+            axum_server.abort();
         }
     }
     info!("Done.");

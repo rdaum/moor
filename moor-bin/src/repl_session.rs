@@ -11,10 +11,16 @@ use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::AsByteBuffer;
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 use std::io::{stdout, Write};
 use std::process::exit;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::task::block_in_place;
+
+/// When repl lines begin with these fragments, we don't prepend a return or postfix a ;
+const EVAL_BLOCK_WORDS: [&str; 7] = ["if ", "while ", "fork ", "for ", "try ", "return ", ";;"];
 
 pub struct ReplSession {
     pub(crate) player: Objid,
@@ -23,6 +29,42 @@ pub struct ReplSession {
 }
 
 impl ReplSession {
+    pub async fn session_loop(
+        self: Arc<Self>,
+        scheduler: Scheduler,
+        state_source: Arc<dyn WorldStateSource>,
+    ) {
+        let mut rl = DefaultEditor::new().unwrap();
+        loop {
+            let output = block_in_place(|| rl.readline("> "));
+            match output {
+                Ok(line) => {
+                    rl.add_history_entry(line.clone())
+                        .expect("Could not add history");
+                    if let Err(e) = self
+                        .clone()
+                        .handle_input(Objid(2), scheduler.clone(), line, state_source.clone())
+                        .await
+                    {
+                        println!("Error: {e:?}");
+                    }
+                }
+                Err(ReadlineError::Eof) => {
+                    println!("<EOF>");
+                    break;
+                }
+                Err(ReadlineError::Interrupted) => {
+                    println!("^C");
+                    continue;
+                }
+                Err(e) => {
+                    println!("Error: {e:?}");
+                    break;
+                }
+            }
+        }
+    }
+
     pub async fn handle_input(
         self: Arc<ReplSession>,
         player: Objid,
@@ -49,24 +91,25 @@ impl ReplSession {
         }
 
         if command.starts_with("@list ") {
-            if let Err(err_str) = list_command(command[6..].to_string(), state_source.clone()).await
+            if let Err(err_str) =
+                list_command(self.player, command[6..].to_string(), state_source.clone()).await
             {
                 println!("{}", err_str);
             }
             return Ok(());
         }
 
-        // Try to behave like MOO's eval to avoid mental confusion:
-        if !command.starts_with(";;") {
+        // Check EVAL_BLOCK_WORDS for a prefix, and if found, don't add a return or postfix a ;
+        if !EVAL_BLOCK_WORDS.iter().any(|&s| command.starts_with(s)) {
             if command.starts_with(';') {
                 command = command[1..].to_string();
             }
             if !command.starts_with("return ") {
                 command = format!("return {}", command);
             }
-        }
-        if !command.ends_with(';') {
-            command = format!("{};", command);
+            if !command.ends_with(';') {
+                command = format!("{};", command);
+            }
         }
 
         let task_id = scheduler
@@ -159,7 +202,7 @@ fn valid_ident(id_str: &str) -> bool {
         && !id_str.starts_with(|c: char| c.is_numeric())
 }
 
-async fn parse_objref(obj_str: &str, tx: &dyn WorldState) -> Result<Objid, String> {
+async fn parse_objref(perms: Objid, obj_str: &str, tx: &dyn WorldState) -> Result<Objid, String> {
     if obj_str.starts_with('#') {
         // Parse to number...
         match obj_str[1..].parse::<u64>() {
@@ -181,7 +224,7 @@ async fn parse_objref(obj_str: &str, tx: &dyn WorldState) -> Result<Objid, Strin
             ));
         }
         // Look up on #0...
-        let Ok(pvalue) = tx.retrieve_property(Objid(2), Objid(0), obj_str).await else {
+        let Ok(pvalue) = tx.retrieve_property(perms, Objid(0), obj_str).await else {
             return Err(format!(
                 "Invalid $object reference; couldn't not access {}",
                 obj_str
@@ -206,6 +249,7 @@ async fn parse_objref(obj_str: &str, tx: &dyn WorldState) -> Result<Objid, Strin
 // @list obj:verb
 // Accepts only object numbers or $type names, as we don't have access to a matcher here.
 async fn list_command(
+    perms: Objid,
     command_args: String,
     state_source: Arc<dyn WorldStateSource>,
 ) -> Result<(), String> {
@@ -217,7 +261,7 @@ async fn list_command(
         return Err("Unable to get world state".to_string());
     };
     let (obj_str, verb_str) = (arguments[0], arguments[1]);
-    let obj = parse_objref(obj_str, tx.as_ref()).await?;
+    let obj = parse_objref(perms, obj_str, tx.as_ref()).await?;
 
     if !valid_ident(verb_str) {
         return Err(format!("Invalid verb name {}", verb_str));

@@ -42,4 +42,5 @@ metrics.workspace = true
 metrics-util.workspace = true
 metrics-macros.workspace = true
 
-
+## For Repl
+rustyline.workspace = true
