@@ -195,7 +195,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
         return Ok(Error(E_TYPE));
     };
 
-    // Before actually doing any work, reject recursive moves.
+    // World state will reject this move if it's recursive.
     //   If the destination is self, E_RECMOVE
     //   If the destination is something that's inside me, that's also E_RECMOVE
     //   And so on...
@@ -203,6 +203,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
     // 'Trampoline' state machine:
     //    None => look up :accept, if it exists, set tramp to 1, and ask for it to be invoked.
     //            if it doesn't & perms not wizard, set raise E_NACC (as if :accept returned false)
+    //            If the destination is #-1 (NOTHING), we can skip straight through to 1/.
     //    1    => if verb call was a success (look at stack), set tramp to 2, move the object,
     //            then prepare :exitfunc on the original object source
     //            if :exitfunc doesn't exist, proceed to 3 (enterfunc)
@@ -221,6 +222,11 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
     loop {
         match tramp {
             BF_MOVE_TRAMPOLINE_START_ACCEPT => {
+                if *whereto == NOTHING {
+                    shortcircuit = true;
+                    tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
+                    continue;
+                }
                 match bf_args
                     .world_state
                     .find_method_verb_on(bf_args.task_perms_who(), *whereto, "accept")
@@ -248,7 +254,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Err
                             return Ok(Error(E_NACC));
                         }
                         // Short-circuit fake-tramp state change.
-                        tramp = 1;
+                        tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
                         shortcircuit = true;
                         continue;
                     }
