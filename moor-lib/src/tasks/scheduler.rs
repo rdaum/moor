@@ -365,7 +365,7 @@ impl Scheduler {
     }
 
     /// Submit a verb task to the scheduler for execution.
-    #[instrument(skip(self, sessions))]
+    #[instrument(skip(self, session))]
     pub async fn submit_verb_task(
         &self,
         player: Objid,
@@ -373,7 +373,7 @@ impl Scheduler {
         verb: String,
         args: Vec<Var>,
         perms: Objid,
-        sessions: Arc<dyn Session>,
+        session: Arc<dyn Session>,
     ) -> Result<TaskId, anyhow::Error> {
         increment_counter!("scheduler.submit_verb_task");
 
@@ -384,7 +384,7 @@ impl Scheduler {
             .new_task(
                 player,
                 state_source,
-                sessions,
+                session,
                 None,
                 self.clone(),
                 perms,
@@ -488,12 +488,6 @@ impl Scheduler {
 }
 
 impl Inner {
-    // TODO: the 'session' here is a problem, as it's just another reference to the same session
-    //  that started the original command that performed the fork. but the lifecycle of that session
-    //  is disjoint from this, and may already have commit revert etc. by the time the forked task
-    //  executes.
-    //  it really should be getting a new one. which would require us to have a 'session factory' or
-    //  'session state source' analogous to the world state source.
     async fn submit_fork_task(
         &mut self,
         fork_request: ForkRequest,
@@ -707,9 +701,11 @@ impl Inner {
         }
 
         // Service fork requests
-        for (fork_request, reply, state_source, sessions, scheduler) in fork_requests {
+        for (fork_request, reply, state_source, session, scheduler) in fork_requests {
+            // Fork the session.
+            let forked_session = session.clone();
             let task_id = self
-                .submit_fork_task(fork_request, state_source, sessions, scheduler)
+                .submit_fork_task(fork_request, state_source, forked_session, scheduler)
                 .await?;
             reply.send(task_id).expect("Could not send fork reply");
         }

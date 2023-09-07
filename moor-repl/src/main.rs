@@ -82,6 +82,10 @@ impl Session for ReplSession {
         Ok(())
     }
 
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+        Ok(self.clone())
+    }
+
     async fn send_text(&self, _player: Objid, msg: &str) -> Result<(), Error> {
         info!(msg, "NOTIFY");
         Ok(())

@@ -1,7 +1,7 @@
 use anyhow::Error;
 use async_trait::async_trait;
 use moor_value::var::objid::Objid;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
@@ -43,6 +43,12 @@ pub trait Session: Send + Sync {
     /// Should result in the session throwing away all buffered output.
     /// The session should not be usable after this point.
     async fn rollback(&self) -> Result<(), anyhow::Error>;
+
+    /// "Fork" this session; create a new session which attaches to the same connection, but
+    /// maintains its own buffer and state and can be committed/rolled back independently.
+    /// Is used for forked tasks which end up running in their own transaction.
+    /// Note: `disconnect` on one must also disconnect on all the other forks of the same lineage.
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, anyhow::Error>;
 
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
@@ -93,6 +99,11 @@ impl Session for NoopClientSession {
     async fn rollback(&self) -> Result<(), Error> {
         Ok(())
     }
+
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+        Ok(self.clone())
+    }
+
     async fn send_text(&self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
         Ok(())
     }
@@ -129,20 +140,20 @@ impl Session for NoopClientSession {
 /// hostnames, etc. can be added later.
 struct Inner {
     received: Vec<String>,
-    system: Vec<String>,
     committed: Vec<String>,
 }
 pub struct MockClientSession {
     inner: RwLock<Inner>,
+    system: Arc<RwLock<Vec<String>>>,
 }
 impl MockClientSession {
     pub fn new() -> Self {
         Self {
             inner: RwLock::new(Inner {
                 received: vec![],
-                system: vec![],
                 committed: vec![],
             }),
+            system: Arc::new(Default::default()),
         }
     }
     pub fn received(&self) -> Vec<String> {
@@ -154,8 +165,7 @@ impl MockClientSession {
         inner.committed.clone()
     }
     pub fn system(&self) -> Vec<String> {
-        let inner = self.inner.read().unwrap();
-        inner.system.clone()
+        self.system.read().unwrap().clone()
     }
 }
 #[async_trait]
@@ -171,26 +181,35 @@ impl Session for MockClientSession {
         Ok(())
     }
 
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+        Ok(Arc::new(MockClientSession {
+            inner: RwLock::new(Inner {
+                received: vec![],
+                committed: vec![],
+            }),
+            system: self.system.clone(),
+        }))
+    }
+
     async fn send_text(&self, _player: Objid, msg: &str) -> Result<(), Error> {
         self.inner.write().unwrap().received.push(String::from(msg));
         Ok(())
     }
 
     async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), Error> {
-        self.inner
+        self.system
             .write()
             .unwrap()
-            .system
             .push(format!("{}: {}", player.0, msg));
         Ok(())
     }
 
     async fn shutdown(&self, msg: Option<String>) -> Result<(), Error> {
-        let mut inner = self.inner.write().unwrap();
+        let mut system = self.system.write().unwrap();
         if let Some(msg) = msg {
-            inner.system.push(format!("shutdown: {}", msg));
+            system.push(format!("shutdown: {}", msg));
         } else {
-            inner.system.push(String::from("shutdown"));
+            system.push(String::from("shutdown"));
         }
         Ok(())
     }
@@ -200,8 +219,8 @@ impl Session for MockClientSession {
     }
 
     async fn disconnect(&self, _player: Objid) -> Result<(), Error> {
-        let mut inner = self.inner.write().unwrap();
-        inner.system.push(String::from("disconnect"));
+        let mut system = self.system.write().unwrap();
+        system.push(String::from("disconnect"));
         Ok(())
     }
 

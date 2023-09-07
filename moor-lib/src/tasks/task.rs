@@ -5,7 +5,7 @@ use metrics_macros::increment_counter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
-use tracing::{debug, error, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use moor_value::model::verb_info::VerbInfo;
 use moor_value::model::world_state::WorldState;
@@ -253,23 +253,6 @@ impl Task {
                             .expect("Could not send abort response");
                         return;
                     }
-                    Err(err) => {
-                        error!(task_id = self.task_id, error = ?err, "Task error; rollback");
-                        increment_counter!("tasks.error.exec");
-                        self.world_state
-                            .rollback()
-                            .await
-                            .expect("Could not rollback world state");
-                        self.session
-                            .rollback()
-                            .await
-                            .expect("Could not rollback connection output");
-
-                        self.scheduler_control_sender
-                            .send(SchedulerControlMsg::TaskAbortError(err))
-                            .expect("Could not send error response");
-                        return;
-                    }
                     Ok(VMHostResponse::AbortLimit(reason)) => {
                         let abort_reason_text = match reason {
                             AbortLimitReason::Ticks(ticks) => {
@@ -293,6 +276,23 @@ impl Task {
                             .expect("Could not rollback connection output");
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskAbortLimitsReached(reason))
+                            .expect("Could not send error response");
+                        return;
+                    }
+                    Err(err) => {
+                        error!(task_id = self.task_id, error = ?err, "Task error; rollback");
+                        increment_counter!("tasks.error.exec");
+                        self.world_state
+                            .rollback()
+                            .await
+                            .expect("Could not rollback world state");
+                        self.session
+                            .rollback()
+                            .await
+                            .expect("Could not rollback connection output");
+
+                        self.scheduler_control_sender
+                            .send(SchedulerControlMsg::TaskAbortError(err))
                             .expect("Could not send error response");
                         return;
                     }
@@ -398,7 +398,7 @@ impl Task {
                 suspended,
             } => {
                 assert!(!self.vm_host.is_running());
-                trace!(?task_id, "Setting up fork");
+                info!(?task_id, "Setting up fork");
                 self.scheduled_start_time = None;
 
                 self.vm_host

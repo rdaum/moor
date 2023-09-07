@@ -62,7 +62,7 @@ impl MooVmHost {
 
 #[async_trait]
 impl VMHost<Program> for MooVmHost {
-    /// Setup for executing a method call in this VM.
+    /// Setup for executing a method initited from a command.
     async fn start_call_command_verb(
         &mut self,
         task_id: TaskId,

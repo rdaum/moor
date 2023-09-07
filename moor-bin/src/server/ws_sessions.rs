@@ -178,6 +178,14 @@ impl Session for WebSocketSession {
         Ok(())
     }
 
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+        Ok(Arc::new(WebSocketSession {
+            player: self.player,
+            ws_sessions: self.ws_sessions.clone(),
+            session_buffer: Default::default(),
+        }))
+    }
+
     async fn send_text(&self, player: Objid, msg: &str) -> Result<(), anyhow::Error> {
         increment_counter!("ws_server.sessions.send_text");
         let mut buffer = self.session_buffer.lock().await;

@@ -104,7 +104,7 @@ pub trait VMHost<ProgramType> {
     ) -> Result<ProgramType, anyhow::Error>;
 
     /// Attempt to set a variable inside the VM's current top stack frame.
-    /// The sole use of this is to set the task id variable for resuming suspended tasks.
+    /// The sole use of this is to set the task id variable for forked tasks or resumed tasks.
     // TODO: a bit of an abstraction break, might require some better thought.
     fn set_variable(&mut self, task_id_var: Name, value: Var);
 
