@@ -7,7 +7,7 @@ edition.workspace = true
 moor-lib = { path = "../moor-lib" }
 moor-value = { path = "../moor-value" }
 
-rustyline-async.workspace = true
+rustyline.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true

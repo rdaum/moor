@@ -473,6 +473,22 @@ impl Scheduler {
         Ok(())
     }
 
+    /// Request information on all tasks known to the scheduler.
+    pub async fn tasks(&self) -> Result<Vec<TaskDescription>, anyhow::Error> {
+        let inner = self.inner.read().await;
+        let mut tasks = Vec::new();
+        for (task_id, task) in inner.tasks.iter() {
+            trace!(task_id, "Requesting task description");
+            let (t_send, t_reply) = oneshot::channel();
+            task.task_control_sender
+                .send(TaskControlMsg::Describe(t_send))?;
+            let task_desc = t_reply.await?;
+            trace!(task_id, "Got task description");
+            tasks.push(task_desc);
+        }
+        Ok(tasks)
+    }
+
     /// Stop the scheduler run loop.
     pub async fn stop(&self) -> Result<(), anyhow::Error> {
         let mut scheduler = self.inner.write().await;

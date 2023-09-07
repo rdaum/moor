@@ -57,7 +57,7 @@ itertools = "0.11.0"
 lazy_static = "1.4.0"
 num-traits = "0.2.16"
 once_cell = "1.17.2"
-rustyline-async = "0.3.2"
+rustyline = "12.0.0"
 strum = { version = "0.25.0", features = ["derive"] }
 text_io = "0.1.12" # Used for reading text dumps.
 uuid = { version = "1.4.1", features = ["v4"] }
