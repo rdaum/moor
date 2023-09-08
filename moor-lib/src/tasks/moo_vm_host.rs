@@ -112,7 +112,6 @@ impl VMHost<Program> for MooVmHost {
         fork_request: ForkRequest,
         suspended: bool,
     ) -> Result<(), anyhow::Error> {
-        self.vm.start_time = Some(SystemTime::now());
         self.vm.tick_count = 0;
         self.vm.exec_fork_vector(fork_request, task_id).await?;
         self.running_method = !suspended;

@@ -457,7 +457,7 @@ impl VM {
                     if *time < 0 {
                         return self.push_error(E_INVARG);
                     }
-                    let delay = (*time == 0).then(|| Duration::from_secs(*time as u64));
+                    let delay = (*time != 0).then(|| Duration::from_secs(*time as u64));
                     let new_activation = self.top().clone();
                     let fork = ForkRequest {
                         player: self.top().player,

@@ -11,7 +11,7 @@ use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::model::{CommitResult, WorldStateError};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use tracing::warn;
+use tracing::error;
 
 mod transient_store;
 
@@ -33,9 +33,12 @@ fn inmem_db_server(
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         loop {
-            let Ok(msg) = rx.recv() else {
-                warn!("Transaction closed without commit");
-                return;
+            let msg = match rx.recv() {
+                Ok(msg) => msg,
+                Err(e) => {
+                    error!("Error receiving message: {:?}", e);
+                    return;
+                }
             };
             match msg {
                 DbMessage::CreateObject { id, attrs, reply } => {

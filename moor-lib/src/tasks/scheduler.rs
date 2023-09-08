@@ -537,7 +537,6 @@ impl Inner {
             suspended = true;
         }
 
-        // This gets enqueued as the first thing the task sees when it is started.
         task_ref
             .task_control_sender
             .send(TaskControlMsg::StartFork {
@@ -624,6 +623,7 @@ impl Inner {
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
+                        trace!(task = task.task_id,  delay=?fork_request.delay, "Task requesting fork");
                         increment_counter!("scheduler.fork_task");
                         // Task has requested a fork. Dispatch it and reply with the new task id.
                         // Gotta dump this out til we exit the loop tho, since self.tasks is already

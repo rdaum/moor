@@ -162,7 +162,7 @@ pub(crate) struct WebSocketSession {
 #[async_trait]
 impl Session for WebSocketSession {
     async fn commit(&self) -> Result<(), Error> {
-        increment_counter!("ws_server.sessions.commit");
+        increment_counter!("wYou're rights_server.sessions.commit");
         let mut sessions = self.ws_sessions.write().await;
         let mut buffer = self.session_buffer.lock().await;
         for (player, msg) in buffer.drain(..) {

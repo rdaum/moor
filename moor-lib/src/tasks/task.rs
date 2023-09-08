@@ -5,7 +5,7 @@ use metrics_macros::increment_counter;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 use moor_value::model::verb_info::VerbInfo;
 use moor_value::model::world_state::WorldState;
@@ -128,7 +128,7 @@ impl Task {
                         // send a message back asking it to fork the task and return the new task id on a
                         // reply channel.
                         // We will then take the new task id and send it back to the caller.
-                        let (send, reply) = tokio::sync::oneshot::channel();
+                        let (send, reply) = oneshot::channel();
                         let task_id_var = fork_request.task_id;
                         self.scheduler_control_sender
                             .send(SchedulerControlMsg::TaskRequestFork(fork_request, send))
@@ -186,7 +186,6 @@ impl Task {
                         else {
                             unimplemented!("Task restart on conflict")
                         };
-                        trace!(self.task_id, result = ?result, "Task complete, committed");
 
                         self.session
                             .commit()
@@ -398,12 +397,12 @@ impl Task {
                 suspended,
             } => {
                 assert!(!self.vm_host.is_running());
-                info!(?task_id, "Setting up fork");
-                self.scheduled_start_time = None;
+                trace!(?task_id, suspended, "Setting up fork");
 
                 self.vm_host
                     .start_fork(task_id, fork_request, suspended)
                     .await?;
+                assert_eq!(self.vm_host.is_running(), !suspended);
             }
             TaskControlMsg::StartEval { player, program } => {
                 increment_counter!("task.start_eval");
