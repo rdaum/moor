@@ -10,7 +10,7 @@ use axum::headers::Authorization;
 use axum::response::IntoResponse;
 use axum::TypedHeader;
 use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use metrics_macros::increment_counter;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::RwLock;
@@ -211,7 +211,15 @@ impl WebSocketServer {
         info!("WebSocket session finished: {}", peer);
     }
     async fn submission_loop(&self, player: Objid, mut ws_receiver: SplitStream<WebSocket>) {
-        while let Ok(Some(msg)) = ws_receiver.try_next().await {
+        while let Some(msg) = ws_receiver.next().await {
+            let msg = match msg {
+                Ok(msg) => msg,
+                Err(e) => {
+                    increment_counter!("ws_server.error_receiving_message");
+                    error!("Error receiving a message: {:?}", e);
+                    continue;
+                }
+            };
             let cmd = match msg.into_text() {
                 Ok(cmd) => cmd,
                 Err(e) => {
@@ -243,6 +251,7 @@ impl WebSocketServer {
                     .await
             };
             if let Err(e) = task_id {
+                error!(player=?player, command=cmd, error=?e, "Error submitting command task");
                 increment_counter!("ws_server.submit_error");
 
                 match e {

@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{error, warn};
+use tracing::{error, trace, warn};
 
 pub(crate) struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,
@@ -125,6 +125,15 @@ impl WebSocketSessions {
         connection_oid: Objid,
         msg: &str,
     ) -> anyhow::Result<()> {
+        if msg.len() == 0 {
+            // Client's intent was probably to send an empty line, but this actually seems to cause
+            // a disconnection event. So we'll just log it and ignore it. At least for now.
+            warn!(
+                "Attempt to send empty message to player: #{}",
+                connection_oid.0
+            );
+            return Ok(());
+        }
         let Some(conn) = self.connections.get_mut(&connection_oid) else {
             // TODO This can be totally harmless, if a user disconnected while a transaction was in
             //  progress. But it can also be a sign of a bug, so we'll log it for now but remove the
@@ -162,9 +171,15 @@ pub(crate) struct WebSocketSession {
 #[async_trait]
 impl Session for WebSocketSession {
     async fn commit(&self) -> Result<(), Error> {
-        increment_counter!("wYou're rights_server.sessions.commit");
+        increment_counter!("ws_server.sessions.commit");
         let mut sessions = self.ws_sessions.write().await;
         let mut buffer = self.session_buffer.lock().await;
+        trace!(
+            "Committing session for player: #{}, # buffer events: {}, length of all strings: {}",
+            self.player.0,
+            buffer.len(),
+            buffer.iter().map(|(_, s)| s.len()).sum::<usize>()
+        );
         for (player, msg) in buffer.drain(..) {
             sessions.write_msg(player, &msg).await?;
         }

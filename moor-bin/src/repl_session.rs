@@ -196,7 +196,7 @@ impl Session for ReplSession {
 // Prop and verb names must be a single identifier, underscores and alpha only, no leading numbers.
 fn valid_ident(id_str: &str) -> bool {
     id_str
-        .matches(|c: char| c.is_alphanumeric() || c == '_')
+        .matches(|c: char| c.is_alphanumeric() || c == '_' || c == '@')
         .count()
         == id_str.len()
         && !id_str.starts_with(|c: char| c.is_numeric())
