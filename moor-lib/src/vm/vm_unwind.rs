@@ -238,6 +238,26 @@ impl VM {
         // by the parent anyways.
         self.parent_activation_mut().push(v_err(code));
 
+        self.raise_error(code)
+    }
+
+    /// Push an error to the stack with a description and raise it.
+    pub(crate) fn push_error_msg(
+        &mut self,
+        code: Error,
+        msg: String,
+    ) -> Result<ExecutionResult, anyhow::Error> {
+        trace!(?code, msg, "push_error_msg");
+        self.push(&v_err(code));
+
+        self.raise_error(code)
+    }
+
+    /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
+    /// want.
+    pub(crate) fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+        trace!(?code, "maybe_raise_error");
+
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // In this case we're looking for a non-bf frame. The actual verb which called the bf.
         let verb_frame = self.stack.iter().rev().find(|a| a.bf_index.is_none());
@@ -253,36 +273,11 @@ impl VM {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
-        // If we're not unwinding, we need to pop the builtin function's activation frame.
-        self.stack.pop();
-        Ok(ExecutionResult::More)
+        return Ok(ExecutionResult::More);
     }
 
-    /// Push an error to the stack with a description and raise it.
-    pub(crate) fn push_error_msg(
-        &mut self,
-        code: Error,
-        msg: String,
-    ) -> Result<ExecutionResult, anyhow::Error> {
-        trace!(?code, msg, "push_error_msg");
-        self.push(&v_err(code));
-
-        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        if let Some(activation) = self.stack.last() {
-            if activation
-                .verb_info
-                .verbdef()
-                .flags()
-                .contains(VerbFlag::Debug)
-            {
-                return self.raise_error_pack(code.make_error_pack(Some(msg)));
-            }
-        }
-        Ok(ExecutionResult::More)
-    }
-
-    /// Raise an error (without pushing its value to stack)
-    pub(crate) fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+    /// Explicitly raise an error, regardless of the 'd' bit.
+    pub(crate) fn throw_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
         trace!(?code, "raise_error");
         self.raise_error_pack(code.make_error_pack(None))
     }

@@ -67,7 +67,9 @@ impl VM {
     ) -> Result<ExecutionResult, anyhow::Error> {
         // Before executing, check stack depth...
         if self.stack.len() >= exec_params.max_stack_depth {
-            return self.raise_error(E_MAXREC);
+            // Absolutely raise-unwind an error here instead of just offering it as a potential
+            // return value if this is a non-d verb. At least I think this the right thing to do?
+            return self.throw_error(E_MAXREC);
         }
 
         // If the current activation frame is a builtin function, we need to jump back into it,
@@ -130,16 +132,16 @@ impl VM {
                     // for now and revisit later.
                     let (count, list) = (&self.pop(), &self.pop());
                     let Variant::Int(count) = count.variant() else {
+                        // If the result of raising error was just to push the value -- that is, we
+                        // didn't 'throw' and unwind the stack -- we need to get out of the loop.
+                        // So we preemptively jump (here and below for List) and then raise the error.
+                        self.jump(label);
                         return self.raise_error(E_TYPE);
-
-                        // LambdaMOO had a raise followed by jump. Not clear how that would work.
-                        // Watch out for bugs here. Same below
-                        // self.jump(label);
                     };
                     let count = *count as usize;
                     let Variant::List(l) = list.variant() else {
+                        self.jump(label);
                         return self.raise_error(E_TYPE);
-                        // self.jump(label);
                     };
 
                     // If we've exhausted the list, pop the count and list and jump out.
@@ -185,6 +187,10 @@ impl VM {
                             v_obj(from_o.0 + 1)
                         }
                         (_, _) => {
+                            // Make sure we've jumped out of the loop before raising the error,
+                            // because in verbs that aren't `d' we could end up continuing on in
+                            // the loop (with a messed up stack) otherwise.
+                            self.jump(label);
                             return self.raise_error(E_TYPE);
                         }
                     };
