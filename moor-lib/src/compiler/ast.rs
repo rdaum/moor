@@ -237,3 +237,61 @@ pub enum StmtNode {
     },
     Expr(Expr),
 }
+
+// Recursive descent compare of two trees, ignoring the parser-provided line numbers, but
+// validating equality for everything else.
+#[cfg(test)]
+pub fn assert_trees_match_recursive(a: &Vec<Stmt>, b: &Vec<Stmt>) {
+    assert_eq!(a.len(), b.len());
+    for (left, right) in a.iter().zip(b.iter()) {
+        assert_eq!(left.tree_line_no, right.tree_line_no);
+
+        match (&left.node, &right.node) {
+            (StmtNode::Return { .. }, StmtNode::Return { .. }) => {}
+            (StmtNode::Expr { .. }, StmtNode::Expr { .. }) => {}
+            (StmtNode::Break { .. }, StmtNode::Break { .. }) => {}
+            (StmtNode::Continue { .. }, StmtNode::Continue { .. }) => {}
+            (
+                StmtNode::Cond {
+                    otherwise: otherwise1,
+                    arms: arms1,
+                    ..
+                },
+                StmtNode::Cond {
+                    otherwise: otherwise2,
+                    arms: arms2,
+                    ..
+                },
+            ) => {
+                assert_trees_match_recursive(otherwise1, otherwise2);
+                for arms in arms1.iter().zip(arms2.iter()) {
+                    assert_eq!(arms.0.condition, arms.1.condition);
+                    assert_trees_match_recursive(&arms.0.statements, &arms.1.statements);
+                }
+            }
+            (
+                StmtNode::TryFinally {
+                    body: body1,
+                    handler: handler1,
+                },
+                StmtNode::TryFinally {
+                    body: body2,
+                    handler: handler2,
+                },
+            ) => {
+                assert_trees_match_recursive(body1, body2);
+                assert_trees_match_recursive(handler1, handler2);
+            }
+            (StmtNode::TryExcept { body: body1, .. }, StmtNode::TryExcept { body: body2, .. })
+            | (StmtNode::ForList { body: body1, .. }, StmtNode::ForList { body: body2, .. })
+            | (StmtNode::ForRange { body: body1, .. }, StmtNode::ForRange { body: body2, .. })
+            | (StmtNode::Fork { body: body1, .. }, StmtNode::Fork { body: body2, .. })
+            | (StmtNode::While { body: body1, .. }, StmtNode::While { body: body2, .. }) => {
+                assert_trees_match_recursive(body1, body2);
+            }
+            _ => {
+                panic!("Mismatched statements: {:?} vs {:?}", left, right);
+            }
+        }
+    }
+}

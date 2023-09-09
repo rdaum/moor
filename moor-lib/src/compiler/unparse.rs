@@ -537,66 +537,9 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut Vec<Stmt>) -> usiz
     return line_no;
 }
 
-// Recursive descent compare of two trees, ignoring the parser-provided line numbers, but
-// validating equality for everything else.
-#[cfg(test)]
-pub fn recursive_compare(a: &Vec<Stmt>, b: &Vec<Stmt>) {
-    assert_eq!(a.len(), b.len());
-    for (left, right) in a.iter().zip(b.iter()) {
-        assert_eq!(left.tree_line_no, right.tree_line_no);
-
-        match (&left.node, &right.node) {
-            (StmtNode::Return { .. }, StmtNode::Return { .. }) => {}
-            (StmtNode::Expr { .. }, StmtNode::Expr { .. }) => {}
-            (StmtNode::Break { .. }, StmtNode::Break { .. }) => {}
-            (StmtNode::Continue { .. }, StmtNode::Continue { .. }) => {}
-            (
-                StmtNode::Cond {
-                    otherwise: otherwise1,
-                    arms: arms1,
-                    ..
-                },
-                StmtNode::Cond {
-                    otherwise: otherwise2,
-                    arms: arms2,
-                    ..
-                },
-            ) => {
-                recursive_compare(otherwise1, otherwise2);
-                for arms in arms1.iter().zip(arms2.iter()) {
-                    assert_eq!(arms.0.condition, arms.1.condition);
-                    recursive_compare(&arms.0.statements, &arms.1.statements);
-                }
-            }
-            (
-                StmtNode::TryFinally {
-                    body: body1,
-                    handler: handler1,
-                },
-                StmtNode::TryFinally {
-                    body: body2,
-                    handler: handler2,
-                },
-            ) => {
-                recursive_compare(body1, body2);
-                recursive_compare(handler1, handler2);
-            }
-            (StmtNode::TryExcept { body: body1, .. }, StmtNode::TryExcept { body: body2, .. })
-            | (StmtNode::ForList { body: body1, .. }, StmtNode::ForList { body: body2, .. })
-            | (StmtNode::ForRange { body: body1, .. }, StmtNode::ForRange { body: body2, .. })
-            | (StmtNode::Fork { body: body1, .. }, StmtNode::Fork { body: body2, .. })
-            | (StmtNode::While { body: body1, .. }, StmtNode::While { body: body2, .. }) => {
-                recursive_compare(body1, body2);
-            }
-            _ => {
-                panic!("Mismatched statements: {:?} vs {:?}", left, right);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::assert_trees_match_recursive;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
     use unindent::unindent;
@@ -657,7 +600,7 @@ mod tests {
         // numbers, but validating everything else.
         let parsed_original = crate::compiler::parse::parse_program(&stripped).unwrap();
         let parsed_decompiled = crate::compiler::parse::parse_program(&result).unwrap();
-        recursive_compare(&parsed_original.stmts, &parsed_decompiled.stmts)
+        assert_trees_match_recursive(&parsed_original.stmts, &parsed_decompiled.stmts)
     }
 
     #[test]

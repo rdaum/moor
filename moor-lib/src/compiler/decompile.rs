@@ -310,11 +310,11 @@ impl Decompile {
                 // backward from the current position.
                 let s = if jump_label.position.0 < self.position {
                     StmtNode::Continue {
-                        exit: Some(jump_label.name.unwrap()),
+                        exit: Some(jump_label.name.expect("jump label must have name")),
                     }
                 } else {
                     StmtNode::Break {
-                        exit: Some(jump_label.name.unwrap()),
+                        exit: Some(jump_label.name.expect("jump label must have name")),
                     }
                 };
 
@@ -782,12 +782,13 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::ast::assert_trees_match_recursive;
     use crate::compiler::codegen::compile;
     use crate::compiler::decompile::program_to_tree;
     use crate::compiler::parse::parse_program;
     use crate::compiler::parse::Parse;
-    use crate::compiler::unparse::{annotate_line_numbers, recursive_compare};
-    use tracing_test::traced_test;
+    use crate::compiler::unparse::annotate_line_numbers;
+    use test_case::test_case;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse) {
         let parse_1 = parse_program(program_text).unwrap();
@@ -797,232 +798,72 @@ mod tests {
         (parse_1, parse_2)
     }
 
-    #[test]
-    fn test_if() {
-        let (parse, decompiled) = parse_decompile("if (1) return 2; endif");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
+    #[test_case("if (1) return 2; endif"; "simple if")]
+    #[test_case("if (1) return 2; else return 3; endif"; "if_else")]
+    #[test_case("if (1) return 2; elseif (2) return 3; endif"; "if_elseif")]
+    #[test_case(
+        "if (1) return 2; elseif (2) return 3; else return 4; endif";
+        "if_elseif_else"
+    )]
+    #[test_case("while (1) return 2; endwhile"; "simple while")]
+    #[test_case(
+        "while (1) if (1 == 2) break; else continue; endif endwhile";
+        "while_break_continue"
+    )]
+    #[test_case("while chuckles (1) return 2; endwhile"; "while_labelled")]
+    #[test_case(
+        "while chuckles (1) if (1 == 2) break chuckles; else continue chuckles; endif endwhile";
+        "while_labelled_break_continue"
+    )]
+    #[test_case("for x in (1) return 2; endfor"; "simple for in")]
+    #[test_case("for x in (1) if (1 == 2) break; else continue; endif endfor"; "for_in_break_continue")]
+    #[test_case("for x in (1) if (1 == 2) break x; else continue x; endif endfor"; "for_in_labelled_break_continue")]
+    #[test_case("for x in [1..5] return 2; endfor"; "for_range")]
+    #[test_case("try return 1; except a (E_INVARG) return 2; endtry"; "try_except")]
+    #[test_case("try return 1; except a (E_INVARG) return 2; except b (E_PROPNF) return 3; endtry"; "try_except_2")]
+    #[test_case("try return 1; finally return 2; endtry"; "try_finally")]
+    #[test_case("return setadd({1,2}, 3);"; "builtin")]
+    #[test_case("return {1,2,3};"; "list")]
+    #[test_case("return {1,2,3,@{1,2,3}};"; "list_splice")]
+    #[test_case("return {1,2,3,@{1,2,3},4};"; "list_splice_2")]
+    #[test_case("return -1;"; "unary")]
+    #[test_case("return 1 + 2;"; "binary")]
+    #[test_case("return 1 + 2 * 3;"; "binary_precedence")]
+    #[test_case(
+        "return -(1 + 2 * (3 - 4) / 5 % 6);";
+        "unary_and_binary_and_paren_precedence"
+    )]
+    #[test_case(
+        "return 1 == 2 != 3 < 4 <= 5 > 6 >= 7;";
+        "equality_inequality_relational"
+    )]
+    #[test_case("return 1 && 2 || 3 && 4;"; "logical_and_or")]
+    #[test_case("x = 1; return x;"; "assignment")]
+    #[test_case("return x[1];"; "index")]
+    #[test_case("return x[1..2];"; "range")]
+    #[test_case("return x:y(1,2,3);"; "call_verb")]
+    #[test_case(r#"return x:("y")(1,2,3);"#; "call_verb_expr")]
+    #[test_case("{connection} = args;"; "scatter")]
+    #[test_case("{connection, player} = args;"; "scatter_2")]
+    #[test_case("{connection, player, ?arg3} = args;"; "scatter_3")]
+    #[test_case("{connection, player, ?arg3, @arg4} = args;"; "scatter_4")]
+    #[test_case("x = `x + 1 ! e_propnf, E_PERM => 17';"; "catch_expr")]
+    #[test_case("x = `x + 1 ! e_propnf, E_PERM';"; "catch_expr_no_result")]
+    #[test_case("x = `x + 1 ! ANY => 17';"; "any_catch_expr")]
+    #[test_case("x = `x + 1 ! ANY';"; "any_catch_expr_no_result")]
+    #[test_case("a[1..2] = {3,4};"; "range_set")]
+    #[test_case("a[1] = {3,4};"; "index_set")]
+    #[test_case("1 ? 2 | 3;"; "ternary")]
+    #[test_case("x.y = 1;"; "prop_assign")]
+    #[test_case("try return x; except (E_VARNF) endtry; if (x) return 1; endif"; "if_after_try")]
+    #[test_case("2 ? 0 | caller_perms();"; "regression_builtin_after_ternary")]
+    fn test_case_decompile_matches(prg: &str) {
+        let (parse, decompiled) = parse_decompile(prg);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
-    fn test_if_else() {
-        let (parse, decompiled) = parse_decompile("if (1) return 2; else return 3; endif");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_if_elseif() {
-        let (parse, decompiled) =
-            parse_decompile("if (1) return 2; elseif (2) return 3; elseif (3) return 4; endif");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_while() {
-        let (parse, decompiled) = parse_decompile("while (1) return 2; endwhile");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_while_break_continue() {
-        let (parse, decompiled) =
-            parse_decompile("while (1) if (1 == 2) break; else continue; endif endwhile");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_while_labelled() {
-        let (parse, decompiled) = parse_decompile("while chuckles (1) return 2; endwhile");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_for_in() {
-        let (parse, decompiled) = parse_decompile("for x in (a) return 2; endfor");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_for_range() {
-        let (parse, decompiled) = parse_decompile("for x in [1..5] return 2; endfor");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_builtin() {
-        let (parse, decompiled) = parse_decompile("return setadd({1,2}, 3);");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_list() {
-        let (parse, decompiled) = parse_decompile("return {1,2,3};");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_list_splice() {
-        let (parse, decompiled) = parse_decompile("return {1,2,3,@{1,2,3}};");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_arithmetic_expression() {
-        let (parse, decompiled) = parse_decompile("return -(1 + 2 * (3 - 4) / 5 % 6);");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_equality_inequality_relational() {
-        let (parse, decompiled) = parse_decompile("return 1 == 2 != 3 < 4 <= 5 > 6 >= 7;");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_logical_and_or() {
-        let (parse, decompiled) = parse_decompile("return 1 && 2 || 3 && 4;");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_assignment() {
-        let (parse, decompiled) = parse_decompile("x = 1; return x;");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_index() {
-        let (parse, decompiled) = parse_decompile("return x[1];");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_range() {
-        let (parse, decompiled) = parse_decompile("return x[1..2];");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_call_verb() {
-        let (parse, decompiled) = parse_decompile("return x:y(1,2,3);");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_call_verb_expr() {
-        let (parse, decompiled) = parse_decompile(r#"return x:("y")(1,2,3);"#);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_simple_scatter() {
-        let (parse, decompiled) = parse_decompile("{connection} = args;");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_scatter_required() {
-        let (parse, decompiled) = parse_decompile("{a,b,c} = args;");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_scatter_mixed() {
-        let (parse, decompiled) = parse_decompile("{a,b,?c,@d} = args;");
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_try_except() {
-        let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_try_finally() {
-        let program = "try a=1; finally a=2; endtry";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_catch_expr() {
-        let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_range_set() {
-        let program = "a[1..2] = {3,4};";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_index_set() {
-        let program = "a[1] = {3,4};";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_if_ques() {
-        let program = "1 ? 2 | 3;";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_prop_assign() {
-        let program = "x.y = 1;";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_labelled_break() {
-        let program = "while bozo (1) break bozo; tostr(5);  endwhile;";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_labelled_continue() {
-        let program = "while bozo (1) continue bozo; tostr(5); endwhile;";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_if_after_try() {
-        let program = "try return x; except (E_VARNF) endtry; if (x) return 1; endif;";
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    /// Regression test for catch handling when the "expr-2" portion is missing. This is valid MOO.
-    fn test_decompile_catch_handler() {
-        let program = r#"
-          `1/0 ! ANY';
-        "#;
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    fn test_no_arg_builtin_in_ternary() {
-        let program = r#"
-            2 ? 0 | caller_perms();
-        "#;
-        let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
-    }
-
-    #[test]
-    #[traced_test]
+    // A big verb to verify that decompilation works for more than just simple cases.
     fn test_a_complicated_function() {
         let program = r#"
         brief = args && args[1];
@@ -1068,6 +909,6 @@ mod tests {
         this:tell_contents(things);
         "#;
         let (parse, decompiled) = parse_decompile(program);
-        recursive_compare(&parse.stmts, &decompiled.stmts);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
 }
