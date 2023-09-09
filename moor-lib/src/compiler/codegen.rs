@@ -526,8 +526,7 @@ impl CodegenState {
                 self.push_stack(1);
                 let loop_top = self.make_jump_label(Some(*id));
                 self.commit_jump_label(loop_top);
-                let end_label = self.make_jump_label(None);
-                // TODO self.enter_loop/exit_loop needed?
+                let end_label = self.make_jump_label(Some(*id));
                 self.emit(Op::ForList { id: *id, end_label });
                 self.loops.push(Loop {
                     loop_name: Some(*id),
@@ -548,7 +547,7 @@ impl CodegenState {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
                 let loop_top = self.make_jump_label(Some(*id));
-                let end_label = self.make_jump_label(None);
+                let end_label = self.make_jump_label(Some(*id));
                 self.commit_jump_label(loop_top);
                 self.emit(Op::ForRange { id: *id, end_label });
                 self.loops.push(Loop {
