@@ -134,12 +134,9 @@ impl WorldState for DbTxWorldState {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn contents_of(&self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
-        self.perms(perms)
-            .await?
-            .check_object_allows(owner, flags, ObjFlag::Read)?;
-
+    async fn contents_of(&self, _perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        // MOO does not do any perms checks on contents, pretty sure:
+        // https://github.com/wrog/lambdamoo/blob/master/db_properties.c#L351
         self.client.get_contents_of(obj).await
     }
 
