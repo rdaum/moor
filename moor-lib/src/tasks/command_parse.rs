@@ -64,6 +64,17 @@ pub fn preposition_to_string(ps: &PrepSpec) -> &str {
 }
 
 pub fn match_preposition(prep: &str) -> Option<Prep> {
+    // If the string starts with a number (with or without # prefix), treat it as a preposition ID.
+    // Which is the offset into the PREPOSITIONS array.
+    if let Some(id) = prep.strip_prefix('#') {
+        if let Ok(id) = id.parse::<usize>() {
+            return PREPOSITIONS.get(id).cloned();
+        }
+    } else if let Ok(id) = prep.parse::<usize>() {
+        return PREPOSITIONS.get(id).cloned();
+    }
+
+    // Otherwise, search for the preposition in the list of prepositions by string.
     PREPOSITIONS
         .iter()
         .find(|p| p.phrases.iter().any(|t| t == &prep))
@@ -381,9 +392,9 @@ mod tests {
         let command = ";1 + 1";
         let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
         assert_eq!(parsed.verb, "eval");
-        assert_eq!(parsed.dobjstr, "1 + 1");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, "");
+        assert_eq!(parsed.prepstr, "1");
+        assert_eq!(parsed.iobjstr, "+ 1");
         assert_eq!(parsed.args, vec![v_str("1"), v_str("+"), v_str("1")]);
         assert_eq!(parsed.argstr, "1 + 1");
         assert_eq!(parsed.dobj, Objid(-1));
