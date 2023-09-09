@@ -260,7 +260,7 @@ impl Unparse {
                             buffer.push('@');
                         }
                     }
-                    buffer.push_str(self.names.name_of(&var.id).unwrap());
+                    buffer.push_str(self.names.name_of(&var.id)?);
                     if let Some(expr) = &var.expr {
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
                     }
@@ -282,7 +282,7 @@ impl Unparse {
         match &stmt.0 {
             StmtNode::Cond { arms, otherwise } => {
                 let mut stmt_lines = Vec::with_capacity(arms.len() + 2);
-                let cond_frag = self.unparse_expr(&arms[0].condition).unwrap();
+                let cond_frag = self.unparse_expr(&arms[0].condition)?;
                 let mut stmt_frag =
                     self.unparse_stmts(&arms[0].statements, indent + INDENT_LEVEL)?;
                 stmt_lines.push(format!("{}if ({})", indent_frag, cond_frag));
@@ -451,7 +451,7 @@ impl Unparse {
 
 pub fn unparse(tree: &Parse) -> Result<Vec<String>, anyhow::Error> {
     let unparse = Unparse::new(tree.names.clone());
-    Ok(unparse.unparse_stmts(&tree.stmts, 0).unwrap())
+    unparse.unparse_stmts(&tree.stmts, 0)
 }
 
 #[cfg(test)]
