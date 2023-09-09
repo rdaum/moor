@@ -2,7 +2,7 @@ use moor_value::util::quote_str;
 use moor_value::var::variant::Variant;
 
 use crate::compiler::ast;
-use crate::compiler::ast::{Stmt, StmtNode};
+use crate::compiler::ast::{Expr, Stmt, StmtNode};
 use crate::compiler::parse::Parse;
 
 use super::labels::Names;
@@ -14,6 +14,7 @@ use super::labels::Names;
 //  - sysobj calls:
 //    MOO: $bleh(foo) vs
 //   MOOR: #0.bleh(foo)
+//   with/without extra-parens
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
@@ -21,7 +22,7 @@ struct Unparse {
     names: Names,
 }
 
-impl ast::Expr {
+impl Expr {
     /// Returns the precedence of the operator. The higher the return value the higher the precedent.
     fn precedence(&self) -> u8 {
         // The table here is in reverse order from the return argument because the numbers are based
@@ -30,11 +31,11 @@ impl ast::Expr {
         // Starting from lowest to highest precedence...
         // TODO: drive Pratt and this from one common precedence table.
         let cpp_ref_prep = match self {
-            ast::Expr::Scatter(_, _) | ast::Expr::Assign { .. } => 14,
-            ast::Expr::Cond { .. } => 13,
-            ast::Expr::Or(_, _) => 12,
-            ast::Expr::And(_, _) => 11,
-            ast::Expr::Binary(op, _, _) => match op {
+            Expr::Scatter(_, _) | Expr::Assign { .. } => 14,
+            Expr::Cond { .. } => 13,
+            Expr::Or(_, _) => 12,
+            Expr::And(_, _) => 11,
+            Expr::Binary(op, _, _) => match op {
                 ast::BinaryOp::Eq => 7,
                 ast::BinaryOp::NEq => 7,
                 ast::BinaryOp::Gt => 6,
@@ -53,24 +54,26 @@ impl ast::Expr {
                 ast::BinaryOp::Exp => 2,
             },
 
-            ast::Expr::Unary(_, _) => 1,
+            Expr::Unary(_, _) => 1,
 
-            ast::Expr::Prop { .. } => 1,
-            ast::Expr::Verb { .. } => 1,
-            ast::Expr::Range { .. } => 1,
-            ast::Expr::Index(_, _) => 2,
+            Expr::Prop { .. } => 1,
+            Expr::Verb { .. } => 1,
+            Expr::Range { .. } => 1,
+            Expr::Index(_, _) => 2,
 
-            ast::Expr::VarExpr(_) => 1,
-            ast::Expr::Id(_) => 1,
-            ast::Expr::List(_) => 1,
-            ast::Expr::Pass { .. } => 1,
-            ast::Expr::Call { .. } => 1,
-            ast::Expr::Length => 1,
-            ast::Expr::Catch { .. } => 1,
+            Expr::VarExpr(_) => 1,
+            Expr::Id(_) => 1,
+            Expr::List(_) => 1,
+            Expr::Pass { .. } => 1,
+            Expr::Call { .. } => 1,
+            Expr::Length => 1,
+            Expr::Catch { .. } => 1,
         };
         return 15 - cpp_ref_prep;
     }
 }
+
+const INDENT_LEVEL: usize = 4;
 
 impl Unparse {
     fn new(names: Names) -> Self {
@@ -115,8 +118,8 @@ impl Unparse {
         }
     }
 
-    fn unparse_expr(&self, current_expr: &ast::Expr) -> Result<String, anyhow::Error> {
-        let brace_if_lower = |expr: &ast::Expr| -> String {
+    fn unparse_expr(&self, current_expr: &Expr) -> Result<String, anyhow::Error> {
+        let brace_if_lower = |expr: &Expr| -> String {
             if expr.precedence() < current_expr.precedence() {
                 format!("({})", self.unparse_expr(expr).unwrap())
             } else {
@@ -124,12 +127,12 @@ impl Unparse {
             }
         };
         match current_expr {
-            ast::Expr::Assign { left, right } => {
+            Expr::Assign { left, right } => {
                 let left_frag = self.unparse_expr(left)?;
                 let right_frag = self.unparse_expr(right)?;
                 Ok(format!("{left_frag} = {right_frag}"))
             }
-            ast::Expr::Pass { args } => {
+            Expr::Pass { args } => {
                 let mut buffer = String::new();
                 buffer.push_str("pass");
                 if !args.is_empty() {
@@ -139,53 +142,49 @@ impl Unparse {
                 }
                 Ok(buffer)
             }
-            ast::Expr::VarExpr(var) => Ok(self.unparse_var(var, true)),
-            ast::Expr::Id(id) => Ok(self.names.name_of(id).unwrap().to_string()),
-            ast::Expr::Binary(op, left_expr, right_expr) => Ok(format!(
+            Expr::VarExpr(var) => Ok(self.unparse_var(var, true)),
+            Expr::Id(id) => Ok(self.names.name_of(id).unwrap().to_string()),
+            Expr::Binary(op, left_expr, right_expr) => Ok(format!(
                 "{} {} {}",
                 brace_if_lower(left_expr),
                 op,
                 brace_if_lower(right_expr)
             )),
-            ast::Expr::And(left, right) => Ok(format!(
+            Expr::And(left, right) => Ok(format!(
                 "{} && {}",
                 brace_if_lower(left),
                 brace_if_lower(right)
             )),
-            ast::Expr::Or(left, right) => Ok(format!(
+            Expr::Or(left, right) => Ok(format!(
                 "{} || {}",
                 brace_if_lower(left),
                 brace_if_lower(right)
             )),
-            ast::Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_lower(expr))),
-            ast::Expr::Prop { location, property } => {
+            Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_lower(expr))),
+            Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
-                    (ast::Expr::VarExpr(var), ast::Expr::Id(_)) if var.is_root() => {
-                        String::from("$")
-                    }
+                    (Expr::VarExpr(var), Expr::Id(_)) if var.is_root() => String::from("$"),
                     _ => format!("{}.", self.unparse_expr(location).unwrap()),
                 };
                 let prop = match &**property {
-                    ast::Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
-                    ast::Expr::VarExpr(var) => self.unparse_var(var, true),
+                    Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
+                    Expr::VarExpr(var) => self.unparse_var(var, true),
                     _ => self.unparse_expr(property).unwrap(),
                 };
                 Ok(format!("{location}{prop}"))
             }
-            ast::Expr::Verb {
+            Expr::Verb {
                 location,
                 verb,
                 args,
             } => {
                 let location = match (&**location, &**verb) {
-                    (ast::Expr::VarExpr(var), ast::Expr::Id(_)) if var.is_root() => {
-                        String::from("$")
-                    }
+                    (Expr::VarExpr(var), Expr::Id(_)) if var.is_root() => String::from("$"),
                     _ => format!("{}:", self.unparse_expr(location).unwrap()),
                 };
                 let verb = match &**verb {
-                    ast::Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
-                    ast::Expr::VarExpr(var) => self.unparse_var(var, true),
+                    Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
+                    Expr::VarExpr(var) => self.unparse_var(var, true),
                     _ => self.unparse_expr(verb).unwrap(),
                 };
                 let mut buffer = String::new();
@@ -195,7 +194,7 @@ impl Unparse {
                 buffer.push(')');
                 Ok(buffer)
             }
-            ast::Expr::Call { function, args } => {
+            Expr::Call { function, args } => {
                 let mut buffer = String::new();
                 buffer.push_str(function);
                 buffer.push('(');
@@ -203,13 +202,13 @@ impl Unparse {
                 buffer.push(')');
                 Ok(buffer)
             }
-            ast::Expr::Range { base, from, to } => Ok(format!(
+            Expr::Range { base, from, to } => Ok(format!(
                 "{}[{}..{}]",
                 brace_if_lower(base),
                 brace_if_lower(from),
                 brace_if_lower(to)
             )),
-            ast::Expr::Cond {
+            Expr::Cond {
                 condition,
                 consequence,
                 alternative,
@@ -219,7 +218,7 @@ impl Unparse {
                 self.unparse_expr(consequence).unwrap(),
                 self.unparse_expr(alternative).unwrap()
             )),
-            ast::Expr::Catch {
+            Expr::Catch {
                 trye,
                 codes,
                 except,
@@ -236,19 +235,19 @@ impl Unparse {
                 buffer.push('\'');
                 Ok(buffer)
             }
-            ast::Expr::Index(lvalue, index) => Ok(format!(
+            Expr::Index(lvalue, index) => Ok(format!(
                 "{}[{}]",
                 self.unparse_expr(lvalue).unwrap(),
                 self.unparse_expr(index).unwrap()
             )),
-            ast::Expr::List(list) => {
+            Expr::List(list) => {
                 let mut buffer = String::new();
                 buffer.push('{');
                 buffer.push_str(self.unparse_args(list)?.as_str());
                 buffer.push('}');
                 Ok(buffer)
             }
-            ast::Expr::Scatter(vars, expr) => {
+            Expr::Scatter(vars, expr) => {
                 let mut buffer = String::new();
                 buffer.push('(');
                 for var in vars {
@@ -273,180 +272,195 @@ impl Unparse {
                 buffer.push_str(self.unparse_expr(expr)?.as_str());
                 Ok(buffer)
             }
-            ast::Expr::Length => Ok(String::from("$")),
+            Expr::Length => Ok(String::from("$")),
         }
     }
 
-    fn unparse_stmt(&self, stmt: &ast::Stmt, indent: usize) -> Result<String, anyhow::Error> {
-        let mut base_str = String::new();
+    fn unparse_stmt(&self, stmt: &Stmt, indent: usize) -> Result<Vec<String>, anyhow::Error> {
+        let indent_frag = " ".repeat(indent);
         // Statements should not end in a newline, but should be terminated with a semicolon.
         match &stmt.0 {
             StmtNode::Cond { arms, otherwise } => {
+                let mut stmt_lines = Vec::with_capacity(arms.len() + 2);
                 let cond_frag = self.unparse_expr(&arms[0].condition).unwrap();
-                let stmt_frag = self.unparse_stmts(&arms[0].statements, indent + 4).unwrap();
-                base_str.push_str(format!("if ({})\n{}", cond_frag, stmt_frag).as_str());
+                let mut stmt_frag =
+                    self.unparse_stmts(&arms[0].statements, indent + INDENT_LEVEL)?;
+                stmt_lines.push(format!("{}if ({})", indent_frag, cond_frag));
+                stmt_lines.append(&mut stmt_frag);
                 for arm in arms.iter().skip(1) {
                     let cond_frag = self.unparse_expr(&arm.condition)?;
-                    let stmt_frag = self.unparse_stmts(&arm.statements, indent + 4)?;
-                    base_str.push_str(" ".repeat(indent).as_str());
-                    base_str.push_str(format!("elseif ({})\n{}", cond_frag, stmt_frag).as_str());
+                    let mut stmt_frag =
+                        self.unparse_stmts(&arm.statements, indent + INDENT_LEVEL)?;
+                    stmt_lines.push(format!("{}elseif ({})", indent_frag, cond_frag));
+                    stmt_lines.append(&mut stmt_frag);
                 }
                 if !otherwise.is_empty() {
-                    let stmt_frag = self.unparse_stmts(otherwise, indent + 4).unwrap();
-                    base_str.push_str(" ".repeat(indent).as_str());
-                    base_str.push_str(format!("else\n{}", stmt_frag).as_str());
+                    let mut stmt_frag = self.unparse_stmts(otherwise, indent + INDENT_LEVEL)?;
+                    stmt_lines.push(format!("{}else", indent_frag));
+                    stmt_lines.append(&mut stmt_frag);
                 }
-                base_str.push_str(" ".repeat(indent).as_str());
-                base_str.push_str("endif");
+                stmt_lines.push(format!("{}endif", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::ForList { id, expr, body } => {
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+
                 let expr_frag = self.unparse_expr(expr)?;
-                let stmt_frag = self.unparse_stmts(body, indent + 4)?;
-                base_str.push_str(
-                    format!(
-                        "for {} in ({})\n{}{}endfor",
-                        self.names.name_of(id).unwrap(),
-                        expr_frag,
-                        stmt_frag,
-                        " ".repeat(indent)
-                    )
-                    .as_str(),
-                );
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+                stmt_lines.push(format!(
+                    "{}for {} in ({})",
+                    indent_frag,
+                    self.names.name_of(id)?,
+                    expr_frag
+                ));
+                stmt_lines.append(&mut stmt_frag);
+                stmt_lines.push(format!("{}endfor", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::ForRange { id, from, to, body } => {
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+
                 let from_frag = self.unparse_expr(from)?;
                 let to_frag = self.unparse_expr(to)?;
-                let stmt_frag = self.unparse_stmts(body, indent + 4)?;
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
 
-                base_str.push_str(
-                    format!(
-                        "for {} in [{}..{}]\n{}{}endfor",
-                        self.names.name_of(id).unwrap(),
-                        from_frag,
-                        to_frag,
-                        stmt_frag,
-                        " ".repeat(indent)
-                    )
-                    .as_str(),
-                );
+                stmt_lines.push(format!(
+                    "{}for {} in [{}..{}]",
+                    indent_frag,
+                    self.names.name_of(id)?,
+                    from_frag,
+                    to_frag
+                ));
+                stmt_lines.append(&mut stmt_frag);
+                stmt_lines.push(format!("{}endfor", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::While {
                 id,
                 condition,
                 body,
             } => {
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+
                 let cond_frag = self.unparse_expr(condition)?;
-                let stmt_frag = self.unparse_stmts(body, indent + 4)?;
-                base_str.push_str("while ");
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+
+                let mut base_str = "while ".to_string();
                 if let Some(id) = id {
-                    base_str.push_str(self.names.name_of(id).unwrap());
+                    base_str.push_str(self.names.name_of(id)?);
                 }
-                base_str.push_str(
-                    format!(
-                        "({})\n{}{}endwhile",
-                        cond_frag,
-                        stmt_frag,
-                        " ".repeat(indent)
-                    )
-                    .as_str(),
-                );
+                stmt_lines.push(format!("{}({})", base_str, cond_frag));
+                stmt_lines.append(&mut stmt_frag);
+                stmt_lines.push(format!("{}endwhile", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::Fork { id, time, body } => {
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+
                 let delay_frag = self.unparse_expr(time)?;
-                let stmt_frag = self.unparse_stmts(body, indent + 4)?;
-                base_str.push_str("fork ");
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+                let mut base_str = format!("{}fork", indent_frag);
                 if let Some(id) = id {
-                    base_str.push_str(self.names.name_of(id).unwrap());
+                    base_str.push_str(self.names.name_of(id)?);
                 }
-                base_str.push_str(
-                    format!(
-                        "({})\n{}\n{}endfork",
-                        delay_frag,
-                        stmt_frag,
-                        " ".repeat(indent)
-                    )
-                    .as_str(),
-                );
+                stmt_lines.push(format!("{}({})", base_str, delay_frag));
+                stmt_lines.append(&mut stmt_frag);
+                stmt_lines.push(format!("{}endfork", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::TryExcept { body, excepts } => {
-                let stmt_frag = self.unparse_stmts(body, indent + 4)?;
-                base_str.push_str(format!("try\n{}", stmt_frag).as_str());
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+                stmt_lines.push("try".to_string());
+                stmt_lines.append(&mut stmt_frag);
                 for except in excepts {
-                    let stmt_frag = self.unparse_stmts(&except.statements, indent + 4)?;
-                    base_str.push_str("except ");
+                    let mut stmt_frag =
+                        self.unparse_stmts(&except.statements, indent + INDENT_LEVEL)?;
+                    let mut base_str = "except ".to_string();
                     if let Some(id) = &except.id {
-                        base_str.push_str(self.names.name_of(id).unwrap());
+                        base_str.push_str(self.names.name_of(id)?);
                         base_str.push(' ');
                     }
                     let catch_codes = self.unparse_catch_codes(&except.codes)?;
-                    base_str.push_str(format!("({catch_codes})\n{stmt_frag}").as_str());
+                    base_str.push_str(format!("({catch_codes})").as_str());
+                    stmt_lines.push(base_str);
+                    stmt_lines.append(&mut stmt_frag);
                 }
-                base_str.push_str(" ".repeat(indent).as_str());
-                base_str.push_str("endtry");
+                stmt_lines.push(format!("{}endtry", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::TryFinally { body, handler } => {
-                let stmt_frag = self.unparse_stmts(body, indent + 4)?;
-                let handler_frag = self.unparse_stmts(handler, indent + 4)?;
-                base_str
-                    .push_str(format!("try\n{stmt_frag}finally\n{handler_frag}endtry").as_str());
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+                let mut handler_frag = self.unparse_stmts(handler, indent + INDENT_LEVEL)?;
+                stmt_lines.push("try".to_string());
+                stmt_lines.append(&mut stmt_frag);
+                stmt_lines.push("finally".to_string());
+                stmt_lines.append(&mut handler_frag);
+                stmt_lines.push(format!("{}endtry", indent_frag));
+                Ok(stmt_lines)
             }
             StmtNode::Break { exit } => {
-                base_str.push_str("break");
+                let mut base_str = "break".to_string();
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    base_str.push_str(self.names.name_of(exit).unwrap());
+                    base_str.push_str(self.names.name_of(exit)?);
                 }
                 base_str.push(';');
+                Ok(vec![base_str])
             }
             StmtNode::Continue { exit } => {
-                base_str.push_str("continue");
+                let mut base_str = "continue".to_string();
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    base_str.push_str(self.names.name_of(exit).unwrap());
+                    base_str.push_str(self.names.name_of(exit)?);
                 }
                 base_str.push(';');
+                Ok(vec![base_str])
             }
-            StmtNode::Return { expr } => {
-                base_str.push_str("return");
-                if let Some(ret_expr) = &expr {
-                    base_str.push(' ');
-                    base_str.push_str(self.unparse_expr(ret_expr).unwrap().as_str());
+            StmtNode::Return { expr } => Ok(match expr {
+                None => {
+                    vec![format!("{}return;", indent_frag)]
                 }
-                base_str.push(';');
-            }
-            StmtNode::Expr(expr) => {
-                base_str.push_str(self.unparse_expr(expr).unwrap().as_str());
-                base_str.push(';');
-            }
-        };
-        Ok(base_str)
+                Some(e) => {
+                    vec![format!("{}return {};", indent_frag, self.unparse_expr(e)?)]
+                }
+            }),
+            StmtNode::Expr(expr) => Ok(vec![format!(
+                "{}{};",
+                indent_frag,
+                self.unparse_expr(expr)?
+            )]),
+        }
     }
 
-    pub fn unparse_stmts(&self, stms: &[Stmt], indent: usize) -> Result<String, anyhow::Error> {
-        let prefix = " ".repeat(indent);
-        let results = stms
-            .iter()
-            .map(|s| {
-                self.unparse_stmt(s, indent)
-                    .map(|line| format!("{prefix}{line}"))
-            })
-            .collect::<Result<Vec<String>, anyhow::Error>>()?;
-
-        Ok(results.join("\n") + "\n")
+    pub fn unparse_stmts(
+        &self,
+        stms: &[Stmt],
+        indent: usize,
+    ) -> Result<Vec<String>, anyhow::Error> {
+        let mut results = vec![];
+        for stmt in stms {
+            results.append(&mut self.unparse_stmt(stmt, indent)?);
+        }
+        Ok(results)
     }
 }
 
-pub fn unparse(tree: &Parse) -> Result<String, anyhow::Error> {
+pub fn unparse(tree: &Parse) -> Result<Vec<String>, anyhow::Error> {
     let unparse = Unparse::new(tree.names.clone());
     Ok(unparse.unparse_stmts(&tree.stmts, 0).unwrap())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
     use unindent::unindent;
+
+    use super::*;
 
     #[test_case("a = 1;\n"; "assignment")]
     #[test_case("a = 1 + 2;\n"; "assignment with expr")]
@@ -493,7 +507,7 @@ mod tests {
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();
-        assert_eq!(stripped, result);
+        assert_eq!(stripped.trim(), result.trim());
     }
 
     #[test]
@@ -543,11 +557,11 @@ mod tests {
         "#;
         let stripped = unindent(body);
         let result = parse_and_unparse(&stripped).unwrap();
-        assert_eq!(stripped, result);
+        assert_eq!(stripped.trim(), result.trim());
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, anyhow::Error> {
         let tree = crate::compiler::parse::parse_program(original).unwrap();
-        unparse(&tree)
+        Ok(unparse(&tree)?.join("\n"))
     }
 }

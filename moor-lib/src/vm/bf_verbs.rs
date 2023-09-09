@@ -377,10 +377,9 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, anyhow::Er
             return Ok(Error(E_INVARG));
         }
     };
-    let split = unparsed.split('\n');
-    let mut lines = split.map(v_str).collect::<Vec<_>>();
-    lines.pop(); // Remove the last empty line.
-    Ok(Ret(v_list(lines)))
+    Ok(Ret(v_list(
+        unparsed.iter().map(|s| v_str(s)).collect::<Vec<_>>(),
+    )))
 }
 bf_declare!(verb_code, bf_verb_code);
 

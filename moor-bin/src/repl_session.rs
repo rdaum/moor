@@ -19,7 +19,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::block_in_place;
 
-/// When repl lines begin with these fragments, we don't prepend a return or postfix a ;
+// When repl lines begin with these fragments, we don't prepend a return or postfix a ;
 const EVAL_BLOCK_WORDS: [&str; 7] = ["if ", "while ", "fork ", "for ", "try ", "return ", ";;"];
 
 pub struct ReplSession {
@@ -323,7 +323,7 @@ async fn list_command(
         "Verb {} on object {}:\n{}",
         verb_str,
         obj,
-        unparsed
+        unparsed.join("\n")
     )
     .unwrap();
 

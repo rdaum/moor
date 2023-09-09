@@ -96,10 +96,10 @@ impl Names {
         self.names.len()
     }
 
-    pub fn name_of(&self, name: &Name) -> Option<&str> {
+    pub fn name_of(&self, name: &Name) -> Result<&str, anyhow::Error> {
         if name.0 as usize >= self.names.len() {
-            return None;
+            anyhow::bail!("Invalid name index: {}", name.0)
         }
-        Some(&self.names[name.0 as usize])
+        Ok(&self.names[name.0 as usize])
     }
 }
