@@ -238,7 +238,20 @@ impl VM {
         // by the parent anyways.
         self.parent_activation_mut().push(v_err(code));
 
-        self.raise_error(code)
+        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
+        if let Some(activation) = self.stack.last() {
+            if activation
+                .verb_info
+                .verbdef()
+                .flags()
+                .contains(VerbFlag::Debug)
+            {
+                return self.raise_error_pack(code.make_error_pack(None));
+            }
+        }
+        // If we're not unwinding, we need to pop the builtin function's activation frame.
+        self.stack.pop();
+        Ok(ExecutionResult::More)
     }
 
     /// Push an error to the stack with a description and raise it.
