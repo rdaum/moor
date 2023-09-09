@@ -243,7 +243,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<PropDef, WorldStateError> {
         let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .find_named(pname)
+            .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
@@ -261,7 +261,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .find_named(pname)
+            .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
         self.perms(perms)
@@ -373,7 +373,7 @@ impl WorldState for DbTxWorldState {
 
         let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .find_named(pname)
+            .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
         self.perms(perms)
@@ -394,7 +394,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<bool, WorldStateError> {
         let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .find_named(pname)
+            .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
@@ -421,7 +421,7 @@ impl WorldState for DbTxWorldState {
         // First seek the property handle.
         let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .find_named(pname)
+            .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?
@@ -475,7 +475,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         let properties = self.client.get_properties(obj).await?;
         let ph = properties
-            .find_named(pname)
+            .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
         self.perms(perms)
             .await?

@@ -147,7 +147,7 @@ impl<'a> RocksDbTx<'a> {
             };
 
             // Verify we don't already have a property with this name. If we do, return an error.
-            if props.find_named(name.as_str()).is_some() {
+            if props.find_first_named(name.as_str()).is_some() {
                 return Err(WorldStateError::DuplicatePropertyDefinition(location, name).into());
             }
 
@@ -228,7 +228,7 @@ impl<'a> RocksDbTx<'a> {
                 None => PropDefs::empty(),
                 Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
             };
-            if let Some(prop) = props.find_named(n.as_str()) {
+            if let Some(prop) = props.find_first_named(n.as_str()) {
                 trace!(?prop, parent = ?search_o, "found property");
                 return Ok(Some(prop.clone()));
             }

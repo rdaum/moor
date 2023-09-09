@@ -13,7 +13,7 @@ use moor_value::var::objid::Objid;
 use moor_value::NOTHING;
 
 use crate::db::rocksdb::tx_db_impl::{
-    composite_key_for, composite_key_uuid, get_oid_value, oid_key, write_cf, RocksDbTx,
+    composite_key_uuid, get_oid_value, oid_key, write_cf, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
 
@@ -111,7 +111,10 @@ impl<'a> RocksDbTx<'a> {
             return Err(WorldStateError::VerbNotFound(o, n).into());
         };
         let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
-        let Some(verb) = verbs.find_named(n.as_str()) else {
+        // TODO: verify semantics/call use cases here. MOO verbs are actually potentially ambiguous
+        //   on name, so need to make sure that this is for only specific cases where 'get me the
+        //   first match' is ok.
+        let Some(verb) = verbs.find_first_named(n.as_str()) else {
             return Err(WorldStateError::VerbNotFound(o, n).into());
         };
         Ok(verb.clone())
@@ -148,10 +151,10 @@ impl<'a> RocksDbTx<'a> {
     pub fn resolve_verb(
         &self,
         o: Objid,
-        n: String,
-        a: Option<VerbArgsSpec>,
+        name: String,
+        argspec: Option<VerbArgsSpec>,
     ) -> Result<VerbDef, anyhow::Error> {
-        trace!(object = ?o, verb = %n, args = ?a, "Resolving verb");
+        trace!(object = ?o, verb = %name, args = ?argspec, "Resolving verb");
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         let ov_cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let mut search_o = o;
@@ -164,9 +167,19 @@ impl<'a> RocksDbTx<'a> {
             };
 
             // If we found the verb, return it.
-            if let Some(verb) = verbs.find_named(n.as_str()) {
-                return Ok(verb.clone());
-            };
+            let name_matches = verbs.find_named(name.as_str());
+            for verb in name_matches {
+                match argspec {
+                    Some(argspec) => {
+                        if verb.args().matches(&argspec) {
+                            return Ok(verb.clone());
+                        }
+                    }
+                    None => {
+                        return Ok(verb.clone());
+                    }
+                }
+            }
 
             // Otherwise, find our parent.  If it's, then set o to it and continue unless we've
             // hit the end of the chain.
@@ -178,27 +191,8 @@ impl<'a> RocksDbTx<'a> {
             }
             search_o = parent;
         }
-        trace!(termination_object = ?search_o, verb = %n, "no verb found");
-        Err(WorldStateError::VerbNotFound(o, n).into())
-    }
-    #[tracing::instrument(skip(self))]
-    pub fn retrieve_verb(&self, o: Objid, v: String) -> Result<(Vec<u8>, VerbDef), anyhow::Error> {
-        let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
-        let ok = oid_key(o);
-        let Some(verbs_bytes) = self.tx.get_cf(cf, ok)? else {
-            return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
-        };
-        let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
-        let Some(verb) = verbs.find_named(v.as_str()) else {
-            return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
-        };
-        let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
-        let vk = composite_key_for(o, &verb);
-        let prg_bytes = self.tx.get_cf(cf, vk)?;
-        let Some(prg_bytes) = prg_bytes else {
-            return Err(WorldStateError::VerbNotFound(o, v.clone()).into());
-        };
-        Ok((prg_bytes, verb.clone()))
+        trace!(termination_object = ?search_o, verb = %name, "no verb found");
+        Err(WorldStateError::VerbNotFound(o, name).into())
     }
     #[tracing::instrument(skip(self))]
     pub fn set_verb_info(

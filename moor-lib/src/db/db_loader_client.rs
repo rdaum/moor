@@ -60,7 +60,7 @@ impl LoaderInterface for DbTxWorldState {
             .client
             .get_properties(obj)
             .await?
-            .find_named(pname)
+            .find_first_named(pname)
             .map(|p| p.uuid()))
     }
     async fn define_property(

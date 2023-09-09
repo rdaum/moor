@@ -273,7 +273,8 @@ impl TransientStore {
         let Some(verbdefs) = self.verbdefs.get(&o) else {
             return Err(ObjectNotFound(o));
         };
-        let verbdef = verbdefs.find_named(n.as_str());
+        // TODO: verify that all uses of this are actually needing this "just grab the first match"
+        let verbdef = verbdefs.find_first_named(n.as_str());
         let Some(verbdef) = verbdef else {
             return Err(VerbNotFound(o, n));
         };
@@ -302,7 +303,7 @@ impl TransientStore {
         &self,
         location: Objid,
         name: String,
-        _argspec: Option<VerbArgsSpec>,
+        argspec: Option<VerbArgsSpec>,
     ) -> Result<VerbDef, WorldStateError> {
         let Some(_) = self.objects.get(&location) else {
             return Err(ObjectNotFound(location));
@@ -310,10 +311,21 @@ impl TransientStore {
         let mut search_o = location;
         loop {
             if let Some(verbs) = self.verbdefs.get(&search_o) {
-                // If we found the verb, return it.
-                if let Some(verb) = verbs.find_named(name.as_str()) {
-                    return Ok(verb.clone());
-                };
+                // Seek through the set of matches, looking for one that matches the argspec, if
+                // we care about that. If not, just return the first one.
+                let name_matches = verbs.find_named(name.as_str());
+                for verb in name_matches {
+                    match argspec {
+                        Some(argspec) => {
+                            if verb.args().matches(&argspec) {
+                                return Ok(verb.clone());
+                            }
+                        }
+                        None => {
+                            return Ok(verb.clone());
+                        }
+                    }
+                }
             };
             // Otherwise, find our parent.  If it's, then set o to it and continue unless we've
             // hit the end of the chain.
@@ -451,7 +463,7 @@ impl TransientStore {
 
             if let Some(propdefs) = self.propdefs.get_mut(&location) {
                 // Verify we don't already have a property with this name. If we do, return an error.
-                if propdefs.find_named(name.as_str()).is_some() {
+                if propdefs.find_first_named(name.as_str()).is_some() {
                     return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
                 }
 
@@ -515,7 +527,7 @@ impl TransientStore {
         let Some(propdefs) = self.propdefs.get(&o) else {
             return Err(PropertyNotFound(o, n));
         };
-        let Some(propdef) = propdefs.find_named(n.as_str()) else {
+        let Some(propdef) = propdefs.find_first_named(n.as_str()) else {
             return Err(PropertyNotFound(o, n));
         };
 

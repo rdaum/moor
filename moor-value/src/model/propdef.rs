@@ -196,12 +196,12 @@ mod tests {
         );
 
         let pds = PropDefs::empty().with_all_added(&[test_pd1.clone(), test_pd2.clone()]);
-        let pd1 = pds.find_named("test").unwrap();
+        let pd1 = pds.find_first_named("test").unwrap();
         assert_eq!(pd1.uuid(), test_pd1.uuid());
 
         let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec);
         let pds2 = PropDefs::from_sliceref(SliceRef::from_vec(byte_vec));
-        let pd2 = pds2.find_named("test2").unwrap();
+        let pd2 = pds2.find_first_named("test2").unwrap();
         assert_eq!(pd2.uuid(), test_pd2.uuid());
 
         assert_eq!(pd2.name(), "test2");

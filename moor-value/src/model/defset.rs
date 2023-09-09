@@ -102,7 +102,10 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         self.iter().find(|p| &p.uuid() == uuid)
     }
     #[must_use]
-    pub fn find_named(&self, name: &str) -> Option<T> {
+    pub fn find_named(&self, name: &str) -> Vec<T> {
+        self.iter().filter(|p| p.matches_name(name)).collect()
+    }
+    pub fn find_first_named(&self, name: &str) -> Option<T> {
         self.iter().find(|p| p.matches_name(name))
     }
     #[must_use]
