@@ -481,9 +481,13 @@ impl CodegenState {
     }
 
     pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
-        let line_number = stmt.1;
+        // We use the 'canonical' tree line number here for span generation, which should match what
+        // unparse generates.
+        // TODO In theory we could actually provide both and generate spans for both for situations
+        //   where the user is looking at their own not-decompiled copy of the source.
+        let line_number = stmt.tree_line_no;
         self.line_number_spans.push((self.ops.len(), line_number));
-        match &stmt.0 {
+        match &stmt.node {
             StmtNode::Cond { arms, otherwise } => {
                 let end_label = self.make_jump_label(None);
                 let mut is_else = false;
@@ -741,11 +745,12 @@ pub fn compile(program: &str) -> Result<Program, anyhow::Error> {
 
     let builtins = make_builtin_labels();
     let parse = parse_program(program)?;
+
+    // Generate the code into 'cg_state'.
     let mut cg_state = CodegenState::new(parse.names, builtins);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }
-
     cg_state.emit(Op::Done);
 
     if cg_state.cur_stack != 0 {

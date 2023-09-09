@@ -24,6 +24,7 @@ use crate::compiler::ast::{
 };
 use crate::compiler::labels::Names;
 use crate::compiler::parse::moo::{MooParser, Rule};
+use crate::compiler::unparse::annotate_line_numbers;
 
 pub mod moo {
     #[derive(Parser)]
@@ -750,6 +751,10 @@ pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
     }
     let names = names.borrow_mut();
     let names = names.clone();
+
+    // Annotate the "true" line numbers of the AST nodes.
+    annotate_line_numbers(1, &mut program);
+
     Ok(Parse {
         stmts: program,
         names,
@@ -771,7 +776,7 @@ mod tests {
     use crate::compiler::parse::parse_program;
 
     fn stripped_stmts(statements: &Vec<Stmt>) -> Vec<StmtNode> {
-        statements.iter().map(|s| s.0.clone()).collect()
+        statements.iter().map(|s| s.node.clone()).collect()
     }
 
     #[test]
@@ -845,12 +850,13 @@ mod tests {
                             Box::new(VarExpr(v_int(1))),
                             Box::new(VarExpr(v_int(2))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(5))),
                             },
-                            1
-                        )],
+                            parser_line_no: 1,
+                            tree_line_no: 2,
+                        }],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -858,21 +864,23 @@ mod tests {
                             Box::new(VarExpr(v_int(2))),
                             Box::new(VarExpr(v_int(3))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(3))),
                             },
-                            1
-                        )],
+                            parser_line_no: 1,
+                            tree_line_no: 4,
+                        }],
                     },
                 ],
 
-                otherwise: vec![Stmt(
-                    StmtNode::Return {
+                otherwise: vec![Stmt {
+                    node: StmtNode::Return {
                         expr: Some(VarExpr(v_int(6))),
                     },
-                    1
-                )],
+                    parser_line_no: 1,
+                    tree_line_no: 6,
+                }],
             }
         );
     }
@@ -902,12 +910,13 @@ mod tests {
                             Box::new(VarExpr(v_int(1))),
                             Box::new(VarExpr(v_int(2))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(5))),
                             },
-                            3
-                        )],
+                            parser_line_no: 3,
+                            tree_line_no: 2,
+                        }],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -915,12 +924,13 @@ mod tests {
                             Box::new(VarExpr(v_int(2))),
                             Box::new(VarExpr(v_int(3))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(3))),
                             },
-                            5
-                        )],
+                            parser_line_no: 5,
+                            tree_line_no: 4,
+                        }],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -928,21 +938,23 @@ mod tests {
                             Box::new(VarExpr(v_int(3))),
                             Box::new(VarExpr(v_int(4))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(4))),
                             },
-                            7
-                        )],
+                            parser_line_no: 7,
+                            tree_line_no: 6,
+                        }],
                     },
                 ],
 
-                otherwise: vec![Stmt(
-                    StmtNode::Return {
+                otherwise: vec![Stmt {
+                    node: StmtNode::Return {
                         expr: Some(VarExpr(v_int(6))),
                     },
-                    9
-                )],
+                    parser_line_no: 9,
+                    tree_line_no: 8,
+                }],
             }
         );
     }
@@ -992,7 +1004,11 @@ mod tests {
                             args: vec![Normal(Id(parse.names.find_name("this").unwrap())),],
                         })
                     ),
-                    statements: vec![Stmt(StmtNode::Return { expr: None }, 3)],
+                    statements: vec![Stmt {
+                        node: StmtNode::Return { expr: None },
+                        parser_line_no: 3,
+                        tree_line_no: 2,
+                    }],
                 }],
                 otherwise: vec![],
             }
@@ -1015,8 +1031,8 @@ mod tests {
                     Normal(VarExpr(v_int(2))),
                     Normal(VarExpr(v_int(3))),
                 ]),
-                body: vec![Stmt(
-                    StmtNode::Expr(Expr::Assign {
+                body: vec![Stmt {
+                    node: StmtNode::Expr(Expr::Assign {
                         left: Box::new(Id(b)),
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
@@ -1024,8 +1040,9 @@ mod tests {
                             Box::new(VarExpr(v_int(5))),
                         )),
                     }),
-                    1
-                )],
+                    parser_line_no: 1,
+                    tree_line_no: 2,
+                }],
             }
         )
     }
@@ -1043,8 +1060,8 @@ mod tests {
                 id: x,
                 from: VarExpr(v_int(1)),
                 to: VarExpr(v_int(5)),
-                body: vec![Stmt(
-                    StmtNode::Expr(Expr::Assign {
+                body: vec![Stmt {
+                    node: StmtNode::Expr(Expr::Assign {
                         left: Box::new(Id(b)),
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
@@ -1052,8 +1069,9 @@ mod tests {
                             Box::new(VarExpr(v_int(5))),
                         )),
                     }),
-                    1
-                )],
+                    parser_line_no: 1,
+                    tree_line_no: 2,
+                }],
             }
         )
     }
@@ -1101,8 +1119,8 @@ mod tests {
                 id: None,
                 condition: VarExpr(v_int(1)),
                 body: vec![
-                    Stmt(
-                        StmtNode::Expr(Expr::Assign {
+                    Stmt {
+                        node: StmtNode::Expr(Expr::Assign {
                             left: Box::new(Id(x)),
                             right: Box::new(Expr::Binary(
                                 BinaryOp::Add,
@@ -1110,22 +1128,28 @@ mod tests {
                                 Box::new(VarExpr(v_int(1))),
                             )),
                         }),
-                        1
-                    ),
-                    Stmt(
-                        StmtNode::Cond {
+                        parser_line_no: 1,
+                        tree_line_no: 2,
+                    },
+                    Stmt {
+                        node: StmtNode::Cond {
                             arms: vec![CondArm {
                                 condition: Expr::Binary(
                                     BinaryOp::Gt,
                                     Box::new(Id(x)),
                                     Box::new(VarExpr(v_int(5))),
                                 ),
-                                statements: vec![Stmt(StmtNode::Break { exit: None }, 1)],
+                                statements: vec![Stmt {
+                                    node: StmtNode::Break { exit: None },
+                                    parser_line_no: 1,
+                                    tree_line_no: 4,
+                                }],
                             }],
                             otherwise: vec![],
                         },
-                        1
-                    ),
+                        parser_line_no: 1,
+                        tree_line_no: 3,
+                    },
                 ],
             }]
         )
@@ -1144,8 +1168,8 @@ mod tests {
                 id: Some(chuckles),
                 condition: VarExpr(v_int(1)),
                 body: vec![
-                    Stmt(
-                        StmtNode::Expr(Expr::Assign {
+                    Stmt {
+                        node: StmtNode::Expr(Expr::Assign {
                             left: Box::new(Id(x)),
                             right: Box::new(Expr::Binary(
                                 BinaryOp::Add,
@@ -1153,27 +1177,30 @@ mod tests {
                                 Box::new(VarExpr(v_int(1))),
                             )),
                         }),
-                        1
-                    ),
-                    Stmt(
-                        StmtNode::Cond {
+                        parser_line_no: 1,
+                        tree_line_no: 2,
+                    },
+                    Stmt {
+                        node: StmtNode::Cond {
                             arms: vec![CondArm {
                                 condition: Expr::Binary(
                                     BinaryOp::Gt,
                                     Box::new(Id(x)),
                                     Box::new(VarExpr(v_int(5))),
                                 ),
-                                statements: vec![Stmt(
-                                    StmtNode::Break {
+                                statements: vec![Stmt {
+                                    node: StmtNode::Break {
                                         exit: Some(chuckles)
                                     },
-                                    1
-                                )],
+                                    parser_line_no: 1,
+                                    tree_line_no: 4,
+                                }],
                             }],
                             otherwise: vec![],
                         },
-                        1
-                    ),
+                        parser_line_no: 1,
+                        tree_line_no: 3,
+                    },
                 ],
             }]
         )
@@ -1462,30 +1489,33 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             parse.stmts,
-            vec![Stmt(
-                StmtNode::Cond {
+            vec![Stmt {
+                node: StmtNode::Cond {
                     arms: vec![CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(VarExpr(v_int(5))),
                             Box::new(VarExpr(v_int(5))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(5)))
                             },
-                            2
-                        )],
+                            parser_line_no: 2,
+                            tree_line_no: 2,
+                        }],
                     }],
-                    otherwise: vec![Stmt(
-                        StmtNode::Return {
+                    otherwise: vec![Stmt {
+                        node: StmtNode::Return {
                             expr: Some(VarExpr(v_int(3)))
                         },
-                        4
-                    )],
+                        parser_line_no: 4,
+                        tree_line_no: 4,
+                    }],
                 },
-                1
-            )]
+                parser_line_no: 1,
+                tree_line_no: 1,
+            }]
         );
     }
 
@@ -1509,12 +1539,13 @@ mod tests {
                             Box::new(VarExpr(v_int(5))),
                             Box::new(VarExpr(v_int(5))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(5)))
                             },
-                            2
-                        )],
+                            parser_line_no: 2,
+                            tree_line_no: 2,
+                        }],
                     },
                     CondArm {
                         condition: Expr::Binary(
@@ -1522,20 +1553,22 @@ mod tests {
                             Box::new(VarExpr(v_int(2))),
                             Box::new(VarExpr(v_int(2))),
                         ),
-                        statements: vec![Stmt(
-                            StmtNode::Return {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return {
                                 expr: Some(VarExpr(v_int(2)))
                             },
-                            4
-                        )],
+                            parser_line_no: 4,
+                            tree_line_no: 4,
+                        }],
                     },
                 ],
-                otherwise: vec![Stmt(
-                    StmtNode::Return {
+                otherwise: vec![Stmt {
+                    node: StmtNode::Return {
                         expr: Some(VarExpr(v_int(3)))
                     },
-                    6
-                )],
+                    parser_line_no: 6,
+                    tree_line_no: 6,
+                }],
             }]
         );
     }
@@ -1577,11 +1610,19 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::TryExcept {
-                body: vec![Stmt(StmtNode::Expr(VarExpr(v_int(5))), 2)],
+                body: vec![Stmt {
+                    node: StmtNode::Expr(VarExpr(v_int(5))),
+                    parser_line_no: 2,
+                    tree_line_no: 2,
+                }],
                 excepts: vec![ExceptArm {
                     id: None,
                     codes: CatchCodes::Codes(vec![Normal(VarExpr(v_err(E_PROPNF)))]),
-                    statements: vec![Stmt(StmtNode::Return { expr: None }, 4)],
+                    statements: vec![Stmt {
+                        node: StmtNode::Return { expr: None },
+                        parser_line_no: 4,
+                        tree_line_no: 4,
+                    }],
                 }],
             }]
         );

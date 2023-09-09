@@ -188,8 +188,10 @@ impl Decompile {
                 // Decompile to the 'end_of_otherwise' label to get the statements for the
                 // otherwise branch.
                 let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
-                let Some(Stmt(StmtNode::Cond { arms: _, otherwise }, _)) =
-                    self.statements.last_mut()
+                let Some(Stmt {
+                    node: StmtNode::Cond { arms: _, otherwise },
+                    ..
+                }) = self.statements.last_mut()
                 else {
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
@@ -207,8 +209,10 @@ impl Decompile {
                     statements: cond_statements,
                 };
                 // Add the arm
-                let Some(Stmt(StmtNode::Cond { arms, otherwise: _ }, _)) =
-                    self.statements.last_mut()
+                let Some(Stmt {
+                    node: StmtNode::Cond { arms, otherwise: _ },
+                    ..
+                }) = self.statements.last_mut()
                 else {
                     return Err(MalformedProgram(
                         "expected Cond as working tree".to_string(),
@@ -782,347 +786,220 @@ mod tests {
     use crate::compiler::decompile::program_to_tree;
     use crate::compiler::parse::parse_program;
     use crate::compiler::parse::Parse;
-    use crate::vm::opcode::Program;
+    use crate::compiler::unparse::{annotate_line_numbers, recursive_compare};
     use tracing_test::traced_test;
 
-    fn parse_decompile(program_text: &str) -> (Parse, Parse, Program) {
+    fn parse_decompile(program_text: &str) -> (Parse, Parse) {
         let parse_1 = parse_program(program_text).unwrap();
         let binary = compile(program_text).unwrap();
-        let parse_2 = program_to_tree(&binary).unwrap();
-        (parse_1, parse_2, binary)
+        let mut parse_2 = program_to_tree(&binary).unwrap();
+        annotate_line_numbers(1, &mut parse_2.stmts);
+        (parse_1, parse_2)
     }
 
     #[test]
     fn test_if() {
-        let (parse, decompiled, binary) = parse_decompile("if (1) return 2; endif");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("if (1) return 2; endif");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_if_else() {
-        let (parse, decompiled, binary) = parse_decompile("if (1) return 2; else return 3; endif");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("if (1) return 2; else return 3; endif");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_if_elseif() {
-        let (parse, decompiled, binary) =
+        let (parse, decompiled) =
             parse_decompile("if (1) return 2; elseif (2) return 3; elseif (3) return 4; endif");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_while() {
-        let (parse, decompiled, binary) = parse_decompile("while (1) return 2; endwhile");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("while (1) return 2; endwhile");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_while_break_continue() {
-        let (parse, decompiled, binary) =
+        let (parse, decompiled) =
             parse_decompile("while (1) if (1 == 2) break; else continue; endif endwhile");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_while_labelled() {
-        let (parse, decompiled, binary) = parse_decompile("while chuckles (1) return 2; endwhile");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("while chuckles (1) return 2; endwhile");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_for_in() {
-        let (parse, decompiled, binary) = parse_decompile("for x in (a) return 2; endfor");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("for x in (a) return 2; endfor");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_for_range() {
-        let (parse, decompiled, binary) = parse_decompile("for x in [1..5] return 2; endfor");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("for x in [1..5] return 2; endfor");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_builtin() {
-        let (parse, decompiled, binary) = parse_decompile("return setadd({1,2}, 3);");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return setadd({1,2}, 3);");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_list() {
-        let (parse, decompiled, binary) = parse_decompile("return {1,2,3};");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return {1,2,3};");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_list_splice() {
-        let (parse, decompiled, binary) = parse_decompile("return {1,2,3,@{1,2,3}};");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return {1,2,3,@{1,2,3}};");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_arithmetic_expression() {
-        let (parse, decompiled, binary) = parse_decompile("return -(1 + 2 * (3 - 4) / 5 % 6);");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return -(1 + 2 * (3 - 4) / 5 % 6);");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_equality_inequality_relational() {
-        let (parse, decompiled, binary) = parse_decompile("return 1 == 2 != 3 < 4 <= 5 > 6 >= 7;");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return 1 == 2 != 3 < 4 <= 5 > 6 >= 7;");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_logical_and_or() {
-        let (parse, decompiled, binary) = parse_decompile("return 1 && 2 || 3 && 4;");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return 1 && 2 || 3 && 4;");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_assignment() {
-        let (parse, decompiled, binary) = parse_decompile("x = 1; return x;");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("x = 1; return x;");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_index() {
-        let (parse, decompiled, binary) = parse_decompile("return x[1];");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return x[1];");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_range() {
-        let (parse, decompiled, binary) = parse_decompile("return x[1..2];");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return x[1..2];");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_call_verb() {
-        let (parse, decompiled, binary) = parse_decompile("return x:y(1,2,3);");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("return x:y(1,2,3);");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_call_verb_expr() {
-        let (parse, decompiled, binary) = parse_decompile(r#"return x:("y")(1,2,3);"#);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(r#"return x:("y")(1,2,3);"#);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_simple_scatter() {
-        let (parse, decompiled, binary) = parse_decompile("{connection} = args;");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("{connection} = args;");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_scatter_required() {
-        let (parse, decompiled, binary) = parse_decompile("{a,b,c} = args;");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("{a,b,c} = args;");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_scatter_mixed() {
-        let (parse, decompiled, binary) = parse_decompile("{a,b,?c,@d} = args;");
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile("{a,b,?c,@d} = args;");
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_try_except() {
         let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_try_finally() {
         let program = "try a=1; finally a=2; endtry";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_catch_expr() {
         let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_range_set() {
         let program = "a[1..2] = {3,4};";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_index_set() {
         let program = "a[1] = {3,4};";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_if_ques() {
         let program = "1 ? 2 | 3;";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_prop_assign() {
         let program = "x.y = 1;";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_labelled_break() {
         let program = "while bozo (1) break bozo; tostr(5);  endwhile;";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     fn test_labelled_continue() {
         let program = "while bozo (1) continue bozo; tostr(5); endwhile;";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
     #[traced_test]
     fn test_if_after_try() {
         let program = "try return x; except (E_VARNF) endtry; if (x) return 1; endif;";
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
@@ -1131,12 +1008,8 @@ mod tests {
         let program = r#"
           `1/0 ! ANY';
         "#;
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
@@ -1144,12 +1017,8 @@ mod tests {
         let program = r#"
             2 ? 0 | caller_perms();
         "#;
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 
     #[test]
@@ -1198,11 +1067,7 @@ mod tests {
         "this:tell_contents(things, this.ctype);";
         this:tell_contents(things);
         "#;
-        let (parse, decompiled, binary) = parse_decompile(program);
-        assert_eq!(
-            parse.stmts, decompiled.stmts,
-            "Decompile mismatch for {}",
-            binary
-        );
+        let (parse, decompiled) = parse_decompile(program);
+        recursive_compare(&parse.stmts, &decompiled.stmts);
     }
 }
