@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
+    
     use std::sync::Arc;
+    use std::time::Duration;
 
     use moor_value::model::props::PropFlag;
     use moor_value::model::r#match::VerbArgsSpec;
@@ -10,19 +12,23 @@ mod tests {
     use moor_value::var::error::Error::E_DIV;
     use moor_value::var::objid::Objid;
     use moor_value::var::variant::Variant;
-    use moor_value::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
+    use moor_value::var::{
+        v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, v_str, Var,
+    };
     use moor_value::NOTHING;
     use moor_value::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::inmemtransient::InMemTransientDatabase;
+    use crate::tasks::moo_vm_host::MooVmHost;
     use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
+    use crate::tasks::vm_host::{VMHost, VMHostResponse};
     use crate::tasks::VerbCall;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
     use crate::vm::vm_execute::VmExecParams;
-    use crate::vm::{ExecutionResult, VerbExecutionRequest, VM};
+    use crate::vm::{VM};
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
         Program {
@@ -35,95 +41,84 @@ mod tests {
         }
     }
 
-    async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
-        let o = Objid(0);
-
-        let call = VerbCall {
-            verb_name: verb_name.to_string(),
-            location: o,
-            this: o,
-            player: o,
-            args: vec![],
-            caller: NOTHING,
-        };
-        let verb = state.find_method_verb_on(o, o, verb_name).await.unwrap();
-        let program = Program::from_sliceref(verb.binary());
-        let cr = VerbExecutionRequest {
-            permissions: o,
-            resolved_verb: verb,
-            call,
-            command: None,
-            program,
-        };
-        assert!(vm.exec_call_request(0, cr).await.is_ok());
-    }
-
-    async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
-        exec_vm_loop(vm, state, Arc::new(NoopClientSession::new())).await
-    }
-
     // TODO: move this up into a testing utility. But also factor out common code with Task's loop
     //  so that we aren't duplicating and failing to keep in sync.
-    async fn exec_vm_loop(
-        vm: &mut VM,
+    async fn call_verb(
         world_state: &mut dyn WorldState,
-        client_connection: Arc<dyn Session>,
+        session: Arc<dyn Session>,
+        verb_name: &str,
+        args: Vec<Var>,
     ) -> Var {
+        let vm = VM::new();
+        let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut vm_host = MooVmHost::new(
+            vm,
+            false,
+            20,
+            90_000,
+            Duration::from_secs(5),
+            session.clone(),
+            scs_tx,
+        );
+
+        let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
+        let _vm_exec_params = VmExecParams {
+            world_state,
+            session: session.clone(),
+            scheduler_sender: sched_send.clone(),
+            max_stack_depth: 50,
+            ticks_left: 90_000,
+            time_left: None,
+        };
+
+        let vi = world_state
+            .find_method_verb_on(Objid(0), Objid(0), verb_name)
+            .await
+            .unwrap();
+        vm_host
+            .start_call_method_verb(
+                0,
+                SYSTEM_OBJECT,
+                vi,
+                VerbCall {
+                    verb_name: verb_name.to_string(),
+                    location: SYSTEM_OBJECT,
+                    this: SYSTEM_OBJECT,
+                    player: SYSTEM_OBJECT,
+                    args,
+                    caller: SYSTEM_OBJECT,
+                },
+            )
+            .await
+            .unwrap();
+
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
-            let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
-            let vm_exec_params = VmExecParams {
-                world_state,
-                session: client_connection.clone(),
-                scheduler_sender: sched_send.clone(),
-                max_stack_depth: 50,
-                ticks_left: 90_000,
-                time_left: None,
-            };
-            match vm.exec(vm_exec_params, 1_000000).await {
-                Ok(ExecutionResult::More) => continue,
-                Ok(ExecutionResult::Complete(a)) => return a,
-                Err(e) => panic!("error during execution: {:?}", e),
-                Ok(ExecutionResult::Exception(e)) => {
-                    panic!("MOO exception {:?}", e);
+            match vm_host.exec_interpreter(0, world_state).await {
+                Ok(VMHostResponse::ContinueOk) => {
+                    continue;
                 }
-                Ok(ExecutionResult::ContinueVerb {
-                    permissions,
-                    resolved_verb,
-                    call,
-                    command,
-                    trampoline: _,
-                    trampoline_arg: _,
-                }) => {
-                    let decoded_verb = Program::from_sliceref(resolved_verb.binary());
-                    let cr = VerbExecutionRequest {
-                        permissions,
-                        resolved_verb,
-                        call,
-                        command,
-                        program: decoded_verb,
-                    };
-                    vm.exec_call_request(0, cr).await.unwrap();
+                Ok(VMHostResponse::DispatchFork(f)) => {
+                    panic!("Unexpected fork: {:?}", f);
                 }
-                Ok(ExecutionResult::PerformEval {
-                    permissions,
-                    player,
-                    program,
-                }) => {
-                    vm.exec_eval_request(0, permissions, player, program)
-                        .await
-                        .expect("Could not set up VM for verb execution");
+                Ok(VMHostResponse::AbortLimit(a)) => {
+                    panic!("Unexpected abort: {:?}", a);
                 }
-                Ok(ExecutionResult::DispatchFork(_)) => {
-                    panic!("fork not implemented in test VM")
+                Ok(VMHostResponse::CompleteException(e)) => {
+                    panic!("Unexpected exception: {:?}", e)
                 }
-                Ok(ExecutionResult::Suspend(_)) => {
-                    panic!("suspend not implemented in test VM")
+                Ok(VMHostResponse::CompleteSuccess(v)) => {
+                    return v;
                 }
-                Ok(ExecutionResult::ContinueBuiltin {
-                    bf_func_num: _,
-                    arguments: _,
-                }) => {}
+                Ok(VMHostResponse::CompleteAbort) => {
+                    panic!("Unexpected abort");
+                }
+                Ok(VMHostResponse::Suspend(_)) => {
+                    panic!("Unexpected suspend");
+                }
+                Err(e) => {
+                    panic!("Unexpected error: {}", e);
+                }
             }
         }
     }
@@ -187,10 +182,8 @@ mod tests {
         let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
         let state_source = test_db_with_verb("test", &program).await;
         let mut state = state_source.new_world_state().await.unwrap();
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_none());
     }
 
@@ -206,10 +199,9 @@ mod tests {
         )
         .await;
         let mut state = state_source.new_world_state().await.unwrap();
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("e"));
     }
 
@@ -234,9 +226,9 @@ mod tests {
         .new_world_state()
         .await
         .unwrap();
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str("ell"));
     }
 
@@ -254,10 +246,9 @@ mod tests {
         .new_world_state()
         .await
         .unwrap();
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(222));
     }
 
@@ -286,10 +277,8 @@ mod tests {
         .new_world_state()
         .await
         .unwrap();
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_list(vec![222.into(), 333.into()]));
     }
 
@@ -331,10 +320,8 @@ mod tests {
         .new_world_state()
         .await
         .unwrap();
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_list(vec![111.into(), 321.into(), 123.into()]));
     }
 
@@ -347,10 +334,8 @@ mod tests {
             .new_world_state()
             .await
             .unwrap();
-        let mut vm = VM::new();
-        let _args = binary.find_var("args");
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_list(vec![2.into(), 3.into(), 4.into()]));
     }
 
@@ -362,9 +347,8 @@ mod tests {
             .new_world_state()
             .await
             .unwrap();
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(
             result,
             v_list(vec![v_list(vec![2.into(), 3.into()]), v_int(1)])
@@ -379,9 +363,8 @@ mod tests {
             .new_world_state()
             .await
             .unwrap();
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_int(1));
     }
 
@@ -419,10 +402,8 @@ mod tests {
         .new_world_state()
         .await
         .unwrap();
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_str("manbozorian"));
     }
 
@@ -454,10 +435,8 @@ mod tests {
                 .await
                 .unwrap();
         }
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_int(666));
     }
 
@@ -493,12 +472,8 @@ mod tests {
         .new_world_state()
         .await
         .unwrap();
-        let mut vm = VM::new();
-
-        // Invoke the second verb
-        call_verb(state.as_mut(), "test_call_verb", &mut vm).await;
-
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test_call_verb", vec![]).await;
 
         assert_eq!(result, v_int(666));
     }
@@ -516,9 +491,8 @@ mod tests {
     async fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_int(3));
     }
 
@@ -527,10 +501,8 @@ mod tests {
         let program =
             "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_int(75));
     }
 
@@ -539,10 +511,9 @@ mod tests {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
 
@@ -550,11 +521,9 @@ mod tests {
     async fn test_while_breaks() {
         let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
         let mut state = world_with_test_program(program).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(50));
     }
 
@@ -575,9 +544,9 @@ mod tests {
         return x;
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_int(50));
     }
 
@@ -586,10 +555,9 @@ mod tests {
         let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
 
@@ -598,10 +566,9 @@ mod tests {
         let program = "z = 0; for i in [1..4] z = z + i; endfor return {i,z};";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
     }
 
@@ -610,10 +577,9 @@ mod tests {
         let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)]));
     }
 
@@ -622,10 +588,9 @@ mod tests {
         let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
             v_list(vec![
@@ -643,10 +608,9 @@ mod tests {
     async fn test_scatter_multi_optional() {
         let program = "{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};";
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(
             result,
             v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_empty_list()])
@@ -663,10 +627,9 @@ mod tests {
         return {who, what, where, dobj, iobj, @other};
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         // MOO has  {#2, #70, #70, #-1, #-1, {}} for this equiv in JHCore parse_parties, and does not
         // actually invoke `_locations` (where i've subbed 666) for these values.
         // So something is wonky about our scatter evaluation, looks like on the first arg.
@@ -680,10 +643,9 @@ mod tests {
     async fn test_new_scatter_regression() {
         let program = "{a,b,@c}= {1,2,3,4,5}; return c;";
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(5)]));
     }
 
@@ -692,10 +654,9 @@ mod tests {
         // Simplified case of operator precedence fix.
         let program = "{a,b,c} = {{1,2,3}}[1]; return {a,b,c};";
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(1), v_int(2), v_int(3)]));
     }
 
@@ -703,11 +664,9 @@ mod tests {
     async fn test_conditional_expr() {
         let program = "return 1 ? 2 | 3;";
         let mut state = world_with_test_program(program).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        let mut vm = VM::new();
-
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(2));
     }
 
@@ -716,10 +675,9 @@ mod tests {
         let program = "return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
     }
 
@@ -728,10 +686,9 @@ mod tests {
         let program = "return `1/0 ! ANY';";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_err(E_DIV));
     }
 
@@ -740,10 +697,9 @@ mod tests {
         let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
 
@@ -752,10 +708,9 @@ mod tests {
         let program = "try a; finally return 666; endtry return 333;";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_int(666));
     }
 
@@ -775,10 +730,9 @@ mod tests {
             return ret;
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_list(vec![v_int(3), v_int(2), v_int(1)]));
     }
 
@@ -796,9 +750,9 @@ mod tests {
             endif
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_int(6));
     }
 
@@ -806,9 +760,9 @@ mod tests {
     async fn test_range_set() {
         let program = "a={1,2,3,4}; a[1..2] = {3,4}; return a;";
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]));
     }
 
@@ -817,9 +771,9 @@ mod tests {
         // There was a regression here where the value was being dropped instead of replaced.
         let program = r#"a = "you"; a[1] = "Y"; return a;"#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str("You"));
     }
 
@@ -834,9 +788,9 @@ mod tests {
         endtry
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str("ello world"));
     }
 
@@ -847,9 +801,9 @@ mod tests {
         return `"hello world"[2..$] ! ANY';
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str("ello world"));
     }
 
@@ -860,9 +814,9 @@ mod tests {
         try return "hello world"[2..$]; finally endtry return "oh nope!";
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str("ello world"));
     }
 
@@ -882,9 +836,9 @@ mod tests {
           return object;
         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_obj(2));
     }
 
@@ -892,9 +846,9 @@ mod tests {
     async fn test_eval() {
         let program = r#"return eval("return 5;");"#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_list(vec![v_bool(true), v_int(5)]));
     }
 
@@ -903,9 +857,9 @@ mod tests {
     async fn test_regression_sysprops() {
         let program = r#"return {1, eval("return $test;")};"#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(
             result,
             v_list(vec![v_bool(true), v_list(vec![v_int(1), v_int(1)])])
@@ -916,9 +870,9 @@ mod tests {
     async fn test_negation_precedence() {
         let program = r#"return (!1 || 1);"#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_int(1));
     }
 
@@ -929,9 +883,9 @@ mod tests {
         // 0 index in rangeset is permitted, but in rangeget it is not. 🤦
         let program = r#"rest = "me:words"; rest[0..2] = ""; return rest;"#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str(":words"));
     }
 
@@ -942,9 +896,9 @@ mod tests {
         // rest = "me:test"; rest[1..0] = "; return rest;
         let program = r#"rest = "me:words"; rest[1..0] = ""; return rest;"#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result = exec_vm(state.as_mut(), &mut vm).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         assert_eq!(result, v_str("me:words"));
     }
 
@@ -956,14 +910,40 @@ mod tests {
                          return string;
                         "#;
         let mut state = world_with_test_program(program).await;
-        let mut vm = VM::new();
-        call_verb(state.as_mut(), "test", &mut vm).await;
-        let result =
-            exec_vm_loop(&mut vm, state.as_mut(), Arc::new(MockClientSession::new())).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+
         let Variant::Str(v) = result.variant() else {
             panic!("Not a string")
         };
         assert_eq!(v.as_str(), "You");
+    }
+
+    #[tokio::test]
+    async fn regression_infinite_loop_bf_error() {
+        // This ended up in an infinite loop because of faulty error handling coming out of the
+        // builtin call when 'what' is not a valid object.
+        // The verb is 'd' so E_INVARG should throw exception, exit the loop, but 'twas proceeding.
+        let program = r#"{what, targ} = args;
+                         try
+                           while (what != targ)
+                             what = parent(what);
+                           endwhile
+                           return targ != #-1;
+                         except (E_INVARG)
+                           return 0;
+                         endtry"#;
+        let mut state = world_with_test_program(program).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            "test",
+            vec![v_objid(SYSTEM_OBJECT), v_obj(32)],
+        )
+        .await;
+
+        assert_eq!(result, v_int(0));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -971,16 +951,13 @@ mod tests {
         let program = "return notify(#1, \"test\");";
         let mut state = world_with_test_program(program).await;
 
-        let mut vm = VM::new();
+        let session = Arc::new(MockClientSession::new());
+        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
 
-        call_verb(state.as_mut(), "test", &mut vm).await;
-
-        let client_connection = Arc::new(MockClientSession::new());
-        let result = exec_vm_loop(&mut vm, state.as_mut(), client_connection.clone()).await;
         assert_eq!(result, v_int(1));
 
-        assert_eq!(client_connection.received(), vec!["test".to_string()]);
-        client_connection.commit().await.expect("commit failed");
-        assert_eq!(client_connection.committed(), vec!["test".to_string()]);
+        assert_eq!(session.received(), vec!["test".to_string()]);
+        session.commit().await.expect("commit failed");
+        assert_eq!(session.committed(), vec!["test".to_string()]);
     }
 }
