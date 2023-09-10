@@ -35,7 +35,10 @@ impl<'a> RocksDbTx<'a> {
         let oid = match oid {
             None => self.next_object_id()?,
             Some(oid) => {
-                self.update_highest_object_id(oid)?;
+                // If this object already exists, that's an error.
+                if self.object_valid(oid)? {
+                    return Err(WorldStateError::ObjectAlreadyExists(oid).into());
+                }
                 oid
             }
         };
@@ -70,8 +73,62 @@ impl<'a> RocksDbTx<'a> {
         let default_object_flags = BitEnum::new();
         self.set_object_flags(oid, attrs.flags.unwrap_or(default_object_flags))?;
 
+        self.update_highest_object_id(oid)?;
         Ok(oid)
     }
+    #[tracing::instrument(skip(self))]
+    pub fn recycle_object(&self, obj: Objid) -> Result<(), anyhow::Error> {
+        // First go through and move all objects that are in this object's contents to the
+        // to #-1.  It's up to the caller here to execute :exitfunc on all of them before invoking
+        // this method.
+        let contents = self.get_object_contents(obj)?;
+        for c in contents.iter() {
+            self.set_object_location(c, NOTHING)?;
+        }
+
+        // Now reparent all our immediate children to our parent.
+        // This should properly move all properties all the way down the chain.
+        let parent = self.get_object_parent(obj)?;
+        let children = self.get_object_children(obj)?;
+        for c in children.iter() {
+            self.set_object_parent(c, parent)?;
+        }
+
+        // Now we can remove this object from all relevant column families.
+        // First the simple ones which are keyed on the object id.
+        let oid_cfs = vec![
+            ColumnFamilies::ObjectFlags,
+            ColumnFamilies::ObjectName,
+            ColumnFamilies::ObjectOwner,
+            ColumnFamilies::ObjectParent,
+            ColumnFamilies::ObjectLocation,
+            ColumnFamilies::ObjectContents,
+            ColumnFamilies::ObjectChildren,
+            ColumnFamilies::ObjectVerbs,
+        ];
+        let ok = oid_key(obj);
+        for cf in oid_cfs {
+            let cf = cf_for(&self.cf_handles, cf);
+            self.tx.delete_cf(cf, ok)?;
+        }
+        // Get the propdefs and remove all the property values.
+        let propdefs = self.get_propdefs(obj)?;
+        for p in propdefs.iter() {
+            let vk = composite_key_for(obj, &p);
+            self.tx.delete_cf(
+                cf_for(&self.cf_handles, ColumnFamilies::ObjectPropertyValue),
+                vk,
+            )?;
+        }
+
+        // Now remove the propdefs themselves.
+        self.tx
+            .delete_cf(cf_for(&self.cf_handles, ColumnFamilies::ObjectPropDefs), ok)?;
+
+        // That that's that.
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self))]
     pub fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), anyhow::Error> {
         let parent_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectParent);

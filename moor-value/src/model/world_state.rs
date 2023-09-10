@@ -58,6 +58,12 @@ pub trait WorldState: Send + Sync {
         flags: BitEnum<ObjFlag>,
     ) -> Result<Objid, WorldStateError>;
 
+    /// Recycles (destroys) the given object, and re-parents all its children to the next parent up
+    /// the chain, including removing property definitions inherited from the object.
+    /// If the object is a location, the contents of that location are moved to #-1.
+    /// (It is the caller's (bf_recycle) responsibility to execute :exitfunc for those objects).
+    async fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError>;
+
     /// Move an object to a new location.
     /// (Note it is the caller's responsibility to execute :accept, :enterfunc, :exitfunc, etc.)
     async fn move_object(
@@ -240,6 +246,7 @@ pub trait WorldState: Send + Sync {
     async fn parent_of(&self, perms: Objid, obj: Objid) -> Result<Objid, WorldStateError>;
 
     /// Change the parent of the given object.
+    /// This manages the movement of property definitions between the old and new parents.
     async fn change_parent(
         &mut self,
         perms: Objid,

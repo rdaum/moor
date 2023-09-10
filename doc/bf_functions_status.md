@@ -69,7 +69,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | toobj           | &check;  |                                                     |
 | typeof          | &check;  |                                                     |
 | create          | &check;  | Quota support not implemented yet.                  |
-| recycle         |          |                                                     |
+| recycle         | &check;  |                                                     |
 | valid           | &check;  |                                                     |
 | parent          | &check;  |                                                     |
 | children        | &check;  |                                                     |

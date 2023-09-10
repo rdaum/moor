@@ -119,6 +119,15 @@ impl WorldState for DbTxWorldState {
         self.client.create_object(None, attrs).await
     }
 
+    async fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError> {
+        let (flags, owner) = (self.flags_of(obj).await?, self.owner_of(obj).await?);
+        self.perms(perms)
+            .await?
+            .check_object_allows(owner, flags, ObjFlag::Write)?;
+
+        self.client.recycle_object(obj).await
+    }
+
     async fn move_object(
         &mut self,
         perms: Objid,

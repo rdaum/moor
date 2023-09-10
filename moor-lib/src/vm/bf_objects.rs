@@ -168,6 +168,153 @@ bf_declare!(create, bf_create);
 Function: none recycle (obj object)
 The given object is destroyed, irrevocably. The programmer must either own object or be a wizard; otherwise, E_PERM is raised. If object is not valid, then E_INVARG is raised. The children of object are reparented to the parent of object. Before object is recycled, each object in its contents is moved to #-1 (implying a call to object's exitfunc verb, if any) and then object's `recycle' verb, if any, is called with no arguments.
  */
+// This is invoked with a list of objects to move/call :exitfunc on. When the list is empty, the
+// next trampoline is called, to do the actual recycle.
+const BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC: usize = 0;
+// Do the recycle.
+const BF_RECYCLE_TRAMPOLINE_DONE_MOVE: usize = 1;
+async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if bf_args.args.len() != 1 {
+        return Ok(Error(E_INVARG));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Ok(Error(E_TYPE));
+    };
+
+    // Before actually recycling the object, we need to move all its contents to #-1. While
+    // `recycle_object` will actually do this, we need to make sure :exitfunc is called on each
+    // object, so we'll do it manually here.
+
+    'outer: loop {
+        let tramp = bf_args.vm.top().bf_trampoline;
+        match tramp {
+            None => {
+                // Starting out, we need to call "recycle" on the object, if it exists.
+                // The next point in the trampoline is CALL_EXITFUNC and it will expect a list of
+                // objects to move/call :exitfunc on. So let's get the initial list of objects
+                // now
+                let object_contents = bf_args
+                    .world_state
+                    .contents_of(bf_args.task_perms_who(), *obj)
+                    .await?;
+                // Filter contents for objects that have an :exitfunc verb.
+                let mut contents = vec![];
+                for o in object_contents.iter() {
+                    match bf_args
+                        .world_state
+                        .find_method_verb_on(bf_args.task_perms_who(), o, "exitfunc")
+                        .await
+                    {
+                        Ok(_) => {
+                            contents.push(v_objid(o));
+                        }
+                        Err(WorldStateError::VerbNotFound(_, _)) => {}
+                        Err(e) => {
+                            error!("Error looking up exitfunc verb: {:?}", e);
+                            return Ok(Error(E_NACC));
+                        }
+                    }
+                }
+                let contents = v_list(contents);
+                match bf_args
+                    .world_state
+                    .find_method_verb_on(bf_args.task_perms_who(), *obj, "recycle")
+                    .await
+                {
+                    Ok(dispatch) => {
+                        return Ok(VmInstr(ContinueVerb {
+                            permissions: bf_args.task_perms_who(),
+                            resolved_verb: dispatch,
+                            call: VerbCall {
+                                verb_name: "recycle".to_string(),
+                                location: *obj,
+                                this: *obj,
+                                player: bf_args.vm.top().player,
+                                args: vec![],
+                                caller: bf_args.vm.top().this,
+                            },
+                            trampoline: Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC),
+                            trampoline_arg: Some(contents),
+                            command: None,
+                        }));
+                    }
+                    Err(WorldStateError::VerbNotFound(_, _)) => {
+                        // Short-circuit fake-tramp state change.
+                        bf_args.vm.top_mut().bf_trampoline =
+                            Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
+                        bf_args.vm.top_mut().bf_trampoline_arg = Some(contents);
+                        // Fall through to the next case.
+                    }
+                    Err(e) => {
+                        error!("Error looking up recycle verb: {:?}", e);
+                        return Ok(Error(E_NACC));
+                    }
+                }
+            }
+            Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC) => {
+                // Check the arguments, which must be a list of objects. IF it's empty, we can
+                // move onto DONE_MOVE, if not, take the head of the list, and call :exitfunc on it
+                // (if it exists), and then back to this state.
+                let contents = bf_args.vm.top().bf_trampoline_arg.clone().unwrap();
+                let Variant::List(contents) = contents.variant() else {
+                    panic!("Invalid trampoline argument for bf_recycle");
+                };
+                'inner: loop {
+                    debug!(?obj, contents = ?contents, "Calling :exitfunc for objects contents");
+                    if contents.is_empty() {
+                        bf_args.vm.top_mut().bf_trampoline_arg = None;
+                        bf_args.vm.top_mut().bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE);
+                        continue 'outer;
+                    }
+                    let (head_obj, contents) = contents.pop_front();
+                    let Variant::Obj(head_obj) = head_obj.variant() else {
+                        panic!("Invalid trampoline argument for bf_recycle");
+                    };
+                    // :exitfunc *should* exist because we looked for it earlier, and we're supposed to
+                    // be transactionally isolated. But we need to do resolution anyways, so we will
+                    // look again anyways.
+                    let Ok(exitfunc) = bf_args
+                        .world_state
+                        .find_method_verb_on(bf_args.task_perms_who(), *head_obj, "exitfunc")
+                        .await
+                    else {
+                        // If there's no :exitfunc, we can just move on to the next object.
+                        bf_args.vm.top_mut().bf_trampoline_arg = Some(contents);
+                        continue 'inner;
+                    };
+                    // Call :exitfunc on the head object.
+                    return Ok(VmInstr(ContinueVerb {
+                        permissions: bf_args.task_perms_who(),
+                        resolved_verb: exitfunc,
+                        call: VerbCall {
+                            verb_name: "exitfunc".to_string(),
+                            location: *head_obj,
+                            this: *head_obj,
+                            player: bf_args.vm.top().player,
+                            args: vec![v_objid(*obj)],
+                            caller: bf_args.vm.top().this,
+                        },
+                        trampoline: Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC),
+                        trampoline_arg: Some(contents),
+                        command: None,
+                    }));
+                }
+            }
+            Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE) => {
+                debug!(obj = ?*obj, "Recycling object");
+                bf_args
+                    .world_state
+                    .recycle_object(bf_args.task_perms_who(), *obj)
+                    .await?;
+                return Ok(Ret(v_none()));
+            }
+            Some(unknown) => {
+                panic!("Invalid trampoline for bf_recycle {}", unknown)
+            }
+        }
+    }
+}
+bf_declare!(recycle, bf_recycle);
 
 /*
 Function: int object_bytes (obj object)
@@ -481,6 +628,7 @@ impl VM {
         self.builtins[offset_for_builtin("chparent")] = Arc::new(Box::new(BfChparent {}));
         self.builtins[offset_for_builtin("set_player_flag")] =
             Arc::new(Box::new(BfSetPlayerFlag {}));
+        self.builtins[offset_for_builtin("recycle")] = Arc::new(Box::new(BfRecycle {}));
         Ok(())
     }
 }

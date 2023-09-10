@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 pub(crate) struct TransientStore {
+    max_object: usize,
     verbdefs: HashMap<Objid, VerbDefs>,
     verb_programs: HashMap<(Objid, Uuid), Vec<u8>>,
     objects: HashMap<Objid, Object>,
@@ -36,6 +37,7 @@ struct Object {
 impl TransientStore {
     pub fn new() -> Self {
         Self {
+            max_object: 0,
             verbdefs: Default::default(),
             verb_programs: Default::default(),
             objects: Default::default(),
@@ -62,8 +64,24 @@ impl TransientStore {
             parent: NOTHING,
             children: ObjSet::new(),
         };
-        let id = id.unwrap_or(Objid(self.objects.len() as i64));
+        let id = match id {
+            None => {
+                let o = Objid(self.max_object as i64);
+                o
+            }
+            Some(id) => {
+                if self.objects.contains_key(&id) {
+                    return Err(WorldStateError::ObjectAlreadyExists(id));
+                }
+                id
+            }
+        };
+
         self.objects.insert(id, obj);
+
+        if id.0 >= self.max_object as i64 {
+            self.max_object = id.0 as usize + 1;
+        }
 
         if let Some(parent) = attrs.parent {
             self.set_object_parent(id, parent)?;
@@ -75,7 +93,27 @@ impl TransientStore {
 
         Ok(id)
     }
+    pub fn recycle_object(&mut self, obj: Objid) -> Result<(), WorldStateError> {
+        // First go through and move all objects that are in this object's contents to the
+        // to #-1.  It's up to the caller here to execute :exitfunc on all of them.
+        let contents = self.get_object_contents(obj)?;
+        for c in contents.iter() {
+            self.set_object_location(c, NOTHING)?;
+        }
 
+        // Now reparent all our immediate children to our parent.
+        // This should properly move all properties all the way down the chain.
+        let parent = self.get_object_parent(obj)?;
+        let children = self.get_object_children(obj)?;
+        for c in children.iter() {
+            self.set_object_parent(c, parent)?;
+        }
+
+        // Now it's safe to destroy the object.
+        self.objects.remove(&obj);
+
+        Ok(())
+    }
     pub fn get_object_location(&self, o: Objid) -> Result<Objid, WorldStateError> {
         let Some(obj) = self.objects.get(&o) else {
             return Err(ObjectNotFound(o));
@@ -264,7 +302,7 @@ impl TransientStore {
 
     pub fn get_verbdefs(&self, o: Objid) -> Result<VerbDefs, WorldStateError> {
         let Some(verbdefs) = self.verbdefs.get(&o) else {
-            return Err(ObjectNotFound(o));
+            return Ok(VerbDefs::empty());
         };
         Ok(verbdefs.clone())
     }

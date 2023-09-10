@@ -37,10 +37,24 @@ impl List {
     }
 
     #[must_use]
-    pub fn pop(&self) -> Var {
+    pub fn back(&self) -> Var {
         let mut new_list = Vec::with_capacity(self.inner.len() - 1);
         new_list.extend_from_slice(&self.inner[..self.inner.len() - 1]);
         Variant::List(Self::from_vec(new_list)).into()
+    }
+
+    /// Take the first item from the front, and return (item, new_list)
+    #[must_use]
+    pub fn pop_front(&self) -> (Var, Var) {
+        if self.inner.is_empty() {
+            return (v_empty_list(), v_empty_list());
+        }
+        let mut new_list = Vec::with_capacity(self.inner.len() - 1);
+        new_list.extend_from_slice(&self.inner[1..]);
+        (
+            self.inner[0].clone(),
+            Variant::List(Self::from_vec(new_list)).into(),
+        )
     }
 
     #[must_use]

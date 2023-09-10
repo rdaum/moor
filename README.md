@@ -39,7 +39,7 @@ client connectivity with websockets and such.
 
    * Bugs, bugs, bugs. Collect em' all.
    * Missing features:
-     * `recycle()` isn't implemented, so objects are never deleted.
+     * Quota support. 
      * Background tasks resumption after restart (from DB and from textdump load.)
      * Prompt-receiving network input for things like `@program` and password changes, etc.
      * Accept old-school "telnet" (raw ASCII TCP socket) connections.

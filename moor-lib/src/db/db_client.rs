@@ -92,6 +92,14 @@ impl DbTxClient {
         let oid = get_reply(receive).await?;
         Ok(oid)
     }
+
+    pub async fn recycle_object(&self, obj: Objid) -> Result<(), WorldStateError> {
+        let (send, receive) = oneshot::channel();
+        self.send(DbMessage::RecycleObject(obj, send))?;
+        get_reply(receive).await?;
+        Ok(())
+    }
+
     pub async fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::SetObjectNameOf(obj, name, send))?;

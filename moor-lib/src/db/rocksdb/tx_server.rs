@@ -66,6 +66,9 @@ pub(crate) fn run_tx_server<'a>(
             } => {
                 respond(r, tx.create_object(oid, attrs))?;
             }
+            DbMessage::RecycleObject(oid, r) => {
+                respond(r, tx.recycle_object(oid))?;
+            }
             DbMessage::GetObjectOwner(o, r) => respond(r, tx.get_object_owner(o))?,
             DbMessage::SetObjectOwner(o, owner, r) => respond(r, tx.set_object_owner(o, owner))?,
             DbMessage::GetParentOf(o, r) => respond(r, tx.get_object_parent(o))?,

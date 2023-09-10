@@ -1,16 +1,15 @@
 use moor_lib::compiler::codegen::compile;
 use moor_lib::db::inmemtransient::InMemTransientDatabase;
-use moor_lib::db::DbTxWorldState;
 use moor_lib::tasks::sessions::NoopClientSession;
 use moor_lib::tasks::vm_test_utils::call_verb;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::vm::opcode::Program;
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
-use moor_value::model::world_state::WorldState;
+use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::var::objid::Objid;
 use moor_value::var::Var;
-use moor_value::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+use moor_value::{AsByteBuffer, SYSTEM_OBJECT};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -20,10 +19,7 @@ fn testsuite_dir() -> PathBuf {
 }
 
 // Create a minimal Db to support the test harness.
-async fn test_db_with_verbs(
-    db: &mut InMemTransientDatabase,
-    verbs: &[(&str, &Program)],
-) -> Box<DbTxWorldState> {
+async fn load_db(db: &mut InMemTransientDatabase) {
     let mut tx = db.tx().unwrap();
     textdump_load(
         &mut tx,
@@ -31,7 +27,11 @@ async fn test_db_with_verbs(
     )
     .await
     .expect("Could not load textdump");
+    tx.commit().await.unwrap();
+}
 
+async fn compile_verbs(db: &mut InMemTransientDatabase, verbs: &[(&str, &Program)]) {
+    let mut tx = db.tx().unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec();
         tx.add_verb(
@@ -47,12 +47,13 @@ async fn test_db_with_verbs(
         .await
         .unwrap();
     }
-    Box::new(tx)
+    tx.commit().await.unwrap();
 }
 
 async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Result<Var, anyhow::Error> {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
-    let mut state = test_db_with_verbs(db, &[("test", &binary)]).await;
+    compile_verbs(db, &[("test", &binary)]).await;
+    let mut state = db.new_world_state().await?;
     let result = call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
@@ -87,7 +88,7 @@ async fn run_basic_test(test_dir: &str) {
 
     // Frustratingly the tests are not independent, so we need to run them in a single database.
     let mut db = InMemTransientDatabase::new();
-
+    load_db(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await.unwrap();
         let output = eval(&mut db, expected_output).await.unwrap();

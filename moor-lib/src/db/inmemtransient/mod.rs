@@ -45,6 +45,10 @@ fn inmem_db_server(
                     let mut db = db.write().unwrap();
                     reply.send(db.create_object(id, attrs)).unwrap();
                 }
+                DbMessage::RecycleObject(id, reply) => {
+                    let mut db = db.write().unwrap();
+                    reply.send(db.recycle_object(id)).unwrap();
+                }
                 DbMessage::GetLocationOf(o, reply) => {
                     let db = db.read().unwrap();
                     reply.send(db.get_object_location(o)).unwrap();
