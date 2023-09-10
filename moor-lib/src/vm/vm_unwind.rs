@@ -239,7 +239,9 @@ impl VM {
         self.parent_activation_mut().push(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        if let Some(activation) = self.stack.last() {
+        // Filter out frames for builtin invocations
+        let verb_frame = self.stack.iter().rev().find(|a| a.bf_index.is_none());
+        if let Some(activation) = verb_frame {
             if activation
                 .verb_info
                 .verbdef()
@@ -272,10 +274,8 @@ impl VM {
         trace!(?code, "maybe_raise_error");
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        // In this case we're looking for a non-bf frame. The actual verb which called the bf.
+        // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| a.bf_index.is_none());
-
-        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = verb_frame {
             if activation
                 .verb_info
@@ -286,7 +286,7 @@ impl VM {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
-        return Ok(ExecutionResult::More);
+        Ok(ExecutionResult::More)
     }
 
     /// Explicitly raise an error, regardless of the 'd' bit.
