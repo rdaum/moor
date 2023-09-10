@@ -12,6 +12,7 @@ use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
 use moor_value::model::permissions::Perms;
+use moor_value::model::verb_info::VerbInfo;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
 use moor_value::model::WorldStateError;
 use moor_value::var::error::Error::{E_INVARG, E_PERM};
@@ -278,56 +279,18 @@ impl Scheduler {
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_command_task");
 
+        // TODO: LambdaMOO actually dispatches to #0:do_command *first* to try to run the
+        //  command and only then uses its built-in command matcher if that fails.
+        //  Unfortunately we have an asynchronous workflow here, so while we could submit to the
+        //  #0:do_command process, we'd have no way of knowing if it failed without manually
+        //  polling on it.
+        //  So we're likely going to have to push the actual command parsing portion down a level
+        //  so it happens inside the task's thread instead. Will have to mull it over.
+
+        // Parse the command, and then submit. Note that there are actually two separate
+        // transactions here, one which parses the command and one which executes it.
+        let (vloc, vi, command) = self.parse_command(player, command).await?;
         let mut inner = self.inner.write().await;
-
-        let (vloc, vi, command) = {
-            let mut ws = inner
-                .state_source
-                .new_world_state()
-                .await
-                .map_err(DatabaseError)?;
-
-            // Get perms for environment search. Player's perms.
-            let me = DBMatchEnvironment {
-                ws: ws.as_mut(),
-                perms: player,
-            };
-            let matcher = MatchEnvironmentParseMatcher { env: me, player };
-            let pc = parse_command(command, matcher)
-                .await
-                .map_err(CouldNotParseCommand)?;
-            let loc = match ws.location_of(player, player).await {
-                Ok(loc) => loc,
-                Err(e) => return Err(DatabaseError(e)),
-            };
-
-            let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
-            let mut found = None;
-            for target in targets_to_search {
-                let match_result = ws
-                    .find_command_verb_on(
-                        player,
-                        target,
-                        pc.verb.as_str(),
-                        pc.dobj,
-                        pc.prep,
-                        pc.iobj,
-                    )
-                    .await;
-                let match_result = match match_result {
-                    Ok(m) => m,
-                    Err(e) => return Err(DatabaseError(e)),
-                };
-                if let Some(vi) = match_result {
-                    found = Some((target, vi, pc.clone()));
-                    break;
-                }
-            }
-            let Some((target, vi, pc)) = found else {
-                return Err(SchedulerError::NoCommandMatch(command.to_string(), pc));
-            };
-            (target, vi, pc)
-        };
         let state_source = inner.state_source.clone();
         let task_id = inner
             .new_task(
@@ -1028,5 +991,54 @@ impl Inner {
             .remove(&id)
             .ok_or(anyhow::anyhow!("Task not found"))?;
         Ok(())
+    }
+
+    /// Attempt to parse the command in the context of the player's environment.
+    async fn parse_command(
+        &self,
+        player: Objid,
+        command: &str,
+    ) -> Result<(Objid, VerbInfo, ParsedCommand), SchedulerError> {
+        let inner = self.inner.read().await;
+
+        let mut ws = inner
+            .state_source
+            .new_world_state()
+            .await
+            .map_err(DatabaseError)?;
+
+        // Get perms for environment search. Player's perms.
+        let me = DBMatchEnvironment {
+            ws: ws.as_mut(),
+            perms: player,
+        };
+        let matcher = MatchEnvironmentParseMatcher { env: me, player };
+        let pc = parse_command(command, matcher)
+            .await
+            .map_err(CouldNotParseCommand)?;
+        let loc = match ws.location_of(player, player).await {
+            Ok(loc) => loc,
+            Err(e) => return Err(DatabaseError(e)),
+        };
+
+        let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
+        let mut found = None;
+        for target in targets_to_search {
+            let match_result = ws
+                .find_command_verb_on(player, target, pc.verb.as_str(), pc.dobj, pc.prep, pc.iobj)
+                .await;
+            let match_result = match match_result {
+                Ok(m) => m,
+                Err(e) => return Err(DatabaseError(e)),
+            };
+            if let Some(vi) = match_result {
+                found = Some((target, vi, pc.clone()));
+                break;
+            }
+        }
+        let Some((target, vi, pc)) = found else {
+            return Err(SchedulerError::NoCommandMatch(command.to_string(), pc));
+        };
+        Ok((target, vi, pc))
     }
 }
