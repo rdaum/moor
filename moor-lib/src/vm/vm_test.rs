@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
-    
+
     use std::sync::Arc;
-    use std::time::Duration;
 
     use moor_value::model::props::PropFlag;
     use moor_value::model::r#match::VerbArgsSpec;
@@ -21,14 +20,10 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::inmemtransient::InMemTransientDatabase;
-    use crate::tasks::moo_vm_host::MooVmHost;
     use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
-    use crate::tasks::vm_host::{VMHost, VMHostResponse};
-    use crate::tasks::VerbCall;
+    use crate::tasks::vm_test_utils::call_verb;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
-    use crate::vm::vm_execute::VmExecParams;
-    use crate::vm::{VM};
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
         Program {
@@ -38,88 +33,6 @@ mod tests {
             main_vector,
             fork_vectors: vec![],
             line_number_spans: vec![],
-        }
-    }
-
-    // TODO: move this up into a testing utility. But also factor out common code with Task's loop
-    //  so that we aren't duplicating and failing to keep in sync.
-    async fn call_verb(
-        world_state: &mut dyn WorldState,
-        session: Arc<dyn Session>,
-        verb_name: &str,
-        args: Vec<Var>,
-    ) -> Var {
-        let vm = VM::new();
-        let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut vm_host = MooVmHost::new(
-            vm,
-            false,
-            20,
-            90_000,
-            Duration::from_secs(5),
-            session.clone(),
-            scs_tx,
-        );
-
-        let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
-        let _vm_exec_params = VmExecParams {
-            world_state,
-            session: session.clone(),
-            scheduler_sender: sched_send.clone(),
-            max_stack_depth: 50,
-            ticks_left: 90_000,
-            time_left: None,
-        };
-
-        let vi = world_state
-            .find_method_verb_on(Objid(0), Objid(0), verb_name)
-            .await
-            .unwrap();
-        vm_host
-            .start_call_method_verb(
-                0,
-                SYSTEM_OBJECT,
-                vi,
-                VerbCall {
-                    verb_name: verb_name.to_string(),
-                    location: SYSTEM_OBJECT,
-                    this: SYSTEM_OBJECT,
-                    player: SYSTEM_OBJECT,
-                    args,
-                    caller: SYSTEM_OBJECT,
-                },
-            )
-            .await
-            .unwrap();
-
-        // Call repeatedly into exec until we ge either an error or Complete.
-        loop {
-            match vm_host.exec_interpreter(0, world_state).await {
-                Ok(VMHostResponse::ContinueOk) => {
-                    continue;
-                }
-                Ok(VMHostResponse::DispatchFork(f)) => {
-                    panic!("Unexpected fork: {:?}", f);
-                }
-                Ok(VMHostResponse::AbortLimit(a)) => {
-                    panic!("Unexpected abort: {:?}", a);
-                }
-                Ok(VMHostResponse::CompleteException(e)) => {
-                    panic!("Unexpected exception: {:?}", e)
-                }
-                Ok(VMHostResponse::CompleteSuccess(v)) => {
-                    return v;
-                }
-                Ok(VMHostResponse::CompleteAbort) => {
-                    panic!("Unexpected abort");
-                }
-                Ok(VMHostResponse::Suspend(_)) => {
-                    panic!("Unexpected suspend");
-                }
-                Err(e) => {
-                    panic!("Unexpected error: {}", e);
-                }
-            }
         }
     }
 

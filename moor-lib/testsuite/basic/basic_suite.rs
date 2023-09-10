@@ -2,11 +2,9 @@ use moor_lib::compiler::codegen::compile;
 use moor_lib::db::inmemtransient::InMemTransientDatabase;
 use moor_lib::db::DbTxWorldState;
 use moor_lib::tasks::sessions::NoopClientSession;
-use moor_lib::tasks::VerbCall;
+use moor_lib::tasks::vm_test_utils::call_verb;
 use moor_lib::textdump::load_db::textdump_load;
 use moor_lib::vm::opcode::Program;
-use moor_lib::vm::vm_execute::VmExecParams;
-use moor_lib::vm::{ExecutionResult, VerbExecutionRequest, VM};
 use moor_value::model::r#match::VerbArgsSpec;
 use moor_value::model::verbs::{BinaryType, VerbFlag};
 use moor_value::model::world_state::WorldState;
@@ -52,103 +50,16 @@ async fn test_db_with_verbs(
     Box::new(tx)
 }
 
-async fn call_verb(state: &mut dyn WorldState, verb_name: &str, vm: &mut VM) {
-    let o = Objid(0);
-
-    let call = VerbCall {
-        verb_name: verb_name.to_string(),
-        location: o,
-        this: o,
-        player: o,
-        args: vec![],
-        caller: NOTHING,
-    };
-    let verb = state.find_method_verb_on(o, o, verb_name).await.unwrap();
-    let program = Program::from_sliceref(verb.binary());
-    let cr = VerbExecutionRequest {
-        permissions: o,
-        resolved_verb: verb,
-        call,
-        command: None,
-        program,
-    };
-    assert!(vm.exec_call_request(0, cr).await.is_ok());
-}
-
-// TODO: this loop is starting to look like boilerplate copy of large parts of what's in Task, and
-//  introduces significant possibility of functionality-drift from the real thing. We should factor
-//  out the pieces from Task so they can be re-used here without pulling in all of scheduler.
-//  This is also totally copy and pasted from the same in vm_test.rs
-//  So the whole thing is majorly due for a cleanup.
-async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
-    let client_connection = Arc::new(NoopClientSession::new());
-    // Call repeatedly into exec until we ge either an error or Complete.
-
-    loop {
-        let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
-        let vm_exec_params = VmExecParams {
-            world_state: state,
-            session: client_connection.clone(),
-            scheduler_sender: sched_send.clone(),
-            max_stack_depth: 50,
-            ticks_left: 90_000,
-            time_left: None,
-        };
-        match vm.exec(vm_exec_params, 1_000_000).await {
-            Ok(ExecutionResult::More) => continue,
-            Ok(ExecutionResult::Complete(a)) => return a,
-            Err(e) => panic!("error during execution: {e:?}"),
-            Ok(ExecutionResult::Exception(e)) => {
-                panic!("MOO exception {e:?}");
-            }
-            Ok(ExecutionResult::ContinueVerb {
-                permissions,
-                resolved_verb,
-                call,
-                command,
-                trampoline: _,
-                trampoline_arg: _,
-            }) => {
-                let decoded_verb = Program::from_sliceref(resolved_verb.binary());
-                let cr = VerbExecutionRequest {
-                    permissions,
-                    resolved_verb,
-                    call,
-                    command,
-                    program: decoded_verb,
-                };
-                vm.exec_call_request(0, cr).await.unwrap();
-            }
-            Ok(ExecutionResult::PerformEval {
-                permissions,
-                player,
-                program,
-            }) => {
-                vm.exec_eval_request(0, permissions, player, program)
-                    .await
-                    .expect("Could not set up VM for verb execution");
-            }
-            Ok(ExecutionResult::DispatchFork(_)) => {
-                panic!("fork not implemented in test VM")
-            }
-            Ok(ExecutionResult::Suspend(_)) => {
-                panic!("suspend not implemented in test VM")
-            }
-            Ok(ExecutionResult::ContinueBuiltin {
-                bf_func_num: _,
-                arguments: _,
-            }) => {}
-        }
-    }
-}
-
 async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Result<Var, anyhow::Error> {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     let mut state = test_db_with_verbs(db, &[("test", &binary)]).await;
-    let mut vm = VM::new();
-    let _args = binary.find_var("args");
-    call_verb(state.as_mut(), "test", &mut vm).await;
-    let result = exec_vm(state.as_mut(), &mut vm).await;
+    let result = call_verb(
+        state.as_mut(),
+        Arc::new(NoopClientSession::new()),
+        "test",
+        vec![],
+    )
+    .await;
     state.commit().await?;
     Ok(result)
 }
@@ -180,10 +91,7 @@ async fn run_basic_test(test_dir: &str) {
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await.unwrap();
         let output = eval(&mut db, expected_output).await.unwrap();
-        assert_eq!(
-            evaluated, output,
-            "{test_dir}: line {line_num}: {input}"
-        )
+        assert_eq!(evaluated, output, "{test_dir}: line {line_num}: {input}")
     }
 }
 
