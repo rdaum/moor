@@ -125,15 +125,12 @@ impl WebSocketSessions {
         connection_oid: Objid,
         msg: &str,
     ) -> anyhow::Result<()> {
-        if msg.is_empty() {
-            // Client's intent was probably to send an empty line, but this actually seems to cause
-            // a disconnection event. So we'll just log it and ignore it. At least for now.
-            warn!(
-                "Attempt to send empty message to player: #{}",
-                connection_oid.0
-            );
-            return Ok(());
-        }
+        let msg = if msg.is_empty() {
+            Message::Text("\n".to_string())
+        } else {
+            Message::Text(msg.to_string())
+        };
+
         let Some(conn) = self.connections.get_mut(&connection_oid) else {
             // TODO This can be totally harmless, if a user disconnected while a transaction was in
             //  progress. But it can also be a sign of a bug, so we'll log it for now but remove the
@@ -151,7 +148,7 @@ impl WebSocketSessions {
                 conn.player
             ));
         }
-        SplitSink::send(&mut conn.ws_sender, msg.into()).await?;
+        SplitSink::send(&mut conn.ws_sender, msg).await?;
 
         Ok(())
     }
