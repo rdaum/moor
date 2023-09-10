@@ -247,7 +247,7 @@ where
 mod tests {
     use moor_value::model::r#match::Preposition;
     use moor_value::var::v_str;
-    use moor_value::NOTHING;
+    use moor_value::{FAILED_MATCH, NOTHING};
 
     use crate::db::matching::MatchEnvironmentParseMatcher;
     use crate::db::mock::mock_matching_env::{
@@ -517,10 +517,10 @@ mod tests {
         assert_eq!(result.prep, PrepSpec::None);
         assert_eq!(result.argstr, "1".to_string());
         assert_eq!(result.args, vec![v_str("1")]);
-        assert_eq!(result.dobjstr, "".to_string());
-        assert_eq!(result.dobj, NOTHING);
+        assert_eq!(result.dobjstr, "1".to_string());
+        assert_eq!(result.dobj, FAILED_MATCH);
         assert_eq!(result.prepstr, "".to_string());
         assert_eq!(result.iobjstr, "".to_string());
-        assert_eq!(result.iobj, MOCK_ROOM1);
+        assert_eq!(result.iobj, NOTHING);
     }
 }
