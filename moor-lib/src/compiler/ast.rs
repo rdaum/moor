@@ -185,7 +185,7 @@ pub struct Stmt {
 impl Stmt {
     pub fn new(node: StmtNode, line: usize) -> Self {
         Stmt {
-            node: node,
+            node,
             parser_line_no: line,
             tree_line_no: 0,
         }

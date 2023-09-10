@@ -775,7 +775,7 @@ mod tests {
     use crate::compiler::labels::Names;
     use crate::compiler::parse::parse_program;
 
-    fn stripped_stmts(statements: &Vec<Stmt>) -> Vec<StmtNode> {
+    fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
     }
 

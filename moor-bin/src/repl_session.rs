@@ -13,7 +13,6 @@ use moor_value::var::variant::Variant;
 use moor_value::AsByteBuffer;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use std::io::{stdout, Write};
 use std::process::exit;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -66,7 +65,7 @@ impl ReplSession {
     }
 
     pub async fn handle_input(
-        self: Arc<ReplSession>,
+        self: Arc<Self>,
         player: Objid,
         scheduler: Scheduler,
         program: String,
@@ -85,16 +84,16 @@ impl ReplSession {
             }
             println!("Running background tasks:");
             for task in tasks {
-                println!("TASK {:?}", task);
+                println!("TASK {task:?}");
             }
             return Ok(());
         }
 
-        if command.starts_with("@list ") {
+        if let Some(command) = command.strip_prefix("@list ") {
             if let Err(err_str) =
-                list_command(self.player, command[6..].to_string(), state_source.clone()).await
+                list_command(self.player, command.to_string(), state_source.clone()).await
             {
-                println!("{}", err_str);
+                println!("{err_str}");
             }
             return Ok(());
         }
@@ -105,10 +104,10 @@ impl ReplSession {
                 command = command[1..].to_string();
             }
             if !command.starts_with("return ") {
-                command = format!("return {}", command);
+                command = format!("return {command}");
             }
             if !command.ends_with(';') {
-                command = format!("{};", command);
+                command = format!("{command};");
             }
         }
 
@@ -119,13 +118,13 @@ impl ReplSession {
         let subscription = scheduler.subscribe_to_task(task_id).await?;
         match subscription.await? {
             TaskWaiterResult::Success(v) => {
-                println!("=> {}", v);
+                println!("=> {v}");
             }
             TaskWaiterResult::Exception(e) => {
-                println!("EXCEPTION: {:?}", e);
+                println!("EXCEPTION: {e:?}");
             }
             TaskWaiterResult::AbortTimeout(a) => {
-                println!("TIMEOUT: {:?}", a);
+                println!("TIMEOUT: {a:?}");
             }
             TaskWaiterResult::AbortCancelled => {
                 println!("CANCELLED");
@@ -148,21 +147,21 @@ impl Session for ReplSession {
     }
 
     async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
-        Ok(self.clone())
+        Ok(self)
     }
 
     async fn send_text(&self, _player: Objid, msg: &str) -> Result<(), Error> {
-        println!("{}", msg);
+        println!("{msg}");
         Ok(())
     }
 
     async fn send_system_msg(&self, _player: Objid, msg: &str) -> Result<(), Error> {
-        println!("SYS_MSG: {}", msg);
+        println!("SYS_MSG: {msg}");
         Ok(())
     }
 
     async fn shutdown(&self, msg: Option<String>) -> Result<(), Error> {
-        println!("SHUTDOWN: {}", msg.unwrap_or("".to_string()));
+        println!("SHUTDOWN: {}", msg.unwrap_or_default());
         exit(0);
     }
 
@@ -199,48 +198,40 @@ fn valid_ident(id_str: &str) -> bool {
         .matches(|c: char| c.is_alphanumeric() || c == '_' || c == '@')
         .count()
         == id_str.len()
-        && !id_str.starts_with(|c: char| c.is_numeric())
+        && !id_str.starts_with(char::is_numeric)
 }
 
 async fn parse_objref(perms: Objid, obj_str: &str, tx: &dyn WorldState) -> Result<Objid, String> {
-    if obj_str.starts_with('#') {
+    if let Some(obj_str) = obj_str.strip_prefix('#') {
         // Parse to number...
-        match obj_str[1..].parse::<u64>() {
-            Ok(oid) => return Ok(Objid(oid as i64)),
-            Err(_) => {
-                return Err(format!(
-                    "Bad object reference ({}); but must of form #123 or $name",
-                    obj_str
-                ))
-            }
+        match obj_str.parse::<u64>() {
+            Ok(oid) => Ok(Objid(oid as i64)),
+            Err(_) => Err(format!(
+                "Bad object reference ({obj_str}); but must of form #123 or $name"
+            )),
         }
-    } else if obj_str.starts_with('$') {
+    } else if let Some(obj_str) = obj_str.strip_prefix('$') {
         // TODO Must be a single identifier, underscores and alpha only, no leading numbers.
-        let obj_str = &obj_str[1..];
         if !valid_ident(obj_str) {
             return Err(format!(
-                "Bad object reference ({}); but must of form #123 or $name",
-                obj_str
+                "Bad object reference ({obj_str}); but must of form #123 or $name"
             ));
         }
         // Look up on #0...
         let Ok(pvalue) = tx.retrieve_property(perms, Objid(0), obj_str).await else {
             return Err(format!(
-                "Invalid $object reference; couldn't not access {}",
-                obj_str
+                "Invalid $object reference; couldn't not access {obj_str}"
             ));
         };
         let Variant::Obj(o) = pvalue.variant() else {
             return Err(format!(
-                "Invalid $object reference; not an object. ({}; {:?})",
-                obj_str, pvalue
+                "Invalid $object reference; not an object. ({obj_str}; {pvalue:?})"
             ));
         };
         Ok(*o)
     } else {
         return Err(format!(
-            "Bad object reference ({}); but must of form #123 or $name",
-            obj_str
+            "Bad object reference ({obj_str}); but must of form #123 or $name"
         ));
     }
 }
@@ -264,22 +255,20 @@ async fn list_command(
     let obj = parse_objref(perms, obj_str, tx.as_ref()).await?;
 
     if !valid_ident(verb_str) {
-        return Err(format!("Invalid verb name {}", verb_str));
+        return Err(format!("Invalid verb name {verb_str}"));
     }
 
     // Look up the verb.
     let Ok(verb) = tx.get_verb(Objid(2), obj, verb_str).await else {
         return Err(format!(
-            "Unable to find verb {} on object {}",
-            verb_str, obj
+            "Unable to find verb {verb_str} on object {obj}"
         ));
     };
 
     // If it's not a MOO binary, we can't handle that.
     if verb.binary_type() != BinaryType::LambdaMoo18X {
         return Err(format!(
-            "Verb {} on object {} is not a MOO binary",
-            verb_str, obj
+            "Verb {verb_str} on object {obj} is not a MOO binary"
         ));
     }
 
@@ -294,7 +283,7 @@ async fn list_command(
 
     // If the binary is empty, just error out.
     if verb.binary().is_empty() {
-        return Err(format!("Verb {} on object {} is empty", verb_str, obj));
+        return Err(format!("Verb {verb_str} on object {obj} is empty"));
     }
 
     // Parse its binary as a program...
@@ -303,8 +292,7 @@ async fn list_command(
         Ok(decompiled) => decompiled,
         Err(e) => {
             return Err(format!(
-                "Unable to decompile verb {} on object {}: {:?}",
-                verb_str, obj, e
+                "Unable to decompile verb {verb_str} on object {obj}: {e:?}"
             ));
         }
     };
@@ -313,21 +301,18 @@ async fn list_command(
         Ok(unparsed) => unparsed,
         Err(e) => {
             return Err(format!(
-                "Unable to unparse verb {} on object {}: {:?}",
-                verb_str, obj, e
+                "Unable to unparse verb {verb_str} on object {obj}: {e:?}"
             ));
         }
     };
-    writeln!(
-        stdout(),
+    println!(
         "Verb {} on object {}:\n{}",
         verb_str,
         obj,
         unparsed.join("\n")
-    )
-    .unwrap();
+    );
 
     tx.rollback().await.unwrap();
 
-    return Ok(());
+    Ok(())
 }

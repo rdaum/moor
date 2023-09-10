@@ -41,7 +41,7 @@ pub fn var_as_json(v: &Var) -> Value {
 pub fn json_as_var(v: &Value) -> Result<Var, anyhow::Error> {
     match v {
         Value::Null => Ok(v_none()),
-        Value::Bool(b) => Ok(v_int(if *b { 1 } else { 0 })),
+        Value::Bool(b) => Ok(v_int(i64::from(*b))),
         Value::Number(n) => {
             if n.is_f64() {
                 Ok(v_float(n.as_f64().unwrap()))

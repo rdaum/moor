@@ -27,39 +27,39 @@ impl LayoutAs<u8> for VerbFlag {
 impl VerbFlag {
     #[must_use]
     pub fn rwxd() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Read) | VerbFlag::Write | VerbFlag::Exec | VerbFlag::Debug
+        BitEnum::new_with(Self::Read) | Self::Write | Self::Exec | Self::Debug
     }
     #[must_use]
     pub fn rwx() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Read) | VerbFlag::Write | VerbFlag::Exec
+        BitEnum::new_with(Self::Read) | Self::Write | Self::Exec
     }
     #[must_use]
     pub fn rw() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Read) | VerbFlag::Write
+        BitEnum::new_with(Self::Read) | Self::Write
     }
     #[must_use]
     pub fn rx() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec
+        BitEnum::new_with(Self::Read) | Self::Exec
     }
-    pub fn rxd() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Read) | VerbFlag::Exec | VerbFlag::Debug
+    #[must_use] pub fn rxd() -> BitEnum<Self> {
+        BitEnum::new_with(Self::Read) | Self::Exec | Self::Debug
     }
     #[must_use]
     pub fn r() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Read)
+        BitEnum::new_with(Self::Read)
     }
 
     #[must_use]
     pub fn w() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Write)
+        BitEnum::new_with(Self::Write)
     }
     #[must_use]
     pub fn x() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Exec)
+        BitEnum::new_with(Self::Exec)
     }
     #[must_use]
     pub fn d() -> BitEnum<Self> {
-        BitEnum::new_with(VerbFlag::Debug)
+        BitEnum::new_with(Self::Debug)
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Encode, Decode)]

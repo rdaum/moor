@@ -39,7 +39,7 @@ async fn test_db_with_verbs(
         tx.add_verb(
             Objid(3),
             SYSTEM_OBJECT,
-            vec![verb_name.to_string()],
+            vec![(*verb_name).to_string()],
             Objid(3),
             VerbFlag::rx(),
             VerbArgsSpec::this_none_this(),
@@ -94,12 +94,12 @@ async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
             ticks_left: 90_000,
             time_left: None,
         };
-        match vm.exec(vm_exec_params, 1_000000).await {
+        match vm.exec(vm_exec_params, 1_000_000).await {
             Ok(ExecutionResult::More) => continue,
             Ok(ExecutionResult::Complete(a)) => return a,
-            Err(e) => panic!("error during execution: {:?}", e),
+            Err(e) => panic!("error during execution: {e:?}"),
             Ok(ExecutionResult::Exception(e)) => {
-                panic!("MOO exception {:?}", e);
+                panic!("MOO exception {e:?}");
             }
             Ok(ExecutionResult::ContinueVerb {
                 permissions,
@@ -143,7 +143,7 @@ async fn exec_vm(state: &mut dyn WorldState, vm: &mut VM) -> Var {
 }
 
 async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Result<Var, anyhow::Error> {
-    let binary = compile(format!("return {};", expression).as_str()).unwrap();
+    let binary = compile(format!("return {expression};").as_str()).unwrap();
     let mut state = test_db_with_verbs(db, &[("test", &binary)]).await;
     let mut vm = VM::new();
     let _args = binary.find_var("args");
@@ -182,8 +182,7 @@ async fn run_basic_test(test_dir: &str) {
         let output = eval(&mut db, expected_output).await.unwrap();
         assert_eq!(
             evaluated, output,
-            "{}: line {}: {}",
-            test_dir, line_num, input
+            "{test_dir}: line {line_num}: {input}"
         )
     }
 }

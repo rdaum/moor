@@ -12,7 +12,7 @@ pub enum ArgSpec {
 
 impl LayoutAs<u8> for ArgSpec {
     fn read(v: u8) -> Self {
-        ArgSpec::from_repr(v).expect("Invalid ArgSpec value")
+        Self::from_repr(v).expect("Invalid ArgSpec value")
     }
 
     fn write(v: Self) -> u8 {
@@ -41,7 +41,7 @@ impl ArgSpec {
 }
 
 /// The set of prepositions that are valid for verbs, corresponding to the set of string constants
-/// in PREP_LIST, and for now at least much 1:1 with LambdaMOO's built-in prepositions, and
+/// in `PREP_LIST`, and for now at least much 1:1 with `LambdaMOO`'s built-in prepositions, and
 /// are referred to in the database.
 /// TODO: Long run a proper table with some sort of dynamic look up and a way to add new ones and
 ///   internationalize and so on.
@@ -134,9 +134,9 @@ impl VerbArgsSpec {
 
 impl LayoutAs<u32> for VerbArgsSpec {
     fn read(v: u32) -> Self {
-        let dobj_value = v & 0x000000ff;
-        let prep_value = ((v >> 8) & 0x0000ffff) as i16;
-        let iobj_value = (v >> 24) & 0x000000ff;
+        let dobj_value = v & 0x0000_00ff;
+        let prep_value = ((v >> 8) & 0x0000_ffff) as i16;
+        let iobj_value = (v >> 24) & 0x0000_00ff;
         let dobj = ArgSpec::read(dobj_value as u8);
         let prep = PrepSpec::read(prep_value);
         let iobj = ArgSpec::read(iobj_value as u8);
@@ -146,11 +146,11 @@ impl LayoutAs<u32> for VerbArgsSpec {
     fn write(v: Self) -> u32 {
         let mut r: u32 = 0;
         let dobj_value = ArgSpec::write(v.dobj);
-        r |= dobj_value as u32;
+        r |= u32::from(dobj_value);
         let prep_value = PrepSpec::write(v.prep);
         r |= (prep_value as u32 & 0xffff) << 8;
         let iobj_value = ArgSpec::write(v.iobj);
-        r |= (iobj_value as u32) << 24;
+        r |= u32::from(iobj_value) << 24;
         r
     }
 }

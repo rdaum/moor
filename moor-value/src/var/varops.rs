@@ -32,7 +32,7 @@ impl Var {
         }
     }
 
-    pub fn index_set(&self, i: usize, value: &Var) -> Result<Self, Error> {
+    pub fn index_set(&self, i: usize, value: &Self) -> Result<Self, Error> {
         match self.variant() {
             Variant::List(l) => {
                 if !i < l.len() {

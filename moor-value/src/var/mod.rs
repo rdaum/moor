@@ -70,7 +70,7 @@ impl Var {
         Self { value }
     }
 
-    pub fn is_root(&self) -> bool {
+    #[must_use] pub fn is_root(&self) -> bool {
         match self.variant() {
             Variant::Obj(o) => o.is_sysobj(),
             _ => false,
@@ -191,7 +191,7 @@ impl Var {
         match self.variant() {
             Variant::None => "None".to_string(),
             Variant::Int(i) => i.to_string(),
-            Variant::Float(f) => format!("{:?}", f).to_string(),
+            Variant::Float(f) => format!("{f:?}"),
             Variant::Str(s) => quote_str(s.as_str()),
             Variant::Obj(o) => format!("{o}"),
             Variant::List(l) => {

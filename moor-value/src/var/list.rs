@@ -232,6 +232,6 @@ mod tests {
     #[test]
     pub fn list_display() {
         let list = List::from_vec(vec![v_int(1), v_string("foo".into()), v_int(3)]);
-        assert_eq!(format!("{}", list), "{1, \"foo\", 3}");
+        assert_eq!(format!("{list}"), "{1, \"foo\", 3}");
     }
 }

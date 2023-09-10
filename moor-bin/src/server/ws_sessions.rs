@@ -13,13 +13,13 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, trace, warn};
 
-pub(crate) struct WebSocketSessions {
+pub struct WebSocketSessions {
     connections: HashMap<Objid, WsConnection>,
     shutdown_sender: Sender<Option<String>>,
 }
 
 // The persistent websocket `connection` for the user, which exists across multiple sessions.
-pub(crate) struct WsConnection {
+pub struct WsConnection {
     player: Objid,
     peer_addr: SocketAddr,
     ws_sender: SplitSink<WebSocket, Message>,
@@ -125,7 +125,7 @@ impl WebSocketSessions {
         connection_oid: Objid,
         msg: &str,
     ) -> anyhow::Result<()> {
-        if msg.len() == 0 {
+        if msg.is_empty() {
             // Client's intent was probably to send an empty line, but this actually seems to cause
             // a disconnection event. So we'll just log it and ignore it. At least for now.
             warn!(
@@ -160,7 +160,7 @@ impl WebSocketSessions {
 // A per-transaction `session`. The handle through which the scheduler and VM interact with the
 // connection. Exists for the lifetime of a single transaction and talks back to WebSocketSessions
 // to get it to do the dirty I/O work with the connection.
-pub(crate) struct WebSocketSession {
+pub struct WebSocketSession {
     player: Objid,
     ws_sessions: Arc<RwLock<WebSocketSessions>>,
     // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
@@ -194,7 +194,7 @@ impl Session for WebSocketSession {
     }
 
     async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
-        Ok(Arc::new(WebSocketSession {
+        Ok(Arc::new(Self {
             player: self.player,
             ws_sessions: self.ws_sessions.clone(),
             session_buffer: Default::default(),

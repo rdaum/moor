@@ -74,7 +74,7 @@ async fn run_repl_if_enabled(
     scheduler: Scheduler,
     state_source: Arc<dyn WorldStateSource>,
 ) -> Option<()> {
-    if let Some(true) = run_repl {
+    if run_repl == Some(true) {
         info!("Starting Repl...");
         let repl_session = Arc::new(ReplSession {
             player: Objid(2),
@@ -150,7 +150,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let (shutdown_sender, mut shutdown_receiver) = tokio::sync::mpsc::channel(1);
 
-    let repl_run = run_repl_if_enabled(args.repl.clone(), scheduler.clone(), state_source.clone());
+    let repl_run = run_repl_if_enabled(args.repl, scheduler.clone(), state_source.clone());
 
     let server_scheduler = scheduler.clone();
     let ws_server = WebSocketServer::new(server_scheduler, shutdown_sender);

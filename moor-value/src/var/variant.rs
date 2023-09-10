@@ -23,18 +23,18 @@ impl Display for Variant {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::None => write!(f, "None"),
-            Self::Str(s) => write!(f, "{}", s),
-            Self::Obj(o) => write!(f, "{}", o),
-            Self::Int(i) => write!(f, "{}", i),
-            Self::Float(fl) => write!(f, "{}", fl),
-            Self::Err(e) => write!(f, "{}", e),
-            Self::List(l) => write!(f, "{}", l),
+            Self::Str(s) => write!(f, "{s}"),
+            Self::Obj(o) => write!(f, "{o}"),
+            Self::Int(i) => write!(f, "{i}"),
+            Self::Float(fl) => write!(f, "{fl}"),
+            Self::Err(e) => write!(f, "{e}"),
+            Self::List(l) => write!(f, "{l}"),
         }
     }
 }
 
 impl From<Variant> for Var {
     fn from(val: Variant) -> Self {
-        Var::new(val)
+        Self::new(val)
     }
 }
