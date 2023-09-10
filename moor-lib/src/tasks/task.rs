@@ -355,7 +355,7 @@ impl Task {
                     this: vloc,
                     player,
                     args: command.args.clone(),
-                    caller: NOTHING,
+                    caller: player,
                 };
                 self.vm_host
                     .start_call_command_verb(self.task_id, verbinfo, call, command, self.perms)

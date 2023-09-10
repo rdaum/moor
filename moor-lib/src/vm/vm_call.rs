@@ -48,14 +48,15 @@ impl VM {
             caller: self.caller(),
         };
         debug!(
-            "Verb call: {}:{}({}) line: #{}; caller_perms: {} caller: {} this: {}",
+            line = self.top().find_line_no(self.top().pc).unwrap_or(0),
+            caller_perms = ?self.top().permissions,
+            caller = ?self.caller(),
+            this = ?this,
+            player = ?self.top().player,
+            "Verb call: {}:{}({})",
             this,
             verb_name,
             args_literal(args),
-            self.top().find_line_no(self.top().pc).unwrap_or(0),
-            self.top().permissions,
-            self.caller(),
-            this
         );
 
         let self_valid = state.valid(this).await?;
@@ -151,6 +152,16 @@ impl VM {
     ) -> Result<(), anyhow::Error> {
         let span = span!(Level::TRACE, "VC", task_id, ?call_request);
         let span_id = span.id();
+
+        debug!(
+            caller = ?call_request.call.caller,
+            this = ?call_request.call.this,
+            player = ?call_request.call.player,
+            "Verb call: {}:{}({})",
+            call_request.call.this,
+            call_request.call.verb_name,
+            args_literal(call_request.call.args.as_slice()),
+        );
 
         let a = Activation::for_call(task_id, call_request, span_id.clone())?;
 
