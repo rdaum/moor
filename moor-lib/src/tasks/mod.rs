@@ -2,11 +2,11 @@ use moor_value::var::objid::Objid;
 use moor_value::var::Var;
 
 pub mod command_parse;
-mod moo_vm_host;
+pub mod moo_vm_host;
 pub mod scheduler;
 pub mod sessions;
-mod task;
-mod vm_host;
+pub mod task;
+pub mod vm_host;
 
 pub type TaskId = usize;
 

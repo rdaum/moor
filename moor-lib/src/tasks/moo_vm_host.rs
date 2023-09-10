@@ -25,7 +25,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::{trace, warn};
 
 /// A 'host' for running the MOO virtual machine inside a task.
-pub(crate) struct MooVmHost {
+pub struct MooVmHost {
     vm: VM,
     running_method: bool,
     /// The maximum stack detph for this task
