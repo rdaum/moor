@@ -46,24 +46,18 @@ pub struct Prep {
     phrases: Vec<&'static str>,
 }
 
-pub fn parse_preposition_string(repr: &str) -> Option<PrepSpec> {
+/// Match a preposition for the form used by set_verb_args and friends, which means it must support
+/// numeric arguments for the preposition.
+pub fn parse_preposition_spec(repr: &str) -> Option<PrepSpec> {
     match repr {
         "any" => Some(PrepSpec::Any),
         "none" => Some(PrepSpec::None),
-        _ => match_preposition(repr)
+        _ => find_preposition(repr)
             .map(|p| PrepSpec::Other(Preposition::from_repr(p.id as u16).unwrap())),
     }
 }
 
-pub fn preposition_to_string(ps: &PrepSpec) -> &str {
-    match ps {
-        PrepSpec::Any => "any",
-        PrepSpec::None => "none",
-        PrepSpec::Other(id) => PREP_LIST[*id as usize],
-    }
-}
-
-pub fn match_preposition(prep: &str) -> Option<Prep> {
+pub fn find_preposition(prep: &str) -> Option<Prep> {
     // If the string starts with a number (with or without # prefix), treat it as a preposition ID.
     // Which is the offset into the PREPOSITIONS array.
     if let Some(id) = prep.strip_prefix('#') {
@@ -74,6 +68,19 @@ pub fn match_preposition(prep: &str) -> Option<Prep> {
         return PREPOSITIONS.get(id).cloned();
     }
 
+    find_preposition(prep)
+}
+
+pub fn preposition_to_string(ps: &PrepSpec) -> &str {
+    match ps {
+        PrepSpec::Any => "any",
+        PrepSpec::None => "none",
+        PrepSpec::Other(id) => PREP_LIST[*id as usize],
+    }
+}
+
+/// Match a preposition for the form used by the parser, where using a number is not correct.
+fn match_preposition(prep: &str) -> Option<Prep> {
     // Otherwise, search for the preposition in the list of prepositions by string.
     PREPOSITIONS
         .iter()
@@ -392,9 +399,9 @@ mod tests {
         let command = ";1 + 1";
         let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
         assert_eq!(parsed.verb, "eval");
-        assert_eq!(parsed.dobjstr, "");
-        assert_eq!(parsed.prepstr, "1");
-        assert_eq!(parsed.iobjstr, "+ 1");
+        assert_eq!(parsed.dobjstr, "1 + 1");
+        assert_eq!(parsed.prepstr, "");
+        assert_eq!(parsed.iobjstr, "");
         assert_eq!(parsed.args, vec![v_str("1"), v_str("+"), v_str("1")]);
         assert_eq!(parsed.argstr, "1 + 1");
         assert_eq!(parsed.dobj, Objid(-1));
@@ -491,6 +498,29 @@ mod tests {
         assert_eq!(result.prepstr, "at".to_string());
         assert_eq!(result.prep, PrepSpec::Other(Preposition::AtTo));
         assert_eq!(result.iobjstr, "here".to_string());
+        assert_eq!(result.iobj, MOCK_ROOM1);
+    }
+
+    #[tokio::test]
+    async fn test_prep_confused_with_numeric_arg() {
+        let env = setup_mock_environment();
+        let match_object_fn = MatchEnvironmentParseMatcher {
+            env,
+            player: MOCK_PLAYER,
+        };
+
+        // We had a regression where the first numeric argument was being confused with a
+        // preposition after I added numeric preposition support.
+        let result = parse_command("ins 1", match_object_fn).await.unwrap();
+
+        assert_eq!(result.verb, "ins".to_string());
+        assert_eq!(result.prep, PrepSpec::None);
+        assert_eq!(result.argstr, "1".to_string());
+        assert_eq!(result.args, vec![v_str("1")]);
+        assert_eq!(result.dobjstr, "".to_string());
+        assert_eq!(result.dobj, NOTHING);
+        assert_eq!(result.prepstr, "".to_string());
+        assert_eq!(result.iobjstr, "".to_string());
         assert_eq!(result.iobj, MOCK_ROOM1);
     }
 }

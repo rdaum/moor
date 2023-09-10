@@ -24,7 +24,7 @@ use crate::compiler::codegen::compile;
 use crate::compiler::decompile::program_to_tree;
 use crate::compiler::unparse::unparse;
 use crate::compiler::GlobalName;
-use crate::tasks::command_parse::{parse_preposition_string, preposition_to_string};
+use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
 use crate::vm::builtin::BfRet::{Error, Ret};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::opcode::Program;
@@ -248,7 +248,7 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, anyhow::Error> {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
             let (Some(dobj), Some(prep), Some(iobj)) = (
                 ArgSpec::from_string(dobj_str.as_str()),
-                parse_preposition_string(prep_str.as_str()),
+                parse_preposition_spec(prep_str.as_str()),
                 ArgSpec::from_string(iobj_str.as_str()),
             ) else {
                 return Err(anyhow::anyhow!("Invalid verb args"));
