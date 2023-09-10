@@ -18,7 +18,7 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
     let mut source = subject;
 
-    if what.is_empty() || with.is_empty() {
+    if what.is_empty() {
         return subject.to_string();
     }
 
@@ -225,6 +225,15 @@ mod tests {
     use crate::vm::bf_strings::strsub;
 
     #[test]
+    fn test_strsub_remove_piece() {
+        let subject = "empty_message_integrate_room";
+        assert_eq!(
+            strsub(subject, "empty_message_", "", false),
+            "integrate_room"
+        );
+    }
+
+    #[test]
     fn test_strsub_case_insensitive_substitution() {
         let subject = "foo bar baz";
         let expected = "fizz bar baz";
@@ -250,13 +259,6 @@ mod tests {
         let subject = "foo bar baz";
         let expected = "foo bar baz";
         assert_eq!(strsub(subject, "", "fizz", false), expected);
-    }
-
-    #[test]
-    fn test_strsub_empty_with() {
-        let subject = "foo bar baz";
-        let expected = "foo bar baz";
-        assert_eq!(strsub(subject, "foo", "", false), expected);
     }
 
     #[test]
