@@ -57,10 +57,6 @@ fn parse_atom(
             let int = pairs.as_str().parse::<i64>().unwrap();
             Ok(Expr::VarExpr(v_int(int)))
         }
-        Rule::hex => {
-            let int = i64::from_str_radix(&pairs.as_str()[2..], 16).unwrap();
-            Ok(Expr::VarExpr(v_int(int)))
-        }
         Rule::float => {
             let float = pairs.as_str().parse::<f64>().unwrap();
             Ok(Expr::VarExpr(v_float(float)))
@@ -777,6 +773,19 @@ mod tests {
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
+    }
+
+    #[test]
+    fn test_parse_flt_no_decimal() {
+        let program = "return 1e-09;";
+        let parse = parse_program(program).unwrap();
+        assert_eq!(parse.stmts.len(), 1);
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Return {
+                expr: Some(VarExpr(v_float(1e-9))),
+            }]
+        );
     }
 
     #[test]

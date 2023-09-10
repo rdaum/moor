@@ -83,7 +83,7 @@ in_range = @{ ^"in" ~ !ident_continue+ }
 prefix = _{ neg | not | scatter_assign }
 neg    =  { "-" }
 // 
-not    =  { "!" }
+not = { "!" }
 
 scatter_assign   =  { "{" ~ scatter ~ "}" ~ ASSIGN }
 scatter          = _{ scatter_item ~ ("," ~ scatter_item)* }
@@ -122,7 +122,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | hex | string | object | err | ident }
+atom     = { integer | float | string | object | err | ident }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 exprlist = { argument ~ ("," ~ argument)* }
@@ -188,12 +188,20 @@ ident = @{
 string    = @{ "\"" ~ str_inner ~ "\"" }
 str_inner = @{ (!("\"" | "\\" | "\u{0000}" | "\u{001F}") ~ ANY)* ~ (escape ~ str_inner)? }
 
-hex     = @{ "0x" ~ (ASCII_HEX_DIGIT)+ }
-integer = @{ ("+" | "-")? ~ int ~ !("." ~ digits) }
-float   = @{ ("+" | "-")? ~ int ~ ("." ~ digits ~ exp? | exp)? }
-int     = @{ "0" | (ASCII_NONZERO_DIGIT ~ digits?) }
-digits  = @{ (ASCII_DIGIT | ("_" ~ ASCII_DIGIT))+ }
-exp     = @{ ("E" | "e") ~ ("+" | "-")? ~ int }
+integer = @{ ("+" | "-")? ~ number ~ !("." ~ digits) ~ !("e" | "E") }
+
+float          = ${ exponent_float | point_float }
+point_float    = ${ digit_part? ~ fraction | digit_part ~ "." }
+exponent_float = ${ (point_float | digit_part) ~ (pos_exponent | neg_exponent) }
+digit_part     = ${ number ~ ("_"? ~ number)* }
+fraction       = ${ "." ~ digit_part }
+pos_exponent   = ${ ("e" | "E") ~ "+"? ~ digit_part }
+neg_exponent   = ${ ("e" | "E") ~ "-" ~ digit_part }
+
+number = @{ "0" | (ASCII_NONZERO_DIGIT ~ digits?) }
+digits = @{ (ASCII_DIGIT | ("_" ~ ASCII_DIGIT))+ }
+
+exp = _{ ^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 escape = @{ "\\" ~ ("b" | "t" | "n" | "f" | "r" | "\"" | "\\" | NEWLINE)? }
 
