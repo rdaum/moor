@@ -77,7 +77,7 @@ pub enum WorldStateError {
 impl WorldStateError {
     pub fn to_error_code(&self) -> Result<Error, anyhow::Error> {
         match self {
-            Self::ObjectNotFound(_) => Ok(Error::E_INVARG),
+            Self::ObjectNotFound(_) => Ok(Error::E_INVIND),
             Self::ObjectPermissionDenied => Ok(Error::E_PERM),
             Self::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
             Self::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
