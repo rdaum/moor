@@ -21,30 +21,35 @@ execute existing cores.
 transactionally safe database and full multithreaded concurrency, and replacing the classic `telnet` 
 client connectivity with websockets and such.
 
-### So far ...
+### Current status
 
-   * Successfully compiles and executes the full LambdaMOO 1.8.x language
-   * Successfully imports a JaysHouseCore textdump.
+   * Mostly feature complete. Have tested against JaysHouseCore, and most of the functionality is there.
+   * Objects are stored in a RocksDB database, and are transactionally safe and consistent.
    * Accepts inbound websocket connections (in lieux of telnet), accepts Basic-Auth login, attaches them to a user, 
      and executes commands.
      ![Screenshot of simple session](./doc/screenshot-session.png)
-   * Most simple things like `say`, `emote`, `look`, `get` etc work pretty much as expected. (But also a bunch of simple things ... don't.)
-   * Permissions/security support (though mostly untested.)
-   * `fork`ed & `suspend`ed tasks, tick counts, time limits, etc.
+   * Has an HTTP endpoint for retrieving some public properties (such as `$login.welcome_message`) etc.
+   * A Read-Eval-Print loop can be brought up to work against the database, and can be used to poke around and 
+     execute verbs and such.
    * And what's software without dashboards?
 
 ![Screenshot of grafana dashboard](./doc/screenshot-grafana.png)
 
-### Missing/ Next steps
+### Missing / Next steps before 1.0
 
-   * Bugs bugs bugs. Collect em' all.
-   * Forked tasks resumption from DB and from textdump load.
-   * Network output from forked tasks probably broken.
-   * Dump to textdump format (needed?)
-   * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog slow 
-     without it
-   * Prompt-receiving network input (needed?)
-   * Better auth.
+   * Bugs, bugs, bugs. Collect em' all.
+   * Missing features:
+     * `recycle()` isn't implemented, so objects are never deleted.
+     * Background tasks resumption after restart (from DB and from textdump load.)
+     * Prompt-receiving network input for things like `@program` and password changes, etc.
+     * Accept old-school "telnet" (raw ASCII TCP socket) connections.
+     * Dump to a backup `textdump` format.
+     * 'out of band' network command support, used by some cores/clients.
+   * Improvements:
+     * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog slow 
+       without it
+     * A bit better connection management generally.
+     * Better auth (SSO, OAuth2, etc?). Better crypt/password support.
 
 ## LambdaMOO is 30+ years old, why remain compatible?
 
@@ -61,13 +66,9 @@ client connectivity with websockets and such.
 Eventual new feature goals, after full MOO backwards compatibility has been achieved:
 
 * Embedded JavaScript engine to allow implementation of MOO verbs in a more modern standard language.
-* Extended protocol support (WebSockets, HTTP, etc. inbound and outbound).
+* Extended protocol support, richer output than pure text (e.g. JSON events for clients to render, etc.)
 * Distributed rather than local-only storage of objects.
-* Incremental runtime / model changes:
-  * Remove object numbers and replace with obj-capability references.
-  * Lightweight transient object values in addition to rooted objects. (ala "WAIFs")
-  * New primitive types in the language / properties.
-  * all that kinda fantasy stuff
+* Incremental runtime / model changes.
 
 Contributions are welcome and encouraged. 
 
