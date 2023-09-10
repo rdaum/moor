@@ -9,6 +9,7 @@ mod tests {
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_DIV;
     use moor_value::var::objid::Objid;
+    use moor_value::var::variant::Variant;
     use moor_value::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_str, Var};
     use moor_value::NOTHING;
     use moor_value::{AsByteBuffer, SYSTEM_OBJECT};
@@ -945,6 +946,24 @@ mod tests {
         call_verb(state.as_mut(), "test", &mut vm).await;
         let result = exec_vm(state.as_mut(), &mut vm).await;
         assert_eq!(result, v_str("me:words"));
+    }
+
+    #[tokio::test]
+    async fn test_str_ref_index_set() {
+        let program = r#"string="you";
+                         i = index("abcdefghijklmnopqrstuvwxyz", string[1]);
+                         string[1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i];
+                         return string;
+                        "#;
+        let mut state = world_with_test_program(program).await;
+        let mut vm = VM::new();
+        call_verb(state.as_mut(), "test", &mut vm).await;
+        let result =
+            exec_vm_loop(&mut vm, state.as_mut(), Arc::new(MockClientSession::new())).await;
+        let Variant::Str(v) = result.variant() else {
+            panic!("Not a string")
+        };
+        assert_eq!(v.as_str(), "You");
     }
 
     #[tokio::test(flavor = "multi_thread")]

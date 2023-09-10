@@ -85,7 +85,8 @@ impl CodegenState {
     }
 
     fn add_literal(&mut self, v: &Var) -> Label {
-        let lv_pos = self.literals.iter().position(|lv| lv.eq(v));
+        // This comparison needs to be done with case sensitivity for strings.
+        let lv_pos = self.literals.iter().position(|lv| lv.eq_case_sensitive(v));
         let pos = match lv_pos {
             None => {
                 let idx = self.literals.len();

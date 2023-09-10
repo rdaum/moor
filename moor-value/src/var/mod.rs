@@ -179,6 +179,14 @@ impl Var {
     }
 
     #[must_use]
+    pub fn eq_case_sensitive(&self, other: &Self) -> bool {
+        match (self.variant(), other.variant()) {
+            (Variant::Str(l), Variant::Str(r)) => l.as_str().eq(r.as_str()),
+            _ => self == other,
+        }
+    }
+
+    #[must_use]
     pub fn to_literal(&self) -> String {
         match self.variant() {
             Variant::None => "None".to_string(),
