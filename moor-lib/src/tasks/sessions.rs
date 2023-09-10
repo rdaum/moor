@@ -73,9 +73,10 @@ pub trait Session: Send + Sync {
     /// Process a (wizard) request for system shutdown, with an optional shutdown message.
     async fn shutdown(&self, msg: Option<String>) -> Result<(), anyhow::Error>;
 
-    /// The 'name' of this connection.
+    /// The 'name' of the connection associated with the player.
     /// In a networked environment this is the hostname.
     /// LambdaMOO cores tend to expect this to be a resolved DNS hostname.
+    // TODO: what do we do with the fact that a player may have multiple connections?
     async fn connection_name(&self, player: Objid) -> Result<String, anyhow::Error>;
 
     /// Disconnect the given player's connection.

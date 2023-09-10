@@ -13,7 +13,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, trace, warn};
 
-pub struct WebSocketSessions {
+pub struct WebSocketConnections {
     connections: HashMap<Objid, WsConnection>,
     shutdown_sender: Sender<Option<String>>,
 }
@@ -27,7 +27,7 @@ pub struct WsConnection {
     last_activity: std::time::Instant,
 }
 
-impl WebSocketSessions {
+impl WebSocketConnections {
     pub fn new(shutdown_sender: Sender<Option<String>>) -> Self {
         Self {
             connections: HashMap::new(),
@@ -41,7 +41,7 @@ impl WebSocketSessions {
     ) -> anyhow::Result<Arc<WebSocketSession>> {
         let session = WebSocketSession {
             player,
-            ws_sessions: sessions,
+            connections: sessions,
             session_buffer: Mutex::new(vec![]),
         };
         Ok(Arc::new(session))
@@ -155,11 +155,11 @@ impl WebSocketSessions {
 }
 
 // A per-transaction `session`. The handle through which the scheduler and VM interact with the
-// connection. Exists for the lifetime of a single transaction and talks back to WebSocketSessions
+// connection. Exists for the lifetime of a single transaction and talks back to WebSocketConnections
 // to get it to do the dirty I/O work with the connection.
 pub struct WebSocketSession {
     player: Objid,
-    ws_sessions: Arc<RwLock<WebSocketSessions>>,
+    connections: Arc<RwLock<WebSocketConnections>>,
     // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
     //  should be mmap'd to disk or something.
     session_buffer: Mutex<Vec<(Objid, String)>>,
@@ -169,7 +169,7 @@ pub struct WebSocketSession {
 impl Session for WebSocketSession {
     async fn commit(&self) -> Result<(), Error> {
         increment_counter!("ws_server.sessions.commit");
-        let mut sessions = self.ws_sessions.write().await;
+        let mut connections = self.connections.write().await;
         let mut buffer = self.session_buffer.lock().await;
         trace!(
             "Committing session for player: #{}, # buffer events: {}, length of all strings: {}",
@@ -178,7 +178,7 @@ impl Session for WebSocketSession {
             buffer.iter().map(|(_, s)| s.len()).sum::<usize>()
         );
         for (player, msg) in buffer.drain(..) {
-            sessions.write_msg(player, &msg).await?;
+            connections.write_msg(player, &msg).await?;
         }
         Ok(())
     }
@@ -193,7 +193,7 @@ impl Session for WebSocketSession {
     async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
         Ok(Arc::new(Self {
             player: self.player,
-            ws_sessions: self.ws_sessions.clone(),
+            connections: self.connections.clone(),
             session_buffer: Default::default(),
         }))
     }
@@ -207,13 +207,13 @@ impl Session for WebSocketSession {
 
     async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), Error> {
         increment_counter!("ws_server.sessions.send_text");
-        let mut sessions = self.ws_sessions.write().await;
+        let mut sessions = self.connections.write().await;
         sessions.write_msg(player, msg).await
     }
 
     async fn shutdown(&self, msg: Option<String>) -> Result<(), anyhow::Error> {
         increment_counter!("ws_server.sessions.shutdown");
-        let mut sessions = self.ws_sessions.write().await;
+        let mut sessions = self.connections.write().await;
         if let Some(msg) = msg.clone() {
             sessions.write_msg(self.player, &msg).await?;
         }
@@ -222,7 +222,7 @@ impl Session for WebSocketSession {
     }
 
     async fn connection_name(&self, player: Objid) -> Result<String, anyhow::Error> {
-        let sessions = self.ws_sessions.read().await;
+        let sessions = self.connections.read().await;
 
         increment_counter!("ws_server.sessions.request_connection_name");
 
@@ -247,7 +247,7 @@ impl Session for WebSocketSession {
     }
 
     async fn disconnect(&self, player: Objid) -> Result<(), Error> {
-        let mut sessions = self.ws_sessions.write().await;
+        let mut sessions = self.connections.write().await;
 
         increment_counter!("ws_server.sessions.disconnect");
         let Some(mut conn) = sessions.connections.remove(&player) else {
@@ -270,7 +270,7 @@ impl Session for WebSocketSession {
     }
 
     async fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error> {
-        let sessions = self.ws_sessions.read().await;
+        let sessions = self.connections.read().await;
 
         increment_counter!("ws_server.sessions.request_connected_player");
 
@@ -283,7 +283,7 @@ impl Session for WebSocketSession {
     }
 
     async fn connected_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {
-        let sessions = self.ws_sessions.read().await;
+        let sessions = self.connections.read().await;
 
         increment_counter!("ws_server.sessions.request_connected_seconds");
         let Some(conn) = sessions.connections.get(&player) else {
@@ -295,7 +295,7 @@ impl Session for WebSocketSession {
     }
 
     async fn idle_seconds(&self, player: Objid) -> Result<f64, anyhow::Error> {
-        let sessions = self.ws_sessions.read().await;
+        let sessions = self.connections.read().await;
 
         increment_counter!("ws_server.sessions.request.idle_seconds");
         let Some(conn) = sessions.connections.get(&player) else {

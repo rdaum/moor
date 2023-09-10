@@ -22,7 +22,7 @@ use moor_value::var::variant::Variant;
 use moor_value::var::{v_objid, v_str};
 use moor_value::SYSTEM_OBJECT;
 
-use crate::server::ws_sessions::WebSocketSessions;
+use crate::server::ws_sessions::WebSocketConnections;
 
 #[derive(Clone)]
 pub struct WebSocketServer {
@@ -30,7 +30,7 @@ pub struct WebSocketServer {
 }
 
 struct Inner {
-    sessions: Arc<RwLock<WebSocketSessions>>,
+    sessions: Arc<RwLock<WebSocketConnections>>,
     scheduler: Scheduler,
     // Downward counter for connection ids, starting at -1.
     next_connection_number: AtomicI64,
@@ -38,7 +38,7 @@ struct Inner {
 
 impl WebSocketServer {
     pub fn new(scheduler: Scheduler, shutdown_sender: Sender<Option<String>>) -> Self {
-        let sessions = WebSocketSessions::new(shutdown_sender);
+        let sessions = WebSocketConnections::new(shutdown_sender);
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 scheduler,
@@ -242,7 +242,7 @@ impl WebSocketServer {
             let task_id = {
                 let inner = self.inner.read().await;
                 let sessions = inner.sessions.clone();
-                let session = WebSocketSessions::new_session(sessions, player)
+                let session = WebSocketConnections::new_session(sessions, player)
                     .await
                     .expect("could not create 'command' task session for player");
                 inner
@@ -324,7 +324,7 @@ impl WebSocketServer {
             // Call the scheduler to initiate $do_login_command
             let inner = self.inner.read().await;
             let session =
-                WebSocketSessions::new_session(inner.sessions.clone(), connection_oid).await?;
+                WebSocketConnections::new_session(inner.sessions.clone(), connection_oid).await?;
 
             let task_id = inner
                 .scheduler
@@ -421,7 +421,7 @@ impl WebSocketServer {
 
     async fn submit_connected_task(&self, player: Objid, initiation_type: SessionInitiation) {
         let sessions = self.inner.read().await.sessions.clone();
-        let session = WebSocketSessions::new_session(sessions.clone(), player)
+        let session = WebSocketConnections::new_session(sessions.clone(), player)
             .await
             .expect("could not create 'connected' task session for player");
 

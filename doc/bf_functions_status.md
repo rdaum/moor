@@ -110,15 +110,15 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Values / encoding
 
-| Name          | Complete | Notes                                                                                                                                                                                                                                                           |
-|---------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| value_bytes   | &check;  | Encodes the value as it is currently stored in DB, and counts bytes. But I'd rather not keep this, long run.                                                                                                                                                    |
-| value_hash    |          |                                                                                                                                                                                                                                                                 |
-| string_hash   | &check;  |                                                                                                                                                                                                                                                                 |
-| binary_hash   |          |                                                                                                                                                                                                                                                                 |
-| decode_binary |          | These two functions allow for escaped binary sequences along with a network option for sending them, etc. But a) `moor`'s strings are utf8 so arbitrary byte sequences aren't going to cut it and b) we're on a websocket, and have better ways of doing binary |
-| encode_binary |          | "                                                                                                                                                                                                                                                               |
-| object_bytes  | &check;  | Fake value. Only there to make JHCore happy. Actually calculating this would be tricky                                                                                                                                                                          |
+| Name          | Complete | Notes                                                                                                        |
+|---------------|----------|--------------------------------------------------------------------------------------------------------------|
+| value_bytes   | &check;  | Encodes the value as it is currently stored in DB, and counts bytes. But I'd rather not keep this, long run. |
+| value_hash    |          |                                                                                                              |
+| string_hash   | &check;  |                                                                                                              |
+| binary_hash   |          |                                                                                                              |
+| decode_binary |          | Probably won't implement, see README.md                                                                      |
+| encode_binary |          | "                                                                                                            |
+| object_bytes  | &check;  | Fake value. Only there to make JHCore happy. Actually calculating this would be tricky                       |
 
 ### Server
 

@@ -41,8 +41,8 @@ client connectivity with websockets and such.
    * Missing features:
      * Quota support. 
      * Background tasks resumption after restart (from DB and from textdump load.)
-     * Prompt-receiving network input for things like `@program` and password changes, etc.
-     * Accept old-school "telnet" (raw ASCII TCP socket) connections.
+     * Accept old-school "telnet" (raw ASCII TCP socket) connections in addition to websocket.
+       (Mainly useful for compatibility with existing MUD clients)
      * Dump to a backup `textdump` format.
      * 'out of band' network command support, used by some cores/clients.
    * Improvements:
@@ -50,6 +50,27 @@ client connectivity with websockets and such.
        without it
      * A bit better connection management generally.
      * Better auth (SSO, OAuth2, etc?). Better crypt/password support.
+
+### Unsupported features that might not get supported
+
+  * `$do_command`; LambdaMOO has the ability to attempt execution of a command through
+    user code on `#0:do_command`; if that fails, it then dispatches through the regular
+    built-in command handler. This is not supported, and is actually fairly trick to 
+    implement given the asynchronous flow of the system right now.
+  * `read`; This is used for prompts, password changes, editor, etc. It's slightly tricky
+    because of the 'transactional' nature of I/O in Moor where all verb and I/O operations
+    can be retried on transaction commit failure. Haven't decided what to do about this.
+  * `encode_binary` & `decode_binary`:  These two functions allow for escaped binary 
+     sequences along with a network option for sending them, etc. 
+     But:
+    * `moor`'s strings are utf8 so arbitrary byte sequences aren't going to cut it and
+    * we're on a websocket, and have better ways of doing binary than encoding it into the
+      output. 
+    * The alternative will be to provide a `binary` type that can be used for this purpose
+      and to have special `notify` calls for emitting them to the client.
+  * Network connections, outbound and inbound (e.g. `open_network_connection`, `listen`,  
+    `unlisten` etc). My intent is for the network service layer to be implemented at the Rust level, in the 
+    server daemon, not in MOO code.
 
 ## LambdaMOO is 30+ years old, why remain compatible?
 
