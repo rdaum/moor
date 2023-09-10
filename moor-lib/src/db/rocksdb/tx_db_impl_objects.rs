@@ -27,6 +27,10 @@ impl<'a> RocksDbTx<'a> {
         Ok(ov.is_some())
     }
     #[tracing::instrument(skip(self))]
+    pub fn get_max_object(&self) -> Result<Objid, anyhow::Error> {
+        self.next_object_id()
+    }
+    #[tracing::instrument(skip(self))]
     pub fn create_object(
         &self,
         oid: Option<Objid>,

@@ -64,6 +64,10 @@ pub trait WorldState: Send + Sync {
     /// (It is the caller's (bf_recycle) responsibility to execute :exitfunc for those objects).
     async fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError>;
 
+    /// Return the highest used object # in the system.
+    // TODO: long run want to get rid of this, and deprecate the built-in.
+    async fn max_object(&self, perms: Objid) -> Result<Objid, WorldStateError>;
+
     /// Move an object to a new location.
     /// (Note it is the caller's responsibility to execute :accept, :enterfunc, :exitfunc, etc.)
     async fn move_object(

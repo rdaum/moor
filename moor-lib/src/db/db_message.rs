@@ -37,6 +37,7 @@ pub(crate) enum DbMessage {
     GetObjectOwner(Objid, Sender<Result<Objid, WorldStateError>>),
     SetObjectOwner(Objid, Objid, Sender<Result<(), WorldStateError>>),
     RecycleObject(Objid, Sender<Result<(), WorldStateError>>),
+    GetMaxObject(Sender<Result<Objid, WorldStateError>>),
 
     /// Get information about all verbs declared on a given object
     GetVerbs(Objid, Sender<Result<VerbDefs, WorldStateError>>),

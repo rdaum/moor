@@ -64,21 +64,21 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Objects
 
-| Name            | Complete | Notes                                               |
-|-----------------|----------|-----------------------------------------------------|
-| toobj           | &check;  |                                                     |
-| typeof          | &check;  |                                                     |
-| create          | &check;  | Quota support not implemented yet.                  |
-| recycle         | &check;  |                                                     |
-| valid           | &check;  |                                                     |
-| parent          | &check;  |                                                     |
-| children        | &check;  |                                                     |
-| chparent        | &check;  |                                                     |
-| max_object      |          |                                                     |
-| players         |          |                                                     |
-| is_player       | &check;  |                                                     |
-| set_player_flag | &check;  |                                                     |
-| move            | &check;  | There may be a problem with perms on accept() call? |
+| Name            | Complete | Notes                              |
+|-----------------|----------|------------------------------------|
+| toobj           | &check;  |                                    |
+| typeof          | &check;  |                                    |
+| create          | &check;  | Quota support not implemented yet. |
+| recycle         | &check;  |                                    |
+| valid           | &check;  |                                    |
+| parent          | &check;  |                                    |
+| children        | &check;  |                                    |
+| chparent        | &check;  |                                    |
+| max_object      | &check;  |                                    |
+| players         |          |                                    |
+| is_player       | &check;  |                                    |
+| set_player_flag | &check;  |                                    |
+| move            | &check;  |                                    |
 
 ### Properties
 

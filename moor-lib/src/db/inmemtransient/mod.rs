@@ -97,6 +97,10 @@ fn inmem_db_server(
                     let mut db = db.write().unwrap();
                     r.send(db.set_object_owner(o, no)).unwrap();
                 }
+                DbMessage::GetMaxObject(r) => {
+                    let db = db.read().unwrap();
+                    r.send(db.get_max_object()).unwrap();
+                }
                 DbMessage::GetVerbs(o, r) => {
                     let db = db.read().unwrap();
                     r.send(db.get_verbdefs(o)).unwrap();

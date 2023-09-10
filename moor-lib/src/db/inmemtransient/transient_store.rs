@@ -50,6 +50,9 @@ impl TransientStore {
     pub fn object_valid(&self, o: Objid) -> Result<bool, WorldStateError> {
         Ok(self.objects.contains_key(&o))
     }
+    pub fn get_max_object(&self) -> Result<Objid, WorldStateError> {
+        Ok(Objid(self.max_object as i64))
+    }
     pub fn create_object(
         &mut self,
         id: Option<Objid>,

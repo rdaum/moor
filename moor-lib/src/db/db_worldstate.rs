@@ -128,6 +128,10 @@ impl WorldState for DbTxWorldState {
         self.client.recycle_object(obj).await
     }
 
+    async fn max_object(&self, _perms: Objid) -> Result<Objid, WorldStateError> {
+        self.client.get_max_object().await
+    }
+
     async fn move_object(
         &mut self,
         perms: Objid,

@@ -153,6 +153,13 @@ impl DbTxClient {
         Ok(contents)
     }
 
+    pub async fn get_max_object(&self) -> Result<Objid, WorldStateError> {
+        let (send, receive) = oneshot::channel();
+        self.send(DbMessage::GetMaxObject(send))?;
+        let oid = get_reply(receive).await?;
+        Ok(oid)
+    }
+
     pub async fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::GetVerbs(obj, send))?;

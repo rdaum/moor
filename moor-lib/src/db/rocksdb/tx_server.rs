@@ -93,6 +93,9 @@ pub(crate) fn run_tx_server<'a>(
             DbMessage::SetObjectNameOf(o, names, r) => {
                 respond(r, tx.set_object_name(o, names))?;
             }
+            DbMessage::GetMaxObject(r) => {
+                respond(r, tx.get_max_object())?;
+            }
             DbMessage::GetVerbs(o, r) => {
                 respond(r, tx.get_object_verbs(o))?;
             }

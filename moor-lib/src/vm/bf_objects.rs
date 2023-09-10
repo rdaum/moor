@@ -325,6 +325,17 @@ Returns the number of bytes of the server's memory required to store the given o
 Function: obj max_object ()
 Returns the largest object number yet assigned to a created object. Note that the object with this number may no longer exist; it may have been recycled. The next object created will be assigned the object number one larger than the value of max_object().
  */
+async fn bf_max_object<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+    if !bf_args.args.is_empty() {
+        return Ok(Error(E_INVARG));
+    }
+    let max_obj = bf_args
+        .world_state
+        .max_object(bf_args.task_perms_who())
+        .await?;
+    Ok(Ret(v_objid(max_obj)))
+}
+bf_declare!(max_object, bf_max_object);
 
 const BF_MOVE_TRAMPOLINE_START_ACCEPT: usize = 0;
 const BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC: usize = 1;
@@ -629,6 +640,7 @@ impl VM {
         self.builtins[offset_for_builtin("set_player_flag")] =
             Arc::new(Box::new(BfSetPlayerFlag {}));
         self.builtins[offset_for_builtin("recycle")] = Arc::new(Box::new(BfRecycle {}));
+        self.builtins[offset_for_builtin("max_object")] = Arc::new(Box::new(BfMaxObject {}));
         Ok(())
     }
 }
