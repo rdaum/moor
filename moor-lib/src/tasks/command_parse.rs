@@ -67,7 +67,7 @@ pub fn find_preposition(prep: &str) -> Option<Prep> {
         return PREPOSITIONS.get(id).cloned();
     }
 
-    find_preposition(prep)
+    match_preposition(prep)
 }
 
 pub fn preposition_to_string(ps: &PrepSpec) -> &str {
