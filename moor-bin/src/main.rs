@@ -23,7 +23,8 @@ use moor_value::model::world_state::WorldStateSource;
 use moor_value::var::objid::Objid;
 
 use crate::server::routes::mk_routes;
-use crate::server::ws_server::WebSocketServer;
+use crate::server::server::Server;
+use crate::server::websocket_host::WebSocketHost;
 
 mod repl_session;
 mod server;
@@ -152,8 +153,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let repl_run = run_repl_if_enabled(args.repl, scheduler.clone(), state_source.clone());
 
-    let server_scheduler = scheduler.clone();
-    let ws_server = WebSocketServer::new(server_scheduler, shutdown_sender);
+    let server = Arc::new(Server::new(scheduler.clone(), shutdown_sender));
+    let ws_host = WebSocketHost::new(server);
     let mut hup_signal =
         signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
     let mut stop_signal =
@@ -162,7 +163,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let loop_scheduler = scheduler.clone();
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
-    let main_router = mk_routes(state_source.clone(), ws_server);
+    let main_router = mk_routes(state_source.clone(), ws_host);
 
     let addr = args
         .listen_address

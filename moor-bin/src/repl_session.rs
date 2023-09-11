@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use moor_lib::compiler::decompile::program_to_tree;
 use moor_lib::compiler::unparse::unparse;
-use moor_lib::tasks::scheduler::{Scheduler, TaskWaiterResult};
+use moor_lib::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_lib::tasks::sessions::Session;
 use moor_lib::vm::opcode::Program;
 use moor_value::model::defset::HasUuid;
@@ -120,17 +120,17 @@ impl ReplSession {
             TaskWaiterResult::Success(v) => {
                 println!("=> {v}");
             }
-            TaskWaiterResult::Exception(e) => {
+            TaskWaiterResult::Error(SchedulerError::TaskAbortedException(e)) => {
                 println!("EXCEPTION: {e:?}");
             }
-            TaskWaiterResult::AbortTimeout(a) => {
+            TaskWaiterResult::Error(SchedulerError::TaskAbortedLimit(a)) => {
                 println!("TIMEOUT: {a:?}");
             }
-            TaskWaiterResult::AbortCancelled => {
+            TaskWaiterResult::Error(SchedulerError::TaskAbortedCancelled) => {
                 println!("CANCELLED");
             }
-            TaskWaiterResult::AbortError => {
-                println!("ERROR");
+            TaskWaiterResult::Error(e) => {
+                println!("ERROR: {:?}", e);
             }
         }
         Ok(())
@@ -169,9 +169,9 @@ impl Session for ReplSession {
         Ok(format!("REPL:{player}"))
     }
 
-    async fn disconnect(&self, _player: Objid) -> Result<(), Error> {
-        println!("DISCONNECT");
-        exit(0);
+    async fn disconnect(&self, player: Objid) -> Result<(), Error> {
+        println!("DISCONNECT: {}", player);
+        Ok(())
     }
 
     async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
@@ -260,9 +260,7 @@ async fn list_command(
 
     // Look up the verb.
     let Ok(verb) = tx.get_verb(Objid(2), obj, verb_str).await else {
-        return Err(format!(
-            "Unable to find verb {verb_str} on object {obj}"
-        ));
+        return Err(format!("Unable to find verb {verb_str} on object {obj}"));
     };
 
     // If it's not a MOO binary, we can't handle that.

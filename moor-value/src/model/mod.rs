@@ -27,7 +27,7 @@ pub enum CommitResult {
              // TODO: timeout/task-too-long/error?
 }
 
-#[derive(Error, Debug, Eq, PartialEq)]
+#[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub enum WorldStateError {
     #[error("Object not found: {0}")]
     ObjectNotFound(Objid),

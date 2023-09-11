@@ -4,8 +4,8 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Number, Value};
 
 pub mod routes;
-pub mod ws_server;
-mod ws_sessions;
+pub mod server;
+pub mod websocket_host;
 
 #[derive(Serialize, Deserialize)]
 struct OID(i64);

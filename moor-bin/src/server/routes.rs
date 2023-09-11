@@ -18,13 +18,13 @@ use moor_value::SYSTEM_OBJECT;
 // TODO: support for top-level props.  e.g. $welcome_message, should we need that.
 const WHITELISTED_PUBLIC_SYSTEM_PROPERTIES: [(&str, &str); 1] = [("login", "welcome_message")];
 
-use crate::server::ws_server::{ws_connect_handler, ws_create_handler, WebSocketServer};
+use crate::server::websocket_host::{ws_connect_handler, ws_create_handler, WebSocketHost};
 
 fn setup_metrics_recorder() -> PrometheusHandle {
     PrometheusBuilder::new().install_recorder().unwrap()
 }
 
-pub fn mk_routes(state_source: Arc<dyn WorldStateSource>, ws_server: WebSocketServer) -> Router {
+pub fn mk_routes(state_source: Arc<dyn WorldStateSource>, ws_server: WebSocketHost) -> Router {
     let recorder_handle = setup_metrics_recorder();
 
     // The router for websocket requests

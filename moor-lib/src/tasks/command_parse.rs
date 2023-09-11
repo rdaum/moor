@@ -1,6 +1,5 @@
 use std::string::ToString;
 
-use anyhow::bail;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 
@@ -140,11 +139,21 @@ pub trait ParseMatcher {
     async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, anyhow::Error>;
 }
 
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum ParseCommandError {
+    #[error("Empty command")]
+    EmptyCommand,
+    #[error("Unimplemented built-in command")]
+    UnimplementedBuiltInCommand,
+    #[error("Error occurred during object matching")]
+    ErrorDuringMatch,
+}
+
 #[tracing::instrument(skip(command_environment))]
 pub async fn parse_command<M>(
     input: &str,
     mut command_environment: M,
-) -> Result<ParsedCommand, anyhow::Error>
+) -> Result<ParsedCommand, ParseCommandError>
 where
     M: ParseMatcher,
 {
@@ -161,7 +170,7 @@ where
     // Get word list
     let words = parse_into_words(&command);
     if words.is_empty() {
-        bail!("Empty command");
+        return Err(ParseCommandError::EmptyCommand);
     }
 
     // Check for built-in commands
@@ -184,7 +193,7 @@ where
     .contains(&verb.as_str())
     {
         // TODO: Handle built-in commands
-        bail!("Built-in commands not implemented");
+        return Err(ParseCommandError::UnimplementedBuiltInCommand);
     }
     // Split into verb and argument string
     let mut parts = command.splitn(2, ' ');
@@ -219,12 +228,18 @@ where
 
     // Get indirect object object
     if prep != PrepSpec::None && !iobjstr.is_empty() {
-        iobj = command_environment.match_object(&iobjstr).await?;
+        iobj = command_environment
+            .match_object(&iobjstr)
+            .await
+            .map_err(|_| ParseCommandError::ErrorDuringMatch)?;
     }
 
     // Get direct object object
     if !dobjstr.is_empty() {
-        dobj = command_environment.match_object(&dobjstr).await?;
+        dobj = command_environment
+            .match_object(&dobjstr)
+            .await
+            .map_err(|_| ParseCommandError::ErrorDuringMatch)?;
     }
 
     // Build and return ParsedCommand

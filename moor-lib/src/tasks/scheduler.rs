@@ -22,7 +22,7 @@ use moor_value::var::{v_err, v_int, v_none, Var};
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
 use crate::db::matching::MatchEnvironmentParseMatcher;
-use crate::tasks::command_parse::{parse_command, ParsedCommand};
+use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
 use crate::tasks::moo_vm_host::MooVmHost;
 use crate::tasks::scheduler::SchedulerError::{CouldNotParseCommand, DatabaseError, TaskNotFound};
 use crate::tasks::sessions::Session;
@@ -104,15 +104,11 @@ pub enum SchedulerControlMsg {
     },
 }
 
-// A subset of the messages above, for use by subscribers on tasks (e.g. the websocket connection)
-// TODO consider consolidation here
-#[derive(Clone)]
+/// Results returned to waiters on tasks during subscription.
+#[derive(Clone, Debug)]
 pub enum TaskWaiterResult {
     Success(Var),
-    Exception(UncaughtException),
-    AbortTimeout(AbortLimitReason),
-    AbortCancelled,
-    AbortError,
+    Error(SchedulerError),
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -135,10 +131,10 @@ struct TaskControl {
     subscribers: Vec<oneshot::Sender<TaskWaiterResult>>,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum SchedulerError {
     #[error("Could not parse command: {0}")]
-    CouldNotParseCommand(Error),
+    CouldNotParseCommand(ParseCommandError),
     #[error("Could not find match for command '{0}': {1:?}")]
     NoCommandMatch(String, ParsedCommand),
     #[error("Could not start transaction due to database error: {0}")]
@@ -147,8 +143,16 @@ pub enum SchedulerError {
     PermissionDenied,
     #[error("Task not found: {0:?}")]
     TaskNotFound(TaskId),
-    #[error("Could not start task: {0}")]
-    CouldNotStartTask(Error),
+    #[error("Could not start task (internal error)")]
+    CouldNotStartTask,
+    #[error("Task aborted due to limit: {0:?}")]
+    TaskAbortedLimit(AbortLimitReason),
+    #[error("Task aborted due to error.")]
+    TaskAbortedError,
+    #[error("Task aborted due to exception: {0:?}")]
+    TaskAbortedException(UncaughtException),
+    #[error("Task aborted due to cancellation.")]
+    TaskAbortedCancelled,
 }
 
 // TODO cache
@@ -322,7 +326,7 @@ impl Scheduler {
                 verbinfo: vi,
                 command,
             })
-            .map_err(|e| SchedulerError::CouldNotStartTask(anyhow!(e)))?;
+            .map_err(|_| SchedulerError::CouldNotStartTask)?;
 
         Ok(task_id)
     }
@@ -464,6 +468,55 @@ impl Scheduler {
         scheduler.running = false;
         Ok(())
     }
+
+    /// Attempt to parse the command in the context of the player's environment.
+    async fn parse_command(
+        &self,
+        player: Objid,
+        command: &str,
+    ) -> Result<(Objid, VerbInfo, ParsedCommand), SchedulerError> {
+        let inner = self.inner.read().await;
+
+        let mut ws = inner
+            .state_source
+            .new_world_state()
+            .await
+            .map_err(DatabaseError)?;
+
+        // Get perms for environment search. Player's perms.
+        let me = DBMatchEnvironment {
+            ws: ws.as_mut(),
+            perms: player,
+        };
+        let matcher = MatchEnvironmentParseMatcher { env: me, player };
+        let pc = parse_command(command, matcher)
+            .await
+            .map_err(CouldNotParseCommand)?;
+        let loc = match ws.location_of(player, player).await {
+            Ok(loc) => loc,
+            Err(e) => return Err(DatabaseError(e)),
+        };
+
+        let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
+        let mut found = None;
+        for target in targets_to_search {
+            let match_result = ws
+                .find_command_verb_on(player, target, pc.verb.as_str(), pc.dobj, pc.prep, pc.iobj)
+                .await;
+            let match_result = match match_result {
+                Ok(m) => m,
+                Err(e) => return Err(DatabaseError(e)),
+            };
+            if let Some(vi) = match_result {
+                found = Some((target, vi, pc.clone()));
+                break;
+            }
+        }
+        let Some((target, vi, pc)) = found else {
+            return Err(SchedulerError::NoCommandMatch(command.to_string(), pc));
+        };
+        Ok((target, vi, pc))
+    }
 }
 
 impl Inner {
@@ -542,7 +595,10 @@ impl Inner {
 
                         warn!(task = task.task_id, "Task cancelled");
 
-                        to_notify.push((*task_id, TaskWaiterResult::AbortCancelled));
+                        to_notify.push((
+                            *task_id,
+                            TaskWaiterResult::Error(SchedulerError::TaskAbortedCancelled),
+                        ));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortError(e) => {
@@ -550,7 +606,10 @@ impl Inner {
 
                         warn!(task = task.task_id, error = ?e, "Task aborted");
 
-                        to_notify.push((*task_id, TaskWaiterResult::AbortError));
+                        to_notify.push((
+                            *task_id,
+                            TaskWaiterResult::Error(SchedulerError::TaskAbortedError),
+                        ));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
@@ -569,14 +628,22 @@ impl Inner {
                             }
                         }
                         increment_counter!("scheduler.aborted_limits");
-                        to_notify.push((*task_id, TaskWaiterResult::AbortTimeout(limit_reason)));
+                        to_notify.push((
+                            *task_id,
+                            TaskWaiterResult::Error(SchedulerError::TaskAbortedLimit(limit_reason)),
+                        ));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskException(exception) => {
                         increment_counter!("scheduler.task_exception");
 
                         warn!(task = task.task_id, finally_reason = ?exception, "Task threw exception");
-                        to_notify.push((*task_id, TaskWaiterResult::Exception(exception)));
+                        to_notify.push((
+                            *task_id,
+                            TaskWaiterResult::Error(SchedulerError::TaskAbortedException(
+                                exception,
+                            )),
+                        ));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskSuccess(value) => {
@@ -991,54 +1058,5 @@ impl Inner {
             .remove(&id)
             .ok_or(anyhow::anyhow!("Task not found"))?;
         Ok(())
-    }
-
-    /// Attempt to parse the command in the context of the player's environment.
-    async fn parse_command(
-        &self,
-        player: Objid,
-        command: &str,
-    ) -> Result<(Objid, VerbInfo, ParsedCommand), SchedulerError> {
-        let inner = self.inner.read().await;
-
-        let mut ws = inner
-            .state_source
-            .new_world_state()
-            .await
-            .map_err(DatabaseError)?;
-
-        // Get perms for environment search. Player's perms.
-        let me = DBMatchEnvironment {
-            ws: ws.as_mut(),
-            perms: player,
-        };
-        let matcher = MatchEnvironmentParseMatcher { env: me, player };
-        let pc = parse_command(command, matcher)
-            .await
-            .map_err(CouldNotParseCommand)?;
-        let loc = match ws.location_of(player, player).await {
-            Ok(loc) => loc,
-            Err(e) => return Err(DatabaseError(e)),
-        };
-
-        let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
-        let mut found = None;
-        for target in targets_to_search {
-            let match_result = ws
-                .find_command_verb_on(player, target, pc.verb.as_str(), pc.dobj, pc.prep, pc.iobj)
-                .await;
-            let match_result = match match_result {
-                Ok(m) => m,
-                Err(e) => return Err(DatabaseError(e)),
-            };
-            if let Some(vi) = match_result {
-                found = Some((target, vi, pc.clone()));
-                break;
-            }
-        }
-        let Some((target, vi, pc)) = found else {
-            return Err(SchedulerError::NoCommandMatch(command.to_string(), pc));
-        };
-        Ok((target, vi, pc))
     }
 }
