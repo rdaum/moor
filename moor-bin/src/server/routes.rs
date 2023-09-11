@@ -24,14 +24,14 @@ fn setup_metrics_recorder() -> PrometheusHandle {
     PrometheusBuilder::new().install_recorder().unwrap()
 }
 
-pub fn mk_routes(state_source: Arc<dyn WorldStateSource>, ws_server: WebSocketHost) -> Router {
+pub fn mk_routes(state_source: Arc<dyn WorldStateSource>, ws_host: WebSocketHost) -> Router {
     let recorder_handle = setup_metrics_recorder();
 
     // The router for websocket requests
     let websocket_router = Router::new()
         .route("/connect", get(ws_connect_handler))
         .route("/create", get(ws_create_handler))
-        .with_state(ws_server);
+        .with_state(ws_host);
 
     // Public exposed properties available via GET and output as JSON.
     // These have to be explicitly whitelisted. Used for this like e.g. $login.welcome_message

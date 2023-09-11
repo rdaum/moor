@@ -37,16 +37,16 @@ pub async fn ws_connect_handler(
     ws: WebSocketUpgrade,
     TypedHeader(auth): TypedHeader<Authorization<Basic>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(ws_listener): State<WebSocketHost>,
+    State(ws_host): State<WebSocketHost>,
 ) -> impl IntoResponse {
-    increment_counter!("ws_server.new_connection");
+    increment_counter!("ws_host.new_connection");
 
     info!("Connection from {}", addr);
     // TODO: only async Rust could produce an entity as demonic as this. Let's go on and pretend the
     //   pain is all worth it.
-    ws.on_upgrade(move |socket| async move {
-        ws_listener.handle_player_connect(addr, socket, auth).await
-    })
+    ws.on_upgrade(
+        move |socket| async move { ws_host.handle_player_connect(addr, socket, auth).await },
+    )
 }
 
 /// Handles the attempt to create a new player, via websocket connection & basic-auth.
@@ -54,14 +54,14 @@ pub async fn ws_create_handler(
     ws: WebSocketUpgrade,
     TypedHeader(auth): TypedHeader<Authorization<Basic>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(ws_listener): State<WebSocketHost>,
+    State(ws_host): State<WebSocketHost>,
 ) -> impl IntoResponse {
-    increment_counter!("ws_listener.new_connection");
+    increment_counter!("ws_host.new_connection");
 
     info!("Connection from {}", addr);
-    ws.on_upgrade(move |socket| async move {
-        ws_listener.handle_player_create(addr, socket, auth).await
-    })
+    ws.on_upgrade(
+        move |socket| async move { ws_host.handle_player_create(addr, socket, auth).await },
+    )
 }
 
 impl WebSocketHost {
@@ -157,7 +157,7 @@ impl WebSocketHost {
             let msg = match msg {
                 Ok(msg) => msg,
                 Err(e) => {
-                    increment_counter!("ws_listener.command_receive_error");
+                    increment_counter!("ws_host.command_receive_error");
                     error!("Error receiving a message: {:?}", e);
                     continue;
                 }
@@ -165,12 +165,12 @@ impl WebSocketHost {
             let cmd = match msg.into_text() {
                 Ok(cmd) => cmd,
                 Err(e) => {
-                    increment_counter!("ws_listener.command_decode_error");
+                    increment_counter!("ws_host.command_decode_error");
                     error!("Error decoding a message: {:?}", e);
                     continue;
                 }
             };
-            increment_counter!("ws_listener.command_received");
+            increment_counter!("ws_host.command_received");
             let cmd = cmd.as_str().trim();
 
             // Record activity on the connection, so we can compute idle_seconds.
@@ -189,19 +189,19 @@ impl WebSocketHost {
                 match e {
                     SchedulerError::CouldNotParseCommand(_)
                     | SchedulerError::NoCommandMatch(_, _) => {
-                        increment_counter!("ws_listener.command_parse_error");
+                        increment_counter!("ws_host.command_parse_error");
                         self.send_error(player, "I don't understand that.".to_string())
                             .await
                             .unwrap();
                     }
                     SchedulerError::PermissionDenied => {
-                        increment_counter!("ws_listener.command_permission_error");
+                        increment_counter!("ws_host.command_permission_error");
                         self.send_error(player, "You can't do that.".to_string())
                             .await
                             .unwrap();
                     }
                     _ => {
-                        increment_counter!("ws_listener.command_internal_error");
+                        increment_counter!("ws_host.command_internal_error");
                         self.send_error(
                             player,
                             "Internal error. Let your nearest wizard know".to_string(),
@@ -226,7 +226,7 @@ impl WebSocketHost {
         peer_addr: SocketAddr,
         ws_sender: SplitSink<WebSocket, Message>,
     ) -> Objid {
-        increment_counter!("ws_listener.new_connection");
+        increment_counter!("ws_host.new_connection");
         self.server
             .new_connection(move |connection_oid| {
                 Ok(Box::new(WsConnection {
@@ -242,7 +242,7 @@ impl WebSocketHost {
     }
 
     async fn player_disconnected(&self, connection_object: Objid) {
-        increment_counter!("ws_listener.player_disconnected");
+        increment_counter!("ws_host.player_disconnected");
         match self.server.disconnected(connection_object).await {
             Ok(Some(connection)) => connection,
             Ok(None) => {
@@ -297,7 +297,7 @@ impl Connection for WsConnection {
                     .await?;
             }
             ConnectType::Reconnected => {
-                increment_counter!("ws_listener.player_reconnected");
+                increment_counter!("ws_host.player_reconnected");
                 let reconnect_msg = "** Redirecting old connection to this port **";
                 SplitSink::send(
                     &mut self.ws_sender,
@@ -325,7 +325,7 @@ impl Connection for WsConnection {
                 .await?;
             }
             DisconnectReason::Booted(Some(msg)) => {
-                increment_counter!("ws_listener.player_booted");
+                increment_counter!("ws_host.player_booted");
                 SplitSink::send(
                     &mut self.ws_sender,
                     Message::Text(format!(

@@ -342,7 +342,7 @@ impl Server {
     }
 
     async fn idle_seconds(&self, _requester: Objid, player: Objid) -> Result<Duration, Error> {
-        increment_counter!("ws_server.sessions.request.idle_seconds");
+        increment_counter!("ws_host.sessions.request.idle_seconds");
         let Some(conn) = self.connections.get(&player) else {
             return Err(anyhow!("no known connection for objid: #{}", player.0));
         };
