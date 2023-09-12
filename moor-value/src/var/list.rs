@@ -43,7 +43,7 @@ impl List {
         Variant::List(Self::from_vec(new_list)).into()
     }
 
-    /// Take the first item from the front, and return (item, new_list)
+    /// Take the first item from the front, and return (item, `new_list`)
     #[must_use]
     pub fn pop_front(&self) -> (Var, Var) {
         if self.inner.is_empty() {

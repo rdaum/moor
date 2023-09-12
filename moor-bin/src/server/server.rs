@@ -1,10 +1,13 @@
+use crate::server::connection::Connection;
 use crate::server::server::ConnectType::{Connected, Created, Reconnected};
+use crate::server::{DisconnectReason, LoginType};
 use anyhow::{anyhow, bail, Error};
 use async_trait::async_trait;
 use dashmap::DashMap;
 use metrics_macros::{decrement_gauge, gauge, increment_counter, increment_gauge};
 use moor_lib::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_lib::tasks::sessions::Session;
+use moor_value::model::NarrativeEvent;
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_objid, v_str};
@@ -16,42 +19,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tracing::{trace, warn};
 
-#[async_trait]
-pub trait Connection: Send + Sync {
-    async fn write_message(&mut self, msg: &str) -> Result<(), Error>;
-    async fn notify_connected(
-        &mut self,
-        player: Objid,
-        connect_type: ConnectType,
-    ) -> Result<(), Error>;
-    async fn disconnect(&mut self, reason: DisconnectReason) -> Result<(), Error>;
-    async fn connection_name(&self, player: Objid) -> Result<String, Error>;
-    async fn player(&self) -> Objid;
-    async fn update_player(&mut self, player: Objid) -> Result<(), Error>;
-    async fn last_activity(&self) -> Instant;
-    async fn record_activity(&mut self, when: Instant);
-    async fn connected_time(&self) -> Instant;
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum LoginType {
-    Connect,
-    Create,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ConnectType {
-    Connected,
-    Reconnected,
-    Created,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum DisconnectReason {
-    None,
-    Reconnected,
-    Booted(Option<String>),
-}
+use super::ConnectType;
 
 pub struct Server {
     connections: DashMap<Objid, Box<dyn Connection>>,
@@ -76,7 +44,7 @@ impl Server {
         player: Objid,
     ) -> anyhow::Result<Arc<BufferedSession>> {
         increment_counter!("server.new_session");
-        let session = BufferedSession::new(player, self.clone());
+        let session = BufferedSession::new(player, self);
         Ok(Arc::new(session))
     }
 
@@ -113,7 +81,7 @@ impl Server {
     pub async fn write_messages(
         &self,
         request_author: Objid,
-        messages: &[(Objid, String)],
+        messages: &[(Objid, NarrativeEvent)],
     ) -> anyhow::Result<()> {
         increment_counter!("server.write_messages");
         // To lazily hold the connections we're going to need...
@@ -129,13 +97,13 @@ impl Server {
             let conn_player = conn.player().await;
             assert_eq!(conn_player, *connection_destination, "integrity error");
 
-            conn.write_message(msg).await?;
+            conn.write_message(msg.clone()).await?;
         }
 
         Ok(())
     }
 
-    /// Attempt authentication through $do_login_command( ... )
+    /// Attempt authentication through $`do_login_command`( ... )
     pub async fn authenticate(
         self: Arc<Self>,
         connection_oid: Objid,
@@ -175,7 +143,7 @@ impl Server {
         };
 
         // Now we spin waiting for the task to complete.  The server will output to the connection obj
-        // we created while that's happening
+        // we created while that's happening.
         // We will wait on the subscription channel for this task,
         // And if it's successful and if it's an object that's our new player object to sign in as.
         // Otherwise, The Fail.
@@ -358,7 +326,7 @@ pub struct BufferedSession {
     server: Arc<Server>,
     // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
     //  should be mmap'd to disk or something.
-    session_buffer: Mutex<Vec<(Objid, String)>>,
+    session_buffer: Mutex<Vec<(Objid, NarrativeEvent)>>,
 }
 
 impl BufferedSession {
@@ -385,11 +353,10 @@ impl Session for BufferedSession {
         trace!(
             player = ?self.player,
             num_events = buffer.len(),
-            buffer_len = buffer.iter().map(|(_, s)| s.len()).sum::<usize>(),
             "Flushing session"
         );
 
-        let messages: Vec<(Objid, String)> = buffer.drain(..).collect();
+        let messages: Vec<(Objid, NarrativeEvent)> = buffer.drain(..).collect();
         self.server.write_messages(self.player, &messages).await?;
         Ok(())
     }
@@ -409,26 +376,31 @@ impl Session for BufferedSession {
         }))
     }
 
-    async fn send_text(&self, player: Objid, msg: &str) -> Result<(), Error> {
+    async fn send_event(&self, player: Objid, msg: NarrativeEvent) -> Result<(), Error> {
         increment_counter!("buffered_session.send_text");
         let mut buffer = self.session_buffer.lock().await;
-        buffer.push((player, msg.to_string()));
+        buffer.push((player, msg));
         Ok(())
     }
 
     async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), Error> {
         increment_counter!("buffered_session.send_system_msg");
+        // TODO: not all system messages should be durable...
         self.server
-            .write_messages(self.player, &[(player, msg.to_string())])
+            .write_messages(
+                self.player,
+                &[(
+                    player,
+                    NarrativeEvent::new_durable(SYSTEM_OBJECT, msg.to_string()),
+                )],
+            )
             .await
     }
 
     async fn shutdown(&self, msg: Option<String>) -> Result<(), Error> {
         increment_counter!("buffered_session.shutdown");
         if let Some(msg) = msg.clone() {
-            self.server
-                .write_messages(self.player, &[(self.player, msg)])
-                .await?;
+            self.send_system_msg(self.player, &msg).await?;
         }
         self.server.shutdown_sender.send(msg).await.unwrap();
         Ok(())

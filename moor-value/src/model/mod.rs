@@ -1,4 +1,5 @@
 use anyhow::bail;
+use std::time::SystemTime;
 
 use thiserror::Error;
 
@@ -93,5 +94,55 @@ impl WorldStateError {
                 bail!("Unhandled error code: {:?}", self);
             }
         }
+    }
+}
+
+/// A narrative event is a record of something that happened in the world, and is what `bf_notify`
+/// or similar ultimately create.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NarrativeEvent {
+    /// The time when the event happened.
+    timestamp: SystemTime,
+    /// The player that caused the event. (SYSTEM_OBJECT for system events)
+    author: Objid,
+    /// An event is "durable" (vs "ephemeral") if it should be replayed to a new connection or not.
+    /// Ephemeral events are played only to the immediate connections currently attached, and are
+    /// never persisted.
+    /// Examples would be system notifications, or the "you are now connected" messages etc.
+    ephemeral: bool,
+    /// The event itself (just a string for now, but we will go richer with this later)
+    event: String,
+}
+
+impl NarrativeEvent {
+    #[must_use] pub fn new_durable(author: Objid, event: String) -> Self {
+        Self {
+            timestamp: SystemTime::now(),
+            author,
+            ephemeral: false,
+            event,
+        }
+    }
+
+    #[must_use] pub fn new_ephemeral(author: Objid, event: String) -> Self {
+        Self {
+            timestamp: SystemTime::now(),
+            author,
+            ephemeral: true,
+            event,
+        }
+    }
+
+    #[must_use] pub fn timestamp(&self) -> SystemTime {
+        self.timestamp
+    }
+    #[must_use] pub fn author(&self) -> Objid {
+        self.author
+    }
+    #[must_use] pub fn ephemeral(&self) -> bool {
+        self.ephemeral
+    }
+    #[must_use] pub fn event(&self) -> &str {
+        &self.event
     }
 }

@@ -8,6 +8,7 @@ use moor_lib::vm::opcode::Program;
 use moor_value::model::defset::HasUuid;
 use moor_value::model::verbs::BinaryType;
 use moor_value::model::world_state::{WorldState, WorldStateSource};
+use moor_value::model::NarrativeEvent;
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
 use moor_value::AsByteBuffer;
@@ -130,7 +131,7 @@ impl ReplSession {
                 println!("CANCELLED");
             }
             TaskWaiterResult::Error(e) => {
-                println!("ERROR: {:?}", e);
+                println!("ERROR: {e:?}");
             }
         }
         Ok(())
@@ -150,8 +151,8 @@ impl Session for ReplSession {
         Ok(self)
     }
 
-    async fn send_text(&self, _player: Objid, msg: &str) -> Result<(), Error> {
-        println!("{msg}");
+    async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), Error> {
+        println!("{}", msg.event());
         Ok(())
     }
 
@@ -170,7 +171,7 @@ impl Session for ReplSession {
     }
 
     async fn disconnect(&self, player: Objid) -> Result<(), Error> {
-        println!("DISCONNECT: {}", player);
+        println!("DISCONNECT: {player}");
         Ok(())
     }
 

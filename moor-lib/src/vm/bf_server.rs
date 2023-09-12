@@ -8,7 +8,7 @@ use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
 use moor_value::model::objects::ObjFlag;
-use moor_value::model::WorldStateError;
+use moor_value::model::{NarrativeEvent, WorldStateError};
 use moor_value::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
 use moor_value::var::variant::Variant;
 use moor_value::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
@@ -48,7 +48,8 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args.task_perms().await?.check_obj_owner_perms(*player)?;
 
-    if let Err(send_error) = bf_args.session.send_text(*player, msg.as_str()).await {
+    let event = NarrativeEvent::new_durable(bf_args.vm.caller(), msg.to_string());
+    if let Err(send_error) = bf_args.session.send_event(*player, event).await {
         warn!(
             "Unable to send message to player: #{}: {}",
             player.0, send_error

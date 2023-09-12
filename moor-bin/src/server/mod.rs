@@ -3,6 +3,8 @@ use moor_value::var::{v_float, v_int, v_list, v_none, v_string, Var};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Number, Value};
 
+pub mod connection;
+mod narrative_log;
 pub mod routes;
 pub mod server;
 pub mod websocket_host;
@@ -14,6 +16,26 @@ struct OID(i64);
 struct Error {
     code: u8,
     msg: String,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum LoginType {
+    Connect,
+    Create,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ConnectType {
+    Connected,
+    Reconnected,
+    Created,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum DisconnectReason {
+    None,
+    Reconnected,
+    Booted(Option<String>),
 }
 
 pub fn var_as_json(v: &Var) -> Value {

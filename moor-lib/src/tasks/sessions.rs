@@ -1,5 +1,6 @@
 use anyhow::Error;
 use async_trait::async_trait;
+use moor_value::model::NarrativeEvent;
 use moor_value::var::objid::Objid;
 use std::sync::{Arc, RwLock};
 
@@ -62,7 +63,7 @@ pub trait Session: Send + Sync {
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
     /// rollback.
-    async fn send_text(&self, player: Objid, msg: &str) -> Result<(), anyhow::Error>;
+    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), anyhow::Error>;
 
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
@@ -114,7 +115,7 @@ impl Session for NoopClientSession {
         Ok(self.clone())
     }
 
-    async fn send_text(&self, _player: Objid, _msg: &str) -> Result<(), anyhow::Error> {
+    async fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), anyhow::Error> {
         Ok(())
     }
 
@@ -201,8 +202,12 @@ impl Session for MockClientSession {
         }))
     }
 
-    async fn send_text(&self, _player: Objid, msg: &str) -> Result<(), Error> {
-        self.inner.write().unwrap().received.push(String::from(msg));
+    async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), Error> {
+        self.inner
+            .write()
+            .unwrap()
+            .received
+            .push(msg.event().to_string());
         Ok(())
     }
 

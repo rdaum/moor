@@ -16,10 +16,14 @@ use metrics_macros::increment_counter;
 use tracing::{error, info, instrument, trace, warn};
 
 use moor_lib::tasks::scheduler::SchedulerError;
+use moor_value::model::NarrativeEvent;
 use moor_value::var::objid::Objid;
 use moor_value::SYSTEM_OBJECT;
 
-use crate::server::server::{ConnectType, Connection, DisconnectReason, LoginType, Server};
+use crate::server::server::Server;
+
+use super::connection::Connection;
+use super::{ConnectType, DisconnectReason, LoginType};
 
 #[derive(Clone)]
 pub struct WebSocketHost {
@@ -217,7 +221,10 @@ impl WebSocketHost {
 
     async fn send_error(&self, player: Objid, msg: String) -> Result<(), anyhow::Error> {
         self.server
-            .write_messages(SYSTEM_OBJECT, &[(player, msg)])
+            .write_messages(
+                SYSTEM_OBJECT,
+                &[(player, NarrativeEvent::new_ephemeral(SYSTEM_OBJECT, msg))],
+            )
             .await
     }
 
@@ -244,22 +251,21 @@ impl WebSocketHost {
     async fn player_disconnected(&self, connection_object: Objid) {
         increment_counter!("ws_host.player_disconnected");
         match self.server.disconnected(connection_object).await {
-            Ok(Some(connection)) => connection,
+            Ok(Some(_)) => {
+            }
             Ok(None) => {
                 trace!(
                     ?connection_object,
                     "connection already removed / no connection for object"
                 );
-                return;
             }
             Err(e) => {
                 error!(
                     ?connection_object,
                     "error deregistering connection: {:?}", e
                 );
-                return;
             }
-        };
+        }
     }
 }
 
@@ -274,11 +280,11 @@ pub struct WsConnection {
 
 #[async_trait]
 impl Connection for WsConnection {
-    async fn write_message(&mut self, msg: &str) -> Result<(), Error> {
-        let msg = if msg.is_empty() {
+    async fn write_message(&mut self, msg: NarrativeEvent) -> Result<(), Error> {
+        let msg = if msg.event().is_empty() {
             Message::Text("\n".to_string())
         } else {
-            Message::Text(msg.to_string())
+            Message::Text(msg.event().to_string())
         };
 
         SplitSink::send(&mut self.ws_sender, msg).await?;
@@ -329,8 +335,7 @@ impl Connection for WsConnection {
                 SplitSink::send(
                     &mut self.ws_sender,
                     Message::Text(format!(
-                        "** You have been booted off the server: {} **",
-                        msg
+                        "** You have been booted off the server: {msg} **"
                     )),
                 )
                 .await?;
