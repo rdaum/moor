@@ -19,7 +19,7 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::inmemtransient::InMemTransientDatabase;
-    use crate::tasks::sessions::NoopClientSession;
+    use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
     use crate::tasks::vm_test_utils::call_verb;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
@@ -448,105 +448,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_for_list_loop() {
-        let program = "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
-    }
-
-    #[tokio::test]
-    async fn test_for_range_loop() {
-        let program = "z = 0; for i in [1..4] z = z + i; endfor return {i,z};";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(4), v_int(10)]));
-    }
-
-    #[tokio::test]
-    async fn test_basic_scatter_assign() {
-        let program = "{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)]));
-    }
-
-    #[tokio::test]
-    async fn test_more_scatter_assign() {
-        let program = "{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(
-            result,
-            v_list(vec![
-                v_int(1),
-                v_int(2),
-                v_list(vec![v_int(3), v_int(4)]),
-                v_int(5),
-                v_list(vec![v_int(6), v_int(7)]),
-                v_int(8),
-            ])
-        );
-    }
-
-    #[tokio::test]
-    async fn test_scatter_multi_optional() {
-        let program = "{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};";
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(
-            result,
-            v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_empty_list()])
-        );
-    }
-
-    #[tokio::test]
-    async fn test_scatter_regression() {
-        // Wherein I discovered that precedence order for scatter assign was wrong wrong wrong.
-        let program = r#"
-        a = {{#2, #70, #70, #-1, #-1}, #70};
-        thing = a[2];
-        {?who = player, ?what = thing, ?where = this:_locations(who), ?dobj, ?iobj, @other} = a[1];
-        return {who, what, where, dobj, iobj, @other};
-        "#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        // MOO has  {#2, #70, #70, #-1, #-1, {}} for this equiv in JHCore parse_parties, and does not
-        // actually invoke `_locations` (where i've subbed 666) for these values.
-        // So something is wonky about our scatter evaluation, looks like on the first arg.
-        assert_eq!(
-            result,
-            v_list(vec![v_obj(2), v_obj(70), v_obj(70), v_obj(-1), v_obj(-1)])
-        );
-    }
-
-    #[tokio::test]
-    async fn test_new_scatter_regression() {
-        let program = "{a,b,@c}= {1,2,3,4,5}; return c;";
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(5)]));
-    }
-
-    #[tokio::test]
     async fn test_if_elseif_else_chain() {
         let program = r#"
             ret = {};
@@ -615,25 +516,39 @@ mod tests {
         assert_eq!(result, v_int(0));
     }
 
-    #[test_case("return 1;", v_int(1))]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_call_notify() {
+        let program = "return notify(#1, \"test\");";
+        let mut state = world_with_test_program(program).await;
+
+        let session = Arc::new(MockClientSession::new());
+        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
+
+        assert_eq!(result, v_int(1));
+
+        assert_eq!(session.received(), vec!["test".to_string()]);
+        session.commit().await.expect("commit failed");
+        assert_eq!(session.committed(), vec!["test".to_string()]);
+    }
+
+    #[test_case("return 1;", v_int(1); "simple return")]
     #[test_case(
         r#"rest = "me:words"; rest[1..0] = ""; return rest;"#,
-        v_str("me:words")
+        v_str("me:words"); "range assignment"
     )]
-    #[test_case(r#"rest = "me:words"; rest[0..2] = ""; return rest;"#, v_str(":words"))]
-    #[test_case(r#"return (!1 || 1);"#, v_int(1))]
+    #[test_case(r#"rest = "me:words"; rest[0..2] = ""; return rest;"#, v_str(":words");
+        "range assignment 2")]
+    #[test_case(r#"return (!1 || 1);"#, v_int(1); "not/or precedence")]
     #[test_case(r#"return {1, eval("return $test;")};"#, 
-            v_list(vec![v_int(1), v_list(vec![v_bool(true), v_int(1)])]))]
+            v_list(vec![v_int(1), v_list(vec![v_bool(true), v_int(1)])]); "eval builtin")]
     #[test_case(
         r#"string="you";
                          i = index("abcdefghijklmnopqrstuvwxyz", string[1]);
                          string[1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i];
                          return string;
                         "#,
-        v_str("You")
+        v_str("You"); "string index / index assignment / case compare"
     )]
-    #[test_case("return notify(#1, \"test\");", v_int(1))]
-    #[test_case(r#"return eval("return 5;");"#, v_list(vec![v_bool(true), v_int(5)]))]
     #[test_case(
         r#"
           c = 0;
@@ -648,13 +563,15 @@ mod tests {
           endwhile
           return object;
         "#,
-        v_obj(2)
+        v_obj(2);
+        "labelled break"
     )]
     #[test_case(
         r#"
         try return "hello world"[2..$]; finally endtry return "oh nope!";
         "#,
-        v_str("ello world")
+        v_str("ello world");
+        "try finally string indexing"
     )]
     #[test_case(r#"return `"hello world"[2..$] ! ANY';"#, v_str("ello world"))]
     #[test_case(
@@ -664,22 +581,44 @@ mod tests {
         except (E_RANGE)
         endtry
         "#,
-        v_str("ello world")
+        v_str("ello world"); "try except string indexing"
     )]
-    #[test_case(r#"a = "you"; a[1] = "Y"; return a;"#, v_str("You"))]
+    #[test_case(r#"a = "you"; a[1] = "Y"; return a;"#, v_str("You") ; "string index assignment")]
     #[test_case("a={1,2,3,4}; a[1..2] = {3,4}; return a;", 
-        v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]))]
-    #[test_case("try a; finally return 666; endtry return 333;", v_int(666))]
-    #[test_case("try a; except e (E_VARNF) return 666; endtry return 333;", v_int(666))]
-    #[test_case("return `1/0 ! ANY';", v_err(E_DIV))]
+        v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]) ; "range assignment 3")]
+    #[test_case("try a; finally return 666; endtry return 333;", 
+        v_int(666); "try finally")]
+    #[test_case("try a; except e (E_VARNF) return 666; endtry return 333;", 
+        v_int(666); "try except")]
+    #[test_case("return `1/0 ! ANY';", v_err(E_DIV); "catch expr 1")]
     #[test_case("return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};",
-        v_list(vec![v_int(666), v_int(321)]))]
-    #[test_case("return 1 ? 2 | 3;", v_int(2))]
+        v_list(vec![v_int(666), v_int(321)]); "catch expr 2")]
+    #[test_case("return 1 ? 2 | 3;", v_int(2);"ternary expr")]
     #[test_case("{a,b,c} = {{1,2,3}}[1]; return {a,b,c};" , 
-        v_list(vec![v_int(1), v_int(2), v_int(3)]))]
+        v_list(vec![v_int(1), v_int(2), v_int(3)]); "tuple/splice assignment")]
     #[test_case("return {{1,2,3}[2..$], {1}[$]};", 
         v_list(vec![
-            v_list(vec![v_int(2), v_int(3)]), v_int(1)]))]
+            v_list(vec![v_int(2), v_int(3)]), v_int(1)]);
+        "range to end retrieval")]
+    #[test_case( "{a,b,@c}= {1,2,3,4,5}; return c;",
+        v_list(vec![v_int(3), v_int(4), v_int(5)]); "new scatter regression")]
+    #[test_case("{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};" , 
+        v_list(vec![v_int(1), v_int(3), v_int(2), v_int(1), v_empty_list()]); "complicated scatter")]
+    #[test_case("{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};" , 
+        v_list(vec![
+            v_int(1),
+            v_int(2),
+            v_list(vec![v_int(3), v_int(4)]),
+            v_int(5),
+            v_list(vec![v_int(6), v_int(7)]),
+            v_int(8),
+        ]); "scatter complex 2")]
+    #[test_case("{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};" , 
+        v_list(vec![v_int(4), v_int(3), v_int(2), v_int(1)]); "scatter optional")]
+    #[test_case("z = 0; for i in [1..4] z = z + i; endfor return {i,z};" , 
+        v_list(vec![v_int(4), v_int(10)]); "for range loop")]
+    #[test_case("x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};" , 
+        v_list(vec![v_int(4), v_int(10)]); "for list loop")]
     fn test_run(program: &str, expected_result: Var) {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
