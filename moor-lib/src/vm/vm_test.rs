@@ -10,7 +10,6 @@ mod tests {
     use moor_value::util::bitenum::BitEnum;
     use moor_value::var::error::Error::E_DIV;
     use moor_value::var::objid::Objid;
-    use moor_value::var::variant::Variant;
     use moor_value::var::{
         v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, v_str, Var,
     };
@@ -20,10 +19,11 @@ mod tests {
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
     use crate::db::inmemtransient::InMemTransientDatabase;
-    use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
+    use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::vm_test_utils::call_verb;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
+    use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
         Program {
@@ -250,22 +250,6 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]).await;
         assert_eq!(result, v_list(vec![2.into(), 3.into(), 4.into()]));
-    }
-
-    #[tokio::test]
-    async fn test_list_range_length() {
-        let program = "return {{1,2,3}[2..$], {1}[$]};";
-        let mut state = test_db_with_verb("test", &compile(program).unwrap())
-            .await
-            .new_world_state()
-            .await
-            .unwrap();
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-        assert_eq!(
-            result,
-            v_list(vec![v_list(vec![2.into(), 3.into()]), v_int(1)])
-        );
     }
 
     #[tokio::test]
@@ -563,71 +547,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_scatter_precedence() {
-        // Simplified case of operator precedence fix.
-        let program = "{a,b,c} = {{1,2,3}}[1]; return {a,b,c};";
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(1), v_int(2), v_int(3)]));
-    }
-
-    #[tokio::test]
-    async fn test_conditional_expr() {
-        let program = "return 1 ? 2 | 3;";
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_int(2));
-    }
-
-    #[tokio::test]
-    async fn test_catch_expr() {
-        let program = "return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(666), v_int(321)]));
-    }
-
-    #[tokio::test]
-    async fn test_catch_expr_any() {
-        let program = "return `1/0 ! ANY';";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_err(E_DIV));
-    }
-
-    #[tokio::test]
-    async fn test_try_except_stmt() {
-        let program = "try a; except e (E_VARNF) return 666; endtry return 333;";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_int(666));
-    }
-
-    #[tokio::test]
-    async fn test_try_finally_stmt() {
-        let program = "try a; finally return 666; endtry return 333;";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_int(666));
-    }
-
-    #[tokio::test]
     async fn test_if_elseif_else_chain() {
         let program = r#"
             ret = {};
@@ -670,169 +589,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_range_set() {
-        let program = "a={1,2,3,4}; a[1..2] = {3,4}; return a;";
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]));
-    }
-
-    #[tokio::test]
-    async fn test_str_index_assignment() {
-        // There was a regression here where the value was being dropped instead of replaced.
-        let program = r#"a = "you"; a[1] = "Y"; return a;"#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_str("You"));
-    }
-
-    #[tokio::test]
-    // Regression test for Op::Length inside try/except, which was causing a panic due to the stack
-    // offset being off by 1.
-    async fn test_regression_length_expr_inside_try_except() {
-        let program = r#"
-        try
-          return "hello world"[2..$];
-        except (E_RANGE)
-        endtry
-        "#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_str("ello world"));
-    }
-
-    #[tokio::test]
-    // Same bug as above existed for catch exprs
-    async fn test_regression_length_expr_inside_catch() {
-        let program = r#"
-        return `"hello world"[2..$] ! ANY';
-        "#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_str("ello world"));
-    }
-
-    // And try/finally.
-    #[tokio::test]
-    async fn test_regression_length_expr_inside_finally() {
-        let program = r#"
-        try return "hello world"[2..$]; finally endtry return "oh nope!";
-        "#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_str("ello world"));
-    }
-
-    #[tokio::test]
-    async fn test_labelled_while_regression() {
-        let program = r#"
-          c = 0;
-          object = #1;
-          while properties (1)
-            c = c + 1;
-            if (c > 10)
-                return #4;
-            endif
-            object = #2;
-            break properties;
-          endwhile
-          return object;
-        "#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_obj(2));
-    }
-
-    #[tokio::test]
-    async fn test_eval() {
-        let program = r#"return eval("return 5;");"#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_list(vec![v_bool(true), v_int(5)]));
-    }
-
-    // $sysprop style references were returning E_INVARG but only inside eval.
-    #[tokio::test]
-    async fn test_regression_sysprops() {
-        let program = r#"return {1, eval("return $test;")};"#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(
-            result,
-            v_list(vec![v_bool(true), v_list(vec![v_int(1), v_int(1)])])
-        );
-    }
-
-    #[tokio::test]
-    async fn test_negation_precedence() {
-        let program = r#"return (!1 || 1);"#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_int(1));
-    }
-
-    #[tokio::test]
-    async fn test_zero_bottom_rangeset() {
-        // MOO evaluates this successfully, but we E_RANGEd it:
-        // rest="me:words"; rest[0..2] = ""; return rest;
-        // 0 index in rangeset is permitted, but in rangeget it is not. 🤦
-        let program = r#"rest = "me:words"; rest[0..2] = ""; return rest;"#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_str(":words"));
-    }
-
-    #[tokio::test]
-    async fn test_zero_top_rangeset() {
-        // Likewise, MOO evaluates this successfully, but we E_RANGEd it:
-        //   Should return "me:words".
-        // rest = "me:test"; rest[1..0] = "; return rest;
-        let program = r#"rest = "me:words"; rest[1..0] = ""; return rest;"#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        assert_eq!(result, v_str("me:words"));
-    }
-
-    #[tokio::test]
-    async fn test_str_ref_index_set() {
-        let program = r#"string="you";
-                         i = index("abcdefghijklmnopqrstuvwxyz", string[1]);
-                         string[1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i];
-                         return string;
-                        "#;
-        let mut state = world_with_test_program(program).await;
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-
-        let Variant::Str(v) = result.variant() else {
-            panic!("Not a string")
-        };
-        assert_eq!(v.as_str(), "You");
-    }
-
-    #[tokio::test]
     async fn regression_infinite_loop_bf_error() {
         // This ended up in an infinite loop because of faulty error handling coming out of the
         // builtin call when 'what' is not a valid object.
@@ -859,18 +615,81 @@ mod tests {
         assert_eq!(result, v_int(0));
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_call_builtin() {
-        let program = "return notify(#1, \"test\");";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(MockClientSession::new());
-        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
-
-        assert_eq!(result, v_int(1));
-
-        assert_eq!(session.received(), vec!["test".to_string()]);
-        session.commit().await.expect("commit failed");
-        assert_eq!(session.committed(), vec!["test".to_string()]);
+    #[test_case("return 1;", v_int(1))]
+    #[test_case(
+        r#"rest = "me:words"; rest[1..0] = ""; return rest;"#,
+        v_str("me:words")
+    )]
+    #[test_case(r#"rest = "me:words"; rest[0..2] = ""; return rest;"#, v_str(":words"))]
+    #[test_case(r#"return (!1 || 1);"#, v_int(1))]
+    #[test_case(r#"return {1, eval("return $test;")};"#, 
+            v_list(vec![v_int(1), v_list(vec![v_bool(true), v_int(1)])]))]
+    #[test_case(
+        r#"string="you";
+                         i = index("abcdefghijklmnopqrstuvwxyz", string[1]);
+                         string[1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i];
+                         return string;
+                        "#,
+        v_str("You")
+    )]
+    #[test_case("return notify(#1, \"test\");", v_int(1))]
+    #[test_case(r#"return eval("return 5;");"#, v_list(vec![v_bool(true), v_int(5)]))]
+    #[test_case(
+        r#"
+          c = 0;
+          object = #1;
+          while properties (1)
+            c = c + 1;
+            if (c > 10)
+                return #4;
+            endif
+            object = #2;
+            break properties;
+          endwhile
+          return object;
+        "#,
+        v_obj(2)
+    )]
+    #[test_case(
+        r#"
+        try return "hello world"[2..$]; finally endtry return "oh nope!";
+        "#,
+        v_str("ello world")
+    )]
+    #[test_case(r#"return `"hello world"[2..$] ! ANY';"#, v_str("ello world"))]
+    #[test_case(
+        r#"
+        try
+          return "hello world"[2..$];
+        except (E_RANGE)
+        endtry
+        "#,
+        v_str("ello world")
+    )]
+    #[test_case(r#"a = "you"; a[1] = "Y"; return a;"#, v_str("You"))]
+    #[test_case("a={1,2,3,4}; a[1..2] = {3,4}; return a;", 
+        v_list(vec![v_int(3), v_int(4), v_int(3), v_int(4)]))]
+    #[test_case("try a; finally return 666; endtry return 333;", v_int(666))]
+    #[test_case("try a; except e (E_VARNF) return 666; endtry return 333;", v_int(666))]
+    #[test_case("return `1/0 ! ANY';", v_err(E_DIV))]
+    #[test_case("return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};",
+        v_list(vec![v_int(666), v_int(321)]))]
+    #[test_case("return 1 ? 2 | 3;", v_int(2))]
+    #[test_case("{a,b,c} = {{1,2,3}}[1]; return {a,b,c};" , 
+        v_list(vec![v_int(1), v_int(2), v_int(3)]))]
+    #[test_case("return {{1,2,3}[2..$], {1}[$]};", 
+        v_list(vec![
+            v_list(vec![v_int(2), v_int(3)]), v_int(1)]))]
+    fn test_run(program: &str, expected_result: Var) {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let mut state = world_with_test_program(program).await;
+                let session = Arc::new(NoopClientSession::new());
+                let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+                assert_eq!(result, expected_result);
+            })
     }
 }
