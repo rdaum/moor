@@ -142,7 +142,7 @@ impl Unparse {
                 }
                 Ok(buffer)
             }
-            Expr::VarExpr(var) => Ok(self.unparse_var(var, true)),
+            Expr::VarExpr(var) => Ok(self.unparse_var(var, false)),
             Expr::Id(id) => Ok(self.names.name_of(id).unwrap().to_string()),
             Expr::Binary(op, left_expr, right_expr) => Ok(format!(
                 "{} {} {}",
@@ -163,13 +163,12 @@ impl Unparse {
             Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_lower(expr))),
             Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
-                    (Expr::VarExpr(var), Expr::Id(_)) if var.is_root() => String::from("$"),
+                    (Expr::VarExpr(var), Expr::VarExpr(_)) if var.is_root() => String::from("$"),
                     _ => format!("{}.", self.unparse_expr(location).unwrap()),
                 };
                 let prop = match &**property {
-                    Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
-                    Expr::VarExpr(var) => self.unparse_var(var, true),
-                    _ => self.unparse_expr(property).unwrap(),
+                    Expr::VarExpr(var) => format!("{}", self.unparse_var(var, true)),
+                    _ => format!("({})", self.unparse_expr(property)?),
                 };
                 Ok(format!("{location}{prop}"))
             }
@@ -179,13 +178,12 @@ impl Unparse {
                 args,
             } => {
                 let location = match (&**location, &**verb) {
-                    (Expr::VarExpr(var), Expr::Id(_)) if var.is_root() => String::from("$"),
+                    (Expr::VarExpr(var), Expr::VarExpr(_)) if var.is_root() => String::from("$"),
                     _ => format!("{}:", self.unparse_expr(location).unwrap()),
                 };
                 let verb = match &**verb {
-                    Expr::Id(id) => self.names.name_of(id).unwrap().to_string(),
                     Expr::VarExpr(var) => self.unparse_var(var, true),
-                    _ => self.unparse_expr(verb).unwrap(),
+                    _ => format!("({})", self.unparse_expr(verb).unwrap()),
                 };
                 let mut buffer = String::new();
                 buffer.push_str(format!("{location}{verb}").as_str());
@@ -588,6 +586,15 @@ mod tests {
         finalize();
     endtry
     "#; "try finally")]
+    #[test_case(r#"return "test";"#; "string literal")]
+    #[test_case(r#"return "test \"test\"";"#; "string literal with escaped quote")]
+    #[test_case(r#"return #1.test;"#; "property access")]
+    #[test_case(r#"return #1:test(1, 2, 3);"#; "verb call")]
+    #[test_case(r#"return #1:test();"#; "verb call no args")]
+    #[test_case(r#"return $test(1);"#; "sysverb")]
+    #[test_case(r#"return $options;"#; "sysprop")]
+    #[test_case(r#"options = "test";
+    return #0.(options);"#; "sysobj prop expr")]
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();

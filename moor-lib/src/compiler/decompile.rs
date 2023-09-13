@@ -857,6 +857,7 @@ mod tests {
     #[test_case("x.y = 1;"; "prop_assign")]
     #[test_case("try return x; except (E_VARNF) endtry; if (x) return 1; endif"; "if_after_try")]
     #[test_case("2 ? 0 | caller_perms();"; "regression_builtin_after_ternary")]
+    #[test_case(r#"options="test"; return #0.(options);"#; "sysprop expr")]
     fn test_case_decompile_matches(prg: &str) {
         let (parse, decompiled) = parse_decompile(prg);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);

@@ -87,7 +87,7 @@ fn match_preposition(prep: &str) -> Option<Prep> {
         .cloned()
 }
 
-fn parse_into_words(input: &str) -> Vec<String> {
+pub fn parse_into_words(input: &str) -> Vec<String> {
     // Initialize state variables.
     let mut in_quotes = false;
     let mut previous_char_was_backslash = false;

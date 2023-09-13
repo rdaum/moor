@@ -46,6 +46,12 @@ pub async fn ws_connect_handler(
     increment_counter!("ws_host.new_connection");
 
     info!("Connection from {}", addr);
+    // TODO: this should be returning 403 for authentication failures and we likely have to do the
+    //   auth check before doing the socket upgrade not after. But this is a problem because the
+    //   do_login_command needs a connection to write failures to. So we may have to do something
+    //   wacky like provide an initial "HTTP response" type connection to the server, and then swap
+    //   with the websocket connection once we've authenticated; or have the "WSConnection" handle
+    //   both modes.
     // TODO: only async Rust could produce an entity as demonic as this. Let's go on and pretend the
     //   pain is all worth it.
     ws.on_upgrade(
@@ -63,6 +69,7 @@ pub async fn ws_create_handler(
     increment_counter!("ws_host.new_connection");
 
     info!("Connection from {}", addr);
+    // TODO: this should be returning 403 for authentication failures.
     ws.on_upgrade(
         move |socket| async move { ws_host.handle_player_create(addr, socket, auth).await },
     )
@@ -92,7 +99,12 @@ impl WebSocketHost {
             )
             .await
         {
-            Ok(r) => r,
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                warn!("Authentication failure");
+                self.player_disconnected(connection_oid).await;
+                return;
+            }
             Err(e) => {
                 warn!("Login failure: {}", e.to_string());
                 self.player_disconnected(connection_oid).await;
@@ -129,7 +141,12 @@ impl WebSocketHost {
             )
             .await
         {
-            Ok(r) => r,
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                warn!("Could not create player");
+                self.player_disconnected(connection_oid).await;
+                return;
+            }
             Err(e) => {
                 warn!("Create failure: {}", e.to_string());
                 self.player_disconnected(connection_oid).await;
@@ -251,8 +268,7 @@ impl WebSocketHost {
     async fn player_disconnected(&self, connection_object: Objid) {
         increment_counter!("ws_host.player_disconnected");
         match self.server.disconnected(connection_object).await {
-            Ok(Some(_)) => {
-            }
+            Ok(Some(_)) => {}
             Ok(None) => {
                 trace!(
                     ?connection_object,
@@ -334,9 +350,7 @@ impl Connection for WsConnection {
                 increment_counter!("ws_host.player_booted");
                 SplitSink::send(
                     &mut self.ws_sender,
-                    Message::Text(format!(
-                        "** You have been booted off the server: {msg} **"
-                    )),
+                    Message::Text(format!("** You have been booted off the server: {msg} **")),
                 )
                 .await?;
             }

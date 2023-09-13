@@ -10,12 +10,13 @@ use moor_lib::tasks::sessions::Session;
 use moor_value::model::NarrativeEvent;
 use moor_value::var::objid::Objid;
 use moor_value::var::variant::Variant;
-use moor_value::var::{v_objid, v_str};
+use moor_value::var::{v_objid, v_string};
 use moor_value::SYSTEM_OBJECT;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
 use tracing::{trace, warn};
 
@@ -48,7 +49,7 @@ impl Server {
         Ok(Arc::new(session))
     }
 
-    pub async fn new_connection<F: FnOnce(Objid) -> Result<Box<dyn Connection>, anyhow::Error>>(
+    pub async fn new_connection<F: FnOnce(Objid) -> Result<Box<dyn Connection>, Error>>(
         &self,
         f: F,
     ) -> anyhow::Result<Objid> {
@@ -103,14 +104,37 @@ impl Server {
         Ok(())
     }
 
-    /// Attempt authentication through $`do_login_command`( ... )
+    /// Trigger $do_login_command with zero-args, to get the welcome message.
+    pub async fn send_welcome_message(
+        self: Arc<Self>,
+        connection_oid: Objid,
+    ) -> anyhow::Result<()> {
+        increment_counter!("server.send_welcome_message");
+        let Some(_) = self.connections.get_mut(&connection_oid) else {
+            bail!(
+                "No connection for {} during attempt at sending welcome message",
+                connection_oid
+            );
+        };
+
+        // Welcome message is triggered by invoking $do_login_command with zero-args. So the code
+        // here roughly mimics `authenticate`
+        trace!(?connection_oid, "send_welcome_message");
+        let event_receiver = self.clone().do_login_command(connection_oid, &[]).await?;
+
+        event_receiver.await?;
+        Ok(())
+    }
+
+    /// Attempt authentication through $`do_login_command`( ... ) with fixed pre-determined
+    /// arguments.
     pub async fn authenticate(
         self: Arc<Self>,
         connection_oid: Objid,
         login_type: LoginType,
         username: &str,
         password: &str,
-    ) -> Result<(ConnectType, Objid), anyhow::Error> {
+    ) -> Result<Option<(ConnectType, Objid)>, Error> {
         increment_counter!("server.authenticate");
         let login_verb = match login_type {
             LoginType::Connect => {
@@ -122,26 +146,77 @@ impl Server {
                 "create"
             }
         };
-        let event_receiver = {
-            trace!(?connection_oid, "$do_login_command");
-            let session = self.clone().new_session(connection_oid).await?;
-            let task_id = self
-                .clone()
-                .scheduler
-                .submit_verb_task(
-                    connection_oid,
-                    SYSTEM_OBJECT,
-                    "do_login_command".to_string(),
-                    vec![v_str(login_verb), v_str(username), v_str(password)],
-                    SYSTEM_OBJECT,
-                    session,
-                )
-                .await
-                .unwrap();
+        let event_receiver = self
+            .clone()
+            .do_login_command(
+                connection_oid,
+                &[
+                    login_verb.to_string(),
+                    username.to_string(),
+                    password.to_string(),
+                ],
+            )
+            .await?;
 
-            self.scheduler.subscribe_to_task(task_id).await?
+        self.finish_auth(connection_oid, login_type, event_receiver)
+            .await
+    }
+
+    /// Attempt authentication through $`do_login_command`( ... ) with an arbitrary command set
+    /// that may or may not be a create/connect command.
+    pub async fn login_command_line(
+        self: Arc<Self>,
+        connection_oid: Objid,
+        args: &[String],
+    ) -> Result<Option<(ConnectType, Objid)>, Error> {
+        if args.len() < 1 {
+            bail!("No command line provided");
+        }
+
+        let event_receiver = self.clone().do_login_command(connection_oid, args).await?;
+
+        // Wait on the event receiver. If it's success, then we authenticated. Otherwise, return
+        // None -- because it's either auth failure or another kind of command executed.
+        let login_type = if args[0] == "create" {
+            LoginType::Create
+        } else {
+            LoginType::Connect
         };
+        return self
+            .finish_auth(connection_oid, login_type, event_receiver)
+            .await;
+    }
 
+    async fn do_login_command(
+        self: Arc<Self>,
+        connection_oid: Objid,
+        args: &[String],
+    ) -> anyhow::Result<Receiver<TaskWaiterResult>> {
+        increment_counter!("server.do_login_command");
+        trace!(?connection_oid, "$do_login_command");
+        let session = self.clone().new_session(connection_oid).await?;
+        let task_id = self
+            .clone()
+            .scheduler
+            .submit_verb_task(
+                connection_oid,
+                SYSTEM_OBJECT,
+                "do_login_command".to_string(),
+                args.into_iter().map(|s| v_string(s.clone())).collect(),
+                SYSTEM_OBJECT,
+                session,
+            )
+            .await?;
+        let receiver = self.clone().scheduler.subscribe_to_task(task_id).await?;
+        Ok(receiver)
+    }
+
+    async fn finish_auth(
+        self: Arc<Self>,
+        connection_oid: Objid,
+        login_type: LoginType,
+        event_receiver: Receiver<TaskWaiterResult>,
+    ) -> Result<Option<(ConnectType, Objid)>, Error> {
         // Now we spin waiting for the task to complete.  The server will output to the connection obj
         // we created while that's happening.
         // We will wait on the subscription channel for this task,
@@ -149,16 +224,20 @@ impl Server {
         // Otherwise, The Fail.
         let connect_result = event_receiver.await?;
 
-        // No matter what we need to unregister the connection from the server, success or fail.
-        let Some((_, mut connection)) = self.connections.remove(&connection_oid) else {
-            bail!("No connection for object: {:?}", connection_oid);
+        let TaskWaiterResult::Success(v) = connect_result else {
+            bail!(
+                "Execution failure in $do_login_command: {:?}",
+                connect_result
+            );
+        };
+        // Authentication failure if what was returned was not an object.
+        let Variant::Obj(player) = v.variant() else {
+            return Ok(None);
         };
 
-        let TaskWaiterResult::Success(v) = connect_result else {
-            bail!("Login failure from $do_login_command: {:?}", connect_result);
-        };
-        let Variant::Obj(player) = v.variant() else {
-            bail!("Invalid return value from $do_login_command: {:?}", v);
+        // We replace the transitory connection object with an actual player object.
+        let Some((_, mut connection)) = self.connections.remove(&connection_oid) else {
+            bail!("No connection for object: {:?}", connection_oid);
         };
 
         // Now stick the connection back in the map under the player object, updating it with the
@@ -192,9 +271,8 @@ impl Server {
         // Which allows the core to send welcome messages, etc. to the user.
         self.submit_connected_task(*player, login_result).await;
 
-        Ok((login_result, *player))
+        Ok(Some((login_result, *player)))
     }
-
     async fn submit_connected_task(self: Arc<Self>, player: Objid, initiation_type: ConnectType) {
         let session = self
             .clone()

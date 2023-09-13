@@ -24,6 +24,7 @@ dashmap.workspace = true
 
 ## Asynchronous transaction processing & networking
 tokio.workspace = true
+tokio-util.workspace = true
 
 # HTTP/websockets layer
 axum.workspace = true

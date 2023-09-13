@@ -24,6 +24,7 @@ use moor_value::var::objid::Objid;
 
 use crate::server::routes::mk_routes;
 use crate::server::server::Server;
+use crate::server::tcp_host::TcpHost;
 use crate::server::websocket_host::WebSocketHost;
 
 mod repl_session;
@@ -47,6 +48,13 @@ struct Args {
 
     #[arg(value_name = "listen", help = "HTTP server listen address.")]
     listen_address: Option<String>,
+
+    #[arg(
+        long,
+        value_name = "telnet-address",
+        help = "Telnet server listen address, if any"
+    )]
+    telnet_address: Option<String>,
 
     #[arg(long,
         value_name = "db-type", help = "Type of database backend to use",
@@ -101,7 +109,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .finish();
     let _perfetto_guard = match args.perfetto_tracing {
         Some(true) => {
@@ -154,7 +162,18 @@ async fn main() -> Result<(), anyhow::Error> {
     let repl_run = run_repl_if_enabled(args.repl, scheduler.clone(), state_source.clone());
 
     let server = Arc::new(Server::new(scheduler.clone(), shutdown_sender));
-    let ws_host = WebSocketHost::new(server);
+    let ws_host = WebSocketHost::new(server.clone());
+
+    if let Some(telnet_address) = args.telnet_address {
+        let telnet_host = TcpHost::new(
+            telnet_address.parse::<SocketAddr>().unwrap(),
+            server.clone(),
+        )
+        .await
+        .unwrap();
+        tokio::spawn(async move { telnet_host.run().await });
+    }
+
     let mut hup_signal =
         signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
     let mut stop_signal =
@@ -183,7 +202,7 @@ async fn main() -> Result<(), anyhow::Error> {
             axum_server.abort();
         },
         Some(_) = repl_run => {
-            info!("Readline loop exited");
+            info!("Repl loop exited");
         },
         _ = scheduler_loop => {
             info!("Scheduler loop exited, stopping...");

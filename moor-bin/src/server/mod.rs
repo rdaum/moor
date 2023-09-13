@@ -7,6 +7,7 @@ pub mod connection;
 mod narrative_log;
 pub mod routes;
 pub mod server;
+pub mod tcp_host;
 pub mod websocket_host;
 
 #[derive(Serialize, Deserialize)]

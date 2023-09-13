@@ -245,15 +245,14 @@ fn substitute(
         // We've seen a %, so we'll start lexing a number. But if the next char is a %, we'll
         // just append a % to `result` and continue.
         let mut number = String::new();
+        let mut last_c = None;
         for c in chars.by_ref() {
             if c.is_ascii_digit() {
                 number.push(c);
             } else {
-                // We've seen a non-digit, so we'll stop lexing.
-                // But if the non-digit is a %, we'll append a % to `result`.
-                if c == '%' {
-                    result.push('%');
-                }
+                // We've seen a non-digit, so we'll stop lexing, but keep the character to append
+                // after our substitution.
+                last_c = Some(c);
                 break;
             }
         }
@@ -272,17 +271,20 @@ fn substitute(
         // We're 1-indexed, so we'll subtract 1 from the number.
         let number = number - 1;
 
-        // And look it up in `subs`. Again 1-indexed.
-        let (start, end) = (subs[number].0 - 1, subs[number].1);
+        // And look it up in `subs`.
+        let (start, end) = (subs[number].0, subs[number].1);
 
         // Now validate the range in the source string, and raise an E_INVARG if it's invalid.
         if start < 0 || start > end || end >= (source.len() as isize) {
             return Err(E_INVARG);
         }
 
-        let (start, end) = (start as usize, end as usize);
+        let (start, end) = (start as usize - 1, end as usize);
         // Now append the corresponding substring to `result`.
-        result.push_str(&source[start..=end]);
+        result.push_str(&source[start..end]);
+        if let Some(last_c) = last_c {
+            result.push(last_c);
+        }
     }
     Ok(result)
 }
@@ -371,6 +373,31 @@ mod tests {
             ]
         );
         let result = substitute("I thank you for your %1 here in %2.", &subs, source).unwrap();
-        assert_eq!(result, "I thank you for your Welcome here in LambdaMOO!");
+        assert_eq!(result, "I thank you for your Welcome here in LambdaMOO.");
+    }
+
+    #[test]
+    fn test_substitute_off_by_one() {
+        let pattern =
+            Pattern::new("^@%([^-]*%)%(o%|opt?i?o?n?s?%|-o?p?t?i?o?n?s?%)$", false).unwrap();
+        let source = "@edit-o";
+        let (overall, subs) = pattern.match_pattern(source).unwrap();
+        assert_eq!(overall, (1, 7));
+        assert_eq!(
+            subs,
+            vec![
+                (2, 5),
+                (6, 7),
+                (0, -1),
+                (0, -1),
+                (0, -1),
+                (0, -1),
+                (0, -1),
+                (0, -1),
+                (0, -1),
+            ]
+        );
+        let result = substitute("%1", &subs, source).unwrap();
+        assert_eq!(result, "edit");
     }
 }
