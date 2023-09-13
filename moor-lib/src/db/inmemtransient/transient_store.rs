@@ -312,7 +312,7 @@ impl TransientStore {
 
     pub fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbDef, WorldStateError> {
         let Some(verbdefs) = self.verbdefs.get(&o) else {
-            return Err(ObjectNotFound(o));
+            return Err(VerbNotFound(o, n));
         };
         // TODO: verify that all uses of this are actually needing this "just grab the first match"
         let verbdef = verbdefs.find_first_named(n.as_str());
