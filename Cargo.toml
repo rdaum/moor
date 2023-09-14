@@ -2,9 +2,9 @@
 resolver = "2"
 
 members = [
-  "moor-value",
-  "moor-lib",
-  "moor-bin",
+  "values",
+  "core",
+  "server",
   "regexpr-binding",
 ]
 

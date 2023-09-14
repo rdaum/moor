@@ -1,0 +1,67 @@
+[package]
+name = "moor-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+inventory.workspace = true
+test-case.workspace = true
+unindent.workspace = true
+pretty_assertions.workspace = true
+
+[[test]]
+name = "basic-testsuite"
+path = "testsuite/basic/basic_suite.rs"
+
+[dependencies]
+
+## Own
+regexpr-binding = { path = "../regexpr-binding" }
+moor-values = { path = "../values" }
+
+## General usefullness
+itertools.workspace = true
+lazy_static.workspace = true
+enum-primitive-derive.workspace = true
+async-trait.workspace = true
+decorum.workspace = true
+text_io.workspace = true
+bytes.workspace = true
+strum.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+## Required for MOO builtins.
+pwhash.workspace = true
+md5.workspace = true
+rand.workspace = true
+
+## Compiler grammar/parser
+pest.workspace = true
+pest_derive.workspace = true
+
+## Error declaration/ handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+## For macro-ing
+paste.workspace = true
+
+## Asynchrony and/or networking
+tokio.workspace = true
+tokio-test.workspace = true
+
+## Logging & tracing
+tracing.workspace = true
+tracing-test.workspace = true
+metrics.workspace = true
+metrics-util.workspace = true
+metrics-macros.workspace = true
+
+# For the DB layer.
+rocksdb.workspace = true
+crossbeam-channel.workspace = true
+bincode.workspace = true

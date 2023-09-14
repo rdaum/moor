@@ -1377,40 +1377,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-bin"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "clap",
- "clap_derive",
- "dashmap",
- "futures",
- "futures-util",
- "metrics",
- "metrics-exporter-prometheus",
- "metrics-macros",
- "metrics-util",
- "moor-lib",
- "moor-value",
- "rustyline",
- "serde",
- "serde_derive",
- "serde_json",
- "strum",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tower-http",
- "tracing",
- "tracing-chrome",
- "tracing-subscriber",
- "tungstenite",
-]
-
-[[package]]
-name = "moor-lib"
+name = "moor-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1428,7 +1395,7 @@ dependencies = [
  "metrics",
  "metrics-macros",
  "metrics-util",
- "moor-value",
+ "moor-values",
  "paste",
  "pest",
  "pest_derive",
@@ -1451,7 +1418,40 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-value"
+name = "moor-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "clap",
+ "clap_derive",
+ "dashmap",
+ "futures",
+ "futures-util",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "metrics-macros",
+ "metrics-util",
+ "moor-core",
+ "moor-values",
+ "rustyline",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "strum",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tower-http",
+ "tracing",
+ "tracing-chrome",
+ "tracing-subscriber",
+ "tungstenite",
+]
+
+[[package]]
+name = "moor-values"
 version = "0.1.0"
 dependencies = [
  "anyhow",
