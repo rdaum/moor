@@ -1,5 +1,6 @@
-# Docker composition for starting up the Moor server in cargo-watch mode, with VictoriaMetrics and VMagent for metrics
-# collection, and Grafana for visualization.
+# Docker composition for starting up the Moor system in cargo-watch mode, running with separate `daemon` and `host`
+# binaries (communicating via ZMQ RPC), with VictoriaMetrics and VMagent for metrics collection, and Grafana for
+# visualization.
 
 # The first time the image starts, it will import JHCORE-DEV-2.db from the root of the repository. This is a recent
 # JaysHouseCore database, with no modifications. After import, `development.db` will contain the (RocksDb) database
@@ -8,12 +9,8 @@
 # This composition is not intended for production use, but for development and testing, but could be used as a template
 # production once we're in a better place.
 
-# After this is up and running, you should be able to connect to the server at http://localhost:8080 via websockets
-# with basic-auth 'wizard' / (any passowrd, it's blank) at ws://localhost:8080/ws/connect/players/2
-# I use websocat (cargo install websocat):
-#
-# websocat --basic-auth wizard:potrzebie -E ws://localhost:8080/ws/connect
-#
+# After this is running, a MUD client or telnet client can connect to port 8888 on localhost to interact with the
+# system. (e.g. telnet localhost 8888)
 
 # Grafana will be available at http://localhost:3000/ password is admin/admin
 # victoriametrics will be available at http://localhost:8428/
@@ -26,9 +23,9 @@ volumes:
 networks:
   moor_net:
 services:
-  moor:
+  moor-daemon:
     build: ./
-    container_name: "moor-dev"
+    container_name: "moor-daemon"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
       - ./.target:/root/target:cached
@@ -36,9 +33,33 @@ services:
     environment:
       - CARGO_TARGET_DIR=/root/target
     working_dir: /moor
-    command: sh -c "cargo watch -w moor-lib -w moor-bin -w  -x 'run -p moor-bin -- development.db --textdump JHCore-DEV-2.db 0.0.0.0:8080'"
+    command: >
+        sh -c "RUST_BACKTRACE=1 cargo watch -w crates/kernel -w crates/rpc-common -w crates/daemon -w crates/values -x 
+        'run -p moor-daemon -- development.db --textdump=JHCore-DEV-2.db'"
     ports:
-      - "8080:8080"
+      # ZMQ ports
+      - "7899:7899"
+      - "7898:7898"
+      # HTTP port for prometheus endpoint for metrics export
+      - "9000:9000"
+    networks:
+      - moor_net
+  moor-host:
+    build: ./
+    container_name: "moor-host"
+    volumes:
+      - ./.cargo/registry:/usr/local/cargo/registry:cached
+      - ./.target:/root/target:cached
+      - ./:/moor:cached
+    environment:
+      - CARGO_TARGET_DIR=/root/target
+    working_dir: /moor
+    command: >
+      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/rpc-common -w crates/host -w crates/values -x 
+      'run -p moor-host -- --telnet-address=0.0.0.0:8888 --rpc-server=tcp://moor-daemon:7899 --narrative-server=tcp://moor-daemon:7898'"
+    ports:
+      # Telnet listener
+      - "8888:8888"
     networks:
       - moor_net
   vmagent:
@@ -47,7 +68,7 @@ services:
     depends_on:
       - "victoriametrics"
     ports:
-      - 8429:8429
+      - "8429:8429"
     volumes:
       - vmagentdata:/vmagentdata
       - ./deploy/vmagent:/etc/prometheus/
@@ -61,7 +82,7 @@ services:
     container_name: victoriametrics
     image: victoriametrics/victoria-metrics:v1.92.1
     ports:
-      - 8428:8428
+      - "8428:8428"
     volumes:
       - vmdata:/storage
     command:
@@ -76,7 +97,7 @@ services:
     depends_on:
       - "victoriametrics"
     ports:
-      - 3000:3000
+      - "3000:3000"
     volumes:
       - grafanadata:/var/lib/grafana
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning/

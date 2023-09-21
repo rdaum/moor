@@ -2,10 +2,13 @@
 resolver = "2"
 
 members = [
-  "values",
-  "core",
-  "server",
-  "regexpr-binding",
+  "crates/values",
+  "crates/kernel",
+  "crates/rpc-common",
+  "crates/daemon",
+  "crates/host",
+  "crates/server",
+  "crates/regexpr-binding",
 ]
 
 [workspace.package]
@@ -36,6 +39,8 @@ tokio-util = { version = "0.7.8",  features = ["full"] }
 
 tungstenite = "0.20.0"           # Websockets
 tokio-tungstenite = "0.20.0"
+
+tmq = "0.4.0"
 
 ## Logging & tracing
 tracing = "0.1.37"

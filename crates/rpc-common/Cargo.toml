@@ -1,0 +1,11 @@
+[package]
+name = "rpc-common"
+version = "0.1.0"
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+bincode.workspace = true
+moor-values = { path = "../values" }
+thiserror = "1.0.48"
