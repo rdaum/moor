@@ -22,18 +22,6 @@ use std::sync::{Arc, RwLock};
 //  away, etc) but keep a persistent virtual history. Challenge would be around making this work
 //  nicely with existing MOO code.
 
-// TODO: some of the methods here are cross-task session (shutdown, connected_players, etc.) and some
-//   are per-Session (send_text, commit, rollback, etc.). This is a bit of a mess, and should be
-//   broken up to make it clear. In particular this is a problem if a user is connected from a
-//   different "kind" of session and a message is sent to them from a task running in another.
-//   So `Session` needs to be broken away from `Connections`? -- the latter should be registered with
-//   the Scheduler on a per-user basis, if we are to support the possibility of a) multiple
-//   connections and b) connections from different kinds of session (e.g. websocket and repl and
-//   telnet, etc) .
-//   That or the 'session' gets implemented entirely separate from connection on the server side?
-//   So we have "web socket connections" and "repl connections" that register themselves with
-//   the session layer?
-
 #[async_trait]
 pub trait Session: Send + Sync {
     /// Commit for current activity, called by the scheduler when a task commits and *after* the world
@@ -74,10 +62,9 @@ pub trait Session: Send + Sync {
     /// Process a (wizard) request for system shutdown, with an optional shutdown message.
     async fn shutdown(&self, msg: Option<String>) -> Result<(), anyhow::Error>;
 
-    /// The 'name' of the connection associated with the player.
+    /// The 'name' of the *most recent* connection associated with the player.
     /// In a networked environment this is the hostname.
     /// LambdaMOO cores tend to expect this to be a resolved DNS hostname.
-    // TODO: what do we do with the fact that a player may have multiple connections?
     async fn connection_name(&self, player: Objid) -> Result<String, anyhow::Error>;
 
     /// Disconnect the given player's connection.
