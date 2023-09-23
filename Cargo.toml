@@ -8,6 +8,7 @@ members = [
   "crates/daemon",
   "crates/telnet-host",
   "crates/web-host",
+  "crates/console-host",
   "crates/server",
   "crates/regexpr-binding",
 ]

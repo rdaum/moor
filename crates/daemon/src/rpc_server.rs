@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
-use anyhow::{Context, Error};
+use anyhow::{bail, Context, Error};
 use futures_util::SinkExt;
 use itertools::Itertools;
 use metrics_macros::increment_counter;
@@ -228,6 +228,9 @@ impl RpcServer {
 
     async fn last_activity_for(&self, player: Objid) -> Result<SystemTime, Error> {
         let connections = self.connections.connection_records_for(player).await?;
+        if connections.is_empty() {
+            bail!("No connections for player: {}", player);
+        }
         // Grab the most recent connection record (they are sorted by last_activity, so last item).
         Ok(connections.last().unwrap().last_activity)
     }
@@ -321,7 +324,20 @@ impl RpcServer {
         connection: Objid,
         args: Vec<String>,
     ) -> Result<RpcResponse, RpcError> {
-        debug!("Performing login for client: {}", client_id);
+        increment_counter!("rpc_server.perform_login");
+
+        // TODO: change result of login to return this information, rather than just Objid, so
+        //   we're not dependent on this.
+        let connect_type = if args.get(0) == Some(&"create".to_string()) {
+            ConnectType::Created
+        } else {
+            ConnectType::Connected
+        };
+
+        debug!(
+            "Performing {:?} login for client: {}",
+            connect_type, client_id
+        );
         let Ok(session) = self.clone().new_session(client_id, connection).await else {
             increment_counter!("rpc_server.perform_login.create_session_failed");
             return Err(RpcError::CreateSessionFailed);
@@ -401,7 +417,7 @@ impl RpcServer {
         trace!(?player, "Submitting user_connected task");
         if let Err(e) = self
             .clone()
-            .submit_connected_task(client_id, player, ConnectType::Connected)
+            .submit_connected_task(client_id, player, connect_type)
             .await
         {
             error!(error = ?e, "Error submitting user_connected task");
@@ -411,7 +427,7 @@ impl RpcServer {
         }
 
         increment_counter!("rpc_server.perform_login.success");
-        Ok(LoginResult(Some((ConnectType::Connected, player))))
+        Ok(LoginResult(Some((connect_type, player))))
     }
 
     async fn submit_connected_task(
@@ -425,6 +441,8 @@ impl RpcServer {
             .new_session(client_id, player)
             .await
             .with_context(|| "could not create 'connected' task session for player")?;
+
+        increment_counter!("rpc_server.submit_connected_task");
 
         let connected_verb = match initiation_type {
             ConnectType::Connected => "user_connected".to_string(),
@@ -455,6 +473,16 @@ impl RpcServer {
             increment_counter!("rpc_server.perform_command.create_session_failed");
             return Err(RpcError::CreateSessionFailed);
         };
+
+        if let Err(e) = self
+            .connections
+            .activity_for_client(client_id, connection)
+            .await
+        {
+            warn!("Unable to update client connection activity: {}", e);
+        };
+
+        increment_counter!("rpc_server.perform_command");
 
         // TODO: try to submit to do_command first and only parse_command after that fails.
         debug!(command, ?client_id, ?connection, "Submitting command task");
@@ -535,6 +563,8 @@ impl RpcServer {
             increment_counter!("rpc_server.perform_command.create_session_failed");
             return Err(RpcError::CreateSessionFailed);
         };
+        increment_counter!("rpc_server.perform_out_of_band");
+
         let command_components = parse_into_words(command.as_str());
         let _ = match self
             .clone()
@@ -570,6 +600,7 @@ impl RpcServer {
             return Err(RpcError::CreateSessionFailed);
         };
 
+        increment_counter!("rpc_server.eval");
         let task_id = match self
             .clone()
             .scheduler

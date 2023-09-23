@@ -184,6 +184,23 @@ impl Connections {
         });
     }
 
+    pub(crate) async fn activity_for_client(
+        &self,
+        client_id: Uuid,
+        connobj: Objid,
+    ) -> Result<(), anyhow::Error> {
+        let mut inner = self.connections_list.write().unwrap();
+        let connection_record = inner
+            .connections_client
+            .get_mut(&connobj)
+            .ok_or_else(|| anyhow::anyhow!("No connection for player: {}", connobj))?
+            .iter_mut()
+            .find(|cr| cr.client_id == client_id)
+            .ok_or_else(|| anyhow::anyhow!("No connection record for client: {}", client_id))?;
+        connection_record.last_activity = SystemTime::now();
+        Ok(())
+    }
+
     /// Update the last ping time for a client / connection.
     pub(crate) async fn notify_is_alive(
         &self,

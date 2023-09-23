@@ -12,6 +12,8 @@ Directory layout for `crates/`
      network `host`s
   * `web-host` - like the above, but hosts an HTTP server which provides a websocket interface to the system.
      as well as various web APIs.
+  * `console-host` - console host which connects as a user to the `daemon` and provides a readline-type interface to the
+     system.
   * `server` - a "monolithic" server which links kernel and provides telnet and websocket and repl
      hosts.
   * `rpc-common` - crate providing types used by both `daemon` and `host`, for the RPC interface

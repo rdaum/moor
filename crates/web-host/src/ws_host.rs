@@ -259,7 +259,7 @@ pub async fn ws_create_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
 ) -> impl IntoResponse {
-    increment_counter!("ws_host.new_connection");
+    increment_counter!("ws_host.new_creation");
     info!("Connection from {}", addr);
     ws.on_upgrade(move |socket| async move {
         ws_host

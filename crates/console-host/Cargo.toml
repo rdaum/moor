@@ -1,0 +1,40 @@
+[package]
+name = "moor-console-host"
+version = "0.1.0"
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+moor-kernel = { path = "../kernel" }
+moor-values = { path = "../values" }
+rpc-common = { path = "../rpc-common" }
+
+## Command line arguments parsing.
+clap.workspace = true
+clap_derive.workspace = true
+strum.workspace = true
+
+# General.
+anyhow.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+async-trait.workspace = true
+bincode.workspace = true
+
+## Asynchronous transaction processing & networking
+tokio.workspace = true
+tokio-util.workspace = true
+
+## Logging & tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-chrome.workspace = true
+
+## ZMQ
+tmq.workspace = true
+uuid.workspace = true
+itertools.workspace = true
+
+## For console
+rustyline.workspace = true
