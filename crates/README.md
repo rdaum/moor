@@ -14,8 +14,6 @@ Directory layout for `crates/`
      as well as various web APIs.
   * `console-host` - console host which connects as a user to the `daemon` and provides a readline-type interface to the
      system.
-  * `server` - a "monolithic" server which links kernel and provides telnet and websocket and repl
-     hosts.
   * `rpc-common` - crate providing types used by both `daemon` and `host`, for the RPC interface
   * `regexpr-binding` - crate providing bindings to the old regular expressions library used by
     the LambdaMOO server, for compatibility with existing cores. This is a temporary measure until
