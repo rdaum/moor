@@ -2,7 +2,7 @@ Directory layout for `crates/`
 
 Binaries:
   * `daemon` - the actual server runtime. Brings up the database, VM, task scheduler, etc, and provides an interface
-     to them over a 0MQ based RPC interface, exposing any external network protocol to the outside world. 
+     to them over a 0MQ based RPC interface, not exposing any external network protocol to the outside world. 
      Instead, that functionality is provided by...
   * `telnet-host` - a binary which connects to `daemon` and provides a classic LambdaMOO-style telnet interface.
      The idea being that the `daemon` can go up and down, or be located on a different physical machine from the  

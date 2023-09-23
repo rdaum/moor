@@ -43,6 +43,11 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 * Separate network-host vs daemon process architecture means that upgrades/restarts can happen in-place without
   dropping live connections.
 
+Here's a screenshot of the `JaysHouseCore` world running in `moor`, connected to with the classic `rmoo` Emacs client,
+editing a MOO verb:
+
+![screenshot](doc/screenshot-rmoo.png)
+
 ## How do I use it?
 
 The easiest way to get started is to run the `docker compose` setup. This will bring up a complete server with `telnet`
@@ -51,20 +56,30 @@ metrics monitoring via Grafana and VictoriaMetrics.
 
 To do this, take a look at the local `docker-compose.yml` file, instructions are there, but it really just amounts to:
 
-    `docker compose up`
+```
+    docker compose up
+```
 
 Then connect (with your favourite MUD/MOO client) to `localhost:8888` and follow the login instauctions. Classic 
 clients like `TinyFugue` will work fine, and there are some newer clients like [BlightMud](https://github.com/Blightmud/Blightmud) 
-that should work fine. A partial and probably outdated list of clients can be found here: https://lisdude.com/moo/#clients
+that should work fine. (A partial -- and probably outdated list of clients -- can be found here: https://lisdude.com/moo/#clients)
 
 Once you're familiar with how the docker setup works, you can get more creative. 
 
 An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`.
 
+### Why would I use this instead of the original LambdaMOO server, or something like Stunt/toaststunt, etc?
+
+* Because it's new and shiny and fun.
+* Because it's getting ongoing development.
+* Because its codebase is more modern and easier to add to and maintain.
+* Because it has an exciting future.
+
 ### Missing / Next steps before 1.0
 
 * Bugs, bugs, bugs. Collect em' all.
-* Generally, open issues / missing features can be seen here: https://github.com/rdaum/moor/issues
+* Generally, open issues / missing features can be seen here: https://github.com/rdaum/moor/issues (but there are also
+  plenty of TODOs in the code not yet captured as issues.)
 * Major missing features:
     * Quota support.
     * Background tasks resumption after restart (from DB and from textdump load.)
@@ -100,9 +115,9 @@ An actual production deployment can be fairly easily derived from the `docker-co
 
 The following are targeted as eventual goals / additions once 1.0 (fall 2023) is out the door:
 
-   * A richer front-end experience. Support for websockets as a connection method means that the server can provide  
-     a richer narrative stream to browsers (with in-core support assistance.) A client which provides a full proper 
-     UI experience with interactive UI components, graphical elements, and so on are the end-goal here.
+   * A richer front-end experience. Support for websockets as a connection method means that the server can provide 
+   a richer narrative stream to browsers (with in-core support assistance.) A client which provides a full proper 
+   UI experience with interactive UI components, graphical elements, and so on are the end-goal here.
    * Support for multiple programming language for programming MOO verbs/objects. The backend has been written such that
      this is feasible. Authoring verbs in JavaScript/TypeScript will be the first target, and WebAssembly modules are
      also a possibility. These verbs would still run within the same shared environment and use the same shared object
