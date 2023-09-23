@@ -1,22 +1,22 @@
+use std::path::PathBuf;
 /// The core of the server logic for the RPC daemon
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
-use anyhow::{bail, Context, Error};
-use async_trait::async_trait;
+use anyhow::{Context, Error};
 use futures_util::SinkExt;
 use itertools::Itertools;
 use metrics_macros::increment_counter;
 use moor_kernel::tasks::command_parse::parse_into_words;
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
+use crate::connections::Connections;
 use crate::make_response;
+use crate::rpc_session::RpcSession;
 use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_kernel::tasks::sessions::Session;
 use moor_values::model::world_state::WorldStateSource;
@@ -26,17 +26,16 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_objid, v_string};
 use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
-use rpc_common::{ConnectType, ConnectionEvent, RpcError, RpcRequest, RpcResponse};
+use rpc_common::{
+    BroadcastEvent, ConnectType, ConnectionEvent, RpcError, RpcRequest, RpcResponse,
+    BROADCAST_TOPIC,
+};
 
 pub struct RpcServer {
     publish: Arc<Mutex<Publish>>,
     world_state_source: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,
-    // TODO: these should be backed by a database (eg. rocks or whatever) so that client connections
-    //  are persistent between restarts.
-    client_connections: RwLock<HashMap<Uuid, Objid>>,
-    connections_client: RwLock<HashMap<Objid, Vec<ConnectionRecord>>>,
-    next_connection_id: AtomicI64,
+    connections: Connections,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -49,21 +48,29 @@ struct ConnectionRecord {
 }
 
 impl RpcServer {
-    pub fn new(
+    pub async fn new(
+        connections_file: PathBuf,
         zmq_context: tmq::Context,
         narrative_endpoint: &str,
         wss: Arc<dyn WorldStateSource>,
         scheduler: Scheduler,
     ) -> Self {
+        info!(
+            "Creating new RPC server; with {} ZMQ IO threads...",
+            zmq_context.get_io_threads().unwrap()
+        );
         let publish = publish(&zmq_context.clone())
             .bind(narrative_endpoint)
             .unwrap();
+        let connections = Connections::new(connections_file).await;
+        info!(
+            "Created connections list, with {} initial known connections",
+            connections.connections().await.len()
+        );
         Self {
             world_state_source: wss,
             scheduler,
-            client_connections: Default::default(),
-            connections_client: Default::default(),
-            next_connection_id: AtomicI64::new(-4),
+            connections: connections,
             publish: Arc::new(Mutex::new(publish)),
         }
     }
@@ -78,29 +85,58 @@ impl RpcServer {
         match request {
             RpcRequest::ConnectionEstablish(hostname) => {
                 increment_counter!("rpc_server.connection_establish");
-                make_response(
-                    self.connection_establish(client_id, hostname.as_str())
-                        .await,
-                )
+
+                match self.connections.new_connection(client_id, hostname).await {
+                    Ok(oid) => {
+                        return make_response(Ok(NewConnection(oid)));
+                    }
+                    Err(e) => {
+                        return make_response(Err(e));
+                    }
+                }
+            }
+            RpcRequest::Pong(_client_sys_time) => {
+                // Always respond with a ThanksPong, even if it's somebody we don't know.
+                // Can easily be a connection that was in the middle of negotiation at the time the
+                // ping was sent out, or dangling in some other way.
+                let response = make_response(Ok(RpcResponse::ThanksPong(SystemTime::now())));
+                increment_counter!("rpc_server.pong");
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
+                    warn!("Received Pong from invalid client: {}", client_id);
+                    return response;
+                };
+                // Let 'connections' know that the connection is still alive.
+                let Ok(_) = self
+                    .connections
+                    .notify_is_alive(client_id, connection)
+                    .await
+                else {
+                    warn!("Unable to notify connection is alive: {}", client_id);
+                    return response;
+                };
+                response
             }
             RpcRequest::RequestSysProp(object, property) => {
                 increment_counter!("rpc_server.request_sys_prop");
-                {
-                    let client_connections = self.client_connections.read().await;
-                    let Some(_) = client_connections.get(&client_id) else {
-                        return make_response(Err(RpcError::InvalidRequest));
-                    };
+                if !self.connections.is_valid_client(client_id).await {
+                    warn!("Received RequestSysProp from invalid client: {}", client_id);
+
+                    return make_response(Err(RpcError::NoConnection));
                 }
                 make_response(self.clone().request_sys_prop(object, property).await)
             }
             RpcRequest::LoginCommand(args) => {
                 increment_counter!("rpc_server.login_command");
-                let connection = {
-                    let client_connections = self.client_connections.read().await;
-                    let Some(connection) = client_connections.get(&client_id) else {
-                        return make_response(Err(RpcError::NoConnection));
-                    };
-                    *connection
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
+                    return make_response(Err(RpcError::NoConnection));
                 };
 
                 make_response(
@@ -111,13 +147,14 @@ impl RpcServer {
             }
             RpcRequest::Command(command) => {
                 increment_counter!("rpc_server.command");
-                let connection = {
-                    let client_connections = self.client_connections.read().await;
-                    let Some(connection) = client_connections.get(&client_id) else {
-                        return make_response(Err(RpcError::NoConnection));
-                    };
-                    *connection
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
+                    return make_response(Err(RpcError::NoConnection));
                 };
+
                 make_response(
                     self.clone()
                         .perform_command(client_id, connection, command)
@@ -126,35 +163,39 @@ impl RpcServer {
             }
             RpcRequest::OutOfBand(command) => {
                 increment_counter!("rpc_server.out_of_band_received");
-                let connection = {
-                    let client_connections = self.client_connections.read().await;
-                    let Some(connection) = client_connections.get(&client_id) else {
-                        return make_response(Err(RpcError::NoConnection));
-                    };
-                    *connection
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
+                    return make_response(Err(RpcError::NoConnection));
                 };
+
                 make_response(
                     self.clone()
                         .perform_out_of_band(client_id, connection, command)
                         .await,
                 )
             }
+
             RpcRequest::Eval(evalstr) => {
                 increment_counter!("rpc_server.eval");
-                let connection = {
-                    let client_connections = self.client_connections.read().await;
-                    let Some(connection) = client_connections.get(&client_id) else {
-                        return make_response(Err(RpcError::NoConnection));
-                    };
-                    *connection
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
+                    return make_response(Err(RpcError::NoConnection));
                 };
 
                 make_response(self.clone().eval(client_id, connection, evalstr).await)
             }
             RpcRequest::Detach => {
                 increment_counter!("rpc_server.detach");
+                info!("Detaching client: {}", client_id);
+
                 // Detach this client id from the player/connection object.
-                let Ok(_) = self.remove_client_connection(client_id).await else {
+                let Ok(_) = self.connections.remove_client_connection(client_id).await else {
                     return make_response(Err(RpcError::InternalError(
                         "Unable to remove client connection".to_string(),
                     )));
@@ -165,7 +206,7 @@ impl RpcServer {
         }
     }
 
-    async fn new_session(
+    pub(crate) async fn new_session(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
@@ -179,106 +220,33 @@ impl RpcServer {
         )))
     }
 
-    async fn connection_records_for(&self, player: Objid) -> Result<Vec<ConnectionRecord>, Error> {
-        let connections_client = self.connections_client.read().await;
-
-        let Some(connections) = connections_client.get(&player) else {
-            bail!("No connections for player: {}", player);
-        };
-
-        if connections.is_empty() {
-            bail!("No connections for player: {}", player);
-        }
-
-        Ok(connections
-            .iter()
-            .sorted_by_key(|a| a.last_activity)
-            .cloned()
-            .collect())
-    }
-
-    async fn remove_client_connection(&self, client_id: Uuid) -> Result<(), anyhow::Error> {
-        let (mut client_connections, mut connections_client) = (
-            self.client_connections.write().await,
-            self.connections_client.write().await,
-        );
-
-        let Some(connection) = client_connections.remove(&client_id) else {
-            bail!("No (expected) connection for client: {}", client_id);
-        };
-
-        let Some(clients) = connections_client.get_mut(&connection) else {
-            bail!("No (expected) connection record for player: {}", connection);
-        };
-
-        clients.retain(|c| c.client_id != client_id);
-
-        Ok(())
-    }
-
-    async fn update_client_connection(
-        &self,
-        from_connection: Objid,
-        to_player: Objid,
-    ) -> Result<(), anyhow::Error> {
-        let (mut client_connections, mut connections_client) = (
-            self.client_connections.write().await,
-            self.connections_client.write().await,
-        );
-
-        let mut connection_records = connections_client
-            .remove(&from_connection)
-            .expect("connection record missing");
-        assert_eq!(
-            connection_records.len(),
-            1,
-            "connection record for unlogged in connection has multiple entries"
-        );
-        let mut cr = connection_records.pop().unwrap();
-        cr.player = to_player;
-        cr.last_activity = Instant::now();
-
-        client_connections.insert(cr.client_id, to_player);
-        match connections_client.get_mut(&to_player) {
-            None => {
-                info!("insert new connection...");
-                connections_client.insert(to_player, vec![cr]);
-            }
-            Some(ref mut crs) => {
-                info!("append to existing connections...");
-                crs.push(cr);
-            }
-        }
-        connections_client.remove(&from_connection);
-        Ok(())
-    }
-
-    async fn connection_name_for(&self, player: Objid) -> Result<String, Error> {
-        let connections = self.connection_records_for(player).await?;
+    pub(crate) async fn connection_name_for(&self, player: Objid) -> Result<String, Error> {
+        let connections = self.connections.connection_records_for(player).await?;
         // Grab the most recent connection record (they are sorted by last_activity, so last item).
         Ok(connections.last().unwrap().name.clone())
     }
 
-    async fn last_activity_for(&self, player: Objid) -> Result<Instant, Error> {
-        let connections = self.connection_records_for(player).await?;
+    async fn last_activity_for(&self, player: Objid) -> Result<SystemTime, Error> {
+        let connections = self.connections.connection_records_for(player).await?;
         // Grab the most recent connection record (they are sorted by last_activity, so last item).
         Ok(connections.last().unwrap().last_activity)
     }
 
-    async fn idle_seconds_for(&self, player: Objid) -> Result<f64, Error> {
+    pub(crate) async fn idle_seconds_for(&self, player: Objid) -> Result<f64, Error> {
         let last_activity = self.last_activity_for(player).await?;
-        Ok(last_activity.elapsed().as_secs_f64())
+        Ok(last_activity.elapsed().unwrap().as_secs_f64())
     }
 
-    async fn connected_seconds_for(&self, player: Objid) -> Result<f64, Error> {
+    pub(crate) async fn connected_seconds_for(&self, player: Objid) -> Result<f64, Error> {
         // Grab the highest of all connection times.
-        let connections = self.connection_records_for(player).await?;
+        let connections = self.connections.connection_records_for(player).await?;
         Ok(connections
             .iter()
             .map(|c| c.connect_time)
             .max()
             .unwrap()
             .elapsed()
+            .unwrap()
             .as_secs_f64())
     }
 
@@ -287,9 +255,9 @@ impl RpcServer {
     //   of @quit and @boot-player working.
     //   in reality players using "@quit" will probably really want to just "sleep", and cores
     //   should be modified to reflect that.
-    async fn disconnect(&self, player: Objid) -> Result<(), Error> {
+    pub(crate) async fn disconnect(&self, player: Objid) -> Result<(), Error> {
         warn!("Disconnecting player: {}", player);
-        let connections = self.connection_records_for(player).await?;
+        let connections = self.connections.connection_records_for(player).await?;
         let all_client_ids = connections.iter().map(|c| c.client_id).collect_vec();
 
         let mut publish = self.publish.lock().await;
@@ -302,51 +270,13 @@ impl RpcServer {
                 .await
                 .expect("Unable to send system message");
         }
+
         Ok(())
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-        let connections_client = self.connections_client.read().await;
-
-        Ok(connections_client
-            .iter()
-            .map(|c| *c.0)
-            .filter(|c| c.0 > 0)
-            .collect())
-    }
-
-    async fn connection_establish(
-        self: Arc<Self>,
-        client_id: Uuid,
-        hostname: &str,
-    ) -> Result<RpcResponse, RpcError> {
-        // We should not already have an object connection id for this client. If we do,
-        // respond with an error.
-        let (mut client_connections, mut connections_client) = (
-            self.client_connections.write().await,
-            self.connections_client.write().await,
-        );
-
-        if client_connections.contains_key(&client_id) {
-            return Err(RpcError::AlreadyConnected);
-        }
-
-        // Get a new connection id, and create an entry for it.
-        let connection_id = Objid(self.next_connection_id.fetch_sub(1, Ordering::SeqCst));
-        client_connections.insert(client_id, connection_id);
-        connections_client.insert(
-            connection_id,
-            vec![ConnectionRecord {
-                client_id,
-                player: connection_id,
-                name: hostname.to_string(),
-                last_activity: Instant::now(),
-                connect_time: Instant::now(),
-            }],
-        );
-
-        // And respond with the connection id via NewConnection;
-        Ok(NewConnection(connection_id))
+    pub(crate) async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+        let connections = self.connections.connections().await;
+        Ok(connections.iter().filter(|o| o.0 > 0).cloned().collect())
     }
 
     async fn request_sys_prop(
@@ -450,12 +380,16 @@ impl RpcServer {
         };
 
         // Update the connection records.
-        info!(
+        trace!(
             ?connection,
             ?player,
             "Transitioning connection record to logged in"
         );
-        let Ok(_) = self.update_client_connection(connection, player).await else {
+        let Ok(_) = self
+            .connections
+            .update_client_connection(connection, player)
+            .await
+        else {
             increment_counter!("rpc_server.perform_login.update_client_connection_failed");
             return Err(RpcError::InternalError(
                 "Unable to update client connection".to_string(),
@@ -464,7 +398,7 @@ impl RpcServer {
 
         // Issue calls to user_connected/user_reconnected/user_created
         // TODO: Reconnected/created
-        info!(?player, "Submitting user_connected task");
+        trace!(?player, "Submitting user_connected task");
         if let Err(e) = self
             .clone()
             .submit_connected_task(client_id, player, ConnectType::Connected)
@@ -602,7 +536,7 @@ impl RpcServer {
             return Err(RpcError::CreateSessionFailed);
         };
         let command_components = parse_into_words(command.as_str());
-        let task_id = match self
+        let _ = match self
             .clone()
             .scheduler
             .submit_out_of_band_task(connection, command_components, command, session)
@@ -678,21 +612,14 @@ impl RpcServer {
         }
     }
 
-    async fn publish_narrative_events(
+    pub(crate) async fn publish_narrative_events(
         &self,
         events: &[(Objid, NarrativeEvent)],
     ) -> Result<(), Error> {
         increment_counter!("rpc_server.publish_narrative_events");
         let mut publish = self.publish.lock().await;
-        let connections_client = self.connections_client.read().await;
         for (player, event) in events {
-            let connections = match connections_client.get(player) {
-                None => {
-                    // No connections for this player, so we can't send them anything.
-                    continue;
-                }
-                Some(connections) => connections,
-            };
+            let connections = self.connections.connection_records_for(*player).await?;
             let client_ids = connections.iter().map(|c| c.client_id).collect_vec();
             let event = ConnectionEvent::Narrative(*player, event.clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
@@ -707,7 +634,7 @@ impl RpcServer {
         Ok(())
     }
 
-    async fn send_system_message(
+    pub(crate) async fn send_system_message(
         &self,
         client_id: Uuid,
         player: Objid,
@@ -724,21 +651,53 @@ impl RpcServer {
             .expect("Unable to send system message");
         Ok(())
     }
+
+    async fn ping_pong(&self) {
+        let mut publish = self.publish.lock().await;
+        let event = BroadcastEvent::PingPong(SystemTime::now());
+        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard()).unwrap();
+
+        // We want responses from all clients, so send on this broadcast "topic"
+        let payload = vec![BROADCAST_TOPIC.to_vec(), event_bytes];
+        publish
+            .send(payload)
+            .await
+            .expect("Unable to send system message");
+        self.connections.ping_check().await;
+    }
 }
 
 pub(crate) async fn zmq_loop(
+    connections_file: PathBuf,
     wss: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,
     rpc_endpoint: &str,
     narrative_endpoint: &str,
 ) -> anyhow::Result<()> {
     let zmq_ctx = tmq::Context::new();
-    let rpc_server = Arc::new(RpcServer::new(
-        zmq_ctx.clone(),
-        narrative_endpoint,
-        wss,
-        scheduler,
-    ));
+    let rpc_server = Arc::new(
+        RpcServer::new(
+            connections_file,
+            zmq_ctx.clone(),
+            narrative_endpoint,
+            wss,
+            scheduler,
+        )
+        .await,
+    );
+
+    // Start up the ping-ponger timer in a background thread...
+    tokio::spawn({
+        let rpc_server = rpc_server.clone();
+        async move {
+            let mut ping_pong = tokio::time::interval(std::time::Duration::from_secs(5));
+            loop {
+                ping_pong.tick().await;
+                rpc_server.ping_pong().await;
+            }
+        }
+    });
+
     // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
     // are visible...
     let mut rpc_socket = reply(&zmq_ctx).bind(rpc_endpoint)?;
@@ -799,99 +758,5 @@ pub(crate) async fn zmq_loop(
                 increment_counter!("rpc_server.processed_requests");
             }
         }
-    }
-}
-
-/// A "session" that runs over the RPC system.
-pub struct RpcSession {
-    client_id: Uuid,
-    rpc_server: Arc<RpcServer>,
-    player: Objid,
-    // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
-    //  should be mmap'd to disk or something.
-    // TODO: We could also use Boxcar or other append-only lockless container for this, since we only
-    //  ever append.
-    session_buffer: Mutex<Vec<(Objid, NarrativeEvent)>>,
-}
-
-impl RpcSession {
-    pub fn new(client_id: Uuid, rpc_server: Arc<RpcServer>, player: Objid) -> Self {
-        Self {
-            client_id,
-            rpc_server,
-            player,
-            session_buffer: Default::default(),
-        }
-    }
-}
-
-#[async_trait]
-impl Session for RpcSession {
-    async fn commit(&self) -> Result<(), Error> {
-        info!(player = ?self.player, client_id = ?self.client_id, "Committing session");
-        let events: Vec<_> = {
-            let mut session_buffer = self.session_buffer.lock().await;
-            session_buffer.drain(..).collect()
-        };
-
-        self.rpc_server
-            .publish_narrative_events(&events[..])
-            .await
-            .expect("Unable to publish narrative events");
-
-        Ok(())
-    }
-
-    async fn rollback(&self) -> Result<(), Error> {
-        let mut session_buffer = self.session_buffer.lock().await;
-        session_buffer.clear();
-        Ok(())
-    }
-
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
-        // We ask the rpc server to create a new session, otherwise we'd need to have a copy of all
-        // the info to create a Publish. The rpc server has that, though.
-        let new_session = self
-            .rpc_server
-            .clone()
-            .new_session(self.client_id, self.player)
-            .await?;
-        Ok(new_session)
-    }
-
-    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), Error> {
-        self.session_buffer.lock().await.push((player, event));
-        Ok(())
-    }
-
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), Error> {
-        self.rpc_server
-            .send_system_message(self.client_id, player, msg.to_string())
-            .await?;
-        Ok(())
-    }
-
-    async fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
-        todo!()
-    }
-
-    async fn connection_name(&self, player: Objid) -> Result<String, Error> {
-        self.rpc_server.connection_name_for(player).await
-    }
-
-    async fn disconnect(&self, player: Objid) -> Result<(), Error> {
-        self.rpc_server.disconnect(player).await
-    }
-
-    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
-        self.rpc_server.connected_players().await
-    }
-
-    async fn connected_seconds(&self, player: Objid) -> Result<f64, Error> {
-        self.rpc_server.connected_seconds_for(player).await
-    }
-
-    async fn idle_seconds(&self, player: Objid) -> Result<f64, Error> {
-        self.rpc_server.idle_seconds_for(player).await
     }
 }

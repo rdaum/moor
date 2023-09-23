@@ -17,7 +17,9 @@ use rpc_common::{RpcError, RpcResponse, RpcResult};
 
 use crate::rpc_server::zmq_loop;
 
+mod connections;
 mod rpc_server;
+mod rpc_session;
 
 #[macro_export]
 macro_rules! clap_enum_variants {
@@ -39,6 +41,16 @@ struct Args {
 
     #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
     textdump: Option<PathBuf>,
+
+    #[arg(
+        short,
+        long,
+        value_name = "connections-file",
+        help = "Path to connections list file to use or create",
+        value_hint = ValueHint::FilePath,
+        default_value = "connections.json"
+    )]
+    connections_file: PathBuf,
 
     #[arg(long,
         value_name = "db-type", help = "Type of database backend to use",
@@ -144,6 +156,7 @@ async fn main() {
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
     let zmq_server_loop = zmq_loop(
+        args.connections_file,
         state_source,
         scheduler.clone(),
         args.rpc_listen.as_str(),

@@ -6,7 +6,6 @@ use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 
-mod rpc;
 mod telnet;
 
 #[derive(Parser, Debug)]

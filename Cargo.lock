@@ -1465,13 +1465,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bincode",
+ "chrono",
  "clap",
  "clap_derive",
- "dashmap",
  "futures",
  "futures-util",
  "itertools",
- "log",
  "metrics",
  "metrics-exporter-prometheus",
  "metrics-macros",
@@ -1479,6 +1478,8 @@ dependencies = [
  "moor-kernel",
  "moor-values",
  "rpc-common",
+ "serde",
+ "serde_json",
  "strum",
  "tmq",
  "tokio",
@@ -2076,9 +2077,14 @@ dependencies = [
 name = "rpc-common"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bincode",
+ "futures-util",
  "moor-values",
  "thiserror",
+ "tmq",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

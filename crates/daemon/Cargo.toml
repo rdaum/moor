@@ -36,10 +36,11 @@ metrics.workspace = true
 metrics-util.workspace = true
 metrics-macros.workspace = true
 
-## ZMQ
+## RPC daemon support
 tmq.workspace = true
 uuid.workspace = true
-dashmap.workspace = true
 itertools.workspace = true
-log = "0.4.20"
+serde_json.workspace = true
+serde.workspace = true
+chrono.workspace = true
 

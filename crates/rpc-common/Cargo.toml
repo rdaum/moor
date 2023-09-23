@@ -8,4 +8,9 @@ license.workspace = true
 [dependencies]
 bincode.workspace = true
 moor-values = { path = "../values" }
-thiserror = "1.0.48"
+thiserror.workspace = true
+tmq.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+futures-util.workspace = true

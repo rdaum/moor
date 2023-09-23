@@ -30,7 +30,7 @@ tower-http = { version = "0.4.3", features = ["add-extension", "auth", "compress
 ## HTTP/websockets front-end
 axum = { version = "0.6.19", features = ["ws", "headers"] }
 serde_json = "1.0.104"
-serde = "1.0.178"
+serde = { version = "1.0.188", features = ["derive"] }
 
 ## Asynchronous transaction processing & networking
 tokio = { version = "1.29.1", features = ["full"] }
@@ -40,6 +40,7 @@ tokio-util = { version = "0.7.8",  features = ["full"] }
 tungstenite = "0.20.0"           # Websockets
 tokio-tungstenite = "0.20.0"
 
+# Used for RPC daemon/client
 tmq = "0.4.0"
 
 ## Logging & tracing

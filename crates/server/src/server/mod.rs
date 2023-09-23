@@ -4,7 +4,6 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Number, Value};
 
 pub mod connection;
-mod narrative_log;
 pub mod routes;
 pub mod server;
 pub mod tcp_host;
