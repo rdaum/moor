@@ -65,7 +65,7 @@ Once you're familiar with how the docker setup works, you can get more creative.
 
 An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`.
 
-### Why would I use this instead of the original LambdaMOO server (or one of its forks  like stunt/toaststunt, etc?)
+### Why would I use this instead of the original LambdaMOO server?
 
 * Because it's new and shiny and fun.
 * Because its codebase is more modern and easier to add to and maintain.
