@@ -46,7 +46,7 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 Here's a screenshot of the `JaysHouseCore` world running in `moor`, connected to with the classic `rmoo` Emacs client,
 editing a MOO verb:
 
-![screenshot](doc/screenshot-rmoo.png)
+<img src="doc/screenshot-rmoo.png" alt="drawing" width="400"/>
 
 ## How do I use it?
 
@@ -68,11 +68,11 @@ Once you're familiar with how the docker setup works, you can get more creative.
 
 An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`.
 
-### Why would I use this instead of the original LambdaMOO server, or something like Stunt/toaststunt, etc?
+### Why would I use this instead of the original LambdaMOO server (or one of its forks  like stunt/toaststunt, etc?)
 
 * Because it's new and shiny and fun.
-* Because it's getting ongoing development.
 * Because its codebase is more modern and easier to add to and maintain.
+* Because it's getting ongoing development.
 * Because it has an exciting future.
 
 ### Missing / Next steps before 1.0
