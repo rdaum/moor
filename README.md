@@ -2,9 +2,9 @@
 
 "Moor" is a multi-user, programmable server, coded in Rust, designed to be able to run the original LambdaMOO core as a starting point, with various improvements at the server level to provide a more modern foundation for future development.
 
-LambdaMOO is a MUD, aka a shared, multi-user, text-based virtual world, that first opened to the public in 1990 and is still in operation.  LambdaMOO was and remains unusual in that it is a highly programmable, persistent-world MUD.  In particular, LambdaMOO provides a dynamically programmable environment ("live coding" similar to smalltalk) that supports programming by many users.
+LambdaMOO is a MUD -- aka a shared, multi-user, text-based virtual world -- that first opened to the public in 1990 and is still in operation.  LambdaMOO was and remains unusual in that it is a highly programmable, persistent-world MUD.  In particular, LambdaMOO provides a dynamically programmable environment ("live coding" similar to Smalltalk) that supports programming by many users.
 
-Unlike many MUDs, LambdaMOO is not solely focused on role playing game, although its programmability enabled the users to develop an RPG implemented inside LambdaMOO.
+Unlike many MUDs, LambdaMOO is not solely focused on role playing games, although its programmability has enabled users to develop RPGs implemented inside LambdaMOO.)
 
 Chances are if you landed here you already know all this, but I have a blurb here
 [here](doc/lambda-background.md) briefly summarizing more about LambdaMOO and why it's interesting.
