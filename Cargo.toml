@@ -6,7 +6,8 @@ members = [
   "crates/kernel",
   "crates/rpc-common",
   "crates/daemon",
-  "crates/host",
+  "crates/telnet-host",
+  "crates/web-host",
   "crates/server",
   "crates/regexpr-binding",
 ]
@@ -31,6 +32,7 @@ tower-http = { version = "0.4.3", features = ["add-extension", "auth", "compress
 axum = { version = "0.6.19", features = ["ws", "headers"] }
 serde_json = "1.0.104"
 serde = { version = "1.0.188", features = ["derive"] }
+serde_derive = "1.0.188"
 
 ## Asynchronous transaction processing & networking
 tokio = { version = "1.29.1", features = ["full"] }

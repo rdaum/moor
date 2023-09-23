@@ -1,5 +1,5 @@
 [package]
-name = "moor-host"
+name = "moor-telnet-host"
 version = "0.1.0"
 edition.workspace = true
 repository.workspace = true
@@ -39,6 +39,5 @@ metrics-macros.workspace = true
 ## ZMQ
 tmq.workspace = true
 uuid.workspace = true
-dashmap.workspace = true
 itertools.workspace = true
 

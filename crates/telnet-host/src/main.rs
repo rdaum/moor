@@ -13,10 +13,10 @@ struct Args {
     #[arg(
         long,
         value_name = "telnet-address",
-        help = "Telnet server listen address, if any",
+        help = "Telnet server listen address",
         default_value = "0.0.0.0:8080"
     )]
-    telnet_address: Option<String>,
+    telnet_address: String,
 
     #[arg(
         long,
@@ -55,7 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut stop_signal =
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
-    let telnet_sockaddr = args.telnet_address.unwrap().parse::<SocketAddr>().unwrap();
+    let telnet_sockaddr = args.telnet_address.parse::<SocketAddr>().unwrap();
     let listen_loop = telnet::telnet_listen_loop(
         telnet_sockaddr,
         args.rpc_server.as_str(),

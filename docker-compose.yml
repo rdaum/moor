@@ -9,8 +9,8 @@
 # This composition is not intended for production use, but for development and testing, but could be used as a template
 # production once we're in a better place.
 
-# After this is running, a MUD client or telnet client can connect to port 8888 on localhost to interact with the
-# system. (e.g. telnet localhost 8888)
+# After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
+# system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
 
 # Grafana will be available at http://localhost:3000/ password is admin/admin
 # victoriametrics will be available at http://localhost:8428/
@@ -44,9 +44,9 @@ services:
       - "9000:9000"
     networks:
       - moor_net
-  moor-host:
+  moor-telnet-host:
     build: ./
-    container_name: "moor-host"
+    container_name: "moor-telnet-host"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
       - ./.target:/root/target:cached
@@ -55,11 +55,29 @@ services:
       - CARGO_TARGET_DIR=/root/target
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/rpc-common -w crates/host -w crates/values -x 
-      'run -p moor-host -- --telnet-address=0.0.0.0:8888 --rpc-server=tcp://moor-daemon:7899 --narrative-server=tcp://moor-daemon:7898'"
+      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/rpc-common -w crates/telnet-host -w crates/values -x 
+      'run -p moor-telnet-host -- --telnet-address=0.0.0.0:8888 --rpc-server=tcp://moor-daemon:7899 --narrative-server=tcp://moor-daemon:7898'"
     ports:
       # Telnet listener
       - "8888:8888"
+    networks:
+      - moor_net
+  moor-web-host:
+    build: ./
+    container_name: "moor-web-host"
+    volumes:
+      - ./.cargo/registry:/usr/local/cargo/registry:cached
+      - ./.target:/root/target:cached
+      - ./:/moor:cached
+    environment:
+      - CARGO_TARGET_DIR=/root/target
+    working_dir: /moor
+    command: >
+      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/rpc-common -w crates/web-host -w crates/values -x 
+      'run -p moor-web-host -- --listen-address=0.0.0.0:8080 --rpc-server=tcp://moor-daemon:7899 --narrative-server=tcp://moor-daemon:7898'"
+    ports:
+      # HTTP listener
+      - "8080:8080"
     networks:
       - moor_net
   vmagent:

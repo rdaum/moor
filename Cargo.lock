@@ -1492,37 +1492,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-host"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bincode",
- "clap",
- "clap_derive",
- "dashmap",
- "futures",
- "futures-util",
- "itertools",
- "metrics",
- "metrics-exporter-prometheus",
- "metrics-macros",
- "metrics-util",
- "moor-kernel",
- "moor-values",
- "rpc-common",
- "strum",
- "tmq",
- "tokio",
- "tokio-util",
- "tower-http",
- "tracing",
- "tracing-chrome",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "moor-kernel"
 version = "0.1.0"
 dependencies = [
@@ -1597,6 +1566,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-telnet-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bincode",
+ "clap",
+ "clap_derive",
+ "futures",
+ "futures-util",
+ "itertools",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "metrics-macros",
+ "metrics-util",
+ "moor-kernel",
+ "moor-values",
+ "rpc-common",
+ "strum",
+ "tmq",
+ "tokio",
+ "tokio-util",
+ "tower-http",
+ "tracing",
+ "tracing-chrome",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "moor-values"
 version = "0.1.0"
 dependencies = [
@@ -1614,6 +1613,39 @@ dependencies = [
  "thiserror",
  "uuid",
  "yoke",
+]
+
+[[package]]
+name = "moor-web-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "bincode",
+ "clap",
+ "clap_derive",
+ "futures",
+ "futures-util",
+ "itertools",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "metrics-macros",
+ "metrics-util",
+ "moor-kernel",
+ "moor-values",
+ "rpc-common",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "strum",
+ "tmq",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-chrome",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
