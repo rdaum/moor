@@ -8,38 +8,17 @@ more modern foundation for future development.
 
 ## Background on LambdaMOO
 
-Chances are if you landed here you already know what this is, but I'll give a blurb:
+LambdaMOO is/was a shared virtual social world system similar to a (or kind of) MUD, but (usually) with a social (not RPG/game)
+focus.
 
-LambdaMOO is/was a shared virtual world system similar to a (or kind of) MUD. It was originally written by Stephen White
-(U Waterloo) and added to and maintained by Pavel Curtis (Xerox PARC) (and others) in C, and released in 1990. 
-
-It was novel in that the bulk of the world's behaviour was implemented in a virtual machine, and the world itself was 
-stored in a shared persistent programmable object database.
-
-The world was structured -- like other MUDs -- with some of the aspects of interactive fiction / adventure games, where
-users could move around, interact with objects, and interact with each other using a text-based interface. The focus
-was primarily social interaction and creativity, and it was/is great.
-
-There were many LambdaMOO worlds, and the most famous was LambdaMOO itself, which was a social experiment in shared
-virtual space. It was a text-based virtual world, where users could create objects, and program them in a prototype-based
-object-oriented language called "MOO". 
-
-LambdaMOO is still in use today, and there are many active worlds running on it, but the community has on the whole lost
-the bulk of its vitality. 
-
-In its essence LambdaMOO is/was a live and interactive "social network" offering a somewhat richer social experience 
-than what the web page-oriented systems of today offer. It's a shame that this line of evolution was mostly abandoned
-in the 90s.
-
-The original LambdaMOO server is still available, but is showing its age, and the codebase is not easy to work with to
-add fundamentally new features like a modern database, or to support new network protocols, and most importantly, newer
-user interface modalities / presentation modes.
+Chances are if you landed here you already know what this is, but I have a blurb here
+[here](doc/lambda-background.md) briefly summarizing what it is and why it's interesting.
 
 ## Project goals / status
 
 The intent here is to start out at least fully compatible with LambdaMOO 1.8.x series and to be able to read and
 execute existing cores, and the 1.0 feature release is targeting this rather ambitious but also rather restricted goal.
-(primarily to maintain focus so I don't get distracted by the shiny things I've wanted to do for the last 30 years.)
+(Primarily to maintain focus so I don't get distracted by the shiny things I've wanted to do for the last 30 years.)
 
 ### LambdaMOO is 30+ years old, why remain compatible?
 
@@ -47,7 +26,7 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
   to compare and test against, I may actually get somewhere.
 * Because the *actual* useful and hard parts of those old MOO-type systems was the "user-space" type pieces (like
   LambdaCore/JHCore etc) and by making a new system run those old cores, there's more win.
-* Because LambdaMOO itself is actually a very *complicated system with a lot of moving parts*; there's a compiler,  
+* Because LambdaMOO itself is actually a very *complicated system with a lot of moving parts*. There's a compiler,  
   an object database, a virtual machine, a decompiler, and a network runtime all rolled into one. This, is, in some
   way... fun.
 
@@ -58,8 +37,8 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 * Have tested against JaysHouseCore, and most of the functionality is there. Bugs are becoming increasingly rare.
 * Hosts websocket, "telnet" (classic line oriented TCP connection), and console connections. MCP clients work, with
   remove editing, etc.
-* Objects are stored in a RocksDB database, and safe and consistent and happy. Architecture allows for cleanly adding
-  different storage backends.
+* Objects are stored in a concurrent transactional object database -- safe, consistent and happy. The architecture 
+  allows for cleanly adding different storage backends for new scenarios.
 * Monitoring/metrics support via Prometheus-compatible export.
 * Separate network-host vs daemon process architecture means that upgrades/restarts can happen in-place without
   dropping live connections.
@@ -74,8 +53,13 @@ To do this, take a look at the local `docker-compose.yml` file, instructions are
 
     `docker compose up`
 
-Once you're familiar with how this setup works, you can get more creative. An actual production deployment can be fairly
-easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`.
+Then connect (with your favourite MUD/MOO client) to `localhost:8888` and follow the login instauctions. Classic 
+clients like `TinyFugue` will work fine, and there are some newer clients like [BlightMud](https://github.com/Blightmud/Blightmud) 
+that should work fine. A partial and probably outdated list of clients can be found here: https://lisdude.com/moo/#clients
+
+Once you're familiar with how the docker setup works, you can get more creative. 
+
+An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`.
 
 ### Missing / Next steps before 1.0
 
@@ -92,9 +76,9 @@ easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`
       because of the 'transactional' nature of I/O in Moor where all verb and I/O operations
       can be retried on transaction commit failure. Haven't decided what to do about this.
     * Actual transaction retry on commit-conflict. (Mainly because without actual users and stress testing I haven't
-      been able to provoke this scenario to test against yet. The hooks are there, just not done)
+      been able to provoke this scenario to test against yet. The hooks are there, just not done.)
 * Improvements needed:
-    * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog slow
+    * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog-slow
       without it
     * Better auth (SSO, OAuth2, etc?). Better crypt/password support.
 
@@ -140,11 +124,17 @@ The following are targeted as eventual goals / additions once 1.0 (fall 2023) is
        today.)
      * and so on
 
+## License.
+
+Currently licensed under the Apache 2.0 license. See LICENSE file for details.
+
 ## Contribute and help!
 
 Contributions are welcome and encouraged.
 
 Right now the best way to contribute is to run the system and report bugs, or to try to run your own LambdaMOO core
-and report bugs. (or to fix bugs and submit PRs!)
+and report bugs. (Or to fix bugs and submit PRs!)
 
-Ryan (ryan.daum@gmail.com)
+## Enjoy.
+
+Ryan (ryan.daum @ gmail.com)
