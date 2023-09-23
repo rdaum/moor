@@ -1,18 +1,15 @@
 # 'moor'; lambdaMOO all over again.
 
-This is a rewrite / reimplementation of the LambdaMOO. It's done in Rust, and is intended to be a modernized version
-of the original LambdaMOO server, with the goal of being able to run existing LambdaMOO worlds, but also to provide a
-more modern foundation for future development of _shared interactive creative, narrative, virtual worlds_*.
+"Moor" is a multi-user, programmable server, coded in Rust, designed to be able to run the original LambdaMOO core as a starting point, with various improvements at the server level to provide a more modern foundation for future development.
+
+LambdaMOO is a MUD, aka a shared, multi-user, text-based virtual world, that first opened to the public in 1990 and is still in operation.  LambdaMOO was and remains unusual in that it is a highly programmable, persistent-world MUD.  In particular, LambdaMOO provides a dynamically programmable environment ("live coding" similar to smalltalk) that supports programming by many users.
+
+Unlike many MUDs, LambdaMOO is not solely focused on role playing game, although its programmability enabled the users to develop an RPG implemented inside LambdaMOO.
+
+Chances are if you landed here you already know all this, but I have a blurb here
+[here](doc/lambda-background.md) briefly summarizing more about LambdaMOO and why it's interesting.
 
 (note: "moor" name is provisional and awful, alternative suggestions accepted)
-
-## Background on LambdaMOO
-
-LambdaMOO is a server for shared virtual social worlds, similar to a (or kind of) MUD, but (usually) with a social 
-(not RPG/game) focus. And with a novel live-coding / multiuser authoring environment.
-
-Chances are if you landed here you already know what this is, but I have a blurb here
-[here](doc/lambda-background.md) briefly summarizing what it is and why it's interesting.
 
 ## Project goals / status
 
