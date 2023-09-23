@@ -45,6 +45,7 @@ impl VM {
             args: args.to_vec(),
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
+            argstr: "".to_string(),
             caller: self.caller(),
         };
         debug!(
@@ -129,6 +130,7 @@ impl VM {
             this: self.top().this,
             player: self.top().player,
             args: args.to_vec(),
+            argstr: "".to_string(),
             caller,
         };
 

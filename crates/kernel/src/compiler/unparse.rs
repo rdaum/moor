@@ -247,7 +247,7 @@ impl Unparse {
             }
             Expr::Scatter(vars, expr) => {
                 let mut buffer = String::new();
-                buffer.push('(');
+                buffer.push('{');
                 for var in vars {
                     match var.kind {
                         ast::ScatterKind::Required => {}
@@ -260,13 +260,14 @@ impl Unparse {
                     }
                     buffer.push_str(self.names.name_of(&var.id)?);
                     if let Some(expr) = &var.expr {
+                        buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
                     }
                     buffer.push_str(", ");
                 }
                 buffer.pop();
                 buffer.pop();
-                buffer.push_str(") = ");
+                buffer.push_str("} = ");
                 buffer.push_str(self.unparse_expr(expr)?.as_str());
                 Ok(buffer)
             }
@@ -595,6 +596,8 @@ mod tests {
     #[test_case(r#"return $options;"#; "sysprop")]
     #[test_case(r#"options = "test";
     return #0.(options);"#; "sysobj prop expr")]
+    #[test_case(r#"{a, b, ?c, @d} = args;"#; "scatter assign")]
+    #[test_case(r#"{?a = 5} = args;"#; "scatter assign optional expression argument")]
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();

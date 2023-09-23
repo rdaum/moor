@@ -275,7 +275,7 @@ fn substitute(
         let (start, end) = (subs[number].0, subs[number].1);
 
         // Now validate the range in the source string, and raise an E_INVARG if it's invalid.
-        if start < 0 || start > end || end >= (source.len() as isize) {
+        if start < 0 || start > end || end > (source.len() as isize) {
             return Err(E_INVARG);
         }
 
@@ -374,6 +374,16 @@ mod tests {
         );
         let result = substitute("I thank you for your %1 here in %2.", &subs, source).unwrap();
         assert_eq!(result, "I thank you for your Welcome here in LambdaMOO.");
+    }
+
+    #[test]
+    fn test_substitute_regression() {
+        // substitute("%1", match("help @options", "^help %('%|[^ <][^ ]*%)$"))
+        let pattern = Pattern::new("^help %('%|[^ <][^ ]*%)$", false).unwrap();
+        let source = "help @options";
+        let (_, subs) = pattern.match_pattern(source).unwrap();
+        let result = substitute("%1", &subs, source).unwrap();
+        assert_eq!(result, "@options");
     }
 
     #[test]

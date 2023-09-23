@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use futures_util::SinkExt;
 use itertools::Itertools;
 use metrics_macros::increment_counter;
+use moor_kernel::tasks::command_parse::parse_into_words;
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
 use tokio::sync::{Mutex, RwLock};
@@ -120,6 +121,21 @@ impl RpcServer {
                 make_response(
                     self.clone()
                         .perform_command(client_id, connection, command)
+                        .await,
+                )
+            }
+            RpcRequest::OutOfBand(command) => {
+                increment_counter!("rpc_server.out_of_band_received");
+                let connection = {
+                    let client_connections = self.client_connections.read().await;
+                    let Some(connection) = client_connections.get(&client_id) else {
+                        return make_response(Err(RpcError::NoConnection));
+                    };
+                    *connection
+                };
+                make_response(
+                    self.clone()
+                        .perform_out_of_band(client_id, connection, command)
                         .await,
                 )
             }
@@ -572,6 +588,41 @@ impl RpcServer {
                 Err(RpcError::InternalError(e.to_string()))
             }
         }
+    }
+
+    /// Call $do_out_of_band(command)
+    async fn perform_out_of_band(
+        self: Arc<Self>,
+        client_id: Uuid,
+        connection: Objid,
+        command: String,
+    ) -> Result<RpcResponse, RpcError> {
+        let Ok(session) = self.clone().new_session(client_id, connection).await else {
+            increment_counter!("rpc_server.perform_command.create_session_failed");
+            return Err(RpcError::CreateSessionFailed);
+        };
+        let command_components = parse_into_words(command.as_str());
+        let task_id = match self
+            .clone()
+            .scheduler
+            .submit_out_of_band_task(connection, command_components, command, session)
+            .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                increment_counter!("rpc_server.perform_out_of_band.do_out_of_band_failed");
+                error!(error = ?e, "Error submitting command task");
+                return Err(RpcError::InternalError(e.to_string()));
+            }
+        };
+
+        increment_counter!("rpc_server.perform_out_of_band.submitted");
+
+        // Just return immediately with success, we do not wait for the task to complete, we'll
+        // let the session run to completion on its own and output back to the client.
+        // Maybe we should be returning a value from this for the future, but the way clients are
+        // written right now, there's little point.
+        Ok(RpcResponse::CommandComplete)
     }
 
     async fn eval(

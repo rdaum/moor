@@ -152,7 +152,10 @@ impl Activation {
             a.set_gvar(GlobalName::iobj, v_objid(command.iobj));
             a.set_gvar(GlobalName::iobjstr, v_string(command.iobjstr.clone()));
         } else {
-            a.set_gvar(GlobalName::argstr, v_str(""));
+            a.set_gvar(
+                GlobalName::argstr,
+                v_string(verb_call_request.call.argstr.clone()),
+            );
             a.set_gvar(GlobalName::dobj, v_objid(NOTHING));
             a.set_gvar(GlobalName::dobjstr, v_str(""));
             a.set_gvar(GlobalName::prepstr, v_str(""));

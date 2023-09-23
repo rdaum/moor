@@ -10,6 +10,7 @@ pub enum RpcRequest {
     RequestSysProp(String, String),
     LoginCommand(Vec<String>),
     Command(String),
+    OutOfBand(String),
     Eval(String),
     Detach,
 }

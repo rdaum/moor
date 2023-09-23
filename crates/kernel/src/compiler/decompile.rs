@@ -94,11 +94,15 @@ impl Decompile {
         Err(DecompileError::UnexpectedProgramEnd)
     }
 
-    fn decompile_statements_up_to(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
+    fn decompile_statements_sub_offset(
+        &mut self,
+        label: &Label,
+        offset: usize,
+    ) -> Result<Vec<Stmt>, DecompileError> {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.statements.len();
 
-        while self.position + 1 < jump_label.position.0 {
+        while self.position + offset < jump_label.position.0 {
             self.decompile()?;
         }
         if self.statements.len() > old_len {
@@ -108,20 +112,14 @@ impl Decompile {
         }
     }
 
-    /// Scan forward until we hit the label's position, decompiling as we go and returning the
-    /// new statements produced.
-    fn decompile_statements_until(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
-        let jump_label = self.find_jump(label)?; // check that the label exists
-        let old_len = self.statements.len();
+    // Decompile statements up to the given label, but not including it.
+    fn decompile_statements_up_to(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
+        self.decompile_statements_sub_offset(label, 1)
+    }
 
-        while self.position < jump_label.position.0 {
-            self.decompile()?;
-        }
-        if self.statements.len() > old_len {
-            Ok(self.statements.split_off(old_len))
-        } else {
-            Ok(vec![])
-        }
+    /// Decompile statements up to the given label, including it.
+    fn decompile_statements_until(&mut self, label: &Label) -> Result<Vec<Stmt>, DecompileError> {
+        self.decompile_statements_sub_offset(label, 0)
     }
 
     fn decompile_until_branch_end(
@@ -520,10 +518,23 @@ impl Decompile {
                 nreq: _,
                 labels,
                 rest: _,
-                done: _,
+                done,
             } => {
                 let mut scatter_items = vec![];
-                for scatter_label in labels.iter() {
+                // We need to go through and collect the jump labels for the expressions in
+                // optional scatters. We will use this later to compute the end of optional
+                // assignment expressions in the scatter.
+                let mut jump_labels = vec![];
+                for (label_num, scatter_label) in labels.iter().enumerate() {
+                    match scatter_label {
+                        ScatterLabel::Optional(_, Some(label)) => {
+                            jump_labels.push((label_num, label));
+                        }
+                        _ => {}
+                    }
+                }
+
+                for (label_num, scatter_label) in labels.iter().enumerate() {
                     let scatter_item = match scatter_label {
                         ScatterLabel::Required(id) => ScatterItem {
                             kind: ScatterKind::Required,
@@ -536,13 +547,32 @@ impl Decompile {
                             expr: None,
                         },
                         ScatterLabel::Optional(id, assign_id) => {
-                            let opt_assign = if let Some(_label_b) = assign_id {
-                                let Expr::Assign { left: _, right } = self.pop_expr()? else {
+                            let opt_assign = if let Some(_) = assign_id {
+                                // The labels inside each optional scatters are jumps to the _start_ of the
+                                // expression inside it, so to know the end of the expression we will look at the
+                                // next label after our own (if any), or done.
+                                let mut next_label = None;
+                                for jumps in &jump_labels {
+                                    if jumps.0 <= label_num {
+                                        continue;
+                                    }
+                                    next_label = Some(jumps.1.clone());
+                                }
+                                let next_label = next_label.unwrap_or(done);
+                                let _ = self.decompile_statements_up_to(&next_label)?;
+                                let assign_expr = self.pop_expr()?;
+                                let Expr::Assign { left: _, right } = assign_expr else {
                                     return Err(MalformedProgram(
                                         "expected assign for optional scatter assignment"
                                             .to_string(),
                                     ));
                                 };
+                                // We need to eat the 'pop' after us that is present in the program
+                                // stream.
+                                // It's not clear to me why we have to do this vs the way LambdaMOO
+                                // is decompiling this, but this is what works, otherwise we get
+                                // a hanging pop.
+                                let _ = self.next()?;
                                 Some(*right)
                             } else {
                                 None
@@ -858,6 +888,8 @@ mod tests {
     #[test_case("try return x; except (E_VARNF) endtry; if (x) return 1; endif"; "if_after_try")]
     #[test_case("2 ? 0 | caller_perms();"; "regression_builtin_after_ternary")]
     #[test_case(r#"options="test"; return #0.(options);"#; "sysprop expr")]
+    #[test_case(r#"{?package = 5} = args;"#; "scatter optional assignment")]
+    #[test_case(r#"{?package = $nothing} = args;"#; "scatter optional assignment from property")]
     fn test_case_decompile_matches(prg: &str) {
         let (parse, decompiled) = parse_decompile(prg);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);

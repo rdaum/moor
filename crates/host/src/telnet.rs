@@ -25,6 +25,9 @@ use crate::rpc;
 use crate::rpc::make_rpc_call;
 use crate::rpc::narrative_recv;
 
+/// Out of band messages are prefixed with this string, e.g. for MCP clients.
+const OUT_OF_BAND_PREFIX: &str = "#$#";
+
 pub(crate) struct TelnetConnection {
     client_id: Uuid,
     player: Objid,
@@ -92,8 +95,15 @@ impl TelnetConnection {
                         return Ok(());
                     };
                     let line = line.unwrap();
-                    let (response, rcp_request_sock_rep) = make_rpc_call(self.client_id, rcp_request_sock,
-                        RpcRequest::Command(line)).await?;
+
+                    // If the line begins with the out of band prefix, then send it that way,
+                    // instead. And really just fire and forget.
+                    let (response, rcp_request_sock_rep) = if line.starts_with(OUT_OF_BAND_PREFIX) {
+                        make_rpc_call(self.client_id, rcp_request_sock, RpcRequest::OutOfBand(line)).await?
+                    } else {
+                        make_rpc_call(self.client_id, rcp_request_sock, RpcRequest::Command(line)).await?
+                    };
+
                     rcp_request_sock = rcp_request_sock_rep;
                     match response {
                         RpcResult::Success(RpcResponse::CommandComplete) => {

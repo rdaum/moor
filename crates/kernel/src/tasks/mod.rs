@@ -19,6 +19,7 @@ pub struct VerbCall {
     pub this: Objid,
     pub player: Objid,
     pub args: Vec<Var>,
+    pub argstr: String,
     pub caller: Objid,
 }
 
@@ -78,6 +79,7 @@ pub mod vm_test_utils {
                     this: SYSTEM_OBJECT,
                     player: SYSTEM_OBJECT,
                     args,
+                    argstr: "".to_string(),
                     caller: SYSTEM_OBJECT,
                 },
             )

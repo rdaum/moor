@@ -39,6 +39,7 @@ pub(crate) enum TaskControlMsg {
         vloc: Objid,
         verb: String,
         args: Vec<Var>,
+        argstr: String,
     },
     /// The scheduler is telling the task to run a forked task.
     StartFork {
@@ -355,6 +356,7 @@ impl Task {
                     this: vloc,
                     player,
                     args: command.args.clone(),
+                    argstr: command.argstr.clone(),
                     caller: player,
                 };
                 self.vm_host
@@ -367,6 +369,7 @@ impl Task {
                 vloc,
                 verb,
                 args,
+                argstr,
             } => {
                 increment_counter!("task.start_verb");
                 // We should never be asked to start a command while we're already running one.
@@ -379,6 +382,7 @@ impl Task {
                     this: vloc,
                     player,
                     args,
+                    argstr,
                     caller: NOTHING,
                 };
                 // Find the callable verb ...

@@ -18,7 +18,8 @@ use moor_values::model::world_state::{WorldState, WorldStateSource};
 use moor_values::model::WorldStateError;
 use moor_values::var::error::Error::{E_INVARG, E_PERM};
 use moor_values::var::objid::Objid;
-use moor_values::var::{v_err, v_int, v_none, Var};
+use moor_values::var::{v_err, v_int, v_none, v_string, Var};
+use moor_values::SYSTEM_OBJECT;
 
 use crate::compiler::codegen::compile;
 use crate::db::match_env::DBMatchEnvironment;
@@ -375,6 +376,55 @@ impl Scheduler {
                 vloc,
                 verb,
                 args,
+                argstr: "".to_string(),
+            })?;
+
+        Ok(task_id)
+    }
+
+    #[instrument(skip(self, session))]
+    pub async fn submit_out_of_band_task(
+        &self,
+        player: Objid,
+        command: Vec<String>,
+        argstr: String,
+        session: Arc<dyn Session>,
+    ) -> Result<TaskId, anyhow::Error> {
+        increment_counter!("scheduler.submit_out_of_band_task");
+
+        let mut inner = self.inner.write().await;
+
+        let state_source = inner.state_source.clone();
+        let task_id = inner
+            .new_task(
+                player,
+                state_source,
+                session,
+                None,
+                self.clone(),
+                player,
+                false,
+            )
+            .await?;
+
+        let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
+            return Err(anyhow!("Could not find task with id {:?}", task_id));
+        };
+
+        let args = command
+            .into_iter()
+            .map(|s| v_string(s))
+            .collect::<Vec<Var>>();
+
+        // This gets enqueued as the first thing the task sees when it is started.
+        task_ref
+            .task_control_sender
+            .send(TaskControlMsg::StartVerb {
+                player,
+                vloc: SYSTEM_OBJECT,
+                verb: "do_out_of_band_command".to_string(),
+                args,
+                argstr,
             })?;
 
         Ok(task_id)
