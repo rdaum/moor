@@ -1,14 +1,14 @@
 ## What is LambdaMOO?
 
 LambdaMOO is a shared virtual world system similar to a (or kind of) MUD. It was originally written by Stephen White
-(U Waterloo) and added to and maintained by Pavel Curtis (Xerox PARC) (and others) in C, and released in 1990, and
+(then at U Waterloo) and added to and maintained by Pavel Curtis (Xerox PARC) (and others) in C, and released in 1990, and
 was mainly popular through the early 90s (before the web took off).
 
 It is novel in that the bulk of the world's behaviour is implemented in a virtual machine, and the world itself is
 stored in a shared persistent programmable object database.
 
 The world is structured -- like other MUDs -- with some of the aspects of interactive fiction / adventure games, where
-users can around, interact with objects, and interact with each other using a text-based interface. The focus
+users can move around, interact with objects, and interact with each other using a text-based interface. The focus
 was primarily social interaction and creativity, and it was/is great.
 
 There were many LambdaMOO worlds, and the most famous in the 90s was LambdaMOO itself, which was a social experiment in 
