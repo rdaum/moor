@@ -9,7 +9,7 @@ more modern foundation for future development of _shared interactive creative, n
 ## Background on LambdaMOO
 
 LambdaMOO is a server for shared virtual social worlds, similar to a (or kind of) MUD, but (usually) with a social 
-(not RPG/game) focus.
+(not RPG/game) focus. And with a novel live-coding / multiuser authoring environment.
 
 Chances are if you landed here you already know what this is, but I have a blurb here
 [here](doc/lambda-background.md) briefly summarizing what it is and why it's interesting.
