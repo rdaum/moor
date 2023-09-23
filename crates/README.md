@@ -1,9 +1,6 @@
 Directory layout for `crates/`
 
-  * `values` - crate that implements the core MOO discriminated union (`Var`) value type,
-    plus all associated types and traits and interfaces used by other crates.
-  * `kernel` - the actual implementation of the system: database, compiler, virtual machine,
-    task scheduler, implementations of all builtin functions, etc.
+Binaries:
   * `daemon` - the actual server runtime. Brings up the database, VM, task scheduler, etc, and provides an interface
      to them over a 0MQ based RPC interface, exposing any external network protocol to the outside world. 
      Instead, that functionality is provided by...
@@ -14,8 +11,13 @@ Directory layout for `crates/`
      as well as various web APIs.
   * `console-host` - console host which connects as a user to the `daemon` and provides a readline-type interface to the
      system.
-  * `rpc-common` - crate providing types used by both `daemon` and `host`, for the RPC interface
-  * `regexpr-binding` - crate providing bindings to the old regular expressions library used by
-    the LambdaMOO server, for compatibility with existing cores. This is a temporary measure until
-    this can be reworked with use of the `regex` crate and some compatibility translation
- 
+
+Libraries:
+  * `values` - crate that implements the core MOO discriminated union (`Var`) value type,
+     plus all associated types and traits.
+  * `kernel` - the actual implementation of the system: database, compiler, virtual machine,
+     task scheduler, implementations of all builtin functions, etc.
+  * `rpc-common` - provides types & functions used by both `daemon` and each host binary, for the RPC interface
+  * `regexpr-binding` - provides bindings to the old regular expressions library used by
+     the LambdaMOO server, for compatibility with existing cores. This is a temporary measure until
+     this can be reworked with use of the `regex` crate and some compatibility translation
