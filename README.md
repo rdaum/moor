@@ -2,14 +2,14 @@
 
 This is a rewrite / reimplementation of the LambdaMOO. It's done in Rust, and is intended to be a modernized version
 of the original LambdaMOO server, with the goal of being able to run existing LambdaMOO worlds, but also to provide a
-more modern foundation for future development.
+more modern foundation for future development of _shared interactive creative, narrative, virtual worlds_*.
 
-(note: name is provisional and awful, suggestions accepted)
+(note: "moor" name is provisional and awful, alternative suggestions accepted)
 
 ## Background on LambdaMOO
 
-LambdaMOO is/was a shared virtual social world system similar to a (or kind of) MUD, but (usually) with a social (not RPG/game)
-focus.
+LambdaMOO is a server for shared virtual social worlds, similar to a (or kind of) MUD, but (usually) with a social 
+(not RPG/game) focus.
 
 Chances are if you landed here you already know what this is, but I have a blurb here
 [here](doc/lambda-background.md) briefly summarizing what it is and why it's interesting.
