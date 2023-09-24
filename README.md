@@ -80,10 +80,7 @@ An actual production deployment can be fairly easily derived from the `docker-co
 * Major missing features:
     * Quota support.
     * Background tasks resumption after restart (from DB and from textdump load.)
-    * Dump to a backup `textdump` format.
-    * `$do_command`; LambdaMOO has the ability to attempt execution of a command through
-      user code on `#0:do_command`; if that fails, it then dispatches through the regular
-      built-in command handler. I need to get around to this.
+    * Dump to a backup `textdump` format (or some stable backup format for between-version migrations.)
     * `read`; This is used for prompts, password changes, editor, etc. It's slightly tricky
       because of the 'transactional' nature of I/O in Moor where all verb and I/O operations
       can be retried on transaction commit failure. Haven't decided what to do about this.

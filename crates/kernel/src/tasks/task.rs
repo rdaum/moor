@@ -386,10 +386,16 @@ impl Task {
                     caller: NOTHING,
                 };
                 // Find the callable verb ...
-                let verb_info = self
+                let Ok(verb_info) = self
                     .world_state
                     .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
-                    .await?;
+                    .await
+                else {
+                    return Ok(Some(SchedulerControlMsg::TaskVerbNotFound(
+                        verb_call.this,
+                        verb_call.verb_name,
+                    )));
+                };
 
                 self.vm_host
                     .start_call_method_verb(self.task_id, self.perms, verb_info, verb_call)

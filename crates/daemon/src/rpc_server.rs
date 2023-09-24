@@ -1,13 +1,13 @@
-use std::path::PathBuf;
-/// The core of the server logic for the RPC daemon
-use std::sync::Arc;
-use std::time::{Instant, SystemTime};
-
 use anyhow::{bail, Context, Error};
 use futures_util::SinkExt;
 use itertools::Itertools;
 use metrics_macros::increment_counter;
 use moor_kernel::tasks::command_parse::parse_into_words;
+use moor_values::var::Var;
+use std::path::PathBuf;
+/// The core of the server logic for the RPC daemon
+use std::sync::Arc;
+use std::time::{Instant, SystemTime};
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
 use tokio::sync::Mutex;
@@ -19,11 +19,12 @@ use crate::make_response;
 use crate::rpc_session::RpcSession;
 use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_kernel::tasks::sessions::Session;
+use moor_kernel::tasks::TaskId;
 use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::NarrativeEvent;
 use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
-use moor_values::var::{v_objid, v_string};
+use moor_values::var::{v_bool, v_objid, v_str, v_string};
 use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
@@ -349,7 +350,8 @@ impl RpcServer {
                 connection,
                 SYSTEM_OBJECT,
                 "do_login_command".to_string(),
-                args.into_iter().map(v_string).collect(),
+                args.iter().map(|s| v_string(s.clone())).collect(),
+                args.join(" "),
                 SYSTEM_OBJECT,
                 session,
             )
@@ -455,6 +457,7 @@ impl RpcServer {
                 SYSTEM_OBJECT,
                 connected_verb,
                 vec![v_objid(player)],
+                "".to_string(),
                 SYSTEM_OBJECT,
                 session,
             )
@@ -481,11 +484,40 @@ impl RpcServer {
         {
             warn!("Unable to update client connection activity: {}", e);
         };
-
         increment_counter!("rpc_server.perform_command");
 
-        // TODO: try to submit to do_command first and only parse_command after that fails.
-        debug!(command, ?client_id, ?connection, "Submitting command task");
+        // Try to submit to do_command as a verb call first and only parse_command after that fails.
+        increment_counter!("rpc_server.submit_sys_do_command_task");
+        let arguments = parse_into_words(command.as_str());
+        if let Ok(task_id) = self
+            .clone()
+            .scheduler
+            .submit_verb_task(
+                connection,
+                SYSTEM_OBJECT,
+                "do_command".to_string(),
+                arguments.iter().map(|s| v_str(s)).collect(),
+                command.clone(),
+                SYSTEM_OBJECT,
+                session.clone(),
+            )
+            .await
+        {
+            if let Ok(value) = self.clone().watch_command_task(task_id).await {
+                if value != v_bool(false) {
+                    return Ok(RpcResponse::CommandComplete);
+                }
+            }
+        }
+
+        // That having failed, we do the classic internal parse command cycle instead...
+        increment_counter!("rpc_server.submit_command_task");
+        debug!(
+            command,
+            ?client_id,
+            ?connection,
+            "Invoking submit_command_task"
+        );
         let task_id = match self
             .clone()
             .scheduler
@@ -508,6 +540,12 @@ impl RpcServer {
             }
         };
 
+        self.watch_command_task(task_id).await?;
+
+        Ok(RpcResponse::CommandComplete)
+    }
+
+    async fn watch_command_task(self: Arc<Self>, task_id: TaskId) -> Result<Var, RpcError> {
         debug!(task_id, "Subscribed to command task results");
         let receiver = match self.clone().scheduler.subscribe_to_task(task_id).await {
             Ok(r) => r,
@@ -519,33 +557,21 @@ impl RpcServer {
         };
 
         match receiver.await {
-            Ok(TaskWaiterResult::Success(_)) => {
-                increment_counter!("rpc_server.perform_command.success");
-                Ok(RpcResponse::CommandComplete)
-            }
+            Ok(TaskWaiterResult::Success(value)) => Ok(value),
             Ok(TaskWaiterResult::Error(SchedulerError::PermissionDenied)) => {
-                increment_counter!("rpc_server.perform_command.permission_denied");
                 Err(RpcError::PermissionDenied)
             }
             Ok(TaskWaiterResult::Error(SchedulerError::CouldNotParseCommand(_))) => {
-                increment_counter!("rpc_server.perform_command.could_not_parse_command");
                 Err(RpcError::CouldNotParseCommand)
             }
             Ok(TaskWaiterResult::Error(SchedulerError::NoCommandMatch(s, _))) => {
-                increment_counter!("rpc_server.perform_command.no_command_match");
                 Err(RpcError::NoCommandMatch(s))
             }
             Ok(TaskWaiterResult::Error(SchedulerError::DatabaseError(e))) => {
-                increment_counter!("rpc_server.perform_command.database_error");
                 Err(RpcError::DatabaseError(e))
             }
-            Ok(TaskWaiterResult::Error(e)) => {
-                warn!(error = ?e, "Error processing command");
-                increment_counter!("rpc_server.perform_command.error");
-                Err(RpcError::InternalError(e.to_string()))
-            }
+            Ok(TaskWaiterResult::Error(e)) => Err(RpcError::InternalError(e.to_string())),
             Err(e) => {
-                warn!(error = ?e, "Error processing command");
                 increment_counter!("rpc_server.perform_command.error");
                 Err(RpcError::InternalError(e.to_string()))
             }

@@ -79,6 +79,7 @@ pub enum AbortLimitReason {
 /// The messages that can be sent from tasks (or VM) to the scheduler.
 pub enum SchedulerControlMsg {
     TaskSuccess(Var),
+    TaskVerbNotFound(Objid, String),
     TaskException(UncaughtException),
     TaskAbortError(Error),
     TaskRequestFork(ForkRequest, oneshot::Sender<TaskId>),
@@ -288,16 +289,10 @@ impl Scheduler {
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_command_task");
 
-        // TODO: LambdaMOO actually dispatches to #0:do_command *first* to try to run the
-        //  command and only then uses its built-in command matcher if that fails.
-        //  Unfortunately we have an asynchronous workflow here, so while we could submit to the
-        //  #0:do_command process, we'd have no way of knowing if it failed without manually
-        //  polling on it.
-        //  So we're likely going to have to push the actual command parsing portion down a level
-        //  so it happens inside the task's thread instead. Will have to mull it over.
-
-        // Parse the command, and then submit. Note that there are actually two separate
-        // transactions here, one which parses the command and one which executes it.
+        // Parse the command, and then submit.
+        // TODO: Note that there are actually two separate transactions here, one which parses the
+        //   command and one which executes it. This is perhaps not ideal and the parse_command
+        //   portion could be moved into the task itself.
         let (vloc, vi, command) = self.parse_command(player, command).await?;
         let mut inner = self.inner.write().await;
         let state_source = inner.state_source.clone();
@@ -337,6 +332,8 @@ impl Scheduler {
     }
 
     /// Submit a verb task to the scheduler for execution.
+    /// (This path is really only used for the invocations from the serving processes like login,
+    /// user_connected, or the do_command invocation which precedes an internal parser attempt.)
     #[instrument(skip(self, session))]
     pub async fn submit_verb_task(
         &self,
@@ -344,6 +341,7 @@ impl Scheduler {
         vloc: Objid,
         verb: String,
         args: Vec<Var>,
+        argstr: String,
         perms: Objid,
         session: Arc<dyn Session>,
     ) -> Result<TaskId, anyhow::Error> {
@@ -352,6 +350,7 @@ impl Scheduler {
         let mut inner = self.inner.write().await;
 
         let state_source = inner.state_source.clone();
+
         let task_id = inner
             .new_task(
                 player,
@@ -376,7 +375,7 @@ impl Scheduler {
                 vloc,
                 verb,
                 args,
-                argstr: "".to_string(),
+                argstr,
             })?;
 
         Ok(task_id)
@@ -644,6 +643,19 @@ impl Inner {
 
             match task.scheduler_control_receiver.try_recv() {
                 Ok(msg) => match msg {
+                    SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
+                        increment_counter!("scheduler.verb_not_found");
+
+                        // I'd make this 'warn' but `do_command` gets invoked for every command and
+                        // many cores don't have it at all. So it would just be way too spammy.
+                        debug!(this = ?this, verb, task = task.task_id, "Verb not found, task cancelled");
+
+                        to_notify.push((
+                            *task_id,
+                            TaskWaiterResult::Error(SchedulerError::TaskAbortedError),
+                        ));
+                        to_remove.push(*task_id);
+                    }
                     SchedulerControlMsg::TaskAbortCancelled => {
                         increment_counter!("scheduler.aborted_cancelled");
 
