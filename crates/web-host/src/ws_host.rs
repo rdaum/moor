@@ -7,6 +7,7 @@ use axum::TypedHeader;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use metrics_macros::increment_counter;
+use moor_values::model::CommandError;
 use rpc_common::pubsub_client::broadcast_recv;
 use rpc_common::pubsub_client::narrative_recv;
 use rpc_common::rpc_client::RpcSendClient;
@@ -22,6 +23,7 @@ use tokio::select;
 use tracing::trace;
 use tracing::{debug, error, info};
 use uuid::Uuid;
+
 #[derive(Clone)]
 pub struct WebSocketHost {
     zmq_context: tmq::Context,
@@ -182,13 +184,16 @@ impl WebSocketHost {
                         RpcResult::Success(RpcResponse::CommandComplete) => {
                             // Nothing to do
                         }
-                        RpcResult::Failure(RpcError::CouldNotParseCommand) => {
+                        RpcResult::Failure(RpcError::CommandError(CommandError::CouldNotParseCommand)) => {
                             write_line(&mut ws_sender, "I don't understand that.").await;
                         }
-                        RpcResult::Failure(RpcError::NoCommandMatch(_)) => {
+                        RpcResult::Failure(RpcError::CommandError(CommandError::NoObjectMatch)) => {
                             write_line(&mut ws_sender, "I don't see that here.").await;
                         }
-                        RpcResult::Failure(RpcError::PermissionDenied) => {
+                        RpcResult::Failure(RpcError::CommandError(CommandError::NoCommandMatch)) => {
+                            write_line(&mut ws_sender, "I don't know how to do that.").await;
+                        }
+                        RpcResult::Failure(RpcError::CommandError(CommandError::PermissionDenied)) => {
                            write_line(&mut ws_sender, "You can't do that.").await;
                         }
                         RpcResult::Failure(e) => {

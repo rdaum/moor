@@ -487,6 +487,7 @@ impl RpcServer {
         increment_counter!("rpc_server.perform_command");
 
         // Try to submit to do_command as a verb call first and only parse_command after that fails.
+        // TODO: fold this functionality into Task.
         increment_counter!("rpc_server.submit_sys_do_command_task");
         let arguments = parse_into_words(command.as_str());
         if let Ok(task_id) = self
@@ -525,13 +526,9 @@ impl RpcServer {
             .await
         {
             Ok(t) => t,
-            Err(SchedulerError::CouldNotParseCommand(_)) => {
+            Err(SchedulerError::CommandExecutionError(e)) => {
                 increment_counter!("rpc_server.perform_command.could_not_parse_command");
-                return Err(RpcError::CouldNotParseCommand);
-            }
-            Err(SchedulerError::NoCommandMatch(s, _)) => {
-                increment_counter!("rpc_server.perform_command.no_command_match");
-                return Err(RpcError::NoCommandMatch(s));
+                return Err(RpcError::CommandError(e));
             }
             Err(e) => {
                 increment_counter!("rpc_server.perform_command.submit_command_task_failed");
@@ -558,17 +555,8 @@ impl RpcServer {
 
         match receiver.await {
             Ok(TaskWaiterResult::Success(value)) => Ok(value),
-            Ok(TaskWaiterResult::Error(SchedulerError::PermissionDenied)) => {
-                Err(RpcError::PermissionDenied)
-            }
-            Ok(TaskWaiterResult::Error(SchedulerError::CouldNotParseCommand(_))) => {
-                Err(RpcError::CouldNotParseCommand)
-            }
-            Ok(TaskWaiterResult::Error(SchedulerError::NoCommandMatch(s, _))) => {
-                Err(RpcError::NoCommandMatch(s))
-            }
-            Ok(TaskWaiterResult::Error(SchedulerError::DatabaseError(e))) => {
-                Err(RpcError::DatabaseError(e))
+            Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
+                Err(RpcError::CommandError(e))
             }
             Ok(TaskWaiterResult::Error(e)) => Err(RpcError::InternalError(e.to_string())),
             Err(e) => {
@@ -652,9 +640,9 @@ impl RpcServer {
 
         match receiver.await {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
-            Ok(TaskWaiterResult::Error(SchedulerError::DatabaseError(e))) => {
+            Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 increment_counter!("rpc_server.eval.database_error");
-                Err(RpcError::DatabaseError(e))
+                Err(RpcError::CommandError(e))
             }
             Ok(TaskWaiterResult::Error(e)) => {
                 error!(error = ?e, "Error processing eval");

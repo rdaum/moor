@@ -10,8 +10,8 @@ use moor_values::var::error::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE,
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
 
-use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::sessions::Session;
+use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};

@@ -18,7 +18,7 @@ use crate::compiler::builtins::{
     offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS,
 };
 use crate::compiler::codegen::compile;
-use crate::tasks::scheduler::SchedulerControlMsg;
+use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::builtin::BfRet::{Error, Ret, VmInstr};
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};

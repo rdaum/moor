@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use bincode::{Decode, Encode};
 use metrics_macros::{gauge, increment_counter};
 use thiserror::Error;
@@ -12,23 +12,23 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
-use moor_values::model::permissions::Perms;
-use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::world_state::{WorldState, WorldStateSource};
-use moor_values::model::WorldStateError;
+use moor_values::model::CommandError;
 use moor_values::var::error::Error::{E_INVARG, E_PERM};
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_err, v_int, v_none, v_string, Var};
 use moor_values::SYSTEM_OBJECT;
+use SchedulerError::{
+    CommandExecutionError, CouldNotStartTask, TaskAbortedCancelled, TaskAbortedError,
+    TaskAbortedException, TaskAbortedLimit,
+};
 
 use crate::compiler::codegen::compile;
-use crate::db::match_env::DBMatchEnvironment;
-use crate::db::matching::MatchEnvironmentParseMatcher;
-use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
 use crate::tasks::moo_vm_host::MooVmHost;
-use crate::tasks::scheduler::SchedulerError::{CouldNotParseCommand, DatabaseError, TaskNotFound};
+use crate::tasks::scheduler::SchedulerError::TaskNotFound;
 use crate::tasks::sessions::Session;
-use crate::tasks::task::{Task, TaskControlMsg};
+use crate::tasks::task::Task;
+use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg};
 use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::{ForkRequest, VM};
@@ -51,7 +51,7 @@ pub struct Scheduler {
     inner: Arc<RwLock<Inner>>,
 }
 
-pub struct Inner {
+struct Inner {
     running: bool,
     state_source: Arc<dyn WorldStateSource>,
     next_task_id: usize,
@@ -74,37 +74,6 @@ pub struct TaskDescription {
 pub enum AbortLimitReason {
     Ticks(usize),
     Time(Duration),
-}
-
-/// The messages that can be sent from tasks (or VM) to the scheduler.
-pub enum SchedulerControlMsg {
-    TaskSuccess(Var),
-    TaskVerbNotFound(Objid, String),
-    TaskException(UncaughtException),
-    TaskAbortError(Error),
-    TaskRequestFork(ForkRequest, oneshot::Sender<TaskId>),
-    TaskAbortCancelled,
-    TaskAbortLimitsReached(AbortLimitReason),
-    /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
-    TaskSuspend(Option<SystemTime>),
-    /// Task is requesting a list of all other tasks known to the scheduler.
-    DescribeOtherTasks(oneshot::Sender<Vec<TaskDescription>>),
-    /// Task is requesting that the scheduler abort another task.
-    KillTask {
-        victim_task_id: TaskId,
-        sender_permissions: Perms,
-        result_sender: oneshot::Sender<Var>,
-    },
-    ResumeTask {
-        queued_task_id: TaskId,
-        sender_permissions: Perms,
-        return_value: Var,
-        result_sender: oneshot::Sender<Var>,
-    },
-    BootPlayer {
-        player: Objid,
-        sender_permissions: Perms,
-    },
 }
 
 /// Results returned to waiters on tasks during subscription.
@@ -136,21 +105,12 @@ struct TaskControl {
 
 #[derive(Debug, Error, Clone, Decode, Encode)]
 pub enum SchedulerError {
-    // TODO move these command-related errors out of here, and use CommandError instead.
-    #[error("Could not parse command: {0}")]
-    CouldNotParseCommand(ParseCommandError),
-    #[error("Could not find match for command '{0}': {1:?}")]
-    NoCommandMatch(String, ParsedCommand),
-    #[error("Could not start transaction due to database error: {0}")]
-    DatabaseError(WorldStateError),
-    #[error("Permission denied")]
-    PermissionDenied,
-
-    // (Below are the real actual scheduler errors.)
     #[error("Task not found: {0:?}")]
     TaskNotFound(TaskId),
     #[error("Could not start task (internal error)")]
     CouldNotStartTask,
+    #[error("Could not start command")]
+    CommandExecutionError(CommandError),
     #[error("Task aborted due to limit: {0:?}")]
     TaskAbortedLimit(AbortLimitReason),
     #[error("Task aborted due to error.")]
@@ -289,11 +249,6 @@ impl Scheduler {
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_command_task");
 
-        // Parse the command, and then submit.
-        // TODO: Note that there are actually two separate transactions here, one which parses the
-        //   command and one which executes it. This is perhaps not ideal and the parse_command
-        //   portion could be moved into the task itself.
-        let (vloc, vi, command) = self.parse_command(player, command).await?;
         let mut inner = self.inner.write().await;
         let state_source = inner.state_source.clone();
         let task_id = inner
@@ -317,16 +272,15 @@ impl Scheduler {
             task_id,
             command
         );
+
         // This gets enqueued as the first thing the task sees when it is started.
         task_ref
             .task_control_sender
             .send(TaskControlMsg::StartCommandVerb {
                 player,
-                vloc,
-                verbinfo: vi,
-                command,
+                command: command.to_string(),
             })
-            .map_err(|_| SchedulerError::CouldNotStartTask)?;
+            .map_err(|_| CouldNotStartTask)?;
 
         Ok(task_id)
     }
@@ -521,55 +475,6 @@ impl Scheduler {
         scheduler.running = false;
         Ok(())
     }
-
-    /// Attempt to parse the command in the context of the player's environment.
-    async fn parse_command(
-        &self,
-        player: Objid,
-        command: &str,
-    ) -> Result<(Objid, VerbInfo, ParsedCommand), SchedulerError> {
-        let inner = self.inner.read().await;
-
-        let mut ws = inner
-            .state_source
-            .new_world_state()
-            .await
-            .map_err(DatabaseError)?;
-
-        // Get perms for environment search. Player's perms.
-        let me = DBMatchEnvironment {
-            ws: ws.as_mut(),
-            perms: player,
-        };
-        let matcher = MatchEnvironmentParseMatcher { env: me, player };
-        let pc = parse_command(command, matcher)
-            .await
-            .map_err(CouldNotParseCommand)?;
-        let loc = match ws.location_of(player, player).await {
-            Ok(loc) => loc,
-            Err(e) => return Err(DatabaseError(e)),
-        };
-
-        let targets_to_search = vec![player, loc, pc.dobj, pc.iobj];
-        let mut found = None;
-        for target in targets_to_search {
-            let match_result = ws
-                .find_command_verb_on(player, target, pc.verb.as_str(), pc.dobj, pc.prep, pc.iobj)
-                .await;
-            let match_result = match match_result {
-                Ok(m) => m,
-                Err(e) => return Err(DatabaseError(e)),
-            };
-            if let Some(vi) = match_result {
-                found = Some((target, vi, pc.clone()));
-                break;
-            }
-        }
-        let Some((target, vi, pc)) = found else {
-            return Err(SchedulerError::NoCommandMatch(command.to_string(), pc));
-        };
-        Ok((target, vi, pc))
-    }
 }
 
 impl Inner {
@@ -650,9 +555,17 @@ impl Inner {
                         // many cores don't have it at all. So it would just be way too spammy.
                         debug!(this = ?this, verb, task = task.task_id, "Verb not found, task cancelled");
 
+                        to_notify.push((*task_id, TaskWaiterResult::Error(TaskAbortedError)));
+                        to_remove.push(*task_id);
+                    }
+                    SchedulerControlMsg::TaskCommandError(parse_command_error) => {
+                        increment_counter!("scheduler.command_error");
+
+                        // This is a common occurrence, so we don't want to log it at warn level.
+                        trace!(task = task.task_id, error = ?parse_command_error, "command parse error");
                         to_notify.push((
                             *task_id,
-                            TaskWaiterResult::Error(SchedulerError::TaskAbortedError),
+                            TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
                         ));
                         to_remove.push(*task_id);
                     }
@@ -661,10 +574,7 @@ impl Inner {
 
                         warn!(task = task.task_id, "Task cancelled");
 
-                        to_notify.push((
-                            *task_id,
-                            TaskWaiterResult::Error(SchedulerError::TaskAbortedCancelled),
-                        ));
+                        to_notify.push((*task_id, TaskWaiterResult::Error(TaskAbortedCancelled)));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortError(e) => {
@@ -672,10 +582,7 @@ impl Inner {
 
                         warn!(task = task.task_id, error = ?e, "Task aborted");
 
-                        to_notify.push((
-                            *task_id,
-                            TaskWaiterResult::Error(SchedulerError::TaskAbortedError),
-                        ));
+                        to_notify.push((*task_id, TaskWaiterResult::Error(TaskAbortedError)));
                         to_remove.push(*task_id);
                     }
                     SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
@@ -696,7 +603,7 @@ impl Inner {
                         increment_counter!("scheduler.aborted_limits");
                         to_notify.push((
                             *task_id,
-                            TaskWaiterResult::Error(SchedulerError::TaskAbortedLimit(limit_reason)),
+                            TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
                         ));
                         to_remove.push(*task_id);
                     }
@@ -706,9 +613,7 @@ impl Inner {
                         warn!(task = task.task_id, finally_reason = ?exception, "Task threw exception");
                         to_notify.push((
                             *task_id,
-                            TaskWaiterResult::Error(SchedulerError::TaskAbortedException(
-                                exception,
-                            )),
+                            TaskWaiterResult::Error(TaskAbortedException(exception)),
                         ));
                         to_remove.push(*task_id);
                     }
@@ -1037,7 +942,7 @@ impl Inner {
             self.state_source
                 .new_world_state()
                 .await
-                .map_err(DatabaseError)?
+                .map_err(|_| CouldNotStartTask)?
         };
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
@@ -1085,12 +990,10 @@ impl Inner {
             let task = Task {
                 task_id,
                 scheduled_start_time: None,
-                task_control_receiver,
                 scheduler_control_sender: scheduler_control_sender.clone(),
                 player,
                 vm_host: MooVmHost::new(
                     vm,
-                    false,
                     max_stack_depth,
                     max_ticks,
                     Duration::from_secs(max_seconds),
@@ -1102,7 +1005,7 @@ impl Inner {
                 perms,
             };
             debug!("Starting up task: {:?}", task_id);
-            task.run().await;
+            task.run(task_control_receiver).await;
             debug!("Completed task: {:?}", task_id);
         });
 

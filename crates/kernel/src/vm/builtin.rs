@@ -10,8 +10,8 @@ use moor_values::var::error::Error;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
-use crate::tasks::scheduler::SchedulerControlMsg;
 use crate::tasks::sessions::Session;
+use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::vm::{ExecutionResult, VM};
 
 /// The arguments and other state passed to a built-in function.

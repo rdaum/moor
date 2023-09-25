@@ -148,3 +148,18 @@ impl NarrativeEvent {
         self.event.clone()
     }
 }
+
+/// Errors related to command matching.
+#[derive(Debug, Error, Clone, Decode, Encode, Eq, PartialEq)]
+pub enum CommandError {
+    #[error("Could not parse command")]
+    CouldNotParseCommand,
+    #[error("Could not find object match for command")]
+    NoObjectMatch,
+    #[error("Could not find verb match for command")]
+    NoCommandMatch,
+    #[error("Could not start transaction due to database error: {0}")]
+    DatabaseError(WorldStateError),
+    #[error("Permission denied")]
+    PermissionDenied,
+}

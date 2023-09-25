@@ -2,7 +2,7 @@ pub mod pubsub_client;
 pub mod rpc_client;
 
 use bincode::{Decode, Encode};
-use moor_values::model::{NarrativeEvent, WorldStateError};
+use moor_values::model::{CommandError, NarrativeEvent, WorldStateError};
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
@@ -61,10 +61,8 @@ pub enum RpcError {
     LoginTaskFailed,
     #[error("Could not create narrative session")]
     CreateSessionFailed,
-    #[error("Could not parse command")]
-    CouldNotParseCommand,
-    #[error("Could not find match for command '{0}'")]
-    NoCommandMatch(String),
+    #[error("Could not parse or execute command")]
+    CommandError(CommandError),
     #[error("Could not start transaction due to database error: {0}")]
     DatabaseError(WorldStateError),
     #[error("Permission denied")]

@@ -95,7 +95,7 @@ pub trait VMHost<ProgramType> {
     fn is_running(&self) -> bool;
 
     /// Stop a running VM.
-    fn stop(&mut self);
+    async fn stop(&mut self);
 
     /// Decodes a binary into opcodes that this kind of VM can execute.
     fn decode_program(

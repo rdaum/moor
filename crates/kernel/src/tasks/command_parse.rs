@@ -5,6 +5,7 @@ use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 
 use moor_values::model::r#match::{PrepSpec, Preposition, PREP_LIST};
+use moor_values::model::WorldStateError;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_str, Var};
 
@@ -137,7 +138,7 @@ pub fn parse_into_words(input: &str) -> Vec<String> {
 
 #[async_trait]
 pub trait ParseMatcher {
-    async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, anyhow::Error>;
+    async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError>;
 }
 
 #[derive(thiserror::Error, Debug, Clone, Decode, Encode)]
@@ -147,7 +148,9 @@ pub enum ParseCommandError {
     #[error("Unimplemented built-in command")]
     UnimplementedBuiltInCommand,
     #[error("Error occurred during object matching")]
-    ErrorDuringMatch,
+    ErrorDuringMatch(WorldStateError),
+    #[error("Permission denied")]
+    PermissionDenied,
 }
 
 #[tracing::instrument(skip(command_environment))]
@@ -232,7 +235,7 @@ where
         iobj = command_environment
             .match_object(&iobjstr)
             .await
-            .map_err(|_| ParseCommandError::ErrorDuringMatch)?;
+            .map_err(|wse| ParseCommandError::ErrorDuringMatch(wse))?;
     }
 
     // Get direct object object
@@ -240,7 +243,7 @@ where
         dobj = command_environment
             .match_object(&dobjstr)
             .await
-            .map_err(|_| ParseCommandError::ErrorDuringMatch)?;
+            .map_err(|wse| ParseCommandError::ErrorDuringMatch(wse))?;
     }
 
     // Build and return ParsedCommand
@@ -303,7 +306,7 @@ mod tests {
     struct SimpleParseMatcher {}
     #[async_trait]
     impl ParseMatcher for SimpleParseMatcher {
-        async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, anyhow::Error> {
+        async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError> {
             Ok(match name {
                 "obj" => Some(Objid(1)),
                 "player" => Some(Objid(2)),

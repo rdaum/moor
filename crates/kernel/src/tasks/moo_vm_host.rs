@@ -1,7 +1,8 @@
 use crate::compiler::labels::Name;
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::scheduler::{AbortLimitReason, SchedulerControlMsg};
+use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
+use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
 use crate::tasks::{TaskId, VerbCall};
@@ -22,11 +23,13 @@ use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Notify;
 use tracing::{trace, warn};
 
 /// A 'host' for running the MOO virtual machine inside a task.
 pub struct MooVmHost {
     vm: VM,
+    suspension_signal: SuspendSignal,
     running_method: bool,
     /// The maximum stack detph for this task
     max_stack_depth: usize,
@@ -41,16 +44,17 @@ pub struct MooVmHost {
 impl MooVmHost {
     pub fn new(
         vm: VM,
-        running_method: bool,
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
         sessions: Arc<dyn Session>,
         scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
     ) -> Self {
+        // Created in an initial suspended state.
         Self {
             vm,
-            running_method,
+            running_method: false,
+            suspension_signal: SuspendSignal::suspended(),
             max_stack_depth,
             max_ticks,
             max_time,
@@ -72,7 +76,6 @@ impl VMHost<Program> for MooVmHost {
         permissions: Objid,
     ) -> Result<(), anyhow::Error> {
         let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary().as_slice())?;
-
         let call_request = VerbExecutionRequest {
             permissions,
             resolved_verb: vi,
@@ -115,6 +118,11 @@ impl VMHost<Program> for MooVmHost {
         self.vm.tick_count = 0;
         self.vm.exec_fork_vector(fork_request, task_id).await?;
         self.running_method = !suspended;
+        if !suspended {
+            self.suspension_signal.start().await;
+        } else {
+            self.suspension_signal.suspend().await;
+        }
         Ok(())
     }
     /// Start execution of a verb request.
@@ -130,6 +138,7 @@ impl VMHost<Program> for MooVmHost {
             .await
             .expect("Unable to exec verb");
         self.running_method = true;
+        self.suspension_signal.start().await;
         Ok(())
     }
     async fn start_eval(
@@ -145,6 +154,7 @@ impl VMHost<Program> for MooVmHost {
             .await
             .expect("Could not set up VM for verb execution");
         self.running_method = true;
+        self.suspension_signal.start().await;
         Ok(())
     }
     async fn exec_interpreter(
@@ -153,7 +163,8 @@ impl VMHost<Program> for MooVmHost {
         world_state: &mut dyn WorldState,
     ) -> Result<VMHostResponse, anyhow::Error> {
         if !self.running_method {
-            return Ok(ContinueOk);
+            self.suspension_signal.wait_for_start().await;
+            assert!(self.running_method);
         }
 
         // Check ticks and seconds, and abort the task if we've exceeded the limits.
@@ -260,6 +271,7 @@ impl VMHost<Program> for MooVmHost {
                 }
                 ExecutionResult::Suspend(delay) => {
                     self.running_method = false;
+                    self.suspension_signal.suspend().await;
                     return Ok(Suspend(delay));
                 }
                 ExecutionResult::Complete(a) => {
@@ -295,14 +307,17 @@ impl VMHost<Program> for MooVmHost {
         self.vm.top_mut().push(value);
         self.vm.start_time = Some(SystemTime::now());
         self.vm.tick_count = 0;
+        assert!(!self.running_method);
         self.running_method = true;
+        self.suspension_signal.start().await;
         Ok(())
     }
     fn is_running(&self) -> bool {
         self.running_method
     }
-    fn stop(&mut self) {
+    async fn stop(&mut self) {
         self.running_method = false;
+        self.suspension_signal.suspend().await;
     }
     fn decode_program(
         binary_type: BinaryType,
@@ -341,5 +356,32 @@ impl VMHost<Program> for MooVmHost {
 
     fn args(&self) -> Vec<Var> {
         self.vm.top().args.clone()
+    }
+}
+
+/// A little utility to do a kind of condition variable to represent our internal suspended state,
+/// to allow us to do a blocking async wait for wake-ups.
+/// TODO: It's quite possible this thing might have issues on cancellations...
+struct SuspendSignal(Option<Notify>);
+
+impl SuspendSignal {
+    fn suspended() -> Self {
+        Self(Some(Notify::new()))
+    }
+
+    async fn suspend(&mut self) {
+        if self.0.is_none() {
+            self.0 = Some(Notify::new());
+        }
+    }
+    async fn start(&mut self) {
+        if let Some(notify) = self.0.take() {
+            notify.notify_waiters()
+        }
+    }
+    async fn wait_for_start(&mut self) {
+        if let Some(notify) = self.0.take() {
+            notify.notified().await;
+        }
     }
 }

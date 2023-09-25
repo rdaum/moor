@@ -7,7 +7,8 @@ pub mod sessions;
 
 mod moo_vm_host;
 mod task;
-mod vm_host;
+pub mod task_messages;
+pub mod vm_host;
 
 pub type TaskId = usize;
 
@@ -46,7 +47,6 @@ pub mod vm_test_utils {
         let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut vm_host = MooVmHost::new(
             vm,
-            false,
             20,
             90_000,
             Duration::from_secs(5),

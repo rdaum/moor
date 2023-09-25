@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use async_trait::async_trait;
 use moor_values::model::objset::ObjSet;
 use moor_values::{AMBIGUOUS, FAILED_MATCH, NOTHING};
@@ -13,16 +12,16 @@ use crate::tasks::command_parse::ParseMatcher;
 #[async_trait]
 pub trait MatchEnvironment {
     // Test whether a given object is valid in this environment.
-    async fn obj_valid(&mut self, oid: Objid) -> Result<bool, anyhow::Error>;
+    async fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError>;
 
     // Return all match names & aliases for an object.
-    async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, anyhow::Error>;
+    async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError>;
 
     // Returns location, contents, and player, all the things we'd search for matches on.
-    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, anyhow::Error>;
+    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError>;
 
     // Return the location of a given object.
-    async fn location_of(&mut self, player: Objid) -> Result<Objid, anyhow::Error>;
+    async fn location_of(&mut self, player: Objid) -> Result<Objid, WorldStateError>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -36,7 +35,7 @@ fn do_match_object_names(
     match_data: &mut MatchData,
     names: Vec<String>,
     match_name: &str,
-) -> Result<Objid, anyhow::Error> {
+) -> Result<Objid, WorldStateError> {
     let match_name = match_name.to_lowercase();
 
     for object_name in names {
@@ -71,7 +70,7 @@ pub async fn match_contents<M: MatchEnvironment + Send + Sync>(
     env: &mut M,
     player: Objid,
     object_name: &str,
-) -> Result<Option<Objid>, anyhow::Error> {
+) -> Result<Option<Objid>, WorldStateError> {
     let mut match_data = MatchData {
         exact: NOTHING,
         partial: FAILED_MATCH,
@@ -103,7 +102,7 @@ pub struct MatchEnvironmentParseMatcher<M: MatchEnvironment + Send + Sync> {
 
 #[async_trait]
 impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMatcher<M> {
-    async fn match_object(&mut self, object_name: &str) -> Result<Option<Objid>, anyhow::Error> {
+    async fn match_object(&mut self, object_name: &str) -> Result<Option<Objid>, WorldStateError> {
         if object_name.is_empty() {
             return Ok(None);
         }
@@ -119,9 +118,9 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
 
         // Check if the player is valid.
         if !self.env.obj_valid(self.player).await? {
-            return Err(anyhow!(WorldStateError::FailedMatch(
-                "Invalid current player when performing object match".to_string()
-            )));
+            return Err(WorldStateError::FailedMatch(
+                "Invalid current player when performing object match".to_string(),
+            ));
         }
 
         // Check 'me' and 'here' first.
