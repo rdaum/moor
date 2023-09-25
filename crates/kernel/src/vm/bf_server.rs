@@ -268,7 +268,11 @@ async fn bf_ctime<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         let Variant::Int(time) = bf_args.args[0].variant() else {
             return Ok(Error(E_TYPE));
         };
-        SystemTime::UNIX_EPOCH + Duration::from_secs(*time as u64)
+        if *time < 0 {
+            SystemTime::UNIX_EPOCH - Duration::from_secs(time.abs() as u64)
+        } else {
+            SystemTime::UNIX_EPOCH + Duration::from_secs(time.abs() as u64)
+        }
     };
 
     let date_time: DateTime<Local> = chrono::DateTime::from(time);
