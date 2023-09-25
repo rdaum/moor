@@ -531,6 +531,17 @@ mod tests {
         assert_eq!(session.committed(), vec!["test".to_string()]);
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_regression_catch_issue_23() {
+        // https://github.com/rdaum/moor/issues/23
+        let program =
+            r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#;
+        let mut state = world_with_test_program(program).await;
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
+        assert_eq!(result, v_int(5));
+    }
+
     #[test_case("return 1;", v_int(1); "simple return")]
     #[test_case(
         r#"rest = "me:words"; rest[1..0] = ""; return rest;"#,

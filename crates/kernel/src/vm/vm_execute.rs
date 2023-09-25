@@ -546,6 +546,7 @@ impl VM {
 
                     for _i in 0..num_excepts {
                         self.pop(); /* code list */
+                        self.top_mut().handler_stack.pop();
                     }
                     if is_catch {
                         self.push(&v);
