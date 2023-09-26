@@ -360,9 +360,10 @@ impl Unparse {
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
                 let mut base_str = format!("{}fork", indent_frag);
                 if let Some(id) = id {
+                    base_str.push(' ');
                     base_str.push_str(self.names.name_of(id)?);
                 }
-                stmt_lines.push(format!("{}({})", base_str, delay_frag));
+                stmt_lines.push(format!("{} ({})", base_str, delay_frag));
                 stmt_lines.append(&mut stmt_frag);
                 stmt_lines.push(format!("{}endfork", indent_frag));
                 Ok(stmt_lines)
@@ -598,6 +599,16 @@ mod tests {
     return #0.(options);"#; "sysobj prop expr")]
     #[test_case(r#"{a, b, ?c, @d} = args;"#; "scatter assign")]
     #[test_case(r#"{?a = 5} = args;"#; "scatter assign optional expression argument")]
+    #[test_case(r#"5;
+                   fork (5)
+                       1;
+                   endfork
+                   2;"#; "unlabelled fork decompile")]
+    #[test_case(r#"5;
+                   fork tst (5)
+                       1;
+                   endfork
+                   2;"#; "labelled fork decompile")]
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();

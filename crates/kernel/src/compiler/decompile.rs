@@ -30,7 +30,9 @@ pub enum DecompileError {
 struct Decompile {
     /// The program we are decompiling.
     program: Program,
-    /// The current position in the program as it is being decompiled.
+    /// The fork vector # we're decompiling, or None if from the main strema.
+    fork_vector: Option<usize>,
+    /// The current position in the opcode stream as it is being decompiled.
     position: usize,
     expr_stack: VecDeque<Expr>,
     builtins: HashMap<Name, String>,
@@ -38,12 +40,20 @@ struct Decompile {
 }
 
 impl Decompile {
+    fn opcode_vector(&self) -> &[Op] {
+        match self.fork_vector {
+            Some(fv) => &self.program.fork_vectors[fv],
+            None => &self.program.main_vector,
+        }
+    }
+
     /// Returns the next opcode in the program, or an error if the program is malformed.
     fn next(&mut self) -> Result<Op, DecompileError> {
-        if self.position >= self.program.main_vector.len() {
+        let opcode_vector = &self.opcode_vector();
+        if self.position >= opcode_vector.len() {
             return Err(DecompileError::UnexpectedProgramEnd);
         }
-        let op = self.program.main_vector[self.position].clone();
+        let op = opcode_vector[self.position].clone();
         self.position += 1;
         Ok(op)
     }
@@ -78,8 +88,9 @@ impl Decompile {
         predicate: F,
     ) -> Result<(Vec<Stmt>, Op), DecompileError> {
         let old_len = self.statements.len();
-        while self.position < self.program.main_vector.len() {
-            let op = &self.program.main_vector[self.position];
+        let opcode_vector_len = self.opcode_vector().len();
+        while self.position < opcode_vector_len {
+            let op = &self.opcode_vector()[self.position];
             if predicate(self.position, op) {
                 // We'll need a copy of the matching opcode we terminated at.
                 let final_op = self.next()?;
@@ -318,8 +329,33 @@ impl Decompile {
 
                 self.statements.push(Stmt::new(s, line_num));
             }
-            Op::Fork { .. } => {
-                unimplemented!("decompile fork");
+            Op::Fork { fv_offset, id } => {
+                // Grab the fork vector at `fv_offset` and start decompilation from there, using
+                // a brand new decompiler
+                let mut fork_decompile = Decompile {
+                    program: self.program.clone(),
+                    fork_vector: Some(fv_offset.0),
+                    position: 0,
+                    expr_stack: self.expr_stack.clone(),
+                    builtins: self.builtins.clone(),
+                    statements: vec![],
+                };
+                let fv_len = self.program.fork_vectors[fv_offset.0].len();
+                eprintln!(
+                    "decompiling fork vector {}, vector size {}",
+                    fv_offset.0, fv_len
+                );
+                while fork_decompile.position < fv_len {
+                    fork_decompile.decompile()?;
+                }
+                self.statements.push(Stmt::new(
+                    StmtNode::Fork {
+                        id,
+                        time: Expr::Length,
+                        body: fork_decompile.statements,
+                    },
+                    line_num,
+                ));
             }
             Op::Pop => {
                 let expr = self.pop_expr()?;
@@ -336,7 +372,8 @@ impl Decompile {
                     .push(Stmt::new(StmtNode::Return { expr: None }, line_num));
             }
             Op::Done => {
-                if self.position != self.program.main_vector.len() {
+                let opcode_vector = &self.opcode_vector();
+                if self.position != opcode_vector.len() {
                     return Err(MalformedProgram("expected end of program".to_string()));
                 }
             }
@@ -428,7 +465,8 @@ impl Decompile {
                 });
 
                 // skip forward to and beyond PushTemp
-                while self.position < self.program.main_vector.len() {
+                let opcode_vector_len = self.opcode_vector().len();
+                while self.position < opcode_vector_len {
                     let op = self.next()?;
                     if let Op::PushTemp = op {
                         break;
@@ -448,7 +486,8 @@ impl Decompile {
                 });
 
                 // skip forward to and beyond PushTemp
-                while self.position < self.program.main_vector.len() {
+                let opcode_vector_len = self.opcode_vector().len();
+                while self.position < opcode_vector_len {
                     let op = self.next()?;
                     if let Op::PushTemp = op {
                         break;
@@ -792,12 +831,14 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
     let builtins = make_labels_builtins();
     let mut decompile = Decompile {
         program: program.clone(),
+        fork_vector: None,
         position: 0,
         expr_stack: Default::default(),
         builtins,
         statements: vec![],
     };
-    while decompile.position < decompile.program.main_vector.len() {
+    let opcode_vector_len = decompile.opcode_vector().len();
+    while decompile.position < opcode_vector_len {
         decompile.decompile()?;
     }
 
@@ -887,6 +928,8 @@ mod tests {
     #[test_case(r#"options="test"; return #0.(options);"#; "sysprop expr")]
     #[test_case(r#"{?package = 5} = args;"#; "scatter optional assignment")]
     #[test_case(r#"{?package = $nothing} = args;"#; "scatter optional assignment from property")]
+    #[test_case(r#"5; fork (5) 1; endfork 2;"#; "unlabelled fork decompile")]
+    #[test_case(r#"5; fork tst (5) 1; endfork 2;"#; "labelled fork decompile")]
     fn test_case_decompile_matches(prg: &str) {
         let (parse, decompiled) = parse_decompile(prg);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
