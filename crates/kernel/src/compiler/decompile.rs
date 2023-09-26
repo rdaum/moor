@@ -547,7 +547,7 @@ impl Decompile {
                             expr: None,
                         },
                         ScatterLabel::Optional(id, assign_id) => {
-                            let opt_assign = if let Some(_) = assign_id {
+                            let opt_assign = if assign_id.is_some() {
                                 // The labels inside each optional scatters are jumps to the _start_ of the
                                 // expression inside it, so to know the end of the expression we will look at the
                                 // next label after our own (if any), or done.
@@ -556,7 +556,7 @@ impl Decompile {
                                     if jumps.0 <= label_num {
                                         continue;
                                     }
-                                    next_label = Some(jumps.1.clone());
+                                    next_label = Some(*jumps.1);
                                 }
                                 let next_label = next_label.unwrap_or(done);
                                 let _ = self.decompile_statements_up_to(&next_label)?;

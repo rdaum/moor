@@ -364,10 +364,7 @@ impl Scheduler {
             return Err(anyhow!("Could not find task with id {:?}", task_id));
         };
 
-        let args = command
-            .into_iter()
-            .map(|s| v_string(s))
-            .collect::<Vec<Var>>();
+        let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
 
         // This gets enqueued as the first thing the task sees when it is started.
         task_ref

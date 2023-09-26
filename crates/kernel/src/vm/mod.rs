@@ -164,14 +164,14 @@ impl VM {
             start_time: None,
         };
 
-        vm.register_bf_server().unwrap();
-        vm.register_bf_num().unwrap();
-        vm.register_bf_values().unwrap();
-        vm.register_bf_strings().unwrap();
-        vm.register_bf_list_sets().unwrap();
-        vm.register_bf_objects().unwrap();
-        vm.register_bf_verbs().unwrap();
-        vm.register_bf_properties().unwrap();
+        vm.register_bf_server();
+        vm.register_bf_num();
+        vm.register_bf_values();
+        vm.register_bf_strings();
+        vm.register_bf_list_sets();
+        vm.register_bf_objects();
+        vm.register_bf_verbs();
+        vm.register_bf_properties();
 
         vm
     }

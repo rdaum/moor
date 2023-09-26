@@ -91,7 +91,7 @@ impl ConnectionList {
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("Invalid player value"))?;
             // Object id: #1234 is the format, and we need the 1234 part.
-            let Some(player_oid) = player.strip_prefix("#") else {
+            let Some(player_oid) = player.strip_prefix('#') else {
                 bail!("Invalid player value");
             };
             let player = Objid(player_oid.parse()?);

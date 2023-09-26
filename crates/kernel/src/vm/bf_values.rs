@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use moor_values::var::error::Error;
 use moor_values::var::error::Error::{E_INVARG, E_TYPE};
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_bool, v_float, v_int, v_obj, v_str};
@@ -11,17 +12,17 @@ use moor_values::AsByteBuffer;
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::vm::builtin::BfRet::{Error, Ret};
+use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 
-async fn bf_typeof<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_typeof<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let arg = &bf_args.args[0];
     Ok(Ret(v_int(arg.type_id() as i64)))
 }
 bf_declare!(typeof, bf_typeof);
 
-async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let mut result = String::new();
     for arg in &bf_args.args {
         match arg.variant() {
@@ -38,18 +39,18 @@ async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
 }
 bf_declare!(tostr, bf_tostr);
 
-async fn bf_toliteral<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_toliteral<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     let literal = bf_args.args[0].to_literal();
     Ok(Ret(v_str(literal.as_str())))
 }
 bf_declare!(toliteral, bf_toliteral);
 
-async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(*i))),
@@ -63,14 +64,14 @@ async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
             }
         }
         Variant::Err(e) => Ok(Ret(v_int(*e as i64))),
-        _ => Ok(Error(E_INVARG)),
+        _ => Err(E_INVARG),
     }
 }
 bf_declare!(toint, bf_toint);
 
-async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_obj(*i))),
@@ -89,14 +90,14 @@ async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
                 Err(_) => Ok(Ret(v_obj(0))),
             }
         }
-        _ => Ok(Error(E_INVARG)),
+        _ => Err(E_INVARG),
     }
 }
 bf_declare!(toobj, bf_toobj);
 
-async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
@@ -109,14 +110,14 @@ async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::
             }
         }
         Variant::Err(e) => Ok(Ret(v_float(*e as u8 as f64))),
-        _ => Ok(Error(E_INVARG)),
+        _ => Err(E_INVARG),
     }
 }
 bf_declare!(tofloat, bf_tofloat);
 
-async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
         (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str().to_lowercase(),
@@ -126,18 +127,18 @@ async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
 }
 bf_declare!(equal, bf_equal);
 
-async fn bf_value_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_value_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     let count = bf_args.args[0].size_bytes();
     Ok(Ret(v_int(count as i64)))
 }
 bf_declare!(value_bytes, bf_value_bytes);
 
-async fn bf_value_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_value_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     let mut s = DefaultHasher::new();
     bf_args.args[0].hash(&mut s);
@@ -145,35 +146,35 @@ async fn bf_value_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyho
 }
 bf_declare!(value_hash, bf_value_hash);
 
-async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
 
     match bf_args.args[0].variant() {
         Variant::Str(s) => Ok(Ret(v_int(s.len() as i64))),
         Variant::List(l) => Ok(Ret(v_int(l.len() as i64))),
-        _ => Ok(Error(E_TYPE)),
+        _ => Err(E_TYPE),
     }
 }
 bf_declare!(length, bf_length);
 
-async fn bf_object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     // TODO: we fake this to make cores work. But in reality calculating the size of an object
     // would be too expensive and awkward in general. We'd need to go looking for all its verbs
     // and properties and add them up. So we just return 128 for now.
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     let Variant::Obj(_) = bf_args.args[0].variant() else {
-        return Ok(Error(E_TYPE));
+        return Err(E_TYPE);
     };
     Ok(Ret(v_int(128)))
 }
 bf_declare!(object_bytes, bf_object_bytes);
 
 impl VM {
-    pub(crate) fn register_bf_values(&mut self) -> Result<(), anyhow::Error> {
+    pub(crate) fn register_bf_values(&mut self) {
         self.builtins[offset_for_builtin("typeof")] = Arc::new(Box::new(BfTypeof {}));
         self.builtins[offset_for_builtin("tostr")] = Arc::new(Box::new(BfTostr {}));
         self.builtins[offset_for_builtin("toliteral")] = Arc::new(Box::new(BfToliteral {}));
@@ -187,6 +188,5 @@ impl VM {
         self.builtins[offset_for_builtin("object_bytes")] = Arc::new(Box::new(BfObjectBytes {}));
         self.builtins[offset_for_builtin("value_hash")] = Arc::new(Box::new(BfValueHash {}));
         self.builtins[offset_for_builtin("length")] = Arc::new(Box::new(BfLength {}));
-        Ok(())
     }
 }

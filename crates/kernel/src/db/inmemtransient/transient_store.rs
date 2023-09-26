@@ -68,10 +68,7 @@ impl TransientStore {
             children: ObjSet::new(),
         };
         let id = match id {
-            None => {
-                
-                Objid(self.max_object as i64)
-            }
+            None => Objid(self.max_object as i64),
             Some(id) => {
                 if self.objects.contains_key(&id) {
                     return Err(WorldStateError::ObjectAlreadyExists(id));

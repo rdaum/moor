@@ -116,7 +116,7 @@ impl VMHost<Program> for MooVmHost {
         suspended: bool,
     ) -> Result<(), anyhow::Error> {
         self.vm.tick_count = 0;
-        self.vm.exec_fork_vector(fork_request, task_id).await?;
+        self.vm.exec_fork_vector(fork_request, task_id).await;
         self.running_method = !suspended;
         if !suspended {
             self.suspension_signal.start().await;
@@ -135,8 +135,7 @@ impl VMHost<Program> for MooVmHost {
         self.vm.tick_count = 0;
         self.vm
             .exec_call_request(task_id, verb_execution_request)
-            .await
-            .expect("Unable to exec verb");
+            .await;
         self.running_method = true;
         self.suspension_signal.start().await;
         Ok(())
@@ -151,8 +150,7 @@ impl VMHost<Program> for MooVmHost {
         self.vm.tick_count = 0;
         self.vm
             .exec_eval_request(task_id, player, player, program)
-            .await
-            .expect("Could not set up VM for verb execution");
+            .await;
         self.running_method = true;
         self.suspension_signal.start().await;
         Ok(())
@@ -190,7 +188,10 @@ impl VMHost<Program> for MooVmHost {
             time_left,
         };
         let pre_exec_tick_count = self.vm.tick_count;
-        let mut result = self.vm.exec(exec_params, self.max_ticks).await?;
+
+        // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
+        let mut result = self.vm.exec(exec_params, self.max_ticks).await;
+
         let post_exec_tick_count = self.vm.tick_count;
         trace!(
             task_id,
@@ -227,10 +228,7 @@ impl VMHost<Program> for MooVmHost {
                         program,
                     };
 
-                    self.vm
-                        .exec_call_request(task_id, call_request)
-                        .await
-                        .expect("Could not set up VM for verb execution");
+                    self.vm.exec_call_request(task_id, call_request).await;
                     return Ok(ContinueOk);
                 }
                 ExecutionResult::PerformEval {
@@ -240,8 +238,7 @@ impl VMHost<Program> for MooVmHost {
                 } => {
                     self.vm
                         .exec_eval_request(0, permissions, player, program)
-                        .await
-                        .expect("Could not set up VM for verb execution");
+                        .await;
                     return Ok(ContinueOk);
                 }
                 ExecutionResult::ContinueBuiltin {
@@ -262,8 +259,7 @@ impl VMHost<Program> for MooVmHost {
                     result = self
                         .vm
                         .call_builtin_function(bf_offset, &args, &mut exec_params)
-                        .await
-                        .expect("Could not perform builtin execution");
+                        .await;
                     continue;
                 }
                 ExecutionResult::DispatchFork(fork_request) => {

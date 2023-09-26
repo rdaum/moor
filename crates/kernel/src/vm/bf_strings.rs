@@ -4,13 +4,14 @@ use async_trait::async_trait;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 
+use moor_values::var::error::Error;
 use moor_values::var::error::Error::{E_INVARG, E_TYPE};
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, v_str, v_string};
 
 use crate::bf_declare;
 use crate::compiler::builtins::offset_for_builtin;
-use crate::vm::builtin::BfRet::{Error, Ret};
+use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 
@@ -39,16 +40,16 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
 }
 
 //Function: str strsub (str subject, str what, str with [, case-matters])
-async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
         let Variant::Int(case_matters) = bf_args.args[3].variant() else {
-            return Ok(Error(E_TYPE));
+            return Err(E_TYPE);
         };
         *case_matters == 1
     } else {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     };
     let (subject, what, with) = (
         bf_args.args[0].variant(),
@@ -59,7 +60,7 @@ async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
         (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => Ok(Ret(v_str(
             strsub(subject.as_str(), what.as_str(), with.as_str(), case_matters).as_str(),
         ))),
-        _ => Ok(Error(E_TYPE)),
+        _ => Err(E_TYPE),
     }
 }
 bf_declare!(strsub, bf_strsub);
@@ -88,16 +89,16 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
-async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Ok(Error(E_TYPE));
+            return Err(E_TYPE);
         };
         *case_matters == 1
     } else {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -107,21 +108,21 @@ async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
             what.as_str(),
             case_matters,
         )))),
-        _ => Ok(Error(E_TYPE)),
+        _ => Err(E_TYPE),
     }
 }
 bf_declare!(index, bf_index);
 
-async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Ok(Error(E_TYPE));
+            return Err(E_TYPE);
         };
         *case_matters == 1
     } else {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -131,21 +132,21 @@ async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::E
             what.as_str(),
             case_matters,
         )))),
-        _ => Ok(Error(E_TYPE)),
+        _ => Err(E_TYPE),
     }
 }
 bf_declare!(rindex, bf_rindex);
 
-async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
         (Variant::Str(str1), Variant::Str(str2)) => {
             Ok(Ret(v_int(str1.as_str().cmp(str2.as_str()) as i64)))
         }
-        _ => Ok(Error(E_TYPE)),
+        _ => Err(E_TYPE),
     }
 }
 bf_declare!(strcmp, bf_strcmp);
@@ -159,9 +160,9 @@ encryption "salt" in the algorithm. If salt is not provided, a random pair of ch
  In any case, the salt used is also returned as the first two characters of the resulting encrypted
  string.
 */
-async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
 
     let salt = if bf_args.args.len() == 1 {
@@ -174,7 +175,7 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         salt
     } else {
         let Variant::Str(salt) = bf_args.args[1].variant() else {
-            return Ok(Error(E_TYPE));
+            return Err(E_TYPE);
         };
         String::from(salt.as_str())
     };
@@ -182,32 +183,32 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Er
         let crypted = pwhash::unix::crypt(text.as_str(), salt.as_str()).unwrap();
         Ok(Ret(v_string(crypted)))
     } else {
-        Ok(Error(E_TYPE))
+        Err(E_TYPE)
     }
 }
 bf_declare!(crypt, bf_crypt);
 
-async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Ok(Error(E_INVARG));
+        return Err(E_INVARG);
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
             let hash_digest = md5::compute(s.as_str().as_bytes());
             Ok(Ret(v_str(format!("{:x}", hash_digest).as_str())))
         }
-        _ => Ok(Error(E_INVARG)),
+        _ => Err(E_INVARG),
     }
 }
 bf_declare!(string_hash, bf_string_hash);
 
-async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error> {
+async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     unimplemented!("binary_hash")
 }
 bf_declare!(binary_hash, bf_binary_hash);
 
 impl VM {
-    pub(crate) fn register_bf_strings(&mut self) -> Result<(), anyhow::Error> {
+    pub(crate) fn register_bf_strings(&mut self) {
         self.builtins[offset_for_builtin("strsub")] = Arc::new(Box::new(BfStrsub {}));
         self.builtins[offset_for_builtin("index")] = Arc::new(Box::new(BfIndex {}));
         self.builtins[offset_for_builtin("rindex")] = Arc::new(Box::new(BfRindex {}));
@@ -215,8 +216,6 @@ impl VM {
         self.builtins[offset_for_builtin("crypt")] = Arc::new(Box::new(BfCrypt {}));
         self.builtins[offset_for_builtin("string_hash")] = Arc::new(Box::new(BfStringHash {}));
         self.builtins[offset_for_builtin("binary_hash")] = Arc::new(Box::new(BfBinaryHash {}));
-
-        Ok(())
     }
 }
 

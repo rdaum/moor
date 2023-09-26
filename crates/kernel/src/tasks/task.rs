@@ -128,7 +128,7 @@ impl Task {
             .vm_host
             .exec_interpreter(self.task_id, self.world_state.as_mut())
             .await;
-        return match vm_exec_result {
+        match vm_exec_result {
             Ok(VMHostResponse::DispatchFork(fork_request)) => {
                 trace!(task_id = self.task_id, ?fork_request, "Task fork");
                 // To fork a new task, we need to get the scheduler to do some work for us. So we'll
@@ -303,7 +303,7 @@ impl Task {
                     Some(SchedulerControlMsg::TaskAbortError(err)),
                 )
             }
-        };
+        }
     }
 
     /// Handle an inbound control message from the scheduler, and return a response message to send
@@ -569,5 +569,5 @@ async fn find_verb_for_command(
             return Ok(Some((vi, target)));
         }
     }
-    return Ok(None);
+    Ok(None)
 }

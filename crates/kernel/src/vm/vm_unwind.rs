@@ -187,7 +187,7 @@ impl VM {
     /// Raise an error.
     /// Finds the catch handler for the given error if there is one, and unwinds the stack to it.
     /// If there is no handler, creates an 'Uncaught' reason with backtrace, and unwinds with that.
-    fn raise_error_pack(&mut self, p: ErrorPack) -> Result<ExecutionResult, anyhow::Error> {
+    fn raise_error_pack(&mut self, p: ErrorPack) -> ExecutionResult {
         trace!(error = ?p, "raising error");
 
         // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
@@ -213,7 +213,7 @@ impl VM {
     }
 
     /// Push an error to the stack and raise it.
-    pub(crate) fn push_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+    pub(crate) fn push_error(&mut self, code: Error) -> ExecutionResult {
         trace!(?code, "push_error");
         self.push(&v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
@@ -227,11 +227,11 @@ impl VM {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
-        Ok(ExecutionResult::More)
+        ExecutionResult::More
     }
 
     /// Same as push_error, but for returns from builtin functions.
-    pub(crate) fn push_bf_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+    pub(crate) fn push_bf_error(&mut self, code: Error) -> ExecutionResult {
         trace!(?code, "push_bf_error");
         // No matter what, the error value has to be on the stack of the *calling* verb, not on this
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
@@ -254,15 +254,11 @@ impl VM {
         }
         // If we're not unwinding, we need to pop the builtin function's activation frame.
         self.stack.pop();
-        Ok(ExecutionResult::More)
+        ExecutionResult::More
     }
 
     /// Push an error to the stack with a description and raise it.
-    pub(crate) fn push_error_msg(
-        &mut self,
-        code: Error,
-        msg: String,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    pub(crate) fn push_error_msg(&mut self, code: Error, msg: String) -> ExecutionResult {
         trace!(?code, msg, "push_error_msg");
         self.push(&v_err(code));
 
@@ -271,7 +267,7 @@ impl VM {
 
     /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
     /// want.
-    pub(crate) fn raise_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+    pub(crate) fn raise_error(&mut self, code: Error) -> ExecutionResult {
         trace!(?code, "maybe_raise_error");
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
@@ -287,11 +283,11 @@ impl VM {
                 return self.raise_error_pack(code.make_error_pack(None));
             }
         }
-        Ok(ExecutionResult::More)
+        ExecutionResult::More
     }
 
     /// Explicitly raise an error, regardless of the 'd' bit.
-    pub(crate) fn throw_error(&mut self, code: Error) -> Result<ExecutionResult, anyhow::Error> {
+    pub(crate) fn throw_error(&mut self, code: Error) -> ExecutionResult {
         trace!(?code, "raise_error");
         self.raise_error_pack(code.make_error_pack(None))
     }
@@ -301,10 +297,7 @@ impl VM {
     /// Contains all the logic for handling the various reasons for exiting a verb execution:
     ///     * Error raises of various kinds
     ///     * Return values
-    pub(crate) fn unwind_stack(
-        &mut self,
-        why: FinallyReason,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
         debug!(?why, this = ?self.top().this, from = self.top().verb_name,
                line = self.top().find_line_no(self.top().pc).unwrap_or(0),
                "unwind_stack");
@@ -328,7 +321,7 @@ impl VM {
                         a.jump(label);
                         a.push(v_int(why_num as i64));
                         trace!(jump = ?label, ?why, "matched finally handler");
-                        return Ok(ExecutionResult::More);
+                        return ExecutionResult::More;
                     }
                     HandlerType::Catch(_) => {
                         let FinallyReason::Raise { code, .. } = &why else {
@@ -360,7 +353,7 @@ impl VM {
 
                         if found {
                             a.push(v_list(vec![v_err(*code)]));
-                            return Ok(ExecutionResult::More);
+                            return ExecutionResult::More;
                         }
                     }
                     HandlerType::CatchLabel(_) => {
@@ -373,7 +366,7 @@ impl VM {
             if let FinallyReason::Exit { label, .. } = why {
                 trace!("Exit with a jump");
                 a.jump(label);
-                return Ok(ExecutionResult::More);
+                return ExecutionResult::More;
             }
 
             // If we're doing a return, and this is the last activation, we're done and just pass
@@ -382,7 +375,7 @@ impl VM {
             if let FinallyReason::Return(value) = &why {
                 if self.stack.len() == 1 {
                     tracing_exit_vm_span(&self.top().span_id, &why, value);
-                    return Ok(ExecutionResult::Complete(value.clone()));
+                    return ExecutionResult::Complete(value.clone());
                 }
             }
 
@@ -395,13 +388,13 @@ impl VM {
             }) = &why
             {
                 tracing_exit_vm_span(&self.top().span_id, &why, &v_err(*code));
-                return Ok(ExecutionResult::Exception(why));
+                return ExecutionResult::Exception(why);
             }
 
             self.stack.pop().expect("Stack underflow");
 
             if self.stack.is_empty() {
-                return Ok(ExecutionResult::Complete(v_none()));
+                return ExecutionResult::Complete(v_none());
             }
             // TODO builtin function unwinding stuff
 
@@ -413,7 +406,7 @@ impl VM {
                 self.push(value);
                 trace!(value = ?value, verb_name = self.top().verb_name, "RETURN");
                 tracing_exit_vm_span(&self.top().span_id, &why, value);
-                return Ok(ExecutionResult::More);
+                return ExecutionResult::More;
             }
         }
 

@@ -101,7 +101,7 @@ impl Activation {
         task_id: TaskId,
         verb_call_request: VerbExecutionRequest,
         span_id: Option<tracing::span::Id>,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Self {
         let program = verb_call_request.program;
         let environment = vec![None; program.var_names.width()];
 
@@ -162,7 +162,7 @@ impl Activation {
             a.set_gvar(GlobalName::iobj, v_objid(NOTHING));
             a.set_gvar(GlobalName::iobjstr, v_str(""));
         }
-        Ok(a)
+        a
     }
 
     pub fn for_eval(
@@ -171,7 +171,7 @@ impl Activation {
         player: Objid,
         program: Program,
         span_id: Option<tracing::span::Id>,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Self {
         let environment = vec![None; program.var_names.width()];
 
         let verb_info = VerbInfo::new(
@@ -228,7 +228,7 @@ impl Activation {
         a.set_gvar(GlobalName::prepstr, v_str(""));
         a.set_gvar(GlobalName::iobj, v_objid(NOTHING));
         a.set_gvar(GlobalName::iobjstr, v_str(""));
-        Ok(a)
+        a
     }
     pub fn for_bf_call(
         task_id: TaskId,

@@ -6,6 +6,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use moor_values::model::permissions::Perms;
 use moor_values::model::world_state::WorldState;
+use moor_values::model::WorldStateError;
 use moor_values::var::error::Error;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
@@ -42,7 +43,7 @@ impl BfCallState<'_> {
     pub fn task_perms_who(&self) -> Objid {
         self.vm.task_perms()
     }
-    pub async fn task_perms(&self) -> Result<Perms, anyhow::Error> {
+    pub async fn task_perms(&self) -> Result<Perms, WorldStateError> {
         let who = self.task_perms_who();
         let flags = self.world_state.flags_of(who).await?;
         Ok(Perms { who, flags })
@@ -52,15 +53,13 @@ impl BfCallState<'_> {
 #[async_trait]
 pub(crate) trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
-    async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<BfRet, anyhow::Error>;
+    async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>;
 }
 
 /// Return possibilities from a built-in function.
 pub(crate) enum BfRet {
     /// Successful return, with a value to be pushed to the value stack.
     Ret(Var),
-    /// An error occurred, which should be raised.
-    Error(Error),
     /// BF wants to return control back to the VM, with specific instructions to things like
     /// `suspend` or dispatch to a verb call or execute eval.
     VmInstr(ExecutionResult),
@@ -81,7 +80,7 @@ macro_rules! bf_declare {
                 async fn call<'a>(
                     &self,
                     bf_args: &mut BfCallState<'a>
-                ) -> Result<BfRet, anyhow::Error> {
+                ) -> Result<BfRet, Error> {
                     $action(bf_args).await
                 }
             }

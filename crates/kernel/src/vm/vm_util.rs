@@ -19,7 +19,7 @@ impl VM {
         state: &mut dyn WorldState,
         propname: Var,
         obj: Var,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         let Variant::Str(propname) = propname.variant() else {
             return self.push_error(E_TYPE);
         };
@@ -35,11 +35,14 @@ impl VM {
             Ok(v) => v,
             Err(e) => {
                 debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                return self.push_error(e.to_error_code()?);
+                return self.push_error(
+                    e.to_error_code()
+                        .expect("unable to convert error to error code"),
+                );
             }
         };
         self.push(&v);
-        Ok(ExecutionResult::More)
+        ExecutionResult::More
     }
 
     /// VM-level property assignment
@@ -49,7 +52,7 @@ impl VM {
         propname: Var,
         obj: Var,
         value: Var,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         let (propname, obj) = match (propname.variant(), obj.variant()) {
             (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
             (_, _) => {
@@ -66,10 +69,13 @@ impl VM {
                 self.push(&value);
             }
             Err(e) => {
-                return self.push_error(e.to_error_code()?);
+                return self.push_error(
+                    e.to_error_code()
+                        .expect("unable to convert world state error to error code"),
+                );
             }
         }
-        Ok(ExecutionResult::More)
+        ExecutionResult::More
     }
 
     /// Return the callers stack, in the format expected by the `callers` built-in function.

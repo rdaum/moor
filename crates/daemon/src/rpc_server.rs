@@ -71,7 +71,7 @@ impl RpcServer {
         Self {
             world_state_source: wss,
             scheduler,
-            connections: connections,
+            connections,
             publish: Arc::new(Mutex::new(publish)),
         }
     }
@@ -88,12 +88,8 @@ impl RpcServer {
                 increment_counter!("rpc_server.connection_establish");
 
                 match self.connections.new_connection(client_id, hostname).await {
-                    Ok(oid) => {
-                        return make_response(Ok(NewConnection(oid)));
-                    }
-                    Err(e) => {
-                        return make_response(Err(e));
-                    }
+                    Ok(oid) => make_response(Ok(NewConnection(oid))),
+                    Err(e) => make_response(Err(e)),
                 }
             }
             RpcRequest::Pong(_client_sys_time) => {

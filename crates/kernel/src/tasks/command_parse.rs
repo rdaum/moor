@@ -235,7 +235,7 @@ where
         iobj = command_environment
             .match_object(&iobjstr)
             .await
-            .map_err(|wse| ParseCommandError::ErrorDuringMatch(wse))?;
+            .map_err(ParseCommandError::ErrorDuringMatch)?;
     }
 
     // Get direct object object
@@ -243,7 +243,7 @@ where
         dobj = command_environment
             .match_object(&dobjstr)
             .await
-            .map_err(|wse| ParseCommandError::ErrorDuringMatch(wse))?;
+            .map_err(ParseCommandError::ErrorDuringMatch)?;
     }
 
     // Build and return ParsedCommand

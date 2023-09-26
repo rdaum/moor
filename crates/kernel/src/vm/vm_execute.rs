@@ -64,7 +64,7 @@ impl VM {
         &mut self,
         mut exec_params: VmExecParams<'a>,
         tick_slice: usize,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         // Before executing, check stack depth...
         if self.stack.len() >= exec_params.max_stack_depth {
             // Absolutely raise-unwind an error here instead of just offering it as a potential
@@ -436,6 +436,7 @@ impl VM {
                 }
                 Op::GetProp => {
                     let (propname, obj) = (self.pop(), self.pop());
+
                     return self
                         .resolve_property(exec_params.world_state, propname, obj)
                         .await;
@@ -474,7 +475,7 @@ impl VM {
                         fork_vector_offset: fv_offset,
                         task_id: id,
                     };
-                    return Ok(ExecutionResult::DispatchFork(fork));
+                    return ExecutionResult::DispatchFork(fork);
                 }
                 Op::Pass => {
                     let args = self.pop();
@@ -671,6 +672,6 @@ impl VM {
         // We don't usually get here because most execution paths return before we hit the end of
         // the loop. But if we do, we need to return More so the scheduler knows to keep feeding
         // us.
-        Ok(ExecutionResult::More)
+        ExecutionResult::More
     }
 }

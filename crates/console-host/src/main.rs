@@ -59,7 +59,7 @@ async fn establish_connection(
     client_id: Uuid,
     rpc_client: &mut RpcSendClient,
 ) -> Result<Objid, anyhow::Error> {
-    return match rpc_client
+    match rpc_client
         .make_rpc_call(
             client_id,
             RpcRequest::ConnectionEstablish("console".to_string()),
@@ -79,7 +79,7 @@ async fn establish_connection(
             error!("Error connecting: {:?}", e);
             Err(Error::msg("Error connecting"))
         }
-    };
+    }
 }
 
 async fn perform_auth(
@@ -89,7 +89,7 @@ async fn perform_auth(
     password: &str,
 ) -> Result<Objid, Error> {
     // Need to first authenticate with the server.
-    return match rpc_client
+    match rpc_client
         .make_rpc_call(
             client_id,
             RpcRequest::LoginCommand(vec![
@@ -120,7 +120,7 @@ async fn perform_auth(
             error!("Error authenticating: {:?}", e);
             Err(Error::msg("Error authenticating"))
         }
-    };
+    }
 }
 
 async fn handle_console_line(client_id: Uuid, line: &str, rpc_client: &mut RpcSendClient) {

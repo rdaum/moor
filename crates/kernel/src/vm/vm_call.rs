@@ -1,4 +1,3 @@
-use anyhow::Context;
 use tracing::{debug, span, trace, Level};
 
 use moor_values::model::world_state::WorldState;
@@ -36,7 +35,7 @@ impl VM {
         this: Objid,
         verb_name: &str,
         args: &[Var],
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         let call = VerbCall {
             verb_name: verb_name.to_string(),
             location: this,
@@ -60,7 +59,10 @@ impl VM {
             args_literal(args),
         );
 
-        let self_valid = state.valid(this).await?;
+        let self_valid = state
+            .valid(this)
+            .await
+            .expect("Error checking object validity");
         if !self_valid {
             return self.push_error(E_INVIND);
         }
@@ -80,23 +82,21 @@ impl VM {
                 return self.push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
             }
             Err(e) => {
-                return Err(e).with_context(|| {
-                    format!("Error finding verb \"{}\" on object {}", verb_name, this)
-                })?;
+                panic!("Unexpected error from find_method_verb_on: {:?}", e)
             }
         };
 
         // Permissions for the activation are the verb's owner.
         let permissions = verb_info.verbdef().owner();
 
-        Ok(ExecutionResult::ContinueVerb {
+        ExecutionResult::ContinueVerb {
             permissions,
             resolved_verb: verb_info,
             call,
             command: self.top().command.clone(),
             trampoline: None,
             trampoline_arg: None,
-        })
+        }
     }
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
@@ -106,11 +106,14 @@ impl VM {
         &mut self,
         state: &mut dyn WorldState,
         args: &[Var],
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = self.top().permissions;
-        let parent = state.parent_of(permissions, definer).await?;
+        let parent = state
+            .parent_of(permissions, definer)
+            .await
+            .expect("unable to lookup parent");
         let verb = self.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
@@ -134,24 +137,20 @@ impl VM {
             caller,
         };
 
-        Ok(ExecutionResult::ContinueVerb {
+        ExecutionResult::ContinueVerb {
             permissions,
             resolved_verb: vi,
             call,
             command: self.top().command.clone(),
             trampoline: None,
             trampoline_arg: None,
-        })
+        }
     }
 
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
-    pub async fn exec_call_request(
-        &mut self,
-        task_id: TaskId,
-        call_request: VerbExecutionRequest,
-    ) -> Result<(), anyhow::Error> {
+    pub async fn exec_call_request(&mut self, task_id: TaskId, call_request: VerbExecutionRequest) {
         let span = span!(Level::TRACE, "VC", task_id, ?call_request);
         let span_id = span.id();
 
@@ -165,13 +164,11 @@ impl VM {
             args_literal(call_request.call.args.as_slice()),
         );
 
-        let a = Activation::for_call(task_id, call_request, span_id.clone())?;
+        let a = Activation::for_call(task_id, call_request, span_id.clone());
 
         self.stack.push(a);
 
         tracing_enter_span(&span_id, &None);
-
-        Ok(())
     }
 
     pub async fn exec_eval_request(
@@ -180,7 +177,7 @@ impl VM {
         permissions: Objid,
         player: Objid,
         program: Program,
-    ) -> Result<(), anyhow::Error> {
+    ) {
         let span = span!(Level::TRACE, "EVAL", task_id, ?program);
         let span_id = span.id();
 
@@ -190,24 +187,18 @@ impl VM {
             self.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
         }
 
-        let a = Activation::for_eval(task_id, permissions, player, program, span_id.clone())?;
+        let a = Activation::for_eval(task_id, permissions, player, program, span_id.clone());
 
         self.stack.push(a);
 
         tracing_enter_span(&span_id, &None);
-
-        Ok(())
     }
 
     /// Prepare a new stack & call hierarchy for invocation of a forked task.
     /// Called (ultimately) from the scheduler as the result of a fork() call.
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
-    pub(crate) async fn exec_fork_vector(
-        &mut self,
-        fork_request: ForkRequest,
-        task_id: usize,
-    ) -> Result<(), anyhow::Error> {
+    pub(crate) async fn exec_fork_vector(&mut self, fork_request: ForkRequest, task_id: usize) {
         let span = span!(Level::TRACE, "FORK", task_id);
         let span_id = span.id();
 
@@ -219,7 +210,7 @@ impl VM {
         a.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             a.set_var_offset(task_id_name, v_int(task_id as i64))
-                .unwrap();
+                .expect("Unable to set task_id in activation frame");
         }
 
         // TODO how to set the task_id in the parent activation, as we no longer have a reference
@@ -227,7 +218,6 @@ impl VM {
         self.stack = vec![a];
 
         tracing_enter_span(&span_id, &None);
-        Ok(())
     }
 
     /// Call into a builtin function.
@@ -236,7 +226,7 @@ impl VM {
         bf_func_num: usize,
         args: &[Var],
         exec_args: &mut VmExecParams<'a>,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         if bf_func_num >= self.builtins.len() {
             return self.raise_error(E_VARNF);
         }
@@ -287,15 +277,8 @@ impl VM {
 
         let call_results = match bf.call(&mut bf_args).await {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
-            Ok(BfRet::Error(e)) => self.push_bf_error(e),
-            Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
-            Err(e) => match e.downcast_ref::<WorldStateError>() {
-                Some(e) => {
-                    let err_code = e.to_error_code()?;
-                    self.push_bf_error(err_code)
-                }
-                _ => Err(e),
-            },
+            Err(e) => self.push_bf_error(e),
+            Ok(BfRet::VmInstr(vmi)) => vmi,
         };
 
         trace!(?call_results, "Builtin function call complete");
@@ -306,7 +289,7 @@ impl VM {
     pub(crate) async fn reenter_builtin_function<'a>(
         &mut self,
         exec_args: VmExecParams<'a>,
-    ) -> Result<ExecutionResult, anyhow::Error> {
+    ) -> ExecutionResult {
         trace!(
             bf_index = self.top().bf_index,
             "Reentering builtin function"
@@ -337,15 +320,8 @@ impl VM {
 
         match bf.call(&mut bf_args).await {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
-            Ok(BfRet::Error(e)) => self.push_bf_error(e),
-            Ok(BfRet::VmInstr(vmi)) => Ok(vmi),
-            Err(e) => match e.downcast_ref::<WorldStateError>() {
-                Some(e) => {
-                    let err_code = e.to_error_code()?;
-                    self.push_bf_error(err_code)
-                }
-                _ => Err(e),
-            },
+            Err(e) => self.push_bf_error(e),
+            Ok(BfRet::VmInstr(vmi)) => vmi,
         }
     }
 }
