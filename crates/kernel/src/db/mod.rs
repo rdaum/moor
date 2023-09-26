@@ -1,4 +1,3 @@
-use anyhow::bail;
 use std::sync::Arc;
 use std::thread;
 
@@ -66,13 +65,13 @@ impl DatabaseBuilder {
 
     /// Returns a new database instance. The second value in the result tuple is true if the
     /// database was newly created, and false if it was already present.
-    pub fn open_db(&self) -> Result<(Box<dyn Database>, bool), anyhow::Error> {
+    pub fn open_db(&self) -> Result<(Box<dyn Database>, bool), String> {
         match self.db_type {
             DatabaseType::RocksDb => {
                 let Some(path) = self.path.clone() else {
-                    bail!("Must specify path for RocksDB");
+                    return Err("Must specify path for RocksDB".to_string());
                 };
-                let (db, fresh) = RocksDbServer::new(path)?;
+                let (db, fresh) = RocksDbServer::new(path).map_err(|e| format!("{:?}", e))?;
                 Ok((Box::new(db), fresh))
             }
             DatabaseType::InMemTransient => {

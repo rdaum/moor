@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbs::BinaryType;
 use moor_values::model::world_state::WorldState;
-use moor_values::var::error::Error;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
@@ -45,7 +44,7 @@ pub trait VMHost<ProgramType> {
         verb_call: VerbCall,
         command: ParsedCommand,
         permissions: Objid,
-    ) -> Result<(), anyhow::Error>;
+    );
 
     /// Setup for executing a method call in this VM.
     async fn start_call_method_verb(
@@ -54,30 +53,20 @@ pub trait VMHost<ProgramType> {
         perms: Objid,
         verb_info: VerbInfo,
         verb_call: VerbCall,
-    ) -> Result<(), anyhow::Error>;
+    );
 
     /// Setup for dispatching into a fork request.
-    async fn start_fork(
-        &mut self,
-        task_id: TaskId,
-        fork_request: ForkRequest,
-        suspended: bool,
-    ) -> Result<(), anyhow::Error>;
+    async fn start_fork(&mut self, task_id: TaskId, fork_request: ForkRequest, suspended: bool);
 
     /// Signal the need to start execution of a verb request.
     async fn start_execution(
         &mut self,
         task_id: TaskId,
         verb_execution_request: VerbExecutionRequest,
-    ) -> Result<(), anyhow::Error>;
+    );
 
     /// Setup for executing a free-standing evaluation of `program`.
-    async fn start_eval(
-        &mut self,
-        task_id: TaskId,
-        player: Objid,
-        program: ProgramType,
-    ) -> Result<(), Error>;
+    async fn start_eval(&mut self, task_id: TaskId, player: Objid, program: ProgramType);
 
     /// The meat of the VM host: this is invoked repeatedly by the task scheduler loop to drive the
     /// VM. The responses from this function are used to determine what the task/scheduler should do
@@ -86,10 +75,10 @@ pub trait VMHost<ProgramType> {
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
-    ) -> Result<VMHostResponse, anyhow::Error>;
+    ) -> VMHostResponse;
 
     /// Ask the host to resume what it was doing after suspension.
-    async fn resume_execution(&mut self, value: Var) -> Result<(), anyhow::Error>;
+    async fn resume_execution(&mut self, value: Var);
 
     /// Return true if the VM is currently running.
     fn is_running(&self) -> bool;
@@ -98,10 +87,7 @@ pub trait VMHost<ProgramType> {
     async fn stop(&mut self);
 
     /// Decodes a binary into opcodes that this kind of VM can execute.
-    fn decode_program(
-        binary_type: BinaryType,
-        binary_bytes: &[u8],
-    ) -> Result<ProgramType, anyhow::Error>;
+    fn decode_program(binary_type: BinaryType, binary_bytes: &[u8]) -> ProgramType;
 
     /// Attempt to set a variable inside the VM's current top stack frame.
     /// The sole use of this is to set the task id variable for forked tasks or resumed tasks.

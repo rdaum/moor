@@ -1,4 +1,3 @@
-use anyhow::Context;
 use tracing::trace;
 use uuid::Uuid;
 
@@ -19,10 +18,10 @@ use crate::db::rocksdb::ColumnFamilies;
 
 impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
-    pub fn get_object_verbs(&self, o: Objid) -> Result<VerbDefs, anyhow::Error> {
+    pub fn get_object_verbs(&self, o: Objid) -> Result<VerbDefs, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_pinned_cf(cf, ok)?;
+        let verbs_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verbs");
         let verbs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -39,11 +38,11 @@ impl<'a> RocksDbTx<'a> {
         binary_type: BinaryType,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), WorldStateError> {
         // Get the old vector, add the new verb, put the new vector.
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(oid);
-        let verbs_bytes = self.tx.get_cf(cf, ok)?;
+        let verbs_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verbs");
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -54,22 +53,34 @@ impl<'a> RocksDbTx<'a> {
         let names = names.iter().map(|n| n.as_str()).collect::<Vec<&str>>();
         let verb = VerbDef::new(vid, oid, owner, &names, flags, binary_type, args);
         let verbs = verbs.with_added(verb);
-        write_cf(&self.tx, cf, &ok, &verbs)
-            .with_context(|| format!("failure to write verbdef: {}:{:?}", oid, names.clone()))?;
+        write_cf(&self.tx, cf, &ok, &verbs).unwrap_or_else(|e| {
+            panic!(
+                "failure to write verbdef: {}:{:?}; {:?}",
+                oid,
+                names.clone(),
+                e
+            )
+        });
 
         // Now set the program.
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let vk = composite_key_uuid(oid, &vid);
-        self.tx
-            .put_cf(cf, vk, binary)
-            .with_context(|| format!("failure to write verb program: {}:{:?}", oid, names))?;
+        self.tx.put_cf(cf, vk, binary).unwrap_or_else(|e| {
+            panic!(
+                "failure to write verb program: {}:{:?}: {:?}",
+                oid, names, e
+            )
+        });
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn delete_object_verb(&self, o: Objid, v: Uuid) -> Result<(), anyhow::Error> {
+    pub fn delete_object_verb(&self, o: Objid, v: Uuid) -> Result<(), WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok)?;
+        let verbs_bytes = self
+            .tx
+            .get_cf(cf, ok)
+            .unwrap_or_else(|e| panic!("failure to get verbs for deletion: {}: {:?}", o, e));
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -83,15 +94,17 @@ impl<'a> RocksDbTx<'a> {
         // Delete the program.
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let vk = composite_key_uuid(o, &v);
-        self.tx.delete_cf(cf, vk)?;
+        self.tx
+            .delete_cf(cf, vk)
+            .unwrap_or_else(|e| panic!("failure to delete verb program: {}:{:?}: {:?}", o, v, e));
 
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_verb(&self, o: Objid, v: Uuid) -> Result<VerbDef, anyhow::Error> {
+    pub fn get_verb(&self, o: Objid, v: Uuid) -> Result<VerbDef, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok)?;
+        let verbs_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verbs");
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -104,10 +117,14 @@ impl<'a> RocksDbTx<'a> {
         Ok(verb.clone())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbDef, anyhow::Error> {
+    pub fn get_verb_by_name(&self, o: Objid, n: String) -> Result<VerbDef, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let Some(verbs_bytes) = self.tx.get_cf(cf, ok)? else {
+        let Some(verbs_bytes) = self
+            .tx
+            .get_cf(cf, ok)
+            .expect("unable to retrieve verb bytes")
+        else {
             return Err(WorldStateError::VerbNotFound(o, n).into());
         };
         let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
@@ -120,10 +137,10 @@ impl<'a> RocksDbTx<'a> {
         Ok(verb.clone())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_verb_by_index(&self, o: Objid, i: usize) -> Result<VerbDef, anyhow::Error> {
+    pub fn get_verb_by_index(&self, o: Objid, i: usize) -> Result<VerbDef, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok)?;
+        let verbs_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verbs");
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -137,10 +154,10 @@ impl<'a> RocksDbTx<'a> {
             .ok_or_else(|| WorldStateError::VerbNotFound(o, format!("{}", i)).into())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_binary(&self, o: Objid, v: Uuid) -> Result<Vec<u8>, anyhow::Error> {
+    pub fn get_binary(&self, o: Objid, v: Uuid) -> Result<Vec<u8>, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let ok = composite_key_uuid(o, &v);
-        let prg_bytes = self.tx.get_cf(cf, ok)?;
+        let prg_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verb program");
         let Some(prg_bytes) = prg_bytes else {
             let v_uuid_str = v.to_string();
             return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
@@ -153,7 +170,7 @@ impl<'a> RocksDbTx<'a> {
         o: Objid,
         name: String,
         argspec: Option<VerbArgsSpec>,
-    ) -> Result<VerbDef, anyhow::Error> {
+    ) -> Result<VerbDef, WorldStateError> {
         trace!(object = ?o, verb = %name, args = ?argspec, "Resolving verb");
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         let ov_cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
@@ -161,7 +178,7 @@ impl<'a> RocksDbTx<'a> {
         loop {
             let ok = oid_key(search_o);
 
-            let verbs = match self.tx.get_cf(ov_cf, ok)? {
+            let verbs = match self.tx.get_cf(ov_cf, ok).expect("Unable to get verbs") {
                 None => VerbDefs::empty(),
                 Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
             };
@@ -204,10 +221,10 @@ impl<'a> RocksDbTx<'a> {
         new_names: Option<Vec<String>>,
         new_args: Option<VerbArgsSpec>,
         new_binary_type: Option<BinaryType>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectVerbs as u8) as usize];
         let ok = oid_key(o);
-        let verbs_bytes = self.tx.get_cf(cf, ok)?;
+        let verbs_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verbs");
         let verbs: VerbDefs = match verbs_bytes {
             None => VerbDefs::empty(),
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
@@ -240,10 +257,12 @@ impl<'a> RocksDbTx<'a> {
         o: Objid,
         v: Uuid,
         new_binary: Vec<u8>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let vk = composite_key_uuid(o, &v);
-        self.tx.put_cf(cf, vk, new_binary)?;
+        self.tx
+            .put_cf(cf, vk, new_binary)
+            .expect("Unable to put verb program");
         Ok(())
     }
 }

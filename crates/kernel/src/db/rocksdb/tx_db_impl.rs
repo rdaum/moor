@@ -1,4 +1,3 @@
-use anyhow::bail;
 use rocksdb::{ColumnFamily, ErrorKind};
 use std::convert::TryInto;
 use uuid::Uuid;
@@ -32,7 +31,7 @@ pub(crate) fn get_oid_value<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
-) -> Result<Objid, anyhow::Error> {
+) -> Result<Objid, WorldStateError> {
     let ok = oid_key(o);
     let ov = tx.get_cf(cf, ok).unwrap();
     let ov = ov.ok_or(WorldStateError::ObjectNotFound(o))?;
@@ -45,9 +44,9 @@ pub(crate) fn get_oid_or_nothing<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
-) -> Result<Objid, anyhow::Error> {
+) -> Result<Objid, WorldStateError> {
     let ok = oid_key(o);
-    let ov = tx.get_cf(cf, ok).unwrap();
+    let ov = tx.get_cf(cf, ok).expect("Unable to read object id");
     let Some(ov) = ov else {
         return Ok(NOTHING);
     };
@@ -61,10 +60,10 @@ pub(crate) fn set_oid_value<'a>(
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
     v: Objid,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), WorldStateError> {
     let ok = oid_key(o);
     let ov = oid_key(v);
-    tx.put_cf(cf, ok, ov).unwrap();
+    tx.put_cf(cf, ok, ov).expect("Unable to write object id");
     Ok(())
 }
 
@@ -72,9 +71,9 @@ pub(crate) fn get_objset<'a>(
     cf: &'a ColumnFamily,
     tx: &rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     o: Objid,
-) -> Result<ObjSet, anyhow::Error> {
+) -> Result<ObjSet, WorldStateError> {
     let ok = oid_key(o);
-    let bytes = tx.get_cf(cf, ok)?;
+    let bytes = tx.get_cf(cf, ok).expect("Unable to read object set");
     let bytes = bytes.ok_or(WorldStateError::ObjectNotFound(o))?;
     let ov = ObjSet::from_sliceref(SliceRef::from_vec(bytes));
     Ok(ov)
@@ -87,9 +86,7 @@ pub(crate) fn set_objset<'a>(
     v: ObjSet,
 ) -> Result<(), WorldStateError> {
     let ok = oid_key(o);
-    v.with_byte_buffer(|d| {
-        tx.put_cf(cf, ok, d).unwrap();
-    });
+    v.with_byte_buffer(|d| tx.put_cf(cf, ok, d).expect("Unable to write object set"));
     Ok(())
 }
 
@@ -97,20 +94,14 @@ pub(crate) fn cf_for<'a>(cf_handles: &[&'a ColumnFamily], cf: ColumnFamilies) ->
     cf_handles[(cf as u8) as usize]
 }
 
-pub(crate) fn err_is_objnjf(e: &anyhow::Error) -> bool {
-    if let Some(WorldStateError::ObjectNotFound(_)) = e.downcast_ref::<WorldStateError>() {
-        return true;
-    }
-    false
-}
-
 pub(crate) fn write_cf<W: AsByteBuffer>(
     tx: &rocksdb::Transaction<'_, rocksdb::OptimisticTransactionDB>,
     cf: &ColumnFamily,
     key: &[u8],
     w: &W,
-) -> Result<(), anyhow::Error> {
-    w.with_byte_buffer(|d| tx.put_cf(cf, key, d))?;
+) -> Result<(), WorldStateError> {
+    w.with_byte_buffer(|d| tx.put_cf(cf, key, d))
+        .expect("Unable to write object set");
     Ok(())
 }
 
@@ -121,18 +112,18 @@ pub(crate) struct RocksDbTx<'a> {
 
 impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
-    pub fn commit(self) -> Result<CommitResult, anyhow::Error> {
+    pub fn commit(self) -> Result<CommitResult, WorldStateError> {
         match self.tx.commit() {
             Ok(()) => Ok(CommitResult::Success),
             Err(e) if e.kind() == ErrorKind::Busy || e.kind() == ErrorKind::TryAgain => {
                 Ok(CommitResult::ConflictRetry)
             }
-            Err(e) => bail!(e),
+            Err(e) => panic!("Unexpected error committing transaction: {:?}", e),
         }
     }
     #[tracing::instrument(skip(self))]
-    pub fn rollback(self) -> Result<(), anyhow::Error> {
-        self.tx.rollback()?;
+    pub fn rollback(self) -> Result<(), WorldStateError> {
+        self.tx.rollback().expect("Unable to rollback transaction");
         Ok(())
     }
 }
@@ -441,31 +432,17 @@ mod tests {
         assert_eq!(tx.get_object_location(a).unwrap(), c);
 
         // Validate recursive move detection.
-        match tx
-            .set_object_location(c, b)
-            .err()
-            .unwrap()
-            .downcast_ref::<WorldStateError>()
-        {
-            Some(WorldStateError::RecursiveMove(_, _)) => {}
-            _ => {
-                panic!("Expected recursive move error");
-            }
-        }
+        assert_eq!(
+            tx.set_object_location(c, b).err(),
+            Some(WorldStateError::RecursiveMove(c, b))
+        );
 
         // Move b one level deeper, and then check recursive move detection again.
         tx.set_object_location(b, d).unwrap();
-        match tx
-            .set_object_location(c, b)
-            .err()
-            .unwrap()
-            .downcast_ref::<WorldStateError>()
-        {
-            Some(WorldStateError::RecursiveMove(_, _)) => {}
-            _ => {
-                panic!("Expected recursive move error");
-            }
-        }
+        assert_eq!(
+            tx.set_object_location(c, b).err(),
+            Some(WorldStateError::RecursiveMove(c, b))
+        );
 
         // The other way around, d to c should be fine.
         tx.set_object_location(d, c).unwrap();
@@ -564,12 +541,8 @@ mod tests {
 
         let result = tx.resolve_property(b, "test".into());
         assert_eq!(
-            result
-                .err()
-                .unwrap()
-                .downcast_ref::<WorldStateError>()
-                .unwrap(),
-            &WorldStateError::PropertyNotFound(b, "test".into())
+            result.err(),
+            Some(WorldStateError::PropertyNotFound(b, "test".into()))
         );
     }
 
@@ -621,9 +594,12 @@ mod tests {
         // MOO will not let this happen. The right way to handle overloading is to set the value
         // on the child.
         let result = tx.define_property(a, b, "test".into(), NOTHING, BitEnum::new(), None);
-        assert!(
-            matches!(result, Err(e) if matches!(e.downcast_ref::<WorldStateError>(),
-                Some(WorldStateError::DuplicatePropertyDefinition(_, _))))
+        assert_eq!(
+            result.err(),
+            Some(WorldStateError::DuplicatePropertyDefinition(
+                b,
+                "test".into()
+            ))
         );
     }
 

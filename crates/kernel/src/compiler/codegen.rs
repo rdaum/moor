@@ -1,9 +1,7 @@
 /// Takes the AST and turns it into a list of opcodes.
 use std::collections::HashMap;
 
-use anyhow::anyhow;
 use itertools::Itertools;
-use thiserror::Error;
 use tracing::error;
 
 use moor_values::var::{v_int, Var};
@@ -14,16 +12,9 @@ use crate::compiler::ast::{
 use crate::compiler::builtins::make_builtin_labels;
 use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::compiler::parse::parse_program;
+use crate::compiler::CompileError;
 use crate::vm::opcode::Op::Jump;
 use crate::vm::opcode::{Op, Program, ScatterLabel};
-
-#[derive(Error, Debug)]
-pub enum CompileError {
-    #[error("Unknown built-in function: {0}")]
-    UnknownBuiltinFunction(String),
-    #[error("Could not find loop with id: {0}")]
-    UnknownLoopLabel(String),
-}
 
 pub struct Loop {
     loop_name: Option<Name>,
@@ -102,7 +93,7 @@ impl CodegenState {
         self.ops.push(op);
     }
 
-    fn find_loop(&self, loop_label: &Name) -> Result<&Loop, anyhow::Error> {
+    fn find_loop(&self, loop_label: &Name) -> Result<&Loop, CompileError> {
         let Some(l) = self.loops.iter().find(|l| {
             if let Some(name) = &l.loop_name {
                 name.eq(loop_label)
@@ -111,7 +102,7 @@ impl CodegenState {
             }
         }) else {
             let loop_name = self.var_names.names[loop_label.0 as usize].clone();
-            return Err(anyhow!(CompileError::UnknownLoopLabel(loop_name)));
+            return Err(CompileError::UnknownLoopLabel(loop_name));
         };
         Ok(l)
     }
@@ -147,7 +138,7 @@ impl CodegenState {
         Offset(fv)
     }
 
-    fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), anyhow::Error> {
+    fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), CompileError> {
         self.push_lvalue(left, false)?;
         self.generate_expr(right)?;
         match left {
@@ -208,7 +199,7 @@ impl CodegenState {
         &mut self,
         scatter: &Vec<ScatterItem>,
         right: &Expr,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), CompileError> {
         self.generate_expr(right)?;
         let nargs = scatter.len();
         let nreq = scatter
@@ -261,7 +252,7 @@ impl CodegenState {
         Ok(())
     }
 
-    fn push_lvalue(&mut self, expr: &Expr, indexed_above: bool) -> Result<(), anyhow::Error> {
+    fn push_lvalue(&mut self, expr: &Expr, indexed_above: bool) -> Result<(), CompileError> {
         match expr {
             Expr::Range { from, base, to } => {
                 self.push_lvalue(base.as_ref(), true)?;
@@ -301,7 +292,7 @@ impl CodegenState {
         Ok(())
     }
 
-    fn generate_codes(&mut self, codes: &CatchCodes) -> Result<(), anyhow::Error> {
+    fn generate_codes(&mut self, codes: &CatchCodes) -> Result<(), CompileError> {
         match codes {
             CatchCodes::Codes(codes) => {
                 self.generate_arg_list(codes)?;
@@ -314,7 +305,7 @@ impl CodegenState {
         Ok(())
     }
 
-    fn generate_expr(&mut self, expr: &Expr) -> Result<(), anyhow::Error> {
+    fn generate_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
         match expr {
             Expr::VarExpr(v) => {
                 let literal = self.add_literal(v);
@@ -481,7 +472,7 @@ impl CodegenState {
         Ok(())
     }
 
-    pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), anyhow::Error> {
+    pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
         // We use the 'canonical' tree line number here for span generation, which should match what
         // unparse generates.
         // TODO In theory we could actually provide both and generate spans for both for situations
@@ -708,7 +699,7 @@ impl CodegenState {
         Ok(())
     }
 
-    fn generate_arg_list(&mut self, args: &Vec<Arg>) -> Result<(), anyhow::Error> {
+    fn generate_arg_list(&mut self, args: &Vec<Arg>) -> Result<(), CompileError> {
         if args.is_empty() {
             self.emit(Op::MkEmptyList);
             self.push_stack(1);
@@ -739,7 +730,7 @@ impl CodegenState {
     }
 }
 
-pub fn compile(program: &str) -> Result<Program, anyhow::Error> {
+pub fn compile(program: &str) -> Result<Program, CompileError> {
     let compile_span = tracing::trace_span!("compile");
     let _compile_guard = compile_span.enter();
 
@@ -753,11 +744,11 @@ pub fn compile(program: &str) -> Result<Program, anyhow::Error> {
     }
     cg_state.emit(Op::Done);
 
-    if cg_state.cur_stack != 0 {
-        return Err(anyhow!("stack not entirely popped after code generation"));
-    }
-    if cg_state.saved_stack.is_some() {
-        return Err(anyhow!("saved stack still present after code generation"));
+    if cg_state.cur_stack != 0 || cg_state.saved_stack.is_some() {
+        panic!(
+            "Stack is not empty at end of compilation: cur_stack#: {} stack: {:?}",
+            cg_state.cur_stack, cg_state.saved_stack
+        )
     }
 
     let binary = Program {

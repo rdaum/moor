@@ -272,10 +272,10 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(String, Vec<String>), WorldStateError>;
 
     /// Commit all modifications made to the state of this world since the start of its transaction.
-    async fn commit(&mut self) -> Result<CommitResult, anyhow::Error>;
+    async fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
 
     /// Rollback all modifications made to the state of this world since the start of its transaction.
-    async fn rollback(&mut self) -> Result<(), anyhow::Error>;
+    async fn rollback(&mut self) -> Result<(), WorldStateError>;
 }
 
 #[async_trait]

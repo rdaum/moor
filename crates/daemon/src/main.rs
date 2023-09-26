@@ -13,7 +13,7 @@ use tracing::info;
 use moor_kernel::db::{DatabaseBuilder, DatabaseType};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::load_db::textdump_load;
-use rpc_common::{RpcError, RpcResponse, RpcResult};
+use rpc_common::{RpcRequestError, RpcResponse, RpcResult};
 
 use crate::rpc_server::zmq_loop;
 
@@ -76,7 +76,7 @@ struct Args {
     narrative_listen: String,
 }
 
-pub(crate) fn make_response(result: Result<RpcResponse, RpcError>) -> Multipart {
+pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Multipart {
     let mut payload = Multipart::default();
     let rpc_result = match result {
         Ok(r) => RpcResult::Success(r),

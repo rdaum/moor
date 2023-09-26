@@ -1,5 +1,4 @@
-use crate::{RpcRequest, RpcResult};
-use anyhow::bail;
+use crate::{RpcError, RpcRequest, RpcResult};
 use tmq::request_reply::RequestSender;
 use tmq::Multipart;
 use tracing::error;
@@ -22,11 +21,13 @@ impl RpcSendClient {
         &mut self,
         client_id: Uuid,
         rpc_msg: RpcRequest,
-    ) -> Result<RpcResult, anyhow::Error> {
+    ) -> Result<RpcResult, RpcError> {
         let rpc_msg_payload = bincode::encode_to_vec(&rpc_msg, bincode::config::standard())
-            .expect("Unable to encode connection establish request");
+            .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
         let message = Multipart::from(vec![client_id.as_bytes().to_vec(), rpc_msg_payload]);
-        let rpc_request_sock = self.rcp_request_sock.take().expect("No RPC request socket");
+        let rpc_request_sock = self.rcp_request_sock.take().ok_or(RpcError::CouldNotSend(
+            "RPC request socket not initialized".to_string(),
+        ))?;
         let rpc_reply_sock = match rpc_request_sock.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
@@ -34,7 +35,7 @@ impl RpcSendClient {
                     "Unable to send connection establish request to RPC server: {}",
                     e
                 );
-                bail!(e);
+                return Err(RpcError::CouldNotSend(e.to_string()));
             }
         };
 
@@ -45,7 +46,7 @@ impl RpcSendClient {
                     "Unable to receive connection establish reply from RPC server: {}",
                     e
                 );
-                bail!(e);
+                return Err(RpcError::CouldNotReceive(e.to_string()));
             }
         };
 
@@ -56,7 +57,7 @@ impl RpcSendClient {
             }
             Err(e) => {
                 error!("Unable to decode RPC response: {}", e);
-                bail!(e);
+                return Err(RpcError::CouldNotDecode(e.to_string()));
             }
         }
     }

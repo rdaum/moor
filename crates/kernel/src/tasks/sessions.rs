@@ -1,8 +1,8 @@
-use anyhow::Error;
 use async_trait::async_trait;
 use moor_values::model::NarrativeEvent;
 use moor_values::var::objid::Objid;
 use std::sync::{Arc, RwLock};
+use thiserror::Error;
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
@@ -34,50 +34,60 @@ pub trait Session: Send + Sync {
     ///  If this leads to weird symptoms, we can revisit this.
     // TODO: commit/rollback *could* consume `self` at this point, but this would make it difficult
     //   to manage e.g. mocking connections for unit tests etc. Can revisit.
-    async fn commit(&self) -> Result<(), anyhow::Error>;
+    async fn commit(&self) -> Result<(), SessionError>;
 
     /// Rollback for this session, called by the scheduler when a task rolls back and *after* the
     /// world state has successfully been rolled back.
     /// Should result in the session throwing away all buffered output.
     /// The session should not be usable after this point.
-    async fn rollback(&self) -> Result<(), anyhow::Error>;
+    async fn rollback(&self) -> Result<(), SessionError>;
 
     /// "Fork" this session; create a new session which attaches to the same connection, but
     /// maintains its own buffer and state and can be committed/rolled back independently.
     /// Is used for forked tasks which end up running in their own transaction.
     /// Note: `disconnect` on one must also disconnect on all the other forks of the same lineage.
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, anyhow::Error>;
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError>;
 
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
     /// rollback.
-    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), anyhow::Error>;
+    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError>;
 
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
     /// like login/logout messages, system error messages ("task aborted") or messages that are not
     /// generally co-incident with the mutable state of the world.
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), anyhow::Error>;
+    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError>;
 
     /// Process a (wizard) request for system shutdown, with an optional shutdown message.
-    async fn shutdown(&self, msg: Option<String>) -> Result<(), anyhow::Error>;
+    async fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError>;
 
     /// The 'name' of the *most recent* connection associated with the player.
     /// In a networked environment this is the hostname.
     /// LambdaMOO cores tend to expect this to be a resolved DNS hostname.
-    async fn connection_name(&self, player: Objid) -> Result<String, anyhow::Error>;
+    async fn connection_name(&self, player: Objid) -> Result<String, SessionError>;
 
     /// Disconnect the given player's connection.
-    async fn disconnect(&self, player: Objid) -> Result<(), anyhow::Error>;
+    async fn disconnect(&self, player: Objid) -> Result<(), SessionError>;
 
     /// Return the list of other currently-connected players.
-    async fn connected_players(&self) -> Result<Vec<Objid>, anyhow::Error>;
+    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError>;
 
     /// Return how many seconds the given player has been connected.
-    async fn connected_seconds(&self, player: Objid) -> Result<f64, anyhow::Error>;
+    async fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError>;
 
     /// Return how many seconds the given player has been idle (no tasks submitted).
-    async fn idle_seconds(&self, player: Objid) -> Result<f64, anyhow::Error>;
+    async fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError>;
+}
+
+#[derive(Debug, Error)]
+pub enum SessionError {
+    #[error("No connection for player {0}")]
+    NoConnectionForPlayer(Objid),
+    #[error("Could not deliver session message")]
+    DeliveryError,
+    #[error("Could not commit session: {0}")]
+    CommitError(String),
 }
 
 /// A simple no-op implementation of the Sessions trait, for use in unit tests.
@@ -97,43 +107,43 @@ impl Default for NoopClientSession {
 
 #[async_trait]
 impl Session for NoopClientSession {
-    async fn commit(&self) -> Result<(), Error> {
+    async fn commit(&self) -> Result<(), SessionError> {
         Ok(())
     }
-    async fn rollback(&self) -> Result<(), Error> {
+    async fn rollback(&self) -> Result<(), SessionError> {
         Ok(())
     }
 
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         Ok(self.clone())
     }
 
-    async fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), anyhow::Error> {
+    async fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), SessionError> {
         Ok(())
     }
 
-    async fn send_system_msg(&self, _player: Objid, _msg: &str) -> Result<(), Error> {
+    async fn send_system_msg(&self, _player: Objid, _msg: &str) -> Result<(), SessionError> {
         Ok(())
     }
 
-    async fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
+    async fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
         Ok(())
     }
-    async fn connection_name(&self, player: Objid) -> Result<String, Error> {
+    async fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         Ok(format!("player-{}", player.0))
     }
-    async fn disconnect(&self, _player: Objid) -> Result<(), Error> {
+    async fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
         Ok(())
     }
-    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
         Ok(vec![])
     }
 
-    async fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
+    async fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 
-    async fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
+    async fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 }
@@ -181,18 +191,18 @@ impl Default for MockClientSession {
 
 #[async_trait]
 impl Session for MockClientSession {
-    async fn commit(&self) -> Result<(), Error> {
+    async fn commit(&self) -> Result<(), SessionError> {
         let mut inner = self.inner.write().unwrap();
         inner.committed = inner.received.clone();
         Ok(())
     }
 
-    async fn rollback(&self) -> Result<(), Error> {
+    async fn rollback(&self) -> Result<(), SessionError> {
         self.inner.write().unwrap().received.clear();
         Ok(())
     }
 
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         Ok(Arc::new(MockClientSession {
             inner: RwLock::new(Inner {
                 received: vec![],
@@ -202,7 +212,7 @@ impl Session for MockClientSession {
         }))
     }
 
-    async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), Error> {
+    async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), SessionError> {
         self.inner
             .write()
             .unwrap()
@@ -211,7 +221,7 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), Error> {
+    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
         self.system
             .write()
             .unwrap()
@@ -219,7 +229,7 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    async fn shutdown(&self, msg: Option<String>) -> Result<(), Error> {
+    async fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         if let Some(msg) = msg {
             system.push(format!("shutdown: {}", msg));
@@ -229,25 +239,25 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    async fn connection_name(&self, player: Objid) -> Result<String, Error> {
+    async fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         Ok(format!("player-{}", player))
     }
 
-    async fn disconnect(&self, _player: Objid) -> Result<(), Error> {
+    async fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         system.push(String::from("disconnect"));
         Ok(())
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
         Ok(vec![])
     }
 
-    async fn connected_seconds(&self, _player: Objid) -> Result<f64, Error> {
+    async fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 
-    async fn idle_seconds(&self, _player: Objid) -> Result<f64, Error> {
+    async fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 }

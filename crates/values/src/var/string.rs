@@ -97,7 +97,7 @@ impl Hash for Str {
 }
 
 impl FromStr for Str {
-    type Err = anyhow::Error;
+    type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self {

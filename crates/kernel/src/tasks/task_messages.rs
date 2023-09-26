@@ -2,7 +2,6 @@ use crate::tasks::scheduler::{AbortLimitReason, TaskDescription};
 use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::ForkRequest;
-use anyhow::Error;
 
 use crate::vm::opcode::Program;
 use moor_values::model::permissions::Perms;
@@ -61,8 +60,6 @@ pub enum SchedulerControlMsg {
     TaskVerbNotFound(Objid, String),
     /// An execption was thrown while executing the verb.
     TaskException(UncaughtException),
-    /// The task was aborted.
-    TaskAbortError(Error),
     /// The task is requesting that it be forked.
     TaskRequestFork(ForkRequest, oneshot::Sender<TaskId>),
     /// The task is letting us know it was cancelled.

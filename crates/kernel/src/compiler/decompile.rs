@@ -827,7 +827,7 @@ impl Decompile {
 }
 
 /// Reconstruct a parse tree from opcodes.
-pub fn program_to_tree(program: &Program) -> Result<Parse, anyhow::Error> {
+pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     let builtins = make_labels_builtins();
     let mut decompile = Decompile {
         program: program.clone(),

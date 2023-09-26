@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::Result;
 use async_trait::async_trait;
 use moor_values::model::objset::ObjSet;
 use moor_values::model::WorldStateError;

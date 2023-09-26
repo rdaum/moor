@@ -83,35 +83,31 @@ pub mod vm_test_utils {
                     caller: SYSTEM_OBJECT,
                 },
             )
-            .await
-            .unwrap();
+            .await;
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
             match vm_host.exec_interpreter(0, world_state).await {
-                Ok(VMHostResponse::ContinueOk) => {
+                VMHostResponse::ContinueOk => {
                     continue;
                 }
-                Ok(VMHostResponse::DispatchFork(f)) => {
+                VMHostResponse::DispatchFork(f) => {
                     panic!("Unexpected fork: {:?}", f);
                 }
-                Ok(VMHostResponse::AbortLimit(a)) => {
+                VMHostResponse::AbortLimit(a) => {
                     panic!("Unexpected abort: {:?}", a);
                 }
-                Ok(VMHostResponse::CompleteException(e)) => {
+                VMHostResponse::CompleteException(e) => {
                     panic!("Unexpected exception: {:?}", e)
                 }
-                Ok(VMHostResponse::CompleteSuccess(v)) => {
+                VMHostResponse::CompleteSuccess(v) => {
                     return v;
                 }
-                Ok(VMHostResponse::CompleteAbort) => {
+                VMHostResponse::CompleteAbort => {
                     panic!("Unexpected abort");
                 }
-                Ok(VMHostResponse::Suspend(_)) => {
+                VMHostResponse::Suspend(_) => {
                     panic!("Unexpected suspend");
-                }
-                Err(e) => {
-                    panic!("Unexpected error: {}", e);
                 }
             }
         }

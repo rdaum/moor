@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
-    use crate::compiler::codegen::{compile, CompileError};
+    use crate::compiler::codegen::compile;
     use crate::compiler::labels::{Label, Name, Offset};
+    use crate::compiler::CompileError;
     use moor_values::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF};
     use moor_values::var::objid::Objid;
     use moor_values::var::{v_int, v_obj};
@@ -465,18 +466,10 @@ mod tests {
     fn test_unknown_builtin_call() {
         let program = "bad_builtin(1, 2, 3);";
         let parse = compile(program);
-        assert!(parse.is_err());
-        match parse.err().unwrap().downcast_ref::<CompileError>() {
-            Some(CompileError::UnknownBuiltinFunction(name)) => {
-                assert_eq!(name, "bad_builtin");
-            }
-            None => {
-                panic!("Missing error");
-            }
-            Some(_) => {
-                panic!("Wrong error type")
-            }
-        }
+        assert!(matches!(
+            parse,
+            Err(CompileError::UnknownBuiltinFunction(_))
+        ));
     }
 
     #[test]

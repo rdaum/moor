@@ -9,7 +9,6 @@ use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 use tracing::instrument;
 
-use moor_values::util::unquote_str;
 use moor_values::var::error::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
@@ -25,6 +24,7 @@ use crate::compiler::ast::{
 use crate::compiler::labels::Names;
 use crate::compiler::parse::moo::{MooParser, Rule};
 use crate::compiler::unparse::annotate_line_numbers;
+use crate::compiler::CompileError;
 
 pub mod moo {
     #[derive(Parser)]
@@ -41,7 +41,7 @@ pub struct Parse {
 fn parse_atom(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pair<Rule>,
-) -> Result<Expr, anyhow::Error> {
+) -> Result<Expr, CompileError> {
     match pairs.as_rule() {
         Rule::ident => {
             let name = names.borrow_mut().find_or_add_name(pairs.as_str().trim());
@@ -63,7 +63,6 @@ fn parse_atom(
         }
         Rule::string => {
             let string = pairs.as_str();
-            // Note we don't trim the start and end quotes, because snailquote is expecting them.
             let parsed = unquote_str(string)?;
             Ok(Expr::VarExpr(v_str(&parsed)))
         }
@@ -100,7 +99,7 @@ fn parse_atom(
 fn parse_exprlist(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
-) -> Result<Vec<Arg>, anyhow::Error> {
+) -> Result<Vec<Arg>, CompileError> {
     let mut args = vec![];
     for pair in pairs {
         match pair.as_rule() {
@@ -129,7 +128,7 @@ fn parse_exprlist(
 fn parse_arglist(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
-) -> Result<Vec<Arg>, anyhow::Error> {
+) -> Result<Vec<Arg>, CompileError> {
     for pair in pairs {
         match pair.as_rule() {
             Rule::exprlist => {
@@ -146,7 +145,7 @@ fn parse_arglist(
 fn parse_except_codes(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pair<Rule>,
-) -> Result<CatchCodes, anyhow::Error> {
+) -> Result<CatchCodes, CompileError> {
     match pairs.as_rule() {
         Rule::anycode => Ok(CatchCodes::Any),
         Rule::exprlist => Ok(CatchCodes::Codes(parse_exprlist(
@@ -162,7 +161,7 @@ fn parse_except_codes(
 fn parse_expr(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
-) -> Result<Expr, anyhow::Error> {
+) -> Result<Expr, CompileError> {
     let pratt = PrattParser::new()
         // Generally following C-like precedence order as described:
         //   https://en.cppreference.com/w/c/language/operator_precedence
@@ -482,7 +481,7 @@ fn parse_expr(
 fn parse_statement(
     names: Rc<RefCell<Names>>,
     pair: pest::iterators::Pair<Rule>,
-) -> Result<Option<Stmt>, anyhow::Error> {
+) -> Result<Option<Stmt>, CompileError> {
     let line = pair.line_col().0;
     match pair.as_rule() {
         Rule::expr_statement => {
@@ -700,7 +699,7 @@ fn parse_statement(
 fn parse_statements(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
-) -> Result<Vec<Stmt>, anyhow::Error> {
+) -> Result<Vec<Stmt>, CompileError> {
     let mut statements = vec![];
     for pair in pairs {
         match pair.as_rule() {
@@ -719,8 +718,14 @@ fn parse_statements(
 }
 
 #[instrument(skip(program_text))]
-pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
-    let pairs = MooParser::parse(Rule::program, program_text)?;
+pub fn parse_program(program_text: &str) -> Result<Parse, CompileError> {
+    let pairs = match MooParser::parse(Rule::program, program_text) {
+        Ok(pairs) => pairs,
+        Err(e) => {
+            let msg = format!("Parse error: {}", e.to_string());
+            return Err(CompileError::ParseError(msg));
+        }
+    };
 
     let names = Rc::new(RefCell::new(Names::new()));
     let mut program = Vec::new();
@@ -757,6 +762,49 @@ pub fn parse_program(program_text: &str) -> Result<Parse, anyhow::Error> {
     })
 }
 
+// Lex a simpe MOO string literal.  Expectation is:
+//   " and " at beginning and end
+//   \" is "
+//   \\ is \
+//   \n is just n
+// That's it. MOO has no tabs, newlines, etc. quoting.
+pub fn unquote_str(s: &str) -> Result<String, CompileError> {
+    let mut output = String::new();
+    let mut chars = s.chars().peekable();
+    let Some('"') = chars.next() else {
+        return Err(CompileError::StringLexError(
+            "Expected \" at beginning of string".to_string(),
+        ));
+    };
+    // Proceed until second-last. Last has to be '"'
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => match chars.next() {
+                Some('\\') => output.push('\\'),
+                Some('"') => output.push('"'),
+                Some(c) => output.push(c),
+                None => {
+                    return Err(CompileError::StringLexError(
+                        "Unexpected end of string".to_string(),
+                    ))
+                }
+            },
+            '"' => {
+                if chars.peek().is_some() {
+                    return Err(CompileError::StringLexError(
+                        "Unexpected \" in string".to_string(),
+                    ));
+                }
+                return Ok(output);
+            }
+            c => output.push(c),
+        }
+    }
+    return Err(CompileError::StringLexError(
+        "Unexpected end of string".to_string(),
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use moor_values::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
@@ -769,10 +817,19 @@ mod tests {
         UnaryOp,
     };
     use crate::compiler::labels::Names;
-    use crate::compiler::parse::parse_program;
+    use crate::compiler::parse::{parse_program, unquote_str};
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
+    }
+
+    #[test]
+    fn test_string_unquote() {
+        assert_eq!(unquote_str(r#""foo""#).unwrap(), "foo");
+        assert_eq!(unquote_str(r#""foo\"bar""#).unwrap(), r#"foo"bar"#);
+        assert_eq!(unquote_str(r#""foo\\bar""#).unwrap(), r"foo\bar");
+        // Does not support \t, \n, etc.  They just turn into n, t, etc.
+        assert_eq!(unquote_str(r#""foo\tbar""#).unwrap(), r#"footbar"#);
     }
 
     #[test]

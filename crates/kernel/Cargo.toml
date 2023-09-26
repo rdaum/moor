@@ -44,7 +44,6 @@ pest.workspace = true
 pest_derive.workspace = true
 
 ## Error declaration/ handling
-anyhow.workspace = true
 thiserror.workspace = true
 
 ## For macro-ing

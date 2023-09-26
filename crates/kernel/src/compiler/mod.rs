@@ -1,4 +1,6 @@
+use bincode::{Decode, Encode};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
+use thiserror::Error;
 
 pub mod ast;
 pub mod builtins;
@@ -33,4 +35,16 @@ pub enum GlobalName {
     prepstr,
     iobj,
     iobjstr,
+}
+
+#[derive(Debug, Error, Clone, Decode, Encode)]
+pub enum CompileError {
+    #[error("Failure to parse string: {0}")]
+    StringLexError(String),
+    #[error("Failure to parse program: {0}")]
+    ParseError(String),
+    #[error("Unknown built-in function: {0}")]
+    UnknownBuiltinFunction(String),
+    #[error("Could not find loop with id: {0}")]
+    UnknownLoopLabel(String),
 }

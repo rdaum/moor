@@ -98,7 +98,7 @@ impl Task {
                 control_msg = task_control_receiver.recv() => {
                     match control_msg {
                         Some(control_msg) => {
-                             if let Ok(Some(response)) = self.handle_control_message(control_msg).await {
+                             if let Some(response) = self.handle_control_message(control_msg).await {
                                 self.scheduler_control_sender
                                         .send(response)
                                         .expect("Could not send response");
@@ -129,7 +129,7 @@ impl Task {
             .exec_interpreter(self.task_id, self.world_state.as_mut())
             .await;
         match vm_exec_result {
-            Ok(VMHostResponse::DispatchFork(fork_request)) => {
+            VMHostResponse::DispatchFork(fork_request) => {
                 trace!(task_id = self.task_id, ?fork_request, "Task fork");
                 // To fork a new task, we need to get the scheduler to do some work for us. So we'll
                 // send a message back asking it to fork the task and return the new task id on a
@@ -147,7 +147,7 @@ impl Task {
                 }
                 (VmContinue::Continue, None)
             }
-            Ok(VMHostResponse::Suspend(delay)) => {
+            VMHostResponse::Suspend(delay) => {
                 trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
 
                 // VMHost is now suspended for execution, and we'll be waiting for a Resume
@@ -180,8 +180,8 @@ impl Task {
                     Some(SchedulerControlMsg::TaskSuspend(resume_time)),
                 )
             }
-            Ok(VMHostResponse::ContinueOk) => (VmContinue::Continue, None),
-            Ok(VMHostResponse::CompleteSuccess(result)) => {
+            VMHostResponse::ContinueOk => (VmContinue::Continue, None),
+            VMHostResponse::CompleteSuccess(result) => {
                 trace!(task_id = self.task_id, result = ?result, "Task complete, success");
 
                 // TODO: restart the whole task on conflict.
@@ -204,7 +204,7 @@ impl Task {
                     Some(SchedulerControlMsg::TaskSuccess(result)),
                 )
             }
-            Ok(VMHostResponse::CompleteAbort) => {
+            VMHostResponse::CompleteAbort => {
                 error!(task_id = self.task_id, "Task aborted");
                 if let Err(send_error) = self
                     .session
@@ -228,7 +228,7 @@ impl Task {
                     Some(SchedulerControlMsg::TaskAbortCancelled),
                 )
             }
-            Ok(VMHostResponse::CompleteException(exception)) => {
+            VMHostResponse::CompleteException(exception) => {
                 // Compose a string out of the backtrace
                 let mut traceback = vec![];
                 for frame in exception.backtrace.iter() {
@@ -260,7 +260,7 @@ impl Task {
                     Some(SchedulerControlMsg::TaskException(exception)),
                 )
             }
-            Ok(VMHostResponse::AbortLimit(reason)) => {
+            VMHostResponse::AbortLimit(reason) => {
                 let abort_reason_text = match reason {
                     AbortLimitReason::Ticks(ticks) => {
                         format!("Abort: Task exceeded ticks limit of {}", ticks)
@@ -286,32 +286,12 @@ impl Task {
                     Some(SchedulerControlMsg::TaskAbortLimitsReached(reason)),
                 )
             }
-            Err(err) => {
-                error!(task_id = self.task_id, error = ?err, "Task error; rollback");
-                increment_counter!("tasks.error.exec");
-                self.world_state
-                    .rollback()
-                    .await
-                    .expect("Could not rollback world state");
-                self.session
-                    .rollback()
-                    .await
-                    .expect("Could not rollback connection output");
-
-                (
-                    VmContinue::Complete,
-                    Some(SchedulerControlMsg::TaskAbortError(err)),
-                )
-            }
         }
     }
 
     /// Handle an inbound control message from the scheduler, and return a response message to send
     ///  back, if any.
-    async fn handle_control_message(
-        &mut self,
-        msg: TaskControlMsg,
-    ) -> Result<Option<SchedulerControlMsg>, anyhow::Error> {
+    async fn handle_control_message(&mut self, msg: TaskControlMsg) -> Option<SchedulerControlMsg> {
         match msg {
             // We've been asked to start a command.
             // We need to set up the VM and then execute it.
@@ -342,14 +322,12 @@ impl Task {
                     Err(WorldStateError::VerbPermissionDenied)
                     | Err(WorldStateError::ObjectPermissionDenied)
                     | Err(WorldStateError::PropertyPermissionDenied) => {
-                        return Ok(Some(SchedulerControlMsg::TaskCommandError(
-                            PermissionDenied,
-                        )));
+                        return Some(SchedulerControlMsg::TaskCommandError(PermissionDenied));
                     }
                     Err(wse) => {
-                        return Ok(Some(SchedulerControlMsg::TaskCommandError(
+                        return Some(SchedulerControlMsg::TaskCommandError(
                             CommandError::DatabaseError(wse),
-                        )));
+                        ));
                     }
                 };
 
@@ -362,14 +340,12 @@ impl Task {
                 let parsed_command = match parse_command(&command, matcher).await {
                     Ok(pc) => pc,
                     Err(ParseCommandError::PermissionDenied) => {
-                        return Ok(Some(SchedulerControlMsg::TaskCommandError(
-                            PermissionDenied,
-                        )));
+                        return Some(SchedulerControlMsg::TaskCommandError(PermissionDenied));
                     }
                     Err(_) => {
-                        return Ok(Some(SchedulerControlMsg::TaskCommandError(
+                        return Some(SchedulerControlMsg::TaskCommandError(
                             CommandError::CouldNotParseCommand,
-                        )));
+                        ));
                     }
                 };
 
@@ -383,7 +359,7 @@ impl Task {
                 .await
                 {
                     Ok(results) => results,
-                    Err(e) => return Ok(Some(SchedulerControlMsg::TaskCommandError(e))),
+                    Err(e) => return Some(SchedulerControlMsg::TaskCommandError(e)),
                 };
                 let (verb_info, target) = match parse_results {
                     // If we have a successul match, that's what we'll call into
@@ -400,9 +376,9 @@ impl Task {
                     // Otherwise, we want to try to call :huh, if it exists.
                     None => {
                         if player_location == NOTHING {
-                            return Ok(Some(SchedulerControlMsg::TaskCommandError(
+                            return Some(SchedulerControlMsg::TaskCommandError(
                                 CommandError::NoCommandMatch,
-                            )));
+                            ));
                         }
 
                         // Try to find :huh. If it exists, we'll dispatch to that, instead.
@@ -412,9 +388,9 @@ impl Task {
                             .find_method_verb_on(self.perms, player_location, "huh")
                             .await
                         else {
-                            return Ok(Some(SchedulerControlMsg::TaskCommandError(
+                            return Some(SchedulerControlMsg::TaskCommandError(
                                 CommandError::NoCommandMatch,
-                            )));
+                            ));
                         };
                         let words = parse_into_words(&command);
                         info!(?verb_info, ?player, ?player_location, args = ?words, "Dispatching to :huh");
@@ -439,7 +415,7 @@ impl Task {
                         parsed_command,
                         self.perms,
                     )
-                    .await?;
+                    .await;
             }
 
             TaskControlMsg::StartVerb {
@@ -468,15 +444,15 @@ impl Task {
                     .find_method_verb_on(self.perms, verb_call.this, verb_call.verb_name.as_str())
                     .await
                 else {
-                    return Ok(Some(SchedulerControlMsg::TaskVerbNotFound(
+                    return Some(SchedulerControlMsg::TaskVerbNotFound(
                         verb_call.this,
                         verb_call.verb_name,
-                    )));
+                    ));
                 };
 
                 self.vm_host
                     .start_call_method_verb(self.task_id, self.perms, verb_info, verb_call)
-                    .await?;
+                    .await;
             }
             TaskControlMsg::StartFork {
                 task_id,
@@ -487,15 +463,13 @@ impl Task {
 
                 self.vm_host
                     .start_fork(task_id, fork_request, suspended)
-                    .await?;
+                    .await;
             }
             TaskControlMsg::StartEval { player, program } => {
                 increment_counter!("task.start_eval");
 
                 self.scheduled_start_time = None;
-                self.vm_host
-                    .start_eval(self.task_id, player, program)
-                    .await?;
+                self.vm_host.start_eval(self.task_id, player, program).await;
             }
             TaskControlMsg::Resume(world_state, value) => {
                 increment_counter!("task.resume");
@@ -507,8 +481,8 @@ impl Task {
                 );
                 self.world_state = world_state;
                 self.scheduled_start_time = None;
-                self.vm_host.resume_execution(value).await?;
-                return Ok(None);
+                self.vm_host.resume_execution(value).await;
+                return None;
             }
             TaskControlMsg::Abort => {
                 // We've been asked to die. Go tell the VM host to abort, and roll back the
@@ -516,10 +490,16 @@ impl Task {
                 increment_counter!("task.abort");
                 trace!(task_id = self.task_id, "Aborting task");
                 self.vm_host.stop().await;
-                self.world_state.rollback().await?;
+
+                // Failure to rollback is a panic, something is fundamentally wrong, and we're best
+                //   to just restart.
+                self.world_state
+                    .rollback()
+                    .await
+                    .expect("Could not rollback transaction. Panic.");
 
                 // And now tell the scheduler we're done, as we exit.
-                return Ok(Some(SchedulerControlMsg::TaskAbortCancelled));
+                return Some(SchedulerControlMsg::TaskAbortCancelled);
             }
             TaskControlMsg::Describe(reply_sender) => {
                 increment_counter!("task.describe");
@@ -536,10 +516,10 @@ impl Task {
                 reply_sender
                     .send(description)
                     .expect("Could not send task description");
-                return Ok(None);
+                return None;
             }
         }
-        Ok(None)
+        None
     }
 }
 

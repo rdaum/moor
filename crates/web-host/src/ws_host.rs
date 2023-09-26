@@ -13,8 +13,8 @@ use rpc_common::pubsub_client::narrative_recv;
 use rpc_common::rpc_client::RpcSendClient;
 use rpc_common::BroadcastEvent;
 use rpc_common::ConnectionEvent;
-use rpc_common::RpcError;
 use rpc_common::RpcRequest::ConnectionEstablish;
+use rpc_common::RpcRequestError;
 use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
 use std::net::SocketAddr;
 use std::time::SystemTime;
@@ -184,16 +184,16 @@ impl WebSocketHost {
                         RpcResult::Success(RpcResponse::CommandComplete) => {
                             // Nothing to do
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::CouldNotParseCommand)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::CouldNotParseCommand)) => {
                             write_line(&mut ws_sender, "I don't understand that.").await;
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::NoObjectMatch)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoObjectMatch)) => {
                             write_line(&mut ws_sender, "I don't see that here.").await;
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::NoCommandMatch)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoCommandMatch)) => {
                             write_line(&mut ws_sender, "I don't know how to do that.").await;
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::PermissionDenied)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
                            write_line(&mut ws_sender, "You can't do that.").await;
                         }
                         RpcResult::Failure(e) => {

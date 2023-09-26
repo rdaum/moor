@@ -27,21 +27,27 @@ pub struct RocksDbServer {
 
 impl RocksDbServer {
     #[tracing::instrument()]
-    pub fn new(path: PathBuf) -> Result<(Self, bool), anyhow::Error> {
+    pub fn new(path: PathBuf) -> Result<(Self, bool), WorldStateError> {
         let mut options = rocksdb::Options::default();
         options.create_if_missing(true);
         options.create_missing_column_families(true);
         let column_families = ColumnFamilies::VARIANTS;
+
+        // Note: Panic if we're not able to open the database, this is a fundamental system error.
         let db: rocksdb::OptimisticTransactionDB =
-            rocksdb::OptimisticTransactionDB::open_cf(&options, path, column_families)?;
+            rocksdb::OptimisticTransactionDB::open_cf(&options, path, column_families)
+                .expect("Unable to open database");
 
         // Check if the database was created by looking for objid #0. If that's present, we assume
         // the database was already created.
         let op_cf = db
             .cf_handle(column_families[ColumnFamilies::ObjectFlags as usize])
-            .unwrap();
+            .expect("Unable to open object flags column family");
 
-        let was_created = db.get_cf(op_cf, oid_key(SYSTEM_OBJECT))?.is_none();
+        let was_created = db
+            .get_cf(op_cf, oid_key(SYSTEM_OBJECT))
+            .expect("Unable to check for database freshness")
+            .is_none();
 
         Ok((Self { db: Arc::new(db) }, was_created))
     }

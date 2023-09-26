@@ -26,7 +26,7 @@ async fn get_reply<R>(
 ) -> Result<R, WorldStateError> {
     receive
         .await
-        .map_err(|e| WorldStateError::CommunicationError(e.to_string()))?
+        .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?
 }
 
 /// Sends messages over crossbeam channel to the Db tx thread and fields replies.
@@ -38,7 +38,7 @@ impl DbTxClient {
     fn send(&self, msg: DbMessage) -> Result<(), WorldStateError> {
         self.mailbox
             .send(msg)
-            .map_err(|e| WorldStateError::CommunicationError(e.to_string()))
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
     }
 
     pub async fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
@@ -375,7 +375,7 @@ impl DbTxClient {
         self.send(DbMessage::Valid(obj, send))?;
         let valid = receive
             .await
-            .map_err(|e| WorldStateError::CommunicationError(e.to_string()))?;
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
         Ok(valid)
     }
     pub async fn commit(&self) -> Result<CommitResult, WorldStateError> {
@@ -383,7 +383,7 @@ impl DbTxClient {
         self.send(DbMessage::Commit(send))?;
         receive
             .await
-            .map_err(|e| WorldStateError::CommunicationError(e.to_string()))
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
     }
 
     pub async fn rollback(&self) -> Result<(), WorldStateError> {
@@ -391,6 +391,6 @@ impl DbTxClient {
         self.send(DbMessage::Rollback(send))?;
         receive
             .await
-            .map_err(|e| WorldStateError::CommunicationError(e.to_string()))
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
     }
 }

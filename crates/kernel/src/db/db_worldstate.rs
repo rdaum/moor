@@ -1,4 +1,3 @@
-use anyhow::Error;
 use async_trait::async_trait;
 use uuid::Uuid;
 
@@ -798,12 +797,12 @@ impl WorldState for DbTxWorldState {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn commit(&mut self) -> Result<CommitResult, Error> {
-        Ok(self.client.commit().await?)
+    async fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
+        self.client.commit().await
     }
 
     #[tracing::instrument(skip(self))]
-    async fn rollback(&mut self) -> Result<(), Error> {
-        Ok(self.client.rollback().await?)
+    async fn rollback(&mut self) -> Result<(), WorldStateError> {
+        self.client.rollback().await
     }
 }

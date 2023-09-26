@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
 
-use anyhow::Context;
 use metrics_macros::increment_counter;
 use moor_values::AsByteBuffer;
 use tracing::{info, span, trace, warn};
@@ -13,6 +12,7 @@ use moor_values::var::Var;
 
 use crate::compiler::codegen::compile;
 use crate::db::loader::LoaderInterface;
+use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{Object, TextdumpReader};
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::props::PropFlag;
@@ -84,12 +84,17 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 #[tracing::instrument(skip(ldr))]
-pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<(), anyhow::Error> {
+pub async fn textdump_load(
+    ldr: &mut dyn LoaderInterface,
+    path: &str,
+) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
 
-    let jhcore = File::open(path)?;
-    let br = BufReader::new(jhcore);
+    let corefile =
+        File::open(path).map_err(|e| TextdumpReaderError::CouldNotOpenFile(e.to_string()))?;
+
+    let br = BufReader::new(corefile);
     let mut tdr = TextdumpReader::new(br);
     let td = tdr.read_textdump()?;
 
@@ -110,7 +115,9 @@ pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<
                 .flags(flags),
         )
         .await
-        .with_context(|| format!("Unable to create object #{}", objid.0))?;
+        .map_err(|e| {
+            TextdumpReaderError::LoadError(format!("creating object {}", objid), e.clone())
+        })?;
 
         increment_counter!("textdump.created_objects");
     }
@@ -118,15 +125,17 @@ pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<
     info!("Setting object attributes (parent/location/owner)");
     for (objid, o) in &td.objects {
         trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
-        ldr.set_object_owner(*objid, o.owner)
-            .await
-            .with_context(|| format!("Unable to set owner of {}", *objid))?;
-        ldr.set_object_parent(*objid, o.parent)
-            .await
-            .with_context(|| format!("Unable to set parent of {}", *objid))?;
+        ldr.set_object_owner(*objid, o.owner).await.map_err(|e| {
+            TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
+        })?;
+        ldr.set_object_parent(*objid, o.parent).await.map_err(|e| {
+            TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
+        })?;
         ldr.set_object_location(*objid, o.location)
             .await
-            .with_context(|| format!("Unable to set location of {}", *objid))?;
+            .map_err(|e| {
+                TextdumpReaderError::LoadError(format!("setting location of {}", objid), e.clone())
+            })?;
     }
 
     info!("Defining properties...");
@@ -150,7 +159,12 @@ pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<
                     value,
                 )
                 .await
-                .with_context(|| format!("Unable to define property on {}", objid))?;
+                .map_err(|e| {
+                    TextdumpReaderError::LoadError(
+                        format!("defining property on {}", objid),
+                        e.clone(),
+                    )
+                })?;
             }
             increment_counter!("textdump.defined_properties");
         }
@@ -166,7 +180,12 @@ pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<
 
             ldr.set_update_property(*objid, resolved.name.as_str(), p.owner, flags, value)
                 .await
-                .with_context(|| format!("Unable to set property on {}", objid))?;
+                .map_err(|e| {
+                    TextdumpReaderError::LoadError(
+                        format!("setting property on {}", objid),
+                        e.clone(),
+                    )
+                })?;
             increment_counter!("textdump.set_properties");
         }
     }
@@ -208,10 +227,10 @@ pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<
                 continue;
             };
 
-            let program = compile(verb.program.as_str()).with_context(|| {
-                format!(
-                    "Compile error in #{}/{} ({:?}): {:?}",
-                    objid.0, vn, names, verb.program
+            let program = compile(verb.program.as_str()).map_err(|e| {
+                TextdumpReaderError::VerbCompileError(
+                    format!("compiling verb #{}/{} ({:?})", objid.0, vn, names),
+                    e.clone(),
                 )
             })?;
 
@@ -220,7 +239,12 @@ pub async fn textdump_load(ldr: &mut dyn LoaderInterface, path: &str) -> Result<
 
             ldr.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
                 .await
-                .with_context(|| format!("Unable to add verb #{}/{} ({:?})", objid.0, vn, names))?;
+                .map_err(|e| {
+                    TextdumpReaderError::LoadError(
+                        format!("adding verb #{}/{} ({:?})", objid.0, vn, names),
+                        e.clone(),
+                    )
+                })?;
             trace!(objid = ?objid.0, name = ?vn, "Added verb");
             increment_counter!("textdump.compiled_verbs");
         }

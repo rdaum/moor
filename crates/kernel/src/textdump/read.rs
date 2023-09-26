@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, Read};
 
-use anyhow::anyhow;
+use moor_values::model::WorldStateError;
 use text_io::scan;
 use tracing::info;
 
+use crate::compiler::CompileError;
 use moor_values::var::error::Error;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var, VarType};
@@ -14,32 +15,65 @@ use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
 
 const TYPE_CLEAR: i64 = 5;
 
+#[derive(Debug, thiserror::Error)]
+pub enum TextdumpReaderError {
+    #[error("could not open file: {0}")]
+    CouldNotOpenFile(String),
+    #[error("io error: {0}")]
+    IoError(std::io::Error),
+    #[error("parse error: {0}")]
+    ParseError(String),
+    #[error("db error while {0}: {1}")]
+    LoadError(String, WorldStateError),
+    #[error("compile error while {0}: {1}")]
+    VerbCompileError(String, CompileError),
+}
+
 impl<R: Read> TextdumpReader<R> {
-    fn read_num(&mut self) -> Result<i64, anyhow::Error> {
+    fn read_next_line(&mut self) -> Result<String, TextdumpReaderError> {
         let mut buf = String::new();
-        let _r = self.reader.read_line(&mut buf)?;
-        let i: i64 = buf.trim().parse()?;
-        Ok(i)
-    }
-    fn read_objid(&mut self) -> Result<Objid, anyhow::Error> {
-        let mut buf = String::new();
-        let _r = self.reader.read_line(&mut buf)?;
-        let u: i64 = buf.trim().parse()?;
-        Ok(Objid(u))
-    }
-    fn read_float(&mut self) -> Result<f64, anyhow::Error> {
-        let mut buf = String::new();
-        let _r = self.reader.read_line(&mut buf)?;
-        let f: f64 = buf.trim().parse()?;
-        Ok(f)
-    }
-    fn read_string(&mut self) -> Result<String, anyhow::Error> {
-        let mut buf = String::new();
-        let _r = self.reader.read_line(&mut buf)?;
-        let buf = String::from(buf.trim_matches('\n'));
+        if let Err(e) = self.reader.read_line(&mut buf) {
+            return Err(TextdumpReaderError::IoError(e));
+        }
         Ok(buf)
     }
-    fn read_verbdef(&mut self) -> Result<Verbdef, anyhow::Error> {
+
+    fn read_num(&mut self) -> Result<i64, TextdumpReaderError> {
+        let buf = self.read_next_line()?;
+        let Ok(i) = buf.trim().parse() else {
+            return Err(TextdumpReaderError::ParseError(format!(
+                "invalid number: {}",
+                buf
+            )));
+        };
+        Ok(i)
+    }
+    fn read_objid(&mut self) -> Result<Objid, TextdumpReaderError> {
+        let buf = self.read_next_line()?;
+        let Ok(u) = buf.trim().parse() else {
+            return Err(TextdumpReaderError::ParseError(format!(
+                "invalid objid: {}",
+                buf
+            )));
+        };
+        Ok(Objid(u))
+    }
+    fn read_float(&mut self) -> Result<f64, TextdumpReaderError> {
+        let buf = self.read_next_line()?;
+        let Ok(f) = buf.trim().parse() else {
+            return Err(TextdumpReaderError::ParseError(format!(
+                "invalid float: {}",
+                buf
+            )));
+        };
+        Ok(f)
+    }
+    fn read_string(&mut self) -> Result<String, TextdumpReaderError> {
+        let buf = self.read_next_line()?;
+        let buf = buf.trim_matches('\n');
+        Ok(buf.to_string())
+    }
+    fn read_verbdef(&mut self) -> Result<Verbdef, TextdumpReaderError> {
         let name = self.read_string()?;
         let owner = self.read_objid()?;
         let perms = self.read_num()? as u16;
@@ -51,7 +85,7 @@ impl<R: Read> TextdumpReader<R> {
             prep,
         })
     }
-    fn read_var_value(&mut self, t_num: i64) -> Result<Var, anyhow::Error> {
+    fn read_var_value(&mut self, t_num: i64) -> Result<Var, TextdumpReaderError> {
         let vtype: VarType = VarType::from_repr(t_num as u8).expect("Invalid var type");
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
@@ -78,12 +112,12 @@ impl<R: Read> TextdumpReader<R> {
         Ok(v)
     }
 
-    fn read_var(&mut self) -> Result<Var, anyhow::Error> {
+    fn read_var(&mut self) -> Result<Var, TextdumpReaderError> {
         let t_num = self.read_num()?;
         self.read_var_value(t_num)
     }
 
-    fn read_propval(&mut self) -> Result<Propval, anyhow::Error> {
+    fn read_propval(&mut self) -> Result<Propval, TextdumpReaderError> {
         let t_num = self.read_num()?;
         // Special handling for 'clear' properties, we convert them into a special attribute,
         // because I really don't like the idea of having a special 'clear' Var type for for
@@ -101,7 +135,7 @@ impl<R: Read> TextdumpReader<R> {
             is_clear,
         })
     }
-    fn read_object(&mut self) -> Result<Option<Object>, anyhow::Error> {
+    fn read_object(&mut self) -> Result<Option<Object>, TextdumpReaderError> {
         let ospec = self.read_string()?;
         let ospec = ospec.trim();
 
@@ -119,12 +153,20 @@ impl<R: Read> TextdumpReader<R> {
         match ospec.chars().next() {
             Some('#') => {}
             _ => {
-                return Err(anyhow!("invalid objid: {}", ospec));
+                return Err(TextdumpReaderError::ParseError(format!(
+                    "invalid object spec: {}",
+                    ospec
+                )))
             }
         }
         // TODO: handle "recycled" in spec.
         let oid_str = &ospec[1..];
-        let oid: i64 = oid_str.trim().parse()?;
+        let Ok(oid) = oid_str.trim().parse() else {
+            return Err(TextdumpReaderError::ParseError(format!(
+                "invalid objid: {}",
+                oid_str
+            )));
+        };
         let oid = Objid(oid);
         let name = self.read_string()?;
         let _ohandles_string = self.read_string()?;
@@ -169,7 +211,7 @@ impl<R: Read> TextdumpReader<R> {
         }))
     }
 
-    fn read_verb(&mut self) -> Result<Verb, anyhow::Error> {
+    fn read_verb(&mut self) -> Result<Verb, TextdumpReaderError> {
         let header = self.read_string()?;
         let (oid, verbnum): (i64, usize);
         scan!(header.bytes() => "#{}:{}", oid, verbnum);
@@ -188,7 +230,7 @@ impl<R: Read> TextdumpReader<R> {
         }
     }
 
-    pub fn read_textdump(&mut self) -> Result<Textdump, anyhow::Error> {
+    pub fn read_textdump(&mut self) -> Result<Textdump, TextdumpReaderError> {
         let version = self.read_string()?;
         info!("version {}", version);
         let nobjs = self.read_num()? as usize;

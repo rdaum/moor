@@ -1,9 +1,8 @@
 /// Receives db messages over a crossbeam channel, and passes them through to the database.
-use anyhow::bail;
 use crossbeam_channel::{Receiver, RecvError};
 use metrics_macros::increment_counter;
 use rocksdb::ColumnFamily;
-use tracing::warn;
+use tracing::{error, warn};
 
 use moor_values::model::WorldStateError;
 
@@ -12,24 +11,21 @@ use crate::db::rocksdb::tx_db_impl::RocksDbTx;
 
 fn respond<V: Send + Sync + 'static>(
     r: tokio::sync::oneshot::Sender<Result<V, WorldStateError>>,
-    res: Result<V, anyhow::Error>,
-) -> Result<(), anyhow::Error> {
+    res: Result<V, WorldStateError>,
+) -> Result<(), WorldStateError> {
     match res {
         Ok(v) => {
             let Ok(_) = r.send(Ok(v)) else {
-                bail!("Failed to send response to transaction server");
+                panic!("Failed to send response to transaction server");
             };
             Ok(())
         }
-        Err(e) => match e.downcast::<WorldStateError>() {
-            Ok(e) => {
-                let Ok(_) = r.send(Err(e)) else {
-                    bail!("Failed to send response to transaction server");
-                };
-                Ok(())
-            }
-            Err(e) => Err(e.context("Error in transaction")),
-        },
+        Err(e) => {
+            let Ok(_) = r.send(Err(e)) else {
+                panic!("Failed to send response to transaction server");
+            };
+            Ok(())
+        }
     }
 }
 
@@ -38,7 +34,7 @@ pub(crate) fn run_tx_server<'a>(
     mailbox: Receiver<DbMessage>,
     tx: rocksdb::Transaction<'a, rocksdb::OptimisticTransactionDB>,
     cf_handles: Vec<&'a ColumnFamily>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), WorldStateError> {
     let tx = RocksDbTx {
         tx,
         cf_handles: cf_handles.clone(),
@@ -53,7 +49,7 @@ pub(crate) fn run_tx_server<'a>(
                     tx.rollback()?;
                     return Ok(());
                 } else {
-                    return Err(e.into());
+                    panic!("Error receiving message from transaction server: {:?}", e);
                 }
             }
         };
@@ -205,8 +201,9 @@ pub(crate) fn run_tx_server<'a>(
                 respond(r, tx.resolve_property(o, n))?;
             }
             DbMessage::Valid(o, r) => {
-                let Ok(_) = r.send(tx.object_valid(o)?) else {
-                    bail!("Could not send result")
+                if let Err(e) = r.send(tx.object_valid(o)?) {
+                    warn!(e, "Could not send result for object validity check");
+                    continue;
                 };
             }
             DbMessage::Commit(r) => {
@@ -218,15 +215,21 @@ pub(crate) fn run_tx_server<'a>(
                 warn!("Rolling back transaction");
                 tx.rollback()?;
                 increment_counter!("rocksdb.tx.rollback");
-                let Ok(_) = r.send(()) else {
-                    bail!("Could not send result")
+                if let Err(e) = r.send(()) {
+                    warn!(error = ?e, "Could not send result for rollback");
+                    return Err(WorldStateError::DatabaseError(
+                        "Could not send result for rollback".to_string(),
+                    ));
                 };
                 return Ok(());
             }
         }
     };
-    let Ok(_) = commit_response_send.send(commit_result) else {
-        bail!("Could not send result")
+    if let Err(e) = commit_response_send.send(commit_result) {
+        error!(error = ?e, "Could not send result");
+        return Err(WorldStateError::DatabaseError(
+            "Could not send result for transaction".to_string(),
+        ));
     };
     Ok(())
 }

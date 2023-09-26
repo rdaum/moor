@@ -11,6 +11,5 @@ moor-values = { path = "../values" }
 thiserror.workspace = true
 tmq.workspace = true
 uuid.workspace = true
-anyhow.workspace = true
 tracing.workspace = true
 futures-util.workspace = true

@@ -10,13 +10,11 @@ use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
-use anyhow::bail;
 use async_trait::async_trait;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbs::BinaryType;
 use moor_values::model::world_state::WorldState;
 use moor_values::util::slice_ref::SliceRef;
-use moor_values::var::error::Error;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 use moor_values::AsByteBuffer;
@@ -74,8 +72,8 @@ impl VMHost<Program> for MooVmHost {
         verb_call: VerbCall,
         command: ParsedCommand,
         permissions: Objid,
-    ) -> Result<(), anyhow::Error> {
-        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary().as_slice())?;
+    ) {
+        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary().as_slice());
         let call_request = VerbExecutionRequest {
             permissions,
             resolved_verb: vi,
@@ -93,11 +91,11 @@ impl VMHost<Program> for MooVmHost {
         perms: Objid,
         verb_info: VerbInfo,
         verb_call: VerbCall,
-    ) -> Result<(), anyhow::Error> {
+    ) {
         let binary = Self::decode_program(
             verb_info.verbdef().binary_type(),
             verb_info.binary().as_slice(),
-        )?;
+        );
 
         let call_request = VerbExecutionRequest {
             permissions: perms,
@@ -109,12 +107,7 @@ impl VMHost<Program> for MooVmHost {
 
         self.start_execution(task_id, call_request).await
     }
-    async fn start_fork(
-        &mut self,
-        task_id: TaskId,
-        fork_request: ForkRequest,
-        suspended: bool,
-    ) -> Result<(), anyhow::Error> {
+    async fn start_fork(&mut self, task_id: TaskId, fork_request: ForkRequest, suspended: bool) {
         self.vm.tick_count = 0;
         self.vm.exec_fork_vector(fork_request, task_id).await;
         self.running_method = !suspended;
@@ -123,14 +116,13 @@ impl VMHost<Program> for MooVmHost {
         } else {
             self.suspension_signal.suspend().await;
         }
-        Ok(())
     }
     /// Start execution of a verb request.
     async fn start_execution(
         &mut self,
         task_id: TaskId,
         verb_execution_request: VerbExecutionRequest,
-    ) -> Result<(), anyhow::Error> {
+    ) {
         self.vm.start_time = Some(SystemTime::now());
         self.vm.tick_count = 0;
         self.vm
@@ -138,14 +130,8 @@ impl VMHost<Program> for MooVmHost {
             .await;
         self.running_method = true;
         self.suspension_signal.start().await;
-        Ok(())
     }
-    async fn start_eval(
-        &mut self,
-        task_id: TaskId,
-        player: Objid,
-        program: Program,
-    ) -> Result<(), Error> {
+    async fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
         self.vm.start_time = Some(SystemTime::now());
         self.vm.tick_count = 0;
         self.vm
@@ -153,13 +139,12 @@ impl VMHost<Program> for MooVmHost {
             .await;
         self.running_method = true;
         self.suspension_signal.start().await;
-        Ok(())
     }
     async fn exec_interpreter(
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
-    ) -> Result<VMHostResponse, anyhow::Error> {
+    ) -> VMHostResponse {
         if !self.running_method {
             self.suspension_signal.wait_for_start().await;
             assert!(self.running_method);
@@ -168,16 +153,16 @@ impl VMHost<Program> for MooVmHost {
         // Check ticks and seconds, and abort the task if we've exceeded the limits.
         let time_left = match self.vm.start_time {
             Some(start_time) => {
-                let elapsed = start_time.elapsed()?;
+                let elapsed = start_time.elapsed().expect("Could not get elapsed time");
                 if elapsed > self.max_time {
-                    return Ok(AbortLimit(AbortLimitReason::Time(elapsed)));
+                    return AbortLimit(AbortLimitReason::Time(elapsed));
                 }
                 Some(self.max_time - elapsed)
             }
             None => None,
         };
         if self.vm.tick_count >= self.max_ticks {
-            return Ok(AbortLimit(AbortLimitReason::Ticks(self.vm.tick_count)));
+            return AbortLimit(AbortLimitReason::Ticks(self.vm.tick_count));
         }
         let exec_params = VmExecParams {
             world_state,
@@ -201,7 +186,7 @@ impl VMHost<Program> for MooVmHost {
         );
         while self.running_method {
             match result {
-                ExecutionResult::More => return Ok(ContinueOk),
+                ExecutionResult::More => return ContinueOk,
                 ExecutionResult::ContinueVerb {
                     permissions,
                     resolved_verb,
@@ -218,7 +203,7 @@ impl VMHost<Program> for MooVmHost {
                     let program = Self::decode_program(
                         resolved_verb.verbdef().binary_type(),
                         resolved_verb.binary().as_slice(),
-                    )?;
+                    );
 
                     let call_request = VerbExecutionRequest {
                         permissions,
@@ -229,7 +214,7 @@ impl VMHost<Program> for MooVmHost {
                     };
 
                     self.vm.exec_call_request(task_id, call_request).await;
-                    return Ok(ContinueOk);
+                    return ContinueOk;
                 }
                 ExecutionResult::PerformEval {
                     permissions,
@@ -239,7 +224,7 @@ impl VMHost<Program> for MooVmHost {
                     self.vm
                         .exec_eval_request(0, permissions, player, program)
                         .await;
-                    return Ok(ContinueOk);
+                    return ContinueOk;
                 }
                 ExecutionResult::ContinueBuiltin {
                     bf_func_num: bf_offset,
@@ -263,23 +248,23 @@ impl VMHost<Program> for MooVmHost {
                     continue;
                 }
                 ExecutionResult::DispatchFork(fork_request) => {
-                    return Ok(DispatchFork(fork_request));
+                    return DispatchFork(fork_request);
                 }
                 ExecutionResult::Suspend(delay) => {
                     self.running_method = false;
                     self.suspension_signal.suspend().await;
-                    return Ok(Suspend(delay));
+                    return Suspend(delay);
                 }
                 ExecutionResult::Complete(a) => {
-                    return Ok(VMHostResponse::CompleteSuccess(a));
+                    return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
                     trace!(task_id, result = ?fr, "Task exception");
 
                     return match &fr {
-                        FinallyReason::Abort => Ok(VMHostResponse::CompleteAbort),
+                        FinallyReason::Abort => VMHostResponse::CompleteAbort,
                         FinallyReason::Uncaught(exception) => {
-                            Ok(VMHostResponse::CompleteException(exception.clone()))
+                            VMHostResponse::CompleteException(exception.clone())
                         }
                         _ => {
                             unreachable!(
@@ -295,10 +280,10 @@ impl VMHost<Program> for MooVmHost {
         // We're not running and we didn't get a completion signal from the VM - we must have been
         // asked to stop by the scheduler.
         warn!(task_id, "VM host stopped by task");
-        Ok(VMHostResponse::CompleteAbort)
+        VMHostResponse::CompleteAbort
     }
     /// Resume what you were doing after suspension.
-    async fn resume_execution(&mut self, value: Var) -> Result<(), anyhow::Error> {
+    async fn resume_execution(&mut self, value: Var) {
         // coming back from suspend, we need a return value to feed back to `bf_suspend`
         self.vm.top_mut().push(value);
         self.vm.start_time = Some(SystemTime::now());
@@ -306,7 +291,6 @@ impl VMHost<Program> for MooVmHost {
         assert!(!self.running_method);
         self.running_method = true;
         self.suspension_signal.start().await;
-        Ok(())
     }
     fn is_running(&self) -> bool {
         self.running_method
@@ -315,15 +299,10 @@ impl VMHost<Program> for MooVmHost {
         self.running_method = false;
         self.suspension_signal.suspend().await;
     }
-    fn decode_program(
-        binary_type: BinaryType,
-        binary_bytes: &[u8],
-    ) -> Result<Program, anyhow::Error> {
+    fn decode_program(binary_type: BinaryType, binary_bytes: &[u8]) -> Program {
         match binary_type {
-            BinaryType::LambdaMoo18X => {
-                Ok(Program::from_sliceref(SliceRef::from_bytes(binary_bytes)))
-            }
-            _ => bail!("Unsupported binary type {:?}", binary_type),
+            BinaryType::LambdaMoo18X => Program::from_sliceref(SliceRef::from_bytes(binary_bytes)),
+            _ => panic!("Unsupported binary type {:?}", binary_type),
         }
     }
     fn set_variable(&mut self, task_id_var: Name, value: Var) {

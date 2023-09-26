@@ -1508,7 +1508,6 @@ dependencies = [
 name = "moor-kernel"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "bincode",
  "bytes",
@@ -1579,7 +1578,6 @@ dependencies = [
 name = "moor-values"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "binary-layout",
  "bincode",
@@ -2089,7 +2087,6 @@ dependencies = [
 name = "rpc-common"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bincode",
  "futures-util",
  "moor-values",

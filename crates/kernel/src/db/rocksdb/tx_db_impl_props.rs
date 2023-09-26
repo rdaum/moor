@@ -20,10 +20,13 @@ use crate::db::rocksdb::ColumnFamilies;
 // Methods related to properties; definitions and values.
 impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
-    pub fn get_propdefs(&self, o: Objid) -> Result<PropDefs, anyhow::Error> {
+    pub fn get_propdefs(&self, o: Objid) -> Result<PropDefs, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
         let ok = oid_key(o);
-        let props_bytes = self.tx.get_cf(cf, ok)?;
+        let props_bytes = self
+            .tx
+            .get_cf(cf, ok)
+            .expect("Unable to read property definitions");
         let props = match props_bytes {
             None => PropDefs::empty(),
             Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_vec(props_bytes)),
@@ -31,10 +34,13 @@ impl<'a> RocksDbTx<'a> {
         Ok(props)
     }
     #[tracing::instrument(skip(self))]
-    pub fn retrieve_property(&self, o: Objid, u: Uuid) -> Result<Var, anyhow::Error> {
+    pub fn retrieve_property(&self, o: Objid, u: Uuid) -> Result<Var, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let ok = composite_key_uuid(o, &u);
-        let var_bytes = self.tx.get_cf(cf, ok)?;
+        let var_bytes = self
+            .tx
+            .get_cf(cf, ok)
+            .expect("Unable to read property value");
         let Some(var_bytes) = var_bytes else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
@@ -43,7 +49,7 @@ impl<'a> RocksDbTx<'a> {
         Ok(var)
     }
     #[tracing::instrument(skip(self))]
-    pub fn set_property_value(&self, o: Objid, u: Uuid, v: Var) -> Result<(), anyhow::Error> {
+    pub fn set_property_value(&self, o: Objid, u: Uuid, v: Var) -> Result<(), WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let ok = composite_key_uuid(o, &u);
         write_cf(&self.tx, cf, &ok, &v)?;
@@ -57,10 +63,13 @@ impl<'a> RocksDbTx<'a> {
         new_owner: Option<Objid>,
         new_perms: Option<BitEnum<PropFlag>>,
         new_name: Option<String>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), WorldStateError> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
         let ok = oid_key(o);
-        let props_bytes = self.tx.get_cf(p_cf, ok)?;
+        let props_bytes = self
+            .tx
+            .get_cf(p_cf, ok)
+            .expect("Unable to read property definitions");
         let Some(props_bytes) = props_bytes else {
             let u_uuid_str = u.to_string();
             return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
@@ -88,10 +97,13 @@ impl<'a> RocksDbTx<'a> {
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn delete_property(&self, o: Objid, u: Uuid) -> Result<(), anyhow::Error> {
+    pub fn delete_property(&self, o: Objid, u: Uuid) -> Result<(), WorldStateError> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
         let ok = oid_key(o);
-        let props_bytes = self.tx.get_cf(p_cf, ok)?;
+        let props_bytes = self
+            .tx
+            .get_cf(p_cf, ok)
+            .expect("Unable to read property definitions");
         let Some(props_bytes) = props_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
@@ -105,16 +117,20 @@ impl<'a> RocksDbTx<'a> {
         // Need to also delete the property value.
         let pv_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let uk = composite_key_uuid(o, &u);
-        self.tx.delete_cf(pv_cf, uk)?;
+        self.tx
+            .delete_cf(pv_cf, uk)
+            .expect("Unable to delete property value");
 
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn clear_property(&self, o: Objid, u: Uuid) -> Result<(), anyhow::Error> {
+    pub fn clear_property(&self, o: Objid, u: Uuid) -> Result<(), WorldStateError> {
         // Just delete the property value.
         let pv_cf = self.cf_handles[(ColumnFamilies::ObjectPropertyValue as u8) as usize];
         let uk = composite_key_uuid(o, &u);
-        self.tx.delete_cf(pv_cf, uk)?;
+        self.tx
+            .delete_cf(pv_cf, uk)
+            .expect("Unable to delete property value");
 
         Ok(())
     }
@@ -127,7 +143,7 @@ impl<'a> RocksDbTx<'a> {
         owner: Objid,
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
-    ) -> Result<Uuid, anyhow::Error> {
+    ) -> Result<Uuid, WorldStateError> {
         let p_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
 
         // We have to propagate the propdef down to all my children
@@ -140,7 +156,10 @@ impl<'a> RocksDbTx<'a> {
 
         for location in locations.iter() {
             let ok = oid_key(location);
-            let props_bytes = self.tx.get_cf(p_cf, ok)?;
+            let props_bytes = self
+                .tx
+                .get_cf(p_cf, ok)
+                .expect("Unable to read property definitions");
             let props: PropDefs = match props_bytes {
                 None => PropDefs::empty(),
                 Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
@@ -165,7 +184,11 @@ impl<'a> RocksDbTx<'a> {
         Ok(u)
     }
     #[tracing::instrument(skip(self))]
-    pub fn resolve_property(&self, obj: Objid, n: String) -> Result<(PropDef, Var), anyhow::Error> {
+    pub fn resolve_property(
+        &self,
+        obj: Objid,
+        n: String,
+    ) -> Result<(PropDef, Var), WorldStateError> {
         trace!(?obj, name = ?n, "resolving property");
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
 
@@ -206,7 +229,7 @@ impl<'a> RocksDbTx<'a> {
         &self,
         obj: Objid,
         new_props: PropDefs,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), WorldStateError> {
         let propdefs_cf = self.cf_handles[((ColumnFamilies::ObjectPropDefs) as u8) as usize];
         write_cf(&self.tx, propdefs_cf, &oid_key(obj), &new_props)?;
         Ok(())
@@ -216,7 +239,7 @@ impl<'a> RocksDbTx<'a> {
         &self,
         obj: Objid,
         n: String,
-    ) -> Result<Option<PropDef>, anyhow::Error> {
+    ) -> Result<Option<PropDef>, WorldStateError> {
         trace!(?obj, name = ?n, "resolving property in inheritance hierarchy");
         let op_cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         let ov_cf = self.cf_handles[(ColumnFamilies::ObjectPropDefs as u8) as usize];
@@ -224,7 +247,11 @@ impl<'a> RocksDbTx<'a> {
         loop {
             let ok = oid_key(search_o);
 
-            let props: PropDefs = match self.tx.get_cf(ov_cf, ok)? {
+            let props: PropDefs = match self
+                .tx
+                .get_cf(ov_cf, ok)
+                .expect("Unable to read properties")
+            {
                 None => PropDefs::empty(),
                 Some(props_bytes) => PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes)),
             };

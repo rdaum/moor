@@ -12,22 +12,22 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 
 use crate::db::rocksdb::tx_db_impl::{
-    cf_for, composite_key_for, err_is_objnjf, get_objset, get_oid_or_nothing, get_oid_value,
-    oid_key, set_objset, set_oid_value, write_cf, RocksDbTx,
+    cf_for, composite_key_for, get_objset, get_oid_or_nothing, get_oid_value, oid_key, set_objset,
+    set_oid_value, write_cf, RocksDbTx,
 };
 use crate::db::rocksdb::ColumnFamilies;
 
 // Methods for manipulation of objects, their owners, flags, contents, parents, etc.
 impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
-    pub fn object_valid(&self, o: Objid) -> Result<bool, anyhow::Error> {
+    pub fn object_valid(&self, o: Objid) -> Result<bool, WorldStateError> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = oid_key(o);
-        let ov = self.tx.get_cf(cf, ok)?;
+        let ov = self.tx.get_cf(cf, ok).expect("Unable to get object flags");
         Ok(ov.is_some())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_max_object(&self) -> Result<Objid, anyhow::Error> {
+    pub fn get_max_object(&self) -> Result<Objid, WorldStateError> {
         self.next_object_id()
     }
     #[tracing::instrument(skip(self))]
@@ -35,7 +35,7 @@ impl<'a> RocksDbTx<'a> {
         &self,
         oid: Option<Objid>,
         attrs: ObjAttrs,
-    ) -> Result<Objid, anyhow::Error> {
+    ) -> Result<Objid, WorldStateError> {
         let oid = match oid {
             None => self.next_object_id()?,
             Some(oid) => {
@@ -81,7 +81,7 @@ impl<'a> RocksDbTx<'a> {
         Ok(oid)
     }
     #[tracing::instrument(skip(self))]
-    pub fn recycle_object(&self, obj: Objid) -> Result<(), anyhow::Error> {
+    pub fn recycle_object(&self, obj: Objid) -> Result<(), WorldStateError> {
         // First go through and move all objects that are in this object's contents to the
         // to #-1.  It's up to the caller here to execute :exitfunc on all of them before invoking
         // this method.
@@ -113,28 +113,31 @@ impl<'a> RocksDbTx<'a> {
         let ok = oid_key(obj);
         for cf in oid_cfs {
             let cf = cf_for(&self.cf_handles, cf);
-            self.tx.delete_cf(cf, ok)?;
+            self.tx.delete_cf(cf, ok).expect("Unable to delete object");
         }
         // Get the propdefs and remove all the property values.
         let propdefs = self.get_propdefs(obj)?;
         for p in propdefs.iter() {
             let vk = composite_key_for(obj, &p);
-            self.tx.delete_cf(
-                cf_for(&self.cf_handles, ColumnFamilies::ObjectPropertyValue),
-                vk,
-            )?;
+            self.tx
+                .delete_cf(
+                    cf_for(&self.cf_handles, ColumnFamilies::ObjectPropertyValue),
+                    vk,
+                )
+                .expect("Unable to delete object");
         }
 
         // Now remove the propdefs themselves.
         self.tx
-            .delete_cf(cf_for(&self.cf_handles, ColumnFamilies::ObjectPropDefs), ok)?;
+            .delete_cf(cf_for(&self.cf_handles, ColumnFamilies::ObjectPropDefs), ok)
+            .expect("Unable to delete object");
 
         // That that's that.
         Ok(())
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), anyhow::Error> {
+    pub fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), WorldStateError> {
         let parent_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectParent);
         let property_value_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectPropertyValue);
 
@@ -166,7 +169,9 @@ impl<'a> RocksDbTx<'a> {
             if old_ancestors.contains(&p.definer()) {
                 delort_props.push(p.uuid());
                 let vk = composite_key_for(o, &p);
-                self.tx.delete_cf(property_value_cf, vk)?;
+                self.tx
+                    .delete_cf(property_value_cf, vk)
+                    .expect("Unable to delete property");
             }
         }
         let new_props = old_props.with_all_removed(&delort_props);
@@ -185,7 +190,9 @@ impl<'a> RocksDbTx<'a> {
                 if old_ancestors.contains(&p.definer()) {
                     inherited_props.push(p.uuid());
                     let vk = composite_key_for(c, &p);
-                    self.tx.delete_cf(property_value_cf, vk)?;
+                    self.tx
+                        .delete_cf(property_value_cf, vk)
+                        .expect("Unable to delete property");
                 }
             }
             // And update the property list to not include them
@@ -210,11 +217,12 @@ impl<'a> RocksDbTx<'a> {
                     self.update_object_children(old_parent, new_children)?;
                 }
             }
-            Err(e) if !err_is_objnjf(&e) => {
-                // Object not found is fine, we just don't have a parent yet.
+            Err(WorldStateError::ObjectNotFound(_)) => {
+                // Object not found is ok, we're expecting it.
+            }
+            Err(e) => {
                 return Err(e);
             }
-            Err(_) => {}
         };
         set_oid_value(parent_cf, &self.tx, o, new_parent)?;
 
@@ -252,66 +260,70 @@ impl<'a> RocksDbTx<'a> {
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_children(&self, o: Objid) -> Result<ObjSet, anyhow::Error> {
+    pub fn get_object_children(&self, o: Objid) -> Result<ObjSet, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectChildren as u8) as usize];
         Ok(get_objset(cf, &self.tx, o).unwrap_or_else(|_| ObjSet::new()))
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_name(&self, o: Objid) -> Result<String, anyhow::Error> {
+    pub fn get_object_name(&self, o: Objid) -> Result<String, WorldStateError> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = oid_key(o);
-        let name_bytes = self.tx.get_cf(cf, ok)?;
+        let name_bytes = self.tx.get_cf(cf, ok).expect("Unable to get object name");
         let Some(name_bytes) = name_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
         Ok(String::from_sliceref(SliceRef::from_bytes(&name_bytes)))
     }
     #[tracing::instrument(skip(self))]
-    pub fn set_object_name(&self, o: Objid, name: String) -> Result<(), anyhow::Error> {
+    pub fn set_object_name(&self, o: Objid, name: String) -> Result<(), WorldStateError> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectName);
         let ok = oid_key(o);
         write_cf(&self.tx, cf, &ok, &name)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_flags(&self, o: Objid) -> Result<BitEnum<ObjFlag>, anyhow::Error> {
+    pub fn get_object_flags(&self, o: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = oid_key(o);
-        let flag_bytes = self.tx.get_cf(cf, ok)?;
+        let flag_bytes = self.tx.get_cf(cf, ok).expect("Unable to get object flags");
         let Some(flag_bytes) = flag_bytes else {
             return Err(WorldStateError::ObjectNotFound(o).into());
         };
         Ok(BitEnum::from_sliceref(SliceRef::from_bytes(&flag_bytes)))
     }
     #[tracing::instrument(skip(self))]
-    pub fn set_object_flags(&self, o: Objid, flags: BitEnum<ObjFlag>) -> Result<(), anyhow::Error> {
+    pub fn set_object_flags(
+        &self,
+        o: Objid,
+        flags: BitEnum<ObjFlag>,
+    ) -> Result<(), WorldStateError> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectFlags);
         let ok = oid_key(o);
         write_cf(&self.tx, cf, &ok, &flags)?;
         Ok(())
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_owner(&self, o: Objid) -> Result<Objid, anyhow::Error> {
+    pub fn get_object_owner(&self, o: Objid) -> Result<Objid, WorldStateError> {
         let cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectOwner);
         get_oid_or_nothing(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
-    pub fn set_object_owner(&self, o: Objid, owner: Objid) -> Result<(), anyhow::Error> {
+    pub fn set_object_owner(&self, o: Objid, owner: Objid) -> Result<(), WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectOwner as u8) as usize];
         set_oid_value(cf, &self.tx, o, owner)
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_parent(&self, o: Objid) -> Result<Objid, anyhow::Error> {
+    pub fn get_object_parent(&self, o: Objid) -> Result<Objid, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectParent as u8) as usize];
         get_oid_or_nothing(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_location(&self, o: Objid) -> Result<Objid, anyhow::Error> {
+    pub fn get_object_location(&self, o: Objid) -> Result<Objid, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectLocation as u8) as usize];
         get_oid_or_nothing(cf, &self.tx, o)
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_object_contents(&self, o: Objid) -> Result<ObjSet, anyhow::Error> {
+    pub fn get_object_contents(&self, o: Objid) -> Result<ObjSet, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectContents as u8) as usize];
         get_objset(cf, &self.tx, o)
     }
@@ -320,7 +332,7 @@ impl<'a> RocksDbTx<'a> {
         &self,
         what: Objid,
         new_location: Objid,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), WorldStateError> {
         // Detect recursive move
         let mut oid = new_location;
         loop {
@@ -385,15 +397,17 @@ impl<'a> RocksDbTx<'a> {
     // any totally-theoretical collisions optimistically by relying on commit-time conflicts to
     // suss them out. There's some code in MOO cores that *implies* the concept of monotonically
     // increment OIds, but it is not necessary, I'm pretty sure)
-    fn next_object_id(&self) -> Result<Objid, anyhow::Error> {
+    fn next_object_id(&self) -> Result<Objid, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectIds as u8) as usize];
         let key = "OBJECT_ID_COUNTER".as_bytes();
-        let id_bytes = self.tx.get_cf(cf, key)?;
+        let id_bytes = self.tx.get_cf(cf, key).expect("Unable to get object id");
         let id = match id_bytes {
             None => {
                 let id = Objid(0);
                 let id_bytes = id.0.to_be_bytes().to_vec();
-                self.tx.put_cf(cf, key, id_bytes)?;
+                self.tx
+                    .put_cf(cf, key, id_bytes)
+                    .expect("Unable to set object id");
                 id
             }
             Some(id_bytes) => {
@@ -401,7 +415,9 @@ impl<'a> RocksDbTx<'a> {
                 let id_bytes: [u8; 8] = id_bytes.try_into().unwrap();
                 let id = Objid(i64::from_be_bytes(id_bytes) + 1);
                 let id_bytes = id.0.to_be_bytes().to_vec();
-                self.tx.put_cf(cf, key, id_bytes)?;
+                self.tx
+                    .put_cf(cf, key, id_bytes)
+                    .expect("Unable to set object id");
                 id
             }
         };
@@ -409,14 +425,16 @@ impl<'a> RocksDbTx<'a> {
     }
 
     /// Update the highest object ID if the given ID is higher than the current highest.
-    fn update_highest_object_id(&self, oid: Objid) -> Result<(), anyhow::Error> {
+    fn update_highest_object_id(&self, oid: Objid) -> Result<(), WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectIds as u8) as usize];
         let key = "OBJECT_ID_COUNTER".as_bytes();
-        let id_bytes = self.tx.get_cf(cf, key)?;
+        let id_bytes = self.tx.get_cf(cf, key).expect("Unable to get object id");
         match id_bytes {
             None => {
                 let id_bytes = oid.0.to_be_bytes().to_vec();
-                self.tx.put_cf(cf, key, id_bytes)?;
+                self.tx
+                    .put_cf(cf, key, id_bytes)
+                    .expect("Unable to set object id");
             }
             Some(id_bytes) => {
                 let id_bytes = id_bytes.as_slice();
@@ -424,7 +442,9 @@ impl<'a> RocksDbTx<'a> {
                 let id = Objid(i64::from_be_bytes(id_bytes));
                 if oid > id {
                     let id_bytes = oid.0.to_be_bytes().to_vec();
-                    self.tx.put_cf(cf, key, id_bytes)?;
+                    self.tx
+                        .put_cf(cf, key, id_bytes)
+                        .expect("Unable to set object id");
                 }
             }
         };
@@ -435,7 +455,7 @@ impl<'a> RocksDbTx<'a> {
         &self,
         a: Objid,
         b: Objid,
-    ) -> Result<(Option<Objid>, HashSet<Objid>, HashSet<Objid>), anyhow::Error> {
+    ) -> Result<(Option<Objid>, HashSet<Objid>, HashSet<Objid>), WorldStateError> {
         let mut ancestors_a = HashSet::new();
         let mut search_a = a;
 
@@ -471,7 +491,7 @@ impl<'a> RocksDbTx<'a> {
         }
     }
 
-    pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, anyhow::Error> {
+    pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let mut search_queue = vec![obj];
 
         let all_children = std::iter::from_fn(move || {

@@ -3,6 +3,7 @@ use moor_values::var::variant::Variant;
 
 use crate::compiler::ast;
 use crate::compiler::ast::{Expr, Stmt, StmtNode};
+use crate::compiler::decompile::DecompileError;
 use crate::compiler::parse::Parse;
 
 use super::labels::Names;
@@ -80,14 +81,14 @@ impl Unparse {
         Self { names }
     }
 
-    fn unparse_arg(&self, arg: &ast::Arg) -> Result<String, anyhow::Error> {
+    fn unparse_arg(&self, arg: &ast::Arg) -> Result<String, DecompileError> {
         match arg {
             ast::Arg::Normal(expr) => Ok(self.unparse_expr(expr).unwrap()),
             ast::Arg::Splice(expr) => Ok(format!("@{}", self.unparse_expr(expr).unwrap())),
         }
     }
 
-    fn unparse_args(&self, args: &[ast::Arg]) -> Result<String, anyhow::Error> {
+    fn unparse_args(&self, args: &[ast::Arg]) -> Result<String, DecompileError> {
         Ok(args
             .iter()
             .map(|arg| self.unparse_arg(arg).unwrap())
@@ -95,7 +96,7 @@ impl Unparse {
             .join(", "))
     }
 
-    fn unparse_catch_codes(&self, codes: &ast::CatchCodes) -> Result<String, anyhow::Error> {
+    fn unparse_catch_codes(&self, codes: &ast::CatchCodes) -> Result<String, DecompileError> {
         match codes {
             ast::CatchCodes::Codes(codes) => self.unparse_args(codes),
             ast::CatchCodes::Any => Ok(String::from("ANY")),
@@ -118,7 +119,7 @@ impl Unparse {
         }
     }
 
-    fn unparse_expr(&self, current_expr: &Expr) -> Result<String, anyhow::Error> {
+    fn unparse_expr(&self, current_expr: &Expr) -> Result<String, DecompileError> {
         let brace_if_lower = |expr: &Expr| -> String {
             if expr.precedence() < current_expr.precedence() {
                 format!("({})", self.unparse_expr(expr).unwrap())
@@ -258,7 +259,11 @@ impl Unparse {
                             buffer.push('@');
                         }
                     }
-                    buffer.push_str(self.names.name_of(&var.id)?);
+                    buffer.push_str(
+                        self.names
+                            .name_of(&var.id)
+                            .ok_or_else(|| DecompileError::NameNotFound(var.id))?,
+                    );
                     if let Some(expr) = &var.expr {
                         buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
@@ -275,7 +280,7 @@ impl Unparse {
         }
     }
 
-    fn unparse_stmt(&self, stmt: &Stmt, indent: usize) -> Result<Vec<String>, anyhow::Error> {
+    fn unparse_stmt(&self, stmt: &Stmt, indent: usize) -> Result<Vec<String>, DecompileError> {
         let indent_frag = " ".repeat(indent);
         // Statements should not end in a newline, but should be terminated with a semicolon.
         match &stmt.node {
@@ -309,7 +314,9 @@ impl Unparse {
                 stmt_lines.push(format!(
                     "{}for {} in ({})",
                     indent_frag,
-                    self.names.name_of(id)?,
+                    self.names
+                        .name_of(id)
+                        .ok_or_else(|| DecompileError::NameNotFound(*id))?,
                     expr_frag
                 ));
                 stmt_lines.append(&mut stmt_frag);
@@ -326,7 +333,9 @@ impl Unparse {
                 stmt_lines.push(format!(
                     "{}for {} in [{}..{}]",
                     indent_frag,
-                    self.names.name_of(id)?,
+                    self.names
+                        .name_of(id)
+                        .ok_or_else(|| DecompileError::NameNotFound(*id))?,
                     from_frag,
                     to_frag
                 ));
@@ -346,7 +355,11 @@ impl Unparse {
 
                 let mut base_str = "while ".to_string();
                 if let Some(id) = id {
-                    base_str.push_str(self.names.name_of(id)?);
+                    base_str.push_str(
+                        self.names
+                            .name_of(id)
+                            .ok_or_else(|| DecompileError::NameNotFound(*id))?,
+                    );
                 }
                 stmt_lines.push(format!("{}({})", base_str, cond_frag));
                 stmt_lines.append(&mut stmt_frag);
@@ -361,7 +374,11 @@ impl Unparse {
                 let mut base_str = format!("{}fork", indent_frag);
                 if let Some(id) = id {
                     base_str.push(' ');
-                    base_str.push_str(self.names.name_of(id)?);
+                    base_str.push_str(
+                        self.names
+                            .name_of(id)
+                            .ok_or_else(|| DecompileError::NameNotFound(*id))?,
+                    );
                 }
                 stmt_lines.push(format!("{} ({})", base_str, delay_frag));
                 stmt_lines.append(&mut stmt_frag);
@@ -379,7 +396,11 @@ impl Unparse {
                         self.unparse_stmts(&except.statements, indent + INDENT_LEVEL)?;
                     let mut base_str = "except ".to_string();
                     if let Some(id) = &except.id {
-                        base_str.push_str(self.names.name_of(id)?);
+                        base_str.push_str(
+                            self.names
+                                .name_of(id)
+                                .ok_or_else(|| DecompileError::NameNotFound(*id))?,
+                        );
                         base_str.push(' ');
                     }
                     let catch_codes = self.unparse_catch_codes(&except.codes)?;
@@ -406,7 +427,11 @@ impl Unparse {
                 let mut base_str = "break".to_string();
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    base_str.push_str(self.names.name_of(exit)?);
+                    base_str.push_str(
+                        self.names
+                            .name_of(exit)
+                            .ok_or_else(|| DecompileError::NameNotFound(*exit))?,
+                    );
                 }
                 base_str.push(';');
                 Ok(vec![base_str])
@@ -415,7 +440,11 @@ impl Unparse {
                 let mut base_str = "continue".to_string();
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    base_str.push_str(self.names.name_of(exit)?);
+                    base_str.push_str(
+                        self.names
+                            .name_of(exit)
+                            .ok_or_else(|| DecompileError::NameNotFound(*exit))?,
+                    );
                 }
                 base_str.push(';');
                 Ok(vec![base_str])
@@ -440,7 +469,7 @@ impl Unparse {
         &self,
         stms: &[Stmt],
         indent: usize,
-    ) -> Result<Vec<String>, anyhow::Error> {
+    ) -> Result<Vec<String>, DecompileError> {
         let mut results = vec![];
         for stmt in stms {
             results.append(&mut self.unparse_stmt(stmt, indent)?);
@@ -449,7 +478,7 @@ impl Unparse {
     }
 }
 
-pub fn unparse(tree: &Parse) -> Result<Vec<String>, anyhow::Error> {
+pub fn unparse(tree: &Parse) -> Result<Vec<String>, DecompileError> {
     let unparse = Unparse::new(tree.names.clone());
     unparse.unparse_stmts(&tree.stmts, 0)
 }
@@ -674,7 +703,7 @@ mod tests {
         assert_eq!(stripped.trim(), result.trim());
     }
 
-    pub fn parse_and_unparse(original: &str) -> Result<String, anyhow::Error> {
+    pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
         let tree = crate::compiler::parse::parse_program(original).unwrap();
         Ok(unparse(&tree)?.join("\n"))
     }

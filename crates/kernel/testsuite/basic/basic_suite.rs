@@ -50,10 +50,10 @@ async fn compile_verbs(db: &mut InMemTransientDatabase, verbs: &[(&str, &Program
     tx.commit().await.unwrap();
 }
 
-async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Result<Var, anyhow::Error> {
+async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Var {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     compile_verbs(db, &[("test", &binary)]).await;
-    let mut state = db.new_world_state().await?;
+    let mut state = db.new_world_state().await.unwrap();
     let result = call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
@@ -61,8 +61,8 @@ async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Result<Var, 
         vec![],
     )
     .await;
-    state.commit().await?;
-    Ok(result)
+    state.commit().await.unwrap();
+    result
 }
 
 async fn run_basic_test(test_dir: &str) {
@@ -90,8 +90,8 @@ async fn run_basic_test(test_dir: &str) {
     let mut db = InMemTransientDatabase::new();
     load_db(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
-        let evaluated = eval(&mut db, input).await.unwrap();
-        let output = eval(&mut db, expected_output).await.unwrap();
+        let evaluated = eval(&mut db, input).await;
+        let output = eval(&mut db, expected_output).await;
         assert_eq!(evaluated, output, "{test_dir}: line {line_num}: {input}")
     }
 }

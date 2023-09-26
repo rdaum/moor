@@ -1,7 +1,8 @@
-use anyhow::{bail, Error};
+use anyhow::bail;
 use itertools::Itertools;
+use moor_kernel::tasks::sessions::SessionError;
 use moor_values::var::objid::Objid;
-use rpc_common::RpcError;
+use rpc_common::RpcRequestError;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -298,7 +299,7 @@ impl Connections {
         &self,
         client_id: Uuid,
         hostname: String,
-    ) -> Result<Objid, RpcError> {
+    ) -> Result<Objid, RpcRequestError> {
         let connection_id = {
             let mut inner = self.connections_list.write().unwrap();
 
@@ -306,7 +307,7 @@ impl Connections {
             // respond with an error.
 
             if inner.client_connections.contains_key(&client_id) {
-                return Err(RpcError::AlreadyConnected);
+                return Err(RpcRequestError::AlreadyConnected);
             }
 
             // Get a new connection id, and create an entry for it.
@@ -332,7 +333,7 @@ impl Connections {
     pub(crate) async fn connection_records_for(
         &self,
         player: Objid,
-    ) -> Result<Vec<ConnectionRecord>, Error> {
+    ) -> Result<Vec<ConnectionRecord>, SessionError> {
         let inner = self.connections_list.read().unwrap();
         let Some(connections) = inner.connections_client.get(&player) else {
             return Ok(vec![]);

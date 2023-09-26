@@ -1,4 +1,3 @@
-use anyhow::bail;
 use bincode::{Decode, Encode};
 use std::time::SystemTime;
 
@@ -73,28 +72,28 @@ pub enum WorldStateError {
     AmbiguousMatch(String),
 
     // Catch-alls for system level object DB errors.
-    #[error("DB communications error: {0}")]
-    CommunicationError(String),
+    #[error("DB communications/internal error: {0}")]
+    DatabaseError(String),
 }
 
 /// Translations from WorldStateError to MOO error codes.
 impl WorldStateError {
-    pub fn to_error_code(&self) -> Result<Error, anyhow::Error> {
+    pub fn to_error_code(&self) -> Error {
         match self {
-            Self::ObjectNotFound(_) => Ok(Error::E_INVIND),
-            Self::ObjectPermissionDenied => Ok(Error::E_PERM),
-            Self::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
-            Self::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
-            Self::VerbPermissionDenied => Ok(Error::E_PERM),
-            Self::InvalidVerb(_) => Ok(Error::E_VERBNF),
-            Self::DuplicateVerb(_, _) => Ok(Error::E_INVARG),
-            Self::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
-            Self::PropertyPermissionDenied => Ok(Error::E_PERM),
-            Self::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
-            Self::DuplicatePropertyDefinition(_, _) => Ok(Error::E_INVARG),
-            Self::PropertyTypeMismatch => Ok(Error::E_TYPE),
+            Self::ObjectNotFound(_) => Error::E_INVIND,
+            Self::ObjectPermissionDenied => Error::E_PERM,
+            Self::RecursiveMove(_, _) => Error::E_RECMOVE,
+            Self::VerbNotFound(_, _) => Error::E_VERBNF,
+            Self::VerbPermissionDenied => Error::E_PERM,
+            Self::InvalidVerb(_) => Error::E_VERBNF,
+            Self::DuplicateVerb(_, _) => Error::E_INVARG,
+            Self::PropertyNotFound(_, _) => Error::E_PROPNF,
+            Self::PropertyPermissionDenied => Error::E_PERM,
+            Self::PropertyDefinitionNotFound(_, _) => Error::E_PROPNF,
+            Self::DuplicatePropertyDefinition(_, _) => Error::E_INVARG,
+            Self::PropertyTypeMismatch => Error::E_TYPE,
             _ => {
-                bail!("Unhandled error code: {:?}", self);
+                panic!("Unhandled error code: {:?}", self);
             }
         }
     }
@@ -102,7 +101,7 @@ impl WorldStateError {
 
 impl From<WorldStateError> for Error {
     fn from(val: WorldStateError) -> Self {
-        val.to_error_code().unwrap()
+        val.to_error_code()
     }
 }
 

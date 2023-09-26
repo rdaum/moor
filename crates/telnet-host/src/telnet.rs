@@ -21,7 +21,7 @@ use rpc_common::pubsub_client::{broadcast_recv, narrative_recv};
 use rpc_common::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
 use rpc_common::{
-    BroadcastEvent, ConnectType, ConnectionEvent, RpcError, RpcResult, BROADCAST_TOPIC,
+    BroadcastEvent, ConnectType, ConnectionEvent, RpcRequestError, RpcResult, BROADCAST_TOPIC,
 };
 use rpc_common::{RpcRequest, RpcResponse};
 
@@ -158,16 +158,16 @@ impl TelnetConnection {
                         RpcResult::Success(RpcResponse::CommandComplete) => {
                             // Nothing to do
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::CouldNotParseCommand)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::CouldNotParseCommand)) => {
                             self.write.send("I don't understand that.".to_string()).await?;
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::NoObjectMatch)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoObjectMatch)) => {
                             self.write.send("I don't see that here.".to_string()).await?;
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::NoCommandMatch)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoCommandMatch)) => {
                             self.write.send("I don't understand that.".to_string()).await?;
                         }
-                        RpcResult::Failure(RpcError::CommandError(CommandError::PermissionDenied)) => {
+                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
                             self.write.send("You can't do that.".to_string()).await?;
                         }
                         RpcResult::Failure(e) => {

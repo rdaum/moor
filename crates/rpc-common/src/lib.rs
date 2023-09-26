@@ -10,6 +10,17 @@ use thiserror::Error;
 
 pub const BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
 
+/// Errors at the RPC transport / encoding layer.
+#[derive(Debug, thiserror::Error)]
+pub enum RpcError {
+    #[error("could not send RPC request: {0}")]
+    CouldNotSend(String),
+    #[error("could not receive RPC response: {0}")]
+    CouldNotReceive(String),
+    #[error("could not decode RPC response: {0}")]
+    CouldNotDecode(String),
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum RpcRequest {
     ConnectionEstablish(String),
@@ -33,7 +44,7 @@ pub enum ConnectType {
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum RpcResult {
     Success(RpcResponse),
-    Failure(RpcError),
+    Failure(RpcRequestError),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -47,8 +58,9 @@ pub enum RpcResponse {
     Disconnected,
 }
 
+/// Errors at the call/request level.
 #[derive(Debug, Eq, PartialEq, Error, Clone, Decode, Encode)]
-pub enum RpcError {
+pub enum RpcRequestError {
     #[error("Already connected")]
     AlreadyConnected,
     #[error("Invalid request")]

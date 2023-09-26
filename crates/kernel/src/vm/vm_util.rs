@@ -35,10 +35,7 @@ impl VM {
             Ok(v) => v,
             Err(e) => {
                 debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                return self.push_error(
-                    e.to_error_code()
-                        .expect("unable to convert error to error code"),
-                );
+                return self.push_error(e.to_error_code());
             }
         };
         self.push(&v);
@@ -69,10 +66,7 @@ impl VM {
                 self.push(&value);
             }
             Err(e) => {
-                return self.push_error(
-                    e.to_error_code()
-                        .expect("unable to convert world state error to error code"),
-                );
+                return self.push_error(e.to_error_code());
             }
         }
         ExecutionResult::More

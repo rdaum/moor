@@ -3,7 +3,7 @@ use moor_values::model::objects::ObjAttrs;
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbs::VerbFlag;
-use moor_values::model::CommitResult;
+use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
@@ -17,11 +17,11 @@ pub trait LoaderInterface {
         &self,
         objid: Option<Objid>,
         attrs: &ObjAttrs,
-    ) -> Result<Objid, anyhow::Error>;
-    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), anyhow::Error>;
+    ) -> Result<Objid, WorldStateError>;
+    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError>;
 
-    async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), anyhow::Error>;
-    async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), anyhow::Error>;
+    async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), WorldStateError>;
+    async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError>;
 
     async fn add_verb(
         &self,
@@ -31,9 +31,9 @@ pub trait LoaderInterface {
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
         binary: Vec<u8>,
-    ) -> Result<(), anyhow::Error>;
+    ) -> Result<(), WorldStateError>;
 
-    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, anyhow::Error>;
+    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, WorldStateError>;
     async fn define_property(
         &self,
         definer: Objid,
@@ -42,7 +42,7 @@ pub trait LoaderInterface {
         owner: Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
-    ) -> Result<(), anyhow::Error>;
+    ) -> Result<(), WorldStateError>;
     async fn set_update_property(
         &self,
         objid: Objid,
@@ -50,7 +50,7 @@ pub trait LoaderInterface {
         owner: Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
-    ) -> Result<(), anyhow::Error>;
+    ) -> Result<(), WorldStateError>;
 
-    async fn commit(&self) -> Result<CommitResult, anyhow::Error>;
+    async fn commit(&self) -> Result<CommitResult, WorldStateError>;
 }

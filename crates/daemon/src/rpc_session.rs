@@ -1,7 +1,6 @@
 use crate::rpc_server::RpcServer;
-use anyhow::Error;
 use async_trait::async_trait;
-use moor_kernel::tasks::sessions::Session;
+use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_values::model::NarrativeEvent;
 use moor_values::var::objid::Objid;
 use std::sync::Arc;
@@ -34,7 +33,7 @@ impl RpcSession {
 
 #[async_trait]
 impl Session for RpcSession {
-    async fn commit(&self) -> Result<(), Error> {
+    async fn commit(&self) -> Result<(), SessionError> {
         trace!(player = ?self.player, client_id = ?self.client_id, "Committing session");
         let events: Vec<_> = {
             let mut session_buffer = self.session_buffer.lock().await;
@@ -44,18 +43,18 @@ impl Session for RpcSession {
         self.rpc_server
             .publish_narrative_events(&events[..])
             .await
-            .expect("Unable to publish narrative events");
+            .map_err(|e| SessionError::CommitError(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn rollback(&self) -> Result<(), Error> {
+    async fn rollback(&self) -> Result<(), SessionError> {
         let mut session_buffer = self.session_buffer.lock().await;
         session_buffer.clear();
         Ok(())
     }
 
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, Error> {
+    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         // We ask the rpc server to create a new session, otherwise we'd need to have a copy of all
         // the info to create a Publish. The rpc server has that, though.
         let new_session = self
@@ -66,39 +65,39 @@ impl Session for RpcSession {
         Ok(new_session)
     }
 
-    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), Error> {
+    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError> {
         self.session_buffer.lock().await.push((player, event));
         Ok(())
     }
 
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), Error> {
+    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
         self.rpc_server
             .send_system_message(self.client_id, player, msg.to_string())
             .await?;
         Ok(())
     }
 
-    async fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
+    async fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
         todo!()
     }
 
-    async fn connection_name(&self, player: Objid) -> Result<String, Error> {
+    async fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         self.rpc_server.connection_name_for(player).await
     }
 
-    async fn disconnect(&self, player: Objid) -> Result<(), Error> {
+    async fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
         self.rpc_server.disconnect(player).await
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, Error> {
+    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
         self.rpc_server.connected_players().await
     }
 
-    async fn connected_seconds(&self, player: Objid) -> Result<f64, Error> {
+    async fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError> {
         self.rpc_server.connected_seconds_for(player).await
     }
 
-    async fn idle_seconds(&self, player: Objid) -> Result<f64, Error> {
+    async fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError> {
         self.rpc_server.idle_seconds_for(player).await
     }
 }
