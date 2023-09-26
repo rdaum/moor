@@ -371,7 +371,7 @@ impl Task {
                             ?verb_info,
                             "Starting command"
                         );
-                        (verb_info, player)
+                        (verb_info, target)
                     }
                     // Otherwise, we want to try to call :huh, if it exists.
                     None => {
