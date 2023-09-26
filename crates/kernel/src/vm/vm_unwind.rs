@@ -10,7 +10,6 @@ use moor_values::NOTHING;
 use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
 use crate::compiler::labels::{Label, Offset};
 use crate::vm::activation::{Activation, HandlerType};
-use crate::vm::vm_call::tracing_exit_vm_span;
 use crate::vm::{ExecutionResult, VM};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -374,20 +373,18 @@ impl VM {
             // Otherwise pop off this activation, and continue unwinding.
             if let FinallyReason::Return(value) = &why {
                 if self.stack.len() == 1 {
-                    tracing_exit_vm_span(&self.top().span_id, &why, value);
                     return ExecutionResult::Complete(value.clone());
                 }
             }
 
             if let FinallyReason::Uncaught(UncaughtException {
-                code,
+                code: _,
                 msg: _,
                 value: _,
                 stack: _,
                 backtrace: _,
             }) = &why
             {
-                tracing_exit_vm_span(&self.top().span_id, &why, &v_err(*code));
                 return ExecutionResult::Exception(why);
             }
 
@@ -405,7 +402,6 @@ impl VM {
             if let FinallyReason::Return(value) = &why {
                 self.push(value);
                 trace!(value = ?value, verb_name = self.top().verb_name, "RETURN");
-                tracing_exit_vm_span(&self.top().span_id, &why, value);
                 return ExecutionResult::More;
             }
         }

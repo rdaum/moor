@@ -1,4 +1,4 @@
-use tracing::{debug, span, trace, Level};
+use tracing::{debug, trace};
 
 use moor_values::model::world_state::WorldState;
 use moor_values::model::WorldStateError;
@@ -151,9 +151,6 @@ impl VM {
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
     pub async fn exec_call_request(&mut self, task_id: TaskId, call_request: VerbExecutionRequest) {
-        let span = span!(Level::TRACE, "VC", task_id, ?call_request);
-        let span_id = span.id();
-
         debug!(
             caller = ?call_request.call.caller,
             this = ?call_request.call.this,
@@ -164,11 +161,9 @@ impl VM {
             args_literal(call_request.call.args.as_slice()),
         );
 
-        let a = Activation::for_call(task_id, call_request, span_id.clone());
+        let a = Activation::for_call(task_id, call_request);
 
         self.stack.push(a);
-
-        tracing_enter_span(&span_id, &None);
     }
 
     pub async fn exec_eval_request(
@@ -178,20 +173,15 @@ impl VM {
         player: Objid,
         program: Program,
     ) {
-        let span = span!(Level::TRACE, "EVAL", task_id, ?program);
-        let span_id = span.id();
-
         if !self.stack.is_empty() {
             // We need to set up a trampoline to return back into `bf_eval`
             self.top_mut().bf_trampoline_arg = None;
             self.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
         }
 
-        let a = Activation::for_eval(task_id, permissions, player, program, span_id.clone());
+        let a = Activation::for_eval(task_id, permissions, player, program);
 
         self.stack.push(a);
-
-        tracing_enter_span(&span_id, &None);
     }
 
     /// Prepare a new stack & call hierarchy for invocation of a forked task.
@@ -199,12 +189,8 @@ impl VM {
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
     pub(crate) async fn exec_fork_vector(&mut self, fork_request: ForkRequest, task_id: usize) {
-        let span = span!(Level::TRACE, "FORK", task_id);
-        let span_id = span.id();
-
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
-        a.span_id = span_id.clone();
         a.task_id = task_id;
         a.program.main_vector = a.program.fork_vectors[fork_request.fork_vector_offset.0].clone();
         a.pc = 0;
@@ -216,8 +202,6 @@ impl VM {
         // TODO how to set the task_id in the parent activation, as we no longer have a reference
         // to it?
         self.stack = vec![a];
-
-        tracing_enter_span(&span_id, &None);
     }
 
     /// Call into a builtin function.
@@ -238,17 +222,6 @@ impl VM {
             args_literal(args),
             self.top().permissions
         );
-        let span = span!(
-            Level::TRACE,
-            "BF",
-            bf_name = BUILTIN_DESCRIPTORS[bf_func_num].name,
-            bf_func_num,
-            ?args
-        );
-        span.follows_from(self.top().span_id.clone());
-
-        let _guard = span.enter();
-
         let args = args.to_vec();
 
         // Push an activation frame for the builtin function.
@@ -262,7 +235,6 @@ impl VM {
             // behaviour below.
             flags,
             self.top().player,
-            span.id(),
         ));
         let mut bf_args = BfCallState {
             vm: self,
@@ -323,32 +295,5 @@ impl VM {
             Err(e) => self.push_bf_error(e),
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }
-    }
-}
-
-/// Manually enter a tracing span by its Id.
-fn tracing_enter_span(span_id: &Option<span::Id>, follows_span: &Option<span::Id>) {
-    if let Some(span_id) = span_id {
-        tracing::dispatcher::get_default(|d| {
-            if let Some(follows_span) = follows_span {
-                d.record_follows_from(span_id, follows_span);
-            }
-            d.enter(span_id);
-        });
-    }
-}
-
-/// Manually exit a tracing span by its Id.
-pub(crate) fn tracing_exit_vm_span(
-    span_id: &Option<span::Id>,
-    finally_reason: &FinallyReason,
-    return_value: &Var,
-) {
-    if let Some(span_id) = span_id {
-        tracing::dispatcher::get_default(|d| {
-            // TODO figure out how to get the return value & exit information into the span
-            trace!(?finally_reason, ?return_value, "exiting VM span");
-            d.exit(span_id);
-        });
     }
 }

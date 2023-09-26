@@ -92,16 +92,10 @@ pub(crate) struct Activation {
     pub(crate) bf_trampoline: Option<usize>,
     /// And an optional argument that can be passed with the above...
     pub(crate) bf_trampoline_arg: Option<Var>,
-    /// The tracing span ID for this verb call, if any.
-    pub(crate) span_id: Option<tracing::span::Id>,
 }
 
 impl Activation {
-    pub fn for_call(
-        task_id: TaskId,
-        verb_call_request: VerbExecutionRequest,
-        span_id: Option<tracing::span::Id>,
-    ) -> Self {
+    pub fn for_call(task_id: TaskId, verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
         let environment = vec![None; program.var_names.width()];
 
@@ -122,7 +116,6 @@ impl Activation {
             bf_index: None,
             bf_trampoline: None,
             bf_trampoline_arg: None,
-            span_id,
             args: verb_call_request.call.args.clone(),
             permissions: verb_owner,
         };
@@ -165,13 +158,7 @@ impl Activation {
         a
     }
 
-    pub fn for_eval(
-        task_id: TaskId,
-        permissions: Objid,
-        player: Objid,
-        program: Program,
-        span_id: Option<tracing::span::Id>,
-    ) -> Self {
+    pub fn for_eval(task_id: TaskId, permissions: Objid, player: Objid, program: Program) -> Self {
         let environment = vec![None; program.var_names.width()];
 
         let verb_info = VerbInfo::new(
@@ -205,7 +192,6 @@ impl Activation {
             bf_index: None,
             bf_trampoline: None,
             bf_trampoline_arg: None,
-            span_id,
             args: vec![],
             permissions,
         };
@@ -237,7 +223,6 @@ impl Activation {
         args: Vec<Var>,
         _verb_flags: BitEnum<VerbFlag>,
         player: Objid,
-        span_id: Option<tracing::span::Id>,
     ) -> Self {
         let verb_info = VerbInfo::new(
             // Fake verbdef. Not sure how I feel about this.
@@ -270,7 +255,6 @@ impl Activation {
             bf_index: Some(bf_index),
             bf_trampoline: None,
             bf_trampoline_arg: None,
-            span_id,
             args,
             permissions: NOTHING,
         }
