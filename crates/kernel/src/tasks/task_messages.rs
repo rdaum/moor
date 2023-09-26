@@ -51,6 +51,7 @@ pub enum TaskControlMsg {
 }
 
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
+#[derive(Debug)]
 pub enum SchedulerControlMsg {
     /// Everything executed. The task is done.
     TaskSuccess(Var),
