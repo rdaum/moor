@@ -333,16 +333,16 @@ bf_declare!(substitute, bf_substitute);
 
 impl VM {
     pub(crate) fn register_bf_list_sets(&mut self) {
-        self.builtins[offset_for_builtin("is_member")] = Arc::new(Box::new(BfIsMember {}));
-        self.builtins[offset_for_builtin("listinsert")] = Arc::new(Box::new(BfListinsert {}));
-        self.builtins[offset_for_builtin("listappend")] = Arc::new(Box::new(BfListappend {}));
-        self.builtins[offset_for_builtin("listdelete")] = Arc::new(Box::new(BfListdelete {}));
-        self.builtins[offset_for_builtin("listset")] = Arc::new(Box::new(BfListset {}));
-        self.builtins[offset_for_builtin("setadd")] = Arc::new(Box::new(BfSetadd {}));
-        self.builtins[offset_for_builtin("setremove")] = Arc::new(Box::new(BfSetremove {}));
-        self.builtins[offset_for_builtin("match")] = Arc::new(Box::new(BfMatch {}));
-        self.builtins[offset_for_builtin("rmatch")] = Arc::new(Box::new(BfRmatch {}));
-        self.builtins[offset_for_builtin("substitute")] = Arc::new(Box::new(BfSubstitute {}));
+        self.builtins[offset_for_builtin("is_member")] = Arc::new(BfIsMember {});
+        self.builtins[offset_for_builtin("listinsert")] = Arc::new(BfListinsert {});
+        self.builtins[offset_for_builtin("listappend")] = Arc::new(BfListappend {});
+        self.builtins[offset_for_builtin("listdelete")] = Arc::new(BfListdelete {});
+        self.builtins[offset_for_builtin("listset")] = Arc::new(BfListset {});
+        self.builtins[offset_for_builtin("setadd")] = Arc::new(BfSetadd {});
+        self.builtins[offset_for_builtin("setremove")] = Arc::new(BfSetremove {});
+        self.builtins[offset_for_builtin("match")] = Arc::new(BfMatch {});
+        self.builtins[offset_for_builtin("rmatch")] = Arc::new(BfRmatch {});
+        self.builtins[offset_for_builtin("substitute")] = Arc::new(BfSubstitute {});
     }
 }
 

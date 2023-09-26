@@ -633,14 +633,14 @@ bf_declare!(disassemble, bf_disassemble);
 
 impl VM {
     pub(crate) fn register_bf_verbs(&mut self) {
-        self.builtins[offset_for_builtin("verb_info")] = Arc::new(Box::new(BfVerbInfo {}));
-        self.builtins[offset_for_builtin("set_verb_info")] = Arc::new(Box::new(BfSetVerbInfo {}));
-        self.builtins[offset_for_builtin("verb_args")] = Arc::new(Box::new(BfVerbArgs {}));
-        self.builtins[offset_for_builtin("set_verb_args")] = Arc::new(Box::new(BfSetVerbArgs {}));
-        self.builtins[offset_for_builtin("verb_code")] = Arc::new(Box::new(BfVerbCode {}));
-        self.builtins[offset_for_builtin("set_verb_code")] = Arc::new(Box::new(BfSetVerbCode {}));
-        self.builtins[offset_for_builtin("add_verb")] = Arc::new(Box::new(BfAddVerb {}));
-        self.builtins[offset_for_builtin("delete_verb")] = Arc::new(Box::new(BfDeleteVerb {}));
-        self.builtins[offset_for_builtin("disassemble")] = Arc::new(Box::new(BfDisassemble {}));
+        self.builtins[offset_for_builtin("verb_info")] = Arc::new(BfVerbInfo {});
+        self.builtins[offset_for_builtin("set_verb_info")] = Arc::new(BfSetVerbInfo {});
+        self.builtins[offset_for_builtin("verb_args")] = Arc::new(BfVerbArgs {});
+        self.builtins[offset_for_builtin("set_verb_args")] = Arc::new(BfSetVerbArgs {});
+        self.builtins[offset_for_builtin("verb_code")] = Arc::new(BfVerbCode {});
+        self.builtins[offset_for_builtin("set_verb_code")] = Arc::new(BfSetVerbCode {});
+        self.builtins[offset_for_builtin("add_verb")] = Arc::new(BfAddVerb {});
+        self.builtins[offset_for_builtin("delete_verb")] = Arc::new(BfDeleteVerb {});
+        self.builtins[offset_for_builtin("disassemble")] = Arc::new(BfDisassemble {});
     }
 }

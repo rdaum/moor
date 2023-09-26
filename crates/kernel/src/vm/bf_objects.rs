@@ -662,17 +662,16 @@ bf_declare!(set_player_flag, bf_set_player_flag);
 
 impl VM {
     pub(crate) fn register_bf_objects(&mut self) {
-        self.builtins[offset_for_builtin("create")] = Arc::new(Box::new(BfCreate {}));
-        self.builtins[offset_for_builtin("valid")] = Arc::new(Box::new(BfValid {}));
-        self.builtins[offset_for_builtin("verbs")] = Arc::new(Box::new(BfVerbs {}));
-        self.builtins[offset_for_builtin("properties")] = Arc::new(Box::new(BfProperties {}));
-        self.builtins[offset_for_builtin("parent")] = Arc::new(Box::new(BfParent {}));
-        self.builtins[offset_for_builtin("children")] = Arc::new(Box::new(BfChildren {}));
-        self.builtins[offset_for_builtin("move")] = Arc::new(Box::new(BfMove {}));
-        self.builtins[offset_for_builtin("chparent")] = Arc::new(Box::new(BfChparent {}));
-        self.builtins[offset_for_builtin("set_player_flag")] =
-            Arc::new(Box::new(BfSetPlayerFlag {}));
-        self.builtins[offset_for_builtin("recycle")] = Arc::new(Box::new(BfRecycle {}));
-        self.builtins[offset_for_builtin("max_object")] = Arc::new(Box::new(BfMaxObject {}));
+        self.builtins[offset_for_builtin("create")] = Arc::new(BfCreate {});
+        self.builtins[offset_for_builtin("valid")] = Arc::new(BfValid {});
+        self.builtins[offset_for_builtin("verbs")] = Arc::new(BfVerbs {});
+        self.builtins[offset_for_builtin("properties")] = Arc::new(BfProperties {});
+        self.builtins[offset_for_builtin("parent")] = Arc::new(BfParent {});
+        self.builtins[offset_for_builtin("children")] = Arc::new(BfChildren {});
+        self.builtins[offset_for_builtin("move")] = Arc::new(BfMove {});
+        self.builtins[offset_for_builtin("chparent")] = Arc::new(BfChparent {});
+        self.builtins[offset_for_builtin("set_player_flag")] = Arc::new(BfSetPlayerFlag {});
+        self.builtins[offset_for_builtin("recycle")] = Arc::new(BfRecycle {});
+        self.builtins[offset_for_builtin("max_object")] = Arc::new(BfMaxObject {});
     }
 }

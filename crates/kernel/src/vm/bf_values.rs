@@ -175,18 +175,18 @@ bf_declare!(object_bytes, bf_object_bytes);
 
 impl VM {
     pub(crate) fn register_bf_values(&mut self) {
-        self.builtins[offset_for_builtin("typeof")] = Arc::new(Box::new(BfTypeof {}));
-        self.builtins[offset_for_builtin("tostr")] = Arc::new(Box::new(BfTostr {}));
-        self.builtins[offset_for_builtin("toliteral")] = Arc::new(Box::new(BfToliteral {}));
-        self.builtins[offset_for_builtin("toint")] = Arc::new(Box::new(BfToint {}));
-        self.builtins[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
-        self.builtins[offset_for_builtin("tonum")] = Arc::new(Box::new(BfToint {}));
-        self.builtins[offset_for_builtin("toobj")] = Arc::new(Box::new(BfToobj {}));
-        self.builtins[offset_for_builtin("tofloat")] = Arc::new(Box::new(BfTofloat {}));
-        self.builtins[offset_for_builtin("equal")] = Arc::new(Box::new(BfEqual {}));
-        self.builtins[offset_for_builtin("value_bytes")] = Arc::new(Box::new(BfValueBytes {}));
-        self.builtins[offset_for_builtin("object_bytes")] = Arc::new(Box::new(BfObjectBytes {}));
-        self.builtins[offset_for_builtin("value_hash")] = Arc::new(Box::new(BfValueHash {}));
-        self.builtins[offset_for_builtin("length")] = Arc::new(Box::new(BfLength {}));
+        self.builtins[offset_for_builtin("typeof")] = Arc::new(BfTypeof {});
+        self.builtins[offset_for_builtin("tostr")] = Arc::new(BfTostr {});
+        self.builtins[offset_for_builtin("toliteral")] = Arc::new(BfToliteral {});
+        self.builtins[offset_for_builtin("toint")] = Arc::new(BfToint {});
+        self.builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
+        self.builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
+        self.builtins[offset_for_builtin("toobj")] = Arc::new(BfToobj {});
+        self.builtins[offset_for_builtin("tofloat")] = Arc::new(BfTofloat {});
+        self.builtins[offset_for_builtin("equal")] = Arc::new(BfEqual {});
+        self.builtins[offset_for_builtin("value_bytes")] = Arc::new(BfValueBytes {});
+        self.builtins[offset_for_builtin("object_bytes")] = Arc::new(BfObjectBytes {});
+        self.builtins[offset_for_builtin("value_hash")] = Arc::new(BfValueHash {});
+        self.builtins[offset_for_builtin("length")] = Arc::new(BfLength {});
     }
 }

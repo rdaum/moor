@@ -44,7 +44,7 @@ pub struct VM {
     /// The stack of activation records / stack frames.
     pub(crate) stack: Vec<Activation>,
     /// The set of built-in functions, indexed by their Name offset in the variable stack.
-    pub(crate) builtins: Vec<Arc<Box<dyn BuiltinFunction>>>,
+    pub(crate) builtins: Vec<Arc<dyn BuiltinFunction>>,
     /// The number of ticks that have been executed so far.
     pub(crate) tick_count: usize,
     /// The time at which the VM was started.
@@ -151,15 +151,14 @@ impl Default for VM {
 impl VM {
     #[tracing::instrument()]
     pub fn new() -> Self {
-        let mut bf_funcs: Vec<Arc<Box<dyn BuiltinFunction>>> =
+        let mut builtins: Vec<Arc<dyn BuiltinFunction>> =
             Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
         for _ in 0..BUILTIN_DESCRIPTORS.len() {
-            bf_funcs.push(Arc::new(Box::new(BfNoop {})))
+            builtins.push(Arc::new(BfNoop {}))
         }
-        let _bf_noop = Box::new(BfNoop {});
         let mut vm = Self {
             stack: vec![],
-            builtins: bf_funcs,
+            builtins,
             tick_count: 0,
             start_time: None,
         };

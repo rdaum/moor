@@ -222,15 +222,11 @@ async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
 bf_declare!(delete_property, bf_delete_property);
 impl VM {
     pub(crate) fn register_bf_properties(&mut self) {
-        self.builtins[offset_for_builtin("property_info")] = Arc::new(Box::new(BfPropertyInfo {}));
-        self.builtins[offset_for_builtin("set_property_info")] =
-            Arc::new(Box::new(BfSetPropertyInfo {}));
-        self.builtins[offset_for_builtin("is_clear_property")] =
-            Arc::new(Box::new(BfIsClearProperty {}));
-        self.builtins[offset_for_builtin("clear_property")] =
-            Arc::new(Box::new(BfSetClearProperty {}));
-        self.builtins[offset_for_builtin("add_property")] = Arc::new(Box::new(BfAddProperty {}));
-        self.builtins[offset_for_builtin("delete_property")] =
-            Arc::new(Box::new(BfDeleteProperty {}));
+        self.builtins[offset_for_builtin("property_info")] = Arc::new(BfPropertyInfo {});
+        self.builtins[offset_for_builtin("set_property_info")] = Arc::new(BfSetPropertyInfo {});
+        self.builtins[offset_for_builtin("is_clear_property")] = Arc::new(BfIsClearProperty {});
+        self.builtins[offset_for_builtin("clear_property")] = Arc::new(BfSetClearProperty {});
+        self.builtins[offset_for_builtin("add_property")] = Arc::new(BfAddProperty {});
+        self.builtins[offset_for_builtin("delete_property")] = Arc::new(BfDeleteProperty {});
     }
 }
