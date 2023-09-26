@@ -6,8 +6,8 @@ use tracing::{error, warn};
 
 use moor_values::model::WorldStateError;
 
-use crate::db::db_message::DbMessage;
-use crate::db::rocksdb::tx_db_impl::RocksDbTx;
+use crate::db_message::DbMessage;
+use crate::rocksdb::tx_db_impl::RocksDbTx;
 
 fn respond<V: Send + Sync + 'static>(
     r: tokio::sync::oneshot::Sender<Result<V, WorldStateError>>,

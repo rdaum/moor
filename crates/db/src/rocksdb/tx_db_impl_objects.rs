@@ -11,11 +11,11 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 
-use crate::db::rocksdb::tx_db_impl::{
+use crate::rocksdb::tx_db_impl::{
     cf_for, composite_key_for, get_objset, get_oid_or_nothing, get_oid_value, oid_key, set_objset,
     set_oid_value, write_cf, RocksDbTx,
 };
-use crate::db::rocksdb::ColumnFamilies;
+use crate::rocksdb::ColumnFamilies;
 
 // Methods for manipulation of objects, their owners, flags, contents, parents, etc.
 impl<'a> RocksDbTx<'a> {
@@ -41,7 +41,7 @@ impl<'a> RocksDbTx<'a> {
             Some(oid) => {
                 // If this object already exists, that's an error.
                 if self.object_valid(oid)? {
-                    return Err(WorldStateError::ObjectAlreadyExists(oid).into());
+                    return Err(WorldStateError::ObjectAlreadyExists(oid));
                 }
                 oid
             }
@@ -270,7 +270,7 @@ impl<'a> RocksDbTx<'a> {
         let ok = oid_key(o);
         let name_bytes = self.tx.get_cf(cf, ok).expect("Unable to get object name");
         let Some(name_bytes) = name_bytes else {
-            return Err(WorldStateError::ObjectNotFound(o).into());
+            return Err(WorldStateError::ObjectNotFound(o));
         };
         Ok(String::from_sliceref(SliceRef::from_bytes(&name_bytes)))
     }
@@ -287,7 +287,7 @@ impl<'a> RocksDbTx<'a> {
         let ok = oid_key(o);
         let flag_bytes = self.tx.get_cf(cf, ok).expect("Unable to get object flags");
         let Some(flag_bytes) = flag_bytes else {
-            return Err(WorldStateError::ObjectNotFound(o).into());
+            return Err(WorldStateError::ObjectNotFound(o));
         };
         Ok(BitEnum::from_sliceref(SliceRef::from_bytes(&flag_bytes)))
     }
@@ -340,7 +340,7 @@ impl<'a> RocksDbTx<'a> {
                 break;
             }
             if oid == what {
-                return Err(WorldStateError::RecursiveMove(what, new_location).into());
+                return Err(WorldStateError::RecursiveMove(what, new_location));
             }
             oid = self.get_object_location(oid).unwrap_or(NOTHING);
         }

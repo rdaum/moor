@@ -5,9 +5,8 @@ use moor_values::model::objset::ObjSet;
 use moor_values::model::WorldStateError;
 use moor_values::NOTHING;
 
+use crate::matching::match_env::MatchEnvironment;
 use moor_values::var::objid::Objid;
-
-use crate::db::matching::MatchEnvironment;
 
 pub const MOCK_PLAYER: Objid = Objid(3);
 pub const MOCK_ROOM1: Objid = Objid(1);
@@ -23,18 +22,18 @@ pub struct MockObject {
 }
 
 #[derive(Default)]
-pub struct MockMatchEnvironment {
+pub struct MockMatchEnv {
     objects: HashMap<Objid, MockObject>,
 }
 
-impl MockMatchEnvironment {
+impl MockMatchEnv {
     pub fn new(objects: HashMap<Objid, MockObject>) -> Self {
-        MockMatchEnvironment { objects }
+        MockMatchEnv { objects }
     }
 }
 
 #[async_trait]
-impl MatchEnvironment for MockMatchEnvironment {
+impl MatchEnvironment for MockMatchEnv {
     async fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
         Ok(self.objects.contains_key(&oid))
     }
@@ -69,7 +68,7 @@ impl MatchEnvironment for MockMatchEnvironment {
 }
 
 fn create_mock_object(
-    env: &mut MockMatchEnvironment,
+    env: &mut MockMatchEnv,
     oid: Objid,
     location: Objid,
     contents: ObjSet,
@@ -85,8 +84,8 @@ fn create_mock_object(
     );
 }
 
-pub fn setup_mock_environment() -> MockMatchEnvironment {
-    let mut env = MockMatchEnvironment::default();
+pub fn setup_mock_environment() -> MockMatchEnv {
+    let mut env = MockMatchEnv::default();
 
     create_mock_object(
         &mut env,

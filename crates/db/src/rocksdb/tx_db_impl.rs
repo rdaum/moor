@@ -9,7 +9,7 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::{AsByteBuffer, NOTHING};
 
-use crate::db::rocksdb::ColumnFamilies;
+use crate::rocksdb::ColumnFamilies;
 
 pub fn oid_key(o: Objid) -> [u8; 8] {
     o.0.to_be_bytes()
@@ -147,8 +147,8 @@ mod tests {
     use moor_values::var::v_str;
     use moor_values::NOTHING;
 
-    use crate::db::rocksdb::tx_db_impl::RocksDbTx;
-    use crate::db::rocksdb::ColumnFamilies;
+    use crate::rocksdb::tx_db_impl::RocksDbTx;
+    use crate::rocksdb::ColumnFamilies;
 
     struct TestDb {
         db: Arc<OptimisticTransactionDB>,

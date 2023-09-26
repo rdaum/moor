@@ -141,8 +141,10 @@ mod tests {
     use moor_values::var::objid::Objid;
     use moor_values::{FAILED_MATCH, NOTHING};
 
-    use crate::db::matching::{do_match_object_names, MatchData, MatchEnvironmentParseMatcher};
-    use crate::db::mock::mock_matching_env::{
+    use crate::matching::match_env::{
+        do_match_object_names, MatchData, MatchEnvironmentParseMatcher,
+    };
+    use crate::matching::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
     use crate::tasks::command_parse::ParseMatcher;

@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "crates/values",
   "crates/kernel",
+  "crates/db",
   "crates/rpc-common",
   "crates/daemon",
   "crates/telnet-host",

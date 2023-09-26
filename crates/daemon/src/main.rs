@@ -10,7 +10,7 @@ use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 
-use moor_kernel::db::{DatabaseBuilder, DatabaseType};
+use moor_db::{DatabaseBuilder, DatabaseType};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::load_db::textdump_load;
 use rpc_common::{RpcRequestError, RpcResponse, RpcResult};

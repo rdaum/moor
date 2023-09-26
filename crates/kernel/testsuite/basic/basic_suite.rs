@@ -1,5 +1,5 @@
+use moor_db::inmemtransient::InMemTransientDatabase;
 use moor_kernel::compiler::codegen::compile;
-use moor_kernel::db::inmemtransient::InMemTransientDatabase;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
 use moor_kernel::textdump::load_db::textdump_load;

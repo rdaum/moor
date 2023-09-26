@@ -18,11 +18,11 @@ mod tests {
 
     use crate::compiler::codegen::compile;
     use crate::compiler::labels::Names;
-    use crate::db::inmemtransient::InMemTransientDatabase;
     use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
     use crate::tasks::vm_test_utils::call_verb;
     use crate::vm::opcode::Op::*;
     use crate::vm::opcode::{Op, Program};
+    use moor_db::inmemtransient::InMemTransientDatabase;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {

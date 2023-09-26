@@ -21,7 +21,7 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, v_list, v_objid, Var};
 use moor_values::NOTHING;
 
-use crate::db::DbTxWorldState;
+use crate::DbTxWorldState;
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.

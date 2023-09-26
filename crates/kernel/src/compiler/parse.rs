@@ -722,7 +722,7 @@ pub fn parse_program(program_text: &str) -> Result<Parse, CompileError> {
     let pairs = match MooParser::parse(Rule::program, program_text) {
         Ok(pairs) => pairs,
         Err(e) => {
-            let msg = format!("Parse error: {}", e.to_string());
+            let msg = format!("Parse error: {}", e);
             return Err(CompileError::ParseError(msg));
         }
     };
@@ -800,9 +800,9 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
             c => output.push(c),
         }
     }
-    return Err(CompileError::StringLexError(
+    Err(CompileError::StringLexError(
         "Unexpected end of string".to_string(),
-    ));
+    ))
 }
 
 #[cfg(test)]

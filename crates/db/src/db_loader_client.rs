@@ -11,8 +11,8 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
-use crate::db::loader::LoaderInterface;
-use crate::db::DbTxWorldState;
+use crate::loader::LoaderInterface;
+use crate::DbTxWorldState;
 
 #[async_trait]
 impl LoaderInterface for DbTxWorldState {

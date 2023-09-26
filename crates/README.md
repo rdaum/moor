@@ -15,8 +15,10 @@ Binaries:
 Libraries:
   * `values` - crate that implements the core MOO discriminated union (`Var`) value type,
      plus all associated types and traits.
-  * `kernel` - the actual implementation of the system: database, compiler, virtual machine,
-     task scheduler, implementations of all builtin functions, etc.
+  *  `db` - implementation of the `WorldState` object database trait w/ a (for now) RocksDB backend, along with mock/testing
+     database implementations.
+  * `kernel` - the kernel of the MOO driver: compiler, virtual machine, task scheduler, implementations of all builtin   
+     functions
   * `rpc-common` - provides types & functions used by both `daemon` and each host binary, for the RPC interface
   * `regexpr-binding` - provides bindings to the old regular expressions library used by
      the LambdaMOO server, for compatibility with existing cores. This is a temporary measure until

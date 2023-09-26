@@ -57,7 +57,7 @@ impl RpcSendClient {
             }
             Err(e) => {
                 error!("Unable to decode RPC response: {}", e);
-                return Err(RpcError::CouldNotDecode(e.to_string()));
+                Err(RpcError::CouldNotDecode(e.to_string()))
             }
         }
     }

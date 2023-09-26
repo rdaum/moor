@@ -268,8 +268,8 @@ mod tests {
     use moor_values::var::v_str;
     use moor_values::{FAILED_MATCH, NOTHING};
 
-    use crate::db::matching::MatchEnvironmentParseMatcher;
-    use crate::db::mock::mock_matching_env::{
+    use crate::matching::match_env::MatchEnvironmentParseMatcher;
+    use crate::matching::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
 

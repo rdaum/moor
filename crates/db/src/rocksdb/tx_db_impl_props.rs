@@ -12,10 +12,10 @@ use moor_values::var::objid::Objid;
 use moor_values::var::{v_none, Var};
 use moor_values::{AsByteBuffer, NOTHING};
 
-use crate::db::rocksdb::tx_db_impl::{
+use crate::rocksdb::tx_db_impl::{
     composite_key_uuid, get_oid_or_nothing, get_oid_value, oid_key, write_cf, RocksDbTx,
 };
-use crate::db::rocksdb::ColumnFamilies;
+use crate::rocksdb::ColumnFamilies;
 
 // Methods related to properties; definitions and values.
 impl<'a> RocksDbTx<'a> {
@@ -43,7 +43,7 @@ impl<'a> RocksDbTx<'a> {
             .expect("Unable to read property value");
         let Some(var_bytes) = var_bytes else {
             let u_uuid_str = u.to_string();
-            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
+            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str));
         };
         let var = Var::from_sliceref(SliceRef::from_bytes(&var_bytes));
         Ok(var)
@@ -72,7 +72,7 @@ impl<'a> RocksDbTx<'a> {
             .expect("Unable to read property definitions");
         let Some(props_bytes) = props_bytes else {
             let u_uuid_str = u.to_string();
-            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
+            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str));
         };
         let props = PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes));
         let Some(new_props) = props.with_updated(u, |p| {
@@ -90,7 +90,7 @@ impl<'a> RocksDbTx<'a> {
             )
         }) else {
             let u_uuid_str = u.to_string();
-            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
+            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str));
         };
 
         self.update_propdefs(o, new_props)?;
@@ -105,12 +105,12 @@ impl<'a> RocksDbTx<'a> {
             .get_cf(p_cf, ok)
             .expect("Unable to read property definitions");
         let Some(props_bytes) = props_bytes else {
-            return Err(WorldStateError::ObjectNotFound(o).into());
+            return Err(WorldStateError::ObjectNotFound(o));
         };
         let props = PropDefs::from_sliceref(SliceRef::from_bytes(&props_bytes));
         let Some(new_props) = props.with_removed(u) else {
             let u_uuid_str = u.to_string();
-            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str).into());
+            return Err(WorldStateError::PropertyNotFound(o, u_uuid_str));
         };
         self.update_propdefs(o, new_props)?;
 
@@ -167,7 +167,7 @@ impl<'a> RocksDbTx<'a> {
 
             // Verify we don't already have a property with this name. If we do, return an error.
             if props.find_first_named(name.as_str()).is_some() {
-                return Err(WorldStateError::DuplicatePropertyDefinition(location, name).into());
+                return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
             }
 
             let prop = PropDef::new(u, definer, location, name.as_str(), perms, owner);
@@ -194,7 +194,7 @@ impl<'a> RocksDbTx<'a> {
 
         let propdef = self.seek_property_definition(obj, n.clone())?;
         let Some(propdef) = propdef else {
-            return Err(WorldStateError::PropertyNotFound(obj, n).into());
+            return Err(WorldStateError::PropertyNotFound(obj, n));
         };
 
         // Then we're going to resolve the value up the tree, skipping 'clear' (un-found) until we

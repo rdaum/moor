@@ -396,7 +396,7 @@ impl CodegenState {
                 // Lookup builtin.
                 let Some(builtin) = self.builtins.get(function) else {
                     error!("Unknown builtin function: {}({:?}", function, args);
-                    return Err(CompileError::UnknownBuiltinFunction(function.clone()).into());
+                    return Err(CompileError::UnknownBuiltinFunction(function.clone()));
                 };
                 let builtin = *builtin;
                 self.generate_arg_list(args)?;

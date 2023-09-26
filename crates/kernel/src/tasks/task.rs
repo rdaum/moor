@@ -16,8 +16,8 @@ use moor_values::var::v_int;
 use moor_values::var::variant::Variant;
 use moor_values::NOTHING;
 
-use crate::db::match_env::DBMatchEnvironment;
-use crate::db::matching::MatchEnvironmentParseMatcher;
+use crate::matching::match_env::MatchEnvironmentParseMatcher;
+use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::{
     parse_command, parse_into_words, ParseCommandError, ParsedCommand,
 };
@@ -332,7 +332,7 @@ impl Task {
                 };
 
                 // Parse the command in the current environment.
-                let me = DBMatchEnvironment {
+                let me = WsMatchEnv {
                     ws: self.world_state.as_mut(),
                     perms: player,
                 };

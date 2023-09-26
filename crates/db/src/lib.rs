@@ -3,14 +3,12 @@ use std::thread;
 
 use strum::{Display, EnumIter, EnumString, EnumVariantNames};
 
-use crate::db::db_client::DbTxClient;
-use crate::db::inmemtransient::InMemTransientDatabase;
-use crate::db::loader::LoaderInterface;
-use crate::db::rocksdb::db_server::RocksDbServer;
+use crate::db_client::DbTxClient;
+use crate::inmemtransient::InMemTransientDatabase;
+use crate::loader::LoaderInterface;
+use crate::rocksdb::db_server::RocksDbServer;
 use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::WorldStateError;
-
-pub mod matching;
 
 mod db_client;
 mod db_loader_client;
@@ -18,7 +16,6 @@ mod db_message;
 mod db_worldstate;
 pub mod inmemtransient;
 pub mod loader;
-pub mod match_env;
 pub mod mock;
 pub mod rocksdb;
 

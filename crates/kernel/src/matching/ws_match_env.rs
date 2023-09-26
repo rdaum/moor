@@ -5,15 +5,16 @@ use moor_values::model::world_state::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::var::objid::Objid;
 
-use crate::db::matching::MatchEnvironment;
+use crate::matching::match_env::MatchEnvironment;
 
-pub struct DBMatchEnvironment<'a> {
+/// A "match environment" which matches out of the current DB world state.
+pub struct WsMatchEnv<'a> {
     pub(crate) ws: &'a mut dyn WorldState,
     pub(crate) perms: Objid,
 }
 
 #[async_trait]
-impl<'a> MatchEnvironment for DBMatchEnvironment<'a> {
+impl<'a> MatchEnvironment for WsMatchEnv<'a> {
     async fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
         self.ws.valid(oid).await
     }

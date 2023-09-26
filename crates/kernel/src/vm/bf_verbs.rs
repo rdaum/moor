@@ -162,7 +162,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
                 binary: None,
             })
         }
-        _ => return Err(E_INVARG),
+        _ => Err(E_INVARG),
     }
 }
 

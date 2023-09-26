@@ -651,7 +651,7 @@ impl TransientStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::inmemtransient::transient_store::TransientStore;
+    use crate::inmemtransient::transient_store::TransientStore;
     use moor_values::model::defset::HasUuid;
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::objset::ObjSet;

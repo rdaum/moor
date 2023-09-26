@@ -11,10 +11,8 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::NOTHING;
 
-use crate::db::rocksdb::tx_db_impl::{
-    composite_key_uuid, get_oid_value, oid_key, write_cf, RocksDbTx,
-};
-use crate::db::rocksdb::ColumnFamilies;
+use crate::rocksdb::tx_db_impl::{composite_key_uuid, get_oid_value, oid_key, write_cf, RocksDbTx};
+use crate::rocksdb::ColumnFamilies;
 
 impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
@@ -87,7 +85,7 @@ impl<'a> RocksDbTx<'a> {
         };
         let Some(verbs) = verbs.with_removed(v) else {
             let v_uuid_str = v.to_string();
-            return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
+            return Err(WorldStateError::VerbNotFound(o, v_uuid_str));
         };
         write_cf(&self.tx, cf, &ok, &verbs)?;
 
@@ -112,7 +110,7 @@ impl<'a> RocksDbTx<'a> {
         let verb = verbs.find(&v);
         let Some(verb) = verb else {
             let v_uuid_str = v.to_string();
-            return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
+            return Err(WorldStateError::VerbNotFound(o, v_uuid_str));
         };
         Ok(verb.clone())
     }
@@ -125,14 +123,14 @@ impl<'a> RocksDbTx<'a> {
             .get_cf(cf, ok)
             .expect("unable to retrieve verb bytes")
         else {
-            return Err(WorldStateError::VerbNotFound(o, n).into());
+            return Err(WorldStateError::VerbNotFound(o, n));
         };
         let verbs = VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes));
         // TODO: verify semantics/call use cases here. MOO verbs are actually potentially ambiguous
         //   on name, so need to make sure that this is for only specific cases where 'get me the
         //   first match' is ok.
         let Some(verb) = verbs.find_first_named(n.as_str()) else {
-            return Err(WorldStateError::VerbNotFound(o, n).into());
+            return Err(WorldStateError::VerbNotFound(o, n));
         };
         Ok(verb.clone())
     }
@@ -146,12 +144,12 @@ impl<'a> RocksDbTx<'a> {
             Some(verbs_bytes) => VerbDefs::from_sliceref(SliceRef::from_bytes(&verbs_bytes)),
         };
         if i >= verbs.len() {
-            return Err(WorldStateError::VerbNotFound(o, format!("{}", i)).into());
+            return Err(WorldStateError::VerbNotFound(o, format!("{}", i)));
         }
         verbs
             .iter()
             .nth(i)
-            .ok_or_else(|| WorldStateError::VerbNotFound(o, format!("{}", i)).into())
+            .ok_or_else(|| WorldStateError::VerbNotFound(o, format!("{}", i)))
     }
     #[tracing::instrument(skip(self))]
     pub fn get_binary(&self, o: Objid, v: Uuid) -> Result<Vec<u8>, WorldStateError> {
@@ -160,7 +158,7 @@ impl<'a> RocksDbTx<'a> {
         let prg_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verb program");
         let Some(prg_bytes) = prg_bytes else {
             let v_uuid_str = v.to_string();
-            return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
+            return Err(WorldStateError::VerbNotFound(o, v_uuid_str));
         };
         Ok(prg_bytes)
     }
@@ -209,7 +207,7 @@ impl<'a> RocksDbTx<'a> {
             search_o = parent;
         }
         trace!(termination_object = ?search_o, verb = %name, "no verb found");
-        Err(WorldStateError::VerbNotFound(o, name).into())
+        Err(WorldStateError::VerbNotFound(o, name))
     }
     #[tracing::instrument(skip(self))]
     pub fn set_verb_info(
@@ -245,7 +243,7 @@ impl<'a> RocksDbTx<'a> {
             )
         }) else {
             let v_uuid_str = v.to_string();
-            return Err(WorldStateError::VerbNotFound(o, v_uuid_str).into());
+            return Err(WorldStateError::VerbNotFound(o, v_uuid_str));
         };
 
         write_cf(&self.tx, cf, &ok, &new_verbs)?;

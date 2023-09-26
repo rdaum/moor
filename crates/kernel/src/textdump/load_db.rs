@@ -11,9 +11,9 @@ use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
 use crate::compiler::codegen::compile;
-use crate::db::loader::LoaderInterface;
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{Object, TextdumpReader};
+use moor_db::loader::LoaderInterface;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::Preposition;

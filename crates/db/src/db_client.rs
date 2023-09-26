@@ -14,7 +14,7 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
-use crate::db::db_message::DbMessage;
+use crate::db_message::DbMessage;
 use moor_values::model::verbdef::VerbDefs;
 
 pub(crate) struct DbTxClient {

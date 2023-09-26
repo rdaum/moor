@@ -1,10 +1,10 @@
 /// "local" in-memory transient "db" implementation. For testing.
 /// no persistence, no transactions, just a write lock and some hash tables.
-use crate::db::db_client::DbTxClient;
-use crate::db::db_message::DbMessage;
-use crate::db::inmemtransient::transient_store::TransientStore;
-use crate::db::loader::LoaderInterface;
-use crate::db::{Database, DbTxWorldState};
+use crate::db_client::DbTxClient;
+use crate::db_message::DbMessage;
+use crate::inmemtransient::transient_store::TransientStore;
+use crate::loader::LoaderInterface;
+use crate::{Database, DbTxWorldState};
 use async_trait::async_trait;
 use crossbeam_channel::Receiver;
 use moor_values::model::world_state::{WorldState, WorldStateSource};

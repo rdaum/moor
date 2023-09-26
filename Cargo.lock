@@ -1488,6 +1488,7 @@ dependencies = [
  "metrics-exporter-prometheus",
  "metrics-macros",
  "metrics-util",
+ "moor-db",
  "moor-kernel",
  "moor-values",
  "rpc-common",
@@ -1501,6 +1502,39 @@ dependencies = [
  "tracing",
  "tracing-chrome",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "moor-db"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bincode",
+ "bytes",
+ "crossbeam-channel",
+ "decorum",
+ "enum-primitive-derive",
+ "inventory",
+ "itertools",
+ "lazy_static",
+ "metrics",
+ "metrics-macros",
+ "metrics-util",
+ "moor-values",
+ "paste",
+ "pretty_assertions",
+ "rocksdb",
+ "strum",
+ "tempfile",
+ "test-case",
+ "text_io",
+ "thiserror",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "tracing-test",
+ "unindent",
  "uuid",
 ]
 
@@ -1522,6 +1556,7 @@ dependencies = [
  "metrics",
  "metrics-macros",
  "metrics-util",
+ "moor-db",
  "moor-values",
  "paste",
  "pest",
