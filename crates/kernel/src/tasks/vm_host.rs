@@ -5,7 +5,7 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::vm_unwind::UncaughtException;
-use crate::vm::{ForkRequest, VerbExecutionRequest};
+use crate::vm::{Fork, VerbExecutionRequest};
 use async_trait::async_trait;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbs::BinaryType;
@@ -18,7 +18,7 @@ pub enum VMHostResponse {
     /// Tell the task to just keep on letting us do what we're doing.
     ContinueOk,
     /// Tell the task to ask the scheduler to dispatch a fork request, and then resume execution.
-    DispatchFork(ForkRequest),
+    DispatchFork(Fork),
     /// Tell the task to suspend us.
     Suspend(Option<Duration>),
     /// Task timed out or exceeded ticks.
@@ -56,7 +56,7 @@ pub trait VMHost<ProgramType> {
     );
 
     /// Setup for dispatching into a fork request.
-    async fn start_fork(&mut self, task_id: TaskId, fork_request: ForkRequest, suspended: bool);
+    async fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool);
 
     /// Signal the need to start execution of a verb request.
     async fn start_execution(

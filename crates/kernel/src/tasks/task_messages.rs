@@ -1,7 +1,7 @@
 use crate::tasks::scheduler::{AbortLimitReason, TaskDescription};
 use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
-use crate::vm::ForkRequest;
+use crate::vm::Fork;
 
 use crate::vm::opcode::Program;
 use moor_values::model::permissions::Perms;
@@ -30,7 +30,7 @@ pub enum TaskControlMsg {
     /// set up execution.
     StartFork {
         task_id: TaskId,
-        fork_request: ForkRequest,
+        fork_request: Fork,
         // If we're starting in a suspended state. If this is true, an explicit Resume from the
         // scheduler will be required to start the task.
         suspended: bool,
@@ -61,7 +61,7 @@ pub enum SchedulerControlMsg {
     /// An execption was thrown while executing the verb.
     TaskException(UncaughtException),
     /// The task is requesting that it be forked.
-    TaskRequestFork(ForkRequest, oneshot::Sender<TaskId>),
+    TaskRequestFork(Fork, oneshot::Sender<TaskId>),
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
     /// The task is letting us know that it has reached its abort limits.

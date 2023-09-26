@@ -53,7 +53,7 @@ pub struct VM {
 
 /// The set of parameters for a VM-requested fork.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ForkRequest {
+pub struct Fork {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit
     pub(crate) player: Objid,
@@ -118,7 +118,7 @@ pub enum ExecutionResult {
         trampoline_arg: Option<Var>,
     },
     /// Request dispatch of a new task as a fork
-    DispatchFork(ForkRequest),
+    DispatchFork(Fork),
     /// Request dispatch of a builtin function with the given arguments.
     ContinueBuiltin {
         bf_func_num: usize,

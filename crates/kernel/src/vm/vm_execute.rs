@@ -15,7 +15,7 @@ use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::vm::activation::HandlerType;
 use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
-use crate::vm::{ExecutionResult, ForkRequest, VM};
+use crate::vm::{ExecutionResult, Fork, VM};
 
 macro_rules! binary_bool_op {
     ( $self:ident, $op:tt ) => {
@@ -466,7 +466,7 @@ impl VM {
                     }
                     let delay = (*time != 0).then(|| Duration::from_secs(*time as u64));
                     let new_activation = self.top().clone();
-                    let fork = ForkRequest {
+                    let fork = Fork {
                         player: self.top().player,
                         progr: self.top().permissions,
                         parent_task_id: self.top().task_id,

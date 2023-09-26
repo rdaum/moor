@@ -11,6 +11,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
 
+use moor_values::model::permissions::Perms;
 use moor_values::model::world_state::{WorldState, WorldStateSource};
 use moor_values::model::CommandError;
 use moor_values::var::error::Error::{E_INVARG, E_PERM};
@@ -31,7 +32,7 @@ use crate::tasks::task::Task;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg};
 use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
-use crate::vm::{ForkRequest, VM};
+use crate::vm::{Fork, VM};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);
@@ -81,6 +82,29 @@ pub enum AbortLimitReason {
 pub enum TaskWaiterResult {
     Success(Var),
     Error(SchedulerError),
+}
+
+struct KillRequest {
+    requesting_task_id: TaskId,
+    victim_task_id: TaskId,
+    sender_permissions: Perms,
+    result_sender: oneshot::Sender<Var>,
+}
+
+struct ResumeRequest {
+    requesting_task_id: TaskId,
+    queued_task_id: TaskId,
+    sender_permissions: Perms,
+    return_value: Var,
+    result_sender: oneshot::Sender<Var>,
+}
+
+struct ForkRequest {
+    fork_request: Fork,
+    reply: oneshot::Sender<TaskId>,
+    state_source: Arc<dyn WorldStateSource>,
+    session: Arc<dyn Session>,
+    scheduler: Scheduler,
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -515,7 +539,7 @@ impl Scheduler {
 impl Inner {
     async fn submit_fork_task(
         &mut self,
-        fork_request: ForkRequest,
+        fork: Fork,
         state_source: Arc<dyn WorldStateSource>,
         session: Arc<dyn Session>,
         scheduler_ref: Scheduler,
@@ -523,12 +547,12 @@ impl Inner {
         increment_counter!("scheduler.forked_tasks");
         let task_id = self
             .new_task(
-                fork_request.player,
+                fork.player,
                 state_source,
                 session,
-                fork_request.delay,
+                fork.delay,
                 scheduler_ref,
-                fork_request.progr,
+                fork.progr,
                 false,
             )
             .await?;
@@ -540,7 +564,7 @@ impl Inner {
         // If there's a delay on the fork, we will mark it in suspended state and put in the
         // delay time.
         let mut suspended = false;
-        if let Some(delay) = fork_request.delay {
+        if let Some(delay) = fork.delay {
             task_ref.suspended = true;
             task_ref.resume_time = Some(SystemTime::now() + delay);
             suspended = true;
@@ -550,7 +574,7 @@ impl Inner {
             .task_control_sender
             .send(TaskControlMsg::StartFork {
                 task_id,
-                fork_request,
+                fork_request: fork,
                 suspended,
             })
         {
@@ -663,13 +687,13 @@ impl Inner {
                         // Task has requested a fork. Dispatch it and reply with the new task id.
                         // Gotta dump this out til we exit the loop tho, since self.tasks is already
                         // borrowed here.
-                        fork_requests.push((
+                        fork_requests.push(ForkRequest {
                             fork_request,
                             reply,
-                            task.state_source.clone(),
-                            task.session.clone(),
-                            task.scheduler.clone(),
-                        ));
+                            state_source: task.state_source.clone(),
+                            session: task.session.clone(),
+                            scheduler: task.scheduler.clone(),
+                        });
                     }
                     SchedulerControlMsg::TaskSuspend(resume_time) => {
                         increment_counter!("scheduler.suspend_task");
@@ -690,12 +714,12 @@ impl Inner {
                     } => {
                         increment_counter!("scheduler.kill_task");
                         // Task is asking to kill another task.
-                        kill_requests.push((
-                            task.task_id,
+                        kill_requests.push(KillRequest {
+                            requesting_task_id: task.task_id,
                             victim_task_id,
                             sender_permissions,
                             result_sender,
-                        ));
+                        });
                     }
                     SchedulerControlMsg::ResumeTask {
                         queued_task_id,
@@ -704,13 +728,13 @@ impl Inner {
                         result_sender,
                     } => {
                         increment_counter!("scheduler.resume_task");
-                        resume_requests.push((
-                            task.task_id,
+                        resume_requests.push(ResumeRequest {
+                            requesting_task_id: task.task_id,
                             queued_task_id,
                             sender_permissions,
                             return_value,
                             result_sender,
-                        ));
+                        });
                     }
                     SchedulerControlMsg::BootPlayer {
                         player,
@@ -731,16 +755,54 @@ impl Inner {
         }
 
         // Send notifications. These are oneshot and consumed.
+        to_remove.append(&mut self.process_notifications(to_notify).await);
+
+        // Service wake-ups
+        to_remove.append(&mut self.process_wake_ups(to_wake).await);
+
+        // Service fork requests
+        to_remove.append(&mut self.process_fork_requests(fork_requests).await);
+
+        // Service describe requests.
+        to_remove.append(&mut self.process_describe_requests(desc_requests).await);
+
+        // Service kill requests, removing any that were non-responsive (returned from function)
+        to_remove.append(&mut self.process_kill_requests(kill_requests).await);
+
+        // Service resume requests, removing any that were non-responsive (returned from function)
+        to_remove.append(&mut self.process_resume_requests(resume_requests).await);
+
+        self.process_disconnect_tasks(to_disconnect).await;
+
+        // Prune any completed/dead tasks
+        self.prune_dead_tasks();
+
+        // Service task removals. This is done last because other queues above might contributed to
+        // this list.
+        self.process_task_removals(to_remove);
+    }
+
+    async fn process_notifications(
+        &mut self,
+        to_notify: Vec<(TaskId, TaskWaiterResult)>,
+    ) -> Vec<TaskId> {
+        let mut to_remove = vec![];
+
         for (task_id, result) in to_notify {
             let task = self.tasks.get_mut(&task_id).unwrap();
             for subscriber in task.subscribers.drain(..) {
                 if subscriber.send(result.clone()).is_err() {
+                    to_remove.push(task_id);
                     error!("Notify to subscriber on task {} failed", task_id);
                 }
             }
         }
+        to_remove
+    }
 
-        // Service wake-ups
+    async fn process_wake_ups(&mut self, to_wake: Vec<TaskId>) -> Vec<TaskId> {
+        let mut to_remove = vec![];
+
         for task_id in to_wake {
             let task = self.tasks.get_mut(&task_id).unwrap();
             task.suspended = false;
@@ -760,9 +822,19 @@ impl Inner {
                 to_remove.push(task.task_id);
             }
         }
+        to_remove
+    }
 
-        // Service fork requests
-        for (fork_request, reply, state_source, session, scheduler) in fork_requests {
+    async fn process_fork_requests(&mut self, fork_requests: Vec<ForkRequest>) -> Vec<TaskId> {
+        let mut to_remove = vec![];
+        for ForkRequest {
+            fork_request,
+            reply,
+            state_source,
+            session,
+            scheduler,
+        } in fork_requests
+        {
             // Fork the session.
             let forked_session = session.clone();
             let task_id = self
@@ -774,8 +846,14 @@ impl Inner {
                 to_remove.push(task_id);
             }
         }
+        to_remove
+    }
+    async fn process_describe_requests(
+        &mut self,
+        desc_requests: Vec<(TaskId, oneshot::Sender<Vec<TaskDescription>>)>,
+    ) -> Vec<TaskId> {
+        let mut to_remove = vec![];
 
-        // Service describe requests.
         // Note these could be done in parallel and joined instead of single file, to avoid blocking
         // the loop on one uncooperative thread, and could be done in a separate thread as well?
         // The challenge being the borrow semantics of the 'tasks' list.
@@ -828,11 +906,20 @@ impl Inner {
             reply.send(tasks).expect("Could not send task description");
             trace!(task = requesting_task_id, "Sent task descriptions back");
         }
+        to_remove
+    }
 
+    async fn process_kill_requests(&mut self, kill_requests: Vec<KillRequest>) -> Vec<TaskId> {
+        let mut to_remove = vec![];
         // Service kill requests
-        for (requesting_task_id, victim_task_id, sender_permissions, result_sender) in kill_requests
+        for KillRequest {
+            requesting_task_id,
+            victim_task_id,
+            sender_permissions,
+            result_sender,
+        } in kill_requests
         {
-            // If the task somehow is reuesting a kill on itself, that would lead to deadlock,
+            // If the task somehow is requesting a kill on itself, that would lead to deadlock,
             // because we could never send the result back. So we reject that outright. bf_kill_task
             // should be handling this upfront.
             if requesting_task_id == victim_task_id {
@@ -879,10 +966,23 @@ impl Inner {
                 error!(task = requesting_task_id, error = ?e, "Could not send kill result to requesting task. Requesting task being removed.");
             }
         }
+        to_remove
+    }
+
+    async fn process_resume_requests(
+        &mut self,
+        resume_requests: Vec<ResumeRequest>,
+    ) -> Vec<TaskId> {
+        let mut to_remove = vec![];
 
         // Service resume requests
-        for (requesting_task_id, queued_task_id, sender_permissions, return_value, result_sender) in
-            resume_requests
+        for ResumeRequest {
+            requesting_task_id,
+            queued_task_id,
+            sender_permissions,
+            return_value,
+            result_sender,
+        } in resume_requests
         {
             // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
             // request.
@@ -916,7 +1016,6 @@ impl Inner {
                     .expect("Could not send resume result");
                 continue;
             }
-
             // Task is not suspended.
             if !queued_task.suspended {
                 result_sender
@@ -948,7 +1047,10 @@ impl Inner {
                 to_remove.push(requesting_task_id);
             }
         }
+        to_remove
+    }
 
+    async fn process_disconnect_tasks(&mut self, to_disconnect: Vec<(TaskId, Objid)>) {
         for (disconnect_task_id, player) in to_disconnect {
             {
                 let Some(task) = self.tasks.get_mut(&disconnect_task_id) else {
@@ -983,8 +1085,9 @@ impl Inner {
                 };
             }
         }
+    }
 
-        // Prune any completed/dead tasks
+    fn prune_dead_tasks(&mut self) {
         let dead_tasks: Vec<_> = self
             .tasks
             .iter()
@@ -993,9 +1096,8 @@ impl Inner {
         for task in dead_tasks {
             self.tasks.remove(&task);
         }
-
-        // Service task removals. This is done last because other queues above might contribute to
-        // this list.
+    }
+    fn process_task_removals(&mut self, to_remove: Vec<TaskId>) {
         for task_id in to_remove {
             trace!(task = task_id, "Task removed");
             self.tasks.remove(&task_id);

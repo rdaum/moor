@@ -9,7 +9,7 @@ use crate::tasks::{TaskId, VerbCall};
 use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
+use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use async_trait::async_trait;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbs::BinaryType;
@@ -107,7 +107,7 @@ impl VMHost<Program> for MooVmHost {
 
         self.start_execution(task_id, call_request).await
     }
-    async fn start_fork(&mut self, task_id: TaskId, fork_request: ForkRequest, suspended: bool) {
+    async fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
         self.vm.tick_count = 0;
         self.vm.exec_fork_vector(fork_request, task_id).await;
         self.running_method = !suspended;

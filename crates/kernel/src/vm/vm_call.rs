@@ -14,7 +14,7 @@ use crate::vm::builtin::{BfCallState, BfRet};
 use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, ForkRequest, VerbExecutionRequest, VM};
+use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 
 pub(crate) fn args_literal(args: &[Var]) -> String {
     args.iter()
@@ -188,7 +188,7 @@ impl VM {
     /// Called (ultimately) from the scheduler as the result of a fork() call.
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
-    pub(crate) async fn exec_fork_vector(&mut self, fork_request: ForkRequest, task_id: usize) {
+    pub(crate) async fn exec_fork_vector(&mut self, fork_request: Fork, task_id: usize) {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
         a.task_id = task_id;
