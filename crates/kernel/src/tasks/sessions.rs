@@ -89,6 +89,12 @@ impl NoopClientSession {
     }
 }
 
+impl Default for NoopClientSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Session for NoopClientSession {
     async fn commit(&self) -> Result<(), Error> {
@@ -166,6 +172,13 @@ impl MockClientSession {
         self.system.read().unwrap().clone()
     }
 }
+
+impl Default for MockClientSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Session for MockClientSession {
     async fn commit(&self) -> Result<(), Error> {

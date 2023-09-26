@@ -526,11 +526,8 @@ impl Decompile {
                 // assignment expressions in the scatter.
                 let mut jump_labels = vec![];
                 for (label_num, scatter_label) in labels.iter().enumerate() {
-                    match scatter_label {
-                        ScatterLabel::Optional(_, Some(label)) => {
-                            jump_labels.push((label_num, label));
-                        }
-                        _ => {}
+                    if let ScatterLabel::Optional(_, Some(label)) = scatter_label {
+                        jump_labels.push((label_num, label));
                     }
                 }
 

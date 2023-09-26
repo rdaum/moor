@@ -440,8 +440,7 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
             // MOO-code compiler during processing of code. If the list is non-empty, then
             // set_verb_code() did not install code; the program associated with the verb in question
             // is unchanged.
-            let mut error_list = Vec::new();
-            error_list.push(v_str(e.to_string().as_str()));
+            let error_list = vec![v_str(e.to_string().as_str())];
             return Ok(Ret(v_list(error_list)));
         }
     };

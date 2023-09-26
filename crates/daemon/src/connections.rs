@@ -67,7 +67,7 @@ impl ConnectionList {
             }
         }
         let json_str = serde_json::to_string_pretty(&connections)?;
-        file.write(json_str.as_bytes()).await?;
+        file.write_all(json_str.as_bytes()).await?;
         Ok(())
     }
 
@@ -299,30 +299,32 @@ impl Connections {
         client_id: Uuid,
         hostname: String,
     ) -> Result<Objid, RpcError> {
-        let mut inner = self.connections_list.write().unwrap();
+        let connection_id = {
+            let mut inner = self.connections_list.write().unwrap();
 
-        // We should not already have an object connection id for this client. If we do,
-        // respond with an error.
+            // We should not already have an object connection id for this client. If we do,
+            // respond with an error.
 
-        if inner.client_connections.contains_key(&client_id) {
-            return Err(RpcError::AlreadyConnected);
-        }
+            if inner.client_connections.contains_key(&client_id) {
+                return Err(RpcError::AlreadyConnected);
+            }
 
-        // Get a new connection id, and create an entry for it.
-        let connection_id = Objid(self.next_connection_id.fetch_sub(1, Ordering::SeqCst));
-        inner.client_connections.insert(client_id, connection_id);
-        inner.connections_client.insert(
-            connection_id,
-            vec![ConnectionRecord {
-                client_id,
-                player: connection_id,
-                name: hostname,
-                last_activity: SystemTime::now(),
-                connect_time: SystemTime::now(),
-                last_ping: Instant::now(),
-            }],
-        );
-        drop(inner);
+            // Get a new connection id, and create an entry for it.
+            let connection_id = Objid(self.next_connection_id.fetch_sub(1, Ordering::SeqCst));
+            inner.client_connections.insert(client_id, connection_id);
+            inner.connections_client.insert(
+                connection_id,
+                vec![ConnectionRecord {
+                    client_id,
+                    player: connection_id,
+                    name: hostname,
+                    last_activity: SystemTime::now(),
+                    connect_time: SystemTime::now(),
+                    last_ping: Instant::now(),
+                }],
+            );
+            connection_id
+        };
         self.sync().await;
         Ok(connection_id)
     }
@@ -352,33 +354,33 @@ impl Connections {
         from_connection: Objid,
         to_player: Objid,
     ) -> Result<(), anyhow::Error> {
-        let mut inner = self.connections_list.write().unwrap();
+        {
+            let mut inner = self.connections_list.write().unwrap();
 
-        let mut connection_records = inner
-            .connections_client
-            .remove(&from_connection)
-            .expect("connection record missing");
-        assert_eq!(
-            connection_records.len(),
-            1,
-            "connection record for unlogged in connection has multiple entries"
-        );
-        let mut cr = connection_records.pop().unwrap();
-        cr.player = to_player;
-        cr.last_activity = SystemTime::now();
+            let mut connection_records = inner
+                .connections_client
+                .remove(&from_connection)
+                .expect("connection record missing");
+            assert_eq!(
+                connection_records.len(),
+                1,
+                "connection record for unlogged in connection has multiple entries"
+            );
+            let mut cr = connection_records.pop().unwrap();
+            cr.player = to_player;
+            cr.last_activity = SystemTime::now();
 
-        inner.client_connections.insert(cr.client_id, to_player);
-        match inner.connections_client.get_mut(&to_player) {
-            None => {
-                inner.connections_client.insert(to_player, vec![cr]);
+            inner.client_connections.insert(cr.client_id, to_player);
+            match inner.connections_client.get_mut(&to_player) {
+                None => {
+                    inner.connections_client.insert(to_player, vec![cr]);
+                }
+                Some(ref mut crs) => {
+                    crs.push(cr);
+                }
             }
-            Some(ref mut crs) => {
-                crs.push(cr);
-            }
+            inner.connections_client.remove(&from_connection);
         }
-        inner.connections_client.remove(&from_connection);
-
-        drop(inner);
         self.sync().await;
 
         Ok(())

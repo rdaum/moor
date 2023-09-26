@@ -82,3 +82,9 @@ impl DatabaseBuilder {
         }
     }
 }
+
+impl Default for DatabaseBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

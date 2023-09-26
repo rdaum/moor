@@ -27,6 +27,12 @@ impl InMemTransientDatabase {
     }
 }
 
+impl Default for InMemTransientDatabase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn inmem_db_server(
     db: Arc<RwLock<TransientStore>>,
     rx: Receiver<DbMessage>,
