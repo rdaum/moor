@@ -128,9 +128,9 @@ async fn get_verbdef(
     }
 }
 
-fn parse_verb_info(info: &List) -> Result<VerbAttrs, anyhow::Error> {
+fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     if info.len() != 3 {
-        return Err(anyhow::anyhow!("Invalid verb info"));
+        return Err(E_INVARG);
     }
     match (info[0].variant(), info[1].variant(), info[2].variant()) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
@@ -141,7 +141,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, anyhow::Error> {
                     'w' => perms |= VerbFlag::Write,
                     'x' => perms |= VerbFlag::Exec,
                     'd' => perms |= VerbFlag::Debug,
-                    _ => return Err(anyhow::anyhow!("Invalid verb info")),
+                    _ => return Err(E_INVARG),
                 }
             }
 
@@ -162,7 +162,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, anyhow::Error> {
                 binary: None,
             })
         }
-        _ => Err(anyhow::anyhow!("Invalid verb info")),
+        _ => return Err(E_INVARG),
     }
 }
 
@@ -180,9 +180,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     if info.len() != 3 {
         return Err(E_INVARG);
     }
-    let Ok(update_attrs) = parse_verb_info(info) else {
-        return Err(E_INVARG);
-    };
+    let update_attrs = parse_verb_info(info)?;
 
     match bf_args.args[1].variant() {
         Variant::Str(verb_name) => {
@@ -239,9 +237,9 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
 }
 bf_declare!(verb_args, bf_verb_args);
 
-fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, anyhow::Error> {
+fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
     if verbinfo.len() != 3 {
-        return Err(anyhow::anyhow!("Invalid verb args"));
+        return Err(E_INVARG);
     }
     match (
         verbinfo[0].variant(),
@@ -254,11 +252,11 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, anyhow::Error> {
                 parse_preposition_spec(prep_str.as_str()),
                 ArgSpec::from_string(iobj_str.as_str()),
             ) else {
-                return Err(anyhow::anyhow!("Invalid verb args"));
+                return Err(E_INVARG);
             };
             Ok(VerbArgsSpec { dobj, prep, iobj })
         }
-        _ => Err(anyhow::anyhow!("Invalid verb args")),
+        _ => Err(E_INVARG),
     }
 }
 
@@ -276,9 +274,8 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     if verbinfo.len() != 3 {
         return Err(E_INVARG);
     }
-    let Ok(args) = parse_verb_args(verbinfo) else {
-        return Err(E_INVARG);
-    };
+    let args = parse_verb_args(verbinfo)?;
+
     let update_attrs = VerbAttrs {
         definer: None,
         owner: None,
@@ -490,14 +487,8 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     {
         return Err(E_PERM);
     }
-
-    let Ok(verbargs) = parse_verb_args(args) else {
-        return Err(E_INVARG);
-    };
-
-    let Ok(verbinfo) = parse_verb_info(info) else {
-        return Err(E_INVARG);
-    };
+    let verbargs = parse_verb_args(args)?;
+    let verbinfo = parse_verb_info(info)?;
 
     bf_args
         .world_state
