@@ -31,6 +31,10 @@ pub struct Builtin {
 }
 
 // Originally generated using ./generate_bf_list.py
+// TODO: this list is inconsistently used, and falls out of date. It's only used for generating
+//  the list of functions for the `function_info` built-in right now. It could be used for
+//  validating arguments, and could be part of the registration process for the actual builtin
+//  implementations.
 fn mk_builtin_table() -> Vec<Builtin> {
     vec![
         Builtin {
@@ -38,7 +42,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(2),
             max_args: Q(2),
             types: vec![Typed(TYPE_OBJ), Any],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "log_cache_stats".to_string(),
@@ -388,14 +392,14 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(0),
             max_args: Q(1),
             types: vec![Typed(TYPE_INT)],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "floatstr".to_string(),
             min_args: Q(2),
             max_args: Q(3),
             types: vec![Typed(TYPE_FLOAT), Typed(TYPE_INT), Any],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "sqrt".to_string(),
@@ -535,7 +539,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(1),
             max_args: Q(1),
             types: vec![Typed(TYPE_OBJ)],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "object_bytes".to_string(),
@@ -577,7 +581,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(0),
             max_args: Q(0),
             types: vec![],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "players".to_string(),
@@ -598,7 +602,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(2),
             max_args: Q(2),
             types: vec![Typed(TYPE_OBJ), Any],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "move".to_string(),
@@ -738,7 +742,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(1),
             max_args: Q(1),
             types: vec![Typed(TYPE_OBJ)],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "notify".to_string(),
@@ -815,7 +819,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(0),
             max_args: Q(0),
             types: vec![],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "kill_task".to_string(),
@@ -899,35 +903,35 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(3),
             max_args: Q(3),
             types: vec![Typed(TYPE_OBJ), Typed(TYPE_LIST), Typed(TYPE_LIST)],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "delete_verb".to_string(),
             min_args: Q(2),
             max_args: Q(2),
             types: vec![Typed(TYPE_OBJ), Any],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "verb_code".to_string(),
             min_args: Q(2),
             max_args: Q(4),
             types: vec![Typed(TYPE_OBJ), Any, Any, Any],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "set_verb_code".to_string(),
             min_args: Q(3),
             max_args: Q(3),
             types: vec![Typed(TYPE_OBJ), Any, Typed(TYPE_LIST)],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "eval".to_string(),
             min_args: Q(1),
             max_args: Q(1),
             types: vec![Typed(TYPE_STR)],
-            implemented: false,
+            implemented: true,
         },
     ]
 }
