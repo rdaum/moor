@@ -1,15 +1,15 @@
 #[cfg(test)]
 mod tests {
-    use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
-    use crate::compiler::codegen::compile;
-    use crate::compiler::labels::{Label, Name, Offset};
-    use crate::compiler::CompileError;
+    use crate::builtins::BUILTIN_DESCRIPTORS;
+    use crate::codegen::compile;
+    use crate::labels::{Label, Name, Offset};
+    use crate::CompileError;
     use moor_values::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF};
     use moor_values::var::objid::Objid;
     use moor_values::var::{v_int, v_obj};
 
-    use crate::vm::opcode::Op::*;
-    use crate::vm::opcode::ScatterLabel;
+    use crate::opcode::Op::*;
+    use crate::opcode::ScatterLabel;
 
     #[test]
     fn test_simple_add_expr() {

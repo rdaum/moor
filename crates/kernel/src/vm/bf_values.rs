@@ -11,10 +11,10 @@ use moor_values::var::{v_bool, v_float, v_int, v_obj, v_str};
 use moor_values::AsByteBuffer;
 
 use crate::bf_declare;
-use crate::compiler::builtins::offset_for_builtin;
 use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
+use moor_compiler::builtins::offset_for_builtin;
 
 async fn bf_typeof<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let arg = &bf_args.args[0];

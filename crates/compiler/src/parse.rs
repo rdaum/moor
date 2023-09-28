@@ -16,19 +16,19 @@ use moor_values::var::error::Error::{
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_objid, v_str, v_string};
 
-use crate::compiler::ast::Arg::{Normal, Splice};
-use crate::compiler::ast::{
+use crate::ast::Arg::{Normal, Splice};
+use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
     UnaryOp,
 };
-use crate::compiler::labels::Names;
-use crate::compiler::parse::moo::{MooParser, Rule};
-use crate::compiler::unparse::annotate_line_numbers;
-use crate::compiler::CompileError;
+use crate::labels::Names;
+use crate::parse::moo::{MooParser, Rule};
+use crate::unparse::annotate_line_numbers;
+use crate::CompileError;
 
 pub mod moo {
     #[derive(Parser)]
-    #[grammar = "src/compiler/moo.pest"]
+    #[grammar = "src/moo.pest"]
     pub struct MooParser;
 }
 
@@ -810,14 +810,14 @@ mod tests {
     use moor_values::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
     use moor_values::var::{v_err, v_float, v_int, v_obj, v_str};
 
-    use crate::compiler::ast::Arg::{Normal, Splice};
-    use crate::compiler::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
-    use crate::compiler::ast::{
+    use crate::ast::Arg::{Normal, Splice};
+    use crate::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
+    use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
     };
-    use crate::compiler::labels::Names;
-    use crate::compiler::parse::{parse_program, unquote_str};
+    use crate::labels::Names;
+    use crate::parse::{parse_program, unquote_str};
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()

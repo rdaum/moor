@@ -2,7 +2,7 @@ use moor_values::NOTHING;
 use tracing::trace;
 use uuid::Uuid;
 
-use crate::compiler::GlobalName;
+use moor_compiler::GlobalName;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbdef::VerbDef;
@@ -16,11 +16,11 @@ use moor_values::var::{
     v_empty_list, v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType,
 };
 
-use crate::compiler::labels::{Label, Name};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
-use crate::vm::opcode::{Op, Program, EMPTY_PROGRAM};
 use crate::vm::VerbExecutionRequest;
+use moor_compiler::labels::{Label, Name};
+use moor_compiler::opcode::{Op, Program, EMPTY_PROGRAM};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]

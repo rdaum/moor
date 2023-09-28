@@ -9,17 +9,16 @@ use moor_values::model::verb_info::VerbInfo;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
-use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
-use crate::compiler::labels::{Name, Offset};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
 use crate::vm::bf_server::BfNoop;
 use crate::vm::builtin::BuiltinFunction;
-use crate::vm::opcode::Program;
 use crate::vm::vm_unwind::FinallyReason;
+use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
+use moor_compiler::labels::{Name, Offset};
+use moor_compiler::opcode::Program;
 
-pub mod opcode;
 pub mod vm_call;
 pub mod vm_execute;
 pub(crate) mod vm_unwind;

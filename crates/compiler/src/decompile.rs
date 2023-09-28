@@ -3,15 +3,15 @@ use std::collections::{HashMap, VecDeque};
 use moor_values::var::variant::Variant;
 use moor_values::var::Var;
 
-use crate::compiler::ast::{
+use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
     UnaryOp,
 };
-use crate::compiler::builtins::make_labels_builtins;
-use crate::compiler::decompile::DecompileError::{MalformedProgram, NameNotFound};
-use crate::compiler::labels::{JumpLabel, Label, Name};
-use crate::compiler::parse::Parse;
-use crate::vm::opcode::{Op, Program, ScatterLabel};
+use crate::builtins::make_labels_builtins;
+use crate::decompile::DecompileError::{MalformedProgram, NameNotFound};
+use crate::labels::{JumpLabel, Label, Name};
+use crate::opcode::{Op, Program, ScatterLabel};
+use crate::parse::Parse;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -850,12 +850,12 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::assert_trees_match_recursive;
-    use crate::compiler::codegen::compile;
-    use crate::compiler::decompile::program_to_tree;
-    use crate::compiler::parse::parse_program;
-    use crate::compiler::parse::Parse;
-    use crate::compiler::unparse::annotate_line_numbers;
+    use crate::ast::assert_trees_match_recursive;
+    use crate::codegen::compile;
+    use crate::decompile::program_to_tree;
+    use crate::parse::parse_program;
+    use crate::parse::Parse;
+    use crate::unparse::annotate_line_numbers;
     use test_case::test_case;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse) {

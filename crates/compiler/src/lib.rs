@@ -11,6 +11,10 @@ pub mod parse;
 pub mod unparse;
 
 mod codegen_tests;
+pub mod opcode;
+
+#[macro_use]
+extern crate pest_derive;
 
 /// The set of known variable names that are always set for every verb invocation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]

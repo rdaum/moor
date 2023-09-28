@@ -13,9 +13,9 @@ use moor_values::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::vm::activation::HandlerType;
-use crate::vm::opcode::{Op, ScatterLabel};
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{ExecutionResult, Fork, VM};
+use moor_compiler::opcode::{Op, ScatterLabel};
 
 macro_rules! binary_bool_op {
     ( $self:ident, $op:tt ) => {

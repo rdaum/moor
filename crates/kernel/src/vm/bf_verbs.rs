@@ -20,16 +20,16 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;
-use crate::compiler::builtins::offset_for_builtin;
-use crate::compiler::codegen::compile;
-use crate::compiler::decompile::program_to_tree;
-use crate::compiler::unparse::unparse;
-use crate::compiler::GlobalName;
 use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
 use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
-use crate::vm::opcode::Program;
 use crate::vm::VM;
+use moor_compiler::builtins::offset_for_builtin;
+use moor_compiler::codegen::compile;
+use moor_compiler::decompile::program_to_tree;
+use moor_compiler::opcode::Program;
+use moor_compiler::unparse::unparse;
+use moor_compiler::GlobalName;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {

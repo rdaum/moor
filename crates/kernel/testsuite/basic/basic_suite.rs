@@ -1,9 +1,9 @@
+use moor_compiler::codegen::compile;
+use moor_compiler::opcode::Program;
 use moor_db::inmemtransient::InMemTransientDatabase;
-use moor_kernel::compiler::codegen::compile;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
 use moor_kernel::textdump::load_db::textdump_load;
-use moor_kernel::vm::opcode::Program;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbs::{BinaryType, VerbFlag};
 use moor_values::model::world_state::{WorldState, WorldStateSource};

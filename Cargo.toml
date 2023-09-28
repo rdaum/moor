@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
   "crates/values",
+  "crates/compiler",
   "crates/kernel",
   "crates/db",
   "crates/rpc-common",

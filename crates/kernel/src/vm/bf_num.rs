@@ -10,10 +10,10 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
-use crate::compiler::builtins::offset_for_builtin;
 use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
+use moor_compiler::builtins::offset_for_builtin;
 
 async fn bf_abs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {

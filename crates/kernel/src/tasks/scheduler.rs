@@ -23,8 +23,6 @@ use SchedulerError::{
     TaskAbortedException, TaskAbortedLimit,
 };
 
-use crate::compiler::codegen::compile;
-use crate::compiler::CompileError;
 use crate::tasks::moo_vm_host::MooVmHost;
 use crate::tasks::scheduler::SchedulerError::TaskNotFound;
 use crate::tasks::sessions::Session;
@@ -33,6 +31,8 @@ use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg};
 use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::{Fork, VM};
+use moor_compiler::codegen::compile;
+use moor_compiler::CompileError;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);

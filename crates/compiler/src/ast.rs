@@ -3,8 +3,8 @@ use std::fmt::Display;
 use moor_values::var::Var;
 
 /// The abstract syntax tree produced by the parser and converted by codgen into opcodes.
-use crate::compiler::labels::Name;
-use crate::vm::opcode::Op;
+use crate::labels::Name;
+use crate::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Arg {

@@ -3,7 +3,7 @@ use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
 
-use crate::vm::opcode::Program;
+use moor_compiler::opcode::Program;
 use moor_values::model::permissions::Perms;
 use moor_values::model::world_state::WorldState;
 use moor_values::model::CommandError;

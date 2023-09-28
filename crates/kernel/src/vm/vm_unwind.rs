@@ -7,10 +7,10 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use moor_values::NOTHING;
 
-use crate::compiler::builtins::BUILTIN_DESCRIPTORS;
-use crate::compiler::labels::{Label, Offset};
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::{ExecutionResult, VM};
+use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
+use moor_compiler::labels::{Label, Offset};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct UncaughtException {

@@ -1,21 +1,12 @@
 use moor_values::util::quote_str;
 use moor_values::var::variant::Variant;
 
-use crate::compiler::ast;
-use crate::compiler::ast::{Expr, Stmt, StmtNode};
-use crate::compiler::decompile::DecompileError;
-use crate::compiler::parse::Parse;
+use crate::ast;
+use crate::ast::{Expr, Stmt, StmtNode};
+use crate::decompile::DecompileError;
+use crate::parse::Parse;
 
 use super::labels::Names;
-
-// TODO:
-//  - "" for empty string:
-//    MOO: rest[1..match(rest, "^ *")[2]] = "" vs
-//   MOOR: rest[1..match(rest, "^ *")[2]] = ;
-//  - sysobj calls:
-//    MOO: $bleh(foo) vs
-//   MOOR: #0.bleh(foo)
-//   with/without extra-parens
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
@@ -568,7 +559,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::ast::assert_trees_match_recursive;
+    use crate::ast::assert_trees_match_recursive;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
     use unindent::unindent;
@@ -648,8 +639,8 @@ mod tests {
 
         // Now parse both again, and verify that the complete ASTs match, ignoring the parser line
         // numbers, but validating everything else.
-        let parsed_original = crate::compiler::parse::parse_program(&stripped).unwrap();
-        let parsed_decompiled = crate::compiler::parse::parse_program(&result).unwrap();
+        let parsed_original = crate::parse::parse_program(&stripped).unwrap();
+        let parsed_decompiled = crate::parse::parse_program(&result).unwrap();
         assert_trees_match_recursive(&parsed_original.stmts, &parsed_decompiled.stmts)
     }
 
@@ -704,7 +695,7 @@ mod tests {
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
-        let tree = crate::compiler::parse::parse_program(original).unwrap();
+        let tree = crate::parse::parse_program(original).unwrap();
         Ok(unparse(&tree)?.join("\n"))
     }
 }

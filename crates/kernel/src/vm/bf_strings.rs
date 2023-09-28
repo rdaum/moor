@@ -10,10 +10,10 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, v_str, v_string};
 
 use crate::bf_declare;
-use crate::compiler::builtins::offset_for_builtin;
 use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
+use moor_compiler::builtins::offset_for_builtin;
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();

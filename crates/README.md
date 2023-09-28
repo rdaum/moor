@@ -17,7 +17,8 @@ Libraries:
      plus all associated types and traits.
   *  `db` - implementation of the `WorldState` object database trait w/ a (for now) RocksDB backend, along with mock/testing
      database implementations.
-  * `kernel` - the kernel of the MOO driver: compiler, virtual machine, task scheduler, implementations of all builtin   
+  * `compiler` - the MOO language grammar, parser, AST, and codegen, as well as the decompiler & unparser
+  * `kernel` - the kernel of the MOO driver: virtual machine, task scheduler, implementations of all builtin   
      functions
   * `rpc-common` - provides types & functions used by both `daemon` and each host binary, for the RPC interface
   * `regexpr-binding` - provides bindings to the old regular expressions library used by

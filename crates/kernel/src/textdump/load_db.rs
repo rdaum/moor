@@ -10,9 +10,9 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
-use crate::compiler::codegen::compile;
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{Object, TextdumpReader};
+use moor_compiler::codegen::compile;
 use moor_db::loader::LoaderInterface;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::props::PropFlag;

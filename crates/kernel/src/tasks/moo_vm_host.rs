@@ -1,4 +1,3 @@
-use crate::compiler::labels::Name;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
@@ -6,11 +5,12 @@ use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
 use crate::tasks::{TaskId, VerbCall};
-use crate::vm::opcode::Program;
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use async_trait::async_trait;
+use moor_compiler::labels::Name;
+use moor_compiler::opcode::Program;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbs::BinaryType;
 use moor_values::model::world_state::WorldState;

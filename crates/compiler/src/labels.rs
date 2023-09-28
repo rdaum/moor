@@ -1,4 +1,4 @@
-use crate::compiler::GlobalName;
+use crate::GlobalName;
 use bincode::{Decode, Encode};
 use strum::IntoEnumIterator;
 
@@ -6,13 +6,13 @@ use strum::IntoEnumIterator;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct JumpLabel {
     // The unique id for the jump label, which is also its offset in the jump vector.
-    pub(crate) id: Label,
+    pub id: Label,
 
     // If there's a unique identifier assigned to this label, it goes here.
-    pub(crate) name: Option<Name>,
+    pub name: Option<Name>,
 
     // The temporary and then final resolved position of the label in terms of PC offsets.
-    pub(crate) position: Offset,
+    pub position: Offset,
 }
 
 /// A Label is a unique identifier for a jump position in the program.

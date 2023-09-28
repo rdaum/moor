@@ -16,12 +16,12 @@ mod tests {
     use moor_values::NOTHING;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
-    use crate::compiler::codegen::compile;
-    use crate::compiler::labels::Names;
     use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
     use crate::tasks::vm_test_utils::call_verb;
-    use crate::vm::opcode::Op::*;
-    use crate::vm::opcode::{Op, Program};
+    use moor_compiler::codegen::compile;
+    use moor_compiler::labels::Names;
+    use moor_compiler::opcode::Op::*;
+    use moor_compiler::opcode::{Op, Program};
     use moor_db::inmemtransient::InMemTransientDatabase;
     use test_case::test_case;
 

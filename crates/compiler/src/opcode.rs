@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 
 use moor_values::var::Var;
 
-use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
+use crate::labels::{JumpLabel, Label, Name, Names, Offset};
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum ScatterLabel {
@@ -123,19 +123,19 @@ lazy_static! {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Program {
     /// All the literals referenced in this program.
-    pub(crate) literals: Vec<Var>,
+    pub literals: Vec<Var>,
     /// All the jump offsets used in this program.
-    pub(crate) jump_labels: Vec<JumpLabel>,
+    pub jump_labels: Vec<JumpLabel>,
     /// All the variable names used in this program.
-    pub(crate) var_names: Names,
+    pub var_names: Names,
     /// The actual program code.
-    pub(crate) main_vector: Vec<Op>,
+    pub main_vector: Vec<Op>,
     /// The program code for each fork.
-    pub(crate) fork_vectors: Vec<Vec<Op>>,
+    pub fork_vectors: Vec<Vec<Op>>,
     /// As each statement is pushed, the line number is recorded, along with its offset in the main
     /// vector.
     /// TODO: fork vector offsets... Have to think about that one.
-    pub(crate) line_number_spans: Vec<(usize, usize)>,
+    pub line_number_spans: Vec<(usize, usize)>,
 }
 
 impl Program {

@@ -1,12 +1,12 @@
 use std::time::Duration;
 
-use crate::compiler::labels::Name;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::{Fork, VerbExecutionRequest};
 use async_trait::async_trait;
+use moor_compiler::labels::Name;
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::verbs::BinaryType;
 use moor_values::model::world_state::WorldState;

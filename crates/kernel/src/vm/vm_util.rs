@@ -7,10 +7,10 @@ use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
 use moor_values::var::Var;
 
-use crate::compiler::labels::{Label, Name};
 use crate::vm::activation::{Activation, Caller};
-use crate::vm::opcode::Op;
 use crate::vm::{ExecutionResult, VM};
+use moor_compiler::labels::{Label, Name};
+use moor_compiler::opcode::Op;
 
 impl VM {
     /// VM-level property resolution.

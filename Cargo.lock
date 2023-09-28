@@ -1446,6 +1446,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-compiler"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "itertools",
+ "lazy_static",
+ "metrics",
+ "metrics-macros",
+ "moor-values",
+ "pest",
+ "pest_derive",
+ "pretty_assertions",
+ "strum",
+ "test-case",
+ "thiserror",
+ "tracing",
+ "tracing-test",
+ "unindent",
+]
+
+[[package]]
 name = "moor-console-host"
 version = "0.1.0"
 dependencies = [
@@ -1548,7 +1569,6 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "decorum",
- "enum-primitive-derive",
  "inventory",
  "itertools",
  "lazy_static",
@@ -1556,11 +1576,10 @@ dependencies = [
  "metrics",
  "metrics-macros",
  "metrics-util",
+ "moor-compiler",
  "moor-db",
  "moor-values",
  "paste",
- "pest",
- "pest_derive",
  "pretty_assertions",
  "pwhash",
  "rand",

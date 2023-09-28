@@ -6,15 +6,15 @@ use tracing::error;
 
 use moor_values::var::{v_int, Var};
 
-use crate::compiler::ast::{
+use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::compiler::builtins::make_builtin_labels;
-use crate::compiler::labels::{JumpLabel, Label, Name, Names, Offset};
-use crate::compiler::parse::parse_program;
-use crate::compiler::CompileError;
-use crate::vm::opcode::Op::Jump;
-use crate::vm::opcode::{Op, Program, ScatterLabel};
+use crate::builtins::make_builtin_labels;
+use crate::labels::{JumpLabel, Label, Name, Names, Offset};
+use crate::opcode::Op::Jump;
+use crate::opcode::{Op, Program, ScatterLabel};
+use crate::parse::parse_program;
+use crate::CompileError;
 
 pub struct Loop {
     loop_name: Option<Name>,
