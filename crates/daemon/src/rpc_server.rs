@@ -1,22 +1,19 @@
-use anyhow::{Context, Error};
-use futures_util::SinkExt;
-use itertools::Itertools;
-use metrics_macros::increment_counter;
-use moor_kernel::tasks::command_parse::parse_into_words;
-use moor_values::var::Var;
 use std::path::PathBuf;
 /// The core of the server logic for the RPC daemon
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
+
+use anyhow::{Context, Error};
+use futures_util::SinkExt;
+use itertools::Itertools;
+use metrics_macros::increment_counter;
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use crate::connections::Connections;
-use crate::make_response;
-use crate::rpc_session::RpcSession;
+use moor_kernel::tasks::command_parse::parse_into_words;
 use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
@@ -25,6 +22,7 @@ use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::NarrativeEvent;
 use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
+use moor_values::var::Var;
 use moor_values::var::{v_bool, v_objid, v_str, v_string};
 use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
@@ -32,6 +30,10 @@ use rpc_common::{
     BroadcastEvent, ConnectType, ConnectionEvent, RpcRequest, RpcRequestError, RpcResponse,
     BROADCAST_TOPIC,
 };
+
+use crate::connections::Connections;
+use crate::make_response;
+use crate::rpc_session::RpcSession;
 
 pub struct RpcServer {
     publish: Arc<Mutex<Publish>>,
@@ -62,6 +64,7 @@ impl RpcServer {
             zmq_context.get_io_threads().unwrap()
         );
         let publish = publish(&zmq_context.clone())
+            .set_sndtimeo(1)
             .bind(narrative_endpoint)
             .unwrap();
         let connections = Connections::new(connections_file).await;
@@ -156,6 +159,23 @@ impl RpcServer {
                 make_response(
                     self.clone()
                         .perform_command(client_id, connection, command)
+                        .await,
+                )
+            }
+            RpcRequest::RequestedInput(request_id, input) => {
+                increment_counter!("rpc_server.requested_input");
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
+                    return make_response(Err(RpcRequestError::NoConnection));
+                };
+
+                let request_id = Uuid::from_u128(request_id);
+                make_response(
+                    self.clone()
+                        .respond_input(client_id, connection, request_id, input)
                         .await,
                 )
             }
@@ -507,7 +527,7 @@ impl RpcServer {
         {
             if let Ok(value) = self.clone().watch_command_task(task_id).await {
                 if value != v_bool(false) {
-                    return Ok(RpcResponse::CommandComplete);
+                    return Ok(RpcResponse::CommandSubmitted(task_id));
                 }
             }
         }
@@ -538,9 +558,39 @@ impl RpcServer {
             }
         };
 
-        self.watch_command_task(task_id).await?;
+        Ok(RpcResponse::CommandSubmitted(task_id))
+    }
 
-        Ok(RpcResponse::CommandComplete)
+    async fn respond_input(
+        self: Arc<Self>,
+        client_id: Uuid,
+        connection: Objid,
+        input_request_id: Uuid,
+        input: String,
+    ) -> Result<RpcResponse, RpcRequestError> {
+        if let Err(e) = self
+            .connections
+            .activity_for_client(client_id, connection)
+            .await
+        {
+            warn!("Unable to update client connection activity: {}", e);
+        };
+        increment_counter!("rpc_server.respond_input");
+
+        // Pass this back over to the scheduler to handle.
+        if let Err(e) = self
+            .clone()
+            .scheduler
+            .submit_requested_input(connection, input_request_id, input)
+            .await
+        {
+            increment_counter!("rpc_server.respond_input.submit_requested_input_failed");
+            error!(error = ?e, "Error submitting requested input");
+            return Err(RpcRequestError::InternalError(e.to_string()));
+        }
+
+        // TODO: do we need a new response for this? Maybe just a "Thanks"?
+        Ok(RpcResponse::InputThanks)
     }
 
     async fn watch_command_task(self: Arc<Self>, task_id: TaskId) -> Result<Var, RpcRequestError> {
@@ -581,7 +631,7 @@ impl RpcServer {
         increment_counter!("rpc_server.perform_out_of_band");
 
         let command_components = parse_into_words(command.as_str());
-        let _ = match self
+        let task_id = match self
             .clone()
             .scheduler
             .submit_out_of_band_task(connection, command_components, command, session)
@@ -601,7 +651,7 @@ impl RpcServer {
         // let the session run to completion on its own and output back to the client.
         // Maybe we should be returning a value from this for the future, but the way clients are
         // written right now, there's little point.
-        Ok(RpcResponse::CommandComplete)
+        Ok(RpcResponse::CommandSubmitted(task_id))
     }
 
     async fn eval(
@@ -687,29 +737,71 @@ impl RpcServer {
         message: String,
     ) -> Result<(), SessionError> {
         increment_counter!("rpc_server.send_system_message");
-        let mut publish = self.publish.lock().await;
         let event = ConnectionEvent::SystemMessage(player, message);
         let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
             .expect("Unable to serialize system message");
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-        publish.send(payload).await.map_err(|e| {
-            error!(error = ?e, "Unable to send system message");
-            DeliveryError
-        })?;
+        {
+            let mut publish = self.publish.lock().await;
+            publish.send(payload).await.map_err(|e| {
+                error!(error = ?e, "Unable to send system message");
+                DeliveryError
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Request that the client dispatch its next input event through as an input event into the
+    /// scheduler submit_input, instead, with the attached input_request_id. So send a narrative
+    /// event to this *specific* client id letting it know that it should issue a prompt.
+    pub(crate) async fn request_client_input(
+        &self,
+        client_id: Uuid,
+        player: Objid,
+        input_request_id: Uuid,
+    ) -> Result<(), SessionError> {
+        // Mark this client as in `input mode`, which means that instead of dispatching its next
+        // line to the scheduler as a command, it should instead dispatch it as an input event.
+
+        // Validate first.
+        let Some(connection) = self
+            .connections
+            .connection_object_for_client(client_id)
+            .await
+        else {
+            return Err(SessionError::NoConnectionForPlayer(player));
+        };
+        if connection != player {
+            return Err(SessionError::NoConnectionForPlayer(player));
+        }
+
+        let event = ConnectionEvent::RequestInput(input_request_id.as_u128());
+        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
+            .expect("Unable to serialize input request");
+        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
+        {
+            let mut publish = self.publish.lock().await;
+            publish.send(payload).await.map_err(|e| {
+                error!(error = ?e, "Unable to send input request");
+                DeliveryError
+            })?;
+        }
         Ok(())
     }
 
     async fn ping_pong(&self) -> Result<(), SessionError> {
-        let mut publish = self.publish.lock().await;
         let event = BroadcastEvent::PingPong(SystemTime::now());
         let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard()).unwrap();
 
         // We want responses from all clients, so send on this broadcast "topic"
         let payload = vec![BROADCAST_TOPIC.to_vec(), event_bytes];
-        publish.send(payload).await.map_err(|e| {
-            error!(error = ?e, "Unable to send PingPong to client");
-            DeliveryError
-        })?;
+        {
+            let mut publish = self.publish.lock().await;
+            publish.send(payload).await.map_err(|e| {
+                error!(error = ?e, "Unable to send PingPong to client");
+                DeliveryError
+            })?;
+        }
         self.connections.ping_check().await;
         Ok(())
     }
@@ -723,6 +815,10 @@ pub(crate) async fn zmq_loop(
     narrative_endpoint: &str,
 ) -> anyhow::Result<()> {
     let zmq_ctx = tmq::Context::new();
+    zmq_ctx
+        .set_io_threads(8)
+        .expect("Unable to set ZMQ IO threads");
+
     let rpc_server = Arc::new(
         RpcServer::new(
             connections_file,

@@ -12,8 +12,8 @@ use moor_values::model::world_state::WorldState;
 use moor_values::model::CommandError::PermissionDenied;
 use moor_values::model::{CommandError, CommitResult, WorldStateError};
 use moor_values::var::objid::Objid;
-use moor_values::var::v_int;
 use moor_values::var::variant::Variant;
+use moor_values::var::{v_int, v_string};
 use moor_values::NOTHING;
 
 use crate::matching::match_env::MatchEnvironmentParseMatcher;
@@ -49,7 +49,7 @@ pub(crate) struct Task {
     /// The channel to send control messages to the scheduler.
     /// This sender is unique for our task, but is passed around all over the place down into the
     /// VM host and into the VM itself.
-    pub(crate) scheduler_control_sender: UnboundedSender<SchedulerControlMsg>,
+    pub(crate) scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     /// The 'player' this task is running as.
     pub(crate) player: Objid,
     /// The session object for connection mgmt and sending messages to players
@@ -86,11 +86,11 @@ impl Task {
                     trace!(task_id = ?self.task_id, ?vm_continuation, "VM dispatch");
                     if let Some(scheduler_msg) = vm_continuation.1 {
                          self.scheduler_control_sender
-                                        .send(scheduler_msg)
+                                        .send((self.task_id, scheduler_msg))
                                         .expect("Could not send scheduler_msg");
                     }
                     if vm_continuation.0 == VmContinue::Complete {
-                        info!(task_id = ?self.task_id, "task execution complete");
+                        debug!(task_id = ?self.task_id, "task execution complete");
                         break;
                     }
                 }
@@ -100,12 +100,12 @@ impl Task {
                         Some(control_msg) => {
                              if let Some(response) = self.handle_control_message(control_msg).await {
                                 self.scheduler_control_sender
-                                        .send(response)
+                                        .send((self.task_id, response))
                                         .expect("Could not send response");
                              }
                         }
                         None => {
-                            info!(task_id = ?self.task_id, "Channel closed");
+                            debug!(task_id = ?self.task_id, "Channel closed");
                             return;
                         }
                     }
@@ -122,8 +122,6 @@ impl Task {
     /// whether the VM should continue running, and the SchedulerControlMsg is a message to send
     /// back to the scheduler, if any.
     async fn vm_dispatch(&mut self) -> (VmContinue, Option<SchedulerControlMsg>) {
-        // Note: This is expected to (async) block if the given VM host is in a
-        // suspended/non-running state
         let vm_exec_result = self
             .vm_host
             .exec_interpreter(self.task_id, self.world_state.as_mut())
@@ -138,7 +136,10 @@ impl Task {
                 let (send, reply) = oneshot::channel();
                 let task_id_var = fork_request.task_id;
                 self.scheduler_control_sender
-                    .send(SchedulerControlMsg::TaskRequestFork(fork_request, send))
+                    .send((
+                        self.task_id,
+                        SchedulerControlMsg::TaskRequestFork(fork_request, send),
+                    ))
                     .expect("Could not send fork request");
                 let task_id = reply.await.expect("Could not get fork reply");
                 if let Some(task_id_var) = task_id_var {
@@ -168,6 +169,28 @@ impl Task {
                     );
                 }
 
+                // let new_session = self
+                //     .session
+                //     .clone()
+                //     .fork()
+                //     .await
+                //     .expect("Could not fork session for suspension");
+                // Request the session flush itself out, as it's now committed, and we'll replace
+                // with the new session when we resume.
+                self.session
+                    .commit()
+                    .await
+                    .expect("Could not commit session before suspend");
+
+                // TODO: here and below, fork (for at least RpcSession) and replacing into here
+                //   seems to not produce any output. Likely because the session is not actually
+                //   replaced everywhere?  Or the RpcSession is invalid somehow.  Luckily, it's
+                //   harmless to just not fork here, commit() flushes and then allows additional
+                //   appends.
+                // self.session = new_session;
+
+                self.vm_host.stop().await;
+
                 // Let the scheduler know about our suspension, which can be of the form:
                 //      * Indefinite, wake-able only with Resume
                 //      * Scheduled, a duration is given, and we'll wake up after that duration
@@ -178,6 +201,44 @@ impl Task {
                 (
                     VmContinue::Continue,
                     Some(SchedulerControlMsg::TaskSuspend(resume_time)),
+                )
+            }
+            VMHostResponse::SuspendNeedInput => {
+                trace!(task_id = self.task_id, "Task suspend need input");
+
+                // VMHost is now suspended for input, and we'll be waiting for a ResumeReceiveInput
+
+                // Attempt commit... See comments/notes on Suspend above.
+                let commit_result = self
+                    .world_state
+                    .commit()
+                    .await
+                    .expect("Could not commit world state before suspend");
+                if let CommitResult::ConflictRetry = commit_result {
+                    error!("Conflict during commit before suspend");
+                    return (
+                        VmContinue::Complete,
+                        Some(SchedulerControlMsg::TaskAbortCancelled),
+                    );
+                }
+
+                // let new_session = self
+                //     .session
+                //     .clone()
+                //     .fork()
+                //     .await
+                //     .expect("Could not fork session for suspension");
+                self.session
+                    .commit()
+                    .await
+                    .expect("Could not commit session before suspend");
+                // self.session = new_session;
+
+                self.vm_host.stop().await;
+
+                (
+                    VmContinue::Continue,
+                    Some(SchedulerControlMsg::TaskRequestInput),
                 )
             }
             VMHostResponse::ContinueOk => (VmContinue::Continue, None),
@@ -474,14 +535,29 @@ impl Task {
             TaskControlMsg::Resume(world_state, value) => {
                 increment_counter!("task.resume");
 
-                // We're back. Get a new world state and resume.
+                // We're back.
                 debug!(
                     task_id = self.task_id,
-                    "Resuming task, getting new transaction"
+                    "Resuming task, with new transaction"
                 );
                 self.world_state = world_state;
                 self.scheduled_start_time = None;
                 self.vm_host.resume_execution(value).await;
+                return None;
+            }
+            TaskControlMsg::ResumeReceiveInput(world_state, input) => {
+                increment_counter!("task.resume_receive_input");
+
+                // We're back.
+                debug!(
+                    task_id = self.task_id,
+                    ?input,
+                    "Resuming task, with new transaction and input"
+                );
+                assert!(!self.vm_host.is_running());
+                self.world_state = world_state;
+                self.scheduled_start_time = None;
+                self.vm_host.resume_execution(v_string(input)).await;
                 return None;
             }
             TaskControlMsg::Abort => {

@@ -1,5 +1,6 @@
 use anyhow::Error;
 use std::process::exit;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use clap::Parser;
@@ -10,6 +11,7 @@ use rustyline::DefaultEditor;
 use tmq::request;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::Mutex;
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -123,7 +125,12 @@ async fn perform_auth(
     }
 }
 
-async fn handle_console_line(client_id: Uuid, line: &str, rpc_client: &mut RpcSendClient) {
+async fn handle_console_line(
+    client_id: Uuid,
+    line: &str,
+    rpc_client: &mut RpcSendClient,
+    input_request_id: Option<Uuid>,
+) {
     // Lines are either 'eval' or 'command', depending on the mode we're in.
     // TODO: The intent here is to do something like Julia's repl interface where they have a pkg
     //  mode (initiated by initial ] keystroke) and default repl mode.
@@ -132,11 +139,35 @@ async fn handle_console_line(client_id: Uuid, line: &str, rpc_client: &mut RpcSe
     //  But For now, we'll just act as if we're a telnet connection. User can do eval with ; via
     //  the core.
     let line = line.trim();
+    if let Some(input_request_id) = input_request_id {
+        match rpc_client
+            .make_rpc_call(
+                client_id,
+                RpcRequest::RequestedInput(input_request_id.as_u128(), line.to_string()),
+            )
+            .await
+        {
+            Ok(RpcResult::Success(RpcResponse::InputThanks)) => {
+                trace!("Input complete");
+            }
+            Ok(RpcResult::Success(other)) => {
+                warn!("Unexpected input response: {:?}", other);
+            }
+            Ok(RpcResult::Failure(e)) => {
+                error!("Failure executing input: {:?}", e);
+            }
+            Err(e) => {
+                error!("Error executing input: {:?}", e);
+            }
+        }
+        return;
+    }
+
     match rpc_client
         .make_rpc_call(client_id, RpcRequest::Command(line.to_string()))
         .await
     {
-        Ok(RpcResult::Success(RpcResponse::CommandComplete)) => {
+        Ok(RpcResult::Success(RpcResponse::CommandSubmitted(_))) => {
             trace!("Command complete");
         }
         Ok(RpcResult::Success(other)) => {
@@ -186,6 +217,8 @@ async fn console_loop(
     let mut narrative_subscriber = narrative_subscriber
         .subscribe(client_id.as_bytes())
         .expect("Unable to subscribe to narrative pubsub server");
+    let input_request_id = Arc::new(Mutex::new(None));
+    let output_input_request_id = input_request_id.clone();
     let output_loop = tokio::spawn(async move {
         loop {
             match narrative_recv(client_id, &mut narrative_subscriber).await {
@@ -202,6 +235,10 @@ async fn console_loop(
                 Err(e) => {
                     error!("Error receiving narrative event: {:?}; Session ending.", e);
                     return;
+                }
+                Ok(ConnectionEvent::RequestInput(requested_input_id)) => {
+                    (*output_input_request_id.lock().await) =
+                        Some(Uuid::from_u128(requested_input_id));
                 }
             }
         }
@@ -245,12 +282,18 @@ async fn console_loop(
             // TODO: unprovoked output from the narrative stream screws up the prompt midstream,
             //   but we have no real way to signal to this loop that it should newline for
             //   cleanliness. Need to figure out something for this.
-            let output = block_in_place(|| rl.readline("> "));
+            let input_request_id = input_request_id.lock().await.take();
+            let prompt = if let Some(input_request_id) = input_request_id {
+                format!("{} > ", input_request_id.to_string())
+            } else {
+                "> ".to_string()
+            };
+            let output = block_in_place(|| rl.readline(prompt.as_str()));
             match output {
                 Ok(line) => {
                     rl.add_history_entry(line.clone())
                         .expect("Could not add history");
-                    handle_console_line(client_id, &line, &mut rpc_client).await;
+                    handle_console_line(client_id, &line, &mut rpc_client, input_request_id).await;
                 }
                 Err(ReadlineError::Eof) => {
                     println!("<EOF>");

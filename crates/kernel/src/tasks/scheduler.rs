@@ -6,10 +6,10 @@ use bincode::{Decode, Encode};
 use metrics_macros::{gauge, increment_counter};
 use thiserror::Error;
 use tokio::select;
-use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::{oneshot, Mutex, RwLock};
 use tracing::{debug, error, info, instrument, span, trace, warn, Level};
+use uuid::Uuid;
 
 use moor_values::model::permissions::Perms;
 use moor_values::model::world_state::{WorldState, WorldStateSource};
@@ -19,8 +19,8 @@ use moor_values::var::objid::Objid;
 use moor_values::var::{v_err, v_int, v_none, v_string, Var};
 use moor_values::SYSTEM_OBJECT;
 use SchedulerError::{
-    CommandExecutionError, CouldNotStartTask, TaskAbortedCancelled, TaskAbortedError,
-    TaskAbortedException, TaskAbortedLimit,
+    CommandExecutionError, CouldNotStartTask, EvalCompilationError, InputRequestNotFound,
+    TaskAbortedCancelled, TaskAbortedError, TaskAbortedException, TaskAbortedLimit,
 };
 
 use crate::tasks::moo_vm_host::MooVmHost;
@@ -35,7 +35,7 @@ use moor_compiler::codegen::compile;
 use moor_compiler::CompileError;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
-const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(1);
+const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(5);
 
 // TODO allow these to be set by command line arguments, as well.
 // Note these can be overriden in-core.
@@ -50,6 +50,8 @@ const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 #[derive(Clone)]
 pub struct Scheduler {
     inner: Arc<RwLock<Inner>>,
+    control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
+    control_receiver: Arc<Mutex<UnboundedReceiver<(TaskId, SchedulerControlMsg)>>>,
 }
 
 struct Inner {
@@ -57,6 +59,7 @@ struct Inner {
     state_source: Arc<dyn WorldStateSource>,
     next_task_id: usize,
     tasks: HashMap<TaskId, TaskControl>,
+    input_requests: HashMap<Uuid, TaskId>,
 }
 
 /// External interface description of a task, for purpose of e.g. the queued_tasks() builtin.
@@ -114,11 +117,10 @@ struct TaskControl {
     player: Objid,
     /// Outbound mailbox for messages from the scheduler to the task.
     task_control_sender: UnboundedSender<TaskControlMsg>,
-    /// (Per-task) receiver for messages from the task to the scheduler.
-    scheduler_control_receiver: UnboundedReceiver<SchedulerControlMsg>,
     state_source: Arc<dyn WorldStateSource>,
     session: Arc<dyn Session>,
     suspended: bool,
+    waiting_input: Option<Uuid>,
     resume_time: Option<SystemTime>,
     // Self reference, used when forking tasks to pass them into the new task record. Not super
     // elegant and may need revisiting.
@@ -131,6 +133,9 @@ struct TaskControl {
 pub enum SchedulerError {
     #[error("Task not found: {0:?}")]
     TaskNotFound(TaskId),
+    #[error("Input request not found: {0:?}")]
+    // TODO: using u128 here because Uuid is not bincode-able, but this is just a v4 uuid.
+    InputRequestNotFound(u128),
     #[error("Could not start task (internal error)")]
     CouldNotStartTask,
     #[error("Eval compilation error")]
@@ -209,13 +214,17 @@ async fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize,
 /// Public facing interface for the scheduler.
 impl Scheduler {
     pub fn new(state_source: Arc<dyn WorldStateSource>) -> Self {
+        let (control_sender, control_receiver) = tokio::sync::mpsc::unbounded_channel();
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 running: Default::default(),
                 state_source,
                 next_task_id: Default::default(),
                 tasks: HashMap::new(),
+                input_requests: Default::default(),
             })),
+            control_sender,
+            control_receiver: Arc::new(Mutex::new(control_receiver)),
         }
     }
 
@@ -237,25 +246,7 @@ impl Scheduler {
             let mut start_lock = self.inner.write().await;
             start_lock.running = true;
         }
-        let mut scheduler_interval = tokio::time::interval(SCHEDULER_TICK_TIME);
-        let mut metrics_poller_interval = tokio::time::interval(METRICS_POLLER_TICK_TIME);
-        loop {
-            {
-                select! {
-                    _ = metrics_poller_interval.tick() => {
-                        let inner = self.inner.read().await;
-                        gauge!("scheduler.tasks", inner.tasks.len() as f64);
-                    }
-                    _ = scheduler_interval.tick() => {
-                        let mut inner = self.inner.write().await;
-                        if !inner.running {
-                            break;
-                        }
-                        inner.do_process().await
-                    }
-                }
-            }
-        }
+        self.do_process().await;
         {
             let mut start_lock = self.inner.write().await;
             start_lock.running = false;
@@ -307,6 +298,60 @@ impl Scheduler {
             .map_err(|_| CouldNotStartTask)?;
 
         Ok(task_id)
+    }
+
+    /// Receive input that the (suspended) task previously requested, using the given
+    /// `input_request_id`.
+    /// The request is identified by the `input_request_id`, and given the input and resumed under
+    /// a new transaction.
+    pub async fn submit_requested_input(
+        &self,
+        player: Objid,
+        input_request_id: Uuid,
+        input: String,
+    ) -> Result<(), SchedulerError> {
+        // Validate that the given input request is valid, and if so, resume the task, sending it
+        // the given input, clearing the input request out.
+        let mut inner = self.inner.write().await;
+
+        let Some(task_id) = inner.input_requests.get(&input_request_id).cloned() else {
+            return Err(InputRequestNotFound(input_request_id.as_u128()));
+        };
+
+        let Some(task) = inner.tasks.get_mut(&task_id) else {
+            warn!(?task_id, ?input_request_id, "Input received for dead task");
+            return Err(TaskNotFound(task_id));
+        };
+
+        // If the player doesn't match, we'll pretend we didn't even see it.
+        if task.player != player {
+            warn!(
+                ?task_id,
+                ?input_request_id,
+                ?player,
+                "Task input request received for wrong player"
+            );
+            return Err(TaskNotFound(task_id));
+        }
+
+        // Now we can resume the task with the given input
+        let world_state = task.state_source.new_world_state().await.map_err(|e| {
+            error!(
+                ?e,
+                ?task_id,
+                ?input_request_id,
+                ?player,
+                "Could not create new world state when resuming task for player input"
+            );
+            CouldNotStartTask
+        })?;
+        task.task_control_sender
+            .send(TaskControlMsg::ResumeReceiveInput(world_state, input))
+            .map_err(|_| CouldNotStartTask)?;
+        task.waiting_input = None;
+        inner.input_requests.remove(&input_request_id);
+
+        Ok(())
     }
 
     /// Submit a verb task to the scheduler for execution.
@@ -428,7 +473,7 @@ impl Scheduler {
         // Compile the text into a verb.
         let binary = match compile(code.as_str()) {
             Ok(b) => b,
-            Err(e) => return Err(SchedulerError::EvalCompilationError(e)),
+            Err(e) => return Err(EvalCompilationError(e)),
         };
 
         let state_source = inner.state_source.clone();
@@ -534,6 +579,271 @@ impl Scheduler {
         scheduler.running = false;
         Ok(())
     }
+
+    #[instrument(skip(self))]
+    async fn do_process(&self) {
+        let mut metrics_poller_interval = tokio::time::interval(METRICS_POLLER_TICK_TIME);
+        let mut task_poller_interval = tokio::time::interval(SCHEDULER_TICK_TIME);
+
+        // control receiver is on its own lock so we don't have to hold 'inner' while we wait for
+        // messages, but is still Arc< so the scheduler handle can be cloned.
+        let mut receiver = self.control_receiver.lock().await;
+
+        loop {
+            select! {
+                // Track active tasks in metrics.
+                _ = metrics_poller_interval.tick() => {
+                    let inner = self.inner.read().await;
+                    let mut number_suspended_tasks = 0;
+                    let mut number_readblocked_tasks = 0;
+                    let number_tasks =  inner.tasks.len();
+
+                    for (_, task) in &inner.tasks {
+                        if task.suspended {
+                            number_suspended_tasks += 1;
+                        }
+                        if task.waiting_input.is_some() {
+                            number_readblocked_tasks += 1;
+                        }
+                    }
+                    gauge!("scheduler.tasks", number_tasks as f64);
+                    gauge!("scheduler.suspended_tasks", number_suspended_tasks as f64);
+                    debug!(number_readblocked_tasks, number_tasks, number_suspended_tasks, "...");
+                }
+                // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
+                _ = task_poller_interval.tick() => {
+                    let mut inner = self.inner.write().await;
+                    let mut to_wake = Vec::new();
+                    for (task_id, task) in &inner.tasks {
+                        if task.suspended {
+                            if let Some(delay) = task.resume_time {
+                                if delay <= SystemTime::now() {
+                                    to_wake.push(*task_id);
+                                }
+                            }
+                        }
+                    }
+                    inner.process_wake_ups(to_wake).await;
+                }
+                // Handle messages from any tasks that have sent us messages.
+                msg = receiver.recv() => {
+                    match msg {
+                        Some((task_id, msg)) => {
+                            let mut to_notify = Vec::new();
+                            let mut to_remove = Vec::new();
+                            let mut fork_requests = Vec::new();
+                            let mut desc_requests = Vec::new();
+                            let mut kill_requests = Vec::new();
+                            let mut resume_requests = Vec::new();
+                            let mut to_disconnect = Vec::new();
+
+                            match msg {
+                                SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
+                                    increment_counter!("scheduler.verb_not_found");
+
+                                    // I'd make this 'warn' but `do_command` gets invoked for every command and
+                                    // many cores don't have it at all. So it would just be way too spammy.
+                                    debug!(this = ?this, verb, ?task_id, "Verb not found, task cancelled");
+
+                                    to_notify.push((task_id, TaskWaiterResult::Error(TaskAbortedError)));
+                                    to_remove.push(task_id);
+                                }
+                                SchedulerControlMsg::TaskCommandError(parse_command_error) => {
+                                    increment_counter!("scheduler.command_error");
+
+                                    // This is a common occurrence, so we don't want to log it at warn level.
+                                    trace!(?task_id, error = ?parse_command_error, "command parse error");
+                                    to_notify.push((
+                                        task_id,
+                                        TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
+                                    ));
+                                    to_remove.push(task_id);
+                                }
+                                SchedulerControlMsg::TaskAbortCancelled => {
+                                    increment_counter!("scheduler.aborted_cancelled");
+
+                                    warn!(?task_id, "Task cancelled");
+
+                                    to_notify.push((task_id, TaskWaiterResult::Error(TaskAbortedCancelled)));
+                                    to_remove.push(task_id);
+                                }
+                                SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
+                                    match limit_reason {
+                                        AbortLimitReason::Ticks(t) => {
+                                            increment_counter!("scheduler.aborted_ticks");
+                                            warn!(
+                                        ?task_id,
+                                        ticks = t,
+                                        "Task aborted, ticks exceeded"
+                                    );
+                                        }
+                                        AbortLimitReason::Time(t) => {
+                                            increment_counter!("scheduler.aborted_time");
+                                            warn!(?task_id, time = ?t, "Task aborted, time exceeded");
+                                        }
+                                    }
+                                    increment_counter!("scheduler.aborted_limits");
+                                    to_notify.push((
+                                        task_id,
+                                        TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
+                                    ));
+                                    to_remove.push(task_id);
+                                }
+                                SchedulerControlMsg::TaskException(exception) => {
+                                    increment_counter!("scheduler.task_exception");
+
+                                    warn!(?task_id, finally_reason = ?exception, "Task threw exception");
+                                    to_notify.push((
+                                        task_id,
+                                        TaskWaiterResult::Error(TaskAbortedException(exception)),
+                                    ));
+                                    to_remove.push(task_id);
+                                }
+                                SchedulerControlMsg::TaskSuccess(value) => {
+                                    increment_counter!("scheduler.task_succeeded");
+                                    debug!(?task_id, result = ?value, "Task succeeded");
+                                    to_notify.push((task_id, TaskWaiterResult::Success(value)));
+                                    to_remove.push(task_id);
+                                }
+                                SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
+                                    trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
+                                    increment_counter!("scheduler.fork_task");
+                                    // Task has requested a fork. Dispatch it and reply with the new task id.
+                                    // Gotta dump this out til we exit the loop tho, since self.tasks is already
+                                    // borrowed here.
+                                    let mut inner = self.inner.write().await;
+                                    let Some(task) = inner.tasks.get_mut(&task_id) else {
+                                        warn!(task_id, "Task not found for fork request");
+                                        continue;
+                                    };
+                                    fork_requests.push(ForkRequest {
+                                        fork_request,
+                                        reply,
+                                        state_source: task.state_source.clone(),
+                                        session: task.session.clone(),
+                                        scheduler: task.scheduler.clone(),
+                                    });
+                                }
+                                SchedulerControlMsg::TaskSuspend(resume_time) => {
+                                    increment_counter!("scheduler.suspend_task");
+                                    // Task is suspended. The resume time (if any) is the system time at which
+                                    // the scheduler should try to wake us up.
+                                    let mut inner = self.inner.write().await;
+                                    let Some(task) = inner.tasks.get_mut(&task_id) else {
+                                        warn!(task_id, "Task not found for suspend request");
+                                        continue;
+                                    };
+                                    task.suspended = true;
+                                    task.resume_time = resume_time;
+                                }
+                                SchedulerControlMsg::TaskRequestInput => {
+                                    increment_counter!("scheduler.request_input");
+                                    // Task has gone into suspension waiting for input from the client.
+                                    // Create a unique ID for this request, and we'll wake the task when the
+                                    // session receives input.
+                                    let mut inner = self.inner.write().await;
+                                    let input_request_id = Uuid::new_v4();
+                                    {
+                                        let Some(task) = inner.tasks.get_mut(&task_id) else {
+                                            warn!(task_id, "Task not found for input request");
+                                            continue;
+                                        };
+                                        let Ok(()) = task
+                                            .session
+                                            .request_input(task.player, input_request_id)
+                                            .await
+                                            else {
+                                                warn!("Could not request input from session; aborting task");
+                                                to_notify.push((task_id, TaskWaiterResult::Error(TaskAbortedError)));
+                                                continue;
+                                            };
+                                        task.waiting_input = Some(input_request_id);
+                                    }
+                                    inner.input_requests.insert(input_request_id, task_id);
+                                    debug!(?task_id, "Task suspended waiting for input");
+                                    continue;
+                                }
+                                SchedulerControlMsg::DescribeOtherTasks(reply) => {
+                                    increment_counter!("scheduler.describe_tasks");
+                                    // Task is asking for a description of all other tasks.
+                                    desc_requests.push((task_id, reply));
+                                }
+                                SchedulerControlMsg::KillTask {
+                                    victim_task_id,
+                                    sender_permissions,
+                                    result_sender,
+                                } => {
+                                    increment_counter!("scheduler.kill_task");
+                                    // Task is asking to kill another task.
+                                    kill_requests.push(KillRequest {
+                                        requesting_task_id: task_id,
+                                        victim_task_id,
+                                        sender_permissions,
+                                        result_sender,
+                                    });
+                                }
+                                SchedulerControlMsg::ResumeTask {
+                                    queued_task_id,
+                                    sender_permissions,
+                                    return_value,
+                                    result_sender,
+                                } => {
+                                    increment_counter!("scheduler.resume_task");
+                                    resume_requests.push(ResumeRequest {
+                                        requesting_task_id: task_id,
+                                        queued_task_id,
+                                        sender_permissions,
+                                        return_value,
+                                        result_sender,
+                                    });
+                                }
+                                SchedulerControlMsg::BootPlayer {
+                                    player,
+                                    sender_permissions: _,
+                                } => {
+                                    increment_counter!("scheduler.boot_player");
+                                    // Task is asking to boot a player.
+                                    to_disconnect.push((task_id, player));
+                                }
+                            }
+
+                            // Now apply task mutation actions that shook out of this, before
+                            // trying the next task action.
+                            let mut inner = self.inner.write().await;
+
+                            // Send notifications. These are oneshot and consumed.
+                            to_remove.append(&mut inner.process_notifications(to_notify).await);
+
+                            // Service fork requests
+                            to_remove.append(&mut inner.process_fork_requests(fork_requests).await);
+
+                            // Service describe requests.
+                            to_remove.append(&mut inner.process_describe_requests(desc_requests).await);
+
+                            // Service kill requests, removing any that were non-responsive (returned from function)
+                            to_remove.append(&mut inner.process_kill_requests(kill_requests).await);
+
+                            // Service resume requests, removing any that were non-responsive (returned from function)
+                            to_remove.append(&mut inner.process_resume_requests(resume_requests).await);
+
+                            inner.process_disconnect_tasks(to_disconnect).await;
+
+                            // Prune any completed/dead tasks
+                            inner.prune_dead_tasks();
+
+                            // Service task removals. This is done last because other queues above might contributed to
+                            // this list.
+                            inner.process_task_removals(to_remove);
+                        },
+                        None => {
+                            error!("Scheduler control channel closed");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Inner {
@@ -589,198 +899,6 @@ impl Inner {
 
         Ok(task_id)
     }
-    /// This is expected to be run on a loop, and will process the first task response it sees.
-    #[instrument(skip(self))]
-    async fn do_process(&mut self) {
-        // Would have preferred a futures::select_all here, but it doesn't seem to be possible to
-        // do this without consuming the futures, which we don't want to do.
-        let mut to_notify = Vec::new();
-        let mut to_remove = Vec::new();
-        let mut fork_requests = Vec::new();
-        let mut desc_requests = Vec::new();
-        let mut kill_requests = Vec::new();
-        let mut resume_requests = Vec::new();
-        let mut to_disconnect = Vec::new();
-        let mut to_wake = Vec::new();
-        for (task_id, task) in self.tasks.iter_mut() {
-            // Look for any tasks in suspension whose wake-up time has passed.
-            if task.suspended {
-                if let Some(delay) = task.resume_time {
-                    if delay <= SystemTime::now() {
-                        to_wake.push(*task_id);
-                    }
-                }
-            }
-
-            match task.scheduler_control_receiver.try_recv() {
-                Ok(msg) => match msg {
-                    SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
-                        increment_counter!("scheduler.verb_not_found");
-
-                        // I'd make this 'warn' but `do_command` gets invoked for every command and
-                        // many cores don't have it at all. So it would just be way too spammy.
-                        debug!(this = ?this, verb, task = task.task_id, "Verb not found, task cancelled");
-
-                        to_notify.push((*task_id, TaskWaiterResult::Error(TaskAbortedError)));
-                        to_remove.push(*task_id);
-                    }
-                    SchedulerControlMsg::TaskCommandError(parse_command_error) => {
-                        increment_counter!("scheduler.command_error");
-
-                        // This is a common occurrence, so we don't want to log it at warn level.
-                        trace!(task = task.task_id, error = ?parse_command_error, "command parse error");
-                        to_notify.push((
-                            *task_id,
-                            TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
-                        ));
-                        to_remove.push(*task_id);
-                    }
-                    SchedulerControlMsg::TaskAbortCancelled => {
-                        increment_counter!("scheduler.aborted_cancelled");
-
-                        warn!(task = task.task_id, "Task cancelled");
-
-                        to_notify.push((*task_id, TaskWaiterResult::Error(TaskAbortedCancelled)));
-                        to_remove.push(*task_id);
-                    }
-                    SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
-                        match limit_reason {
-                            AbortLimitReason::Ticks(t) => {
-                                increment_counter!("scheduler.aborted_ticks");
-                                warn!(
-                                    task = task.task_id,
-                                    ticks = t,
-                                    "Task aborted, ticks exceeded"
-                                );
-                            }
-                            AbortLimitReason::Time(t) => {
-                                increment_counter!("scheduler.aborted_time");
-                                warn!(task = task.task_id, time = ?t, "Task aborted, time exceeded");
-                            }
-                        }
-                        increment_counter!("scheduler.aborted_limits");
-                        to_notify.push((
-                            *task_id,
-                            TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
-                        ));
-                        to_remove.push(*task_id);
-                    }
-                    SchedulerControlMsg::TaskException(exception) => {
-                        increment_counter!("scheduler.task_exception");
-
-                        warn!(task = task.task_id, finally_reason = ?exception, "Task threw exception");
-                        to_notify.push((
-                            *task_id,
-                            TaskWaiterResult::Error(TaskAbortedException(exception)),
-                        ));
-                        to_remove.push(*task_id);
-                    }
-                    SchedulerControlMsg::TaskSuccess(value) => {
-                        increment_counter!("scheduler.task_succeeded");
-                        debug!(task = task.task_id, result = ?value, "Task succeeded");
-                        to_notify.push((*task_id, TaskWaiterResult::Success(value)));
-                        to_remove.push(*task_id);
-                    }
-                    SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
-                        trace!(task = task.task_id,  delay=?fork_request.delay, "Task requesting fork");
-                        increment_counter!("scheduler.fork_task");
-                        // Task has requested a fork. Dispatch it and reply with the new task id.
-                        // Gotta dump this out til we exit the loop tho, since self.tasks is already
-                        // borrowed here.
-                        fork_requests.push(ForkRequest {
-                            fork_request,
-                            reply,
-                            state_source: task.state_source.clone(),
-                            session: task.session.clone(),
-                            scheduler: task.scheduler.clone(),
-                        });
-                    }
-                    SchedulerControlMsg::TaskSuspend(resume_time) => {
-                        increment_counter!("scheduler.suspend_task");
-                        // Task is suspended. The resume time (if any) is the system time at which
-                        // the scheduler should try to wake us up.
-                        task.suspended = true;
-                        task.resume_time = resume_time;
-                    }
-                    SchedulerControlMsg::DescribeOtherTasks(reply) => {
-                        increment_counter!("scheduler.describe_tasks");
-                        // Task is asking for a description of all other tasks.
-                        desc_requests.push((task.task_id, reply));
-                    }
-                    SchedulerControlMsg::KillTask {
-                        victim_task_id,
-                        sender_permissions,
-                        result_sender,
-                    } => {
-                        increment_counter!("scheduler.kill_task");
-                        // Task is asking to kill another task.
-                        kill_requests.push(KillRequest {
-                            requesting_task_id: task.task_id,
-                            victim_task_id,
-                            sender_permissions,
-                            result_sender,
-                        });
-                    }
-                    SchedulerControlMsg::ResumeTask {
-                        queued_task_id,
-                        sender_permissions,
-                        return_value,
-                        result_sender,
-                    } => {
-                        increment_counter!("scheduler.resume_task");
-                        resume_requests.push(ResumeRequest {
-                            requesting_task_id: task.task_id,
-                            queued_task_id,
-                            sender_permissions,
-                            return_value,
-                            result_sender,
-                        });
-                    }
-                    SchedulerControlMsg::BootPlayer {
-                        player,
-                        sender_permissions: _,
-                    } => {
-                        increment_counter!("scheduler.boot_player");
-                        // Task is asking to boot a player.
-                        to_disconnect.push((task.task_id, player));
-                    }
-                },
-                Err(TryRecvError::Empty) => {}
-                Err(e) => {
-                    warn!(task = task.task_id, error = ?e, "Task sys-errored");
-                    to_remove.push(*task_id);
-                    continue;
-                }
-            }
-        }
-
-        // Send notifications. These are oneshot and consumed.
-        to_remove.append(&mut self.process_notifications(to_notify).await);
-
-        // Service wake-ups
-        to_remove.append(&mut self.process_wake_ups(to_wake).await);
-
-        // Service fork requests
-        to_remove.append(&mut self.process_fork_requests(fork_requests).await);
-
-        // Service describe requests.
-        to_remove.append(&mut self.process_describe_requests(desc_requests).await);
-
-        // Service kill requests, removing any that were non-responsive (returned from function)
-        to_remove.append(&mut self.process_kill_requests(kill_requests).await);
-
-        // Service resume requests, removing any that were non-responsive (returned from function)
-        to_remove.append(&mut self.process_resume_requests(resume_requests).await);
-
-        self.process_disconnect_tasks(to_disconnect).await;
-
-        // Prune any completed/dead tasks
-        self.prune_dead_tasks();
-
-        // Service task removals. This is done last because other queues above might contributed to
-        // this list.
-        self.process_task_removals(to_remove);
-    }
 
     async fn process_notifications(
         &mut self,
@@ -789,7 +907,11 @@ impl Inner {
         let mut to_remove = vec![];
 
         for (task_id, result) in to_notify {
-            let task = self.tasks.get_mut(&task_id).unwrap();
+            let Some(task) = self.tasks.get_mut(&task_id) else {
+                // Missing task, must have ended already. This is odd though? So we'll warn.
+                warn!(task_id, "Task not found for notification, ignoring");
+                continue;
+            };
             for subscriber in task.subscribers.drain(..) {
                 if subscriber.send(result.clone()).is_err() {
                     to_remove.push(task_id);
@@ -818,7 +940,7 @@ impl Inner {
                 .task_control_sender
                 .send(TaskControlMsg::Resume(world_state, v_int(0)))
             {
-                error!(task = task.task_id, error = ?e, "Could not send message resume task. Task being removed.");
+                error!(?task_id, error = ?e, "Could not send message resume task. Task being removed.");
                 to_remove.push(task.task_id);
             }
         }
@@ -881,13 +1003,13 @@ impl Inner {
                         .task_control_sender
                         .send(TaskControlMsg::Describe(t_send))
                     {
-                        error!(task = task.task_id, error = ?e,
+                        error!(?task_id, error = ?e,
                             "Could not send describe request to task. Task being removed.");
                         to_remove.push(task.task_id);
                         continue;
                     }
                     let Ok(task_desc) = t_reply.await else {
-                        error!(task = task.task_id, "Could not get task description");
+                        error!(?task_id, "Could not get task description");
                         to_remove.push(task.task_id);
                         continue;
                     };
@@ -1108,7 +1230,7 @@ impl Inner {
         &mut self,
         player: Objid,
         state_source: Arc<dyn WorldStateSource>,
-        sessions: Arc<dyn Session>,
+        session: Arc<dyn Session>,
         delay_start: Option<Duration>,
         scheduler_ref: Scheduler,
         perms: Objid,
@@ -1127,21 +1249,18 @@ impl Inner {
         let (max_ticks, max_seconds, max_stack_depth) =
             max_vm_values(world_state.as_mut(), background).await;
 
-        let (task_control_sender, task_control_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (scheduler_control_sender, scheduler_control_receiver) =
-            tokio::sync::mpsc::unbounded_channel();
-
         let task_id = self.next_task_id;
         self.next_task_id += 1;
+        let (task_control_sender, task_control_receiver) = tokio::sync::mpsc::unbounded_channel();
 
         let task_control = TaskControl {
             task_id,
             player,
             task_control_sender,
-            scheduler_control_receiver,
             state_source: state_source.clone(),
-            session: sessions.clone(),
+            session: session.clone(),
             suspended: false,
+            waiting_input: None,
             resume_time: None,
             scheduler: scheduler_ref.clone(),
             subscribers: vec![],
@@ -1164,6 +1283,7 @@ impl Inner {
 
             let vm = VM::new();
 
+            let scheduler_control_sender = scheduler_ref.control_sender.clone();
             let task = Task {
                 task_id,
                 scheduled_start_time: None,
@@ -1174,10 +1294,10 @@ impl Inner {
                     max_stack_depth,
                     max_ticks,
                     Duration::from_secs(max_seconds),
-                    sessions.clone(),
-                    scheduler_control_sender,
+                    session.clone(),
+                    scheduler_control_sender.clone(),
                 ),
-                session: sessions.clone(),
+                session: session.clone(),
                 world_state,
                 perms,
             };
@@ -1194,10 +1314,7 @@ impl Inner {
 
     #[instrument(skip(self))]
     pub async fn abort_task(&mut self, id: TaskId) -> Result<(), SchedulerError> {
-        let task = self
-            .tasks
-            .get_mut(&id)
-            .ok_or(SchedulerError::TaskNotFound(id))?;
+        let task = self.tasks.get_mut(&id).ok_or(TaskNotFound(id))?;
         if let Err(e) = task.task_control_sender.send(TaskControlMsg::Abort) {
             error!(error = ?e, "Could not send abort message to task on its channel.  Already dead?");
         }
@@ -1206,9 +1323,7 @@ impl Inner {
 
     #[instrument(skip(self))]
     async fn remove_task(&mut self, id: TaskId) -> Result<(), SchedulerError> {
-        self.tasks
-            .remove(&id)
-            .ok_or(SchedulerError::TaskNotFound(id))?;
+        self.tasks.remove(&id).ok_or(TaskNotFound(id))?;
         Ok(())
     }
 }

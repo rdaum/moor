@@ -19,7 +19,7 @@ struct Args {
         long,
         value_name = "listen-address",
         help = "HTTP listen address",
-        default_value = "0.0.0.0:8080"
+        default_value = "0.0.0.0:8888"
     )]
     listen_address: String,
 

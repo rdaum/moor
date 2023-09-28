@@ -13,6 +13,7 @@ use moor_values::var::Var;
 
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
+use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
 
 /// The arguments and other state passed to a built-in function.
@@ -28,7 +29,7 @@ pub(crate) struct BfCallState<'a> {
     /// For connection / message management.
     pub(crate) session: Arc<dyn Session>,
     /// For sending messages up to the scheduler
-    pub(crate) scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+    pub(crate) scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     /// How many ticks are left in the current task.
     pub(crate) ticks_left: usize,
     /// How much time is left in the current task.

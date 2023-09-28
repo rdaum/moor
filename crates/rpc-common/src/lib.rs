@@ -27,6 +27,7 @@ pub enum RpcRequest {
     RequestSysProp(String, String),
     LoginCommand(Vec<String>),
     Command(String),
+    RequestedInput(u128, String),
     OutOfBand(String),
     Eval(String),
     Pong(SystemTime),
@@ -52,7 +53,8 @@ pub enum RpcResponse {
     NewConnection(Objid),
     SysPropValue(Option<Var>),
     LoginResult(Option<(ConnectType, Objid)>),
-    CommandComplete,
+    CommandSubmitted(usize /* task id */),
+    InputThanks,
     EvalResult(Var),
     ThanksPong(SystemTime),
     Disconnected,
@@ -89,6 +91,10 @@ pub enum ConnectionEvent {
     /// An event has occurred in the narrative that the connections for the given object are
     /// expected to see.
     Narrative(Objid, NarrativeEvent),
+    /// The server wants the client to prompt the user for input, and the task this session is
+    /// attached to will suspend until the client sends an RPC with a `RequestedInput` message and
+    /// the attached request id.
+    RequestInput(u128),
     /// The system wants to send a message to the given object on its current active connections.
     SystemMessage(Objid, String),
     /// The system wants to disconnect the given object from all its current active connections.

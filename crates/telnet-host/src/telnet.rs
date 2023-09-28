@@ -107,6 +107,9 @@ impl TelnetConnection {
                             let msg = event.event();
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
+                        ConnectionEvent::RequestInput(_request_id) => {
+                            bail!("RequestInput before login");
+                        }
                         ConnectionEvent::Disconnect() => {
                             self.write.close().await?;
                             bail!("Disconnect before login");
@@ -137,6 +140,7 @@ impl TelnetConnection {
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
     ) -> Result<(), anyhow::Error> {
+        let mut expecting_input_reply = None;
         loop {
             select! {
                 line = self.read.next() => {
@@ -146,16 +150,25 @@ impl TelnetConnection {
                     };
                     let line = line.unwrap();
 
-                    // If the line begins with the out of band prefix, then send it that way,
-                    // instead. And really just fire and forget.
-                    let response = if line.starts_with(OUT_OF_BAND_PREFIX) {
-                        rpc_client.make_rpc_call(self.client_id, RpcRequest::OutOfBand(line)).await?
-                    } else {
-                        rpc_client.make_rpc_call(self.client_id, RpcRequest::Command(line)).await?
+                    // Are we expecting to respond to prompt input? If so, send this through to that.
+                    let response = match expecting_input_reply.take() {
+                        Some(input_reply_id) => {
+                            rpc_client.make_rpc_call(self.client_id, RpcRequest::RequestedInput(input_reply_id, line)).await?
+                        }
+                        None => {
+                            // If the line begins with the out of band prefix, then send it that way,
+                            // instead. And really just fire and forget.
+                            if line.starts_with(OUT_OF_BAND_PREFIX) {
+                                rpc_client.make_rpc_call(self.client_id, RpcRequest::OutOfBand(line)).await?
+                            } else {
+                                rpc_client.make_rpc_call(self.client_id, RpcRequest::Command(line)).await?
+                            }
+                        }
                     };
 
                     match response {
-                        RpcResult::Success(RpcResponse::CommandComplete) => {
+                        RpcResult::Success(RpcResponse::CommandSubmitted(_)) |
+                        RpcResult::Success(RpcResponse::InputThanks) => {
                             // Nothing to do
                         }
                         RpcResult::Failure(RpcRequestError::CommandError(CommandError::CouldNotParseCommand)) => {
@@ -190,7 +203,6 @@ impl TelnetConnection {
                     }
                 }
                 Ok(event) = narrative_recv(self.client_id, narrative_sub) => {
-                    trace!(?event, "narrative_event");
                     match event {
                         ConnectionEvent::SystemMessage(_author, msg) => {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
@@ -198,6 +210,10 @@ impl TelnetConnection {
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
+                        }
+                        ConnectionEvent::RequestInput(request_id) => {
+                            // Server is requesting that the next line of input get sent through as a response to this request.
+                            expecting_input_reply = Some(request_id);
                         }
                         ConnectionEvent::Disconnect() => {
                             self.write.send("** Disconnected **".to_string()).await.expect("Unable to send disconnect message to client");
@@ -218,6 +234,9 @@ pub async fn telnet_listen_loop(
 ) -> Result<(), anyhow::Error> {
     let listener = TcpListener::bind(telnet_sockaddr).await?;
     let zmq_ctx = tmq::Context::new();
+    zmq_ctx
+        .set_io_threads(8)
+        .expect("Unable to set ZMQ IO threads");
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;

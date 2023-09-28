@@ -16,7 +16,6 @@ pub async fn narrative_recv(
         ));
     };
 
-    trace!(message = ?inbound, "narrative_message");
     // bincode decode the message, and it should be ConnectionEvent
     if inbound.len() != 2 {
         return Err(RpcError::CouldNotDecode(format!(

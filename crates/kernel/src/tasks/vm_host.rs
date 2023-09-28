@@ -21,6 +21,8 @@ pub enum VMHostResponse {
     DispatchFork(Fork),
     /// Tell the task to suspend us.
     Suspend(Option<Duration>),
+    /// Tell the task Johnny 5 needs input from the client (`read` invocation).
+    SuspendNeedInput,
     /// Task timed out or exceeded ticks.
     AbortLimit(AbortLimitReason),
     /// Tell the task that execution has completed, and the task is successful.

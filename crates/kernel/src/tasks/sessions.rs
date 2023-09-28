@@ -3,6 +3,7 @@ use moor_values::model::NarrativeEvent;
 use moor_values::var::objid::Objid;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
+use uuid::Uuid;
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
@@ -47,6 +48,16 @@ pub trait Session: Send + Sync {
     /// Is used for forked tasks which end up running in their own transaction.
     /// Note: `disconnect` on one must also disconnect on all the other forks of the same lineage.
     async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError>;
+
+    /// Request that the client send input to the server.
+    /// The task is committed and suspended until the client sends input to `submit_requested_input`
+    /// with the given `input_request_id` argument, at which time the task is resumed in a new
+    /// transaction.
+    async fn request_input(
+        &self,
+        player: Objid,
+        input_request_id: Uuid,
+    ) -> Result<(), SessionError>;
 
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
@@ -116,6 +127,17 @@ impl Session for NoopClientSession {
 
     async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         Ok(self.clone())
+    }
+
+    async fn request_input(
+        &self,
+        player: Objid,
+        _input_request_id: Uuid,
+    ) -> Result<(), SessionError> {
+        panic!(
+            "NoopClientSession::request_input called for player {}",
+            player.0
+        )
     }
 
     async fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), SessionError> {
@@ -210,6 +232,17 @@ impl Session for MockClientSession {
             }),
             system: self.system.clone(),
         }))
+    }
+
+    async fn request_input(
+        &self,
+        player: Objid,
+        _input_request_id: Uuid,
+    ) -> Result<(), SessionError> {
+        panic!(
+            "MockClientSession::request_input called for player {}",
+            player.0
+        )
     }
 
     async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), SessionError> {

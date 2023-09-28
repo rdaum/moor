@@ -109,6 +109,9 @@ pub mod vm_test_utils {
                 VMHostResponse::Suspend(_) => {
                     panic!("Unexpected suspend");
                 }
+                VMHostResponse::SuspendNeedInput => {
+                    panic!("Unexpected suspend need input");
+                }
             }
         }
     }

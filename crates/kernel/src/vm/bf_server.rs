@@ -355,6 +355,34 @@ async fn bf_suspend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(suspend, bf_suspend);
 
+async fn bf_read<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+    if bf_args.args.len() > 1 {
+        return Err(E_INVARG);
+    }
+
+    // We don't actually support reading from arbitrary connections that aren't the current player,
+    // so we'll raise E_INVARG for anything else, because we don't support LambdaMOO's
+    // network listener model.
+    if bf_args.args.len() == 1 {
+        let Variant::Obj(requested_player) = bf_args.args[0].variant() else {
+            return Err(E_INVARG);
+        };
+        let player = bf_args.vm.top().player;
+        if *requested_player != player {
+            // We log this because we'd like to know if cores are trying to do this.
+            warn!(
+                requested_player = ?requested_player,
+                caller = ?bf_args.vm.caller(),
+                ?player,
+                "read() called with non-current player");
+            return Err(E_INVARG);
+        }
+    }
+
+    Ok(VmInstr(ExecutionResult::NeedInput))
+}
+bf_declare!(read, bf_read);
+
 async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
@@ -365,7 +393,10 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
     debug!("sending DescribeOtherTasks to scheduler");
     bf_args
         .scheduler_sender
-        .send(SchedulerControlMsg::DescribeOtherTasks(send))
+        .send((
+            bf_args.vm.top().task_id,
+            SchedulerControlMsg::DescribeOtherTasks(send),
+        ))
         .expect("scheduler is not listening");
     let tasks = receive.await.expect("scheduler is not listening");
 
@@ -424,11 +455,14 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     let (send, receive) = oneshot::channel();
     bf_args
         .scheduler_sender
-        .send(SchedulerControlMsg::KillTask {
-            victim_task_id,
-            sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
-            result_sender: send,
-        })
+        .send((
+            bf_args.vm.top().task_id,
+            SchedulerControlMsg::KillTask {
+                victim_task_id,
+                sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
+                result_sender: send,
+            },
+        ))
         .expect("scheduler is not listening");
 
     let result = receive.await.expect("scheduler is not listening");
@@ -465,12 +499,15 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let (send, receive) = oneshot::channel();
     bf_args
         .scheduler_sender
-        .send(SchedulerControlMsg::ResumeTask {
-            queued_task_id: task_id,
-            sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
-            return_value,
-            result_sender: send,
-        })
+        .send((
+            bf_args.vm.top().task_id,
+            SchedulerControlMsg::ResumeTask {
+                queued_task_id: task_id,
+                sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
+                return_value,
+                result_sender: send,
+            },
+        ))
         .expect("scheduler is not listening");
 
     let result = receive.await.expect("scheduler is not listening");
@@ -531,10 +568,13 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
 
     bf_args
         .scheduler_sender
-        .send(SchedulerControlMsg::BootPlayer {
-            player: *player,
-            sender_permissions: task_perms,
-        })
+        .send((
+            bf_args.vm.top().task_id,
+            SchedulerControlMsg::BootPlayer {
+                player: *player,
+                sender_permissions: task_perms,
+            },
+        ))
         .expect("scheduler is not listening");
 
     Ok(Ret(v_none()))
@@ -759,5 +799,6 @@ impl VM {
         self.builtins[offset_for_builtin("function_info")] = Arc::new(BfFunctionInfo {});
         self.builtins[offset_for_builtin("listeners")] = Arc::new(BfListeners {});
         self.builtins[offset_for_builtin("eval")] = Arc::new(BfEval {});
+        self.builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
     }
 }

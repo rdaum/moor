@@ -129,6 +129,8 @@ pub enum ExecutionResult {
     /// If the duration is None, then the task is suspended indefinitely, until it is killed or
     /// resumed using `resume()` or `kill_task()`.
     Suspend(Option<Duration>),
+    /// Request input from the client.
+    NeedInput,
     /// Request `eval` execution, which is a kind of special activation creation where we've already
     /// been given the program to execute instead of having to look it up.
     PerformEval {

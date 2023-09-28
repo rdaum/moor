@@ -65,6 +65,18 @@ impl Session for RpcSession {
         Ok(new_session)
     }
 
+    async fn request_input(
+        &self,
+        player: Objid,
+        input_request_id: Uuid,
+    ) -> Result<(), SessionError> {
+        self.rpc_server
+            .clone()
+            .request_client_input(self.client_id, player, input_request_id)
+            .await?;
+        Ok(())
+    }
+
     async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError> {
         self.session_buffer.lock().await.push((player, event));
         Ok(())

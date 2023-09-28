@@ -167,6 +167,7 @@ impl WebSocketHost {
 
         debug!(?player, ?client_id, "Entering command dispatch loop");
 
+        let mut expecting_input = None;
         loop {
             select! {
                 line = ws_receiver.next() => {
@@ -176,12 +177,21 @@ impl WebSocketHost {
                     };
                     let line = line.into_text().unwrap();
                     let cmd = line.trim().to_string();
-                    let response = rpc_client
-                        .make_rpc_call(client_id, RpcRequest::Command(cmd))
-                        .await.expect("Unable to send command to RPC server");
+
+                    let response = match expecting_input.take() {
+                        Some(input_request_id) => {
+                            rpc_client.make_rpc_call(client_id, RpcRequest::RequestedInput(input_request_id, cmd))
+                                .await.expect("Unable to send input to RPC server")
+                        }
+                        None => {
+                            rpc_client.make_rpc_call(client_id, RpcRequest::Command(cmd))
+                                .await.expect("Unable to send command to RPC server")
+                        }
+                    } ;
 
                     match response {
-                        RpcResult::Success(RpcResponse::CommandComplete) => {
+                        RpcResult::Success(RpcResponse::CommandSubmitted(_)) |
+                        RpcResult::Success(RpcResponse::InputThanks) => {
                             // Nothing to do
                         }
                         RpcResult::Failure(RpcRequestError::CommandError(CommandError::CouldNotParseCommand)) => {
@@ -224,6 +234,9 @@ impl WebSocketHost {
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
                             write_line(&mut ws_sender, &msg).await;
+                        }
+                        ConnectionEvent::RequestInput(request_id) => {
+                            expecting_input = Some(request_id);
                         }
                         ConnectionEvent::Disconnect() => {
                             write_line(&mut ws_sender, "** Disconnected **").await;

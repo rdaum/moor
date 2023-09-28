@@ -12,6 +12,7 @@ use moor_values::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
 
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
+use crate::tasks::TaskId;
 use crate::vm::activation::HandlerType;
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{ExecutionResult, Fork, VM};
@@ -41,7 +42,7 @@ macro_rules! binary_var_op {
 pub struct VmExecParams<'a> {
     pub world_state: &'a mut dyn WorldState,
     pub session: Arc<dyn Session>,
-    pub scheduler_sender: UnboundedSender<SchedulerControlMsg>,
+    pub scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     pub max_stack_depth: usize,
     pub ticks_left: usize,
     pub time_left: Option<Duration>,

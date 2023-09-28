@@ -140,7 +140,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | server_log          | &check;  |                                                                          |
 | load_server_options |          |                                                                          |
 | function_info       | &check;  |                                                                          |
-
+| read                |          |                                                       |
 
 
 ### Tasks
@@ -184,7 +184,6 @@ to the caller if attempted.
 | open_network_connection |          |                                                       |
 | listen                  |          |                                                       |
 | unlisten                |          |                                                       |
-| read                    |          |                                                       |
 | listeners               | &check;  | Ehhh.. hardcoded, just to shut core login process up  |
 | output_delimiters       |          |                                                       |
 | buffered_output_length  |          |                                                       |

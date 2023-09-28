@@ -41,6 +41,9 @@ pub enum TaskControlMsg {
     /// The scheduler is telling the task to resume execution. Use the given world state
     /// (transaction) and permissions when doing so.
     Resume(Box<dyn WorldState>, Var),
+    /// The scheduler is giving the task the input it requested from the client, and is asking it
+    /// to resume execution, using the given world state (transaction) to do so.
+    ResumeReceiveInput(Box<dyn WorldState>, String),
     /// The scheduler is asking the task to describe itself.
     /// TODO: This causes deadlock if the task _requesting_ the description is the task being
     ///   described, so I need to rethink this.
@@ -68,6 +71,8 @@ pub enum SchedulerControlMsg {
     TaskAbortLimitsReached(AbortLimitReason),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
     TaskSuspend(Option<SystemTime>),
+    /// Tell the scheduler we're suspending until we get input from the client.
+    TaskRequestInput,
     /// Task is requesting a list of all other tasks known to the scheduler.
     DescribeOtherTasks(oneshot::Sender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.
