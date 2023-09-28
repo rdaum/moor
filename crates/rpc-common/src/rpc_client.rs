@@ -4,7 +4,11 @@ use tmq::Multipart;
 use tracing::error;
 use uuid::Uuid;
 
+/// Lightweight wrapper around the TMQ RequestSender to make it slightly simpler to make RPC
+/// requests, reducing some boiler plate.
 pub struct RpcSendClient {
+    // Note: this becomes None while a request is in flight, and is replaced with Some() as the
+    // response is received.
     rcp_request_sock: Option<RequestSender>,
 }
 
@@ -16,7 +20,6 @@ impl RpcSendClient {
     }
 
     /// Call the ZMQ RPC (REQ/REPLY) endpoint with a `ClientRequest`, and receive a `ServerResponse`.
-    /// The `RequestSender` is consumed in the process, and a new one is returned.
     pub async fn make_rpc_call(
         &mut self,
         client_id: Uuid,
