@@ -225,8 +225,7 @@ re_compile_initialize()
 }
 
 int
-re_set_syntax(syntax)
-    int syntax;
+re_set_syntax(int syntax)
 {
     int ret;
 
@@ -237,10 +236,8 @@ re_set_syntax(syntax)
     return ret;
 }
 
-static int hex_char_to_decimal PROTO((int));
 static int
-hex_char_to_decimal(ch)
-    int ch;
+hex_char_to_decimal(int ch)
 {
     if (ch >= '0' && ch <= '9')
 	return ch - '0';
@@ -252,10 +249,7 @@ hex_char_to_decimal(ch)
 }
 
 const char *
-re_compile_pattern(regex, size, bufp)
-    char *regex;
-    int size;
-    regexp_t bufp;
+re_compile_pattern(char *regex, int size, regexp_t bufp)
 {
     int a, pos, op, current_level, level, opcode;
     int pattern_offset, alloc;
@@ -733,12 +727,8 @@ re_compile_pattern(regex, size, bufp)
 #undef SETBIT
 #undef SET_FIELDS
 
-static void re_compile_fastmap_aux
- PROTO((char *, int, char *, char *, char *));
 static void
-re_compile_fastmap_aux(code, pos, visited, can_be_null, fastmap)
-    char *code, *visited, *can_be_null, *fastmap;
-    int pos;
+re_compile_fastmap_aux(char *code, int pos, char *visited, char *can_be_null, char *fastmap)
 {
     int a, b, syntaxcode;
 
@@ -830,11 +820,8 @@ re_compile_fastmap_aux(code, pos, visited, can_be_null, fastmap)
 	}
 }
 
-static int re_do_compile_fastmap PROTO((char *, int, int, char *, char *));
 static int
-re_do_compile_fastmap(buffer, used, pos, can_be_null, fastmap)
-    char *buffer, *fastmap, *can_be_null;
-    int used, pos;
+re_do_compile_fastmap(char *buffer, int used, int pos, char *can_be_null, char *fastmap)
 {
     char small_visited[512], *visited;
 
@@ -855,8 +842,7 @@ re_do_compile_fastmap(buffer, used, pos, can_be_null, fastmap)
 }
 
 void
-re_compile_fastmap(bufp)
-    regexp_t bufp;
+re_compile_fastmap(regexp_t bufp)
 {
     if (!bufp->fastmap || bufp->fastmap_accurate)
 	return;
@@ -878,11 +864,7 @@ re_compile_fastmap(bufp)
 
 
 int
-re_match_2(bufp, string1, size1, string2, size2, pos, regs, mstop)
-    regexp_t bufp;
-    char *string1, *string2;
-    int size1, size2, pos, mstop;
-    regexp_registers_t regs;
+re_match_2(regexp_t bufp, char *string1, int size1, char *string2, int size2, int pos, regexp_registers_t regs, int mstop)
 {
     struct failure_point {
 	char *text, *partend, *code;
@@ -1342,22 +1324,14 @@ re_match_2(bufp, string1, size1, string2, size2, pos, regs, mstop)
 #undef PUSH_FAILURE
 
 int
-re_match(bufp, string, size, pos, regs)
-    regexp_t bufp;
-    char *string;
-    int size, pos;
-    regexp_registers_t regs;
+re_match(regexp_t bufp, char *string, int size, int pos, regexp_registers_t regs)
 {
     return re_match_2(bufp, string, size, (char *) NULL, 0, pos, regs, size);
 }
 
 int
-re_search_2(bufp, string1, size1, string2, size2, pos, range, regs,
-	    mstop)
-    regexp_t bufp;
-    char *string1, *string2;
-    int size1, size2, pos, range, mstop;
-    regexp_registers_t regs;
+re_search_2(regexp_t bufp, char *string1, int size1, char *string2, int size2, int pos, int range,
+        regexp_registers_t regs, int mstop)
 {
     char *fastmap, *translate, *text, *partstart, *partend;
     int dir, ret;
@@ -1453,11 +1427,7 @@ re_search_2(bufp, string1, size1, string2, size2, pos, range, regs,
 }
 
 int
-re_search(bufp, string, size, startpos, range, regs)
-    regexp_t bufp;
-    char *string;
-    int size, startpos, range;
-    regexp_registers_t regs;
+re_search(regexp_t bufp, char *string, int size, int startpos, int range, regexp_registers_t regs)
 {
     return re_search_2(bufp, string, size, (char *) NULL, 0,
 		       startpos, range, regs, size);
@@ -1468,8 +1438,7 @@ re_search(bufp, string, size, startpos, range, regs)
 static struct re_pattern_buffer re_comp_buf;
 
 char *
-re_comp(s)
-    char *s;
+re_comp(char *s)
 {
     if (s == NULL) {
 	if (!re_comp_buf.buffer)
@@ -1487,8 +1456,7 @@ re_comp(s)
 }
 
 int
-re_exec(s)
-    char *s;
+re_exec(char *s)
 {
     int len = strlen(s);
 
