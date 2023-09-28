@@ -8,6 +8,7 @@ fn main() {
         .flag("-Wno-sign-compare")
         .flag("-Wno-implicit-function-declaration")
         .flag("-Wno-implicit-fallthrough")
+        .flag("-std=c2x")
         .include("c_src")
         .compile("regexpr");
 

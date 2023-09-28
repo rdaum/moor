@@ -84,7 +84,7 @@ int re_match_2(regexp_t compiled, char *string1, int size1,
 
 int re_search(regexp_t compiled, char *string, int size, int startpos,
 	      int range, regexp_registers_t regs);
-/* This rearches for a substring matching the regexp.  This returns the first
+/* This searches for a substring matching the regexp.  This returns the first
    index at which a match is found.  range specifies at how many positions to
    try matching; positive values indicate searching forwards, and negative
    values indicate searching backwards.  mstop specifies the offset beyond

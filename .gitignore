@@ -1,3 +1,7 @@
 target/
 .vscode/
 
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/moor.iml
+/.idea/vcs.xml
