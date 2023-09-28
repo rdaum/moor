@@ -6,9 +6,11 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-bincode.workspace = true
+# Own
 moor-values = { path = "../values" }
+
 thiserror.workspace = true
+bincode.workspace = true
 tmq.workspace = true
 uuid.workspace = true
 tracing.workspace = true

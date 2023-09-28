@@ -7,33 +7,18 @@ repository.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-inventory.workspace = true
-test-case.workspace = true
-unindent.workspace = true
-pretty_assertions.workspace = true
-
 
 [dependencies]
-
 ## Own
 moor-values = { path = "../values" }
 
 ## General usefullness
-itertools.workspace = true
-lazy_static.workspace = true
-enum-primitive-derive.workspace = true
 async-trait.workspace = true
-decorum.workspace = true
-text_io.workspace = true
-bytes.workspace = true
 strum.workspace = true
 uuid.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true
-
-## For macro-ing
-paste.workspace = true
 
 ## Asynchrony and/or networking
 tokio.workspace = true
@@ -43,7 +28,6 @@ tokio-test.workspace = true
 tracing.workspace = true
 tracing-test.workspace = true
 metrics.workspace = true
-metrics-util.workspace = true
 metrics-macros.workspace = true
 
 # For the DB layer.
