@@ -40,6 +40,10 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
         return Err(E_TYPE);
     };
 
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
+
     let verb_info = match bf_args.args[1].variant() {
         Variant::Str(verb_desc) => bf_args
             .world_state
@@ -182,6 +186,10 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     }
     let update_attrs = parse_verb_info(info)?;
 
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
+
     match bf_args.args[1].variant() {
         Variant::Str(verb_name) => {
             bf_args
@@ -221,6 +229,10 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
+
     let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
         Ok(v) => v,
         Err(e) => return Err(e),
@@ -274,6 +286,10 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     if verbinfo.len() != 3 {
         return Err(E_INVARG);
     }
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
+
     let args = parse_verb_args(verbinfo)?;
 
     let update_attrs = VerbAttrs {
@@ -324,6 +340,10 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
+
     // Verify caller is a programmer.
     if !bf_args
         .task_perms()
@@ -396,6 +416,10 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
+
     // Verify caller is a programmer.
     if !bf_args
         .task_perms()
@@ -476,6 +500,9 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::List(args) = bf_args.args[2].variant() else {
         return Err(E_TYPE);
     };
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
 
     // Verify caller is a programmer.
     if !bf_args
@@ -517,6 +544,9 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
 
     // Verify caller is a programmer.
     if !bf_args
@@ -556,6 +586,9 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
+    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+        return Err(E_INVARG);
+    }
 
     let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
         Ok(v) => v,

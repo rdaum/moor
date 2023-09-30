@@ -5,7 +5,7 @@ use metrics_macros::increment_counter;
 use tokio::select;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::world_state::WorldState;
@@ -454,7 +454,8 @@ impl Task {
                             ));
                         };
                         let words = parse_into_words(&command);
-                        info!(?verb_info, ?player, ?player_location, args = ?words, "Dispatching to :huh");
+                        trace!(?verb_info, ?player, ?player_location, args = ?words,
+                            "Dispatching to :huh");
 
                         (verb_info, player_location)
                     }

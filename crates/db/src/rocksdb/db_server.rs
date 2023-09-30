@@ -10,12 +10,13 @@ use moor_values::model::world_state::{WorldState, WorldStateSource};
 use moor_values::model::WorldStateError;
 use moor_values::SYSTEM_OBJECT;
 
-use crate::db_client::DbTxClient;
+use crate::channel_db_tx_client::DbTxChannelClient;
+use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
 use crate::rocksdb::tx_db_impl::oid_key;
 use crate::rocksdb::tx_server::run_tx_server;
 use crate::rocksdb::ColumnFamilies;
-use crate::{Database, DbTxWorldState};
+use crate::Database;
 
 // Rocks implementation of 'WorldStateSource' -- opens the physical database and provides
 // transactional 'WorldState' implementations for each new transaction.
@@ -70,7 +71,7 @@ impl RocksDbServer {
         });
         Ok(DbTxWorldState {
             join_handle: jh,
-            client: DbTxClient::new(send),
+            tx: Box::new(DbTxChannelClient::new(send)),
         })
     }
 }

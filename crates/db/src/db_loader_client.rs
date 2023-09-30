@@ -11,8 +11,8 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
+use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
-use crate::DbTxWorldState;
 
 #[async_trait]
 impl LoaderInterface for DbTxWorldState {
@@ -21,16 +21,16 @@ impl LoaderInterface for DbTxWorldState {
         objid: Option<Objid>,
         attrs: &ObjAttrs,
     ) -> Result<Objid, WorldStateError> {
-        Ok(self.client.create_object(objid, attrs.clone()).await?)
+        Ok(self.tx.create_object(objid, attrs.clone()).await?)
     }
     async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError> {
-        Ok(self.client.set_parent(obj, parent).await?)
+        Ok(self.tx.set_parent(obj, parent).await?)
     }
     async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), WorldStateError> {
-        Ok(self.client.set_location_of(o, location).await?)
+        Ok(self.tx.set_location_of(o, location).await?)
     }
     async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
-        Ok(self.client.set_object_owner(obj, owner).await?)
+        Ok(self.tx.set_object_owner(obj, owner).await?)
     }
     async fn add_verb(
         &self,
@@ -41,7 +41,7 @@ impl LoaderInterface for DbTxWorldState {
         args: VerbArgsSpec,
         binary: Vec<u8>,
     ) -> Result<(), WorldStateError> {
-        self.client
+        self.tx
             .add_verb(
                 obj,
                 owner,
@@ -56,7 +56,7 @@ impl LoaderInterface for DbTxWorldState {
     }
     async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, WorldStateError> {
         Ok(self
-            .client
+            .tx
             .get_properties(obj)
             .await?
             .find_first_named(pname)
@@ -71,7 +71,7 @@ impl LoaderInterface for DbTxWorldState {
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
-        self.client
+        self.tx
             .define_property(definer, objid, propname.to_string(), owner, flags, value)
             .await?;
         Ok(())
@@ -86,26 +86,24 @@ impl LoaderInterface for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         // First find the property.
         let (propdef, _) = self
-            .client
+            .tx
             .resolve_property(objid, propname.to_string())
             .await?;
 
         // Now set the value if provided.
         if let Some(value) = value {
-            self.client
-                .set_property(objid, propdef.uuid(), value)
-                .await?;
+            self.tx.set_property(objid, propdef.uuid(), value).await?;
         }
 
         // And then set the flags and owner the child had.
-        self.client
+        self.tx
             .set_property_info(objid, propdef.uuid(), Some(owner), Some(flags), None)
             .await?;
         Ok(())
     }
 
     async fn commit(&self) -> Result<CommitResult, WorldStateError> {
-        let cr = self.client.commit().await?;
+        let cr = self.tx.commit().await?;
         Ok(cr)
     }
 }

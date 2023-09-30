@@ -1,10 +1,11 @@
 /// "local" in-memory transient "db" implementation. For testing.
 /// no persistence, no transactions, just a write lock and some hash tables.
-use crate::db_client::DbTxClient;
+use crate::channel_db_tx_client::DbTxChannelClient;
 use crate::db_message::DbMessage;
+use crate::db_worldstate::DbTxWorldState;
 use crate::inmemtransient::transient_store::TransientStore;
 use crate::loader::LoaderInterface;
-use crate::{Database, DbTxWorldState};
+use crate::Database;
 use async_trait::async_trait;
 use crossbeam_channel::Receiver;
 use moor_values::model::world_state::{WorldState, WorldStateSource};
@@ -261,11 +262,11 @@ fn inmem_db_server(
 impl InMemTransientDatabase {
     pub fn tx(&self) -> Result<DbTxWorldState, WorldStateError> {
         let (tx, rx) = crossbeam_channel::unbounded();
-        let tx_client = DbTxClient { mailbox: tx };
+        let tx_client = DbTxChannelClient { mailbox: tx };
         let join_handle = inmem_db_server(self.db.clone(), rx);
         let tx_world_state = DbTxWorldState {
             join_handle,
-            client: tx_client,
+            tx: Box::new(tx_client),
         };
         Ok(tx_world_state)
     }

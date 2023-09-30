@@ -1,28 +1,21 @@
 use std::sync::Arc;
-use std::thread;
-
 use strum::{Display, EnumIter, EnumString, EnumVariantNames};
 
-use crate::db_client::DbTxClient;
 use crate::inmemtransient::InMemTransientDatabase;
 use crate::loader::LoaderInterface;
 use crate::rocksdb::db_server::RocksDbServer;
 use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::WorldStateError;
 
-mod db_client;
+mod channel_db_tx_client;
 mod db_loader_client;
 mod db_message;
+mod db_tx;
 mod db_worldstate;
 pub mod inmemtransient;
 pub mod loader;
 pub mod mock;
 pub mod rocksdb;
-
-pub struct DbTxWorldState {
-    pub join_handle: thread::JoinHandle<()>,
-    client: DbTxClient,
-}
 
 /// Enumeration of potential database backends.
 #[derive(Debug, Display, EnumString, EnumVariantNames, EnumIter, Clone, Copy)]

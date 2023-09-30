@@ -630,6 +630,8 @@ mod tests {
         v_list(vec![v_int(4), v_int(10)]); "for range loop")]
     #[test_case("x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};" , 
         v_list(vec![v_int(4), v_int(10)]); "for list loop")]
+    #[test_case(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#, 
+        v_int(666); "verb_info invalid object error")]
     fn test_run(program: &str, expected_result: Var) {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()

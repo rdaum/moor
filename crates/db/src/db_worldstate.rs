@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::db_tx::DbTransaction;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -20,8 +21,7 @@ use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, v_list, v_objid, Var};
 use moor_values::NOTHING;
-
-use crate::DbTxWorldState;
+use std::thread;
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.
@@ -41,22 +41,28 @@ use crate::DbTxWorldState;
 //    * if a tx commit fails, the (local) changes are discarded, and, again, the lock released
 //    * likely something that should get run through Jepsen
 
+pub struct DbTxWorldState {
+    pub join_handle: thread::JoinHandle<()>,
+    pub tx: Box<dyn DbTransaction + Send + Sync>,
+}
+
 impl DbTxWorldState {
     async fn perms(&self, who: Objid) -> Result<Perms, WorldStateError> {
         let flags = self.flags_of(who).await?;
         Ok(Perms { who, flags })
     }
 }
+
 #[async_trait]
 impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn owner_of(&self, obj: Objid) -> Result<Objid, WorldStateError> {
-        self.client.get_object_owner(obj).await
+        self.tx.get_object_owner(obj).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn flags_of(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
-        self.client.get_object_flags(obj).await
+        self.tx.get_object_flags(obj).await
     }
 
     async fn set_flags_of(
@@ -70,13 +76,13 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)
             .await?
             .check_object_allows(owner, flags, ObjFlag::Write)?;
-        self.client.set_object_flags(obj, new_flags).await
+        self.tx.set_object_flags(obj, new_flags).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn location_of(&self, _perms: Objid, obj: Objid) -> Result<Objid, WorldStateError> {
         // MOO permits location query even if the object is unreadable!
-        self.client.get_location_of(obj).await
+        self.tx.get_location_of(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -115,7 +121,7 @@ impl WorldState for DbTxWorldState {
             location: None,
             flags: Some(flags),
         };
-        self.client.create_object(None, attrs).await
+        self.tx.create_object(None, attrs).await
     }
 
     async fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError> {
@@ -124,11 +130,11 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, flags, ObjFlag::Write)?;
 
-        self.client.recycle_object(obj).await
+        self.tx.recycle_object(obj).await
     }
 
     async fn max_object(&self, _perms: Objid) -> Result<Objid, WorldStateError> {
-        self.client.get_max_object().await
+        self.tx.get_max_object().await
     }
 
     async fn move_object(
@@ -142,14 +148,14 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, flags, ObjFlag::Write)?;
 
-        self.client.set_location_of(obj, new_loc).await
+        self.tx.set_location_of(obj, new_loc).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn contents_of(&self, _perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
         // MOO does not do any perms checks on contents, pretty sure:
         // https://github.com/wrog/lambdamoo/blob/master/db_properties.c#L351
-        self.client.get_contents_of(obj).await
+        self.tx.get_contents_of(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -159,7 +165,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
-        Ok(self.client.get_verbs(obj).await?)
+        Ok(self.tx.get_verbs(obj).await?)
     }
 
     #[tracing::instrument(skip(self))]
@@ -169,7 +175,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, flags, ObjFlag::Read)?;
 
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         Ok(properties)
     }
 
@@ -240,7 +246,7 @@ impl WorldState for DbTxWorldState {
             };
         }
 
-        let (ph, value) = self.client.resolve_property(obj, pname.to_string()).await?;
+        let (ph, value) = self.tx.resolve_property(obj, pname.to_string()).await?;
         self.perms(perms)
             .await?
             .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
@@ -253,7 +259,7 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         pname: &str,
     ) -> Result<PropDef, WorldStateError> {
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         let ph = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
@@ -271,7 +277,7 @@ impl WorldState for DbTxWorldState {
         pname: &str,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         let ph = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
@@ -285,7 +291,7 @@ impl WorldState for DbTxWorldState {
         //   <prop-name>, as opposed to an inheritor of the property, then `clear_property()' raises
         //   `E_INVARG'
 
-        self.client
+        self.tx
             .set_property_info(obj, ph.uuid(), attrs.owner, attrs.flags, attrs.name)
             .await?;
         Ok(())
@@ -315,7 +321,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.client.set_object_name(obj, name.to_string()).await?;
+                self.tx.set_object_name(obj, name.to_string()).await?;
                 return Ok(());
             }
 
@@ -323,7 +329,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.client.set_object_owner(obj, *owner).await?;
+                self.tx.set_object_owner(obj, *owner).await?;
                 return Ok(());
             }
 
@@ -336,7 +342,7 @@ impl WorldState for DbTxWorldState {
                 } else {
                     flags.clear(ObjFlag::Read);
                 }
-                self.client.set_object_flags(obj, flags).await?;
+                self.tx.set_object_flags(obj, flags).await?;
                 return Ok(());
             }
 
@@ -349,7 +355,7 @@ impl WorldState for DbTxWorldState {
                 } else {
                     flags.clear(ObjFlag::Write);
                 }
-                self.client.set_object_flags(obj, flags).await?;
+                self.tx.set_object_flags(obj, flags).await?;
                 return Ok(());
             }
 
@@ -362,7 +368,7 @@ impl WorldState for DbTxWorldState {
                 } else {
                     flags.clear(ObjFlag::Fertile);
                 }
-                self.client.set_object_flags(obj, flags).await?;
+                self.tx.set_object_flags(obj, flags).await?;
                 return Ok(());
             }
         }
@@ -379,11 +385,11 @@ impl WorldState for DbTxWorldState {
                 flags.set(ObjFlag::Wizard);
             }
 
-            self.client.set_object_flags(obj, flags).await?;
+            self.tx.set_object_flags(obj, flags).await?;
             return Ok(());
         }
 
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         let ph = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
@@ -392,9 +398,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
-        self.client
-            .set_property(obj, ph.uuid(), value.clone())
-            .await?;
+        self.tx.set_property(obj, ph.uuid(), value.clone()).await?;
         Ok(())
     }
 
@@ -404,7 +408,7 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         pname: &str,
     ) -> Result<bool, WorldStateError> {
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         let ph = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
@@ -413,7 +417,7 @@ impl WorldState for DbTxWorldState {
             .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
 
         // Now RetrieveProperty and if it's not there, it's clear.
-        let result = self.client.retrieve_property(obj, ph.uuid()).await;
+        let result = self.tx.retrieve_property(obj, ph.uuid()).await;
         // What we want is an ObjectError::PropertyNotFound, that will tell us if it's clear.
         let is_clear = match result {
             Err(WorldStateError::PropertyNotFound(_, _)) => true,
@@ -431,7 +435,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         // This is just deleting the local *value* portion of the property.
         // First seek the property handle.
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         let ph = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
@@ -439,7 +443,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
-        self.client.clear_property(obj, ph.uuid()).await?;
+        self.tx.clear_property(obj, ph.uuid()).await?;
         Ok(())
     }
 
@@ -465,7 +469,7 @@ impl WorldState for DbTxWorldState {
             .check_object_allows(objowner, flags, ObjFlag::Write)?;
         self.perms(perms).await?.check_obj_owner_perms(propowner)?;
 
-        self.client
+        self.tx
             .define_property(
                 definer,
                 location,
@@ -485,7 +489,7 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         pname: &str,
     ) -> Result<(), WorldStateError> {
-        let properties = self.client.get_properties(obj).await?;
+        let properties = self.tx.get_properties(obj).await?;
         let ph = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
@@ -493,7 +497,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
 
-        self.client.delete_property(obj, ph.uuid()).await
+        self.tx.delete_property(obj, ph.uuid()).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -513,7 +517,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(obj_owner, objflags, ObjFlag::Write)?;
 
-        self.client
+        self.tx
             .add_verb(obj, owner, names, binary_type, binary, flags, args)
             .await?;
         Ok(())
@@ -526,7 +530,7 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         uuid: Uuid,
     ) -> Result<(), WorldStateError> {
-        let verbs = self.client.get_verbs(obj).await?;
+        let verbs = self.tx.get_verbs(obj).await?;
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
@@ -534,7 +538,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
 
-        self.client.delete_verb(obj, vh.uuid()).await?;
+        self.tx.delete_verb(obj, vh.uuid()).await?;
         Ok(())
     }
 
@@ -546,11 +550,11 @@ impl WorldState for DbTxWorldState {
         vname: &str,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
+        let vh = self.tx.get_verb_by_name(obj, vname.to_string()).await?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
-        self.client.update_verb(obj, vh.uuid(), verb_attrs).await?;
+        self.tx.update_verb(obj, vh.uuid(), verb_attrs).await?;
         Ok(())
     }
 
@@ -561,11 +565,11 @@ impl WorldState for DbTxWorldState {
         vidx: usize,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let vh = self.client.get_verb_by_index(obj, vidx).await?;
+        let vh = self.tx.get_verb_by_index(obj, vidx).await?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
-        self.client.update_verb(obj, vh.uuid(), verb_attrs).await?;
+        self.tx.update_verb(obj, vh.uuid(), verb_attrs).await?;
         Ok(())
     }
 
@@ -576,14 +580,14 @@ impl WorldState for DbTxWorldState {
         uuid: Uuid,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let verbs = self.client.get_verbs(obj).await?;
+        let verbs = self.tx.get_verbs(obj).await?;
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
-        self.client.update_verb(obj, vh.uuid(), verb_attrs).await?;
+        self.tx.update_verb(obj, vh.uuid(), verb_attrs).await?;
         Ok(())
     }
 
@@ -594,7 +598,11 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbDef, WorldStateError> {
-        let vh = self.client.get_verb_by_name(obj, vname.to_string()).await?;
+        if !self.tx.valid(obj).await? {
+            return Err(WorldStateError::ObjectNotFound(obj));
+        }
+
+        let vh = self.tx.get_verb_by_name(obj, vname.to_string()).await?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
@@ -608,7 +616,7 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vidx: usize,
     ) -> Result<VerbDef, WorldStateError> {
-        let vh = self.client.get_verb_by_index(obj, vidx).await?;
+        let vh = self.tx.get_verb_by_index(obj, vidx).await?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
@@ -621,17 +629,14 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         uuid: Uuid,
     ) -> Result<VerbInfo, WorldStateError> {
-        let verbs = self.client.get_verbs(obj).await?;
+        let verbs = self.tx.get_verbs(obj).await?;
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let binary = self
-            .client
-            .get_verb_binary(vh.location(), vh.uuid())
-            .await?;
+        let binary = self.tx.get_verb_binary(vh.location(), vh.uuid()).await?;
         Ok(VerbInfo::new(vh, SliceRef::from_vec(binary)))
     }
 
@@ -642,18 +647,12 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbInfo, WorldStateError> {
-        let vh = self
-            .client
-            .resolve_verb(obj, vname.to_string(), None)
-            .await?;
+        let vh = self.tx.resolve_verb(obj, vname.to_string(), None).await?;
         self.perms(perms)
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self
-            .client
-            .get_verb_binary(vh.location(), vh.uuid())
-            .await?;
+        let binary = self.tx.get_verb_binary(vh.location(), vh.uuid()).await?;
         Ok(VerbInfo::new(vh, SliceRef::from_vec(binary)))
     }
 
@@ -691,7 +690,7 @@ impl WorldState for DbTxWorldState {
         let argspec = VerbArgsSpec { dobj, prep, iobj };
 
         let vh = self
-            .client
+            .tx
             .resolve_verb(obj, command_verb.to_string(), Some(argspec))
             .await;
         let vh = match vh {
@@ -708,16 +707,13 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self
-            .client
-            .get_verb_binary(vh.location(), vh.uuid())
-            .await?;
+        let binary = self.tx.get_verb_binary(vh.location(), vh.uuid()).await?;
         Ok(Some(VerbInfo::new(vh, SliceRef::from_vec(binary))))
     }
 
     #[tracing::instrument(skip(self))]
     async fn parent_of(&self, _perms: Objid, obj: Objid) -> Result<Objid, WorldStateError> {
-        self.client.get_parent(obj).await
+        self.tx.get_parent(obj).await
     }
 
     async fn change_parent(
@@ -752,7 +748,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
 
-        self.client.set_parent(obj, new_parent).await
+        self.tx.set_parent(obj, new_parent).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -762,12 +758,12 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, objflags, ObjFlag::Read)?;
 
-        self.client.get_children(obj).await
+        self.tx.get_children(obj).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
-        self.client.valid(obj).await
+        self.tx.valid(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -778,7 +774,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(String, Vec<String>), WorldStateError> {
         // Another thing that MOO allows lookup of without permissions.
         // First get name
-        let name = self.client.get_object_name(obj).await?;
+        let name = self.tx.get_object_name(obj).await?;
 
         // Then grab aliases property.
         let aliases = match self.retrieve_property(perms, obj, "aliases").await {
@@ -798,11 +794,11 @@ impl WorldState for DbTxWorldState {
 
     #[tracing::instrument(skip(self))]
     async fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
-        self.client.commit().await
+        self.tx.commit().await
     }
 
     #[tracing::instrument(skip(self))]
     async fn rollback(&mut self) -> Result<(), WorldStateError> {
-        self.client.rollback().await
+        self.tx.rollback().await
     }
 }
