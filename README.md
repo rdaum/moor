@@ -30,18 +30,19 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 ### Current status / features
 
 * Pretty much feature complete / compatible with LambdaMOO 1.8.1 with a few caveats (see below)
+* See the current set of tracked bugs & features in the [issue tracker](https://github.com/rdaum/moor/issues).
 * Can load and run LambdaMOO 1.8.x cores.
 * Have tested against JaysHouseCore, and most of the functionality is there. Bugs are becoming increasingly rare.
 * Hosts websocket, "telnet" (classic line oriented TCP connection), and console connections. MCP clients work, with
-  remove editing, etc.
+  remote editing, etc. support.
 * Objects are stored in a concurrent transactional object database -- safe, consistent and happy. The architecture 
   allows for cleanly adding different storage backends for new scenarios.
 * Monitoring/metrics support via Prometheus-compatible export.
 * Separate network-host vs daemon process architecture means that upgrades/restarts can happen in-place without
   dropping live connections.
 
-Here's a screenshot of the `JaysHouseCore` world running in `moor`, connected to with the classic `rmoo` Emacs client,
-editing a MOO verb:
+Proof: here's a screenshot of the `JaysHouseCore` world running in `moor`, connected to with the classic `rmoo` Emacs client,
+editing a MOO verb in an emacs buffer with syntax highlighting:
 
 <img src="doc/screenshot-rmoo.png" alt="drawing" width="400"/>
 
@@ -49,9 +50,9 @@ editing a MOO verb:
 
 The easiest way to get started is to run the `docker compose` setup. This will bring up a complete server with `telnet`
 and `websocket` interfaces. The server will be setup with an initial `JaysHouseCore` core import, and will be set up with
-metrics monitoring via Grafana and VictoriaMetrics.
+metrics monitoring via Grafana and VictoriaMetrics. 
 
-To do this, take a look at the local `docker-compose.yml` file, instructions are there, but it really just amounts to:
+To run, take a look at the local `docker-compose.yml` file, instructions are there, but it really just amounts to:
 
 ```
     docker compose up
@@ -63,7 +64,11 @@ that should work fine. (A partial -- and probably outdated list of clients -- ca
 
 Once you're familiar with how the docker setup works, you can get more creative. 
 
-An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile`.
+Note this configuration is set up for a development -- it compiles in debug mode, and is to watch the source directory for changes, 
+recompile, and redeploy as needed.
+
+An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile` by
+removing the `cargo watch` pieces and adding `--release` etc.
 
 ### Why would I use this instead of the original LambdaMOO server?
 
@@ -81,11 +86,6 @@ An actual production deployment can be fairly easily derived from the `docker-co
     * Quota support.
     * Background tasks resumption after restart (from DB and from textdump load.)
     * Dump to a backup `textdump` format (or some stable backup format for between-version migrations.)
-    * `read`; This is used for prompts, password changes, editor, etc. It's slightly tricky
-      because of the 'transactional' nature of I/O in Moor where all verb and I/O operations
-      can be retried on transaction commit failure. Haven't decided what to do about this.
-    * Actual transaction retry on commit-conflict. (Mainly because without actual users and stress testing I haven't
-      been able to provoke this scenario to test against yet. The hooks are there, just not done.)
 * Improvements needed:
     * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog-slow
       without it
@@ -101,7 +101,7 @@ An actual production deployment can be fairly easily derived from the `docker-co
       output.
     * The alternative will be to provide a `binary` type that can be used for this purpose
       and to have special `notify` calls for emitting them to the client.
-* Network connections, outbound and inbound (e.g. `open_network_connection`, `listen`,  
+* MOO-programmable network connections, outbound and inbound (e.g. `open_network_connection`, `listen`,  
   `unlisten` etc). My intent is for the network service layer to be implemented at the Rust level, in the
   server daemon, not in MOO code.
 
