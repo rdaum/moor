@@ -34,3 +34,5 @@ metrics-macros.workspace = true
 rocksdb.workspace = true
 crossbeam-channel.workspace = true
 bincode.workspace = true
+im.workspace = true
+

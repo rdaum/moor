@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use strum::{Display, EnumIter, EnumString, EnumVariantNames};
 
-use crate::inmemtransient::InMemTransientDatabase;
+use crate::inmemtransient::InMemObjectDatabase;
 use crate::loader::LoaderInterface;
 use crate::rocksdb::db_server::RocksDbServer;
 use moor_values::model::world_state::WorldStateSource;
@@ -22,7 +22,7 @@ pub mod rocksdb;
 pub enum DatabaseType {
     /// Persistent transactional RocksDB backend.
     RocksDb,
-    /// Transient, non-transactional, in-memory only. Useful for testing only.
+    /// Transient (For now) but transactional, in-memory only. Useful for testing only.
     InMemTransient,
 }
 
@@ -65,7 +65,7 @@ impl DatabaseBuilder {
                 Ok((Box::new(db), fresh))
             }
             DatabaseType::InMemTransient => {
-                let db = InMemTransientDatabase::new();
+                let db = InMemObjectDatabase::new();
                 Ok((Box::new(db), true))
             }
         }

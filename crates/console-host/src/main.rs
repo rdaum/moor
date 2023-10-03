@@ -284,7 +284,7 @@ async fn console_loop(
             //   cleanliness. Need to figure out something for this.
             let input_request_id = input_request_id.lock().await.take();
             let prompt = if let Some(input_request_id) = input_request_id {
-                format!("{} > ", input_request_id.to_string())
+                format!("{} > ", input_request_id)
             } else {
                 "> ".to_string()
             };

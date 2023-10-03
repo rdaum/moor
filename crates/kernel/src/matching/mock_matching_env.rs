@@ -91,7 +91,7 @@ pub fn setup_mock_environment() -> MockMatchEnv {
         &mut env,
         MOCK_PLAYER,
         MOCK_ROOM1,
-        ObjSet::new(),
+        ObjSet::empty(),
         vec!["porcupine".to_string()],
     );
     create_mock_object(
@@ -112,21 +112,21 @@ pub fn setup_mock_environment() -> MockMatchEnv {
         &mut env,
         MOCK_THING1,
         MOCK_ROOM1,
-        ObjSet::new(),
+        ObjSet::empty(),
         vec!["thing1".to_string(), "t1".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_THING2,
         MOCK_ROOM1,
-        ObjSet::new(),
+        ObjSet::empty(),
         vec!["thing2".to_string(), "t2".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_THING3,
         MOCK_ROOM2,
-        ObjSet::new(),
+        ObjSet::empty(),
         vec!["thing3".to_string(), "t3".to_string()],
     );
 

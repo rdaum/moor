@@ -21,7 +21,6 @@ use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, v_list, v_objid, Var};
 use moor_values::NOTHING;
-use std::thread;
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.
@@ -42,7 +41,6 @@ use std::thread;
 //    * likely something that should get run through Jepsen
 
 pub struct DbTxWorldState {
-    pub join_handle: thread::JoinHandle<()>,
     pub tx: Box<dyn DbTransaction + Send + Sync>,
 }
 
@@ -82,7 +80,7 @@ impl WorldState for DbTxWorldState {
     #[tracing::instrument(skip(self))]
     async fn location_of(&self, _perms: Objid, obj: Objid) -> Result<Objid, WorldStateError> {
         // MOO permits location query even if the object is unreadable!
-        self.tx.get_location_of(obj).await
+        self.tx.get_object_location(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -148,14 +146,14 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, flags, ObjFlag::Write)?;
 
-        self.tx.set_location_of(obj, new_loc).await
+        self.tx.set_object_location(obj, new_loc).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn contents_of(&self, _perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
         // MOO does not do any perms checks on contents, pretty sure:
         // https://github.com/wrog/lambdamoo/blob/master/db_properties.c#L351
-        self.tx.get_contents_of(obj).await
+        self.tx.get_object_contents(obj).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -518,7 +516,7 @@ impl WorldState for DbTxWorldState {
             .check_object_allows(obj_owner, objflags, ObjFlag::Write)?;
 
         self.tx
-            .add_verb(obj, owner, names, binary_type, binary, flags, args)
+            .add_object_verb(obj, owner, names, binary, binary_type, flags, args)
             .await?;
         Ok(())
     }
@@ -598,7 +596,7 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         vname: &str,
     ) -> Result<VerbDef, WorldStateError> {
-        if !self.tx.valid(obj).await? {
+        if !self.tx.object_valid(obj).await? {
             return Err(WorldStateError::ObjectNotFound(obj));
         }
 
@@ -713,7 +711,7 @@ impl WorldState for DbTxWorldState {
 
     #[tracing::instrument(skip(self))]
     async fn parent_of(&self, _perms: Objid, obj: Objid) -> Result<Objid, WorldStateError> {
-        self.tx.get_parent(obj).await
+        self.tx.get_object_parent(obj).await
     }
 
     async fn change_parent(
@@ -748,7 +746,7 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, objflags, ObjFlag::Write)?;
 
-        self.tx.set_parent(obj, new_parent).await
+        self.tx.set_object_parent(obj, new_parent).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -758,12 +756,12 @@ impl WorldState for DbTxWorldState {
             .await?
             .check_object_allows(owner, objflags, ObjFlag::Read)?;
 
-        self.tx.get_children(obj).await
+        self.tx.get_object_children(obj).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
-        self.tx.valid(obj).await
+        self.tx.object_valid(obj).await
     }
 
     #[tracing::instrument(skip(self))]

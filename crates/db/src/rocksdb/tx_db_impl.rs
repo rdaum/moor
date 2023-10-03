@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[b]));
 
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
-        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::new());
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
 
         // Add a second child
         let c = tx
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[b, c]));
 
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
-        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::new());
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
 
         // Create new obj and reparent one child
         let d = tx
@@ -344,17 +344,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(tx.descendants(a).unwrap(), ObjSet::from(&[b, c, d]));
-        assert_eq!(tx.descendants(b).unwrap(), ObjSet::new());
+        assert_eq!(tx.descendants(b).unwrap(), ObjSet::empty());
         assert_eq!(tx.descendants(c).unwrap(), ObjSet::from(&[d]));
 
         // Now reparent d to b
         tx.set_object_parent(d, b).unwrap();
         assert_eq!(tx.get_object_children(a).unwrap(), ObjSet::from(&[b, c]));
         assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from(&[d]));
-        assert_eq!(tx.get_object_children(c).unwrap(), ObjSet::new());
+        assert_eq!(tx.get_object_children(c).unwrap(), ObjSet::empty());
         assert_eq!(tx.descendants(a).unwrap(), ObjSet::from(&[b, c, d]));
         assert_eq!(tx.descendants(b).unwrap(), ObjSet::from(&[d]));
-        assert_eq!(tx.descendants(c).unwrap(), ObjSet::new());
+        assert_eq!(tx.descendants(c).unwrap(), ObjSet::empty());
     }
 
     #[test]
@@ -391,7 +391,7 @@ mod tests {
         assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[b]));
 
         assert_eq!(tx.get_object_location(a).unwrap(), NOTHING);
-        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::new());
+        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
 
         let c = tx
             .create_object(
@@ -408,7 +408,7 @@ mod tests {
 
         tx.set_object_location(b, c).unwrap();
         assert_eq!(tx.get_object_location(b).unwrap(), c);
-        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::new());
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
 
         let d = tx
@@ -644,7 +644,7 @@ mod tests {
         );
 
         let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
-        assert_eq!(tx.get_binary(a, v_uuid).unwrap(), vec![]);
+        assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
     }
 
     #[test]

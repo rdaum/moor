@@ -8,7 +8,7 @@ use binary_layout::{define_layout, Field};
 use bytes::{Buf, BufMut};
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PropDef(SliceRef);
 
 define_layout!(propdef, LittleEndian, {

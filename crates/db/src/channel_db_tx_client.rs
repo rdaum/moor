@@ -106,37 +106,41 @@ impl DbTransaction for DbTxChannelClient {
         get_reply(receive).await?;
         Ok(())
     }
-    async fn get_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
+    async fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::GetParentOf(obj, send))?;
         let oid = get_reply(receive).await?;
         Ok(oid)
     }
-    async fn set_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError> {
+    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::SetParent(obj, parent, send))?;
         get_reply(receive).await?;
         Ok(())
     }
-    async fn get_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+    async fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::GetChildrenOf(obj, send))?;
         let children = get_reply(receive).await?;
         Ok(children)
     }
-    async fn get_location_of(&self, obj: Objid) -> Result<Objid, WorldStateError> {
+    async fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::GetLocationOf(obj, send))?;
         let oid = get_reply(receive).await?;
         Ok(oid)
     }
-    async fn set_location_of(&self, obj: Objid, location: Objid) -> Result<(), WorldStateError> {
+    async fn set_object_location(
+        &self,
+        obj: Objid,
+        location: Objid,
+    ) -> Result<(), WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::SetLocationOf(obj, location, send))?;
         get_reply(receive).await?;
         Ok(())
     }
-    async fn get_contents_of(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+    async fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.send(DbMessage::GetContentsOf(obj, send))?;
         let contents = get_reply(receive).await?;
@@ -226,13 +230,13 @@ impl DbTransaction for DbTxChannelClient {
         }
         Ok(())
     }
-    async fn add_verb(
+    async fn add_object_verb(
         &self,
         location: Objid,
         owner: Objid,
         names: Vec<String>,
-        binary_type: BinaryType,
         binary: Vec<u8>,
+        binary_type: BinaryType,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
     ) -> Result<(), WorldStateError> {
@@ -347,7 +351,7 @@ impl DbTransaction for DbTxChannelClient {
         let (prop, value) = get_reply(receive).await?;
         Ok((prop, value))
     }
-    async fn valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
+    async fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
         if obj.0 < 0 {
             return Ok(false);
         }

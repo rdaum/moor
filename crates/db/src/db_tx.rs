@@ -33,12 +33,13 @@ pub trait DbTransaction {
     ) -> Result<Objid, WorldStateError>;
     async fn recycle_object(&self, obj: Objid) -> Result<(), WorldStateError>;
     async fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError>;
-    async fn get_parent(&self, obj: Objid) -> Result<Objid, WorldStateError>;
-    async fn set_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError>;
-    async fn get_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError>;
-    async fn get_location_of(&self, obj: Objid) -> Result<Objid, WorldStateError>;
-    async fn set_location_of(&self, obj: Objid, location: Objid) -> Result<(), WorldStateError>;
-    async fn get_contents_of(&self, obj: Objid) -> Result<ObjSet, WorldStateError>;
+    async fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError>;
+    async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError>;
+    async fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError>;
+    async fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError>;
+    async fn set_object_location(&self, obj: Objid, location: Objid)
+        -> Result<(), WorldStateError>;
+    async fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError>;
     async fn get_max_object(&self) -> Result<Objid, WorldStateError>;
     async fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError>;
     // TODO: this could return SliceRef or an Arc<Vec<u8>>, to potentially avoid copying. Though
@@ -60,13 +61,13 @@ pub trait DbTransaction {
         uuid: Uuid,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError>;
-    async fn add_verb(
+    async fn add_object_verb(
         &self,
         location: Objid,
         owner: Objid,
         names: Vec<String>,
-        binary_type: BinaryType,
         binary: Vec<u8>,
+        binary_type: BinaryType,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
     ) -> Result<(), WorldStateError>;
@@ -99,7 +100,7 @@ pub trait DbTransaction {
         obj: Objid,
         name: String,
     ) -> Result<(PropDef, Var), WorldStateError>;
-    async fn valid(&self, obj: Objid) -> Result<bool, WorldStateError>;
+    async fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError>;
     async fn commit(&self) -> Result<CommitResult, WorldStateError>;
     async fn rollback(&self) -> Result<(), WorldStateError>;
 }

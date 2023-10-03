@@ -89,10 +89,11 @@ thiserror = "1.0.47"
 ## For macro-ing
 paste = "1.0.12"
 
-# For the DB layer.
+# For the DB / values layer.
 rocksdb = "0.21.0"
 crossbeam-channel = "0.5.8"
 bincode = "2.0.0-rc.3"
+im = "15.1.0"
 
 # Dev dependencies
 tempfile = "3.8.0"

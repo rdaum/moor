@@ -78,7 +78,7 @@ impl Iterator for ObjSetIter {
 
 impl ObjSet {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         EMPTY_OBJSET.clone()
     }
 
@@ -216,6 +216,6 @@ impl ObjSet {
 
 impl Default for ObjSet {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }

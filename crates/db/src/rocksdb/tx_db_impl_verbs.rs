@@ -152,7 +152,7 @@ impl<'a> RocksDbTx<'a> {
             .ok_or_else(|| WorldStateError::VerbNotFound(o, format!("{}", i)))
     }
     #[tracing::instrument(skip(self))]
-    pub fn get_binary(&self, o: Objid, v: Uuid) -> Result<Vec<u8>, WorldStateError> {
+    pub fn get_verb_binary(&self, o: Objid, v: Uuid) -> Result<Vec<u8>, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::VerbProgram as u8) as usize];
         let ok = composite_key_uuid(o, &v);
         let prg_bytes = self.tx.get_cf(cf, ok).expect("Unable to get verb program");

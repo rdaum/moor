@@ -24,10 +24,10 @@ impl LoaderInterface for DbTxWorldState {
         Ok(self.tx.create_object(objid, attrs.clone()).await?)
     }
     async fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError> {
-        Ok(self.tx.set_parent(obj, parent).await?)
+        Ok(self.tx.set_object_parent(obj, parent).await?)
     }
     async fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), WorldStateError> {
-        Ok(self.tx.set_location_of(o, location).await?)
+        Ok(self.tx.set_object_location(o, location).await?)
     }
     async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
         Ok(self.tx.set_object_owner(obj, owner).await?)
@@ -42,12 +42,12 @@ impl LoaderInterface for DbTxWorldState {
         binary: Vec<u8>,
     ) -> Result<(), WorldStateError> {
         self.tx
-            .add_verb(
+            .add_object_verb(
                 obj,
                 owner,
                 names.iter().map(|s| s.to_string()).collect(),
-                BinaryType::LambdaMoo18X,
                 binary,
+                BinaryType::LambdaMoo18X,
                 flags,
                 args,
             )

@@ -124,7 +124,7 @@ pub(crate) fn run_tx_server<'a>(
                 respond(r, tx.get_verb_by_index(o, i))?;
             }
             DbMessage::GetVerbBinary(o, v, r) => {
-                respond(r, tx.get_binary(o, v))?;
+                respond(r, tx.get_verb_binary(o, v))?;
             }
             DbMessage::ResolveVerb {
                 location: o,

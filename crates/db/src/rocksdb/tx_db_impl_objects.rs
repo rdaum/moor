@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::TryInto;
 
 use moor_values::model::defset::HasUuid;
@@ -62,9 +62,9 @@ impl<'a> RocksDbTx<'a> {
 
         // Establish initial `contents` and `children` vectors, initially empty.
         let c_cf = cf_for(&self.cf_handles, ColumnFamilies::ObjectContents);
-        set_objset(c_cf, &self.tx, oid, ObjSet::new())?;
+        set_objset(c_cf, &self.tx, oid, ObjSet::empty())?;
 
-        self.update_object_children(oid, ObjSet::new())?;
+        self.update_object_children(oid, ObjSet::empty())?;
 
         if let Some(parent) = attrs.parent {
             self.set_object_parent(oid, parent)?;
@@ -262,7 +262,7 @@ impl<'a> RocksDbTx<'a> {
     #[tracing::instrument(skip(self))]
     pub fn get_object_children(&self, o: Objid) -> Result<ObjSet, WorldStateError> {
         let cf = self.cf_handles[(ColumnFamilies::ObjectChildren as u8) as usize];
-        Ok(get_objset(cf, &self.tx, o).unwrap_or_else(|_| ObjSet::new()))
+        Ok(get_objset(cf, &self.tx, o).unwrap_or_else(|_| ObjSet::empty()))
     }
     #[tracing::instrument(skip(self))]
     pub fn get_object_name(&self, o: Objid) -> Result<String, WorldStateError> {
@@ -381,7 +381,7 @@ impl<'a> RocksDbTx<'a> {
 
         // Get and add to contents of new location.
         let new_contents = get_objset(c_cf, &self.tx, new_location)
-            .unwrap_or_else(|_| ObjSet::new())
+            .unwrap_or_else(|_| ObjSet::empty())
             .with_inserted(what);
         set_objset(c_cf, &self.tx, new_location, new_contents)?;
         Ok(())
@@ -492,26 +492,15 @@ impl<'a> RocksDbTx<'a> {
     }
 
     pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let mut search_queue = vec![obj];
+        let mut descendants = vec![];
+        let mut queue: VecDeque<_> = self.get_object_children(obj).unwrap().iter().collect();
+        while let Some(o) = queue.pop_front() {
+            descendants.push(o);
+            let children = self.get_object_children(o)?;
+            queue.extend(children.iter());
+        }
 
-        let all_children = std::iter::from_fn(move || {
-            while let Some(search_obj) = search_queue.pop() {
-                match self.get_object_children(search_obj) {
-                    Ok(new_children) => {
-                        // Add new children to the search queue
-                        search_queue.extend(new_children.iter());
-
-                        // Extend the iterator with new children
-                        return Some(new_children.iter());
-                    }
-                    Err(_) => continue,
-                }
-            }
-            None
-        })
-        .flatten();
-
-        Ok(ObjSet::from_oid_iter(all_children))
+        Ok(ObjSet::from(&descendants))
     }
 
     fn update_object_children(

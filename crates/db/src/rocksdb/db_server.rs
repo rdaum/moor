@@ -58,7 +58,7 @@ impl RocksDbServer {
         // Spawn a thread to handle the transaction, and return a mailbox to it.
         let (send, receive) = crossbeam_channel::unbounded();
         let db = self.db.clone();
-        let jh = spawn(move || {
+        spawn(move || {
             // Open up all the column families.
             let column_families = ColumnFamilies::VARIANTS
                 .iter()
@@ -70,7 +70,6 @@ impl RocksDbServer {
             run_tx_server(receive, tx, column_families.collect()).expect("Error running tx server");
         });
         Ok(DbTxWorldState {
-            join_handle: jh,
             tx: Box::new(DbTxChannelClient::new(send)),
         })
     }

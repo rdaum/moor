@@ -1,12 +1,13 @@
 use moor_compiler::codegen::compile;
 use moor_compiler::opcode::Program;
-use moor_db::inmemtransient::InMemTransientDatabase;
+use moor_db::inmemtransient::InMemObjectDatabase;
+use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
 use moor_kernel::textdump::load_db::textdump_load;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbs::{BinaryType, VerbFlag};
-use moor_values::model::world_state::{WorldState, WorldStateSource};
+use moor_values::model::world_state::WorldStateSource;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
@@ -18,11 +19,11 @@ fn testsuite_dir() -> PathBuf {
     Path::new(manifest_dir).join("testsuite")
 }
 
-// Create a minimal Db to support the test harness.
-async fn load_db(db: &mut InMemTransientDatabase) {
-    let mut tx = db.tx().unwrap();
+/// Create a minimal Db to support the test harness.
+async fn load_db(db: &mut InMemObjectDatabase) {
+    let mut tx = db.loader_client().unwrap();
     textdump_load(
-        &mut tx,
+        tx.as_mut(),
         testsuite_dir().join("Minimal.db").to_str().unwrap(),
     )
     .await
@@ -30,8 +31,8 @@ async fn load_db(db: &mut InMemTransientDatabase) {
     tx.commit().await.unwrap();
 }
 
-async fn compile_verbs(db: &mut InMemTransientDatabase, verbs: &[(&str, &Program)]) {
-    let mut tx = db.tx().unwrap();
+async fn compile_verbs(db: &mut InMemObjectDatabase, verbs: &[(&str, &Program)]) {
+    let mut tx = db.new_world_state().await.unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec();
         tx.add_verb(
@@ -50,7 +51,7 @@ async fn compile_verbs(db: &mut InMemTransientDatabase, verbs: &[(&str, &Program
     tx.commit().await.unwrap();
 }
 
-async fn eval(db: &mut InMemTransientDatabase, expression: &str) -> Var {
+async fn eval(db: &mut InMemObjectDatabase, expression: &str) -> Var {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     compile_verbs(db, &[("test", &binary)]).await;
     let mut state = db.new_world_state().await.unwrap();
@@ -86,8 +87,9 @@ async fn run_basic_test(test_dir: &str) {
     // Zip
     let zipped = in_lines.zip(out_lines);
 
-    // Frustratingly the tests are not independent, so we need to run them in a single database.
-    let mut db = InMemTransientDatabase::new();
+    // Frustratingly the individual test lines are not independent, so we need to run them in a
+    // single database.
+    let mut db = InMemObjectDatabase::new();
     load_db(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await;

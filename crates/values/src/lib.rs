@@ -38,7 +38,6 @@ pub trait AsByteBuffer {
     /// Create a value from the given bytes.
     /// Either takes ownership or moves.
     fn from_sliceref(bytes: SliceRef) -> Self;
-    // TODO from_byte_buffer (Bytes) ? may not be needed.
 }
 
 lazy_static! {

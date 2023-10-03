@@ -35,7 +35,7 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 * Have tested against JaysHouseCore, and most of the functionality is there. Bugs are becoming increasingly rare.
 * Hosts websocket, "telnet" (classic line oriented TCP connection), and console connections. MCP clients work, with
   remote editing, etc. support.
-* Objects are stored in a concurrent transactional object database -- safe, consistent and happy. The architecture 
+* Objects are stored in a concurrent transactional object database -- safe, consistent and happy. The architecture
   allows for cleanly adding different storage backends for new scenarios.
 * Monitoring/metrics support via Prometheus-compatible export.
 * Separate network-host vs daemon process architecture means that upgrades/restarts can happen in-place without
@@ -50,7 +50,7 @@ editing a MOO verb in an emacs buffer with syntax highlighting:
 
 The easiest way to get started is to run the `docker compose` setup. This will bring up a complete server with `telnet`
 and `websocket` interfaces. The server will be setup with an initial `JaysHouseCore` core import, and will be set up with
-metrics monitoring via Grafana and VictoriaMetrics. 
+metrics monitoring via Grafana and VictoriaMetrics.
 
 To run, take a look at the local `docker-compose.yml` file, instructions are there, but it really just amounts to:
 
@@ -58,13 +58,13 @@ To run, take a look at the local `docker-compose.yml` file, instructions are the
     docker compose up
 ```
 
-Then connect (with your favourite MUD/MOO client) to `localhost:8888` and follow the login instauctions. Classic 
-clients like `TinyFugue` will work fine, and there are some newer clients like [BlightMud](https://github.com/Blightmud/Blightmud) 
+Then connect (with your favourite MUD/MOO client) to `localhost:8888` and follow the login instauctions. Classic
+clients like `TinyFugue` will work fine, and there are some newer clients like [BlightMud](https://github.com/Blightmud/Blightmud)
 that should work fine. (A partial -- and probably outdated list of clients -- can be found here: https://lisdude.com/moo/#clients)
 
-Once you're familiar with how the docker setup works, you can get more creative. 
+Once you're familiar with how the docker setup works, you can get more creative.
 
-Note this configuration is set up for a development -- it compiles in debug mode, and is to watch the source directory for changes, 
+Note this configuration is set up for a development -- it compiles in debug mode, and is to watch the source directory for changes,
 recompile, and redeploy as needed.
 
 An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile` by
@@ -109,29 +109,29 @@ removing the `cargo watch` pieces and adding `--release` etc.
 
 The following are targeted as eventual goals / additions once 1.0 (fall 2023) is out the door:
 
-   * A richer front-end experience. Support for websockets as a connection method means that the server can provide 
-   a richer narrative stream to browsers (with in-core support assistance.) A client which provides a full proper 
-   UI experience with interactive UI components, graphical elements, and so on are the end-goal here.
-   * Support for multiple programming language for programming MOO verbs/objects. The backend has been written such that
-     this is feasible. Authoring verbs in JavaScript/TypeScript will be the first target, and WebAssembly modules are
-     also a possibility. These verbs would still run within the same shared environment and use the same shared object
-     environment, but would allow for a more modern programming experience.
-   * A more scalable server architecture; the system right now is divided into separate "host" frontends for network  
-     connections, and a common backend `daemon` which manages the database, virtual machine, and task scheduler. This
-     can be further split up to permit a distributed database backend or distributing other components, to meet higher
-     scalability goals if that is needed.
-   * Enhancements to the MOO data model and language, to support a richer / smoother authoring experience. Some ideas 
-     are:
-     * Datalog-style relations / predicates; for managing logical relationships between entities. This could allow
-       bidirectional (or more) relationships like already exist with e.g. `location`/`contents`, but more generalized,
-       and to allow for making complex worlds easier to maintain.
-     * Adding a map/dictionary type. MOO predates the existence of dictionary types as a standard type in most languages.  
-       MOO's type system only has lists and uses "associative lists" for maps, which are a bit awkward. Immutable/CoW
-       maps with an explicit syntax would be a nice addition. Other MOO offshoots (Stunt, etc.) do already provided this.
-     * Adding a `binary` type. MOO's type system is very string-oriented, and there's not an elegant way to represent
-       arbitrary binary data. (There's `encode_binary` and `decode_binary` builtins, but these are not the way I'd do it
-       today.)
-     * and so on
+* A richer front-end experience. Support for websockets as a connection method means that the server can provide
+  a richer narrative stream to browsers (with in-core support assistance.) A client which provides a full proper
+  UI experience with interactive UI components, graphical elements, and so on are the end-goal here.
+* Support for multiple programming language for programming MOO verbs/objects. The backend has been written such that
+  this is feasible. Authoring verbs in JavaScript/TypeScript will be the first target, and WebAssembly modules are
+  also a possibility. These verbs would still run within the same shared environment and use the same shared object
+  environment, but would allow for a more modern programming experience.
+* A more scalable server architecture; the system right now is divided into separate "host" frontends for network  
+  connections, and a common backend `daemon` which manages the database, virtual machine, and task scheduler. This
+  can be further split up to permit a distributed database backend or distributing other components, to meet higher
+  scalability goals if that is needed.
+* Enhancements to the MOO data model and language, to support a richer / smoother authoring experience. Some ideas
+  are:
+    * Datalog-style relations / predicates; for managing logical relationships between entities. This could allow
+      bidirectional (or more) relationships like already exist with e.g. `location`/`contents`, but more generalized,
+      and to allow for making complex worlds easier to maintain.
+    * Adding a map/dictionary type. MOO predates the existence of dictionary types as a standard type in most languages.  
+      MOO's type system only has lists and uses "associative lists" for maps, which are a bit awkward. Immutable/CoW
+      maps with an explicit syntax would be a nice addition. Other MOO offshoots (Stunt, etc.) do already provided this.
+    * Adding a `binary` type. MOO's type system is very string-oriented, and there's not an elegant way to represent
+      arbitrary binary data. (There's `encode_binary` and `decode_binary` builtins, but these are not the way I'd do it
+      today.)
+    * and so on
 
 ## License.
 

@@ -22,7 +22,7 @@ mod tests {
     use moor_compiler::labels::Names;
     use moor_compiler::opcode::Op::*;
     use moor_compiler::opcode::{Op, Program};
-    use moor_db::inmemtransient::InMemTransientDatabase;
+    use moor_db::inmemtransient::InMemObjectDatabase;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -37,8 +37,8 @@ mod tests {
     }
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
-    async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemTransientDatabase {
-        let state = InMemTransientDatabase::new();
+    async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> InMemObjectDatabase {
+        let state = InMemObjectDatabase::new();
         let mut tx = state.new_world_state().await.unwrap();
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
@@ -86,7 +86,7 @@ mod tests {
         state
     }
 
-    async fn test_db_with_verb(verb_name: &str, program: &Program) -> InMemTransientDatabase {
+    async fn test_db_with_verb(verb_name: &str, program: &Program) -> InMemObjectDatabase {
         test_db_with_verbs(&[(verb_name, program)]).await
     }
 

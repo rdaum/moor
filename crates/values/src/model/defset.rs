@@ -14,7 +14,7 @@ pub trait Named {
 
 /// A container for verb or property defs.
 /// Immutable, and can be iterated over in sequence, or searched by name.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Defs<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> {
     bytes: SliceRef,
     _phantom: std::marker::PhantomData<T>,
