@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use strum::EnumCount;
+use strum::{EnumCount, IntoEnumIterator};
 use tracing::warn;
 use uuid::Uuid;
 
@@ -17,6 +17,7 @@ use crate::db_tx::DbTransaction;
 use crate::db_worldstate::DbTxWorldState;
 use crate::inmemtransient::object_relations::WorldStateSequences;
 use crate::inmemtransient::transaction::TupleError;
+use crate::inmemtransient::tuplebox::RelationInfo;
 use crate::loader::LoaderInterface;
 use crate::Database;
 use moor_values::model::defset::HasUuid;
@@ -37,6 +38,7 @@ use object_relations::WorldStateRelation;
 use transaction::{CommitError, Transaction};
 use tuplebox::TupleBox;
 
+mod base_relation;
 mod object_relations;
 mod transaction;
 pub mod tuplebox;
@@ -46,10 +48,24 @@ pub struct InMemObjectDatabase {
 }
 
 impl InMemObjectDatabase {
-    pub fn new() -> Self {
-        Self {
-            db: TupleBox::new(WorldStateRelation::COUNT, WorldStateSequences::COUNT),
-        }
+    pub async fn new() -> Self {
+        let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
+            .map(|wsr| {
+                RelationInfo {
+                    name: wsr.to_string(),
+                    domain_type_id: 0, /* tbd */
+                    codomain_type_id: 0,
+                    secondary_indexed: false,
+                }
+            })
+            .collect();
+
+        // "Children" is derived from projection of the secondary index of parents.
+        relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
+        // Same with "contents".
+        relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
+        let db = TupleBox::new(&relations, WorldStateSequences::COUNT);
+        Self { db }
     }
 }
 #[async_trait]
@@ -113,8 +129,6 @@ impl DbTransaction for TupleBoxTransaction {
             None => {
                 let max = self
                     .tx
-                    .db
-                    .clone()
                     .sequence_next(WorldStateSequences::MaximumObject as usize)
                     .await;
                 Objid(max as i64)
@@ -131,25 +145,6 @@ impl DbTransaction for TupleBoxTransaction {
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, id, name)
             .await
             .expect("Unable to insert initial name");
-
-        // Establish initial `contents` and `children`.
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectContents,
-            id,
-            ObjSet::empty(),
-        )
-        .await
-        .expect("Unable to insert initial contents");
-
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectChildren,
-            id,
-            ObjSet::empty(),
-        )
-        .await
-        .expect("Unable to insert initial children");
 
         // We use our own setters for these, since there's biz-logic attached here...
         if let Some(parent) = attrs.parent {
@@ -176,8 +171,6 @@ impl DbTransaction for TupleBoxTransaction {
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
         self.tx
-            .db
-            .clone()
             .update_sequence_max(WorldStateSequences::MaximumObject as usize, id.0 as u64)
             .await;
 
@@ -210,14 +203,12 @@ impl DbTransaction for TupleBoxTransaction {
             WorldStateRelation::ObjectOwner,
             WorldStateRelation::ObjectParent,
             WorldStateRelation::ObjectLocation,
-            WorldStateRelation::ObjectContents,
-            WorldStateRelation::ObjectChildren,
             WorldStateRelation::ObjectVerbs,
         ];
         for rel in oid_relations.iter() {
             let key_bytes = obj.0.to_le_bytes();
             self.tx
-                .delete_tuple((*rel) as usize, &key_bytes)
+                .remove_by_domain((*rel) as usize, &key_bytes)
                 .await
                 .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
         }
@@ -226,13 +217,13 @@ impl DbTransaction for TupleBoxTransaction {
         for p in propdefs.iter() {
             let key = object_relations::composite_key_for(obj, &p.uuid());
             self.tx
-                .delete_tuple(WorldStateRelation::ObjectPropertyValue as usize, &key)
+                .remove_by_domain(WorldStateRelation::ObjectPropertyValue as usize, &key)
                 .await
                 .expect("Unable to delete object");
         }
 
         self.tx
-            .delete_tuple(
+            .remove_by_domain(
                 WorldStateRelation::ObjectPropDefs as usize,
                 &obj.0.to_le_bytes(),
             )
@@ -342,36 +333,15 @@ impl DbTransaction for TupleBoxTransaction {
 
         // If this is a new object it won't have a parent, old parent this will come up not-found,
         // and if that's the case we can ignore that.
-        match object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectParent, o)
-            .await
+        if let Some(old_parent) = object_relations::get_object_value::<Objid>(
+            &self.tx,
+            WorldStateRelation::ObjectParent,
+            o,
+        )
+        .await
         {
-            Some(old_parent) => {
-                if old_parent == new_parent {
-                    return Ok(());
-                }
-                if old_parent != NOTHING {
-                    // Prune us out of the old parent's children list.
-                    let old_children = object_relations::get_object_value(
-                        &self.tx,
-                        WorldStateRelation::ObjectChildren,
-                        old_parent,
-                    )
-                    .await
-                    .unwrap_or_else(|| ObjSet::empty());
-                    let new_children =
-                        ObjSet::from_oid_iter(old_children.iter().filter(|&x| x != o));
-                    object_relations::upsert_object_value(
-                        &self.tx,
-                        WorldStateRelation::ObjectChildren,
-                        old_parent,
-                        new_children,
-                    )
-                    .await
-                    .expect("Unable to update children");
-                }
-            }
-            None => {
-                // Object not found is ok, we're expecting it.
+            if old_parent == new_parent {
+                return Ok(());
             }
         };
         object_relations::upsert_object_value(
@@ -386,22 +356,6 @@ impl DbTransaction for TupleBoxTransaction {
         if new_parent == NOTHING {
             return Ok(());
         }
-        let new_children = object_relations::get_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectChildren,
-            new_parent,
-        )
-        .await
-        .unwrap_or_else(|| ObjSet::empty())
-        .with_inserted(o);
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectChildren,
-            new_parent,
-            new_children,
-        )
-        .await
-        .expect("Unable to update children");
 
         // Now walk all my new descendants and give them the properties that derive from any
         // ancestors they don't already share.
@@ -456,9 +410,8 @@ impl DbTransaction for TupleBoxTransaction {
 
     async fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectChildren, obj)
-                .await
-                .unwrap_or(ObjSet::empty()),
+            object_relations::get_object_codomain(&self.tx, WorldStateRelation::ObjectParent, obj)
+                .await,
         )
     }
 
@@ -500,36 +453,18 @@ impl DbTransaction for TupleBoxTransaction {
         // without it. Set new location, get its contents, add o to contents, put contents
         // back with it. Then update the location of o.
         // Get and remove from contents of old location, if we had any.
-        match object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectLocation, what)
-            .await
+        if let Some(old_location) = object_relations::get_object_value::<Objid>(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            what,
+        )
+        .await
         {
-            None => {
-                // Object not found is fine, we just don't have a location yet.
-            }
-            Some(old_location) => {
-                if old_location == new_location {
-                    return Ok(());
-                }
-                if old_location != NOTHING {
-                    let old_contents = object_relations::get_object_value(
-                        &self.tx,
-                        WorldStateRelation::ObjectContents,
-                        old_location,
-                    )
-                    .await
-                    .unwrap_or_else(|| ObjSet::empty());
-                    let old_contents = old_contents.with_removed(what);
-                    object_relations::upsert_object_value(
-                        &self.tx,
-                        WorldStateRelation::ObjectContents,
-                        old_location,
-                        old_contents,
-                    )
-                    .await
-                    .expect("Unable to update contents");
-                }
+            if old_location == new_location {
+                return Ok(());
             }
         }
+
         // Set new location.
         object_relations::upsert_object_value(
             &self.tx,
@@ -544,39 +479,23 @@ impl DbTransaction for TupleBoxTransaction {
             return Ok(());
         }
 
-        // Get and add to contents of new location.
-        let new_contents = object_relations::get_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectContents,
-            new_location,
-        )
-        .await
-        .unwrap_or_else(|| ObjSet::empty())
-        .with_inserted(what);
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectContents,
-            new_location,
-            new_contents,
-        )
-        .await
-        .expect("Unable to update contents");
         Ok(())
     }
 
     async fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectContents, obj)
-                .await
-                .unwrap_or(ObjSet::empty()),
+            object_relations::get_object_codomain(
+                &self.tx,
+                WorldStateRelation::ObjectLocation,
+                obj,
+            )
+            .await,
         )
     }
 
     async fn get_max_object(&self) -> Result<Objid, WorldStateError> {
         Ok(Objid(
             self.tx
-                .db
-                .clone()
                 .sequence_current(WorldStateSequences::MaximumObject as usize)
                 .await as i64,
         ))
@@ -779,7 +698,7 @@ impl DbTransaction for TupleBoxTransaction {
         .await?;
 
         self.tx
-            .delete_tuple(
+            .remove_by_domain(
                 WorldStateRelation::VerbProgram as usize,
                 &uuid.as_bytes()[..],
             )
@@ -918,7 +837,7 @@ impl DbTransaction for TupleBoxTransaction {
         let key = object_relations::composite_key_for(obj, &uuid);
         match self
             .tx
-            .delete_tuple(WorldStateRelation::ObjectPropertyValue as usize, &key)
+            .remove_by_domain(WorldStateRelation::ObjectPropertyValue as usize, &key)
             .await
         {
             Ok(_) => return Ok(()),
@@ -1051,25 +970,21 @@ impl TupleBoxTransaction {
         Self { tx }
     }
     pub(crate) async fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let Some(children): Option<ObjSet> =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectChildren, obj)
-                .await
-        else {
-            return Ok(ObjSet::empty());
-        };
+        let children =
+            object_relations::get_object_codomain(&self.tx, WorldStateRelation::ObjectParent, obj)
+                .await;
+
         let mut descendants = vec![];
         let mut queue: VecDeque<_> = children.iter().collect();
         while let Some(o) = queue.pop_front() {
             descendants.push(o);
-            if let Some(children) = object_relations::get_object_value::<ObjSet>(
+            let children = object_relations::get_object_codomain(
                 &self.tx,
-                WorldStateRelation::ObjectChildren,
+                WorldStateRelation::ObjectParent,
                 o,
             )
-            .await
-            {
-                queue.extend(children.iter());
-            }
+            .await;
+            queue.extend(children.iter());
         }
 
         Ok(ObjSet::from(&descendants))
@@ -1139,8 +1054,8 @@ impl Database for InMemObjectDatabase {
 #[cfg(test)]
 mod tests {
     use crate::db_tx::DbTransaction;
-    use crate::inmemtransient::object_relations::WorldStateRelation;
-    use crate::inmemtransient::tuplebox::TupleBox;
+    use crate::inmemtransient::object_relations::{WorldStateRelation, WorldStateSequences};
+    use crate::inmemtransient::tuplebox::{RelationInfo, TupleBox};
     use crate::inmemtransient::TupleBoxTransaction;
     use moor_values::model::defset::HasUuid;
     use moor_values::model::objects::ObjAttrs;
@@ -1152,11 +1067,30 @@ mod tests {
     use moor_values::var::objid::Objid;
     use moor_values::var::v_str;
     use moor_values::NOTHING;
-    use strum::EnumCount;
+    use std::sync::Arc;
+    use strum::{EnumCount, IntoEnumIterator};
+
+    async fn test_db() -> Arc<TupleBox> {
+        let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
+            .map(|wsr| {
+                RelationInfo {
+                    name: wsr.to_string(),
+                    domain_type_id: 0, /* tbd */
+                    codomain_type_id: 0,
+                    secondary_indexed: false,
+                }
+            })
+            .collect();
+        relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
+        relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
+
+        let db = TupleBox::new(&relations, WorldStateSequences::COUNT);
+        db
+    }
 
     #[tokio::test]
     async fn test_create_object() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
         let oid = tx
             .create_object(
@@ -1182,7 +1116,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parent_children() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         // Single parent/child relationship.
@@ -1215,7 +1149,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(tx.get_object_parent(b).await.unwrap(), a);
-        assert_eq!(tx.get_object_children(a).await.unwrap(), ObjSet::from(&[b]));
+        assert!(tx
+            .get_object_children(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b])));
 
         assert_eq!(tx.get_object_parent(a).await.unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).await.unwrap(), ObjSet::empty());
@@ -1236,10 +1174,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(tx.get_object_parent(c).await.unwrap(), a);
-        assert_eq!(
-            tx.get_object_children(a).await.unwrap(),
-            ObjSet::from(&[b, c])
-        );
+        assert!(tx
+            .get_object_children(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, c])));
 
         assert_eq!(tx.get_object_parent(a).await.unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).await.unwrap(), ObjSet::empty());
@@ -1261,14 +1200,22 @@ mod tests {
 
         tx.set_object_parent(b, d).await.unwrap();
         assert_eq!(tx.get_object_parent(b).await.unwrap(), d);
-        assert_eq!(tx.get_object_children(a).await.unwrap(), ObjSet::from(&[c]));
-        assert_eq!(tx.get_object_children(d).await.unwrap(), ObjSet::from(&[b]));
+        assert!(tx
+            .get_object_children(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[c])));
+        assert!(tx
+            .get_object_children(d)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b])));
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
     }
 
     #[tokio::test]
     async fn test_descendants() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         let a = tx
@@ -1331,19 +1278,28 @@ mod tests {
             .unwrap();
         assert_eq!(d, Objid(3));
 
-        assert_eq!(tx.descendants(a).await.unwrap(), ObjSet::from(&[b, c, d]));
+        assert!(tx
+            .descendants(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, c, d])));
         assert_eq!(tx.descendants(b).await.unwrap(), ObjSet::empty());
         assert_eq!(tx.descendants(c).await.unwrap(), ObjSet::from(&[d]));
 
         // Now reparent d to b
         tx.set_object_parent(d, b).await.unwrap();
-        assert_eq!(
-            tx.get_object_children(a).await.unwrap(),
-            ObjSet::from(&[b, c])
-        );
+        assert!(tx
+            .get_object_children(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, c])));
         assert_eq!(tx.get_object_children(b).await.unwrap(), ObjSet::from(&[d]));
         assert_eq!(tx.get_object_children(c).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.descendants(a).await.unwrap(), ObjSet::from(&[b, c, d]));
+        assert!(tx
+            .descendants(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, c, d])));
         assert_eq!(tx.descendants(b).await.unwrap(), ObjSet::from(&[d]));
         assert_eq!(tx.descendants(c).await.unwrap(), ObjSet::empty());
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
@@ -1351,7 +1307,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_location_contents() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db.clone());
 
         let a = tx
@@ -1421,17 +1377,19 @@ mod tests {
             .await
             .unwrap();
         tx.set_object_location(d, c).await.unwrap();
-        assert_eq!(
-            tx.get_object_contents(c).await.unwrap(),
-            ObjSet::from(&[b, d])
-        );
+        assert!(tx
+            .get_object_contents(c)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, d])));
         assert_eq!(tx.get_object_location(d).await.unwrap(), c);
 
         tx.set_object_location(a, c).await.unwrap();
-        assert_eq!(
-            tx.get_object_contents(c).await.unwrap(),
-            ObjSet::from(&[b, d, a])
-        );
+        assert!(tx
+            .get_object_contents(c)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, d, a])));
         assert_eq!(tx.get_object_location(a).await.unwrap(), c);
 
         // Validate recursive move detection.
@@ -1459,7 +1417,7 @@ mod tests {
     /// Test data integrity of object moves between commits.
     #[tokio::test]
     async fn test_object_move_commits() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db.clone());
 
         let a = tx
@@ -1508,10 +1466,11 @@ mod tests {
         tx.set_object_location(c, a).await.unwrap();
         assert_eq!(tx.get_object_location(b).await.unwrap(), a);
         assert_eq!(tx.get_object_location(c).await.unwrap(), a);
-        assert_eq!(
-            tx.get_object_contents(a).await.unwrap(),
-            ObjSet::from(&[b, c])
-        );
+        assert!(tx
+            .get_object_contents(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, c])));
         assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::empty());
 
@@ -1520,10 +1479,11 @@ mod tests {
         let tx = TupleBoxTransaction::new(db.clone());
         assert_eq!(tx.get_object_location(b).await.unwrap(), a);
         assert_eq!(tx.get_object_location(c).await.unwrap(), a);
-        assert_eq!(
-            tx.get_object_contents(a).await.unwrap(),
-            ObjSet::from(&[b, c])
-        );
+        assert!(tx
+            .get_object_contents(a)
+            .await
+            .unwrap()
+            .is_same(ObjSet::from(&[b, c])));
         assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::empty());
 
@@ -1545,7 +1505,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_simple_property() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         let oid = tx
@@ -1580,7 +1540,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_transitive_property_resolution() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         let a = tx
@@ -1653,7 +1613,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_transitive_property_resolution_clear_property() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         let a = tx
@@ -1714,7 +1674,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verb_resolve() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         let a = tx
@@ -1770,7 +1730,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verb_resolve_inherited() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
 
         let a = tx
@@ -1840,7 +1800,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verb_resolve_wildcard() {
-        let db = TupleBox::new(WorldStateRelation::COUNT, 1);
+        let db = test_db().await;
         let tx = TupleBoxTransaction::new(db);
         let a = tx
             .create_object(

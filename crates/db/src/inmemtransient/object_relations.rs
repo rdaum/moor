@@ -1,41 +1,36 @@
 use crate::inmemtransient::transaction::{Transaction, TupleError};
+use moor_values::model::objset::ObjSet;
 use moor_values::model::WorldStateError;
 use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::AsByteBuffer;
-use strum::{EnumCount, EnumIter};
+use strum::{Display, EnumCount, EnumIter};
 use uuid::Uuid;
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display)]
 pub enum WorldStateRelation {
-    /// Object->Parent
+    /// Object<->Parent
     ObjectParent = 0,
-    /// Object->Children (ObjSet)
-    // TODO: this could be re-formulated using a secondary index on the ObjectParent relation.
-    ObjectChildren = 1,
-    /// Object->Location
-    ObjectLocation = 2,
-    /// Object->Contents (ObjSet)
-    // TODO: this could be re-formulated using a secondary index on the ObjectLocation relation.
-    ObjectContents = 3,
+    /// Object<->Location
+    ObjectLocation = 1,
     /// Object->Flags (BitEnum<ObjFlag>)
-    ObjectFlags = 4,
+    ObjectFlags = 2,
     /// Object->Name
-    ObjectName = 5,
+    ObjectName = 3,
     /// Object->Owner
-    ObjectOwner = 6,
+    ObjectOwner = 4,
 
     /// Object->Verbs (Verbdefs)
-    ObjectVerbs = 7,
+    ObjectVerbs = 5,
     /// Verb UUID->VerbProgram (Binary)
-    VerbProgram = 8,
+    VerbProgram = 6,
 
     /// Object->Properties (Propdefs)
-    ObjectPropDefs = 9,
+    ObjectPropDefs = 7,
     /// Property UUID->PropertyValue (Var)
-    ObjectPropertyValue = 10,
+    ObjectPropertyValue = 8,
 }
 
 #[repr(usize)]
@@ -86,11 +81,29 @@ pub async fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     oid: Objid,
 ) -> Option<Codomain> {
     let key_bytes = oid.0.to_le_bytes();
-    match tx.get_tuple(rel as usize, &key_bytes).await {
+    match tx.seek_by_domain(rel as usize, &key_bytes).await {
         Ok(v) => Some(Codomain::from_sliceref(v)),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
+}
+
+pub async fn get_object_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+    tx: &Transaction,
+    rel: WorldStateRelation,
+    codomain: Codomain,
+) -> ObjSet {
+    // Transaction-side support for the reverse index is not yet implemented.
+    let objs = tx
+        .seek_by_codomain(rel as usize, &codomain.make_copy_as_vec())
+        .await
+        .expect("Unable to seek by codomain")
+        .into_iter()
+        .map(|v| {
+            let oid = i64::from_le_bytes(v[0..8].try_into().unwrap());
+            Objid(oid)
+        });
+    ObjSet::from_oid_iter(objs)
 }
 
 pub async fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
@@ -100,7 +113,7 @@ pub async fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer
     uuid: Uuid,
 ) -> Option<Codomain> {
     let key_bytes = composite_key_for(oid, &uuid);
-    match tx.get_tuple(rel as usize, &key_bytes).await {
+    match tx.seek_by_domain(rel as usize, &key_bytes).await {
         Ok(v) => Some(Codomain::from_sliceref(v)),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -132,7 +145,7 @@ async fn delete_if_exists<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     oid: Objid,
 ) -> Result<(), WorldStateError> {
     let key_bytes = oid.0.to_le_bytes();
-    match tx.delete_tuple(rel as usize, &key_bytes).await {
+    match tx.remove_by_domain(rel as usize, &key_bytes).await {
         Ok(_) => Ok(()),
         Err(TupleError::NotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -146,7 +159,7 @@ pub async fn delete_composite_if_exists<Codomain: Clone + Eq + PartialEq + AsByt
     uuid: Uuid,
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
-    match tx.delete_tuple(rel as usize, &key_bytes).await {
+    match tx.remove_by_domain(rel as usize, &key_bytes).await {
         Ok(_) => Ok(()),
         Err(TupleError::NotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),

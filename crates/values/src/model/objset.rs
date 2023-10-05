@@ -4,6 +4,7 @@ use crate::AsByteBuffer;
 use bytes::BufMut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -12,7 +13,7 @@ lazy_static! {
 }
 
 /// When we want to refer to a set of object ids, use this type.
-// (Mainly this is for encapsulation its storage and retrieval)
+/// Note that equality is defined as "same bytes" buffer for efficiency reasons.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ObjSet(SliceRef);
 
@@ -183,6 +184,13 @@ impl ObjSet {
     pub fn contains(&self, oid: Objid) -> bool {
         // O(N) operation. Which we're fine with, really. We're a vector.
         self.iter().any(|o| o == oid)
+    }
+
+    /// Set equality comparison, because Eq/PartialEq for this type is "same bytes", this is actual
+    /// logical equality, but less efficient.
+    #[must_use]
+    pub fn is_same(&self, other: Self) -> bool {
+        return self.iter().collect::<HashSet<_>>() == other.iter().collect::<HashSet<_>>();
     }
 
     #[must_use]

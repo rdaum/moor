@@ -114,7 +114,7 @@ async fn main() {
     let db_source_builder = DatabaseBuilder::new()
         .with_db_type(args.db_type)
         .with_path(args.db.clone());
-    let (mut db_source, freshly_made) = db_source_builder.open_db().unwrap();
+    let (mut db_source, freshly_made) = db_source_builder.open_db().await.unwrap();
     info!(db_type = ?args.db_type, path = ?args.db, "Opened database");
 
     // If the database already existed, do not try to import the textdump...

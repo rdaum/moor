@@ -55,7 +55,7 @@ impl DatabaseBuilder {
 
     /// Returns a new database instance. The second value in the result tuple is true if the
     /// database was newly created, and false if it was already present.
-    pub fn open_db(&self) -> Result<(Box<dyn Database>, bool), String> {
+    pub async fn open_db(&self) -> Result<(Box<dyn Database>, bool), String> {
         match self.db_type {
             DatabaseType::RocksDb => {
                 let Some(path) = self.path.clone() else {
@@ -65,7 +65,7 @@ impl DatabaseBuilder {
                 Ok((Box::new(db), fresh))
             }
             DatabaseType::InMemTransient => {
-                let db = InMemObjectDatabase::new();
+                let db = InMemObjectDatabase::new().await;
                 Ok((Box::new(db), true))
             }
         }
