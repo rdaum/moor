@@ -1,10 +1,13 @@
-use crate::inmemtransient::base_relation::{BaseRelation, TupleValue};
-use crate::inmemtransient::tuplebox::{RelationInfo, TupleBox};
-use moor_values::util::slice_ref::SliceRef;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
 use thiserror::Error;
 use tokio::sync::RwLock;
+
+use moor_values::util::slice_ref::SliceRef;
+
+use crate::tuplebox::base_relation::{BaseRelation, TupleValue};
+use crate::tuplebox::tb::{RelationInfo, TupleBox};
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
@@ -61,9 +64,9 @@ impl LocalRelation {
 }
 
 impl WorkingSet {
-    fn new(schema: Vec<RelationInfo>) -> Self {
+    fn new(schema: &[RelationInfo]) -> Self {
         let mut relations = Vec::new();
-        for r in &schema {
+        for r in schema {
             relations.push(LocalRelation {
                 domain_index: HashMap::new(),
                 codomain_index: if r.secondary_indexed {
@@ -92,7 +95,7 @@ pub(crate) struct LocalValue<Codomain: Clone + Eq + PartialEq> {
     pub(crate) t: TupleOperation<Codomain>,
 }
 
-/// Possible operations on tuple codomains, in the context of a transaction.
+/// Possible operations on tuples, in the context of a transaction .
 #[derive(Clone)]
 pub(crate) enum TupleOperation<Codomain: Clone + Eq + PartialEq> {
     /// Insert T into the tuple.
@@ -127,7 +130,7 @@ pub enum CommitError {
 
 impl Transaction {
     pub fn new(ts: u64, db: Arc<TupleBox>) -> Self {
-        let ws = WorkingSet::new(db.relation_info());
+        let ws = WorkingSet::new(&db.relation_info());
         Self {
             ts,
             db,
@@ -150,10 +153,15 @@ impl Transaction {
     pub async fn commit(&self) -> Result<(), CommitError> {
         let mut tries = 0;
         'retry: loop {
-            let working_set = self.working_set.read().await;
+            let mut working_set = self.working_set.write().await;
             let commit_set = self.db.prepare_commit_set(self.ts, &working_set).await?;
             match self.db.try_commit(commit_set).await {
-                Ok(_) => return Ok(()),
+                Ok(_) => {
+                    let mut blank_ws = WorkingSet::new(&self.db.relation_info());
+                    std::mem::swap(&mut *working_set, &mut blank_ws);
+                    self.db.sync(self.ts, blank_ws).await;
+                    return Ok(());
+                }
                 Err(CommitError::RelationContentionConflict) => {
                     tries += 1;
                     if tries > 3 {
@@ -511,13 +519,16 @@ impl CommitSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::inmemtransient::transaction::{CommitError, TupleError};
-    use crate::inmemtransient::tuplebox::{RelationInfo, TupleBox};
-    use moor_values::util::slice_ref::SliceRef;
     use std::sync::Arc;
 
-    fn test_db() -> Arc<TupleBox> {
+    use moor_values::util::slice_ref::SliceRef;
+
+    use crate::tuplebox::tb::{RelationInfo, TupleBox};
+    use crate::tuplebox::transaction::{CommitError, TupleError};
+
+    async fn test_db() -> Arc<TupleBox> {
         let db = TupleBox::new(
+            None,
             &[RelationInfo {
                 name: "test".to_string(),
                 domain_type_id: 0,
@@ -525,14 +536,15 @@ mod tests {
                 secondary_indexed: false,
             }],
             0,
-        );
+        )
+        .await;
         db
     }
 
     /// Verifies that base relations ("canonical") get updated when successful commits happen.
     #[tokio::test]
     async fn basic_commit() {
-        let db = test_db();
+        let db = test_db().await;
         let tx = db.clone().start_tx();
         tx.insert_tuple(0, b"abc", SliceRef::from_bytes(b"def"))
             .await
@@ -564,7 +576,7 @@ mod tests {
     /// sequentially without potential for conflict.
     #[tokio::test]
     async fn serial_insert_update_tx() {
-        let db = test_db();
+        let db = test_db().await;
         let tx = db.clone().start_tx();
         tx.insert_tuple(0, b"abc", SliceRef::from_bytes(b"def"))
             .await
@@ -622,7 +634,7 @@ mod tests {
     /// Much the same as above, but test for deletion logic instead of update.
     #[tokio::test]
     async fn serial_insert_delete_tx() {
-        let db = test_db();
+        let db = test_db().await;
         let tx = db.clone().start_tx();
         tx.insert_tuple(0, b"abc", SliceRef::from_bytes(b"def"))
             .await
@@ -661,7 +673,7 @@ mod tests {
     /// commit happens, we should detect the conflict and fail.
     #[tokio::test]
     async fn parallel_insert_new_conflict() {
-        let db = test_db();
+        let db = test_db().await;
         let tx1 = db.clone().start_tx();
 
         tx1.insert_tuple(0, b"abc", SliceRef::from_bytes(b"def"))
@@ -682,7 +694,7 @@ mod tests {
 
     #[tokio::test]
     async fn parallel_get_update_conflict() {
-        let db = test_db();
+        let db = test_db().await;
 
         // 1. Initial transaction creates value, commits.
         let init_tx = db.clone().start_tx();

@@ -1,25 +1,12 @@
-//! In-memory database that provides transactional consistency through copy-on-write maps
-//! Base relations are `im` hashmaps -- persistent / functional / copy-on-writish hashmaps, which
-//! transactions obtain a fork of from `canonical`. At commit timestamps are checked and reconciled
-//! if possible, and the whole set of relations is swapped out for the set of modified tuples.
-//!
-//! TLDR Transactions continue to see a fully snapshot isolated view of the world.
-
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
-
-use async_trait::async_trait;
-use strum::{EnumCount, IntoEnumIterator};
-use tracing::warn;
-use uuid::Uuid;
-
 use crate::db_tx::DbTransaction;
 use crate::db_worldstate::DbTxWorldState;
-use crate::inmemtransient::object_relations::WorldStateSequences;
-use crate::inmemtransient::transaction::TupleError;
-use crate::inmemtransient::tuplebox::RelationInfo;
 use crate::loader::LoaderInterface;
+use crate::tuplebox::object_relations;
+use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
+use crate::tuplebox::tb::{RelationInfo, TupleBox};
+use crate::tuplebox::transaction::{CommitError, Transaction, TupleError};
 use crate::Database;
+use async_trait::async_trait;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -33,22 +20,21 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_none, Var};
-use moor_values::NOTHING;
-use object_relations::WorldStateRelation;
-use transaction::{CommitError, Transaction};
-use tuplebox::TupleBox;
+use moor_values::{NOTHING, SYSTEM_OBJECT};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
+use std::sync::Arc;
+use strum::{EnumCount, IntoEnumIterator};
+use tracing::warn;
+use uuid::Uuid;
 
-mod base_relation;
-mod object_relations;
-mod transaction;
-pub mod tuplebox;
-
-pub struct InMemObjectDatabase {
+/// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
+pub struct TupleBoxWorldStateSource {
     db: Arc<TupleBox>,
 }
 
-impl InMemObjectDatabase {
-    pub async fn new() -> Self {
+impl TupleBoxWorldStateSource {
+    pub async fn open(path: Option<PathBuf>) -> (Self, bool) {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -64,12 +50,21 @@ impl InMemObjectDatabase {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         // Same with "contents".
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
-        let db = TupleBox::new(&relations, WorldStateSequences::COUNT);
-        Self { db }
+        let db = TupleBox::new(path, &relations, WorldStateSequences::COUNT).await;
+
+        // Check the db for sys (#0) object to see if this is a fresh DB or not.
+        let fresh_db = {
+            let rels = db.canonical.read().await;
+            rels[WorldStateRelation::ObjectParent as usize]
+                .seek_by_domain(&SYSTEM_OBJECT.0.to_le_bytes())
+                .is_none()
+        };
+        (Self { db }, fresh_db)
     }
 }
+
 #[async_trait]
-impl WorldStateSource for InMemObjectDatabase {
+impl WorldStateSource for TupleBoxWorldStateSource {
     async fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = TupleBoxTransaction::new(self.db.clone());
         return Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }));
@@ -219,7 +214,7 @@ impl DbTransaction for TupleBoxTransaction {
             self.tx
                 .remove_by_domain(WorldStateRelation::ObjectPropertyValue as usize, &key)
                 .await
-                .expect("Unable to delete object");
+                .unwrap_or(());
         }
 
         self.tx
@@ -700,7 +695,7 @@ impl DbTransaction for TupleBoxTransaction {
         self.tx
             .remove_by_domain(
                 WorldStateRelation::VerbProgram as usize,
-                &uuid.as_bytes()[..],
+                &object_relations::composite_key_for(location, &uuid),
             )
             .await
             .expect("Unable to delete verb program");
@@ -1040,7 +1035,7 @@ impl TupleBoxTransaction {
     }
 }
 
-impl Database for InMemObjectDatabase {
+impl Database for TupleBoxWorldStateSource {
     fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = TupleBoxTransaction::new(self.db.clone());
         return Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }));
@@ -1054,9 +1049,9 @@ impl Database for InMemObjectDatabase {
 #[cfg(test)]
 mod tests {
     use crate::db_tx::DbTransaction;
-    use crate::inmemtransient::object_relations::{WorldStateRelation, WorldStateSequences};
-    use crate::inmemtransient::tuplebox::{RelationInfo, TupleBox};
-    use crate::inmemtransient::TupleBoxTransaction;
+    use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
+    use crate::tuplebox::tb::{RelationInfo, TupleBox};
+    use crate::tuplebox::tb_worldstate::TupleBoxTransaction;
     use moor_values::model::defset::HasUuid;
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::objset::ObjSet;
@@ -1084,7 +1079,7 @@ mod tests {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        let db = TupleBox::new(&relations, WorldStateSequences::COUNT);
+        let db = TupleBox::new(None, &relations, WorldStateSequences::COUNT).await;
         db
     }
 

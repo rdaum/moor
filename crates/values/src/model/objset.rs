@@ -190,7 +190,7 @@ impl ObjSet {
     /// logical equality, but less efficient.
     #[must_use]
     pub fn is_same(&self, other: Self) -> bool {
-        return self.iter().collect::<HashSet<_>>() == other.iter().collect::<HashSet<_>>();
+        self.iter().collect::<HashSet<_>>() == other.iter().collect::<HashSet<_>>()
     }
 
     #[must_use]

@@ -1,29 +1,39 @@
 use std::sync::Arc;
 use strum::{Display, EnumIter, EnumString, EnumVariantNames};
 
-use crate::inmemtransient::InMemObjectDatabase;
 use crate::loader::LoaderInterface;
 use crate::rocksdb::db_server::RocksDbServer;
 use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::WorldStateError;
+use tuplebox::tb_worldstate::TupleBoxWorldStateSource;
 
 mod channel_db_tx_client;
 mod db_loader_client;
 mod db_message;
 mod db_tx;
 mod db_worldstate;
-pub mod inmemtransient;
 pub mod loader;
 pub mod mock;
 pub mod rocksdb;
+pub mod tuplebox;
 
-/// Enumeration of potential database backends.
+/// Enumeration of potential worldstate/database backends for Moor.
 #[derive(Debug, Display, EnumString, EnumVariantNames, EnumIter, Clone, Copy)]
 pub enum DatabaseType {
-    /// Persistent transactional RocksDB backend.
+    /// Custom in-memory transactional database.
+    /// Relations are stored in memory as copy-on-write hashmaps (HAMTs from im::HashMap), with
+    /// each transaction having a fully snapshot-isolated view of the world.
+    ///
+    /// Objects are backed up to disk on commit, and restored from disk on startup, but are not
+    /// paged out on inactivity, so the dataset size is limited to the amount of available memory,
+    /// for now.
+    ///
+    /// Faster, but currently only suitable for worlds that fit in main memory.   
+    Tuplebox,
+    /// Direct translation to RocksDB, using its OptimisticTransaction model.
+    /// Potentially slower, and the transactional model not as robust.
+    /// But can handle larger worlds.
     RocksDb,
-    /// Transient (For now) but transactional, in-memory only. Useful for testing only.
-    InMemTransient,
 }
 
 pub struct DatabaseBuilder {
@@ -64,9 +74,9 @@ impl DatabaseBuilder {
                 let (db, fresh) = RocksDbServer::new(path).map_err(|e| format!("{:?}", e))?;
                 Ok((Box::new(db), fresh))
             }
-            DatabaseType::InMemTransient => {
-                let db = InMemObjectDatabase::new().await;
-                Ok((Box::new(db), true))
+            DatabaseType::Tuplebox => {
+                let (db, fresh) = TupleBoxWorldStateSource::open(self.path.clone()).await;
+                Ok((Box::new(db), fresh))
             }
         }
     }

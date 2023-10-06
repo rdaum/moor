@@ -1,6 +1,6 @@
 use moor_compiler::codegen::compile;
 use moor_compiler::opcode::Program;
-use moor_db::inmemtransient::InMemObjectDatabase;
+use moor_db::tuplebox::tb_worldstate::TupleBoxWorldStateSource;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
@@ -20,7 +20,7 @@ fn testsuite_dir() -> PathBuf {
 }
 
 /// Create a minimal Db to support the test harness.
-async fn load_db(db: &mut InMemObjectDatabase) {
+async fn load_db(db: &mut TupleBoxWorldStateSource) {
     let mut tx = db.loader_client().unwrap();
     textdump_load(
         tx.as_mut(),
@@ -31,7 +31,7 @@ async fn load_db(db: &mut InMemObjectDatabase) {
     tx.commit().await.unwrap();
 }
 
-async fn compile_verbs(db: &mut InMemObjectDatabase, verbs: &[(&str, &Program)]) {
+async fn compile_verbs(db: &mut TupleBoxWorldStateSource, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().await.unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec();
@@ -51,7 +51,7 @@ async fn compile_verbs(db: &mut InMemObjectDatabase, verbs: &[(&str, &Program)])
     tx.commit().await.unwrap();
 }
 
-async fn eval(db: &mut InMemObjectDatabase, expression: &str) -> Var {
+async fn eval(db: &mut TupleBoxWorldStateSource, expression: &str) -> Var {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     compile_verbs(db, &[("test", &binary)]).await;
     let mut state = db.new_world_state().await.unwrap();
@@ -89,7 +89,7 @@ async fn run_basic_test(test_dir: &str) {
 
     // Frustratingly the individual test lines are not independent, so we need to run them in a
     // single database.
-    let mut db = InMemObjectDatabase::new().await;
+    let (mut db, _) = TupleBoxWorldStateSource::open(None).await;
     load_db(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await;

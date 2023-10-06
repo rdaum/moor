@@ -2,7 +2,7 @@
 # binaries (communicating via ZMQ RPC), with VictoriaMetrics and VMagent for metrics collection, and Grafana for
 # visualization.
 
-# The first time the image starts, it will import JHCORE-DEV-2.db from the root of the repository. This is a recent
+# The first time the image starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
 # JaysHouseCore database, with no modifications. After import, `development.db` will contain the (RocksDb) database
 # that resulted. To re-import the textdump, simply delete this directory.
 
@@ -35,7 +35,7 @@ services:
     working_dir: /moor
     command: >
         sh -c "RUST_BACKTRACE=1 cargo watch -w crates/kernel -w crates/rpc-common -w crates/daemon -w crates/values -w crates/db -x 
-        'run -p moor-daemon -- development.db --db-type=InMemTransient --textdump=JHCore-DEV-2.db'"
+        'run -p moor-daemon -- development.db --db-type=Tuplebox --textdump=JHCore-DEV-2.db'"
     ports:
       # ZMQ ports
       - "7899:7899"

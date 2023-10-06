@@ -1,4 +1,4 @@
-use crate::inmemtransient::transaction::{Transaction, TupleError};
+use crate::tuplebox::transaction::{Transaction, TupleError};
 use moor_values::model::objset::ObjSet;
 use moor_values::model::WorldStateError;
 use moor_values::util::slice_ref::SliceRef;

@@ -705,7 +705,7 @@ async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 
     let bf_list = BUILTIN_DESCRIPTORS
         .iter()
-        .filter_map(|bf| bf.implemented.then(|| bf_function_info_to_list(bf)))
+        .filter(|&bf| bf.implemented).map(bf_function_info_to_list)
         .collect();
     Ok(Ret(v_list(bf_list)))
 }

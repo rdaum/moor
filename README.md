@@ -35,7 +35,7 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 * Have tested against JaysHouseCore, and most of the functionality is there. Bugs are becoming increasingly rare.
 * Hosts websocket, "telnet" (classic line oriented TCP connection), and console connections. MCP clients work, with
   remote editing, etc. support.
-* Objects are stored in a concurrent transactional object database -- safe, consistent and happy. The architecture
+* Objects are stored in a concurrent transactional object database -- isolated, consistent and happy. The architecture
   allows for cleanly adding different storage backends for new scenarios.
 * Monitoring/metrics support via Prometheus-compatible export.
 * Separate network-host vs daemon process architecture means that upgrades/restarts can happen in-place without

@@ -1,20 +1,20 @@
-// TODO: secondary (codomain) indices.
-// TODO: garbage collect old versions.
 // TODO: support sorted indices, too.
 // TODO: 'join' and transitive closure -> datalog-style variable unification
-// TODO: persistence: bare minimum is a WAL to some kind of backup state that can be re-read on
-//  startup. maximal is fully paged storage.
 
-use crate::inmemtransient::base_relation::BaseRelation;
-use crate::inmemtransient::transaction::{
+use crate::tuplebox::backing::BackingStoreClient;
+use crate::tuplebox::base_relation::BaseRelation;
+use crate::tuplebox::rocks_backing::RocksBackingStore;
+use crate::tuplebox::transaction::{
     CommitError, CommitSet, Transaction, TupleOperation, WorkingSet,
 };
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::info;
 
-/// Meta-data q about a relation
+/// Meta-data about a relation
 #[derive(Clone, Debug)]
 pub struct RelationInfo {
     /// Human readable name of the relation.
@@ -30,7 +30,6 @@ pub struct RelationInfo {
 /// The tuplebox is the set of relations, referenced by their unique (usize) relation ID.
 /// It exposes interfaces for starting & managing transactions on those relations.
 /// It is, essentially, a micro database.
-// TODO: prune old versions, background thread.
 // TODO: locking in general here is (probably) safe, but not optimal. optimistic locking would be
 //   better for various portions here.
 pub struct TupleBox {
@@ -48,10 +47,16 @@ pub struct TupleBox {
     /// The copy-on-write set of current canonical base relations.
     // TODO: this is a candidate for an optimistic lock.
     pub(crate) canonical: RwLock<Vec<BaseRelation>>,
+
+    backing_store: Option<BackingStoreClient>,
 }
 
 impl TupleBox {
-    pub fn new(relations: &[RelationInfo], num_sequences: usize) -> Arc<Self> {
+    pub async fn new(
+        path: Option<PathBuf>,
+        relations: &[RelationInfo],
+        num_sequences: usize,
+    ) -> Arc<Self> {
         let mut base_relations = Vec::with_capacity(relations.len());
         for r in relations {
             base_relations.push(BaseRelation::new(0));
@@ -59,12 +64,29 @@ impl TupleBox {
                 base_relations.last_mut().unwrap().add_secondary_index();
             }
         }
+        let mut sequences = vec![0; num_sequences];
+        let backing_store = match path {
+            None => None,
+            Some(path) => {
+                let bs = RocksBackingStore::start(
+                    path,
+                    relations.to_vec(),
+                    &mut base_relations,
+                    &mut sequences,
+                )
+                .await;
+                info!("Backing store loaded, and write-ahead thread started...");
+                Some(bs)
+            }
+        };
+
         Arc::new(Self {
             relation_info: relations.to_vec(),
             maximum_transaction: AtomicU64::new(0),
             active_transactions: RwLock::new(HashSet::new()),
             canonical: RwLock::new(base_relations),
-            sequences: RwLock::new(vec![0; num_sequences]),
+            sequences: RwLock::new(sequences),
+            backing_store,
         })
     }
 
@@ -219,11 +241,23 @@ impl TupleBox {
             .await
             .remove(&commit_set.ts);
 
-        // TODO: write to WAL here.
         Ok(())
     }
 
     pub(crate) async fn abort_transaction(&self, ts: u64) {
         self.active_transactions.write().await.remove(&ts);
+    }
+
+    pub async fn sync(&self, ts: u64, world_state: WorkingSet) {
+        if let Some(bs) = &self.backing_store {
+            let seqs = self.sequences.read().await.clone();
+            bs.sync(ts, world_state, seqs).await;
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        if let Some(bs) = &self.backing_store {
+            bs.shutdown().await;
+        }
     }
 }
