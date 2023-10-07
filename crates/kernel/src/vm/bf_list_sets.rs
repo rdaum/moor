@@ -1,19 +1,20 @@
+use std::ops::BitOr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use onig::{SearchOptions, SyntaxOperator};
 
+use moor_compiler::builtins::offset_for_builtin;
 use moor_values::var::error::Error;
 use moor_values::var::error::Error::{E_INVARG, E_TYPE};
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_empty_list, v_int, v_list, v_string};
-use regexpr_binding::Pattern;
 
 use crate::bf_declare;
 use crate::vm::builtin::BfRet::Ret;
 use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::vm_execute::one_to_zero_index;
 use crate::vm::VM;
-use moor_compiler::builtins::offset_for_builtin;
 
 async fn bf_is_member<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
@@ -138,7 +139,137 @@ bf_declare!(setremove, bf_setremove);
 // whole 'legacy' regex engine in a mutex.
 pub static mut task_timed_out: u64 = 0;
 
-async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+/// Translate a MOO pattern into a more standard syntax.  Effectively, this
+/// just involves remove `%' escapes into `\' escapes.
+fn translate_pattern(pattern: &str) -> Option<String> {
+    let mut s = String::with_capacity(pattern.len());
+    let mut c_iter = pattern.chars();
+    loop {
+        let Some(mut c) = c_iter.next() else {
+            break;
+        };
+        if c == '%' {
+            let Some(escape) = c_iter.next() else {
+                return None;
+            };
+            if ".*+?[^$|()123456789bB<>wW".contains(escape) {
+                s.push('\\');
+            }
+            s.push(escape);
+            continue;
+        }
+        if c == '\\' {
+            s.push_str("\\\\");
+            continue;
+        }
+        if c == '[' {
+            /* Any '%' or '\' characters inside a charset should be copied
+             * over without translation. */
+            s.push(c);
+            let Some(next) = c_iter.next() else {
+                return None;
+            };
+            c = next;
+            if c == '^' {
+                s.push(c);
+                let Some(next) = c_iter.next() else {
+                    return None;
+                };
+                c = next;
+            }
+            if c == ']' {
+                s.push(c);
+                let Some(next) = c_iter.next() else {
+                    return None;
+                };
+                c = next;
+            }
+            while c != ']' {
+                s.push(c);
+                let Some(next) = c_iter.next() else {
+                    return None;
+                };
+                c = next;
+            }
+            s.push(c);
+            continue;
+        }
+        s.push(c);
+    }
+    Some(s)
+}
+
+type Span = (isize, isize);
+type MatchSpans = (Span, Vec<Span>);
+
+fn onig_match(
+    pattern: &str,
+    subject: &str,
+    case_matters: bool,
+    reverse: bool,
+) -> Result<Option<MatchSpans>, Error> {
+    let Some(translated_pattern) = translate_pattern(pattern) else {
+        return Err(E_INVARG);
+    };
+
+    let options = if case_matters {
+        onig::RegexOptions::REGEX_OPTION_NONE
+    } else {
+        onig::RegexOptions::REGEX_OPTION_IGNORECASE
+    };
+
+    let mut syntax = onig::Syntax::grep().clone();
+    syntax.set_operators(
+        syntax
+            .operators()
+            .bitor(SyntaxOperator::SYNTAX_OPERATOR_QMARK_ZERO_ONE),
+    );
+    let regex = onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
+        .map_err(|_| E_INVARG)?;
+
+    let (start_pos, end_pos) = if reverse {
+        (subject.len(), 0)
+    } else {
+        (0, subject.len())
+    };
+
+    let Some(start) = regex.search_with_options(
+        subject,
+        start_pos,
+        end_pos,
+        SearchOptions::SEARCH_OPTION_NONE,
+        None,
+    ) else {
+        return Ok(None);
+    };
+
+    let Some(captures) = regex.captures(subject) else {
+        return Ok(None);
+    };
+
+    // Overall span
+    let Some((_, end)) = captures.pos(0) else {
+        return Ok(None);
+    };
+
+    let overall = ((start + 1) as isize, end as isize);
+    // Now we'll iterate through the captures, and build up a Vec<Span> of the captured groups.
+    // MOO match() returns 9 subpatterns, no more, no less. So we start with a Vec of 9
+    // (-1, -1) pairs and then fill that in with the captured groups, if any.
+    let mut match_vec = vec![(0, -1); 9];
+    for (i, capture) in captures.iter_pos().enumerate() {
+        if i == 0 {
+            continue;
+        }
+        let Some((start, end)) = capture else {
+            continue;
+        };
+        match_vec[i - 1] = (start as isize + 1, end as isize);
+    }
+    Ok(Some((overall, match_vec)))
+}
+
+fn do_re_match<'a>(bf_args: &mut BfCallState<'a>, reverse: bool) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(E_INVARG);
     }
@@ -157,11 +288,9 @@ async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     };
 
     // TODO: pattern cache?
-    let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
-        return Err(E_INVARG);
-    };
-
-    let Ok((overall, match_vec)) = pattern.match_pattern(subject.as_str()) else {
+    let Some((overall, match_vec)) =
+        onig_match(pattern.as_str(), subject.as_str(), case_matters, reverse)?
+    else {
         return Ok(Ret(v_empty_list()));
     };
 
@@ -178,47 +307,13 @@ async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         bf_args.args[0].clone(),
     ])))
 }
+async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+    do_re_match(bf_args, false)
+}
 bf_declare!(match, bf_match);
 
 async fn bf_rmatch<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(E_INVARG);
-    }
-    let (subject, pattern) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Str(subject), Variant::Str(pattern)) => (subject, pattern),
-        _ => return Err(E_TYPE),
-    };
-
-    let case_matters = if bf_args.args.len() == 3 {
-        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Err(E_TYPE);
-        };
-        *case_matters == 1
-    } else {
-        false
-    };
-
-    // TODO: pattern cache?
-    let Ok(pattern) = Pattern::new(pattern.as_str(), case_matters) else {
-        return Err(E_INVARG);
-    };
-
-    let Ok((overall, match_vec)) = pattern.reverse_match_pattern(subject.as_str()) else {
-        return Ok(Ret(v_empty_list()));
-    };
-
-    let subs = v_list(
-        match_vec
-            .iter()
-            .map(|(start, end)| v_list(vec![v_int(*start as i64), v_int(*end as i64)]))
-            .collect(),
-    );
-    Ok(Ret(v_list(vec![
-        v_int(overall.0 as i64),
-        v_int(overall.1 as i64),
-        subs,
-        bf_args.args[0].clone(),
-    ])))
+    do_re_match(bf_args, true)
 }
 bf_declare!(rmatch, bf_rmatch);
 
@@ -348,15 +443,15 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
-    use regexpr_binding::Pattern;
-
-    use crate::vm::bf_list_sets::substitute;
+    use crate::vm::bf_list_sets::{onig_match, substitute};
 
     #[test]
     fn test_match_substitute() {
-        let pattern = Pattern::new("%(%w*%) to %(%w*%)", false).unwrap();
         let source = "*** Welcome to LambdaMOO!!!";
-        let (overall, subs) = pattern.match_pattern(source).unwrap();
+        let (overall, subs) = onig_match("%(%w*%) to %(%w*%)", source, false, false)
+            .unwrap()
+            .unwrap();
+        //  left: [(12, 11), (16, 15), (0, -1), (0, -1), (0, -1), (0, -1), (0, -1), (0, -1), (0, -1)]
         assert_eq!(overall, (5, 24));
         assert_eq!(
             subs,
@@ -378,20 +473,25 @@ mod tests {
 
     #[test]
     fn test_substitute_regression() {
-        // substitute("%1", match("help @options", "^help %('%|[^ <][^ ]*%)$"))
-        let pattern = Pattern::new("^help %('%|[^ <][^ ]*%)$", false).unwrap();
         let source = "help @options";
-        let (_, subs) = pattern.match_pattern(source).unwrap();
+        let (_, subs) = onig_match("^help %('%|[^ <][^ ]*%)$", source, false, false)
+            .unwrap()
+            .unwrap();
         let result = substitute("%1", &subs, source).unwrap();
         assert_eq!(result, "@options");
     }
 
     #[test]
     fn test_substitute_off_by_one() {
-        let pattern =
-            Pattern::new("^@%([^-]*%)%(o%|opt?i?o?n?s?%|-o?p?t?i?o?n?s?%)$", false).unwrap();
         let source = "@edit-o";
-        let (overall, subs) = pattern.match_pattern(source).unwrap();
+        let (overall, subs) = onig_match(
+            "^@%([^-]*%)%(o%|opt?i?o?n?s?%|-o?p?t?i?o?n?s?%)$",
+            source,
+            false,
+            false,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(overall, (1, 7));
         assert_eq!(
             subs,

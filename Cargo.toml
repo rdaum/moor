@@ -11,7 +11,6 @@ members = [
   "crates/telnet-host",
   "crates/web-host",
   "crates/console-host",
-  "crates/regexpr-binding",
 ]
 
 [workspace.package]
@@ -77,6 +76,7 @@ yoke = "0.7.1"
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
 md5 = "0.7.0" # For MOO's "string_hash"
 rand = "0.8.5"
+onig = "6.4.0"
 
 ## Compiler grammar/parser
 pest = "2.7.1"

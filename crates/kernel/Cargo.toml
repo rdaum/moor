@@ -19,7 +19,6 @@ path = "testsuite/basic/basic_suite.rs"
 [dependencies]
 
 ## Own
-regexpr-binding = { path = "../regexpr-binding" }
 moor-values = { path = "../values" }
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
@@ -39,6 +38,7 @@ chrono.workspace = true
 pwhash.workspace = true
 md5.workspace = true
 rand.workspace = true
+onig.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true

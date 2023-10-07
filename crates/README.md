@@ -21,6 +21,3 @@ Libraries:
   * `kernel` - the kernel of the MOO driver: virtual machine, task scheduler, implementations of all builtin   
      functions
   * `rpc-common` - provides types & functions used by both `daemon` and each host binary, for the RPC interface
-  * `regexpr-binding` - provides bindings to the old regular expressions library used by
-     the LambdaMOO server, for compatibility with existing cores. This is a temporary measure until
-     this can be reworked with use of the `regex` crate and some compatibility translation
