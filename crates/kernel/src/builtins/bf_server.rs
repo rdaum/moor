@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeZone};
+use chrono_tz::{OffsetName, Tz};
+use iana_time_zone::get_timezone;
 use metrics_macros::increment_counter;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
@@ -298,8 +300,17 @@ async fn bf_ctime<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     };
 
     let date_time: DateTime<Local> = chrono::DateTime::from(time);
+    let tz_str = get_timezone().unwrap();
+    let tz: Tz = tz_str.parse().unwrap();
+    let offset = tz.offset_from_local_date(&date_time.date_naive()).unwrap();
+    let abbreviation = offset.abbreviation();
+    let datetime_str = format!(
+        "{} {}",
+        date_time.format("%a %b %d %H:%M:%S %Y"),
+        abbreviation
+    );
 
-    Ok(Ret(v_string(date_time.to_rfc2822())))
+    Ok(Ret(v_string(datetime_str.to_string())))
 }
 bf_declare!(ctime, bf_ctime);
 async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {

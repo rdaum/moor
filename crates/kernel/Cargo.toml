@@ -39,6 +39,8 @@ pwhash.workspace = true
 md5.workspace = true
 rand.workspace = true
 onig.workspace = true
+chrono-tz.workspace = true
+iana-time-zone.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true

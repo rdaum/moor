@@ -77,6 +77,8 @@ pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) ba
 md5 = "0.7.0" # For MOO's "string_hash"
 rand = "0.8.5"
 onig = "6.4.0"
+chrono-tz = "0.8.3"
+iana-time-zone = "0.1.57"
 
 ## Compiler grammar/parser
 pest = "2.7.1"
