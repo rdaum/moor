@@ -15,10 +15,10 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;
+use crate::builtins::BfRet::{Ret, VmInstr};
+use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::TaskId;
-use crate::vm::builtin::BfRet::{Ret, VmInstr};
-use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::{ExecutionResult, VM};
 use moor_compiler::builtins::{
     offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS,
@@ -705,7 +705,8 @@ async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 
     let bf_list = BUILTIN_DESCRIPTORS
         .iter()
-        .filter(|&bf| bf.implemented).map(bf_function_info_to_list)
+        .filter(|&bf| bf.implemented)
+        .map(bf_function_info_to_list)
         .collect();
     Ok(Ret(v_list(bf_list)))
 }

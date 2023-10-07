@@ -1,3 +1,12 @@
+mod bf_list_sets;
+mod bf_num;
+mod bf_objects;
+mod bf_properties;
+pub mod bf_server;
+mod bf_strings;
+mod bf_values;
+mod bf_verbs;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,7 +26,7 @@ use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
 
 /// The arguments and other state passed to a built-in function.
-pub(crate) struct BfCallState<'a> {
+pub struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: String,
     /// Arguments passed to the function.
@@ -52,13 +61,13 @@ impl BfCallState<'_> {
 }
 
 #[async_trait]
-pub(crate) trait BuiltinFunction: Sync + Send {
+pub trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
     async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>;
 }
 
 /// Return possibilities from a built-in function.
-pub(crate) enum BfRet {
+pub enum BfRet {
     /// Successful return, with a value to be pushed to the value stack.
     Ret(Var),
     /// BF wants to return control back to the VM, with specific instructions to things like

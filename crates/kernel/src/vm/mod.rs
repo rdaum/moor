@@ -9,11 +9,11 @@ use moor_values::model::verb_info::VerbInfo;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
+use crate::builtins::bf_server::BfNoop;
+use crate::builtins::BuiltinFunction;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
-use crate::vm::bf_server::BfNoop;
-use crate::vm::builtin::BuiltinFunction;
 use crate::vm::vm_unwind::FinallyReason;
 use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
 use moor_compiler::labels::{Name, Offset};
@@ -26,16 +26,6 @@ pub(crate) mod vm_util;
 
 mod activation;
 
-mod bf_list_sets;
-mod bf_num;
-mod bf_objects;
-mod bf_properties;
-mod bf_server;
-mod bf_strings;
-mod bf_values;
-mod bf_verbs;
-
-mod builtin;
 #[cfg(test)]
 mod vm_test;
 

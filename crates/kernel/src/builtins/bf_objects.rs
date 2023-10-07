@@ -13,9 +13,9 @@ use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
 use moor_values::NOTHING;
 
 use crate::bf_declare;
+use crate::builtins::BfRet::{Ret, VmInstr};
+use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::tasks::VerbCall;
-use crate::vm::builtin::BfRet::{Ret, VmInstr};
-use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
 use moor_compiler::builtins::offset_for_builtin;

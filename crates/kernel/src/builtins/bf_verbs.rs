@@ -20,9 +20,9 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;
+use crate::builtins::BfRet::Ret;
+use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
-use crate::vm::builtin::BfRet::Ret;
-use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 use moor_compiler::builtins::offset_for_builtin;
 use moor_compiler::codegen::compile;
@@ -40,7 +40,12 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
         return Err(E_TYPE);
     };
 
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -186,7 +191,12 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     }
     let update_attrs = parse_verb_info(info)?;
 
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -229,7 +239,12 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -286,7 +301,12 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     if verbinfo.len() != 3 {
         return Err(E_INVARG);
     }
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -340,7 +360,12 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -416,7 +441,12 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -500,7 +530,12 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::List(args) = bf_args.args[2].variant() else {
         return Err(E_TYPE);
     };
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -544,7 +579,12 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 
@@ -586,7 +626,12 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    if !bf_args.world_state.valid(*obj).await.map_err(world_state_err)? {
+    if !bf_args
+        .world_state
+        .valid(*obj)
+        .await
+        .map_err(world_state_err)?
+    {
         return Err(E_INVARG);
     }
 

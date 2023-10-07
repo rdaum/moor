@@ -6,10 +6,10 @@ use moor_values::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_int, Var};
 
+use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
+use crate::builtins::{BfCallState, BfRet};
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::Activation;
-use crate::vm::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
-use crate::vm::builtin::{BfCallState, BfRet};
 use crate::vm::vm_execute::VmExecParams;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};

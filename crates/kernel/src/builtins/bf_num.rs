@@ -10,8 +10,8 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
-use crate::vm::builtin::BfRet::Ret;
-use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::BfRet::Ret;
+use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 use moor_compiler::builtins::offset_for_builtin;
 

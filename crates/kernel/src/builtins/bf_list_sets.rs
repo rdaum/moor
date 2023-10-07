@@ -11,8 +11,8 @@ use moor_values::var::variant::Variant;
 use moor_values::var::{v_empty_list, v_int, v_list, v_string};
 
 use crate::bf_declare;
-use crate::vm::builtin::BfRet::Ret;
-use crate::vm::builtin::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::BfRet::Ret;
+use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::vm_execute::one_to_zero_index;
 use crate::vm::VM;
 
@@ -437,7 +437,7 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::bf_list_sets::{perform_regex_match, substitute};
+    use crate::builtins::bf_list_sets::{perform_regex_match, substitute};
 
     #[test]
     fn test_match_substitute() {
