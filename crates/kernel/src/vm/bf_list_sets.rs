@@ -2,7 +2,7 @@ use std::ops::BitOr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use onig::{SearchOptions, SyntaxOperator};
+use onig::{Region, SearchOptions, SyntaxOperator};
 
 use moor_compiler::builtins::offset_for_builtin;
 use moor_values::var::error::Error;
@@ -202,7 +202,7 @@ fn translate_pattern(pattern: &str) -> Option<String> {
 type Span = (isize, isize);
 type MatchSpans = (Span, Vec<Span>);
 
-fn onig_match(
+fn perform_regex_match(
     pattern: &str,
     subject: &str,
     case_matters: bool,
@@ -227,28 +227,24 @@ fn onig_match(
     let regex = onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
         .map_err(|_| E_INVARG)?;
 
-    let (start_pos, end_pos) = if reverse {
+    let (search_start, search_end) = if reverse {
         (subject.len(), 0)
     } else {
         (0, subject.len())
     };
+    let mut region = Region::new();
 
-    let Some(start) = regex.search_with_options(
+    let Some(_) = regex.search_with_options(
         subject,
-        start_pos,
-        end_pos,
+        search_start,
+        search_end,
         SearchOptions::SEARCH_OPTION_NONE,
-        None,
+        Some(&mut region),
     ) else {
         return Ok(None);
     };
-
-    let Some(captures) = regex.captures(subject) else {
-        return Ok(None);
-    };
-
     // Overall span
-    let Some((_, end)) = captures.pos(0) else {
+    let Some((start, end)) = region.pos(0) else {
         return Ok(None);
     };
 
@@ -257,18 +253,16 @@ fn onig_match(
     // MOO match() returns 9 subpatterns, no more, no less. So we start with a Vec of 9
     // (-1, -1) pairs and then fill that in with the captured groups, if any.
     let mut match_vec = vec![(0, -1); 9];
-    for (i, capture) in captures.iter_pos().enumerate() {
-        if i == 0 {
-            continue;
+    for i in 1..=8 {
+        if let Some((start, end)) = region.pos(i) {
+            match_vec[i - 1] = ((start + 1) as isize, end as isize);
         }
-        let Some((start, end)) = capture else {
-            continue;
-        };
-        match_vec[i - 1] = (start as isize + 1, end as isize);
     }
+
     Ok(Some((overall, match_vec)))
 }
 
+/// Common code for both match and rmatch.
 fn do_re_match<'a>(bf_args: &mut BfCallState<'a>, reverse: bool) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(E_INVARG);
@@ -289,7 +283,7 @@ fn do_re_match<'a>(bf_args: &mut BfCallState<'a>, reverse: bool) -> Result<BfRet
 
     // TODO: pattern cache?
     let Some((overall, match_vec)) =
-        onig_match(pattern.as_str(), subject.as_str(), case_matters, reverse)?
+        perform_regex_match(pattern.as_str(), subject.as_str(), case_matters, reverse)?
     else {
         return Ok(Ret(v_empty_list()));
     };
@@ -443,15 +437,14 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::bf_list_sets::{onig_match, substitute};
+    use crate::vm::bf_list_sets::{perform_regex_match, substitute};
 
     #[test]
     fn test_match_substitute() {
         let source = "*** Welcome to LambdaMOO!!!";
-        let (overall, subs) = onig_match("%(%w*%) to %(%w*%)", source, false, false)
+        let (overall, subs) = perform_regex_match("%(%w*%) to %(%w*%)", source, false, false)
             .unwrap()
             .unwrap();
-        //  left: [(12, 11), (16, 15), (0, -1), (0, -1), (0, -1), (0, -1), (0, -1), (0, -1), (0, -1)]
         assert_eq!(overall, (5, 24));
         assert_eq!(
             subs,
@@ -474,7 +467,7 @@ mod tests {
     #[test]
     fn test_substitute_regression() {
         let source = "help @options";
-        let (_, subs) = onig_match("^help %('%|[^ <][^ ]*%)$", source, false, false)
+        let (_, subs) = perform_regex_match("^help %('%|[^ <][^ ]*%)$", source, false, false)
             .unwrap()
             .unwrap();
         let result = substitute("%1", &subs, source).unwrap();
@@ -484,7 +477,7 @@ mod tests {
     #[test]
     fn test_substitute_off_by_one() {
         let source = "@edit-o";
-        let (overall, subs) = onig_match(
+        let (overall, subs) = perform_regex_match(
             "^@%([^-]*%)%(o%|opt?i?o?n?s?%|-o?p?t?i?o?n?s?%)$",
             source,
             false,
@@ -509,5 +502,30 @@ mod tests {
         );
         let result = substitute("%1", &subs, source).unwrap();
         assert_eq!(result, "edit");
+    }
+
+    #[test]
+    fn test_rmatch() {
+        let m = perform_regex_match("o*b", "foobar", false, true)
+            .unwrap()
+            .unwrap();
+        // {4, 4, {{0, -1}
+        assert_eq!(
+            m,
+            (
+                (4, 4),
+                vec![
+                    (0, -1),
+                    (0, -1),
+                    (0, -1),
+                    (0, -1),
+                    (0, -1),
+                    (0, -1),
+                    (0, -1),
+                    (0, -1),
+                    (0, -1)
+                ]
+            )
+        );
     }
 }
