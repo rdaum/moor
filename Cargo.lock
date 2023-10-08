@@ -1684,6 +1684,7 @@ dependencies = [
  "pwhash",
  "rand",
  "rocksdb",
+ "sized-chunks 0.7.0",
  "strum",
  "tempfile",
  "test-case",

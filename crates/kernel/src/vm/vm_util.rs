@@ -167,12 +167,12 @@ impl VM {
         self.top_mut().jump(label)
     }
 
-    pub(crate) fn get_env(&self, id: Name) -> &Option<Var> {
-        &self.top().environment[id.0 as usize]
+    pub(crate) fn get_env(&self, id: Name) -> Option<&Var> {
+        self.top().environment.get(id.0 as usize)
     }
 
     pub(crate) fn set_env(&mut self, id: Name, v: &Var) {
-        self.top_mut().environment[id.0 as usize] = Some(v.clone());
+        self.top_mut().environment.insert(id.0 as usize, v.clone());
     }
 
     pub(crate) fn peek(&self, amt: usize) -> Vec<Var> {

@@ -1,4 +1,5 @@
 use moor_values::NOTHING;
+use sized_chunks::SparseChunk;
 use tracing::trace;
 use uuid::Uuid;
 
@@ -21,6 +22,10 @@ use crate::tasks::TaskId;
 use crate::vm::VerbExecutionRequest;
 use moor_compiler::labels::{Label, Name};
 use moor_compiler::opcode::{Op, Program, EMPTY_PROGRAM};
+
+/// The maximum number of variables that can be in scope at any one time, including globals.
+/// This is a hard limit, and is used to size the activation's environment.
+pub const MAX_VARS: usize = 256;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -73,7 +78,7 @@ pub(crate) struct Activation {
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Objid,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: Vec<Option<Var>>,
+    pub(crate) environment: SparseChunk<Var, MAX_VARS>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active error handlers, each relative to a position in the valstack.
@@ -97,7 +102,7 @@ pub(crate) struct Activation {
 impl Activation {
     pub fn for_call(task_id: TaskId, verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
-        let environment = vec![None; program.var_names.width()];
+        let environment = SparseChunk::new();
 
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
         let mut a = Self {
@@ -159,7 +164,7 @@ impl Activation {
     }
 
     pub fn for_eval(task_id: TaskId, permissions: Objid, player: Objid, program: Program) -> Self {
-        let environment = vec![None; program.var_names.width()];
+        let environment = SparseChunk::new();
 
         let verb_info = VerbInfo::new(
             // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
@@ -242,7 +247,7 @@ impl Activation {
         Self {
             task_id,
             program: EMPTY_PROGRAM.clone(),
-            environment: vec![],
+            environment: SparseChunk::new(),
             valstack: vec![],
             handler_stack: vec![],
             pc: 0,
@@ -289,14 +294,14 @@ impl Activation {
     }
 
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
-        self.environment[gname as usize] = Some(value);
+        self.environment.insert(gname as usize, value);
     }
 
     pub fn set_var_offset(&mut self, offset: Name, value: Var) -> Result<(), Error> {
         if offset.0 as usize >= self.environment.len() {
             return Err(E_VARNF);
         }
-        self.environment[offset.0 as usize] = Some(value);
+        self.environment[offset.0 as usize] = value;
         Ok(())
     }
 

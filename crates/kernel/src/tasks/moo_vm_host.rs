@@ -26,8 +26,7 @@ use tracing::{trace, warn};
 /// A 'host' for running the MOO virtual machine inside a task.
 pub struct MooVmHost {
     vm: VM,
-    running_method: bool,
-    /// The maximum stack detph for this task
+    /// The maximum stack depth for this task
     max_stack_depth: usize,
     /// The amount of ticks (opcode executions) allotted to this task
     max_ticks: usize,
@@ -35,6 +34,8 @@ pub struct MooVmHost {
     max_time: Duration,
     sessions: Arc<dyn Session>,
     scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
+    run_watch_send: tokio::sync::watch::Sender<bool>,
+    run_watch_recv: tokio::sync::watch::Receiver<bool>,
 }
 
 impl MooVmHost {
@@ -46,15 +47,17 @@ impl MooVmHost {
         scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     ) -> Self {
         let vm = VM::new();
+        let (run_watch_send, run_watch_recv) = tokio::sync::watch::channel(false);
         // Created in an initial suspended state.
         Self {
             vm,
-            running_method: false,
             max_stack_depth,
             max_ticks,
             max_time,
             sessions,
             scheduler_control_sender,
+            run_watch_send,
+            run_watch_recv,
         }
     }
 }
@@ -107,7 +110,7 @@ impl VMHost<Program> for MooVmHost {
     async fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
         self.vm.tick_count = 0;
         self.vm.exec_fork_vector(fork_request, task_id).await;
-        self.running_method = !suspended;
+        self.run_watch_send.send(!suspended).unwrap();
     }
     /// Start execution of a verb request.
     async fn start_execution(
@@ -120,7 +123,7 @@ impl VMHost<Program> for MooVmHost {
         self.vm
             .exec_call_request(task_id, verb_execution_request)
             .await;
-        self.running_method = true;
+        self.run_watch_send.send(true).unwrap();
     }
     async fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
         self.vm.start_time = Some(SystemTime::now());
@@ -128,17 +131,17 @@ impl VMHost<Program> for MooVmHost {
         self.vm
             .exec_eval_request(task_id, player, player, program)
             .await;
-        self.running_method = true;
+        self.run_watch_send.send(true).unwrap();
     }
     async fn exec_interpreter(
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
     ) -> VMHostResponse {
-        if !self.running_method {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            return ContinueOk;
-        }
+        self.run_watch_recv
+            .wait_for(|running| *running)
+            .await
+            .unwrap();
 
         // Check ticks and seconds, and abort the task if we've exceeded the limits.
         let time_left = match self.vm.start_time {
@@ -174,7 +177,7 @@ impl VMHost<Program> for MooVmHost {
             ?result,
             "Executed ticks",
         );
-        while self.running_method {
+        while self.is_running() {
             match result {
                 ExecutionResult::More => return ContinueOk,
                 ExecutionResult::ContinueVerb {
@@ -241,11 +244,11 @@ impl VMHost<Program> for MooVmHost {
                     return DispatchFork(fork_request);
                 }
                 ExecutionResult::Suspend(delay) => {
-                    self.running_method = false;
+                    self.run_watch_send.send(false).unwrap();
                     return Suspend(delay);
                 }
                 ExecutionResult::NeedInput => {
-                    self.running_method = false;
+                    self.run_watch_send.send(false).unwrap();
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
@@ -281,14 +284,13 @@ impl VMHost<Program> for MooVmHost {
         self.vm.top_mut().push(value);
         self.vm.start_time = Some(SystemTime::now());
         self.vm.tick_count = 0;
-        assert!(!self.running_method);
-        self.running_method = true;
+        self.run_watch_send.send(true).unwrap();
     }
     fn is_running(&self) -> bool {
-        self.running_method
+        *self.run_watch_recv.borrow()
     }
     async fn stop(&mut self) {
-        self.running_method = false;
+        self.run_watch_send.send(false).unwrap();
     }
     fn decode_program(binary_type: BinaryType, binary_bytes: &[u8]) -> Program {
         match binary_type {
@@ -315,9 +317,7 @@ impl VMHost<Program> for MooVmHost {
         self.vm.top().this
     }
     fn line_number(&self) -> usize {
-        // self.vm.top().line_number
-        // TODO: implement line number tracking
-        0
+        self.vm.top().find_line_no(self.vm.top().pc).unwrap_or(0)
     }
 
     fn args(&self) -> Vec<Var> {
