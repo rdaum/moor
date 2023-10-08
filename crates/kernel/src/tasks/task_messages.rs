@@ -57,6 +57,9 @@ pub enum TaskControlMsg {
 pub enum SchedulerControlMsg {
     /// Everything executed. The task is done.
     TaskSuccess(Var),
+    /// The task hit an unresolvable transaction serialization conflict, and needs to be restarted
+    /// in a new transaction.
+    TaskConflictRetry,
     /// A 'StartCommandVerb' type task failed to parse or match the command.
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.

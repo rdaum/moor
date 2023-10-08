@@ -30,7 +30,6 @@ pub mod vm_test_utils {
     use crate::tasks::vm_host::{VMHost, VMHostResponse};
     use crate::tasks::VerbCall;
     use crate::vm::vm_execute::VmExecParams;
-    use crate::vm::VM;
     use moor_values::model::world_state::WorldState;
     use moor_values::var::Var;
     use moor_values::SYSTEM_OBJECT;
@@ -43,16 +42,9 @@ pub mod vm_test_utils {
         verb_name: &str,
         args: Vec<Var>,
     ) -> Var {
-        let vm = VM::new();
         let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut vm_host = MooVmHost::new(
-            vm,
-            20,
-            90_000,
-            Duration::from_secs(5),
-            session.clone(),
-            scs_tx,
-        );
+        let mut vm_host =
+            MooVmHost::new(20, 90_000, Duration::from_secs(5), session.clone(), scs_tx);
 
         let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
         let _vm_exec_params = VmExecParams {

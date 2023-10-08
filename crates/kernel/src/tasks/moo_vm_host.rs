@@ -39,13 +39,13 @@ pub struct MooVmHost {
 
 impl MooVmHost {
     pub fn new(
-        vm: VM,
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
         sessions: Arc<dyn Session>,
         scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     ) -> Self {
+        let vm = VM::new();
         // Created in an initial suspended state.
         Self {
             vm,
