@@ -202,8 +202,9 @@ impl DbTransaction for TupleBoxTransaction {
         ];
         for rel in oid_relations.iter() {
             let key_bytes = obj.0.to_le_bytes();
-            self.tx
-                .remove_by_domain((*rel) as usize, &key_bytes)
+            let relation = self.tx.relation((*rel).into()).await;
+            relation
+                .remove_by_domain(&key_bytes)
                 .await
                 .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
         }
@@ -211,17 +212,19 @@ impl DbTransaction for TupleBoxTransaction {
         let propdefs = self.get_properties(obj).await?;
         for p in propdefs.iter() {
             let key = object_relations::composite_key_for(obj, &p.uuid());
-            self.tx
-                .remove_by_domain(WorldStateRelation::ObjectPropertyValue as usize, &key)
-                .await
-                .unwrap_or(());
+            let relation = self
+                .tx
+                .relation(WorldStateRelation::ObjectPropertyValue.into())
+                .await;
+            relation.remove_by_domain(&key).await.unwrap_or(());
         }
 
-        self.tx
-            .remove_by_domain(
-                WorldStateRelation::ObjectPropDefs as usize,
-                &obj.0.to_le_bytes(),
-            )
+        let obj_propdefs_rel = self
+            .tx
+            .relation(WorldStateRelation::ObjectPropDefs.into())
+            .await;
+        obj_propdefs_rel
+            .remove_by_domain(&obj.0.to_le_bytes())
             .await
             .expect("Unable to delete propdefs");
 
@@ -692,11 +695,11 @@ impl DbTransaction for TupleBoxTransaction {
         )
         .await?;
 
-        self.tx
-            .remove_by_domain(
-                WorldStateRelation::VerbProgram as usize,
-                &object_relations::composite_key_for(location, &uuid),
-            )
+        let rel = self
+            .tx
+            .relation(WorldStateRelation::VerbProgram.into())
+            .await;
+        rel.remove_by_domain(&object_relations::composite_key_for(location, &uuid))
             .await
             .expect("Unable to delete verb program");
 
@@ -830,11 +833,11 @@ impl DbTransaction for TupleBoxTransaction {
 
     async fn clear_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
         let key = object_relations::composite_key_for(obj, &uuid);
-        match self
+        let rel = self
             .tx
-            .remove_by_domain(WorldStateRelation::ObjectPropertyValue as usize, &key)
-            .await
-        {
+            .relation(WorldStateRelation::ObjectPropertyValue.into())
+            .await;
+        match rel.remove_by_domain(&key).await {
             Ok(_) => return Ok(()),
             Err(TupleError::NotFound) => return Ok(()),
             Err(e) => {

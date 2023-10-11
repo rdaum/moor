@@ -1,3 +1,4 @@
+use crate::tuplebox::RelationId;
 use moor_values::util::slice_ref::SliceRef;
 use std::collections::HashSet;
 
@@ -9,6 +10,8 @@ use std::collections::HashSet;
 //   type-checking on the values, though for our purposes this may be overkill at this time.
 #[derive(Clone)]
 pub struct BaseRelation {
+    pub(crate) id: RelationId,
+
     /// The last successful committer's tx timestamp
     pub(crate) ts: u64,
 
@@ -22,8 +25,9 @@ pub struct BaseRelation {
 }
 
 impl BaseRelation {
-    pub fn new(timestamp: u64) -> Self {
+    pub fn new(id: RelationId, timestamp: u64) -> Self {
         Self {
+            id,
             ts: timestamp,
             domain_tuples: im::HashMap::new(),
             codomain_domain: None,

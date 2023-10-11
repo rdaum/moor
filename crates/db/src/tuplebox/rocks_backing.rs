@@ -3,11 +3,12 @@
 use crate::tuplebox::backing::{BackingStoreClient, WriterMessage};
 use crate::tuplebox::base_relation::BaseRelation;
 use crate::tuplebox::tb::RelationInfo;
-use crate::tuplebox::transaction::{TupleOperation, WorkingSet};
+use crate::tuplebox::transaction::TupleOperation;
+use crate::tuplebox::working_set::WorkingSet;
 use moor_values::util::slice_ref::SliceRef;
 use rocksdb::{IteratorMode, DB};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{debug, error, info};
 
@@ -84,27 +85,20 @@ impl RocksBackingStore {
         let bs = Arc::new(RocksBackingStore { db, schema });
 
         let (writer_send, writer_receive) = tokio::sync::mpsc::unbounded_channel();
-        let abort_flag = Arc::new(Mutex::new(None));
-        tokio::spawn(bs.clone().listen_loop(writer_receive, abort_flag));
+        tokio::spawn(bs.clone().listen_loop(writer_receive));
 
         BackingStoreClient::new(writer_send)
     }
 
-    async fn listen_loop(
-        self: Arc<Self>,
-        mut writer_receive: UnboundedReceiver<WriterMessage>,
-        abort_flag: Arc<Mutex<Option<u64>>>,
-    ) {
+    async fn listen_loop(self: Arc<Self>, mut writer_receive: UnboundedReceiver<WriterMessage>) {
         loop {
-            let abort_flag = abort_flag.clone();
+            let (abort_send, abort_receive) = tokio::sync::watch::channel(0);
             let bs = self.clone();
             match writer_receive.recv().await {
                 Some(WriterMessage::Commit(ts, ws, sequences)) => {
                     debug!("Committing write-ahead for ts {}", ts);
-                    {
-                        *abort_flag.lock().unwrap() = Some(ts);
-                    }
-                    tokio::spawn(bs.perform_writes(ts, ws, sequences, abort_flag.clone()));
+                    abort_send.send(ts).unwrap();
+                    tokio::spawn(bs.perform_writes(ts, ws, sequences, abort_receive.clone()));
                 }
                 Some(WriterMessage::Shutdown) => {
                     info!("Shutting down RocksDB writer thread");
@@ -123,7 +117,7 @@ impl RocksBackingStore {
         ts: u64,
         committed_working_set: WorkingSet,
         current_sequences: Vec<u64>,
-        abort: Arc<Mutex<Option<u64>>>,
+        abort: tokio::sync::watch::Receiver<u64>,
     ) {
         // Write the current state of sequences first.
         let seq_cf = self
@@ -141,22 +135,22 @@ impl RocksBackingStore {
         }
 
         // Go through the modified tuples and mutate the underlying column families
-        for (relation_id, local_relation) in
-            committed_working_set.local_relations.iter().enumerate()
-        {
+        for (relation_id, local_relation) in committed_working_set.0.iter().enumerate() {
             let relation_info = &self.schema[relation_id];
             let cf = self
                 .db
                 .cf_handle(relation_info.name.as_str())
                 .expect("Unable to open column family");
-            for (domain, tuple) in local_relation.domain_index.iter() {
-                let abort = abort.lock().unwrap();
-                if abort.is_none() || abort.unwrap() != ts {
-                    debug!(
-                        "Aborting write-ahead due to abort flag flip from {} to {:?}",
-                        ts, abort
-                    );
-                    return;
+            for (domain, tuple) in local_relation.tuples() {
+                if let Ok(true) = abort.has_changed() {
+                    let new_ts = abort.borrow();
+                    if *new_ts != ts {
+                        debug!(
+                            "Aborting write-ahead due to abort flag flip from {} to {:?}",
+                            ts, new_ts
+                        );
+                        return;
+                    }
                 }
                 match &tuple.t {
                     TupleOperation::Insert(v)

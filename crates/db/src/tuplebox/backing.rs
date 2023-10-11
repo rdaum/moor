@@ -2,7 +2,7 @@
 //! Used for write-ahead type storage at commit-time, and backed by whatever preferred physical
 //! storage mechanism is desired.
 
-use crate::tuplebox::transaction::WorkingSet;
+use crate::tuplebox::working_set::WorkingSet;
 use tokio::sync::mpsc::UnboundedSender;
 pub struct BackingStoreClient {
     sender: UnboundedSender<WriterMessage>,

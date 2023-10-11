@@ -4,9 +4,9 @@
 use crate::tuplebox::backing::BackingStoreClient;
 use crate::tuplebox::base_relation::BaseRelation;
 use crate::tuplebox::rocks_backing::RocksBackingStore;
-use crate::tuplebox::transaction::{
-    CommitError, CommitSet, Transaction, TupleOperation, WorkingSet,
-};
+use crate::tuplebox::transaction::{CommitError, CommitSet, Transaction, TupleOperation};
+use crate::tuplebox::working_set::WorkingSet;
+use crate::tuplebox::RelationId;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -58,8 +58,8 @@ impl TupleBox {
         num_sequences: usize,
     ) -> Arc<Self> {
         let mut base_relations = Vec::with_capacity(relations.len());
-        for r in relations {
-            base_relations.push(BaseRelation::new(0));
+        for (rid, r) in relations.iter().enumerate() {
+            base_relations.push(BaseRelation::new(RelationId(rid), 0));
             if r.secondary_indexed {
                 base_relations.last_mut().unwrap().add_secondary_index();
             }
@@ -123,12 +123,16 @@ impl TupleBox {
             sequences[sequence_number] = value;
         }
     }
-    pub async fn with_relation<R, F: Fn(&BaseRelation) -> R>(&self, relation_id: usize, f: F) -> R {
+    pub async fn with_relation<R, F: Fn(&BaseRelation) -> R>(
+        &self,
+        relation_id: RelationId,
+        f: F,
+    ) -> R {
         f(self
             .canonical
             .read()
             .await
-            .get(relation_id)
+            .get(relation_id.0)
             .expect("No such relation"))
     }
 
@@ -140,14 +144,15 @@ impl TupleBox {
         tx_ts: u64,
         tx_working_set: &WorkingSet,
     ) -> Result<CommitSet, CommitError> {
-        let mut commitset = CommitSet::new(tx_ts, tx_working_set.local_relations.len());
+        let mut commitset = CommitSet::new(tx_ts);
 
-        for (relation_id, local_relation) in tx_working_set.local_relations.iter().enumerate() {
+        for (relation_id, local_relation) in tx_working_set.0.iter().enumerate() {
+            let relation_id = RelationId(relation_id);
             // scan through the local working set, and for each tuple, check to see if it's safe to
             // commit. If it is, then we'll add it to the commit set.
             // note we're not actually committing yet, just producing a candidate commit set
-            let canonical = &self.canonical.read().await[relation_id];
-            for (k, v) in local_relation.domain_index.iter() {
+            let canonical = &self.canonical.read().await[relation_id.0];
+            for (k, v) in local_relation.tuples() {
                 let cv = canonical.seek_by_domain(k);
 
                 // If there's no value there, and our local is not tombstoned and we're not doing
@@ -215,31 +220,26 @@ impl TupleBox {
         // We have to hold a lock during the duration of this. If we fail, we will loop back
         // and retry.
         let mut canonical = self.canonical.write().await;
-        for (relation_id, relation) in commit_set.relations.iter().enumerate() {
-            if let Some(relation) = relation {
-                // Did the relation get committed to by someone else in the interim? If so, return
-                // back to the transaction letting it know that, and it can decide if it wants to
-                // retry.
-                if relation.ts != canonical[relation_id].ts {
-                    return Err(CommitError::RelationContentionConflict);
-                }
+        for relation in commit_set.iter() {
+            // Did the relation get committed to by someone else in the interim? If so, return
+            // back to the transaction letting it know that, and it can decide if it wants to
+            // retry.
+            if relation.ts != canonical[relation.id.0].ts {
+                return Err(CommitError::RelationContentionConflict);
             }
         }
 
         // Everything passed, so we can commit the changes by swapping in the new canonical
         // before releasing the lock.
-        for (relation_id, relation) in commit_set.relations.into_iter().enumerate() {
-            if let Some(relation) = relation {
-                canonical[relation_id] = relation;
-                // And update the timestamp on the canonical relation.
-                canonical[relation_id].ts = commit_set.ts;
-            }
+        let commit_ts = commit_set.ts;
+        for relation in commit_set.into_iter() {
+            let idx = relation.id.0;
+            canonical[idx] = relation;
+            // And update the timestamp on the canonical relation.
+            canonical[idx].ts = commit_ts;
         }
         // Clear out the active transaction.
-        self.active_transactions
-            .write()
-            .await
-            .remove(&commit_set.ts);
+        self.active_transactions.write().await.remove(&commit_ts);
 
         Ok(())
     }

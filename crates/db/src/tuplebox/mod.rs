@@ -11,8 +11,27 @@
 mod backing;
 mod base_relation;
 mod object_relations;
+mod transaction;
+mod working_set;
+
+pub mod relvar;
 pub mod rocks_backing;
 pub mod tb;
 pub mod tb_worldstate;
 
-mod transaction;
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct RelationId(usize);
+
+impl RelationId {
+    pub fn transient(id: usize) -> Self {
+        RelationId(id | (1 << 63))
+    }
+
+    // If the top bit (63rd) bit is not set, then this is a base relation.
+    pub fn is_base_relation(&self) -> bool {
+        self.0 & (1 << 63) == 0
+    }
+    pub fn is_transient_relation(&self) -> bool {
+        !self.is_base_relation()
+    }
+}

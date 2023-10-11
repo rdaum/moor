@@ -394,6 +394,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitmaps"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "703642b98a00b3b90513279a8ede3fcfa479c126c5fb46e78f3051522f021403"
+
+[[package]]
 name = "block-buffer"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1240,10 +1246,10 @@ version = "15.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0acd33ff0285af998aaf9b57342af478078f53492322fafc47450e09397e0e9"
 dependencies = [
- "bitmaps",
+ "bitmaps 2.1.0",
  "rand_core",
  "rand_xoshiro",
- "sized-chunks",
+ "sized-chunks 0.6.5",
  "typenum",
  "version_check",
 ]
@@ -1646,6 +1652,7 @@ dependencies = [
  "metrics-macros",
  "moor-values",
  "rocksdb",
+ "sized-chunks 0.7.0",
  "strum",
  "tempfile",
  "thiserror",
@@ -2541,8 +2548,17 @@ version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16d69225bde7a69b235da73377861095455d298f2b970996eec25ddbb42b3d1e"
 dependencies = [
- "bitmaps",
+ "bitmaps 2.1.0",
  "typenum",
+]
+
+[[package]]
+name = "sized-chunks"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "718af0c70466d1901d87da3fa23e38a955cd0dec64af16bc49cf2d901ec0e5e7"
+dependencies = [
+ "bitmaps 3.2.0",
 ]
 
 [[package]]
