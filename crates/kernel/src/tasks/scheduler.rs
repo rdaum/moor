@@ -12,7 +12,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use moor_values::model::permissions::Perms;
-use moor_values::model::world_state::{WorldState, WorldStateSource};
+use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::CommandError;
 use moor_values::var::error::Error::{E_INVARG, E_PERM};
 use moor_values::var::objid::Objid;
@@ -23,11 +23,10 @@ use SchedulerError::{
     TaskAbortedCancelled, TaskAbortedError, TaskAbortedException, TaskAbortedLimit,
 };
 
-use crate::tasks::moo_vm_host::MooVmHost;
 use crate::tasks::scheduler::SchedulerError::TaskNotFound;
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
-use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg};
+use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart};
 use crate::tasks::TaskId;
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
@@ -36,14 +35,6 @@ use moor_compiler::CompileError;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(5);
-
-// TODO allow these to be set by command line arguments, as well.
-// Note these can be overriden in-core.
-const DEFAULT_FG_TICKS: usize = 60_000;
-const DEFAULT_BG_TICKS: usize = 30_000;
-const DEFAULT_FG_SECONDS: u64 = 5;
-const DEFAULT_BG_SECONDS: u64 = 3;
-const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
@@ -151,65 +142,6 @@ pub enum SchedulerError {
     TaskAbortedCancelled,
 }
 
-// TODO cache
-async fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize, u64, usize) {
-    let (max_ticks, max_seconds, max_stack_depth) = if is_background {
-        (
-            DEFAULT_BG_TICKS,
-            DEFAULT_BG_SECONDS,
-            DEFAULT_MAX_STACK_DEPTH,
-        )
-    } else {
-        (
-            DEFAULT_FG_TICKS,
-            DEFAULT_FG_SECONDS,
-            DEFAULT_MAX_STACK_DEPTH,
-        )
-    };
-
-    // TODO: revisit this -- we need a way to look up and cache these without having to fake wizard
-    //   permissions to get them, which probably means not going through worldstate. I don't want to
-    //   have to guess what $wizard is, and some cores may not have this even defined.
-    //   I think the scheduler will need a handle on some access to the DB that bypasses perms?
-
-    //
-    // // Look up fg_ticks, fg_seconds, and max_stack_depth on $server_options.
-    // // These are optional properties, and if they are not set, we use the defaults.
-    // let wizperms = PermissionsContext::root_for(Objid(2), BitEnum::new_with(ObjFlag::Wizard));
-    // if let Ok(server_options) = ws
-    //     .retrieve_property(wizperms.clone(), Objid(0), "server_options")
-    //     .await
-    // {
-    //     if let Variant::Obj(server_options) = server_options.variant() {
-    //         if let Ok(v) = ws
-    //             .retrieve_property(wizperms.clone(), *server_options, "fg_ticks")
-    //             .await
-    //         {
-    //             if let Variant::Int(v) = v.variant() {
-    //                 max_ticks = *v as usize;
-    //             }
-    //         }
-    //         if let Ok(v) = ws
-    //             .retrieve_property(wizperms.clone(), *server_options, "fg_seconds")
-    //             .await
-    //         {
-    //             if let Variant::Int(v) = v.variant() {
-    //                 max_seconds = *v as u64;
-    //             }
-    //         }
-    //         if let Ok(v) = ws
-    //             .retrieve_property(wizperms, *server_options, "max_stack_depth")
-    //             .await
-    //         {
-    //             if let Variant::Int(v) = v.variant() {
-    //                 max_stack_depth = *v as usize;
-    //             }
-    //         }
-    //     }
-    // }
-    (max_ticks, max_seconds, max_stack_depth)
-}
-
 /// Public facing interface for the scheduler.
 impl Scheduler {
     pub fn new(state_source: Arc<dyn WorldStateSource>) -> Self {
@@ -263,29 +195,23 @@ impl Scheduler {
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_command_task");
 
-        let mut inner = self.inner.write().await;
-        let task_id = inner
-            .new_task(player, session, None, self.clone(), player, false)
-            .await?;
-
-        let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
-            return Err(TaskNotFound(task_id));
+        let task_start = TaskStart::StartCommandVerb {
+            player,
+            command: command.to_string(),
         };
 
-        trace!(
-            "Set up command task {:?} for {:?}, sending StartCommandVerb...",
-            task_id,
-            command
-        );
-
-        // This gets enqueued as the first thing the task sees when it is started.
-        task_ref
-            .task_control_sender
-            .send(TaskControlMsg::StartCommandVerb {
+        let mut inner = self.inner.write().await;
+        let task_id = inner
+            .new_task(
+                task_start,
                 player,
-                command: command.to_string(),
-            })
-            .map_err(|_| CouldNotStartTask)?;
+                session,
+                None,
+                self.clone(),
+                player,
+                false,
+            )
+            .await?;
 
         Ok(task_id)
     }
@@ -362,28 +288,25 @@ impl Scheduler {
 
         let mut inner = self.inner.write().await;
 
-        let task_id = inner
-            .new_task(player, session, None, self.clone(), perms, false)
-            .await?;
-
-        let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
-            return Err(TaskNotFound(task_id));
+        let task_start = TaskStart::StartVerb {
+            player,
+            vloc,
+            verb,
+            args,
+            argstr,
         };
 
-        // Send the initial task message.
-        if let Err(e) = task_ref
-            .task_control_sender
-            .send(TaskControlMsg::StartVerb {
+        let task_id = inner
+            .new_task(
+                task_start,
                 player,
-                vloc,
-                verb,
-                args,
-                argstr,
-            })
-        {
-            error!(task_id, error = ?e, "Could not start verb task");
-            return Err(TaskNotFound(task_id));
-        }
+                session,
+                None,
+                self.clone(),
+                perms,
+                false,
+            )
+            .await?;
 
         Ok(task_id)
     }
@@ -398,32 +321,28 @@ impl Scheduler {
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.submit_out_of_band_task");
 
+        let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
+        let task_start = TaskStart::StartVerb {
+            player,
+            vloc: SYSTEM_OBJECT,
+            verb: "do_out_of_band_command".to_string(),
+            args,
+            argstr,
+        };
+
         let mut inner = self.inner.write().await;
 
         let task_id = inner
-            .new_task(player, session, None, self.clone(), player, false)
-            .await?;
-
-        let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
-            return Err(TaskNotFound(task_id));
-        };
-
-        let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
-
-        // This gets enqueued as the first thing the task sees when it is started.
-        if let Err(e) = task_ref
-            .task_control_sender
-            .send(TaskControlMsg::StartVerb {
+            .new_task(
+                task_start,
                 player,
-                vloc: SYSTEM_OBJECT,
-                verb: "do_out_of_band_command".to_string(),
-                args,
-                argstr,
-            })
-        {
-            error!(task_id, error = ?e, "Could not start out-of-band task");
-            return Err(TaskNotFound(task_id));
-        }
+                session,
+                None,
+                self.clone(),
+                player,
+                false,
+            )
+            .await?;
 
         Ok(task_id)
     }
@@ -447,25 +366,22 @@ impl Scheduler {
             Err(e) => return Err(EvalCompilationError(e)),
         };
 
-        let task_id = inner
-            .new_task(player, sessions, None, self.clone(), perms, false)
-            .await?;
-
-        let Some(task_ref) = inner.tasks.get_mut(&task_id) else {
-            return Err(TaskNotFound(task_id));
+        let task_start = TaskStart::StartEval {
+            player,
+            program: binary,
         };
 
-        // This gets enqueued as the first thing the task sees when it is started.
-        if let Err(e) = task_ref
-            .task_control_sender
-            .send(TaskControlMsg::StartEval {
+        let task_id = inner
+            .new_task(
+                task_start,
                 player,
-                program: binary,
-            })
-        {
-            error!(task_id, error = ?e, "Could not start eval task");
-            return Err(TaskNotFound(task_id));
-        }
+                sessions,
+                None,
+                self.clone(),
+                perms,
+                false,
+            )
+            .await?;
 
         Ok(task_id)
     }
@@ -618,6 +534,7 @@ impl Scheduler {
         let mut kill_requests = Vec::new();
         let mut resume_requests = Vec::new();
         let mut to_disconnect = Vec::new();
+        let mut to_retry = Vec::new();
 
         match msg {
             SchedulerControlMsg::TaskSuccess(value) => {
@@ -630,10 +547,9 @@ impl Scheduler {
                 increment_counter!("scheduler.task_conflict_retry");
                 debug!(?task_id, "Task retrying due to conflict");
 
-                // TODO: to restart we need to have a way to know the original action that was being
-                //   performed, and we need to basically re-issue it, but making sure that the task's
-                //   state is entirely cleared.
-                todo!("Task conflict retry");
+                // Ask the task to restart itself, using its stashed original start info, but with
+                // a brand new transaction.
+                to_retry.push(task_id);
             }
             SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
                 increment_counter!("scheduler.verb_not_found");
@@ -811,6 +727,9 @@ impl Scheduler {
         // Service resume requests, removing any that were non-responsive (returned from function)
         to_remove.append(&mut inner.process_resume_requests(resume_requests).await);
 
+        // Service retry requests, removing any that were non-responsive (returned from function)
+        to_remove.append(&mut inner.process_retry_requests(to_retry).await);
+
         inner.process_disconnect_tasks(to_disconnect).await;
 
         // Prune any completed/dead tasks
@@ -830,13 +749,23 @@ impl Inner {
         scheduler_ref: Scheduler,
     ) -> Result<TaskId, SchedulerError> {
         increment_counter!("scheduler.forked_tasks");
+
+        let suspended = fork.delay.is_some();
+
+        let player = fork.player;
+        let delay = fork.delay;
+        let progr = fork.progr;
         let task_id = self
             .new_task(
-                fork.player,
+                TaskStart::StartFork {
+                    fork_request: fork,
+                    suspended,
+                },
+                player,
                 session,
-                fork.delay,
+                delay,
                 scheduler_ref,
-                fork.progr,
+                progr,
                 false,
             )
             .await?;
@@ -847,26 +776,9 @@ impl Inner {
 
         // If there's a delay on the fork, we will mark it in suspended state and put in the
         // delay time.
-        let mut suspended = false;
-        if let Some(delay) = fork.delay {
+        if let Some(delay) = delay {
             task_ref.suspended = true;
             task_ref.resume_time = Some(SystemTime::now() + delay);
-            suspended = true;
-        }
-
-        if let Err(e) = task_ref
-            .task_control_sender
-            .send(TaskControlMsg::StartFork {
-                task_id,
-                fork_request: fork,
-                suspended,
-            })
-        {
-            error!(task_id, error = ?e, "Could not start fork task");
-
-            // Will treat this as a task not found because if we can't deliver to its mailbox,
-            // its dead to us.
-            return Err(TaskNotFound(task_id));
         }
 
         increment_counter!("scheduler.forked_tasks");
@@ -1145,6 +1057,33 @@ impl Inner {
         to_remove
     }
 
+    async fn process_retry_requests(&mut self, to_retry: Vec<TaskId>) -> Vec<TaskId> {
+        let mut to_remove = vec![];
+        for task_id in to_retry {
+            let Some(task) = self.tasks.get_mut(&task_id) else {
+                warn!(task = task_id, "Retrying task not found");
+                continue;
+            };
+
+            // Create a new transaction.
+            let world_state = self
+                .state_source
+                .new_world_state()
+                .await
+                .expect("Could not start transaction for resumed task. Panic.");
+
+            task.suspended = false;
+            if let Err(e) = task
+                .task_control_sender
+                .send(TaskControlMsg::Restart(world_state))
+            {
+                error!(task = task_id, error = ?e,
+                    "Could not send resume request to task. Task being removed.");
+                to_remove.push(task_id);
+            }
+        }
+        to_remove
+    }
     async fn process_disconnect_tasks(&mut self, to_disconnect: Vec<(TaskId, Objid)>) {
         for (disconnect_task_id, player) in to_disconnect {
             {
@@ -1201,6 +1140,7 @@ impl Inner {
 
     async fn new_task(
         &mut self,
+        task_start: TaskStart,
         player: Objid,
         session: Arc<dyn Session>,
         delay_start: Option<Duration>,
@@ -1215,7 +1155,6 @@ impl Inner {
         let (task_control_sender, task_control_receiver) = tokio::sync::mpsc::unbounded_channel();
 
         let state_source = self.state_source.clone();
-
         let task_control = TaskControl {
             task_id,
             player,
@@ -1233,45 +1172,23 @@ impl Inner {
         // TODO: support a queue-size on concurrent executing tasks and allow them to sit in an
         //   initially suspended state without spawning a worker thread, until the queue has space.
         // Spawn the task's thread.
+        let state_source = self.state_source.clone();
         tokio::spawn(async move {
-            if let Some(delay) = delay_start {
-                tokio::time::sleep(delay).await;
-            }
-
-            // Start the transaction.
-            let mut world_state = state_source
-                .new_world_state()
-                .await
-                .expect("Could not start transaction for new task");
-
-            // Find out max ticks, etc. for this task. These are either pulled from server constants in
-            // the DB or from default constants.
-            let (max_ticks, max_seconds, max_stack_depth) =
-                max_vm_values(world_state.as_mut(), is_background).await;
-
-            // Spawn a new MOO VM host.
-            // TODO: here is where we'd make a choice about alternative VM/VM Host implementations.
-            let scheduler_control_sender = scheduler_ref.control_sender.clone();
-            let vm_host = MooVmHost::new(
-                max_stack_depth,
-                max_ticks,
-                Duration::from_secs(max_seconds),
-                session.clone(),
-                scheduler_control_sender.clone(),
-            );
-            let task = Task {
+            debug!(?task_id, ?task_start, "Starting up task");
+            Task::run(
                 task_id,
-                scheduled_start_time: None,
-                scheduler_control_sender,
+                task_start,
                 player,
-                vm_host,
-                session,
-                world_state,
                 perms,
-            };
-            debug!("Starting up task: {:?}", task_id);
-            task.run(task_control_receiver).await;
-            debug!("Completed task: {:?}", task_id);
+                delay_start,
+                state_source,
+                is_background,
+                session.clone(),
+                task_control_receiver,
+                scheduler_ref.control_sender.clone(),
+            )
+            .await;
+            debug!(?task_id, "Completed task");
         });
 
         increment_counter!("scheduler.created_tasks");

@@ -12,8 +12,8 @@ use moor_values::var::Var;
 use std::time::SystemTime;
 use tokio::sync::oneshot;
 
-/// Messages sent to tasks from the scheduler to tell the task to do things.
-pub enum TaskControlMsg {
+#[derive(Debug, Clone)]
+pub enum TaskStart {
     /// The scheduler is telling the task to parse a command and execute whatever verbs are
     /// associated with it.
     StartCommandVerb { player: Objid, command: String },
@@ -29,7 +29,6 @@ pub enum TaskControlMsg {
     /// ForkRequest contains the information on the fork vector and other information needed to
     /// set up execution.
     StartFork {
-        task_id: TaskId,
         fork_request: Fork,
         // If we're starting in a suspended state. If this is true, an explicit Resume from the
         // scheduler will be required to start the task.
@@ -38,6 +37,12 @@ pub enum TaskControlMsg {
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
     /// TODO: remove the MOO-specificity of this.
     StartEval { player: Objid, program: Program },
+}
+
+/// Messages sent to tasks from the scheduler to tell the task to do things.
+pub enum TaskControlMsg {
+    /// The scheduler is telling the task to restart itself in a new transaction.
+    Restart(Box<dyn WorldState>),
     /// The scheduler is telling the task to resume execution. Use the given world state
     /// (transaction) and permissions when doing so.
     Resume(Box<dyn WorldState>, Var),

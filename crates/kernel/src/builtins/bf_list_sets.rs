@@ -218,7 +218,7 @@ fn perform_regex_match(
         onig::RegexOptions::REGEX_OPTION_IGNORECASE
     };
 
-    let mut syntax = onig::Syntax::grep().clone();
+    let mut syntax = *onig::Syntax::grep();
     syntax.set_operators(
         syntax
             .operators()
@@ -263,7 +263,7 @@ fn perform_regex_match(
 }
 
 /// Common code for both match and rmatch.
-fn do_re_match<'a>(bf_args: &mut BfCallState<'a>, reverse: bool) -> Result<BfRet, Error> {
+fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(E_INVARG);
     }
