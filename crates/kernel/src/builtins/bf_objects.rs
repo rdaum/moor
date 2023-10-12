@@ -94,7 +94,7 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> 
     debug!("Children: {:?} {:?}", obj, children);
     let children = children.iter().map(v_objid).collect::<Vec<_>>();
     debug!("Children: {:?} {:?}", obj, children);
-    Ok(Ret(v_list(children)))
+    Ok(Ret(v_list(&children)))
 }
 bf_declare!(children, bf_children);
 
@@ -227,7 +227,7 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                         }
                     }
                 }
-                let contents = v_list(contents);
+                let contents = v_list(&contents);
                 match bf_args
                     .world_state
                     .find_method_verb_on(bf_args.task_perms_who(), *obj, "recycle")
@@ -582,11 +582,11 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .verbs(bf_args.task_perms_who(), *obj)
         .await
         .map_err(world_state_err)?;
-    let verbs = verbs
+    let verbs: Vec<_> = verbs
         .iter()
         .map(|v| v_str(v.names().first().unwrap()))
         .collect();
-    Ok(Ret(v_list(verbs)))
+    Ok(Ret(v_list(&verbs)))
 }
 bf_declare!(verbs, bf_verbs);
 
@@ -606,8 +606,8 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
         .properties(bf_args.task_perms_who(), *obj)
         .await
         .map_err(world_state_err)?;
-    let props = props.iter().map(|p| v_str(p.name())).collect();
-    Ok(Ret(v_list(props)))
+    let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
+    Ok(Ret(v_list(&props)))
 }
 bf_declare!(properties, bf_properties);
 

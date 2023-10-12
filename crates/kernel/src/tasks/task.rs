@@ -22,11 +22,11 @@ use crate::tasks::command_parse::{
     parse_command, parse_into_words, ParseCommandError, ParsedCommand,
 };
 use crate::tasks::moo_vm_host::MooVmHost;
-use crate::tasks::scheduler::{AbortLimitReason, TaskDescription};
+use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart};
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
-use crate::tasks::{TaskId, VerbCall};
+use crate::tasks::{TaskDescription, TaskId, VerbCall};
 
 /// A task is a concurrent, transactionally isolated, thread of execution. It starts with the
 /// execution of a 'verb' (or 'command verb' or 'eval' etc) and runs through to completion or

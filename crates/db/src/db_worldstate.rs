@@ -197,13 +197,13 @@ impl WorldState for DbTxWorldState {
         } else if pname == "location" {
             return self.location_of(perms, obj).await.map(Var::from);
         } else if pname == "contents" {
-            let contents = self
+            let contents: Vec<_> = self
                 .contents_of(perms, obj)
                 .await?
                 .iter()
                 .map(v_objid)
                 .collect();
-            return Ok(v_list(contents));
+            return Ok(v_list(&contents));
         } else if pname == "owner" {
             return self.owner_of(obj).await.map(Var::from);
         } else if pname == "programmer" {

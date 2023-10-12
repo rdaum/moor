@@ -142,7 +142,7 @@ impl VM {
                 }
             };
 
-            stack_list.push(v_list(traceback_entry));
+            stack_list.push(v_list(&traceback_entry));
         }
         stack_list
     }
@@ -351,7 +351,7 @@ impl VM {
                         }
 
                         if found {
-                            a.push(v_list(vec![v_err(*code)]));
+                            a.push(v_list(&[v_err(*code)]));
                             return ExecutionResult::More;
                         }
                     }

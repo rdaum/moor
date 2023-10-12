@@ -33,7 +33,7 @@ lazy_static! {
     static ref VAR_EMPTY_STR: Var = Var::new(Variant::Str(Str::from_str("").unwrap()));
 }
 
-// Macro to call v_list with vector arguments to construct instead of having to do v_list(vec![...])
+// Macro to call v_list with vector arguments to construct instead of having to do v_list(&[...])
 #[allow(unused_macros)]
 macro_rules! v_lst {
     () => (
@@ -141,8 +141,8 @@ pub fn v_err(e: Error) -> Var {
 }
 
 #[must_use]
-pub fn v_list(l: Vec<Var>) -> Var {
-    Var::new(Variant::List(List::from_vec(l)))
+pub fn v_list(l: &[Var]) -> Var {
+    Var::new(Variant::List(List::from_vec(l.to_vec())))
 }
 
 #[must_use]
@@ -337,7 +337,7 @@ impl From<Objid> for Var {
 
 impl From<Vec<Self>> for Var {
     fn from(l: Vec<Self>) -> Self {
-        v_list(l)
+        v_list(&l)
     }
 }
 
@@ -417,12 +417,9 @@ mod tests {
 
     #[test]
     fn test_index() {
-        assert_eq!(v_list(vec![v_int(1), v_int(2)]).index(0), Ok(v_int(1)));
-        assert_eq!(v_list(vec![v_int(1), v_int(2)]).index(1), Ok(v_int(2)));
-        assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).index(2),
-            Ok(v_err(E_RANGE))
-        );
+        assert_eq!(v_list(&[v_int(1), v_int(2)]).index(0), Ok(v_int(1)));
+        assert_eq!(v_list(&[v_int(1), v_int(2)]).index(1), Ok(v_int(2)));
+        assert_eq!(v_list(&[v_int(1), v_int(2)]).index(2), Ok(v_err(E_RANGE)));
         assert_eq!(v_str("ab").index(0), Ok(v_str("a")));
         assert_eq!(v_str("ab").index(1), Ok(v_str("b")));
         assert_eq!(v_str("ab").index(2), Ok(v_err(E_RANGE)));
@@ -434,10 +431,7 @@ mod tests {
         assert_eq!(v_float(1.), v_float(1.));
         assert_eq!(v_str("a"), v_str("a"));
         assert_eq!(v_str("a"), v_str("A"));
-        assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]),
-            v_list(vec![v_int(1), v_int(2)])
-        );
+        assert_eq!(v_list(&[v_int(1), v_int(2)]), v_list(&[v_int(1), v_int(2)]));
         assert_eq!(v_obj(1), v_obj(1));
         assert_eq!(v_err(E_TYPE), v_err(E_TYPE));
     }
@@ -447,10 +441,7 @@ mod tests {
         assert_ne!(v_int(1), v_int(2));
         assert_ne!(v_float(1.), v_float(2.));
         assert_ne!(v_str("a"), v_str("b"));
-        assert_ne!(
-            v_list(vec![v_int(1), v_int(2)]),
-            v_list(vec![v_int(1), v_int(3)])
-        );
+        assert_ne!(v_list(&[v_int(1), v_int(2)]), v_list(&[v_int(1), v_int(3)]));
         assert_ne!(v_obj(1), v_obj(2));
         assert_ne!(v_err(E_TYPE), v_err(E_RANGE));
     }
@@ -460,7 +451,7 @@ mod tests {
         assert!(v_int(1) < v_int(2));
         assert!(v_float(1.) < v_float(2.));
         assert!(v_str("a") < v_str("b"));
-        assert!(v_list(vec![v_int(1), v_int(2)]) < v_list(vec![v_int(1), v_int(3)]));
+        assert!(v_list(&[v_int(1), v_int(2)]) < v_list(&[v_int(1), v_int(3)]));
         assert!(v_obj(1) < v_obj(2));
         assert!(v_err(E_TYPE) < v_err(E_RANGE));
     }
@@ -470,7 +461,7 @@ mod tests {
         assert!(v_int(1) <= v_int(2));
         assert!(v_float(1.) <= v_float(2.));
         assert!(v_str("a") <= v_str("b"));
-        assert!(v_list(vec![v_int(1), v_int(2)]) <= v_list(vec![v_int(1), v_int(3)]));
+        assert!(v_list(&[v_int(1), v_int(2)]) <= v_list(&[v_int(1), v_int(3)]));
         assert!(v_obj(1) <= v_obj(2));
         assert!(v_err(E_TYPE) <= v_err(E_RANGE));
     }
@@ -480,7 +471,7 @@ mod tests {
         assert!(v_int(2) > v_int(1));
         assert!(v_float(2.) > v_float(1.));
         assert!(v_str("b") > v_str("a"));
-        assert!(v_list(vec![v_int(1), v_int(3)]) > v_list(vec![v_int(1), v_int(2)]));
+        assert!(v_list(&[v_int(1), v_int(3)]) > v_list(&[v_int(1), v_int(2)]));
         assert!(v_obj(2) > v_obj(1));
         assert!(v_err(E_RANGE) > v_err(E_TYPE));
     }
@@ -490,7 +481,7 @@ mod tests {
         assert!(v_int(2) >= v_int(1));
         assert!(v_float(2.) >= v_float(1.));
         assert!(v_str("b") >= v_str("a"));
-        assert!(v_list(vec![v_int(1), v_int(3)]) >= v_list(vec![v_int(1), v_int(2)]));
+        assert!(v_list(&[v_int(1), v_int(3)]) >= v_list(&[v_int(1), v_int(2)]));
         assert!(v_obj(2) >= v_obj(1));
         assert!(v_err(E_RANGE) >= v_err(E_TYPE));
     }
@@ -501,7 +492,7 @@ mod tests {
         assert_eq!(v_float(1.).partial_cmp(&v_float(1.)), Some(Ordering::Equal));
         assert_eq!(v_str("a").partial_cmp(&v_str("a")), Some(Ordering::Equal));
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).partial_cmp(&v_list(vec![v_int(1), v_int(2)])),
+            v_list(&[v_int(1), v_int(2)]).partial_cmp(&v_list(&[v_int(1), v_int(2)])),
             Some(Ordering::Equal)
         );
         assert_eq!(v_obj(1).partial_cmp(&v_obj(1)), Some(Ordering::Equal));
@@ -514,7 +505,7 @@ mod tests {
         assert_eq!(v_float(1.).partial_cmp(&v_float(2.)), Some(Ordering::Less));
         assert_eq!(v_str("a").partial_cmp(&v_str("b")), Some(Ordering::Less));
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).partial_cmp(&v_list(vec![v_int(1), v_int(3)])),
+            v_list(&[v_int(1), v_int(2)]).partial_cmp(&v_list(&[v_int(1), v_int(3)])),
             Some(Ordering::Less)
         );
         assert_eq!(v_obj(1).partial_cmp(&v_obj(2)), Some(Ordering::Less));
@@ -530,7 +521,7 @@ mod tests {
         );
         assert_eq!(v_str("b").partial_cmp(&v_str("a")), Some(Ordering::Greater));
         assert_eq!(
-            v_list(vec![v_int(1), v_int(3)]).partial_cmp(&v_list(vec![v_int(1), v_int(2)])),
+            v_list(&[v_int(1), v_int(3)]).partial_cmp(&v_list(&[v_int(1), v_int(2)])),
             Some(Ordering::Greater)
         );
         assert_eq!(v_obj(2).partial_cmp(&v_obj(1)), Some(Ordering::Greater));
@@ -546,7 +537,7 @@ mod tests {
         assert_eq!(v_float(1.).cmp(&v_float(1.)), Ordering::Equal);
         assert_eq!(v_str("a").cmp(&v_str("a")), Ordering::Equal);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).cmp(&v_list(vec![v_int(1), v_int(2)])),
+            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(2)])),
             Ordering::Equal
         );
         assert_eq!(v_obj(1).cmp(&v_obj(1)), Ordering::Equal);
@@ -556,7 +547,7 @@ mod tests {
         assert_eq!(v_float(1.).cmp(&v_float(2.)), Ordering::Less);
         assert_eq!(v_str("a").cmp(&v_str("b")), Ordering::Less);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).cmp(&v_list(vec![v_int(1), v_int(3)])),
+            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(3)])),
             Ordering::Less
         );
         assert_eq!(v_obj(1).cmp(&v_obj(2)), Ordering::Less);
@@ -566,7 +557,7 @@ mod tests {
         assert_eq!(v_float(2.).cmp(&v_float(1.)), Ordering::Greater);
         assert_eq!(v_str("b").cmp(&v_str("a")), Ordering::Greater);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(3)]).cmp(&v_list(vec![v_int(1), v_int(2)])),
+            v_list(&[v_int(1), v_int(3)]).cmp(&v_list(&[v_int(1), v_int(2)])),
             Ordering::Greater
         );
         assert_eq!(v_obj(2).cmp(&v_obj(1)), Ordering::Greater);
@@ -585,8 +576,8 @@ mod tests {
             Ordering::Equal
         );
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)])
-                .partial_cmp(&v_list(vec![v_int(1), v_int(2)]))
+            v_list(&[v_int(1), v_int(2)])
+                .partial_cmp(&v_list(&[v_int(1), v_int(2)]))
                 .unwrap(),
             Ordering::Equal
         );
@@ -603,8 +594,8 @@ mod tests {
         );
         assert_eq!(v_str("a").partial_cmp(&v_str("b")).unwrap(), Ordering::Less);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)])
-                .partial_cmp(&v_list(vec![v_int(1), v_int(3)]))
+            v_list(&[v_int(1), v_int(2)])
+                .partial_cmp(&v_list(&[v_int(1), v_int(3)]))
                 .unwrap(),
             Ordering::Less
         );
@@ -624,8 +615,8 @@ mod tests {
             Ordering::Greater
         );
         assert_eq!(
-            v_list(vec![v_int(1), v_int(3)])
-                .partial_cmp(&v_list(vec![v_int(1), v_int(2)]))
+            v_list(&[v_int(1), v_int(3)])
+                .partial_cmp(&v_list(&[v_int(1), v_int(2)]))
                 .unwrap(),
             Ordering::Greater
         );
@@ -642,7 +633,7 @@ mod tests {
         assert_eq!(v_float(1.).cmp(&v_float(1.)), Ordering::Equal);
         assert_eq!(v_str("a").cmp(&v_str("a")), Ordering::Equal);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).cmp(&v_list(vec![v_int(1), v_int(2)])),
+            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(2)])),
             Ordering::Equal
         );
         assert_eq!(v_obj(1).cmp(&v_obj(1)), Ordering::Equal);
@@ -652,7 +643,7 @@ mod tests {
         assert_eq!(v_float(1.).cmp(&v_float(2.)), Ordering::Less);
         assert_eq!(v_str("a").cmp(&v_str("b")), Ordering::Less);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(2)]).cmp(&v_list(vec![v_int(1), v_int(3)])),
+            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(3)])),
             Ordering::Less
         );
         assert_eq!(v_obj(1).cmp(&v_obj(2)), Ordering::Less);
@@ -662,7 +653,7 @@ mod tests {
         assert_eq!(v_float(2.).cmp(&v_float(1.)), Ordering::Greater);
         assert_eq!(v_str("b").cmp(&v_str("a")), Ordering::Greater);
         assert_eq!(
-            v_list(vec![v_int(1), v_int(3)]).cmp(&v_list(vec![v_int(1), v_int(2)])),
+            v_list(&[v_int(1), v_int(3)]).cmp(&v_list(&[v_int(1), v_int(2)])),
             Ordering::Greater
         );
         assert_eq!(v_obj(2).cmp(&v_obj(1)), Ordering::Greater);
@@ -674,33 +665,33 @@ mod tests {
         assert!(v_int(1).is_true());
         assert!(v_float(1.).is_true());
         assert!(v_str("a").is_true());
-        assert!(v_list(vec![v_int(1), v_int(2)]).is_true());
+        assert!(v_list(&[v_int(1), v_int(2)]).is_true());
         assert!(!v_obj(1).is_true());
         assert!(!v_err(E_TYPE).is_true());
     }
 
     #[test]
     fn test_listrangeset() {
-        let base = v_list(vec![v_int(1), v_int(2), v_int(3), v_int(4)]);
+        let base = v_list(&[v_int(1), v_int(2), v_int(3), v_int(4)]);
 
         // {1,2,3,4}[1..2] = {"a", "b", "c"} => {1, "a", "b", "c", 4}
-        let value = v_list(vec![v_str("a"), v_str("b"), v_str("c")]);
-        let expected = v_list(vec![v_int(1), v_str("a"), v_str("b"), v_str("c"), v_int(4)]);
+        let value = v_list(&[v_str("a"), v_str("b"), v_str("c")]);
+        let expected = v_list(&[v_int(1), v_str("a"), v_str("b"), v_str("c"), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a"} => {1, "a", 4}
-        let value = v_list(vec![v_str("a")]);
-        let expected = v_list(vec![v_int(1), v_str("a"), v_int(4)]);
+        let value = v_list(&[v_str("a")]);
+        let expected = v_list(&[v_int(1), v_str("a"), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {} => {1,4}
         let value = v_empty_list();
-        let expected = v_list(vec![v_int(1), v_int(4)]);
+        let expected = v_list(&[v_int(1), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a", "b"} => {1, "a", "b", 4}
-        let value = v_list(vec![v_str("a"), v_str("b")]);
-        let expected = v_list(vec![v_int(1), v_str("a"), v_str("b"), v_int(4)]);
+        let value = v_list(&[v_str("a"), v_str("b")]);
+        let expected = v_list(&[v_int(1), v_str("a"), v_str("b"), v_int(4)]);
         assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
     }
 
@@ -738,10 +729,10 @@ mod tests {
     #[test]
     fn test_range() -> Result<(), Error> {
         // test on integer list
-        let int_list = v_list(vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
+        let int_list = v_list(&[1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
         assert_eq!(
             int_list.range(2, 4)?,
-            v_list(vec![2.into(), 3.into(), 4.into()])
+            v_list(&[2.into(), 3.into(), 4.into()])
         );
 
         // test on string
@@ -752,7 +743,7 @@ mod tests {
         let empty_list = v_empty_list();
         assert_eq!(empty_list.range(1, 0), Ok(v_empty_list()));
         // test on out of range
-        let int_list = v_list(vec![1.into(), 2.into(), 3.into()]);
+        let int_list = v_list(&[1.into(), 2.into(), 3.into()]);
         assert_eq!(int_list.range(2, 4), Ok(v_err(E_RANGE)));
         // test on type mismatch
         let var_int = v_int(10);

@@ -168,7 +168,7 @@ impl Var {
                 for i in from..=to {
                     res.push(l[(i - 1) as usize].clone());
                 }
-                Ok(v_list(res))
+                Ok(v_list(&res))
             }
             _ => Ok(v_err(E_TYPE)),
         }
@@ -218,7 +218,7 @@ impl Var {
                 ans.extend_from_slice(&base_list[..from - 1]);
                 ans.extend(value_list.iter().cloned());
                 ans.extend_from_slice(&base_list[to..]);
-                v_list(ans)
+                v_list(&ans)
             }
             _ => unreachable!(),
         };

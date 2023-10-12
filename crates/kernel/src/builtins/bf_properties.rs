@@ -48,7 +48,7 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
         perms.push('c');
     }
 
-    Ok(Ret(v_list(vec![v_objid(owner), v_string(perms)])))
+    Ok(Ret(v_list(&[v_objid(owner), v_string(perms)])))
 }
 bf_declare!(property_info, bf_property_info);
 
@@ -121,7 +121,7 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
         .set_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str(), attrs)
         .await
         .map_err(world_state_err)?;
-    Ok(Ret(v_list(vec![])))
+    Ok(Ret(v_list(&[])))
 }
 bf_declare!(set_property_info, bf_set_property_info);
 
@@ -159,7 +159,7 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
         .clear_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await
         .map_err(world_state_err)?;
-    Ok(Ret(v_list(vec![])))
+    Ok(Ret(v_list(&[])))
 }
 bf_declare!(set_clear_property, bf_clear_property);
 
@@ -217,7 +217,7 @@ async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         .delete_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await
         .map_err(world_state_err)?;
-    Ok(Ret(v_list(vec![])))
+    Ok(Ret(v_list(&[])))
 }
 bf_declare!(delete_property, bf_delete_property);
 impl VM {

@@ -245,7 +245,7 @@ impl VM {
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
                     let new_list = list.iter().chain(tail.iter());
-                    self.push(&v_list(new_list.cloned().collect()))
+                    self.push(&v_list(&new_list.cloned().collect::<Vec<_>>()));
                 }
                 Op::IndexSet => {
                     // collection[index] = value
@@ -271,7 +271,7 @@ impl VM {
                 }
                 Op::MakeSingletonList => {
                     let v = self.pop();
-                    self.push(&v_list(vec![v]))
+                    self.push(&v_list(&[v]))
                 }
                 Op::PutTemp => {
                     self.top_mut().temp = self.peek_top();
@@ -634,7 +634,7 @@ impl VM {
                                     };
                                     v.push(rest.clone());
                                 }
-                                let rest = v_list(v);
+                                let rest = v_list(&v);
                                 self.set_env(*id, &rest);
                             }
                             ScatterLabel::Required(id) => {

@@ -1,5 +1,6 @@
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
+use std::time::SystemTime;
 
 pub mod command_parse;
 pub mod scheduler;
@@ -22,6 +23,18 @@ pub struct VerbCall {
     pub args: Vec<Var>,
     pub argstr: String,
     pub caller: Objid,
+}
+
+/// External interface description of a task, for purpose of e.g. the queued_tasks() builtin.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct TaskDescription {
+    pub task_id: TaskId,
+    pub start_time: Option<SystemTime>,
+    pub permissions: Objid,
+    pub verb_name: String,
+    pub verb_definer: Objid,
+    pub line_number: usize,
+    pub this: Objid,
 }
 
 pub mod vm_test_utils {

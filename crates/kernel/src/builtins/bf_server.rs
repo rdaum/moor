@@ -75,14 +75,14 @@ async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
     }
 
     Ok(Ret(v_list(
-        bf_args
+        &bf_args
             .session
             .connected_players()
             .await
             .unwrap()
             .iter()
             .map(|p| v_objid(*p))
-            .collect(),
+            .collect::<Vec<Var>>(),
     )))
 }
 bf_declare!(connected_players, bf_connected_players);
@@ -141,7 +141,7 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     // We have to exempt ourselves from the callers list.
     let callers = bf_args.vm.callers()[1..].to_vec();
     Ok(Ret(v_list(
-        callers
+        &callers
             .iter()
             .map(|c| {
                 let callers = vec![
@@ -158,9 +158,9 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                     // line number
                     v_int(c.line_number as i64),
                 ];
-                v_list(callers)
+                v_list(&callers)
             })
-            .collect(),
+            .collect::<Vec<Var>>(),
     )))
 }
 bf_declare!(callers, bf_callers);
@@ -414,7 +414,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
     //      <programmer>, <verb-loc>, <verb-name>, <line>, <this>}
-    let tasks = tasks
+    let tasks: Vec<_> = tasks
         .iter()
         .map(|task| {
             let task_id = v_int(task.task_id as i64);
@@ -432,13 +432,13 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
             let verb_name = v_string(task.verb_name.clone());
             let line = v_int(task.line_number as i64);
             let this = v_objid(task.this);
-            v_list(vec![
+            v_list(&[
                 task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
             ])
         })
         .collect();
 
-    Ok(Ret(v_list(tasks)))
+    Ok(Ret(v_list(&tasks)))
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
 
@@ -687,12 +687,7 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
         })
         .collect::<Vec<_>>();
 
-    v_list(vec![
-        v_str(bf.name.as_str()),
-        min_args,
-        max_args,
-        v_list(types),
-    ])
+    v_list(&[v_str(bf.name.as_str()), min_args, max_args, v_list(&types)])
 }
 
 async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
@@ -714,12 +709,12 @@ async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
         return Ok(Ret(desc));
     }
 
-    let bf_list = BUILTIN_DESCRIPTORS
+    let bf_list: Vec<_> = BUILTIN_DESCRIPTORS
         .iter()
         .filter(|&bf| bf.implemented)
         .map(bf_function_info_to_list)
         .collect();
-    Ok(Ret(v_list(bf_list)))
+    Ok(Ret(v_list(&bf_list)))
 }
 bf_declare!(function_info, bf_function_info);
 
@@ -731,7 +726,7 @@ async fn bf_listeners<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     // TODO this function is hardcoded to just return {{#0, 7777, 1}}
     // this is on account that existing cores expect this to be the case
     // but we have no intend of supporting other network listener magic at this point
-    let listeners = v_list(vec![v_list(vec![v_int(0), v_int(7777), v_int(1)])]);
+    let listeners = v_list(&[v_list(&[v_int(0), v_int(7777), v_int(1)])]);
 
     Ok(Ret(listeners))
 }
@@ -759,7 +754,7 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
             let program_code = program_code.as_str();
             let program = match compile(program_code) {
                 Ok(program) => program,
-                Err(e) => return Ok(Ret(v_list(vec![v_int(0), v_string(e.to_string())]))),
+                Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
             };
 
             // Now we have to construct things to set up for eval. Which means tramping through with a
@@ -773,7 +768,7 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
             // Value must be on stack,  and we then wrap that up in the {success, value} tuple.
             let value = bf_args.vm.pop();
-            Ok(Ret(v_list(vec![v_bool(true), value])))
+            Ok(Ret(v_list(&[v_bool(true), value])))
         }
         _ => {
             panic!("Invalid trampoline value for bf_eval: {}", tramp);

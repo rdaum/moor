@@ -92,7 +92,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     // Join names into a single string, this is how MOO presents it.
     let verb_names = names.join(" ");
 
-    let result = v_list(vec![
+    let result = v_list(&[
         v_objid(owner),
         v_string(perms_string),
         v_string(verb_names),
@@ -255,7 +255,7 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     let args = verbdef.args();
 
     // Output is {dobj, prep, iobj} as strings
-    let result = v_list(vec![
+    let result = v_list(&[
         v_str(args.dobj.to_string()),
         v_str(preposition_to_string(&args.prep)),
         v_str(args.iobj.to_string()),
@@ -427,7 +427,7 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         }
     };
     Ok(Ret(v_list(
-        unparsed.iter().map(|s| v_str(s)).collect::<Vec<_>>(),
+        &unparsed.iter().map(|s| v_str(s)).collect::<Vec<_>>(),
     )))
 }
 bf_declare!(verb_code, bf_verb_code);
@@ -491,8 +491,7 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
             // MOO-code compiler during processing of code. If the list is non-empty, then
             // set_verb_code() did not install code; the program associated with the verb in question
             // is unchanged.
-            let error_list = vec![v_str(e.to_string().as_str())];
-            return Ok(Ret(v_list(error_list)));
+            return Ok(Ret(v_list(&[v_str(e.to_string().as_str())])));
         }
     };
     // Now we have a program, we need to encode it.
@@ -705,7 +704,7 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         disassembly.push(v_string(format!("{: >3}: {:?}{}", i, op, line_no_string)));
     }
 
-    Ok(Ret(v_list(disassembly)))
+    Ok(Ret(v_list(&disassembly)))
 }
 bf_declare!(disassemble, bf_disassemble);
 

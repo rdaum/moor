@@ -139,7 +139,7 @@ impl Activation {
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
         );
-        a.set_gvar(GlobalName::args, v_list(verb_call_request.call.args));
+        a.set_gvar(GlobalName::args, v_list(&verb_call_request.call.args));
 
         // From the command, if any...
         if let Some(command) = verb_call_request.command {

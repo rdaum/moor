@@ -6,8 +6,7 @@ LambdaMOO is a MUD -- aka a shared, multi-user, text-based virtual world -- that
 
 Unlike many MUDs, LambdaMOO is not solely focused on role playing games, although its programmability has enabled users to develop RPGs implemented inside LambdaMOO.)
 
-Chances are if you landed here you already know all this, but I have a blurb here
-[here](doc/lambda-background.md) briefly summarizing more about LambdaMOO and why it's interesting.
+Chances are if you landed here you already know all this, but I have a blurb [here](doc/lambda-background.md) briefly summarizing more about LambdaMOO and why it's interesting.
 
 (note: "moor" name is provisional and awful, alternative suggestions accepted)
 
@@ -21,7 +20,7 @@ execute existing cores, and the 1.0 feature release is targeting this rather amb
 
 * Because it's easy to go into the weeds creating new things, and never finishing. By having a concrete goal, and something
   to compare and test against, I may actually get somewhere.
-* Because the *actual* useful and hard parts of those old MOO-type systems was the "user-space" type pieces (like
+* Because the *actual* useful and hard parts of those old MOO-type systems was the "user-space" type pieces ("cores" like
   LambdaCore/JHCore etc) and by making a new system run those old cores, there's more win.
 * Because LambdaMOO itself is actually a very *complicated system with a lot of moving parts*. There's a compiler,  
   an object database, a virtual machine, a decompiler, and a network runtime all rolled into one. This, is, in some

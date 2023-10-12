@@ -99,7 +99,7 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_LIST => {
                 let l_size = self.read_num()?;
                 let v: Vec<Var> = (0..l_size).map(|_l| self.read_var().unwrap()).collect();
-                v_list(v)
+                v_list(&v)
             }
             VarType::TYPE_NONE => v_none(),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),

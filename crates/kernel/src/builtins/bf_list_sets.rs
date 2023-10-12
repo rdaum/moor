@@ -289,12 +289,12 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Er
     };
 
     let subs = v_list(
-        match_vec
+        &match_vec
             .iter()
-            .map(|(start, end)| v_list(vec![v_int(*start as i64), v_int(*end as i64)]))
-            .collect(),
+            .map(|(start, end)| v_list(&[v_int(*start as i64), v_int(*end as i64)]))
+            .collect::<Vec<_>>(),
     );
-    Ok(Ret(v_list(vec![
+    Ok(Ret(v_list(&[
         v_int(overall.0 as i64),
         v_int(overall.1 as i64),
         subs,

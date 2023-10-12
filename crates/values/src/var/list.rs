@@ -232,14 +232,14 @@ mod tests {
         let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
         assert_eq!(
             list.insert(-1, &v_int(0)),
-            v_list(vec![v_int(0), v_int(1), v_int(2), v_int(3)])
+            v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)])
         );
 
         // MOO supports indexes beyond length of the list, which just append to the end...
         let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
         assert_eq!(
             list.insert(100, &v_int(0)),
-            v_list(vec![v_int(1), v_int(2), v_int(3), v_int(0)])
+            v_list(&[v_int(1), v_int(2), v_int(3), v_int(0)])
         );
     }
 

@@ -1,5 +1,5 @@
-use crate::tasks::scheduler::{AbortLimitReason, TaskDescription};
-use crate::tasks::TaskId;
+use crate::tasks::scheduler::AbortLimitReason;
+use crate::tasks::{TaskDescription, TaskId};
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
 
