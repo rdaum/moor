@@ -20,34 +20,29 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
-clap = "4.3.19"
-clap_derive = "4.3.12"
+clap = "4.4.6"
+clap_derive = "4.4.2"
 
-#
+## HTTP/websockets front-end
+axum = { version = "0.6.20", features = ["ws", "headers"] }
+serde_json = "1.0.107"
+serde = { version = "1.0.189", features = ["derive"] }
+serde_derive = "1.0.189"
+tower-http = { version = "0.4.4", features = ["add-extension", "auth", "compression-full", "trace"] }
+
+## Asynchronous transaction processing & networking
 futures = "0.3.28"
 futures-util = { version = "0.3.28", features = ["sink", "std"] }
 async-trait = "0.1.73"
-tower-http = { version = "0.4.3", features = ["add-extension", "auth", "compression-full", "trace"] }
-
-## HTTP/websockets front-end
-axum = { version = "0.6.19", features = ["ws", "headers"] }
-serde_json = "1.0.104"
-serde = { version = "1.0.188", features = ["derive"] }
-serde_derive = "1.0.188"
-
-## Asynchronous transaction processing & networking
-tokio = { version = "1.29.1", features = ["full"] }
-tokio-test = "0.4.2"
-tokio-util = { version = "0.7.8",  features = ["full"] }
-
-tungstenite = "0.20.0"           # Websockets
-tokio-tungstenite = "0.20.0"
+tokio = { version = "1.33.0", features = ["full"] }
+tokio-test = "0.4.3"
+tokio-util = { version = "0.7.9",  features = ["full"] }
 
 # Used for RPC daemon/client
 tmq = "0.4.0"
 
 ## Logging & tracing
-tracing = "0.1.37"
+tracing = "0.1.39"
 tracing-test = "0.2.4"
 tracing-subscriber = "0.3.17"
 tracing-chrome = "0.7.1"
@@ -56,22 +51,22 @@ metrics = "0.21.1"
 metrics-util = { version = "0.15.1",  default-features = false, features = ["recency", "registry", "summary"] }
 metrics-macros = "0.7.0"
 
-binary-layout = "3.1.3"
-bytes = "1.4.0"
-chrono = "0.4.26"
+# General usefullness
+binary-layout = "3.2.0"
+bytes = "1.5.0"
+chrono = "0.4.31"
+crossbeam-channel = "0.5.8"
 decorum = "0.3.1"  # For ordering & comparing our floats
 enum-primitive-derive = "0.2.2"
 inventory = "0.3.12"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
-num-traits = "0.2.16"
-once_cell = "1.17.2"
+num-traits = "0.2.17"
 rustyline = "12.0.0"
-strum = { version = "0.25.0", features = ["derive"] }
-text_io = "0.1.12" # Used for reading text dumps.
-uuid = { version = "1.4.1", features = ["v4"] }
-yoke = "0.7.1"
 sized-chunks = "0.7.0"
+strum = { version = "0.25.0", features = ["derive"] }
+uuid = { version = "1.4.1", features = ["v4"] }
+yoke = "0.7.2"
 
 ## Required for MOO builtins.
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
@@ -82,30 +77,26 @@ chrono-tz = "0.8.3"
 iana-time-zone = "0.1.57"
 
 ## Compiler grammar/parser
-pest = "2.7.1"
-pest_derive = "2.7.1"
+pest = "2.7.4"
+pest_derive = "2.7.4"
 
 ## Error declaration/ handling
 anyhow = { version = "1.0.75", features = ["backtrace"] }
-thiserror = "1.0.47"
+thiserror = "1.0.49"
 
 ## For macro-ing
-paste = "1.0.12"
+paste = "1.0.14"
 
-# For the DB / values layer.
+# For the DB & values layer.
+bincode = "2.0.0-rc.3" # For serializing/deserializing values
+im = "15.1.0" # Immutable data structures
 rocksdb = "0.21.0"
-crossbeam-channel = "0.5.8"
-bincode = "2.0.0-rc.3"
-im = "15.1.0"
+text_io = "0.1.12" # Used for reading text dumps.
 
 # Dev dependencies
 tempfile = "3.8.0"
 
-# Bindings
-cc = { version = "1.0", features = ["parallel"] }
-bindgen = "0.66.1"
-
 # testing
-test-case = "3.1.0"
-unindent = "0.2.2"
 pretty_assertions = "1.4.0"
+test-case = "3.2.1"
+unindent = "0.2.3"

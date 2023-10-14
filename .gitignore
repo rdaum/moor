@@ -5,3 +5,6 @@ target/
 /.idea/modules.xml
 /.idea/moor.iml
 /.idea/vcs.xml
+
+connections.json
+development.db
