@@ -1,16 +1,17 @@
 //! RocksDB implementation of a backing-store for relations.
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use rocksdb::{IteratorMode, DB};
+use tokio::sync::mpsc::UnboundedReceiver;
+use tracing::{debug, error, info};
+
 use crate::tuplebox::backing::{BackingStoreClient, WriterMessage};
 use crate::tuplebox::base_relation::BaseRelation;
 use crate::tuplebox::tb::RelationInfo;
-use crate::tuplebox::transaction::TupleOperation;
-use crate::tuplebox::working_set::WorkingSet;
-use moor_values::util::slice_ref::SliceRef;
-use rocksdb::{IteratorMode, DB};
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{debug, error, info};
+use crate::tuplebox::tuples::TxTuple;
+use crate::tuplebox::tx::working_set::WorkingSet;
 
 /// In lieu of a proper write-ahead-log and our own pager and backing store (in development), we're
 /// going to use RocksDB -- at least temporarily -- as a place to store the current canonical relation
@@ -63,7 +64,7 @@ impl RocksBackingStore {
             let it = db.iterator_cf(&cf, IteratorMode::Start);
             for item in it {
                 let (key, value) = item.expect("Could not retrieve tuple");
-                relation.upsert_tuple(key.to_vec(), 0, SliceRef::from_bytes(&value));
+                relation.insert_tuple(&key, &value);
                 tuplecnt += 1;
             }
         }
@@ -135,13 +136,13 @@ impl RocksBackingStore {
         }
 
         // Go through the modified tuples and mutate the underlying column families
-        for (relation_id, local_relation) in committed_working_set.0.iter().enumerate() {
+        for (relation_id, local_relation) in committed_working_set.relations.iter().enumerate() {
             let relation_info = &self.schema[relation_id];
             let cf = self
                 .db
                 .cf_handle(relation_info.name.as_str())
                 .expect("Unable to open column family");
-            for (domain, tuple) in local_relation.tuples() {
+            for tuple in local_relation.tuples() {
                 if let Ok(true) = abort.has_changed() {
                     let new_ts = abort.borrow();
                     if *new_ts != ts {
@@ -152,17 +153,20 @@ impl RocksBackingStore {
                         return;
                     }
                 }
-                match &tuple.t {
-                    TupleOperation::Insert(v)
-                    | TupleOperation::Update(v)
-                    | TupleOperation::Value(v) => {
+                match &tuple {
+                    TxTuple::Insert(t) | TxTuple::Update(t) => {
+                        let v = t.get();
                         self.db
-                            .put_cf(cf, domain, v.as_slice())
+                            .put_cf(cf, v.domain().as_slice(), v.codomain().as_slice())
                             .expect("Unable to sync tuple to backing store");
                     }
-                    TupleOperation::Tombstone => {
+                    TxTuple::Value(_) => {
+                        // No-op, this should already exist in the backing store.
+                        continue;
+                    }
+                    TxTuple::Tombstone { ts: _, domain: d } => {
                         self.db
-                            .delete_cf(cf, domain)
+                            .delete_cf(cf, d.as_slice())
                             .expect("Unable to delete tuple from backing store");
                     }
                 }

@@ -532,10 +532,10 @@ impl Scheduler {
             SchedulerControlMsg::TaskSuccess(value) => {
                 increment_counter!("scheduler.task_succeeded");
                 debug!(?task_id, result = ?value, "Task succeeded");
-                return vec![
+                vec![
                     TaskHandleResult::Notify(task_id, TaskWaiterResult::Success(value)),
                     TaskHandleResult::Remove(task_id),
-                ];
+                ]
             }
             SchedulerControlMsg::TaskConflictRetry => {
                 increment_counter!("scheduler.task_conflict_retry");
@@ -543,7 +543,7 @@ impl Scheduler {
 
                 // Ask the task to restart itself, using its stashed original start info, but with
                 // a brand new transaction.
-                return vec![TaskHandleResult::Retry(task_id)];
+                vec![TaskHandleResult::Retry(task_id)]
             }
             SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
                 increment_counter!("scheduler.verb_not_found");
@@ -552,10 +552,10 @@ impl Scheduler {
                 // many cores don't have it at all. So it would just be way too spammy.
                 debug!(this = ?this, verb, ?task_id, "Verb not found, task cancelled");
 
-                return vec![
+                vec![
                     TaskHandleResult::Notify(task_id, TaskWaiterResult::Error(TaskAbortedError)),
                     TaskHandleResult::Remove(task_id),
-                ];
+                ]
             }
             SchedulerControlMsg::TaskCommandError(parse_command_error) => {
                 increment_counter!("scheduler.command_error");
@@ -563,26 +563,26 @@ impl Scheduler {
                 // This is a common occurrence, so we don't want to log it at warn level.
                 trace!(?task_id, error = ?parse_command_error, "command parse error");
 
-                return vec![
+                vec![
                     TaskHandleResult::Notify(
                         task_id,
                         TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
                     ),
                     TaskHandleResult::Remove(task_id),
-                ];
+                ]
             }
             SchedulerControlMsg::TaskAbortCancelled => {
                 increment_counter!("scheduler.aborted_cancelled");
 
                 warn!(?task_id, "Task cancelled");
 
-                return vec![
+                vec![
                     TaskHandleResult::Notify(
                         task_id,
                         TaskWaiterResult::Error(TaskAbortedCancelled),
                     ),
                     TaskHandleResult::Remove(task_id),
-                ];
+                ]
             }
             SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
                 match limit_reason {
@@ -597,26 +597,26 @@ impl Scheduler {
                 }
                 increment_counter!("scheduler.aborted_limits");
 
-                return vec![
+                vec![
                     TaskHandleResult::Notify(
                         task_id,
                         TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
                     ),
                     TaskHandleResult::Remove(task_id),
-                ];
+                ]
             }
             SchedulerControlMsg::TaskException(exception) => {
                 increment_counter!("scheduler.task_exception");
 
                 warn!(?task_id, finally_reason = ?exception, "Task threw exception");
 
-                return vec![
+                vec![
                     TaskHandleResult::Notify(
                         task_id,
                         TaskWaiterResult::Error(TaskAbortedException(exception)),
                     ),
                     TaskHandleResult::Remove(task_id),
-                ];
+                ]
             }
             SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
                 trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
@@ -629,12 +629,12 @@ impl Scheduler {
                     warn!(task_id, "Task not found for fork request");
                     return vec![TaskHandleResult::Remove(task_id)];
                 };
-                return vec![TaskHandleResult::Fork(ForkRequest {
+                vec![TaskHandleResult::Fork(ForkRequest {
                     fork_request,
                     reply,
                     session: task.session.clone(),
                     scheduler: self.clone(),
-                })];
+                })]
             }
             SchedulerControlMsg::TaskSuspend(resume_time) => {
                 increment_counter!("scheduler.suspend_task");
@@ -647,7 +647,7 @@ impl Scheduler {
                 };
                 task.suspended = true;
                 task.resume_time = resume_time;
-                return vec![];
+                vec![]
             }
             SchedulerControlMsg::TaskRequestInput => {
                 increment_counter!("scheduler.request_input");
@@ -679,12 +679,12 @@ impl Scheduler {
                 }
                 inner.input_requests.insert(input_request_id, task_id);
                 debug!(?task_id, "Task suspended waiting for input");
-                return vec![];
+                vec![]
             }
             SchedulerControlMsg::DescribeOtherTasks(reply) => {
                 increment_counter!("scheduler.describe_tasks");
                 // Task is asking for a description of all other tasks.
-                return vec![TaskHandleResult::Describe(task_id, reply)];
+                vec![TaskHandleResult::Describe(task_id, reply)]
             }
             SchedulerControlMsg::KillTask {
                 victim_task_id,
@@ -693,12 +693,12 @@ impl Scheduler {
             } => {
                 increment_counter!("scheduler.kill_task");
                 // Task is asking to kill another task.
-                return vec![TaskHandleResult::Kill(KillRequest {
+                vec![TaskHandleResult::Kill(KillRequest {
                     requesting_task_id: task_id,
                     victim_task_id,
                     sender_permissions,
                     result_sender,
-                })];
+                })]
             }
             SchedulerControlMsg::ResumeTask {
                 queued_task_id,
@@ -707,13 +707,13 @@ impl Scheduler {
                 result_sender,
             } => {
                 increment_counter!("scheduler.resume_task");
-                return vec![TaskHandleResult::Resume(ResumeRequest {
+                vec![TaskHandleResult::Resume(ResumeRequest {
                     requesting_task_id: task_id,
                     queued_task_id,
                     sender_permissions,
                     return_value,
                     result_sender,
-                })];
+                })]
             }
             SchedulerControlMsg::BootPlayer {
                 player,
@@ -721,7 +721,7 @@ impl Scheduler {
             } => {
                 increment_counter!("scheduler.boot_player");
                 // Task is asking to boot a player.
-                return vec![TaskHandleResult::Disconnect(task_id, player)];
+                vec![TaskHandleResult::Disconnect(task_id, player)]
             }
         }
     }

@@ -9,6 +9,7 @@ use moor_values::model::propdef::{PropDef, PropDefs};
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbdef::VerbDef;
+use moor_values::model::verbdef::VerbDefs;
 use moor_values::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
@@ -17,7 +18,6 @@ use moor_values::var::Var;
 
 use crate::db_message::DbMessage;
 use crate::db_tx::DbTransaction;
-use moor_values::model::verbdef::VerbDefs;
 
 pub(crate) struct DbTxChannelClient {
     pub(crate) mailbox: Sender<DbMessage>,

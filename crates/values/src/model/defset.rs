@@ -213,4 +213,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> AsByteBuffer for Defs<T> {
             _phantom: Default::default(),
         }
     }
+
+    fn as_sliceref(&self) -> SliceRef {
+        self.bytes.clone()
+    }
 }

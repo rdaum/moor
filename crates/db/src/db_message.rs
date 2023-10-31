@@ -7,14 +7,13 @@ use moor_values::model::propdef::{PropDef, PropDefs};
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbdef::VerbDef;
+use moor_values::model::verbdef::VerbDefs;
 use moor_values::model::verbs::{BinaryType, VerbFlag};
 use moor_values::model::CommitResult;
 use moor_values::model::WorldStateError;
 use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
-
-use moor_values::model::verbdef::VerbDefs;
 
 /// The set of messages that DbTxWorldState sends to the underlying physical database to execute
 /// storage/retrieval of object attributes, properties, and verbs.

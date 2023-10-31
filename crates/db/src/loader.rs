@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use uuid::Uuid;
+
 use moor_values::model::objects::ObjAttrs;
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
@@ -7,7 +9,6 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
-use uuid::Uuid;
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics.

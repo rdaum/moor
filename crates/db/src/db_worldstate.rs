@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::db_tx::DbTransaction;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -21,6 +20,8 @@ use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, v_list, v_objid, Var};
 use moor_values::NOTHING;
+
+use crate::db_tx::DbTransaction;
 
 // all of this right now is direct-talk to physical DB transaction, and should be fronted by a
 // cache.

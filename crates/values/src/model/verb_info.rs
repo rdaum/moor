@@ -51,4 +51,8 @@ impl AsByteBuffer for VerbInfo {
     fn from_sliceref(bytes: SliceRef) -> Self {
         Self(bytes)
     }
+
+    fn as_sliceref(&self) -> SliceRef {
+        self.0.clone()
+    }
 }

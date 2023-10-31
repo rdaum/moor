@@ -16,4 +16,5 @@ bytes.workspace = true
 uuid.workspace = true
 itertools.workspace = true
 yoke.workspace = true
+yoke-derive.workspace = true
 binary-layout.workspace = true

@@ -52,6 +52,7 @@ metrics-util = { version = "0.15.1",  default-features = false, features = ["rec
 metrics-macros = "0.7.0"
 
 # General usefullness
+atomic-wait = "1.1.0"
 binary-layout = "3.2.0"
 bytes = "1.5.0"
 chrono = "0.4.31"
@@ -67,6 +68,7 @@ sized-chunks = "0.7.0"
 strum = { version = "0.25.0", features = ["derive"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 yoke = "0.7.2"
+yoke-derive = "0.7.2"
 
 ## Required for MOO builtins.
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
@@ -92,6 +94,7 @@ bincode = "2.0.0-rc.3" # For serializing/deserializing values
 im = "15.1.0" # Immutable data structures
 rocksdb = "0.21.0"
 text_io = "0.1.12" # Used for reading text dumps.
+libc = "0.2.149"
 
 # Dev dependencies
 tempfile = "3.8.0"

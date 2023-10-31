@@ -1,16 +1,18 @@
-use sized_chunks::SparseChunk;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use sized_chunks::SparseChunk;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
 use moor_values::util::slice_ref::SliceRef;
 
 use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::relvar::RelVar;
+use crate::tuplebox::slots::SlotBox;
 use crate::tuplebox::tb::TupleBox;
-use crate::tuplebox::working_set::WorkingSet;
+use crate::tuplebox::tuples::TupleError;
+use crate::tuplebox::tx::relvar::RelVar;
+use crate::tuplebox::tx::working_set::WorkingSet;
 use crate::tuplebox::RelationId;
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
@@ -19,6 +21,7 @@ pub struct Transaction {
     ts: u64,
     /// Where we came from, for referencing back to the base relations.
     db: Arc<TupleBox>,
+    slotbox: Arc<SlotBox>,
     /// The "working set" is the set of retrieved and/or modified tuples from base relations, known
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
@@ -28,34 +31,6 @@ pub struct Transaction {
     /// and or moving tuples in them into commits in the working set..)
     transient_relations: RwLock<HashMap<RelationId, TransientRelation>>,
     next_transient_relation_id: RelationId,
-}
-
-/// A local value, which is a tuple operation (insert/update/delete) and a timestamp.
-#[derive(Clone)]
-pub(crate) struct LocalValue<Codomain: Clone + Eq + PartialEq> {
-    pub(crate) ts: Option<u64>,
-    pub(crate) t: TupleOperation<Codomain>,
-}
-
-/// Possible operations on tuples, in the context of a transaction .
-#[derive(Clone)]
-pub(crate) enum TupleOperation<Codomain: Clone + Eq + PartialEq> {
-    /// Insert T into the tuple.
-    Insert(Codomain),
-    /// Update T in the tuple.
-    Update(Codomain),
-    /// Clone/fork T into the tuple from the base relation.
-    Value(Codomain),
-    /// Delete the tuple.
-    Tombstone,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Error)]
-pub enum TupleError {
-    #[error("Tuple not found")]
-    NotFound,
-    #[error("Tuple already exists")]
-    Duplicate,
 }
 
 /// Errors which can occur during a commit.
@@ -71,12 +46,13 @@ pub enum CommitError {
 }
 
 impl Transaction {
-    pub fn new(ts: u64, db: Arc<TupleBox>) -> Self {
-        let ws = WorkingSet::new(&db.relation_info());
+    pub fn new(ts: u64, slotbox: Arc<SlotBox>, db: Arc<TupleBox>) -> Self {
+        let ws = WorkingSet::new(slotbox.clone(), &db.relation_info(), ts);
         let next_transient_relation_id = RelationId::transient(db.relation_info().len());
 
         Self {
             ts,
+            slotbox,
             db,
             working_set: RwLock::new(ws),
             transient_relations: RwLock::new(HashMap::new()),
@@ -102,7 +78,8 @@ impl Transaction {
             let commit_set = self.db.prepare_commit_set(self.ts, &working_set).await?;
             match self.db.try_commit(commit_set).await {
                 Ok(_) => {
-                    let mut blank_ws = WorkingSet::new(&self.db.relation_info());
+                    let mut blank_ws =
+                        WorkingSet::new(self.slotbox.clone(), &self.db.relation_info(), self.ts);
                     std::mem::swap(&mut *working_set, &mut blank_ws);
                     self.db.sync(self.ts, blank_ws).await;
                     return Ok(());
@@ -147,6 +124,7 @@ impl Transaction {
             rid,
             TransientRelation {
                 _id: rid,
+                tuples: vec![],
                 domain_tuples: HashMap::new(),
                 codomain_domain: None,
             },
@@ -159,8 +137,8 @@ impl Transaction {
     pub(crate) async fn seek_by_domain(
         &self,
         relation_id: RelationId,
-        domain: &[u8],
-    ) -> Result<SliceRef, TupleError> {
+        domain: SliceRef,
+    ) -> Result<(SliceRef, SliceRef), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
             ws.seek_by_domain(self.db.clone(), relation_id, domain)
@@ -177,8 +155,8 @@ impl Transaction {
     pub(crate) async fn seek_by_codomain(
         &self,
         relation_id: RelationId,
-        codomain: &[u8],
-    ) -> Result<HashSet<Vec<u8>>, TupleError> {
+        codomain: SliceRef,
+    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
             ws.seek_by_codomain(self.db.clone(), relation_id, codomain)
@@ -197,7 +175,7 @@ impl Transaction {
     pub(crate) async fn insert_tuple(
         &self,
         relation_id: RelationId,
-        domain: &[u8],
+        domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
@@ -213,12 +191,30 @@ impl Transaction {
         }
     }
 
+    pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
+        &self,
+        relation_id: RelationId,
+        f: &F,
+    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+        if relation_id.is_base_relation() {
+            let ws = self.working_set.read().await;
+            ws.predicate_scan(self.db.clone(), relation_id, f).await
+        } else {
+            let ts = self.transient_relations.read().await;
+            ts.get(&relation_id)
+                .ok_or(TupleError::NotFound)
+                .unwrap()
+                .predicate_scan(f)
+                .await
+        }
+    }
+
     /// Attempt to update a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
     pub(crate) async fn update_tuple(
         &self,
         relation_id: RelationId,
-        domain: &[u8],
+        domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
@@ -239,7 +235,7 @@ impl Transaction {
     pub(crate) async fn upsert_tuple(
         &self,
         relation_id: RelationId,
-        domain: &[u8],
+        domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
@@ -260,7 +256,7 @@ impl Transaction {
     pub(crate) async fn remove_by_domain(
         &self,
         relation_id: RelationId,
-        domain: &[u8],
+        domain: SliceRef,
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
@@ -318,43 +314,70 @@ impl CommitSet {
 
 struct TransientRelation {
     _id: RelationId,
-    domain_tuples: HashMap<Vec<u8>, SliceRef>,
-    codomain_domain: Option<HashMap<Vec<u8>, HashSet<Vec<u8>>>>,
+    tuples: Vec<(SliceRef, SliceRef)>,
+    domain_tuples: HashMap<Vec<u8>, usize>,
+    codomain_domain: Option<HashMap<Vec<u8>, HashSet<usize>>>,
 }
 
 impl TransientRelation {
     /// Seek for a tuple by its indexed domain value.
-    pub async fn seek_by_domain(&self, domain: &[u8]) -> Result<SliceRef, TupleError> {
-        self.domain_tuples
-            .get(domain)
+    pub async fn seek_by_domain(
+        &self,
+        domain: SliceRef,
+    ) -> Result<(SliceRef, SliceRef), TupleError> {
+        let tuple_id = self
+            .domain_tuples
+            .get(domain.as_slice())
             .map(|v| v.clone())
-            .ok_or(TupleError::NotFound)
+            .ok_or(TupleError::NotFound);
+        tuple_id.and_then(|id| Ok(self.tuples[id].clone()))
     }
 
     /// Seek for tuples by their indexed codomain value, if there's an index. Panics if there is no
     /// secondary index.
-    pub async fn seek_by_codomain(&self, codomain: &[u8]) -> Result<HashSet<Vec<u8>>, TupleError> {
+    pub async fn seek_by_codomain(
+        &self,
+        codomain: SliceRef,
+    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
         // Attempt to seek on codomain without an index is a panic.
         // We could do full-scan, but in this case we're going to assume that the caller knows
         // what they're doing.
         let codomain_domain = self.codomain_domain.as_ref().expect("No codomain index");
-        codomain_domain
-            .get(codomain)
+        let tuple_ids = codomain_domain
+            .get(codomain.as_slice())
             .map(|v| v.clone())
-            .ok_or(TupleError::NotFound)
+            .ok_or(TupleError::NotFound)?;
+        Ok(tuple_ids
+            .iter()
+            .map(|tid| self.tuples[*tid].clone())
+            .collect())
+    }
+
+    pub async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
+        &self,
+        f: &F,
+    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+        Ok(self
+            .tuples
+            .iter()
+            .filter(|t| f(t))
+            .map(|t| t.clone())
+            .collect())
     }
 
     /// Insert a tuple into the relation.
     pub async fn insert_tuple(
         &mut self,
-        domain: &[u8],
+        domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if self.domain_tuples.contains_key(domain) {
+        if self.domain_tuples.contains_key(domain.as_slice()) {
             return Err(TupleError::Duplicate);
         }
+        let tuple_id = self.tuples.len();
+        self.tuples.push((domain.clone(), codomain.clone()));
         self.domain_tuples
-            .insert(domain.to_vec(), codomain)
+            .insert(domain.as_slice().to_vec(), tuple_id)
             .map(|_| ())
             .ok_or(TupleError::Duplicate)
     }
@@ -362,49 +385,63 @@ impl TransientRelation {
     /// Update a tuple in the relation.
     pub async fn update_tuple(
         &mut self,
-        domain: &[u8],
+        domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if self.domain_tuples.contains_key(domain) {
-            if self.codomain_domain.is_some() {
-                self.update_secondary(domain, None, Some(codomain.clone()));
-            }
-            self.domain_tuples.insert(domain.to_vec(), codomain);
-            Ok(())
-        } else {
-            Err(TupleError::NotFound)
+        let tuple_id = self
+            .domain_tuples
+            .get(domain.as_slice())
+            .map(|v| v.clone())
+            .ok_or(TupleError::NotFound)?;
+        if self.codomain_domain.is_some() {
+            self.update_secondary(tuple_id, None, Some(codomain.clone()));
         }
+        self.tuples[tuple_id] = (domain, codomain);
+        Ok(())
     }
 
     /// Upsert a tuple into the relation.
     pub async fn upsert_tuple(
         &mut self,
-        domain: &[u8],
+        domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if self.codomain_domain.is_some() {
-            self.update_secondary(domain, None, Some(codomain.clone()));
-        }
-        self.domain_tuples.insert(domain.to_vec(), codomain);
+        let tuple_id = match self.domain_tuples.get(domain.as_slice()) {
+            Some(tuple_id) => {
+                self.tuples[*tuple_id] = (domain, codomain.clone());
+                *tuple_id
+            }
+            None => {
+                let tuple_id = self.tuples.len();
+                self.tuples.push((domain.clone(), codomain.clone()));
+                self.domain_tuples
+                    .insert(domain.as_slice().to_vec(), tuple_id);
+                tuple_id
+            }
+        };
+        self.update_secondary(tuple_id, None, Some(codomain.clone()));
+
         Ok(())
     }
 
     /// Remove a tuple from the relation.
-    pub async fn remove_by_domain(&mut self, domain: &[u8]) -> Result<(), TupleError> {
-        if self.domain_tuples.contains_key(domain) {
-            if self.codomain_domain.is_some() {
-                self.update_secondary(domain, None, None);
-            }
-            self.domain_tuples.remove(domain);
-            Ok(())
-        } else {
-            Err(TupleError::NotFound)
+    pub async fn remove_by_domain(&mut self, domain: SliceRef) -> Result<(), TupleError> {
+        let tuple_id = self
+            .domain_tuples
+            .remove(domain.as_slice())
+            .map(|v| v.clone())
+            .ok_or(TupleError::NotFound)?;
+
+        if self.codomain_domain.is_some() {
+            self.update_secondary(tuple_id, None, None);
         }
+        self.tuples.remove(tuple_id);
+        Ok(())
     }
 
     pub(crate) fn update_secondary(
         &mut self,
-        domain: &[u8],
+        tuple_id: usize,
         old_codomain: Option<SliceRef>,
         new_codomain: Option<SliceRef>,
     ) {
@@ -417,25 +454,31 @@ impl TransientRelation {
             index
                 .entry(old_codomain.as_slice().to_vec())
                 .or_insert_with(HashSet::new)
-                .remove(domain);
+                .remove(&tuple_id);
         }
         if let Some(new_codomain) = new_codomain {
             index
                 .entry(new_codomain.as_slice().to_vec())
                 .or_insert_with(HashSet::new)
-                .insert(domain.to_vec());
+                .insert(tuple_id);
         }
     }
 }
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
     use std::sync::Arc;
 
-    use crate::tuplebox::RelationId;
     use moor_values::util::slice_ref::SliceRef;
 
     use crate::tuplebox::tb::{RelationInfo, TupleBox};
-    use crate::tuplebox::transaction::{CommitError, TupleError};
+    use crate::tuplebox::tuples::TupleError;
+    use crate::tuplebox::tx::transaction::CommitError;
+    use crate::tuplebox::RelationId;
+
+    fn attr(slice: &[u8]) -> SliceRef {
+        SliceRef::from_bytes(slice)
+    }
 
     async fn test_db() -> Arc<TupleBox> {
         let db = TupleBox::new(
@@ -444,7 +487,7 @@ mod tests {
                 name: "test".to_string(),
                 domain_type_id: 0,
                 codomain_type_id: 0,
-                secondary_indexed: false,
+                secondary_indexed: true,
             }],
             0,
         )
@@ -458,29 +501,44 @@ mod tests {
         let db = test_db().await;
         let tx = db.clone().start_tx();
         let rid = RelationId(0);
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .unwrap();
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .expect_err("Expected insert to fail");
-        tx.update_tuple(rid, b"abc", SliceRef::from_bytes(b"123"))
+        tx.update_tuple(rid, attr(b"abc"), attr(b"123"))
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"123")
+            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap().1,
+            attr(b"123")
         );
+        assert_eq!(
+            tx.seek_by_codomain(rid, attr(b"123"))
+                .await
+                .expect("Expected secondary seek to succeed"),
+            vec![(attr(b"abc"), attr(b"123"))]
+        );
+
         tx.commit().await.expect("Expected commit to succeed");
 
-        // Verify canonical state
+        // Verify canonical state.
         {
             let relation = &db.canonical.read().await[0];
-            let tuple = relation
-                .seek_by_domain(b"abc")
+            let tref = relation
+                .seek_by_domain(attr(b"abc"))
                 .expect("Expected tuple to exist");
-            assert_eq!(tuple.ts, 0);
-            assert_eq!(tuple.v, SliceRef::from_bytes(b"123"));
+            let tuple = tref.get();
+            assert_eq!(tuple.ts(), 0);
+            assert_eq!(tuple.codomain().as_slice(), b"123");
+
+            let tuples = relation.seek_by_codomain(attr(b"123"));
+            assert_eq!(tuples.len(), 1);
+            let tuple = tuples.iter().next().unwrap().get();
+            assert_eq!(tuple.ts(), 0);
+            assert_eq!(tuple.domain().as_slice(), b"abc");
+            assert_eq!(tuple.codomain().as_slice(), b"123");
         }
     }
 
@@ -491,56 +549,88 @@ mod tests {
         let db = test_db().await;
         let tx = db.clone().start_tx();
         let rid = RelationId(0);
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .unwrap();
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .expect_err("Expected insert to fail");
-        tx.update_tuple(rid, b"abc", SliceRef::from_bytes(b"123"))
+        tx.update_tuple(rid, attr(b"abc"), attr(b"123"))
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"123")
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"123"
         );
         tx.commit().await.expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"123")
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"123"
         );
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .expect_err("Expected insert to fail");
-        tx.upsert_tuple(rid, b"abc", SliceRef::from_bytes(b"321"))
+        tx.upsert_tuple(rid, attr(b"abc"), attr(b"321"))
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"321")
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"321"
         );
         tx.commit().await.expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"321")
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"321"
         );
-        tx.upsert_tuple(rid, b"abc", SliceRef::from_bytes(b"666"))
+        tx.upsert_tuple(rid, attr(b"abc"), attr(b"666"))
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"666")
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"666"
         );
         tx.commit().await.expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"666")
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"666"
+        );
+
+        // And verify secondary index...
+        assert_eq!(
+            tx.seek_by_codomain(rid, attr(b"666"))
+                .await
+                .expect("Expected secondary seek to succeed"),
+            vec![(attr(b"abc"), attr(b"666"))]
         );
     }
 
@@ -550,34 +640,48 @@ mod tests {
         let db = test_db().await;
         let tx = db.clone().start_tx();
         let rid = RelationId(0);
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .unwrap();
-        tx.remove_by_domain(rid, b"abc")
+        tx.remove_by_domain(rid, attr(b"abc"))
             .await
             .expect("Expected delete to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap_err(),
+            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap_err(),
             TupleError::NotFound
         );
         tx.commit().await.expect("Expected commit to succeed");
 
-        let tx = db.start_tx();
+        let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap_err(),
+            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap_err(),
             TupleError::NotFound
         );
-        tx.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .unwrap();
-        tx.update_tuple(rid, b"abc", SliceRef::from_bytes(b"321"))
+        tx.update_tuple(rid, attr(b"abc"), attr(b"321"))
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"321")
+            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap().1,
+            attr(b"321")
         );
         tx.commit().await.expect("Expected commit to succeed");
+
+        // And verify primary & secondary index after the commit.
+        let tx = db.start_tx();
+        let tuple = tx
+            .seek_by_domain(rid, attr(b"abc"))
+            .await
+            .expect("Expected tuple to exist");
+        assert_eq!(tuple.1.as_slice(), b"321");
+        assert_eq!(
+            tx.seek_by_codomain(rid, attr(b"321"))
+                .await
+                .expect("Expected secondary seek to succeed"),
+            vec![(attr(b"abc"), attr(b"321"))]
+        );
     }
 
     /// Two transactions both starting with nothing present for a tuple.
@@ -590,12 +694,12 @@ mod tests {
         let db = test_db().await;
         let tx1 = db.clone().start_tx();
         let rid = RelationId(0);
-        tx1.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+        tx1.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .unwrap();
 
         let tx2 = db.clone().start_tx();
-        tx2.insert_tuple(rid, b"abc", SliceRef::from_bytes(b"zzz"))
+        tx2.insert_tuple(rid, attr(b"abc"), attr(b"zzz"))
             .await
             .unwrap();
 
@@ -614,7 +718,7 @@ mod tests {
         // 1. Initial transaction creates value, commits.
         let init_tx = db.clone().start_tx();
         init_tx
-            .insert_tuple(rid, b"abc", SliceRef::from_bytes(b"def"))
+            .insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .await
             .unwrap();
         init_tx.commit().await.unwrap();
@@ -622,20 +726,28 @@ mod tests {
         // 2. Two transactions get the value, and then update it, in "parallel".
         let tx1 = db.clone().start_tx();
         let tx2 = db.clone().start_tx();
-        tx1.update_tuple(rid, b"abc", SliceRef::from_bytes(b"123"))
+        tx1.update_tuple(rid, attr(b"abc"), attr(b"123"))
             .await
             .unwrap();
         assert_eq!(
-            tx1.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"123")
+            tx1.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"123"
         );
 
-        tx2.update_tuple(rid, b"abc", SliceRef::from_bytes(b"321"))
+        tx2.update_tuple(rid, attr(b"abc"), attr(b"321"))
             .await
             .unwrap();
         assert_eq!(
-            tx2.seek_by_domain(rid, b"abc").await.unwrap(),
-            SliceRef::from_bytes(b"321")
+            tx2.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .1
+                .as_slice(),
+            b"321"
         );
 
         // 3. First transaction commits with success but second transaction fails with Conflict,
@@ -648,7 +760,126 @@ mod tests {
         );
     }
 
-    // TODO: Loom tests
+    fn random_tuple() -> (Vec<u8>, Vec<u8>) {
+        let mut rng = rand::thread_rng();
+        let domain = (0..16).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
+        let codomain = (0..16).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
+        (domain, codomain)
+    }
+
+    fn assert_same(tuples: &[(SliceRef, SliceRef)], items: &[(Vec<u8>, Vec<u8>)]) {
+        assert_eq!(tuples.len(), items.len());
+        for (domain, codomain) in tuples {
+            let idx = items
+                .iter()
+                .position(|(d, _)| d == domain.as_slice())
+                .unwrap();
+            assert_eq!(codomain.as_slice(), items[idx].1.as_slice());
+        }
+    }
+
+    #[tokio::test]
+    async fn predicate_scan_with_predicate() {
+        let db = test_db().await;
+        let rid = RelationId(0);
+
+        // Scan an empty relation in a transaction
+        let tx = db.clone().start_tx();
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_eq!(tuples.len(), 0);
+        tx.commit().await.unwrap();
+
+        // Scan the same empty relation in a brand new transaction.
+        let tx = db.clone().start_tx();
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_eq!(tuples.len(), 0);
+
+        // Then insert a pile of of random tuples into the relation, and scan it again.
+        let tx = db.clone().start_tx();
+        let mut items = vec![];
+        for _ in 0..1000 {
+            let (domain, codomain) = random_tuple();
+            items.push((domain.clone(), codomain.clone()));
+            tx.insert_tuple(rid, attr(&domain), attr(&codomain))
+                .await
+                .unwrap();
+        }
+        // Scan the local relation, and verify that we get back the same number of tuples.
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+        tx.commit().await.unwrap();
+
+        // Scan the same relation in a brand new transaction, and verify that we get back the same
+        // number of tuples.
+        let tx = db.clone().start_tx();
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_eq!(tuples.len(), 1000);
+
+        // Randomly delete tuples from the relation, and verify that the scan returns the correct
+        // tuples.
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let (domain, _) = items.remove(rng.gen_range(0..items.len()));
+            tx.remove_by_domain(rid, attr(&domain)).await.unwrap();
+        }
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+        tx.commit().await.unwrap();
+
+        // Scan the same relation in a brand new transaction, and verify that we get back the same
+        // tuples.
+        let tx = db.clone().start_tx();
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+
+        // Randomly update tuples in the relation, and verify that the scan returns the correct
+        // values.
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let (domain, _) = items[rng.gen_range(0..items.len())].clone();
+            let new_codomain = (0..16).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
+            tx.update_tuple(rid, attr(&domain), attr(&new_codomain))
+                .await
+                .unwrap();
+            // Update in `items`
+            let idx = items.iter().position(|(d, _)| d == &domain).unwrap();
+            items[idx] = (domain, new_codomain);
+        }
+        // Verify ...
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+
+        // And commit and verify in a new tx.
+        tx.commit().await.unwrap();
+        let tx = db.clone().start_tx();
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+
+        // Now insert some new random values.
+        for _ in 0..100 {
+            let (domain, codomain) = random_tuple();
+            // Update in `items` and insert, but only if we don't already have this same domain.
+            if items.iter().find(|(d, _)| d == &domain).is_some() {
+                continue;
+            }
+            items.push((domain.clone(), codomain.clone()));
+            tx.insert_tuple(rid, attr(&domain), attr(&codomain))
+                .await
+                .unwrap();
+        }
+        // And verify that the scan returns the correct number of tuples and values.
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+
+        // Commit and verify in a new tx.
+        tx.commit().await.unwrap();
+        let tx = db.clone().start_tx();
+        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        assert_same(&tuples, &items);
+    }
+
+    // TODO: Loom tests? Stateright tests?
     // TODO: Test sequences
     // TODO: Consistency across multiple relations
+    // TODO: Index consistency, secondary index consistency
 }

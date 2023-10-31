@@ -105,6 +105,10 @@ impl AsByteBuffer for PropDef {
     fn from_sliceref(bytes: SliceRef) -> Self {
         Self::from_bytes(bytes)
     }
+
+    fn as_sliceref(&self) -> SliceRef {
+        self.0.clone()
+    }
 }
 
 impl Named for PropDef {

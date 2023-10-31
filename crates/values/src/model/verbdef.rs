@@ -154,6 +154,10 @@ impl AsByteBuffer for VerbDef {
     fn from_sliceref(bytes: SliceRef) -> Self {
         Self::from_bytes(bytes)
     }
+
+    fn as_sliceref(&self) -> SliceRef {
+        self.0.clone()
+    }
 }
 
 pub type VerbDefs = Defs<VerbDef>;

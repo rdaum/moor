@@ -92,11 +92,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     // Join names into a single string, this is how MOO presents it.
     let verb_names = names.join(" ");
 
-    let result = v_list(&[
-        v_objid(owner),
-        v_string(perms_string),
-        v_string(verb_names),
-    ]);
+    let result = v_list(&[v_objid(owner), v_string(perms_string), v_string(verb_names)]);
     Ok(Ret(result))
 }
 bf_declare!(verb_info, bf_verb_info);

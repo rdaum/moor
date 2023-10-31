@@ -33,6 +33,10 @@ impl AsByteBuffer for ObjSet {
     fn from_sliceref(bytes: SliceRef) -> Self {
         Self(bytes)
     }
+
+    fn as_sliceref(&self) -> SliceRef {
+        self.0.clone()
+    }
 }
 
 impl Display for ObjSet {

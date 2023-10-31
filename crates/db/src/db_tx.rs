@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use uuid::Uuid;
+
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
 use moor_values::model::propdef::{PropDef, PropDefs};
@@ -10,7 +12,6 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
-use uuid::Uuid;
 
 /// A trait defining a generic interface to a database for storing the the per-attribute values
 /// of our objects and their properties and verbs.  Used by DbTxWorldState.

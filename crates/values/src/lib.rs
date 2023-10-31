@@ -38,6 +38,8 @@ pub trait AsByteBuffer {
     /// Create a value from the given bytes.
     /// Either takes ownership or moves.
     fn from_sliceref(bytes: SliceRef) -> Self;
+    /// As a sliceref...
+    fn as_sliceref(&self) -> SliceRef;
 }
 
 lazy_static! {
@@ -91,5 +93,9 @@ impl<T: Encode + Decode + Sized> AsByteBuffer for T {
         bincode::decode_from_slice(bytes.as_slice(), *BINCODE_CONFIG)
             .expect("bincode from bytes")
             .0
+    }
+
+    fn as_sliceref(&self) -> SliceRef {
+        SliceRef::from_vec(self.make_copy_as_vec())
     }
 }

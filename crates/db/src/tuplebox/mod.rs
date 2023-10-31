@@ -11,13 +11,13 @@
 mod backing;
 mod base_relation;
 mod object_relations;
-mod transaction;
-mod working_set;
 
-pub mod relvar;
 pub mod rocks_backing;
+mod slots;
 pub mod tb;
 pub mod tb_worldstate;
+mod tuples;
+mod tx;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RelationId(usize);

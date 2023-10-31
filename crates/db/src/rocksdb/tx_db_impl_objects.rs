@@ -4,12 +4,11 @@ use std::convert::TryInto;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
-use moor_values::{AsByteBuffer, NOTHING};
-
 use moor_values::model::WorldStateError;
 use moor_values::util::bitenum::BitEnum;
 use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
+use moor_values::{AsByteBuffer, NOTHING};
 
 use crate::rocksdb::tx_db_impl::{
     cf_for, composite_key_for, get_objset, get_oid_or_nothing, get_oid_value, oid_key, set_objset,

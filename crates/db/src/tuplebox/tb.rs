@@ -1,18 +1,25 @@
 // TODO: support sorted indices, too.
 // TODO: 'join' and transitive closure -> datalog-style variable unification
 
-use crate::tuplebox::backing::BackingStoreClient;
-use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::rocks_backing::RocksBackingStore;
-use crate::tuplebox::transaction::{CommitError, CommitSet, Transaction, TupleOperation};
-use crate::tuplebox::working_set::WorkingSet;
-use crate::tuplebox::RelationId;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use tracing::info;
+
+use crate::tuplebox::backing::BackingStoreClient;
+use crate::tuplebox::base_relation::BaseRelation;
+use crate::tuplebox::rocks_backing::RocksBackingStore;
+use crate::tuplebox::slots::{SlotBox, TUPLEBOX_PAGE_SIZE};
+use crate::tuplebox::tuples::TxTuple;
+use crate::tuplebox::tx::transaction::{CommitError, CommitSet, Transaction};
+use crate::tuplebox::tx::working_set::WorkingSet;
+use crate::tuplebox::RelationId;
+
+pub const TUPLEBOX_MEMORY_SIZE: usize = 1 << 36;
+pub const TUPLEBOX_MAX_PAGES: usize = TUPLEBOX_MEMORY_SIZE / TUPLEBOX_PAGE_SIZE;
 
 /// Meta-data about a relation
 #[derive(Clone, Debug)]
@@ -42,11 +49,12 @@ pub struct TupleBox {
     /// versions of tuples.
     active_transactions: RwLock<HashSet<u64>>,
     /// Monotonically incrementing sequence counters.
-    // TODO: this is a candidate for an optimistic lock.
-    sequences: RwLock<Vec<u64>>,
+    sequences: Vec<AtomicU64>,
     /// The copy-on-write set of current canonical base relations.
     // TODO: this is a candidate for an optimistic lock.
     pub(crate) canonical: RwLock<Vec<BaseRelation>>,
+
+    slotbox: Arc<SlotBox>,
 
     backing_store: Option<BackingStoreClient>,
 }
@@ -57,9 +65,10 @@ impl TupleBox {
         relations: &[RelationInfo],
         num_sequences: usize,
     ) -> Arc<Self> {
+        let slotbox = Arc::new(SlotBox::new(TUPLEBOX_PAGE_SIZE, TUPLEBOX_MEMORY_SIZE));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
-            base_relations.push(BaseRelation::new(RelationId(rid), 0));
+            base_relations.push(BaseRelation::new(slotbox.clone(), RelationId(rid), 0));
             if r.secondary_indexed {
                 base_relations.last_mut().unwrap().add_secondary_index();
             }
@@ -80,13 +89,19 @@ impl TupleBox {
             }
         };
 
+        let sequences = sequences
+            .into_iter()
+            .map(|s| AtomicU64::new(s))
+            .collect::<Vec<_>>();
+
         Arc::new(Self {
             relation_info: relations.to_vec(),
             maximum_transaction: AtomicU64::new(0),
             active_transactions: RwLock::new(HashSet::new()),
             canonical: RwLock::new(base_relations),
-            sequences: RwLock::new(sequences),
+            sequences,
             backing_store,
+            slotbox,
         })
     }
 
@@ -99,30 +114,46 @@ impl TupleBox {
         let next_ts = self
             .maximum_transaction
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Transaction::new(next_ts, self.clone())
+        Transaction::new(next_ts, self.slotbox.clone(), self.clone())
     }
 
     /// Get the next value for the given sequence.
     pub async fn sequence_next(self: Arc<Self>, sequence_number: usize) -> u64 {
-        let mut sequences = self.sequences.write().await;
-        let next = sequences[sequence_number];
-        sequences[sequence_number] += 1;
-        next
+        let sequence = &self.sequences[sequence_number];
+        loop {
+            let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
+            if let Ok(n) = sequence.compare_exchange(
+                current,
+                current + 1,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            ) {
+                return n;
+            }
+        }
     }
 
     /// Get the current value for the given sequence.
     pub async fn sequence_current(self: Arc<Self>, sequence_number: usize) -> u64 {
-        let sequences = self.sequences.read().await;
-        sequences[sequence_number]
+        self.sequences[sequence_number].load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Update the given sequence to `value` iff `value` is greater than the current value.
     pub async fn update_sequence_max(self: Arc<Self>, sequence_number: usize, value: u64) {
-        let mut sequences = self.sequences.write().await;
-        if value > sequences[sequence_number] {
-            sequences[sequence_number] = value;
+        let sequence = &self.sequences[sequence_number];
+        loop {
+            let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
+            if let Ok(_) = sequence.compare_exchange(
+                current,
+                std::cmp::max(current, value),
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            ) {
+                return;
+            }
         }
     }
+
     pub async fn with_relation<R, F: Fn(&BaseRelation) -> R>(
         &self,
         relation_id: RelationId,
@@ -146,63 +177,68 @@ impl TupleBox {
     ) -> Result<CommitSet, CommitError> {
         let mut commitset = CommitSet::new(tx_ts);
 
-        for (relation_id, local_relation) in tx_working_set.0.iter().enumerate() {
+        for (relation_id, local_relation) in tx_working_set.relations.iter().enumerate() {
             let relation_id = RelationId(relation_id);
             // scan through the local working set, and for each tuple, check to see if it's safe to
             // commit. If it is, then we'll add it to the commit set.
             // note we're not actually committing yet, just producing a candidate commit set
             let canonical = &self.canonical.read().await[relation_id.0];
-            for (k, v) in local_relation.tuples() {
-                let cv = canonical.seek_by_domain(k);
+            for tuple in local_relation.tuples() {
+                let canon_tuple = canonical.seek_by_domain(tuple.domain().clone());
 
                 // If there's no value there, and our local is not tombstoned and we're not doing
-                // an insert that's already a conflict.
-                // Otherwise we have to straight-away insert into the canonical base relation.
+                // an insert -- that's already a conflict.
+                // Otherwise we can straight-away insert into the canonical base relation.
                 // TODO: it should be possible to do this without having the fork logic exist twice
                 //   here.
-                let Some(cv) = cv else {
-                    match &v.t {
-                        TupleOperation::Insert(value) => {
+                let Some(cv) = canon_tuple else {
+                    match &tuple {
+                        TxTuple::Insert(tref) => {
+                            let t = tref.get();
+                            t.update_timestamp(self.slotbox.clone(), tx_ts);
                             let forked_relation = commitset.fork(relation_id, &canonical);
-                            forked_relation.upsert_tuple(k.clone(), tx_ts, value.clone());
+                            forked_relation.upsert_tuple(tref.clone());
                             continue;
                         }
-                        TupleOperation::Tombstone => {
+                        TxTuple::Tombstone { .. } => {
                             // We let this pass, as this must be a delete of something we inserted
                             // temporarily previously in our transaction.
                             continue;
                         }
-                        TupleOperation::Update(_) | TupleOperation::Value(_) => {
+                        TxTuple::Update(..) | TxTuple::Value(..) => {
                             return Err(CommitError::TupleVersionConflict);
                         }
                     }
                 };
 
-                // If there's no timestamp on the value in ours, but there *is* a value in
-                // canonical, that's a conflict, because it means someone else has already
-                // committed a change to this tuple that we thought was net-new.
-                let Some(ts) = v.ts else {
+                // If the timestamp in our working tuple is our own ts, that's a conflict, because
+                // it means someone else has already committed a change to this tuple that we
+                // thought was net-new (and so used our own TS)
+                if tuple.ts() == tx_ts {
                     return Err(CommitError::TupleVersionConflict);
                 };
 
-                // Check the timestamp on the value, if it's newer than the read-timestamp
-                // we have for this tuple (or if we don't have one because net-new), then
-                // that's conflict, because it means someone else has already committed a
-                // change to this key.
-                if cv.ts > ts {
+                // Check the timestamp on the value, if it's newer than the read-timestamp,
+                // we have for this tuple then that's a conflict, because it means someone else has
+                // already committed a change to this key.
+                let cv = cv.get();
+                if cv.ts() > tuple.ts() {
                     return Err(CommitError::TupleVersionConflict);
                 }
 
                 // Otherwise apply the change into a new canonical relation, which is a CoW
                 // branching of the old one.
                 let forked_relation = commitset.fork(relation_id, &canonical);
-                match &v.t {
-                    TupleOperation::Insert(val) | TupleOperation::Update(val) => {
-                        forked_relation.upsert_tuple(k.clone(), tx_ts, val.clone());
+                match &tuple {
+                    TxTuple::Insert(tref) | TxTuple::Update(tref) => {
+                        let t = tref.get();
+                        t.update_timestamp(self.slotbox.clone(), tx_ts);
+                        let forked_relation = commitset.fork(relation_id, &canonical);
+                        forked_relation.upsert_tuple(tref.clone());
                     }
-                    TupleOperation::Value(_) => {}
-                    TupleOperation::Tombstone => {
-                        forked_relation.remove_by_domain(k);
+                    TxTuple::Value(..) => {}
+                    TxTuple::Tombstone { ts: _, domain: k } => {
+                        forked_relation.remove_by_domain(k.clone());
                     }
                 }
             }
@@ -250,7 +286,11 @@ impl TupleBox {
 
     pub async fn sync(&self, ts: u64, world_state: WorkingSet) {
         if let Some(bs) = &self.backing_store {
-            let seqs = self.sequences.read().await.clone();
+            let seqs = self
+                .sequences
+                .iter()
+                .map(|s| s.load(std::sync::atomic::Ordering::SeqCst))
+                .collect();
             bs.sync(ts, world_state, seqs).await;
         }
     }

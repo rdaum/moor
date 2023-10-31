@@ -1,12 +1,12 @@
-use crate::db_tx::DbTransaction;
-use crate::db_worldstate::DbTxWorldState;
-use crate::loader::LoaderInterface;
-use crate::tuplebox::object_relations;
-use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
-use crate::tuplebox::tb::{RelationInfo, TupleBox};
-use crate::tuplebox::transaction::{CommitError, Transaction, TupleError};
-use crate::Database;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use strum::{EnumCount, IntoEnumIterator};
+use tracing::warn;
+use uuid::Uuid;
+
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -20,13 +20,17 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_none, Var};
-use moor_values::{NOTHING, SYSTEM_OBJECT};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
-use std::sync::Arc;
-use strum::{EnumCount, IntoEnumIterator};
-use tracing::warn;
-use uuid::Uuid;
+use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+
+use crate::db_tx::DbTransaction;
+use crate::db_worldstate::DbTxWorldState;
+use crate::loader::LoaderInterface;
+use crate::tuplebox::object_relations;
+use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
+use crate::tuplebox::tb::{RelationInfo, TupleBox};
+use crate::tuplebox::tuples::TupleError;
+use crate::tuplebox::tx::transaction::{CommitError, Transaction};
+use crate::Database;
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
 pub struct TupleBoxWorldStateSource {
@@ -56,7 +60,7 @@ impl TupleBoxWorldStateSource {
         let fresh_db = {
             let rels = db.canonical.read().await;
             rels[WorldStateRelation::ObjectParent as usize]
-                .seek_by_domain(&SYSTEM_OBJECT.0.to_le_bytes())
+                .seek_by_domain(SYSTEM_OBJECT.0.as_sliceref())
                 .is_none()
         };
         (Self { db }, fresh_db)
@@ -107,11 +111,6 @@ impl DbTransaction for TupleBoxTransaction {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
             .await
             .ok_or_else(|| WorldStateError::ObjectNotFound(obj))
-    }
-
-    async fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, obj, name)
-            .await
     }
 
     async fn create_object(
@@ -201,10 +200,9 @@ impl DbTransaction for TupleBoxTransaction {
             WorldStateRelation::ObjectVerbs,
         ];
         for rel in oid_relations.iter() {
-            let key_bytes = obj.0.to_le_bytes();
             let relation = self.tx.relation((*rel).into()).await;
             relation
-                .remove_by_domain(&key_bytes)
+                .remove_by_domain(obj.0.as_sliceref())
                 .await
                 .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
         }
@@ -216,7 +214,7 @@ impl DbTransaction for TupleBoxTransaction {
                 .tx
                 .relation(WorldStateRelation::ObjectPropertyValue.into())
                 .await;
-            relation.remove_by_domain(&key).await.unwrap_or(());
+            relation.remove_by_domain(key).await.unwrap_or(());
         }
 
         let obj_propdefs_rel = self
@@ -224,11 +222,16 @@ impl DbTransaction for TupleBoxTransaction {
             .relation(WorldStateRelation::ObjectPropDefs.into())
             .await;
         obj_propdefs_rel
-            .remove_by_domain(&obj.0.to_le_bytes())
+            .remove_by_domain(obj.0.as_sliceref())
             .await
             .expect("Unable to delete propdefs");
 
         Ok(())
+    }
+
+    async fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
+        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, obj, name)
+            .await
     }
 
     async fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
@@ -407,10 +410,12 @@ impl DbTransaction for TupleBoxTransaction {
     }
 
     async fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(
-            object_relations::get_object_codomain(&self.tx, WorldStateRelation::ObjectParent, obj)
-                .await,
+        Ok(object_relations::get_object_by_codomain(
+            &self.tx,
+            WorldStateRelation::ObjectParent,
+            obj,
         )
+        .await)
     }
 
     async fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError> {
@@ -481,14 +486,12 @@ impl DbTransaction for TupleBoxTransaction {
     }
 
     async fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(
-            object_relations::get_object_codomain(
-                &self.tx,
-                WorldStateRelation::ObjectLocation,
-                obj,
-            )
-            .await,
+        Ok(object_relations::get_object_by_codomain(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            obj,
         )
+        .await)
     }
 
     async fn get_max_object(&self) -> Result<Objid, WorldStateError> {
@@ -699,7 +702,7 @@ impl DbTransaction for TupleBoxTransaction {
             .tx
             .relation(WorldStateRelation::VerbProgram.into())
             .await;
-        rel.remove_by_domain(&object_relations::composite_key_for(location, &uuid))
+        rel.remove_by_domain(object_relations::composite_key_for(location, &uuid))
             .await
             .expect("Unable to delete verb program");
 
@@ -837,7 +840,7 @@ impl DbTransaction for TupleBoxTransaction {
             .tx
             .relation(WorldStateRelation::ObjectPropertyValue.into())
             .await;
-        match rel.remove_by_domain(&key).await {
+        match rel.remove_by_domain(key).await {
             Ok(_) => return Ok(()),
             Err(TupleError::NotFound) => return Ok(()),
             Err(e) => {
@@ -968,15 +971,18 @@ impl TupleBoxTransaction {
         Self { tx }
     }
     pub(crate) async fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let children =
-            object_relations::get_object_codomain(&self.tx, WorldStateRelation::ObjectParent, obj)
-                .await;
+        let children = object_relations::get_object_by_codomain(
+            &self.tx,
+            WorldStateRelation::ObjectParent,
+            obj,
+        )
+        .await;
 
         let mut descendants = vec![];
         let mut queue: VecDeque<_> = children.iter().collect();
         while let Some(o) = queue.pop_front() {
             descendants.push(o);
-            let children = object_relations::get_object_codomain(
+            let children = object_relations::get_object_by_codomain(
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 o,
@@ -1051,10 +1057,10 @@ impl Database for TupleBoxWorldStateSource {
 
 #[cfg(test)]
 mod tests {
-    use crate::db_tx::DbTransaction;
-    use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
-    use crate::tuplebox::tb::{RelationInfo, TupleBox};
-    use crate::tuplebox::tb_worldstate::TupleBoxTransaction;
+    use std::sync::Arc;
+
+    use strum::{EnumCount, IntoEnumIterator};
+
     use moor_values::model::defset::HasUuid;
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::objset::ObjSet;
@@ -1065,8 +1071,11 @@ mod tests {
     use moor_values::var::objid::Objid;
     use moor_values::var::v_str;
     use moor_values::NOTHING;
-    use std::sync::Arc;
-    use strum::{EnumCount, IntoEnumIterator};
+
+    use crate::db_tx::DbTransaction;
+    use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
+    use crate::tuplebox::tb::{RelationInfo, TupleBox};
+    use crate::tuplebox::tb_worldstate::TupleBoxTransaction;
 
     async fn test_db() -> Arc<TupleBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
@@ -1477,11 +1486,16 @@ mod tests {
         let tx = TupleBoxTransaction::new(db.clone());
         assert_eq!(tx.get_object_location(b).await.unwrap(), a);
         assert_eq!(tx.get_object_location(c).await.unwrap(), a);
-        assert!(tx
+        let contents = tx
             .get_object_contents(a)
             .await
-            .unwrap()
-            .is_same(ObjSet::from(&[b, c])));
+            .expect("Unable to get contents");
+        assert!(
+            contents.is_same(ObjSet::from(&[b, c])),
+            "Contents of a are not as expected: {:?} vs {:?}",
+            contents,
+            ObjSet::from(&[b, c])
+        );
         assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::empty());
 
