@@ -89,7 +89,7 @@ async fn run_basic_test(test_dir: &str) {
 
     // Frustratingly the individual test lines are not independent, so we need to run them in a
     // single database.
-    let (mut db, _) = TupleBoxWorldStateSource::open(None).await;
+    let (mut db, _) = TupleBoxWorldStateSource::open(None, 1 << 30).await;
     load_db(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await;

@@ -32,13 +32,17 @@ use crate::tuplebox::tuples::TupleError;
 use crate::tuplebox::tx::transaction::{CommitError, Transaction};
 use crate::Database;
 
+// TODO: Totally arbitrary and needs profiling. Needs to be big enough to hold entire props and
+//   verbs.
+const PAGE_SIZE: usize = 32768;
+
 /// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
 pub struct TupleBoxWorldStateSource {
     db: Arc<TupleBox>,
 }
 
 impl TupleBoxWorldStateSource {
-    pub async fn open(path: Option<PathBuf>) -> (Self, bool) {
+    pub async fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -54,7 +58,14 @@ impl TupleBoxWorldStateSource {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         // Same with "contents".
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
-        let db = TupleBox::new(path, &relations, WorldStateSequences::COUNT).await;
+        let db = TupleBox::new(
+            memory_size,
+            PAGE_SIZE,
+            path,
+            &relations,
+            WorldStateSequences::COUNT,
+        )
+        .await;
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
@@ -1091,7 +1102,7 @@ mod tests {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        let db = TupleBox::new(None, &relations, WorldStateSequences::COUNT).await;
+        let db = TupleBox::new(1 << 24, 4096, None, &relations, WorldStateSequences::COUNT).await;
         db
     }
 

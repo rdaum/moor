@@ -41,6 +41,7 @@ pub enum DatabaseType {
 pub struct DatabaseBuilder {
     db_type: DatabaseType,
     path: Option<std::path::PathBuf>,
+    memory_size: Option<usize>,
 }
 
 pub trait Database {
@@ -53,6 +54,7 @@ impl DatabaseBuilder {
         Self {
             db_type: DatabaseType::RocksDb,
             path: None,
+            memory_size: None,
         }
     }
 
@@ -62,6 +64,11 @@ impl DatabaseBuilder {
     }
     pub fn with_path(mut self, path: std::path::PathBuf) -> Self {
         self.path = Some(path);
+        self
+    }
+
+    pub fn with_memory_size(&mut self, memory_size_bytes: usize) -> &mut Self {
+        self.memory_size = Some(memory_size_bytes);
         self
     }
 
@@ -77,7 +84,11 @@ impl DatabaseBuilder {
                 Ok((Box::new(db), fresh))
             }
             DatabaseType::Tuplebox => {
-                let (db, fresh) = TupleBoxWorldStateSource::open(self.path.clone()).await;
+                let (db, fresh) = TupleBoxWorldStateSource::open(
+                    self.path.clone(),
+                    self.memory_size.unwrap_or(1 << 48),
+                )
+                .await;
                 Ok((Box::new(db), fresh))
             }
         }

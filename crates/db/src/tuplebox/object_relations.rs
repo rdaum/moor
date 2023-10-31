@@ -224,7 +224,7 @@ mod tests {
         relations[ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        let db = TupleBox::new(None, &relations, WorldStateSequences::COUNT).await;
+        let db = TupleBox::new(1 << 24, 4096, None, &relations, WorldStateSequences::COUNT).await;
         db
     }
 

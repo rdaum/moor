@@ -12,14 +12,11 @@ use tracing::info;
 use crate::tuplebox::backing::BackingStoreClient;
 use crate::tuplebox::base_relation::BaseRelation;
 use crate::tuplebox::rocks_backing::RocksBackingStore;
-use crate::tuplebox::slots::{SlotBox, TUPLEBOX_PAGE_SIZE};
+use crate::tuplebox::slots::SlotBox;
 use crate::tuplebox::tuples::TxTuple;
 use crate::tuplebox::tx::transaction::{CommitError, CommitSet, Transaction};
 use crate::tuplebox::tx::working_set::WorkingSet;
 use crate::tuplebox::RelationId;
-
-pub const TUPLEBOX_MEMORY_SIZE: usize = 1 << 36;
-pub const TUPLEBOX_MAX_PAGES: usize = TUPLEBOX_MEMORY_SIZE / TUPLEBOX_PAGE_SIZE;
 
 /// Meta-data about a relation
 #[derive(Clone, Debug)]
@@ -61,11 +58,13 @@ pub struct TupleBox {
 
 impl TupleBox {
     pub async fn new(
+        memory_size: usize,
+        page_size: usize,
         path: Option<PathBuf>,
         relations: &[RelationInfo],
         num_sequences: usize,
     ) -> Arc<Self> {
-        let slotbox = Arc::new(SlotBox::new(TUPLEBOX_PAGE_SIZE, TUPLEBOX_MEMORY_SIZE));
+        let slotbox = Arc::new(SlotBox::new(page_size, memory_size));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
             base_relations.push(BaseRelation::new(slotbox.clone(), RelationId(rid), 0));

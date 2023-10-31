@@ -482,6 +482,8 @@ mod tests {
 
     async fn test_db() -> Arc<TupleBox> {
         let db = TupleBox::new(
+            1 << 24,
+            4096,
             None,
             &[RelationInfo {
                 name: "test".to_string(),
