@@ -474,7 +474,7 @@ mod tests {
     use crate::tuplebox::tb::{RelationInfo, TupleBox};
     use crate::tuplebox::tuples::TupleError;
     use crate::tuplebox::tx::transaction::CommitError;
-    use crate::tuplebox::RelationId;
+    use crate::tuplebox::{RelationId, Transaction};
 
     fn attr(slice: &[u8]) -> SliceRef {
         SliceRef::from_bytes(slice)
@@ -778,6 +778,46 @@ mod tests {
                 .unwrap();
             assert_eq!(codomain.as_slice(), items[idx].1.as_slice());
         }
+    }
+
+    /// Test some few secondary index scenarios:
+    ///     a->b, b->b, c->b = b->{a,b,c} -- before and after commit
+    #[tokio::test]
+    async fn secondary_indices() {
+        let db = test_db().await;
+        let rid = RelationId(0);
+        let tx = db.clone().start_tx();
+        tx.insert_tuple(rid, attr(b"a"), attr(b"b")).await.unwrap();
+        tx.insert_tuple(rid, attr(b"b"), attr(b"b")).await.unwrap();
+        tx.insert_tuple(rid, attr(b"c"), attr(b"b")).await.unwrap();
+
+        async fn verify(tx: &Transaction, expected: Vec<&[u8]>) {
+            let b_results = tx
+                .seek_by_codomain(RelationId(0), attr(b"b"))
+                .await
+                .unwrap();
+
+            let mut domains = b_results
+                .iter()
+                .map(|(d, _)| d.as_slice())
+                .collect::<Vec<&[u8]>>();
+            domains.sort();
+            assert_eq!(domains, expected);
+        }
+        verify(&tx, vec![b"a", b"b", b"c"]).await;
+
+        tx.commit().await.unwrap();
+
+        let tx = db.clone().start_tx();
+        verify(&tx, vec![b"a", b"b", b"c"]).await;
+
+        // Add another one, in our new transaction
+        tx.insert_tuple(rid, attr(b"d"), attr(b"b")).await.unwrap();
+        verify(&tx, vec![b"a", b"b", b"c", b"d"]).await;
+
+        // And remove one
+        tx.remove_by_domain(rid, attr(b"c")).await.unwrap();
+        verify(&tx, vec![b"a", b"b", b"d"]).await;
     }
 
     #[tokio::test]

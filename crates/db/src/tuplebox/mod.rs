@@ -19,8 +19,10 @@ pub mod tb_worldstate;
 mod tuples;
 mod tx;
 
+pub use tx::transaction::Transaction;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct RelationId(usize);
+pub struct RelationId(pub usize);
 
 impl RelationId {
     pub fn transient(id: usize) -> Self {

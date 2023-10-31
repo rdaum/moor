@@ -1,12 +1,15 @@
-use crate::rpc_server::RpcServer;
-use async_trait::async_trait;
-use moor_kernel::tasks::sessions::{Session, SessionError};
-use moor_values::model::NarrativeEvent;
-use moor_values::var::objid::Objid;
 use std::sync::Arc;
+
+use async_trait::async_trait;
 use tokio::sync::Mutex;
 use tracing::trace;
 use uuid::Uuid;
+
+use moor_kernel::tasks::sessions::{Session, SessionError};
+use moor_values::model::NarrativeEvent;
+use moor_values::var::objid::Objid;
+
+use crate::rpc_server::RpcServer;
 
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {

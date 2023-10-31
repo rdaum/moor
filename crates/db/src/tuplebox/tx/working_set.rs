@@ -117,8 +117,9 @@ impl WorkingSet {
         // By performing the seek, we'll materialize the tuples into our local working set, which
         // will in turn update the codomain index for those tuples.
         for tuples in tuples_for_codomain {
-            self.seek_by_domain(db.clone(), relation_id, tuples.get().domain())
-                .await?;
+            let _ = self
+                .seek_by_domain(db.clone(), relation_id, tuples.get().domain())
+                .await;
         }
 
         let relation = &mut self.relations[relation_id.0];

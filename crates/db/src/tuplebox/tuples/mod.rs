@@ -10,7 +10,7 @@ mod tx_tuple;
 
 pub struct TupleRef {
     sb: Arc<SlotBox>,
-    id: TupleId,
+    pub id: TupleId,
 }
 
 impl PartialEq for TupleRef {

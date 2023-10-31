@@ -18,6 +18,7 @@ use rpc_common::{RpcRequestError, RpcResponse, RpcResult};
 use crate::rpc_server::zmq_loop;
 
 mod connections;
+mod connections_tb;
 mod rpc_server;
 mod rpc_session;
 
@@ -45,10 +46,10 @@ struct Args {
     #[arg(
         short,
         long,
-        value_name = "connections-file",
-        help = "Path to connections list file to use or create",
+        value_name = "connections-db",
+        help = "Path to connections database to use or create",
         value_hint = ValueHint::FilePath,
-        default_value = "connections.json"
+        default_value = "connections.db"
     )]
     connections_file: PathBuf,
 

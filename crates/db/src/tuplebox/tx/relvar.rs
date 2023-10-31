@@ -61,4 +61,11 @@ impl<'a> RelVar<'a> {
     pub async fn remove_by_domain(&self, domain: SliceRef) -> Result<(), TupleError> {
         self.tx.remove_by_domain(self.id, domain).await
     }
+
+    pub async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
+        &self,
+        f: &F,
+    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+        self.tx.predicate_scan(self.id, f).await
+    }
 }

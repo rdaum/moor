@@ -5,7 +5,6 @@ use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Error};
 use futures_util::SinkExt;
-use itertools::Itertools;
 use metrics_macros::increment_counter;
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
@@ -31,7 +30,8 @@ use rpc_common::{
     BROADCAST_TOPIC,
 };
 
-use crate::connections::Connections;
+use crate::connections::ConnectionsDB;
+use crate::connections_tb::ConnectionsTb;
 use crate::make_response;
 use crate::rpc_session::RpcSession;
 
@@ -39,7 +39,7 @@ pub struct RpcServer {
     publish: Arc<Mutex<Publish>>,
     world_state_source: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,
-    connections: Connections,
+    connections: Arc<dyn ConnectionsDB + Send + Sync>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -67,7 +67,7 @@ impl RpcServer {
             .set_sndtimeo(1)
             .bind(narrative_endpoint)
             .unwrap();
-        let connections = Connections::new(connections_file).await;
+        let connections = Arc::new(ConnectionsTb::new(Some(connections_file)).await);
         info!(
             "Created connections list, with {} initial known connections",
             connections.connections().await.len()
@@ -239,36 +239,21 @@ impl RpcServer {
     }
 
     pub(crate) async fn connection_name_for(&self, player: Objid) -> Result<String, SessionError> {
-        let connections = self.connections.connection_records_for(player).await?;
-        // Grab the most recent connection record (they are sorted by last_activity, so last item).
-        Ok(connections.last().unwrap().name.clone())
+        self.connections.connection_name_for(player).await
     }
 
+    #[allow(dead_code)]
     async fn last_activity_for(&self, player: Objid) -> Result<SystemTime, SessionError> {
-        let connections = self.connections.connection_records_for(player).await?;
-        if connections.is_empty() {
-            return Err(SessionError::NoConnectionForPlayer(player));
-        }
-        // Grab the most recent connection record (they are sorted by last_activity, so last item).
-        Ok(connections.last().unwrap().last_activity)
+        self.connections.last_activity_for(player).await
     }
 
     pub(crate) async fn idle_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
-        let last_activity = self.last_activity_for(player).await?;
+        let last_activity = self.connections.last_activity_for(player).await?;
         Ok(last_activity.elapsed().unwrap().as_secs_f64())
     }
 
     pub(crate) async fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
-        // Grab the highest of all connection times.
-        let connections = self.connections.connection_records_for(player).await?;
-        Ok(connections
-            .iter()
-            .map(|c| c.connect_time)
-            .max()
-            .unwrap()
-            .elapsed()
-            .unwrap()
-            .as_secs_f64())
+        self.connections.connected_seconds_for(player).await
     }
 
     // TODO this will issue physical disconnects to *all* connections for this player.
@@ -278,8 +263,7 @@ impl RpcServer {
     //   should be modified to reflect that.
     pub(crate) async fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
         warn!("Disconnecting player: {}", player);
-        let connections = self.connections.connection_records_for(player).await?;
-        let all_client_ids = connections.iter().map(|c| c.client_id).collect_vec();
+        let all_client_ids = self.connections.client_ids_for(player).await?;
 
         let mut publish = self.publish.lock().await;
         let event = ConnectionEvent::Disconnect();
@@ -500,7 +484,7 @@ impl RpcServer {
 
         if let Err(e) = self
             .connections
-            .activity_for_client(client_id, connection)
+            .record_client_activity(client_id, connection)
             .await
         {
             warn!("Unable to update client connection activity: {}", e);
@@ -570,7 +554,7 @@ impl RpcServer {
     ) -> Result<RpcResponse, RpcRequestError> {
         if let Err(e) = self
             .connections
-            .activity_for_client(client_id, connection)
+            .record_client_activity(client_id, connection)
             .await
         {
             warn!("Unable to update client connection activity: {}", e);
@@ -715,8 +699,7 @@ impl RpcServer {
         increment_counter!("rpc_server.publish_narrative_events");
         let mut publish = self.publish.lock().await;
         for (player, event) in events {
-            let connections = self.connections.connection_records_for(*player).await?;
-            let client_ids = connections.iter().map(|c| c.client_id).collect_vec();
+            let client_ids = self.connections.client_ids_for(*player).await?;
             let event = ConnectionEvent::Narrative(*player, event.clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
             for client_id in &client_ids {

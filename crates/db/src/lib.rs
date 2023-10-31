@@ -86,7 +86,7 @@ impl DatabaseBuilder {
             DatabaseType::Tuplebox => {
                 let (db, fresh) = TupleBoxWorldStateSource::open(
                     self.path.clone(),
-                    self.memory_size.unwrap_or(1 << 48),
+                    self.memory_size.unwrap_or(1 << 40),
                 )
                 .await;
                 Ok((Box::new(db), fresh))
