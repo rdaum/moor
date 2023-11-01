@@ -45,3 +45,6 @@ serde_json.workspace = true
 serde.workspace = true
 chrono.workspace = true
 
+# Auth/Auth
+paseto.workspace = true
+ring.workspace = true

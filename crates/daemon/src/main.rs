@@ -9,6 +9,7 @@ use tmq::Multipart;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
+use {ring::rand::SystemRandom, ring::signature::Ed25519KeyPair};
 
 use moor_db::{DatabaseBuilder, DatabaseType};
 use moor_kernel::tasks::scheduler::Scheduler;
@@ -75,6 +76,22 @@ struct Args {
         default_value = "tcp://0.0.0.0:7898"
     )]
     narrative_listen: String,
+
+    #[arg(
+        long,
+        value_name = "keypair",
+        help = "file containing a pkcs8 ed25519, used for authenticating client connections",
+        default_value = "keypair.pkcs8"
+    )]
+    keypair: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "generate-keypair",
+        help = "Generate a new keypair and save it to the keypair files, if they don't exist already",
+        default_value = "false"
+    )]
+    generate_keypair: bool,
 }
 
 pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Multipart {
@@ -110,6 +127,38 @@ async fn main() {
     builder
         .install()
         .expect("failed to install Prometheus recorder");
+
+    // Check the public/private keypair file to see if it exists. If it does, parse it and establish
+    // the PASETO keypair from it...
+    let keypair = if args.keypair.exists() {
+        let keypair_bytes = std::fs::read(args.keypair).expect("Unable to read keypair file");
+        let keypair = Ed25519KeyPair::from_pkcs8(keypair_bytes.as_ref())
+            .expect("Unable to parse keypair file");
+        keypair
+    } else {
+        // Otherwise, check to see if --generate-keypair was passed. If it was, generate a new
+        // keypair and save it to the file; otherwise, error out.
+
+        if args.generate_keypair {
+            let sys_rand = SystemRandom::new();
+            let key_pkcs8 =
+                Ed25519KeyPair::generate_pkcs8(&sys_rand).expect("Failed to generate pkcs8 key!");
+            let keypair =
+                Ed25519KeyPair::from_pkcs8(key_pkcs8.as_ref()).expect("Failed to parse keypair");
+            let pkcs8_keypair_bytes: &[u8] = key_pkcs8.as_ref();
+
+            // Now write it out...
+            std::fs::write(args.keypair, pkcs8_keypair_bytes)
+                .expect("Unable to write keypair file");
+
+            keypair
+        // Write
+        } else {
+            panic!(
+                "Public/private keypair files do not exist, and --generate-keypair was not passed"
+            );
+        }
+    };
 
     info!("Daemon starting...");
     let db_source_builder = DatabaseBuilder::new()
@@ -157,6 +206,7 @@ async fn main() {
     let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
 
     let zmq_server_loop = zmq_loop(
+        keypair,
         args.connections_file,
         state_source,
         scheduler.clone(),

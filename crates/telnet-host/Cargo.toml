@@ -36,8 +36,9 @@ metrics.workspace = true
 metrics-util.workspace = true
 metrics-macros.workspace = true
 
-## ZMQ
+## ZMQ / RPC
 tmq.workspace = true
 uuid.workspace = true
 itertools.workspace = true
+paseto.workspace = true
 

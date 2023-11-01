@@ -74,7 +74,7 @@ yoke-derive = "0.7.2"
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
 md5 = "0.7.0" # For MOO's "string_hash"
 rand = "0.8.5"
-onig = "6.4.0"
+onig = { version = "6.4.0", default-features = false  }
 chrono-tz = "0.8.3"
 iana-time-zone = "0.1.57"
 
@@ -103,3 +103,7 @@ tempfile = "3.8.0"
 pretty_assertions = "1.4.0"
 test-case = "3.2.1"
 unindent = "0.2.3"
+
+# Auth/Auth
+paseto = "2.0.2"
+ring = { version = "*", features = ["std"] }

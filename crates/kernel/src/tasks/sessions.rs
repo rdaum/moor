@@ -99,6 +99,8 @@ pub enum SessionError {
     DeliveryError,
     #[error("Could not commit session: {0}")]
     CommitError(String),
+    #[error("Invalid authorization token")]
+    InvalidToken,
 }
 
 /// A simple no-op implementation of the Sessions trait, for use in unit tests.

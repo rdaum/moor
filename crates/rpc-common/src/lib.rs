@@ -21,17 +21,26 @@ pub enum RpcError {
     CouldNotDecode(String),
 }
 
+/// PASETO public token for a connection, used for the validation of RPC requests after the initial
+/// connection is established.
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub struct ClientToken(pub String);
+
+/// PASTEO public token for an authenticated player, encoding the player's identity.
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub struct AuthToken(pub String);
+
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum RpcRequest {
     ConnectionEstablish(String),
-    RequestSysProp(String, String),
-    LoginCommand(Vec<String>),
-    Command(String),
-    RequestedInput(u128, String),
-    OutOfBand(String),
-    Eval(String),
-    Pong(SystemTime),
-    Detach,
+    RequestSysProp(ClientToken, String, String),
+    LoginCommand(ClientToken, Vec<String>),
+    Command(ClientToken, AuthToken, String),
+    RequestedInput(ClientToken, AuthToken, u128, String),
+    OutOfBand(ClientToken, AuthToken, String),
+    Eval(ClientToken, AuthToken, String),
+    Pong(ClientToken, SystemTime),
+    Detach(ClientToken),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Encode, Decode)]
@@ -50,9 +59,9 @@ pub enum RpcResult {
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum RpcResponse {
-    NewConnection(Objid),
+    NewConnection(ClientToken, Objid),
     SysPropValue(Option<Var>),
-    LoginResult(Option<(ConnectType, Objid)>),
+    LoginResult(Option<(AuthToken, ConnectType, Objid)>),
     CommandSubmitted(usize /* task id */),
     InputThanks,
     EvalResult(Var),

@@ -21,7 +21,8 @@ use rpc_common::pubsub_client::{broadcast_recv, narrative_recv};
 use rpc_common::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
 use rpc_common::{
-    BroadcastEvent, ConnectType, ConnectionEvent, RpcRequestError, RpcResult, BROADCAST_TOPIC,
+    AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequestError,
+    RpcResult, BROADCAST_TOPIC,
 };
 use rpc_common::{RpcRequest, RpcResponse};
 
@@ -30,6 +31,8 @@ const OUT_OF_BAND_PREFIX: &str = "#$#";
 
 pub(crate) struct TelnetConnection {
     client_id: Uuid,
+    /// Current PASETO token.
+    client_token: ClientToken,
     write: SplitSink<Framed<TcpStream, LinesCodec>, String>,
     read: SplitStream<Framed<TcpStream, LinesCodec>>,
 }
@@ -44,11 +47,14 @@ impl TelnetConnection {
         // Provoke welcome message, which is a login command with no arguments, and we
         // don't care about the reply at this point.
         rpc_client
-            .make_rpc_call(self.client_id, RpcRequest::LoginCommand(vec![]))
+            .make_rpc_call(
+                self.client_id,
+                RpcRequest::LoginCommand(self.client_token.clone(), vec![]),
+            )
             .await
             .expect("Unable to send login request to RPC server");
 
-        let Ok((player, connect_type)) = self
+        let Ok((auth_token, player, connect_type)) = self
             .authorization_phase(narrative_sub, broadcast_sub, rpc_client)
             .await
         else {
@@ -64,7 +70,7 @@ impl TelnetConnection {
 
         debug!(?player, client_id = ?self.client_id, "Entering command dispatch loop");
         if self
-            .command_loop(narrative_sub, broadcast_sub, rpc_client)
+            .command_loop(auth_token.clone(), narrative_sub, broadcast_sub, rpc_client)
             .await
             .is_err()
         {
@@ -73,7 +79,10 @@ impl TelnetConnection {
 
         // Let the server know this client is gone.
         rpc_client
-            .make_rpc_call(self.client_id, RpcRequest::Detach)
+            .make_rpc_call(
+                self.client_id,
+                RpcRequest::Detach(self.client_token.clone()),
+            )
             .await?;
 
         Ok(())
@@ -84,7 +93,7 @@ impl TelnetConnection {
         narrative_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
-    ) -> Result<(Objid, ConnectType), anyhow::Error> {
+    ) -> Result<(AuthToken, Objid, ConnectType), anyhow::Error> {
         debug!(client_id = ?self.client_id, "Entering auth loop");
         loop {
             select! {
@@ -93,7 +102,7 @@ impl TelnetConnection {
                     match event {
                         BroadcastEvent::PingPong(_server_time) => {
                             let _ = rpc_client.make_rpc_call(self.client_id,
-                                RpcRequest::Pong(SystemTime::now())).await?;
+                                RpcRequest::Pong(self.client_token.clone(), SystemTime::now())).await?;
                         }
                     }
                 }
@@ -124,10 +133,10 @@ impl TelnetConnection {
                     let line = line.unwrap();
                     let words = parse_into_words(&line);
                     let response = rpc_client.make_rpc_call(self.client_id,
-                        RpcRequest::LoginCommand(words)).await.expect("Unable to send login request to RPC server");
-                    if let RpcResult::Success(RpcResponse::LoginResult(Some((connect_type, player)))) = response {
+                        RpcRequest::LoginCommand(self.client_token.clone(), words)).await.expect("Unable to send login request to RPC server");
+                    if let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
-                        return Ok((player, connect_type))
+                        return Ok((auth_token, player, connect_type))
                     }
                 }
             }
@@ -136,6 +145,7 @@ impl TelnetConnection {
 
     async fn command_loop(
         &mut self,
+        auth_token: AuthToken,
         narrative_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
@@ -153,15 +163,15 @@ impl TelnetConnection {
                     // Are we expecting to respond to prompt input? If so, send this through to that.
                     let response = match expecting_input_reply.take() {
                         Some(input_reply_id) => {
-                            rpc_client.make_rpc_call(self.client_id, RpcRequest::RequestedInput(input_reply_id, line)).await?
+                            rpc_client.make_rpc_call(self.client_id, RpcRequest::RequestedInput(self.client_token.clone(), auth_token.clone(), input_reply_id, line)).await?
                         }
                         None => {
                             // If the line begins with the out of band prefix, then send it that way,
                             // instead. And really just fire and forget.
                             if line.starts_with(OUT_OF_BAND_PREFIX) {
-                                rpc_client.make_rpc_call(self.client_id, RpcRequest::OutOfBand(line)).await?
+                                rpc_client.make_rpc_call(self.client_id, RpcRequest::OutOfBand(self.client_token.clone(), auth_token.clone(), line)).await?
                             } else {
-                                rpc_client.make_rpc_call(self.client_id, RpcRequest::Command(line)).await?
+                                rpc_client.make_rpc_call(self.client_id, RpcRequest::Command(self.client_token.clone(), auth_token.clone(), line)).await?
                             }
                         }
                     };
@@ -198,7 +208,7 @@ impl TelnetConnection {
                     match event {
                         BroadcastEvent::PingPong(_server_time) => {
                             let _ = rpc_client.make_rpc_call(self.client_id,
-                                RpcRequest::Pong(SystemTime::now())).await?;
+                                RpcRequest::Pong(self.client_token.clone(), SystemTime::now())).await?;
                         }
                     }
                 }
@@ -260,13 +270,13 @@ pub async fn telnet_listen_loop(
             debug!(rpc_address, "Contacting RPC server to establish connection");
             let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
-            let connection_oid = match rpc_client
+            let (token, connection_oid) = match rpc_client
                 .make_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))
                 .await
             {
-                Ok(RpcResult::Success(RpcResponse::NewConnection(objid))) => {
+                Ok(RpcResult::Success(RpcResponse::NewConnection(token, objid))) => {
                     info!("Connection established, connection ID: {}", objid);
-                    objid
+                    (token, objid)
                 }
                 Ok(RpcResult::Failure(f)) => {
                     bail!("RPC failure in connection establishment: {}", f);
@@ -306,6 +316,7 @@ pub async fn telnet_listen_loop(
             let (write, read): (SplitSink<Framed<TcpStream, LinesCodec>, String>, _) =
                 framed_stream.split();
             let mut tcp_connection = TelnetConnection {
+                client_token: token,
                 client_id,
                 write,
                 read,

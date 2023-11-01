@@ -6,6 +6,8 @@ use std::time::{Instant, SystemTime};
 use anyhow::{Context, Error};
 use futures_util::SinkExt;
 use metrics_macros::increment_counter;
+use ring::signature::Ed25519KeyPair;
+use serde_json::json;
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
 use tokio::sync::Mutex;
@@ -26,9 +28,12 @@ use moor_values::var::{v_bool, v_objid, v_str, v_string};
 use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
-    BroadcastEvent, ConnectType, ConnectionEvent, RpcRequest, RpcRequestError, RpcResponse,
-    BROADCAST_TOPIC,
+    AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequest,
+    RpcRequestError, RpcResponse, BROADCAST_TOPIC,
 };
+
+pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_rpc";
+pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
 
 use crate::connections::ConnectionsDB;
 use crate::connections_tb::ConnectionsTb;
@@ -36,6 +41,7 @@ use crate::make_response;
 use crate::rpc_session::RpcSession;
 
 pub struct RpcServer {
+    keypair: Ed25519KeyPair,
     publish: Arc<Mutex<Publish>>,
     world_state_source: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,
@@ -53,7 +59,8 @@ struct ConnectionRecord {
 
 impl RpcServer {
     pub async fn new(
-        connections_file: PathBuf,
+        keypair: Ed25519KeyPair,
+        connections_db_path: PathBuf,
         zmq_context: tmq::Context,
         narrative_endpoint: &str,
         wss: Arc<dyn WorldStateSource>,
@@ -67,12 +74,13 @@ impl RpcServer {
             .set_sndtimeo(1)
             .bind(narrative_endpoint)
             .unwrap();
-        let connections = Arc::new(ConnectionsTb::new(Some(connections_file)).await);
+        let connections = Arc::new(ConnectionsTb::new(Some(connections_db_path)).await);
         info!(
             "Created connections list, with {} initial known connections",
             connections.connections().await.len()
         );
         Self {
+            keypair,
             world_state_source: wss,
             scheduler,
             connections,
@@ -92,11 +100,14 @@ impl RpcServer {
                 increment_counter!("rpc_server.connection_establish");
 
                 match self.connections.new_connection(client_id, hostname).await {
-                    Ok(oid) => make_response(Ok(NewConnection(oid))),
+                    Ok(oid) => {
+                        let token = self.make_client_token(client_id);
+                        make_response(Ok(NewConnection(token, oid)))
+                    }
                     Err(e) => make_response(Err(e)),
                 }
             }
-            RpcRequest::Pong(_client_sys_time) => {
+            RpcRequest::Pong(token, _client_sys_time) => {
                 // Always respond with a ThanksPong, even if it's somebody we don't know.
                 // Can easily be a connection that was in the middle of negotiation at the time the
                 // ping was sent out, or dangling in some other way.
@@ -110,6 +121,15 @@ impl RpcServer {
                     warn!("Received Pong from invalid client: {}", client_id);
                     return response;
                 };
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
                 // Let 'connections' know that the connection is still alive.
                 let Ok(_) = self
                     .connections
@@ -121,16 +141,27 @@ impl RpcServer {
                 };
                 response
             }
-            RpcRequest::RequestSysProp(object, property) => {
+            RpcRequest::RequestSysProp(token, object, property) => {
                 increment_counter!("rpc_server.request_sys_prop");
-                if !self.connections.is_valid_client(client_id).await {
-                    warn!("Received RequestSysProp from invalid client: {}", client_id);
-
+                let Some(connection) = self
+                    .connections
+                    .connection_object_for_client(client_id)
+                    .await
+                else {
                     return make_response(Err(RpcRequestError::NoConnection));
-                }
+                };
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
                 make_response(self.clone().request_sys_prop(object, property).await)
             }
-            RpcRequest::LoginCommand(args) => {
+            RpcRequest::LoginCommand(token, args) => {
                 increment_counter!("rpc_server.login_command");
                 let Some(connection) = self
                     .connections
@@ -139,6 +170,14 @@ impl RpcServer {
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
 
                 make_response(
                     self.clone()
@@ -146,7 +185,7 @@ impl RpcServer {
                         .await,
                 )
             }
-            RpcRequest::Command(command) => {
+            RpcRequest::Command(token, auth_token, command) => {
                 increment_counter!("rpc_server.command");
                 let Some(connection) = self
                     .connections
@@ -156,13 +195,30 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
 
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
+                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Auth token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
                 make_response(
                     self.clone()
                         .perform_command(client_id, connection, command)
                         .await,
                 )
             }
-            RpcRequest::RequestedInput(request_id, input) => {
+            RpcRequest::RequestedInput(token, auth_token, request_id, input) => {
                 increment_counter!("rpc_server.requested_input");
                 let Some(connection) = self
                     .connections
@@ -172,6 +228,23 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
 
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
+                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Auth token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
                 let request_id = Uuid::from_u128(request_id);
                 make_response(
                     self.clone()
@@ -179,7 +252,7 @@ impl RpcServer {
                         .await,
                 )
             }
-            RpcRequest::OutOfBand(command) => {
+            RpcRequest::OutOfBand(token, auth_token, command) => {
                 increment_counter!("rpc_server.out_of_band_received");
                 let Some(connection) = self
                     .connections
@@ -187,6 +260,23 @@ impl RpcServer {
                     .await
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
+                };
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
+                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Auth token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
                 make_response(
@@ -196,7 +286,7 @@ impl RpcServer {
                 )
             }
 
-            RpcRequest::Eval(evalstr) => {
+            RpcRequest::Eval(token, auth_token, evalstr) => {
                 increment_counter!("rpc_server.eval");
                 let Some(connection) = self
                     .connections
@@ -206,10 +296,33 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
 
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
+                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Auth token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
                 make_response(self.clone().eval(client_id, connection, evalstr).await)
             }
-            RpcRequest::Detach => {
+            RpcRequest::Detach(token) => {
                 increment_counter!("rpc_server.detach");
+
+                let Ok(connection) = self.validate_client_token(token, client_id) else {
+                    warn!(?client_id, "Client token validation failed for request");
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
                 info!("Detaching client: {}", client_id);
 
                 // Detach this client id from the player/connection object.
@@ -434,7 +547,10 @@ impl RpcServer {
         }
 
         increment_counter!("rpc_server.perform_login.success");
-        Ok(LoginResult(Some((connect_type, player))))
+
+        let auth_token = self.make_auth_token(player);
+
+        Ok(LoginResult(Some((auth_token, connect_type, player))))
     }
 
     async fn submit_connected_task(
@@ -788,10 +904,139 @@ impl RpcServer {
         self.connections.ping_check().await;
         Ok(())
     }
+
+    /// Construct a PASETO token for this client_id and player combination. This token is used to
+    /// validate the client connection to the daemon for future requests.
+    fn make_client_token(&self, client_id: Uuid) -> ClientToken {
+        let token = paseto::tokens::PasetoBuilder::new()
+            .set_ed25519_key(&self.keypair)
+            .set_issued_at(None)
+            .set_claim("client_id", json!(client_id.to_string()))
+            .set_issuer("moor")
+            .set_audience("moor_connection")
+            .set_footer(MOOR_SESSION_TOKEN_FOOTER)
+            .build()
+            .expect("Unable to build Paseto token");
+        ClientToken(token)
+    }
+
+    /// Construct a PASETO token for this player login. This token is used to provide credentials
+    /// for requests, to allow reconnection with a different client_id.
+    fn make_auth_token(&self, oid: Objid) -> AuthToken {
+        let token = paseto::tokens::PasetoBuilder::new()
+            .set_ed25519_key(&self.keypair)
+            .set_issued_at(None)
+            .set_claim("player", json!(oid.0.to_string()))
+            .set_issuer("moor")
+            .set_audience("moor_credentials")
+            .set_footer(MOOR_AUTH_TOKEN_FOOTER)
+            .build()
+            .expect("Unable to build Paseto token");
+        AuthToken(token)
+    }
+
+    /// Validate the provided PASETO token against the provided client id and (optionally) player
+    /// objid. If they do not match, the request is rejected, permissions denied.
+    fn validate_client_token(
+        &self,
+        token: ClientToken,
+        client_id: Uuid,
+    ) -> Result<(), SessionError> {
+        let pk = paseto::tokens::PasetoPublicKey::ED25519KeyPair(&self.keypair);
+        let verified_token = paseto::tokens::validate_public_token(
+            &token.0,
+            Some(MOOR_SESSION_TOKEN_FOOTER),
+            &pk,
+            &paseto::tokens::TimeBackend::Chrono,
+        )
+        .map_err(|e| {
+            warn!(error = ?e, "Unable to parse/validate token");
+            SessionError::InvalidToken
+        })?;
+
+        // Issuer & audience must match.
+        let (Some(Some("moor")), Some(Some("moor_connection"))) = (
+            verified_token.get("iss").map(|s| s.as_str()),
+            verified_token.get("aud").map(|s| s.as_str()),
+        ) else {
+            debug!("Token does not contain valid issuer/audience");
+            return Err(SessionError::InvalidToken);
+        };
+
+        // Does the token match the client it came from? If not, reject it.
+        let Some(token_client_id) = verified_token.get("client_id") else {
+            debug!("Token does not contain client_id");
+            return Err(SessionError::InvalidToken);
+        };
+        let Some(token_client_id) = token_client_id.as_str() else {
+            debug!("Token client_id is null");
+            return Err(SessionError::InvalidToken);
+        };
+        let Ok(token_client_id) = Uuid::parse_str(token_client_id) else {
+            debug!("Token client_id is not a valid UUID");
+            return Err(SessionError::InvalidToken);
+        };
+        if client_id != token_client_id {
+            debug!(
+                ?client_id,
+                ?token_client_id,
+                "Token client_id does not match client_id"
+            );
+            return Err(SessionError::InvalidToken);
+        }
+
+        Ok(())
+    }
+
+    /// Validate that the provided PASETO token is valid for the provided player Objid.
+    /// Note that this is merely validating that the token is valid, not that the actual player
+    /// inside the token is valid and has the capapilities it thinks it has. That must be done in
+    /// the server.
+    fn validate_auth_token(&self, token: AuthToken, objid: Objid) -> Result<(), SessionError> {
+        let pk = paseto::tokens::PasetoPublicKey::ED25519KeyPair(&self.keypair);
+        let verified_token = paseto::tokens::validate_public_token(
+            &token.0,
+            Some(MOOR_AUTH_TOKEN_FOOTER),
+            &pk,
+            &paseto::tokens::TimeBackend::Chrono,
+        )
+        .map_err(|e| {
+            warn!(error = ?e, "Unable to parse/validate token");
+            SessionError::InvalidToken
+        })?;
+
+        // Does the 'player' match objid? If not, reject it.
+        let Some(token_player) = verified_token.get("player") else {
+            debug!("Token does not contain player");
+            return Err(SessionError::InvalidToken);
+        };
+        let Some(token_player) = token_player.as_str() else {
+            debug!("Token player is not a string");
+            return Err(SessionError::InvalidToken);
+        };
+        let Ok(token_player) = token_player.parse() else {
+            debug!("Token player is not a valid Objid");
+            return Err(SessionError::InvalidToken);
+        };
+        let token_player = Objid(token_player);
+        if objid != token_player {
+            debug!(?objid, ?token_player, "Token player does not match objid");
+            return Err(SessionError::InvalidToken);
+        }
+
+        // TODO: we will need to verify that the player object id inside the token is valid inside
+        //   moor itself. And really only something with a WorldState can do that. So it's not
+        //   enough to have validated the auth token here, we will need to pepper the scheduler/task
+        //   code with checks to make sure that the player objid is valid before letting it go
+        //   forwards.
+
+        Ok(())
+    }
 }
 
 pub(crate) async fn zmq_loop(
-    connections_file: PathBuf,
+    keypair: Ed25519KeyPair,
+    connections_db_path: PathBuf,
     wss: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,
     rpc_endpoint: &str,
@@ -804,7 +1049,8 @@ pub(crate) async fn zmq_loop(
 
     let rpc_server = Arc::new(
         RpcServer::new(
-            connections_file,
+            keypair,
+            connections_db_path,
             zmq_ctx.clone(),
             narrative_endpoint,
             wss,

@@ -31,10 +31,11 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-chrome.workspace = true
 
-## ZMQ
+## ZMQ / RPC
 tmq.workspace = true
 uuid.workspace = true
 itertools.workspace = true
+paseto.workspace = true
 
 ## For console
 rustyline.workspace = true

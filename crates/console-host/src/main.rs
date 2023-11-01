@@ -19,7 +19,8 @@ use uuid::Uuid;
 use rpc_common::pubsub_client::{broadcast_recv, narrative_recv};
 use rpc_common::rpc_client::RpcSendClient;
 use rpc_common::{
-    BroadcastEvent, ConnectionEvent, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC,
+    AuthToken, BroadcastEvent, ClientToken, ConnectionEvent, RpcRequest, RpcResponse, RpcResult,
+    BROADCAST_TOPIC,
 };
 
 #[derive(Parser, Debug)]
@@ -60,7 +61,7 @@ struct Args {
 async fn establish_connection(
     client_id: Uuid,
     rpc_client: &mut RpcSendClient,
-) -> Result<Objid, anyhow::Error> {
+) -> Result<(ClientToken, Objid), anyhow::Error> {
     match rpc_client
         .make_rpc_call(
             client_id,
@@ -68,7 +69,7 @@ async fn establish_connection(
         )
         .await
     {
-        Ok(RpcResult::Success(RpcResponse::NewConnection(conn_id))) => Ok(conn_id),
+        Ok(RpcResult::Success(RpcResponse::NewConnection(token, conn_id))) => Ok((token, conn_id)),
         Ok(RpcResult::Success(other)) => {
             error!("Unexpected response: {:?}", other);
             Err(Error::msg("Unexpected response"))
@@ -85,26 +86,34 @@ async fn establish_connection(
 }
 
 async fn perform_auth(
+    token: ClientToken,
     client_id: Uuid,
     rpc_client: &mut RpcSendClient,
     username: &str,
     password: &str,
-) -> Result<Objid, Error> {
+) -> Result<(AuthToken, Objid), Error> {
     // Need to first authenticate with the server.
     match rpc_client
         .make_rpc_call(
             client_id,
-            RpcRequest::LoginCommand(vec![
-                "connect".to_string(),
-                username.to_string(),
-                password.to_string(),
-            ]),
+            RpcRequest::LoginCommand(
+                token,
+                vec![
+                    "connect".to_string(),
+                    username.to_string(),
+                    password.to_string(),
+                ],
+            ),
         )
         .await
     {
-        Ok(RpcResult::Success(RpcResponse::LoginResult(Some((connect_type, player))))) => {
+        Ok(RpcResult::Success(RpcResponse::LoginResult(Some((
+            auth_token,
+            connect_type,
+            player,
+        ))))) => {
             info!("Authenticated as {:?} with id {:?}", connect_type, player);
-            Ok(player)
+            Ok((auth_token, player))
         }
         Ok(RpcResult::Success(RpcResponse::LoginResult(None))) => {
             error!("Authentication failed");
@@ -126,6 +135,8 @@ async fn perform_auth(
 }
 
 async fn handle_console_line(
+    client_token: ClientToken,
+    auth_token: AuthToken,
     client_id: Uuid,
     line: &str,
     rpc_client: &mut RpcSendClient,
@@ -143,7 +154,12 @@ async fn handle_console_line(
         match rpc_client
             .make_rpc_call(
                 client_id,
-                RpcRequest::RequestedInput(input_request_id.as_u128(), line.to_string()),
+                RpcRequest::RequestedInput(
+                    client_token.clone(),
+                    auth_token.clone(),
+                    input_request_id.as_u128(),
+                    line.to_string(),
+                ),
             )
             .await
         {
@@ -164,7 +180,10 @@ async fn handle_console_line(
     }
 
     match rpc_client
-        .make_rpc_call(client_id, RpcRequest::Command(line.to_string()))
+        .make_rpc_call(
+            client_id,
+            RpcRequest::Command(client_token.clone(), auth_token.clone(), line.to_string()),
+        )
         .await
     {
         Ok(RpcResult::Success(RpcResponse::CommandSubmitted(_))) => {
@@ -201,11 +220,18 @@ async fn console_loop(
 
     let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
-    let conn_obj_id = establish_connection(client_id, &mut rpc_client).await?;
+    let (client_token, conn_obj_id) = establish_connection(client_id, &mut rpc_client).await?;
     debug!("Transitional connection ID before auth: {:?}", conn_obj_id);
 
     // Now authenticate with the server.
-    let player = perform_auth(client_id, &mut rpc_client, username, password).await?;
+    let (auth_token, player) = perform_auth(
+        client_token.clone(),
+        client_id,
+        &mut rpc_client,
+        username,
+        password,
+    )
+    .await?;
 
     info!("Authenticated as {:?} /  {}", username, player);
 
@@ -256,12 +282,17 @@ async fn console_loop(
         .connect(rpc_server)
         .expect("Unable to bind RPC server for connection");
     let mut broadcast_rpc_client = RpcSendClient::new(broadcast_rcp_request_sock);
+
+    let broadcast_client_token = client_token.clone();
     let broadcast_loop = tokio::spawn(async move {
         loop {
             match broadcast_recv(&mut broadcast_subscriber).await {
                 Ok(BroadcastEvent::PingPong(_)) => {
                     if let Err(e) = broadcast_rpc_client
-                        .make_rpc_call(client_id, RpcRequest::Pong(SystemTime::now()))
+                        .make_rpc_call(
+                            client_id,
+                            RpcRequest::Pong(broadcast_client_token.clone(), SystemTime::now()),
+                        )
                         .await
                     {
                         error!("Error sending pong: {:?}", e);
@@ -276,6 +307,8 @@ async fn console_loop(
         }
     });
 
+    let edit_client_token = client_token.clone();
+    let edit_auth_token = auth_token.clone();
     let edit_loop = tokio::spawn(async move {
         let mut rl = DefaultEditor::new().unwrap();
         loop {
@@ -293,7 +326,15 @@ async fn console_loop(
                 Ok(line) => {
                     rl.add_history_entry(line.clone())
                         .expect("Could not add history");
-                    handle_console_line(client_id, &line, &mut rpc_client, input_request_id).await;
+                    handle_console_line(
+                        edit_client_token.clone(),
+                        edit_auth_token.clone(),
+                        client_id,
+                        &line,
+                        &mut rpc_client,
+                        input_request_id,
+                    )
+                    .await;
                 }
                 Err(ReadlineError::Eof) => {
                     println!("<EOF>");

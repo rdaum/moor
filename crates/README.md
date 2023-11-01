@@ -15,8 +15,7 @@ Binaries:
 Libraries:
   * `values` - crate that implements the core MOO discriminated union (`Var`) value type,
      plus all associated types and traits.
-  *  `db` - implementation of the `WorldState` object database trait w/ a (for now) RocksDB backend, along with mock/testing
-     database implementations.
+  *  `db` - implementation of the `WorldState` object database trait w/ a custom MVCC in-memory database.
   * `compiler` - the MOO language grammar, parser, AST, and codegen, as well as the decompiler & unparser
   * `kernel` - the kernel of the MOO driver: virtual machine, task scheduler, implementations of all builtin   
      functions
