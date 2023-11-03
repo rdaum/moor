@@ -23,6 +23,7 @@ pub trait ConnectionsDB {
         &self,
         client_id: Uuid,
         hostname: String,
+        player: Option<Objid>,
     ) -> Result<Objid, RpcRequestError>;
 
     /// Record activity for the given client.

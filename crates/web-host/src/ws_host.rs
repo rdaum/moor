@@ -1,36 +1,44 @@
-use axum::body::Bytes;
-use axum::extract::ws::{Message, WebSocket};
+use crate::ws_connection::WebSocketConnection;
+use anyhow::anyhow;
+use axum::body::{boxed, Bytes, Empty};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
-use axum::headers::authorization::Basic;
-use axum::headers::{Authorization, HeaderValue};
+use axum::headers::HeaderValue;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::TypedHeader;
-use futures_util::stream::SplitSink;
-use futures_util::{SinkExt, StreamExt};
 use metrics_macros::increment_counter;
-use moor_values::model::CommandError;
-use rpc_common::pubsub_client::broadcast_recv;
-use rpc_common::pubsub_client::narrative_recv;
+use moor_values::var::objid::Objid;
 use rpc_common::rpc_client::RpcSendClient;
-use rpc_common::BroadcastEvent;
-use rpc_common::ConnectionEvent;
-use rpc_common::RpcRequest::ConnectionEstablish;
-use rpc_common::RpcRequestError;
+use rpc_common::AuthToken;
+use rpc_common::RpcRequest::{Attach, ConnectionEstablish};
+use rpc_common::{ClientToken, RpcRequestError};
 use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
 use std::net::SocketAddr;
-use std::time::SystemTime;
 use tmq::{request, subscribe};
-use tokio::select;
-use tracing::trace;
+use tracing::warn;
 use tracing::{debug, error, info};
 use uuid::Uuid;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum LoginType {
+    Connect,
+    Create,
+}
 
 #[derive(Clone)]
 pub struct WebSocketHost {
     zmq_context: tmq::Context,
     rpc_addr: String,
     pubsub_addr: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum WsHostError {
+    #[error("RPC request error: {0}")]
+    RpcFailure(RpcRequestError),
+    #[error("RPC system error: {0}")]
+    RpcError(anyhow::Error),
+    #[error("Authentication failed")]
+    AuthenticationFailed,
 }
 
 impl WebSocketHost {
@@ -44,89 +52,88 @@ impl WebSocketHost {
     }
 }
 
-async fn write_line(ws_sender: &mut SplitSink<WebSocket, Message>, msg: &str) {
-    let msg = if msg.is_empty() {
-        Message::Text("\n".to_string())
-    } else {
-        Message::Text(msg.to_string())
-    };
-    ws_sender
-        .send(msg)
-        .await
-        .expect("Unable to send message to client");
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum LoginType {
-    Connect,
-    Create,
-}
-
 impl WebSocketHost {
-    pub async fn handle_session(
+    /// Contact the RPC server to validate an auth token, and return the object ID of the player
+    /// and the client token and rpc client to use for the connection.
+    pub async fn validate_auth(
         &self,
-        login_type: LoginType,
+        auth_token: AuthToken,
+        connect_type: ConnectType,
         peer_addr: SocketAddr,
-        stream: WebSocket,
-        auth: Authorization<Basic>,
-    ) {
+    ) -> Result<(Objid, Uuid, ClientToken, RpcSendClient), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
         // Establish a connection to the RPC server
         let client_id = Uuid::new_v4();
-        info!(peer_addr = ?peer_addr, client_id = ?client_id,
-            "Accepted connection"
-        );
-
         let rcp_request_sock = request(&zmq_ctx)
             .set_rcvtimeo(100)
             .set_sndtimeo(100)
             .connect(self.rpc_addr.as_str())
-            .expect("Unable to bind RPC server for connection");
+            .map_err(|e| WsHostError::RpcError(anyhow!(e)))?;
 
-        // And let the RPC server know we're here, and it should start sending events on the
-        // narrative subscription.
+        // Establish a connection to the RPC server
         debug!(
             self.rpc_addr,
             "Contacting RPC server to establish connection"
         );
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
-        let (client_token, connection_oid) = match rpc_client
-            .make_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))
+        let (client_token, player) = match rpc_client
+            .make_rpc_call(
+                client_id,
+                Attach(auth_token, connect_type, peer_addr.to_string()),
+            )
             .await
         {
-            Ok(RpcResult::Success(RpcResponse::NewConnection(client_token, objid))) => {
-                info!("Connection established, connection ID: {}", objid);
-                (client_token, objid)
+            Ok(RpcResult::Success(RpcResponse::AttachResult(Some((client_token, player))))) => {
+                info!("Connection authenticated, player: {}", player);
+                (client_token, player)
+            }
+            Ok(RpcResult::Success(RpcResponse::AttachResult(None))) => {
+                warn!("Connection authentication failed from {}", peer_addr);
+                return Err(WsHostError::AuthenticationFailed);
             }
             Ok(RpcResult::Failure(f)) => {
                 error!("RPC failure in connection establishment: {}", f);
-                return;
+                return Err(WsHostError::RpcFailure(f));
             }
-            Ok(_) => {
-                error!("Unexpected response from RPC server");
-                return;
+            Ok(resp) => {
+                return Err(WsHostError::RpcError(anyhow::anyhow!(
+                    "Unexpected response from RPC server: {:?}",
+                    resp
+                )));
             }
             Err(e) => {
-                error!("Unable to establish connection: {}", e);
-                return;
+                return Err(WsHostError::RpcError(anyhow!(e)));
             }
         };
-        debug!(?client_id, connection = ?connection_oid, "Connection established");
 
-        // Before attempting login, we subscribe to the narrative channel, using our client
-        // id. The daemon should be sending events here.
+        Ok((player, client_id, client_token, rpc_client))
+    }
+
+    /// Actually instantiate the connection now that we've validated the auth token.
+    pub async fn start_connection(
+        &self,
+        player: Objid,
+        client_id: Uuid,
+        client_token: ClientToken,
+        auth_token: AuthToken,
+        rpc_client: RpcSendClient,
+        peer_addr: SocketAddr,
+    ) -> Result<WebSocketConnection, anyhow::Error> {
+        let zmq_ctx = self.zmq_context.clone();
+
+        // We'll need to subscribe to the narrative & broadcast messages for this connection.
         let narrative_sub = subscribe(&zmq_ctx)
             .connect(self.pubsub_addr.as_str())
             .expect("Unable to connect narrative subscriber ");
-        let mut narrative_sub = narrative_sub
+        let narrative_sub = narrative_sub
             .subscribe(&client_id.as_bytes()[..])
             .expect("Unable to subscribe to narrative messages for client connection");
 
         let broadcast_sub = subscribe(&zmq_ctx)
             .connect(self.pubsub_addr.as_str())
             .expect("Unable to connect broadcast subscriber ");
-        let mut broadcast_sub = broadcast_sub
+        let broadcast_sub = broadcast_sub
             .subscribe(BROADCAST_TOPIC)
             .expect("Unable to subscribe to broadcast messages for client connection");
 
@@ -135,133 +142,44 @@ impl WebSocketHost {
             client_id, self.pubsub_addr
         );
 
-        let (mut ws_sender, mut ws_receiver) = stream.split();
-
-        let connect_verb = match login_type {
-            LoginType::Connect => "connect",
-            LoginType::Create => "create",
-        };
-
-        let words = vec![
-            connect_verb.to_string(),
-            auth.username().to_string(),
-            auth.password().to_string(),
-        ];
-        let response = rpc_client
-            .make_rpc_call(
-                client_id,
-                RpcRequest::LoginCommand(client_token.clone(), words),
-            )
-            .await
-            .expect("Unable to send login request to RPC server");
-        let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, connect_type, player)))) =
-            response
-        else {
-            error!(?response, "Login failed");
-
-            return;
-        };
-
-        info!(?player, client_id = ?client_id, "Login successful");
-
-        let connect_message = match connect_type {
-            ConnectType::Connected => "** Connected **",
-            ConnectType::Reconnected => "** Reconnected **",
-            ConnectType::Created => "** Created **",
-        };
-        write_line(&mut ws_sender, connect_message).await;
-
-        debug!(?player, ?client_id, "Entering command dispatch loop");
-
-        let mut expecting_input = None;
-        loop {
-            select! {
-                line = ws_receiver.next() => {
-                    let Some(Ok(line)) = line else {
-                        info!("Connection closed");
-                        return;
-                    };
-                    let line = line.into_text().unwrap();
-                    let cmd = line.trim().to_string();
-
-                    let response = match expecting_input.take() {
-                        Some(input_request_id) => {
-                            rpc_client.make_rpc_call(client_id, RpcRequest::RequestedInput(client_token.clone(), auth_token.clone(), input_request_id, cmd))
-                                .await.expect("Unable to send input to RPC server")
-                        }
-                        None => {
-                            rpc_client.make_rpc_call(client_id, RpcRequest::Command(client_token.clone(), auth_token.clone(), cmd))
-                                .await.expect("Unable to send command to RPC server")
-                        }
-                    } ;
-
-                    match response {
-                        RpcResult::Success(RpcResponse::CommandSubmitted(_)) |
-                        RpcResult::Success(RpcResponse::InputThanks) => {
-                            // Nothing to do
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::CouldNotParseCommand)) => {
-                            write_line(&mut ws_sender, "I don't understand that.").await;
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoObjectMatch)) => {
-                            write_line(&mut ws_sender, "I don't see that here.").await;
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoCommandMatch)) => {
-                            write_line(&mut ws_sender, "I don't know how to do that.").await;
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
-                           write_line(&mut ws_sender, "You can't do that.").await;
-                        }
-                        RpcResult::Failure(e) => {
-                            error!("Unhandled RPC error: {:?}", e);
-                            continue;
-                        }
-                        RpcResult::Success(s) => {
-                            error!("Unexpected RPC success: {:?}", s);
-                            continue;
-                        }
-                    }
-                }
-                Ok(event) = broadcast_recv(&mut broadcast_sub) => {
-                    trace!(?event, "broadcast_event");
-                    match event {
-                        BroadcastEvent::PingPong(_server_time) => {
-                            let _ = rpc_client.make_rpc_call(client_id,
-                                RpcRequest::Pong(client_token.clone(), SystemTime::now())).await.expect("Unable to send pong to RPC server");
-                        }
-                    }
-                }
-                Ok(event) = narrative_recv(client_id, &mut narrative_sub) => {
-                    trace!(?event, "narrative_event");
-                    match event {
-                        ConnectionEvent::SystemMessage(_author, msg) => {
-                            write_line(&mut ws_sender, &msg).await;
-                        }
-                        ConnectionEvent::Narrative(_author, event) => {
-                            let msg = event.event();
-                            write_line(&mut ws_sender, &msg).await;
-                        }
-                        ConnectionEvent::RequestInput(request_id) => {
-                            expecting_input = Some(request_id);
-                        }
-                        ConnectionEvent::Disconnect() => {
-                            write_line(&mut ws_sender, "** Disconnected **").await;
-                            ws_sender.close().await.expect("Unable to close connection");
-                            return ;
-                        }
-                    }
-                }
-            }
-        }
+        Ok(WebSocketConnection {
+            player,
+            peer_addr,
+            broadcast_sub,
+            narrative_sub,
+            client_id,
+            client_token,
+            auth_token,
+            rpc_client,
+        })
     }
 }
 
-/// Stand-alone HTTP GET authentication handler which connects and then gets a valid authentication token
-/// which can then be used in the headers for subsequent websocket request.
-pub async fn auth_handler(
+pub async fn connect_auth_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
     Path(player): Path<String>,
+    body: Bytes,
+) -> impl IntoResponse {
+    auth_handler(LoginType::Connect, addr, ws_host, player, body).await
+}
+
+pub async fn create_auth_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(ws_host): State<WebSocketHost>,
+    Path(player): Path<String>,
+    body: Bytes,
+) -> impl IntoResponse {
+    auth_handler(LoginType::Create, addr, ws_host, player, body).await
+}
+
+/// Stand-alone HTTP POST authentication handler which connects and then gets a valid authentication token
+/// which can then be used in the headers for subsequent websocket request.
+async fn auth_handler(
+    login_type: LoginType,
+    addr: SocketAddr,
+    ws_host: WebSocketHost,
+    player: String,
     body: Bytes,
 ) -> impl IntoResponse {
     increment_counter!("ws_host.auth");
@@ -310,7 +228,12 @@ pub async fn auth_handler(
     // Read the password string out of 'body'.
     let password = String::from_utf8(body.to_vec()).unwrap();
 
-    let words = vec!["connect".to_string(), player, password];
+    let auth_verb = match login_type {
+        LoginType::Connect => "connect",
+        LoginType::Create => "create",
+    };
+
+    let words = vec![auth_verb.to_string(), player, password];
     let response = rpc_client
         .make_rpc_call(
             client_id,
@@ -329,14 +252,16 @@ pub async fn auth_handler(
             .unwrap();
     };
 
-    // We now have a valid auth token for the player, so we return it in the response headers,
-    // along with an empty body and an OK.
+    // We now have a valid auth token for the player, so we return it in the response headers.
     let mut headers = HeaderMap::new();
     headers.insert(
         "X-Moor-Auth-Token",
         HeaderValue::from_str(&auth_token.0).expect("Invalid token"),
     );
 
+    // We now need to wait for the login message completion.
+
+    // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
         .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
         .await
@@ -349,38 +274,91 @@ pub async fn auth_handler(
         .unwrap()
 }
 
-pub async fn ws_connect_handler(
+async fn attach(
     ws: WebSocketUpgrade,
-    TypedHeader(auth): TypedHeader<Authorization<Basic>>,
+    addr: SocketAddr,
+    connect_type: ConnectType,
+    ws_host: &WebSocketHost,
+    header_map: HeaderMap,
+) -> impl IntoResponse {
+    info!("Connection from {}", addr);
+
+    // Pull the auth header out and do a quick validation on it before we do anything further like
+    // upgrade the connection to a websocket.
+    let Some(auth_token) = header_map.get("X-Moor-Auth-Token") else {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(boxed(Empty::new()))
+            .unwrap();
+    };
+    let Ok(auth_token) = auth_token.to_str() else {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(boxed(Empty::new()))
+            .unwrap();
+    };
+
+    let auth_token = AuthToken(auth_token.to_string());
+
+    let (player, client_id, client_token, rpc_client) = match ws_host
+        .validate_auth(auth_token.clone(), connect_type, addr)
+        .await
+    {
+        Ok(connection_details) => connection_details,
+        Err(WsHostError::AuthenticationFailed) => {
+            return Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(boxed(Empty::new()))
+                .unwrap();
+        }
+        Err(e) => {
+            error!("Unable to validate auth token: {}", e);
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(boxed(Empty::new()))
+                .unwrap();
+        }
+    };
+
+    let Ok(mut connection) = ws_host
+        .start_connection(
+            player,
+            client_id,
+            client_token,
+            auth_token,
+            rpc_client,
+            addr,
+        )
+        .await
+    else {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(boxed(Empty::new()))
+            .unwrap();
+    };
+
+    ws.on_upgrade(move |socket| async move { connection.handle(connect_type, socket).await })
+}
+pub async fn ws_connect_attach_handler(
+    ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
+    header_map: HeaderMap,
 ) -> impl IntoResponse {
-    increment_counter!("ws_host.new_connection");
+    increment_counter!("ws_host.ws_connect_attach_handler");
     info!("Connection from {}", addr);
-    // TODO: this should be returning 403 for authentication failures and we likely have to do the
-    //   auth check before doing the socket upgrade not after. But this is a problem because the
-    //   do_login_command needs a connection to write failures to. So we may have to do something
-    //   wacky like provide an initial "HTTP response" type connection to the server, and then swap
-    //   with the websocket connection once we've authenticated; or have the "WSConnection" handle
-    //   both modes.
-    ws.on_upgrade(move |socket| async move {
-        ws_host
-            .handle_session(LoginType::Connect, addr, socket, auth)
-            .await
-    })
+
+    attach(ws, addr, ConnectType::Connected, &ws_host, header_map).await
 }
 
-pub async fn ws_create_handler(
+pub async fn ws_create_attach_handler(
     ws: WebSocketUpgrade,
-    TypedHeader(auth): TypedHeader<Authorization<Basic>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
+    header_map: HeaderMap,
 ) -> impl IntoResponse {
-    increment_counter!("ws_host.new_creation");
+    increment_counter!("ws_host.ws_create_attach_handler");
     info!("Connection from {}", addr);
-    ws.on_upgrade(move |socket| async move {
-        ws_host
-            .handle_session(LoginType::Create, addr, socket, auth)
-            .await
-    })
+
+    attach(ws, addr, ConnectType::Created, &ws_host, header_map).await
 }

@@ -21,6 +21,7 @@ futures.workspace = true
 futures-util.workspace = true
 async-trait.workspace = true
 bincode.workspace = true
+thiserror.workspace = true
 
 ## Asynchronous transaction processing & networking
 tokio.workspace = true

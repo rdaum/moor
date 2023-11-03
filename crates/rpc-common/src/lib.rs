@@ -10,8 +10,11 @@ use thiserror::Error;
 
 pub const BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
 
+pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_rpc";
+pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
+
 /// Errors at the RPC transport / encoding layer.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum RpcError {
     #[error("could not send RPC request: {0}")]
     CouldNotSend(String),
@@ -32,14 +35,27 @@ pub struct AuthToken(pub String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum RpcRequest {
+    /// Establish a new connection, requesting a client token and a connection object
     ConnectionEstablish(String),
+    /// Anonymously request a sysprop (e.g. $login.welcome_message)
     RequestSysProp(ClientToken, String, String),
+    /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
+    /// auth token and the object id of the player. None if the login failed.
     LoginCommand(ClientToken, Vec<String>),
+    /// Attach to a previously-authenticated session, returning the object id of the player,
+    /// and a client token -- or None if the auth token is not valid.
+    Attach(AuthToken, ConnectType, String),
+    /// Send a command to be executed.
     Command(ClientToken, AuthToken, String),
+    /// Respond to a request for input.
     RequestedInput(ClientToken, AuthToken, u128, String),
+    /// Send an "out of band" command to be executed.
     OutOfBand(ClientToken, AuthToken, String),
+    /// Evaluate a MOO expression.
     Eval(ClientToken, AuthToken, String),
+    /// Respond to a ping request.
     Pong(ClientToken, SystemTime),
+    /// We're done with this connection, buh-bye.
     Detach(ClientToken),
 }
 
@@ -62,6 +78,7 @@ pub enum RpcResponse {
     NewConnection(ClientToken, Objid),
     SysPropValue(Option<Var>),
     LoginResult(Option<(AuthToken, ConnectType, Objid)>),
+    AttachResult(Option<(ClientToken, Objid)>),
     CommandSubmitted(usize /* task id */),
     InputThanks,
     EvalResult(Var),

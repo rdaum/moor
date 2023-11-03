@@ -156,12 +156,18 @@ impl ConnectionsDB for ConnectionsTb {
         &self,
         client_id: Uuid,
         hostname: String,
+        player: Option<Objid>,
     ) -> Result<Objid, RpcRequestError> {
-        // The connection object is pulled from the sequence, then we invert it and subtract from
-        // -4 to get the connection object, since they always grow downwards from there.
-        let connection_id = self.tb.clone().sequence_next(0).await;
-        let connection_id: i64 = -4 - (connection_id as i64);
-        let connection_oid = Objid(connection_id);
+        let connection_oid = match player {
+            None => {
+                // The connection object is pulled from the sequence, then we invert it and subtract from
+                // -4 to get the connection object, since they always grow downwards from there.
+                let connection_id = self.tb.clone().sequence_next(0).await;
+                let connection_id: i64 = -4 - (connection_id as i64);
+                Objid(connection_id)
+            }
+            Some(player) => player,
+        };
 
         // Insert the initial tuples for the connection.
         let tx = self.tb.clone().start_tx();
@@ -477,7 +483,7 @@ mod tests {
             jh.push(tokio::spawn(async move {
                 let client_id = uuid::Uuid::new_v4();
                 let oid = db
-                    .new_connection(client_id, "localhost".to_string())
+                    .new_connection(client_id, "localhost".to_string(), None)
                     .await
                     .unwrap();
                 let client_ids = db.client_ids_for(oid).await.unwrap();
@@ -522,11 +528,11 @@ mod tests {
                 let client_id1 = uuid::Uuid::new_v4();
                 let client_id2 = uuid::Uuid::new_v4();
                 let con_oid1 = db
-                    .new_connection(client_id1, "localhost".to_string())
+                    .new_connection(client_id1, "localhost".to_string(), None)
                     .await
                     .unwrap();
                 let con_oid2 = db
-                    .new_connection(client_id2, "localhost".to_string())
+                    .new_connection(client_id2, "localhost".to_string(), None)
                     .await
                     .unwrap();
                 db.update_client_connection(con_oid1, Objid(x))
@@ -571,7 +577,7 @@ mod tests {
         let db = Arc::new(ConnectionsTb::new(None).await);
         let client_id1 = uuid::Uuid::new_v4();
         let ob = db
-            .new_connection(client_id1, "localhost".to_string())
+            .new_connection(client_id1, "localhost".to_string(), None)
             .await
             .unwrap();
         db.ping_check().await;

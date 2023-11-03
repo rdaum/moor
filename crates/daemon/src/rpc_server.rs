@@ -29,11 +29,9 @@ use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequest,
-    RpcRequestError, RpcResponse, BROADCAST_TOPIC,
+    RpcRequestError, RpcResponse, BROADCAST_TOPIC, MOOR_AUTH_TOKEN_FOOTER,
+    MOOR_SESSION_TOKEN_FOOTER,
 };
-
-pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_rpc";
-pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
 
 use crate::connections::ConnectionsDB;
 use crate::connections_tb::ConnectionsTb;
@@ -99,13 +97,47 @@ impl RpcServer {
             RpcRequest::ConnectionEstablish(hostname) => {
                 increment_counter!("rpc_server.connection_establish");
 
-                match self.connections.new_connection(client_id, hostname).await {
+                match self
+                    .connections
+                    .new_connection(client_id, hostname, None)
+                    .await
+                {
                     Ok(oid) => {
                         let token = self.make_client_token(client_id);
                         make_response(Ok(NewConnection(token, oid)))
                     }
                     Err(e) => make_response(Err(e)),
                 }
+            }
+            RpcRequest::Attach(auth_token, connect_type, hostname) => {
+                // TODO: use _connect_type to provoke the
+                increment_counter!("rpc_server.attach");
+                // Validate the auth token, and get the player.
+                let Ok(player) = self.validate_auth_token(auth_token, None) else {
+                    warn!("Invalid auth token for attach request");
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+                let client_token = match self
+                    .connections
+                    .new_connection(client_id, hostname, Some(player))
+                    .await
+                {
+                    Ok(_) => self.make_client_token(client_id),
+                    Err(e) => return make_response(Err(e)),
+                };
+
+                trace!(?player, "Submitting user_connected task");
+                if let Err(e) = self
+                    .clone()
+                    .submit_connected_task(client_id, player, connect_type)
+                    .await
+                {
+                    error!(error = ?e, "Error submitting user_connected task");
+                    increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
+                    // Note we still continue to return a successful login result here, hoping for the best
+                    // but we do log the error.
+                }
+                make_response(Ok(RpcResponse::AttachResult(Some((client_token, player)))))
             }
             RpcRequest::Pong(token, _client_sys_time) => {
                 // Always respond with a ThanksPong, even if it's somebody we don't know.
@@ -204,7 +236,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
                     warn!(
                         ?client_id,
                         ?connection,
@@ -237,7 +269,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
                     warn!(
                         ?client_id,
                         ?connection,
@@ -270,7 +302,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
                     warn!(
                         ?client_id,
                         ?connection,
@@ -305,7 +337,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                let Ok(_) = self.validate_auth_token(auth_token, connection) else {
+                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
                     warn!(
                         ?client_id,
                         ?connection,
@@ -318,7 +350,7 @@ impl RpcServer {
             RpcRequest::Detach(token) => {
                 increment_counter!("rpc_server.detach");
 
-                let Ok(connection) = self.validate_client_token(token, client_id) else {
+                let Ok(_) = self.validate_client_token(token, client_id) else {
                     warn!(?client_id, "Client token validation failed for request");
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
@@ -532,8 +564,6 @@ impl RpcServer {
             ));
         };
 
-        // Issue calls to user_connected/user_reconnected/user_created
-        // TODO: Reconnected/created
         trace!(?player, "Submitting user_connected task");
         if let Err(e) = self
             .clone()
@@ -926,7 +956,7 @@ impl RpcServer {
         let token = paseto::tokens::PasetoBuilder::new()
             .set_ed25519_key(&self.keypair)
             .set_issued_at(None)
-            .set_claim("player", json!(oid.0.to_string()))
+            .set_claim("player", json!(oid.0))
             .set_issuer("moor")
             .set_audience("moor_credentials")
             .set_footer(MOOR_AUTH_TOKEN_FOOTER)
@@ -935,8 +965,8 @@ impl RpcServer {
         AuthToken(token)
     }
 
-    /// Validate the provided PASETO token against the provided client id and (optionally) player
-    /// objid. If they do not match, the request is rejected, permissions denied.
+    /// Validate the provided PASETO token against the provided client id
+    /// If they do not match, the request is rejected, permissions denied.
     fn validate_client_token(
         &self,
         token: ClientToken,
@@ -988,11 +1018,17 @@ impl RpcServer {
         Ok(())
     }
 
-    /// Validate that the provided PASETO token is valid for the provided player Objid.
+    /// Validate that the provided PASETO token is valid.
+    /// If a player id is provided, validate it matches the player id.
+    /// Return the player id if it is valid.
     /// Note that this is merely validating that the token is valid, not that the actual player
-    /// inside the token is valid and has the capapilities it thinks it has. That must be done in
-    /// the server.
-    fn validate_auth_token(&self, token: AuthToken, objid: Objid) -> Result<(), SessionError> {
+    /// inside the token is valid and has the capabilities it thinks it has. That must be done in
+    /// the runtime itself.
+    fn validate_auth_token(
+        &self,
+        token: AuthToken,
+        objid: Option<Objid>,
+    ) -> Result<Objid, SessionError> {
         let pk = paseto::tokens::PasetoPublicKey::ED25519KeyPair(&self.keypair);
         let verified_token = paseto::tokens::validate_public_token(
             &token.0,
@@ -1005,23 +1041,29 @@ impl RpcServer {
             SessionError::InvalidToken
         })?;
 
-        // Does the 'player' match objid? If not, reject it.
+        let (Some(Some("moor")), Some(Some("moor_credentials"))) = (
+            verified_token.get("iss").map(|s| s.as_str()),
+            verified_token.get("aud").map(|s| s.as_str()),
+        ) else {
+            debug!("Token does not contain valid issuer/audience");
+            return Err(SessionError::InvalidToken);
+        };
+
         let Some(token_player) = verified_token.get("player") else {
             debug!("Token does not contain player");
             return Err(SessionError::InvalidToken);
         };
-        let Some(token_player) = token_player.as_str() else {
-            debug!("Token player is not a string");
-            return Err(SessionError::InvalidToken);
-        };
-        let Ok(token_player) = token_player.parse() else {
-            debug!("Token player is not a valid Objid");
+        let Some(token_player) = token_player.as_i64() else {
+            debug!("Token player is not valid");
             return Err(SessionError::InvalidToken);
         };
         let token_player = Objid(token_player);
-        if objid != token_player {
-            debug!(?objid, ?token_player, "Token player does not match objid");
-            return Err(SessionError::InvalidToken);
+        if let Some(objid) = objid {
+            // Does the 'player' match objid? If not, reject it.
+            if objid != token_player {
+                debug!(?objid, ?token_player, "Token player does not match objid");
+                return Err(SessionError::InvalidToken);
+            }
         }
 
         // TODO: we will need to verify that the player object id inside the token is valid inside
@@ -1030,7 +1072,7 @@ impl RpcServer {
         //   code with checks to make sure that the player objid is valid before letting it go
         //   forwards.
 
-        Ok(())
+        Ok(token_player)
     }
 }
 
