@@ -21,16 +21,17 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_none, Var};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+use tuplebox::TupleError;
 
 use crate::db_tx::DbTransaction;
 use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
-use crate::tuplebox::object_relations;
-use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
+use crate::object_relations::{
+    get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
+};
 use crate::tuplebox::tb::{RelationInfo, TupleBox};
-use crate::tuplebox::tuples::TupleError;
-use crate::tuplebox::tx::transaction::{CommitError, Transaction};
-use crate::Database;
+use crate::tuplebox::{CommitError, Transaction};
+use crate::{object_relations, tuplebox, Database};
 
 // TODO: Totally arbitrary and needs profiling. Needs to be big enough to hold entire props and
 //   verbs.
@@ -92,6 +93,17 @@ pub struct TupleBoxTransaction {
 
 #[async_trait]
 impl DbTransaction for TupleBoxTransaction {
+    async fn get_players(&self) -> Result<ObjSet, WorldStateError> {
+        // TODO: this is going to be not-at-all performant in the long run, and we'll need a way to
+        //   cache this or index it better
+        get_all_object_keys_matching(
+            &self.tx,
+            WorldStateRelation::ObjectFlags,
+            |_, flags: BitEnum<ObjFlag>| flags.contains(ObjFlag::User),
+        )
+        .await
+    }
+
     async fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj)
             .await
@@ -1084,9 +1096,9 @@ mod tests {
     use moor_values::NOTHING;
 
     use crate::db_tx::DbTransaction;
-    use crate::tuplebox::object_relations::{WorldStateRelation, WorldStateSequences};
+    use crate::object_relations::{WorldStateRelation, WorldStateSequences};
+    use crate::tb_worldstate::TupleBoxTransaction;
     use crate::tuplebox::tb::{RelationInfo, TupleBox};
-    use crate::tuplebox::tb_worldstate::TupleBoxTransaction;
 
     async fn test_db() -> Arc<TupleBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()

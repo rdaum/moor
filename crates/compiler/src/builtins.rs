@@ -588,7 +588,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(0),
             max_args: Q(0),
             types: vec![],
-            implemented: false,
+            implemented: true,
         },
         Builtin {
             name: "is_player".to_string(),

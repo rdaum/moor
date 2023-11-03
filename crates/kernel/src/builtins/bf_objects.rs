@@ -660,6 +660,26 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
 }
 bf_declare!(set_player_flag, bf_set_player_flag);
 
+async fn bf_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+    if !bf_args.args.is_empty() {
+        return Err(E_INVARG);
+    }
+    let players = bf_args
+        .world_state
+        .players()
+        .await
+        .map_err(world_state_err)?;
+
+    Ok(Ret(v_list(
+        players
+            .iter()
+            .map(|oid| v_objid(oid))
+            .collect::<Vec<_>>()
+            .as_slice(),
+    )))
+}
+bf_declare!(players, bf_players);
+
 impl VM {
     pub(crate) fn register_bf_objects(&mut self) {
         self.builtins[offset_for_builtin("create")] = Arc::new(BfCreate {});
@@ -673,5 +693,6 @@ impl VM {
         self.builtins[offset_for_builtin("set_player_flag")] = Arc::new(BfSetPlayerFlag {});
         self.builtins[offset_for_builtin("recycle")] = Arc::new(BfRecycle {});
         self.builtins[offset_for_builtin("max_object")] = Arc::new(BfMaxObject {});
+        self.builtins[offset_for_builtin("players")] = Arc::new(BfPlayers {});
     }
 }

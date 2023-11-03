@@ -22,7 +22,7 @@ mod tests {
     use moor_compiler::labels::Names;
     use moor_compiler::opcode::Op::*;
     use moor_compiler::opcode::{Op, Program};
-    use moor_db::tuplebox::tb_worldstate::TupleBoxWorldStateSource;
+    use moor_db::tb_worldstate::TupleBoxWorldStateSource;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {

@@ -27,6 +27,9 @@ use crate::var::Var;
 pub trait WorldState: Send + Sync {
     // TODO: combine owner & flags into one call, to make perms check more efficient
 
+    /// Get the set of all objects which are 'players' in the world.
+    async fn players(&self) -> Result<ObjSet, WorldStateError>;
+
     /// Get the owner of an object
     async fn owner_of(&self, obj: Objid) -> Result<Objid, WorldStateError>;
 

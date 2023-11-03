@@ -4,14 +4,13 @@ use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
 use metrics_exporter_prometheus::PrometheusBuilder;
-use strum::VariantNames;
 use tmq::Multipart;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 use {ring::rand::SystemRandom, ring::signature::Ed25519KeyPair};
 
-use moor_db::{DatabaseBuilder, DatabaseType};
+use moor_db::DatabaseBuilder;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::load_db::textdump_load;
 use rpc_common::{RpcRequestError, RpcResponse, RpcResult};
@@ -53,13 +52,6 @@ struct Args {
         default_value = "connections.db"
     )]
     connections_file: PathBuf,
-
-    #[arg(long,
-        value_name = "db-type", help = "Type of database backend to use",
-        value_parser = clap_enum_variants!(DatabaseType),
-        default_value = "RocksDb"
-    )]
-    db_type: DatabaseType,
 
     #[arg(
         long,
@@ -161,11 +153,9 @@ async fn main() {
     };
 
     info!("Daemon starting...");
-    let db_source_builder = DatabaseBuilder::new()
-        .with_db_type(args.db_type)
-        .with_path(args.db.clone());
+    let db_source_builder = DatabaseBuilder::new().with_path(args.db.clone());
     let (mut db_source, freshly_made) = db_source_builder.open_db().await.unwrap();
-    info!(db_type = ?args.db_type, path = ?args.db, "Opened database");
+    info!(path = ?args.db, "Opened database");
 
     // If the database already existed, do not try to import the textdump...
     if let Some(textdump) = args.textdump {

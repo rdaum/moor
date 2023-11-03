@@ -10,16 +10,15 @@
 
 mod backing;
 mod base_relation;
-mod object_relations;
 
 pub mod rocks_backing;
 mod slots;
 pub mod tb;
-pub mod tb_worldstate;
 mod tuples;
 mod tx;
 
-pub use tx::transaction::Transaction;
+pub use tuples::TupleError;
+pub use tx::transaction::{CommitError, Transaction};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RelationId(pub usize);

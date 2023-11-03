@@ -75,7 +75,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | children        | &check;  |                                    |
 | chparent        | &check;  |                                    |
 | max_object      | &check;  |                                    |
-| players         |          |                                    |
+| players         | &check;  | Potentially slow in a large DB.    |
 | is_player       | &check;  |                                    |
 | set_player_flag | &check;  |                                    |
 | move            | &check;  |                                    |

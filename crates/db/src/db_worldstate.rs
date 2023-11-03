@@ -23,24 +23,6 @@ use moor_values::NOTHING;
 
 use crate::db_tx::DbTransaction;
 
-// all of this right now is direct-talk to physical DB transaction, and should be fronted by a
-// cache.
-// the challenge is how to make the cache work with the transactional semantics of the DB and
-// runtime.
-// bare simple would be a rather inefficient cache that is flushed and re-read for each tx
-// better would be one that is long lived and shared with other transactions, but this is far more
-// challenging, esp if we want to support a distributed db back-end at some point. in that case,
-// the invalidation process would need to be distributed as well.
-// there's probably some optimistic scheme that could be done here, but here is my first thought
-//    * every tx has a cache
-//    * there's also a 'global' cache
-//    * the tx keeps track of which entities it has modified. when it goes to commit, those
-//      entities are locked.
-//    * when a tx commits successfully into the db, the committed changes are merged into the
-//      upstream cache, and the lock released
-//    * if a tx commit fails, the (local) changes are discarded, and, again, the lock released
-//    * likely something that should get run through Jepsen
-
 pub struct DbTxWorldState {
     pub tx: Box<dyn DbTransaction + Send + Sync>,
 }
@@ -54,6 +36,10 @@ impl DbTxWorldState {
 
 #[async_trait]
 impl WorldState for DbTxWorldState {
+    async fn players(&self) -> Result<ObjSet, WorldStateError> {
+        self.tx.get_players().await
+    }
+
     #[tracing::instrument(skip(self))]
     async fn owner_of(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         self.tx.get_object_owner(obj).await

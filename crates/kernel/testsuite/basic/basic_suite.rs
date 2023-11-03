@@ -1,6 +1,6 @@
 use moor_compiler::codegen::compile;
 use moor_compiler::opcode::Program;
-use moor_db::tuplebox::tb_worldstate::TupleBoxWorldStateSource;
+use moor_db::tb_worldstate::TupleBoxWorldStateSource;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;

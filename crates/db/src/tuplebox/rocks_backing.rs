@@ -52,8 +52,7 @@ impl RocksBackingStore {
         column_families.push("Sequences");
 
         // Note: Panic if we're not able to open the database, this is a fundamental system error.
-        let db = rocksdb::DB::open_cf(&options, path, &column_families)
-            .expect("Unable to open database");
+        let db = DB::open_cf(&options, path, &column_families).expect("Unable to open database");
 
         // Load all the existing tuples into memory...
         let mut tuplecnt = 0;

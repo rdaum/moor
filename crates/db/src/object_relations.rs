@@ -7,9 +7,7 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::AsByteBuffer;
 
-use crate::tuplebox::tuples::TupleError;
-use crate::tuplebox::tx::transaction::Transaction;
-use crate::tuplebox::RelationId;
+use crate::tuplebox::{RelationId, Transaction, TupleError};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]
@@ -89,6 +87,33 @@ pub async fn insert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer
         }
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
+}
+
+/// Full scan an entire relation where the Domain is an Objid, and return the ones matching the
+/// predicate.
+pub async fn get_all_object_keys_matching<P, Codomain>(
+    tx: &Transaction,
+    rel: WorldStateRelation,
+    pred: P,
+) -> Result<ObjSet, WorldStateError>
+where
+    P: Fn(Objid, Codomain) -> bool,
+    Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+{
+    let relation = tx.relation(RelationId(rel as usize)).await;
+    let Ok(all_tuples) = relation
+        .predicate_scan(&|t| {
+            let oid = Objid::from_sliceref(t.0.clone());
+            pred(oid, Codomain::from_sliceref(t.1.clone()))
+        })
+        .await
+    else {
+        return Err(WorldStateError::DatabaseError(
+            "Unable to scan relation".to_string(),
+        ));
+    };
+    let objs = all_tuples.into_iter().map(|v| Objid::from_sliceref(v.0));
+    Ok(ObjSet::from_oid_iter(objs))
 }
 
 pub async fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
@@ -202,9 +227,9 @@ mod tests {
 
     use moor_values::model::objset::ObjSet;
     use moor_values::var::objid::Objid;
-    use WorldStateRelation::ObjectParent;
 
-    use crate::tuplebox::object_relations::{
+    use crate::object_relations::WorldStateRelation::ObjectParent;
+    use crate::object_relations::{
         get_object_by_codomain, get_object_value, insert_object_value, upsert_object_value,
         WorldStateRelation, WorldStateSequences,
     };
