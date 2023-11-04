@@ -28,6 +28,17 @@ pub struct WebSocketConnection {
     pub(crate) rpc_client: RpcSendClient,
 }
 
+/// The JSON output of a narrative event.
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct NarrativeOutput {
+    origin_player: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+    server_time: SystemTime,
+}
+
 impl WebSocketConnection {
     pub async fn handle(&mut self, connect_type: ConnectType, stream: WebSocket) {
         info!("New connection from {}, {}", self.peer_addr, self.player);
@@ -38,7 +49,16 @@ impl WebSocketConnection {
             ConnectType::Reconnected => "** Reconnected **",
             ConnectType::Created => "** Created **",
         };
-        Self::write_line(&mut ws_sender, connect_message).await;
+        Self::emit_event(
+            &mut ws_sender,
+            NarrativeOutput {
+                origin_player: self.player.0,
+                system_message: Some(connect_message.to_string()),
+                message: None,
+                server_time: SystemTime::now(),
+            },
+        )
+        .await;
 
         debug!(client_id = ?self.client_id, "Entering command dispatch loop");
 
@@ -64,18 +84,35 @@ impl WebSocketConnection {
                 Ok(event) = narrative_recv(self.client_id, &mut self.narrative_sub) => {
                     trace!(?event, "narrative_event");
                     match event {
-                        ConnectionEvent::SystemMessage(_author, msg) => {
-                            Self::write_line(&mut ws_sender, &msg).await;
+                        ConnectionEvent::SystemMessage(author, msg) => {
+                            Self::emit_event(&mut ws_sender, NarrativeOutput {
+                                origin_player: author.0,
+                                system_message: Some(msg),
+                                message: None,
+                                server_time: SystemTime::now(),
+                            }).await;
                         }
-                        ConnectionEvent::Narrative(_author, event) => {
+                        ConnectionEvent::Narrative(author, event) => {
                             let msg = event.event();
-                            Self::write_line(&mut ws_sender, &msg).await;
+                            Self::emit_event(&mut ws_sender, NarrativeOutput {
+                                origin_player: author.0,
+                                system_message: None,
+                                message: Some(match msg {
+                                    moor_values::model::Event::TextNotify(msg) => msg,
+                                }),
+                                server_time: event.timestamp(),
+                            }).await;
                         }
                         ConnectionEvent::RequestInput(request_id) => {
                             expecting_input = Some(request_id);
                         }
                         ConnectionEvent::Disconnect() => {
-                            Self::write_line(&mut ws_sender, "** Disconnected **").await;
+                            Self::emit_event(&mut ws_sender, NarrativeOutput {
+                                origin_player: self.player.0,
+                                system_message: Some("** Disconnected **".to_string()),
+                                message: None,
+                                server_time: SystemTime::now(),
+                            }).await;
                             ws_sender.close().await.expect("Unable to close connection");
                             return ;
                         }
@@ -126,16 +163,52 @@ impl WebSocketConnection {
             RpcResult::Failure(RpcRequestError::CommandError(
                 CommandError::CouldNotParseCommand,
             )) => {
-                Self::write_line(ws_sender, "I don't understand that.").await;
+                Self::emit_event(
+                    ws_sender,
+                    NarrativeOutput {
+                        origin_player: self.player.0,
+                        system_message: Some("I don't understand that.".to_string()),
+                        message: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await;
             }
             RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoObjectMatch)) => {
-                Self::write_line(ws_sender, "I don't see that here.").await;
+                Self::emit_event(
+                    ws_sender,
+                    NarrativeOutput {
+                        origin_player: self.player.0,
+                        system_message: Some("I don't know what you're talking about.".to_string()),
+                        message: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await;
             }
             RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoCommandMatch)) => {
-                Self::write_line(ws_sender, "I don't know how to do that.").await;
+                Self::emit_event(
+                    ws_sender,
+                    NarrativeOutput {
+                        origin_player: self.player.0,
+                        system_message: Some("I don't know how to do that.".to_string()),
+                        message: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await;
             }
             RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
-                Self::write_line(ws_sender, "You can't do that.").await;
+                Self::emit_event(
+                    ws_sender,
+                    NarrativeOutput {
+                        origin_player: self.player.0,
+                        system_message: Some("You can't do that.".to_string()),
+                        message: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await;
             }
             RpcResult::Failure(e) => {
                 error!("Unhandled RPC error: {:?}", e);
@@ -148,12 +221,10 @@ impl WebSocketConnection {
         }
     }
 
-    async fn write_line(ws_sender: &mut SplitSink<WebSocket, Message>, msg: &str) {
-        let msg = if msg.is_empty() {
-            Message::Text("\n".to_string())
-        } else {
-            Message::Text(msg.to_string())
-        };
+    async fn emit_event(ws_sender: &mut SplitSink<WebSocket, Message>, msg: NarrativeOutput) {
+        // Serialize to JSON.
+        let msg = serde_json::to_string(&msg).unwrap();
+        let msg = Message::Text(msg);
         ws_sender
             .send(msg)
             .await

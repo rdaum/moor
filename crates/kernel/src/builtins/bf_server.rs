@@ -56,7 +56,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .check_obj_owner_perms(*player)
         .map_err(world_state_err)?;
 
-    let event = NarrativeEvent::new_durable(bf_args.vm.caller(), msg.to_string());
+    let event = NarrativeEvent::notify_text(bf_args.vm.caller(), msg.to_string());
     if let Err(send_error) = bf_args.session.send_event(*player, event).await {
         warn!(
             "Unable to send message to player: #{}: {}",

@@ -113,30 +113,30 @@ pub fn world_state_err(err: WorldStateError) -> Error {
 /// or similar ultimately create.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct NarrativeEvent {
+    /// When the event happened, in the server's system time.
     timestamp: SystemTime,
+    /// The object that authored or caused the event.
     author: Objid,
-    ephemeral: bool,
-    event: String,
+    /// The event itself.
+    event: Event,
+}
+
+/// Types of events we can send to the session.
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum Event {
+    /// The typical "something happened" descriptive event.
+    TextNotify(String),
+    // TODO: other events that might happen here would be things like (local) "object moved" or "object
+    //   created."
 }
 
 impl NarrativeEvent {
     #[must_use]
-    pub fn new_durable(author: Objid, event: String) -> Self {
+    pub fn notify_text(author: Objid, event: String) -> Self {
         Self {
             timestamp: SystemTime::now(),
             author,
-            ephemeral: false,
-            event,
-        }
-    }
-
-    #[must_use]
-    pub fn new_ephemeral(author: Objid, event: String) -> Self {
-        Self {
-            timestamp: SystemTime::now(),
-            author,
-            ephemeral: true,
-            event,
+            event: Event::TextNotify(event),
         }
     }
 
@@ -149,11 +149,7 @@ impl NarrativeEvent {
         self.author
     }
     #[must_use]
-    pub fn ephemeral(&self) -> bool {
-        self.ephemeral
-    }
-    #[must_use]
-    pub fn event(&self) -> String {
+    pub fn event(&self) -> Event {
         self.event.clone()
     }
 }

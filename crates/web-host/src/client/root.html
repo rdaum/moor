@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head><title>Welcome</title>
+    <script lang="javascript">
+        let context = {
+            player: null,
+            token: null,
+            ws: null
+        };
+
+        // Utility function to build DOM elements from HTML.
+        function generateElements(html) {
+            const template = document.createElement('template');
+            template.innerHTML = html.trim();
+            return template.content.children;
+        }
+
+        // Output a system message to the narrative panel.
+        function output_system_text(text) {
+            let anchor = document.getElementById("anchor");
+            let narrative = document.getElementById("narrative");
+            let msg = generateElements("<li class='system_message'>" + text + "</li>")[0];
+            narrative.insertBefore(msg, anchor);
+            // scroll to bottom
+            narrative.scrollTop = narrative.scrollHeight;
+        }
+
+        // Output a typical narrative message to the narrative panel.
+        function output_narrative_text(text) {
+            let anchor = document.getElementById("anchor");
+            let narrative = document.getElementById("narrative");
+            let msg = generateElements("<li class='message'>" + text + "</li>")[0];
+            narrative.insertBefore(msg, anchor);
+            // scroll to bottom
+            narrative.scrollTop = narrative.scrollHeight;
+        }
+
+        function output_narrative_gap() {
+            let anchor = document.getElementById("anchor");
+            let narrative = document.getElementById("narrative");
+            let msg = generateElements("<li class='gap'>&nbsp;</li>")[0];
+            narrative.insertBefore(msg, anchor);
+            // scroll to bottom
+            narrative.scrollTop = narrative.scrollHeight;
+        }
+
+        // Process an inbound (JSON) event from the websocket connection to the server.
+        function handle_narrative_event(e) {
+            // Parse event as JSON.
+            let event = JSON.parse(e.data);
+            if (event["message"]) {
+                output_narrative_text(event["message"]);
+            } else if (event["system_message"]) {
+                output_system_text(event["system_message"]);
+            } else {
+                console.log("Unknown event type: " + event);
+            }
+        }
+
+        // Handle the connect phase in response to a user clicking the "Connect" button.
+        async function connect(e) {
+            e.preventDefault();
+            let form = e.target;
+            let data = new URLSearchParams();
+            data.set("player", form.player.value);
+            data.set("password", form.password.value);
+            let result = await fetch("/ws/auth/connect", {
+                method: "POST",
+                body: data
+            });
+            if (result.ok) {
+                console.log("Connected!");
+            } else {
+                console.log("Failed to connect!");
+                alert("Failed to authenticate!")
+                return;
+            }
+            let connect_form = document.getElementById("connect_form");
+            let entry_form = document.getElementById("entry");
+            connect_form.style.display = "none";
+            entry_form.style.display = "";
+
+            let login_result = await result.text();
+            login_result = login_result.split(" ");
+            let connect_type = login_result[1].toLowerCase();
+            let player = login_result[0];
+            let paseto_token = result.headers.get("X-Moor-Auth-Token");
+            if (!paseto_token) {
+                console.log("No token; authorization denied");
+                alert("Could not authenticate!");
+                return;
+            }
+
+            // Now initiate the websocket connection, attaching the header
+            // with the token.
+            let ws = new WebSocket("ws://localhost:8080/ws/attach/" + connect_type + "/" + paseto_token);
+            context.player = player;
+            context.token = paseto_token;
+            context.ws = ws;
+            ws.onmessage = handle_narrative_event
+        }
+
+        async function handle_input(e) {
+            e.preventDefault();
+            context.ws.send(e.target.command.value);
+            e.target.command.value = "";
+            // Put a small gap in the narrative output, to make it easier to read.
+            output_narrative_gap();
+        }
+
+        // Attach event handlers to our elements in the DOM.
+        document.addEventListener("DOMContentLoaded", function () {
+            let connect_form = document.getElementById("connect_form");
+            let entry_form = document.getElementById("entry");
+
+            connect_form.addEventListener("submit", connect);
+            entry_form.addEventListener("submit", handle_input);
+        });
+
+
+    </script>
+    <style>
+        body {
+            font-family: monospace;
+            background-color: #7fdbff;
+        }
+
+        li {
+            list-style-type: none;
+        }
+
+        .message {
+            color: black;
+            background-color: white;
+        }
+        .system_message {
+            color: darkred;
+            background-color: white;
+        }
+        .gap {
+            color: white;
+            background-color: white;
+            height: 10px;
+        }
+        #narrative {
+            border-radius: 5px;
+            border-width: thick;
+            border-style: solid;
+            border-color: black;
+            overflow-y: scroll;
+            background-color: white;
+            height: calc(100vh - 100px);
+            margin-bottom: 10px;
+        }
+
+
+        #anchor {
+            overflow-anchor: auto;
+            height: 1px;
+        }
+
+        #command_input {
+            width: calc(100% - 100px);
+        }
+
+    </style>
+</head>
+<body>
+<!-- output area, where narrative is displayed, new messages are added at bottom, and scroll is locked to bottom -->
+<div id="narrative">
+    <!-- messages always get added prior to this -->
+    <div id="anchor"></div>
+</div>
+<form id="connect_form">
+    <input type="text" name="player"/>
+    <input type="text" name="password"/>
+    <button type="submit">Connect</button>
+</form>
+<form id="entry" style="display: none;">
+    <input type="text" name="command" id="command_input"/>
+    <button type="submit">Send</button>
+</form>
+</body>
+</html>

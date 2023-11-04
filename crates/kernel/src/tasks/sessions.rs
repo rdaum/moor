@@ -67,7 +67,8 @@ pub trait Session: Send + Sync {
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
     /// like login/logout messages, system error messages ("task aborted") or messages that are not
-    /// generally co-incident with the mutable state of the world.
+    /// generally co-incident with the mutable state of the world and that need not be logged
+    /// across multiple connections, etc.
     async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError>;
 
     /// Process a (wizard) request for system shutdown, with an optional shutdown message.
@@ -177,8 +178,8 @@ impl Session for NoopClientSession {
 /// For now that's all it does, but facilities for pretending players are connected, mocking
 /// hostnames, etc. can be added later.
 struct Inner {
-    received: Vec<String>,
-    committed: Vec<String>,
+    received: Vec<NarrativeEvent>,
+    committed: Vec<NarrativeEvent>,
 }
 pub struct MockClientSession {
     inner: RwLock<Inner>,
@@ -194,11 +195,11 @@ impl MockClientSession {
             system: Arc::new(Default::default()),
         }
     }
-    pub fn received(&self) -> Vec<String> {
+    pub fn received(&self) -> Vec<NarrativeEvent> {
         let inner = self.inner.read().unwrap();
         inner.received.clone()
     }
-    pub fn committed(&self) -> Vec<String> {
+    pub fn committed(&self) -> Vec<NarrativeEvent> {
         let inner = self.inner.read().unwrap();
         inner.committed.clone()
     }
@@ -248,11 +249,7 @@ impl Session for MockClientSession {
     }
 
     async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), SessionError> {
-        self.inner
-            .write()
-            .unwrap()
-            .received
-            .push(msg.event().to_string());
+        self.inner.write().unwrap().received.push(msg);
         Ok(())
     }
 

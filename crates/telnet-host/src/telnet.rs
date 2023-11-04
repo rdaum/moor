@@ -49,7 +49,7 @@ impl TelnetConnection {
         rpc_client
             .make_rpc_call(
                 self.client_id,
-                RpcRequest::LoginCommand(self.client_token.clone(), vec![]),
+                RpcRequest::LoginCommand(self.client_token.clone(), vec![], false),
             )
             .await
             .expect("Unable to send login request to RPC server");
@@ -114,7 +114,10 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
+                            let msg_text = match msg {
+                                moor_values::model::Event::TextNotify(msg) => msg,
+                            };
+                            self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(_request_id) => {
                             bail!("RequestInput before login");
@@ -133,7 +136,7 @@ impl TelnetConnection {
                     let line = line.unwrap();
                     let words = parse_into_words(&line);
                     let response = rpc_client.make_rpc_call(self.client_id,
-                        RpcRequest::LoginCommand(self.client_token.clone(), words)).await.expect("Unable to send login request to RPC server");
+                        RpcRequest::LoginCommand(self.client_token.clone(), words, true)).await.expect("Unable to send login request to RPC server");
                     if let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
                         return Ok((auth_token, player, connect_type))
@@ -219,7 +222,10 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
+                            let msg_text = match msg {
+                                moor_values::model::Event::TextNotify(msg) => msg,
+                            };
+                            self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(request_id) => {
                             // Server is requesting that the next line of input get sent through as a response to this request.

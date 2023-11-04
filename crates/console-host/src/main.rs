@@ -103,6 +103,7 @@ async fn perform_auth(
                     username.to_string(),
                     password.to_string(),
                 ],
+                true,
             ),
         )
         .await
@@ -249,7 +250,12 @@ async fn console_loop(
         loop {
             match narrative_recv(client_id, &mut narrative_subscriber).await {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
-                    println!("{}", msg.event());
+                    println!(
+                        "{}",
+                        match msg.event() {
+                            moor_values::model::Event::TextNotify(s) => s,
+                        }
+                    );
                 }
                 Ok(ConnectionEvent::SystemMessage(o, msg)) => {
                     eprintln!("SYSMSG: {}: {}", o, msg);

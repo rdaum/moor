@@ -41,7 +41,7 @@ pub enum RpcRequest {
     RequestSysProp(ClientToken, String, String),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
-    LoginCommand(ClientToken, Vec<String>),
+    LoginCommand(ClientToken, Vec<String>, bool /* attach? */),
     /// Attach to a previously-authenticated session, returning the object id of the player,
     /// and a client token -- or None if the auth token is not valid.
     Attach(AuthToken, ConnectType, String),

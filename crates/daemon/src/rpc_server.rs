@@ -193,7 +193,7 @@ impl RpcServer {
 
                 make_response(self.clone().request_sys_prop(object, property).await)
             }
-            RpcRequest::LoginCommand(token, args) => {
+            RpcRequest::LoginCommand(token, args, attach) => {
                 increment_counter!("rpc_server.login_command");
                 let Some(connection) = self
                     .connections
@@ -213,7 +213,7 @@ impl RpcServer {
 
                 make_response(
                     self.clone()
-                        .perform_login(client_id, connection, args)
+                        .perform_login(client_id, connection, args, attach)
                         .await,
                 )
             }
@@ -474,6 +474,7 @@ impl RpcServer {
         client_id: Uuid,
         connection: Objid,
         args: Vec<String>,
+        attach: bool,
     ) -> Result<RpcResponse, RpcRequestError> {
         increment_counter!("rpc_server.perform_login");
 
@@ -564,18 +565,19 @@ impl RpcServer {
             ));
         };
 
-        trace!(?player, "Submitting user_connected task");
-        if let Err(e) = self
-            .clone()
-            .submit_connected_task(client_id, player, connect_type)
-            .await
-        {
-            error!(error = ?e, "Error submitting user_connected task");
-            increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
-            // Note we still continue to return a successful login result here, hoping for the best
-            // but we do log the error.
+        if attach {
+            trace!(?player, "Submitting user_connected task");
+            if let Err(e) = self
+                .clone()
+                .submit_connected_task(client_id, player, connect_type)
+                .await
+            {
+                error!(error = ?e, "Error submitting user_connected task");
+                increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
+                // Note we still continue to return a successful login result here, hoping for the best
+                // but we do log the error.
+            }
         }
-
         increment_counter!("rpc_server.perform_login.success");
 
         let auth_token = self.make_auth_token(player);

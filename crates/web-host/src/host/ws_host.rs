@@ -1,10 +1,11 @@
-use crate::ws_connection::WebSocketConnection;
+use crate::host::ws_connection::WebSocketConnection;
 use anyhow::anyhow;
-use axum::body::{boxed, Bytes, Empty};
+use axum::body::{boxed, Empty};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
 use axum::headers::HeaderValue;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Form;
 use metrics_macros::increment_counter;
 use moor_values::var::objid::Objid;
 use rpc_common::rpc_client::RpcSendClient;
@@ -12,6 +13,7 @@ use rpc_common::AuthToken;
 use rpc_common::RpcRequest::{Attach, ConnectionEstablish};
 use rpc_common::{ClientToken, RpcRequestError};
 use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
+use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tmq::{request, subscribe};
 use tracing::warn;
@@ -155,22 +157,26 @@ impl WebSocketHost {
     }
 }
 
+#[derive(Deserialize)]
+pub struct AuthRequest {
+    player: String,
+    password: String,
+}
+
 pub async fn connect_auth_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
-    Path(player): Path<String>,
-    body: Bytes,
+    Form(AuthRequest { player, password }): Form<AuthRequest>,
 ) -> impl IntoResponse {
-    auth_handler(LoginType::Connect, addr, ws_host, player, body).await
+    auth_handler(LoginType::Connect, addr, ws_host, player, password).await
 }
 
 pub async fn create_auth_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
-    Path(player): Path<String>,
-    body: Bytes,
+    Form(AuthRequest { player, password }): Form<AuthRequest>,
 ) -> impl IntoResponse {
-    auth_handler(LoginType::Create, addr, ws_host, player, body).await
+    auth_handler(LoginType::Create, addr, ws_host, player, password).await
 }
 
 /// Stand-alone HTTP POST authentication handler which connects and then gets a valid authentication token
@@ -180,7 +186,7 @@ async fn auth_handler(
     addr: SocketAddr,
     ws_host: WebSocketHost,
     player: String,
-    body: Bytes,
+    password: String,
 ) -> impl IntoResponse {
     increment_counter!("ws_host.auth");
 
@@ -225,9 +231,6 @@ async fn auth_handler(
         }
     };
 
-    // Read the password string out of 'body'.
-    let password = String::from_utf8(body.to_vec()).unwrap();
-
     let auth_verb = match login_type {
         LoginType::Connect => "connect",
         LoginType::Create => "create",
@@ -237,11 +240,11 @@ async fn auth_handler(
     let response = rpc_client
         .make_rpc_call(
             client_id,
-            RpcRequest::LoginCommand(client_token.clone(), words),
+            RpcRequest::LoginCommand(client_token.clone(), words, false),
         )
         .await
         .expect("Unable to send login request to RPC server");
-    let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, connect_type, player)))) =
+    let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, _connect_type, player)))) =
         response
     else {
         error!(?response, "Login failed");
@@ -270,7 +273,7 @@ async fn auth_handler(
     Response::builder()
         .status(StatusCode::OK)
         .header("X-Moor-Auth-Token", auth_token.0)
-        .body(format!("{} {:?}\n", player, connect_type))
+        .body(format!("{} {}", player, auth_verb))
         .unwrap()
 }
 
@@ -279,26 +282,11 @@ async fn attach(
     addr: SocketAddr,
     connect_type: ConnectType,
     ws_host: &WebSocketHost,
-    header_map: HeaderMap,
+    auth_token: String,
 ) -> impl IntoResponse {
     info!("Connection from {}", addr);
 
-    // Pull the auth header out and do a quick validation on it before we do anything further like
-    // upgrade the connection to a websocket.
-    let Some(auth_token) = header_map.get("X-Moor-Auth-Token") else {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body(boxed(Empty::new()))
-            .unwrap();
-    };
-    let Ok(auth_token) = auth_token.to_str() else {
-        return Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body(boxed(Empty::new()))
-            .unwrap();
-    };
-
-    let auth_token = AuthToken(auth_token.to_string());
+    let auth_token = AuthToken(auth_token);
 
     let (player, client_id, client_token, rpc_client) = match ws_host
         .validate_auth(auth_token.clone(), connect_type, addr)
@@ -343,22 +331,22 @@ pub async fn ws_connect_attach_handler(
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
-    header_map: HeaderMap,
+    Path(token): Path<String>,
 ) -> impl IntoResponse {
     increment_counter!("ws_host.ws_connect_attach_handler");
     info!("Connection from {}", addr);
 
-    attach(ws, addr, ConnectType::Connected, &ws_host, header_map).await
+    attach(ws, addr, ConnectType::Connected, &ws_host, token).await
 }
 
 pub async fn ws_create_attach_handler(
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebSocketHost>,
-    header_map: HeaderMap,
+    Path(token): Path<String>,
 ) -> impl IntoResponse {
     increment_counter!("ws_host.ws_create_attach_handler");
     info!("Connection from {}", addr);
 
-    attach(ws, addr, ConnectType::Created, &ws_host, header_map).await
+    attach(ws, addr, ConnectType::Created, &ws_host, token).await
 }

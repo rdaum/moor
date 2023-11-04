@@ -1,7 +1,8 @@
-mod ws_connection;
-mod ws_host;
+mod client;
+mod host;
 
-use crate::ws_host::WebSocketHost;
+use crate::client::root_handler;
+use crate::host::WebSocketHost;
 use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
@@ -51,14 +52,18 @@ fn mk_routes(ws_host: WebSocketHost) -> anyhow::Result<Router> {
     let recorder_handle = setup_metrics_recorder()?;
 
     let websocket_router = Router::new()
-        .route("/attach/connect", get(ws_host::ws_connect_attach_handler))
-        .route("/attach/create", get(ws_host::ws_create_attach_handler))
-        .route("/auth/connect/:player", post(ws_host::connect_auth_handler))
-        .route("/auth/create/:player", post(ws_host::create_auth_handler))
+        .route(
+            "/attach/connect/:token",
+            get(host::ws_connect_attach_handler),
+        )
+        .route("/attach/create/:token", get(host::ws_create_attach_handler))
+        .route("/auth/connect", post(host::connect_auth_handler))
+        .route("/auth/create", post(host::create_auth_handler))
         .with_state(ws_host);
 
     Ok(Router::new()
         .nest("/ws", websocket_router)
+        .route("/", get(root_handler))
         .route("/metrics", get(move || ready(recorder_handle.render()))))
 }
 
