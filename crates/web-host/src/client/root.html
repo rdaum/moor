@@ -44,6 +44,7 @@
                 console.log("Failed to retrieve welcome text!");
             }
         }
+
         // Output a system message to the narrative panel.
         function output_system_text(text) {
             let narrative = document.getElementById("narrative");
@@ -122,7 +123,7 @@
             context.token = paseto_token;
             context.ws = ws;
             ws.onmessage = handle_narrative_event
-            
+
             // Show the narrative panel, and hide the welcome panel.
             let welcome_panel = document.getElementById("welcome");
             welcome_panel.style.display = "none";
@@ -141,7 +142,19 @@
 
         // Attach event handlers to our elements in the DOM.
         document.addEventListener("DOMContentLoaded", function () {
-            context.showdown = new showdown.Converter({emoji: true, simpleLineBreaks: true});
+            context.showdown = new showdown.Converter({
+                // Permit markdown tables, strikethrough, and emoji.
+                tables: true,
+                strikethrough: true,
+                emoji: true,
+                // Require a space after the # in a heading, to prevent non-heading-intended things from being
+                // interpreted as such.
+                requireSpaceBeforeHeadingText: true,
+                // Open links in new window to prevent this one from being clobbered
+                openLinksInNewWindow: true,
+                // Put a <br> after each line break, as this makes existing MOO content format correctly.
+                simpleLineBreaks: true
+            });
 
             let connect_form = document.getElementById("connect_form");
             let entry_form = document.getElementById("entry");
@@ -168,15 +181,18 @@
             color: black;
             background-color: white;
         }
+
         .system_message {
             color: darkred;
             background-color: white;
         }
+
         .gap {
             color: white;
             background-color: white;
             height: 10px;
         }
+
         #narrative {
             padding: 5px;
             font-family: monospace;
@@ -190,18 +206,24 @@
             height: calc(100vh - 100px);
             margin-bottom: 10px;
         }
-        #narrative p { margin:0 }
+
+        #narrative p {
+            margin: 0
+        }
 
         #welcome {
             padding: 10px;
-            font-family: arial,sans-serif;
+            font-family: arial, sans-serif;
             border-radius: 5px;
             border-width: thick;
             border-style: solid;
             border-color: black;
             background-color: white;
         }
-        #welcome p { margin:0 }
+
+        #welcome p {
+            margin: 0
+        }
 
         #anchor {
             overflow-anchor: auto;
