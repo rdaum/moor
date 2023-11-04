@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head><title>Welcome</title>
+    <!-- Showdown markdown library -->
+    <script src="https://cdn.jsdelivr.net/npm/showdown@2.0.3/dist/showdown.min.js"></script>
+
     <script lang="javascript">
+
         let context = {
+            showdown: null,
             player: null,
             token: null,
             ws: null
@@ -15,22 +20,41 @@
             return template.content.children;
         }
 
+        function write_markdown(markdown, destination, style) {
+            let html = context.showdown.makeHtml(markdown);
+            let elements = generateElements(html);
+            while (elements.length > 0) {
+                if (style) {
+                    elements[0].classList.add(style);
+                }
+                destination.appendChild(elements[0]);
+            }
+        }
+
+        // Retrieve and display welcome message.
+        async function retrieve_welcome(welcome_panel) {
+            let result = await fetch("/welcome");
+            if (result.ok) {
+                let welcome_text = await result.json();
+                // "welcome_text" is a json array of strings, but we want to treat it as one markdown doc,
+                // so we'll join them together with a newline.
+                let welcome_markdown = welcome_text.join("\n");
+                write_markdown(welcome_markdown, welcome_panel);
+            } else {
+                console.log("Failed to retrieve welcome text!");
+            }
+        }
         // Output a system message to the narrative panel.
         function output_system_text(text) {
-            let anchor = document.getElementById("anchor");
             let narrative = document.getElementById("narrative");
-            let msg = generateElements("<li class='system_message'>" + text + "</li>")[0];
-            narrative.insertBefore(msg, anchor);
-            // scroll to bottom
+            write_markdown(text, narrative, "system_message");
             narrative.scrollTop = narrative.scrollHeight;
         }
 
         // Output a typical narrative message to the narrative panel.
         function output_narrative_text(text) {
-            let anchor = document.getElementById("anchor");
             let narrative = document.getElementById("narrative");
-            let msg = generateElements("<li class='message'>" + text + "</li>")[0];
-            narrative.insertBefore(msg, anchor);
+            write_markdown(text, narrative, "message");
             // scroll to bottom
             narrative.scrollTop = narrative.scrollHeight;
         }
@@ -114,24 +138,11 @@
             output_narrative_gap();
         }
 
-        async function retrieve_welcome(welcome_panel) {
-            let result = await fetch("/welcome");
-            if (result.ok) {
-                let welcome_text = await result.json();
-                // "welcome_text" is a json array of strings, which we will append to the welcome panel as
-                // individual <p> elements.
-                for (let i = 0; i < welcome_text.length; i++) {
-                    let p = document.createElement("p");
-                    p.innerHTML = welcome_text[i];
-                    welcome_panel.appendChild(p);
-                }
-            } else {
-                console.log("Failed to retrieve welcome text!");
-            }
-        }
 
         // Attach event handlers to our elements in the DOM.
         document.addEventListener("DOMContentLoaded", function () {
+            context.showdown = new showdown.Converter({emoji: true, simpleLineBreaks: true});
+
             let connect_form = document.getElementById("connect_form");
             let entry_form = document.getElementById("entry");
 
@@ -179,6 +190,8 @@
             height: calc(100vh - 100px);
             margin-bottom: 10px;
         }
+        #narrative p { margin:0 }
+
         #welcome {
             padding: 10px;
             font-family: arial,sans-serif;
@@ -188,6 +201,7 @@
             border-color: black;
             background-color: white;
         }
+        #welcome p { margin:0 }
 
         #anchor {
             overflow-anchor: auto;
@@ -207,7 +221,6 @@
 <body>
 <!-- welcome message, shown until user connects -->
 <div id="welcome">
-    
 </div>
 <form id="connect_form">
     <input type="text" name="player"/>
@@ -216,8 +229,6 @@
 </form>
 <!-- output area, where narrative is displayed, new messages are added at bottom, and scroll is locked to bottom -->
 <div id="narrative">
-    <!-- messages always get added prior to this -->
-    <div id="anchor"></div>
 </div>
 <form id="entry" style="display: none;">
     <input type="text" name="command" id="command_input"/>
