@@ -118,7 +118,7 @@ pub struct NarrativeEvent {
     /// The object that authored or caused the event.
     author: Objid,
     /// The event itself.
-    event: Event,
+    pub event: Event,
 }
 
 /// Types of events we can send to the session.

@@ -23,6 +23,7 @@ mod tests {
     use moor_compiler::opcode::Op::*;
     use moor_compiler::opcode::{Op, Program};
     use moor_db::tb_worldstate::TupleBoxWorldStateSource;
+    use moor_values::model::{Event, NarrativeEvent};
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -516,6 +517,12 @@ mod tests {
         assert_eq!(result, v_int(0));
     }
 
+    fn has_narrative_event_with_string(events: &[NarrativeEvent], text: &str) -> bool {
+        events.iter().any(|event| match &event.event {
+            Event::TextNotify(s) => s == text,
+        })
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_call_notify() {
         let program = "return notify(#1, \"test\");";
@@ -526,9 +533,27 @@ mod tests {
 
         assert_eq!(result, v_int(1));
 
-        assert_eq!(session.received(), vec!["test".to_string()]);
+        assert!(has_narrative_event_with_string(&session.received(), "test"));
         session.commit().await.expect("commit failed");
-        assert_eq!(session.committed(), vec!["test".to_string()]);
+        assert!(has_narrative_event_with_string(
+            &session.committed(),
+            "test"
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_call_notify_rollback() {
+        let program = "return notify(#1, \"test\");";
+        let mut state = world_with_test_program(program).await;
+
+        let session = Arc::new(MockClientSession::new());
+        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
+
+        assert_eq!(result, v_int(1));
+
+        assert!(has_narrative_event_with_string(&session.received(), "test"));
+        session.rollback().await.expect("rollback failed");
+        assert!(&session.committed().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]
