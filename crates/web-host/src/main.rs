@@ -2,7 +2,7 @@ mod client;
 mod host;
 
 use crate::client::root_handler;
-use crate::host::WebSocketHost;
+use crate::host::WebHost;
 use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
@@ -48,22 +48,26 @@ fn setup_metrics_recorder() -> anyhow::Result<PrometheusHandle> {
         .with_context(|| "Unable to install Prometheus recorder")
 }
 
-fn mk_routes(ws_host: WebSocketHost) -> anyhow::Result<Router> {
+fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
     let recorder_handle = setup_metrics_recorder()?;
 
-    let websocket_router = Router::new()
+    let webhost_router = Router::new()
         .route(
-            "/attach/connect/:token",
+            "/ws/attach/connect/:token",
             get(host::ws_connect_attach_handler),
         )
-        .route("/attach/create/:token", get(host::ws_create_attach_handler))
+        .route("/", get(root_handler))
+        .route(
+            "/ws/attach/create/:token",
+            get(host::ws_create_attach_handler),
+        )
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
-        .with_state(ws_host);
+        .route("/welcome", get(host::welcome_message_handler))
+        .with_state(web_host);
 
     Ok(Router::new()
-        .nest("/ws", websocket_router)
-        .route("/", get(root_handler))
+        .nest("/", webhost_router)
         .route("/metrics", get(move || ready(recorder_handle.render()))))
 }
 
@@ -87,7 +91,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut stop_signal =
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
-    let ws_host = WebSocketHost::new(args.rpc_server, args.narrative_server);
+    let ws_host = WebHost::new(args.rpc_server, args.narrative_server);
 
     let main_router = mk_routes(ws_host).expect("Unable to create main router");
 
