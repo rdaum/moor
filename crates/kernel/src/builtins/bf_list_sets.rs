@@ -222,7 +222,8 @@ fn perform_regex_match(
     syntax.set_operators(
         syntax
             .operators()
-            .bitor(SyntaxOperator::SYNTAX_OPERATOR_QMARK_ZERO_ONE),
+            .bitor(SyntaxOperator::SYNTAX_OPERATOR_QMARK_ZERO_ONE)
+            .bitor(SyntaxOperator::SYNTAX_OPERATOR_PLUS_ONE_INF),
     );
     let regex = onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
         .map_err(|_| E_INVARG)?;
@@ -502,6 +503,17 @@ mod tests {
         );
         let result = substitute("%1", &subs, source).unwrap();
         assert_eq!(result, "edit");
+    }
+
+    #[test]
+    fn test_match_regression() {
+        let source = "2";
+        // In MOO this should yield (1,1). In Python re it's (0,1).
+        // 'twas returning None because + support got broken.
+        let (overall, _) = perform_regex_match("[0-9]+ *", source, false, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(overall, (1, 1));
     }
 
     #[test]
