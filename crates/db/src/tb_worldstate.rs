@@ -620,14 +620,12 @@ impl DbTransaction for TupleBoxTransaction {
         uuid: Uuid,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let verbdefs = object_relations::get_composite_value(
-            &self.tx,
-            WorldStateRelation::ObjectVerbs,
-            obj,
-            uuid,
-        )
-        .await
-        .unwrap_or(VerbDefs::empty());
+        let Some(verbdefs): Option<VerbDefs> =
+            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
+                .await
+        else {
+            return Err(WorldStateError::VerbNotFound(obj, format!("{}", uuid)));
+        };
 
         let Some(verbdefs) = verbdefs.with_updated(uuid, |ov| {
             let names = match &verb_attrs.names {
@@ -1088,7 +1086,7 @@ mod tests {
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::objset::ObjSet;
     use moor_values::model::r#match::VerbArgsSpec;
-    use moor_values::model::verbs::BinaryType;
+    use moor_values::model::verbs::{BinaryType, VerbAttrs};
     use moor_values::model::{CommitResult, WorldStateError};
     use moor_values::util::bitenum::BitEnum;
     use moor_values::var::objid::Objid;
@@ -1571,6 +1569,63 @@ mod tests {
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test"));
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+    }
+
+    /// Regression test for updating-verbs failing.
+    #[tokio::test]
+    async fn test_verb_add_update() {
+        let db = test_db().await;
+        let tx = TupleBoxTransaction::new(db);
+        let oid = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .await
+            .unwrap();
+        tx.add_object_verb(
+            oid,
+            oid,
+            vec!["test".into()],
+            vec![],
+            BinaryType::LambdaMoo18X,
+            BitEnum::new(),
+            VerbArgsSpec::this_none_this(),
+        )
+        .await
+        .unwrap();
+        // resolve the verb to its vh.
+        let vh = tx.resolve_verb(oid, "test".into(), None).await.unwrap();
+        assert_eq!(vh.names(), vec!["test"]);
+        // Verify it's actually on the object when we get verbs.
+        let verbs = tx.get_verbs(oid).await.unwrap();
+        assert_eq!(verbs.len(), 1);
+        assert!(verbs.contains(vh.uuid()));
+        // update the verb using its uuid, renaming it.
+        tx.update_verb(
+            oid,
+            vh.uuid(),
+            VerbAttrs {
+                definer: None,
+                owner: None,
+                names: Some(vec!["test2".into()]),
+                flags: None,
+                args_spec: None,
+                binary_type: None,
+                binary: None,
+            },
+        )
+        .await
+        .unwrap();
+        // resolve with the new name.
+        let vh = tx.resolve_verb(oid, "test2".into(), None).await.unwrap();
+        assert_eq!(vh.names(), vec!["test2"]);
     }
 
     #[tokio::test]
