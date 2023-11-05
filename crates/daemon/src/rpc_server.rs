@@ -110,7 +110,6 @@ impl RpcServer {
                 }
             }
             RpcRequest::Attach(auth_token, connect_type, hostname) => {
-                // TODO: use _connect_type to provoke the
                 increment_counter!("rpc_server.attach");
                 // Validate the auth token, and get the player.
                 let Ok(player) = self.validate_auth_token(auth_token, None) else {
@@ -126,16 +125,18 @@ impl RpcServer {
                     Err(e) => return make_response(Err(e)),
                 };
 
-                trace!(?player, "Submitting user_connected task");
-                if let Err(e) = self
-                    .clone()
-                    .submit_connected_task(client_id, player, connect_type)
-                    .await
-                {
-                    error!(error = ?e, "Error submitting user_connected task");
-                    increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
-                    // Note we still continue to return a successful login result here, hoping for the best
-                    // but we do log the error.
+                if let Some(connect_type) = connect_type {
+                    trace!(?player, "Submitting user_connected task");
+                    if let Err(e) = self
+                        .clone()
+                        .submit_connected_task(client_id, player, connect_type)
+                        .await
+                    {
+                        error!(error = ?e, "Error submitting user_connected task");
+                        increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
+                        // Note we still continue to return a successful login result here, hoping for the best
+                        // but we do log the error.
+                    }
                 }
                 make_response(Ok(RpcResponse::AttachResult(Some((client_token, player)))))
             }

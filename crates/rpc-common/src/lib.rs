@@ -42,9 +42,10 @@ pub enum RpcRequest {
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
     LoginCommand(ClientToken, Vec<String>, bool /* attach? */),
-    /// Attach to a previously-authenticated session, returning the object id of the player,
+    /// Attach to a previously-authenticated user, returning the object id of the player,
     /// and a client token -- or None if the auth token is not valid.
-    Attach(AuthToken, ConnectType, String),
+    /// If a ConnectType is specified, the user_connected verb will be called.
+    Attach(AuthToken, Option<ConnectType>, String),
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, String),
     /// Respond to a request for input.

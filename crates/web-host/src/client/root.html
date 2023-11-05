@@ -6,10 +6,11 @@
 
     <script lang="javascript">
 
+        // Global state.
         let context = {
             showdown: null,
             player: null,
-            token: null,
+            auth_token: null,
             ws: null
         };
 
@@ -60,6 +61,7 @@
             narrative.scrollTop = narrative.scrollHeight;
         }
 
+        // Output a gap in the narrative panel, to make it easier to read.
         function output_narrative_gap() {
             let anchor = document.getElementById("anchor");
             let narrative = document.getElementById("narrative");
@@ -109,8 +111,8 @@
             login_result = login_result.split(" ");
             let connect_type = login_result[1].toLowerCase();
             let player = login_result[0];
-            let paseto_token = result.headers.get("X-Moor-Auth-Token");
-            if (!paseto_token) {
+            let auth_token = result.headers.get("X-Moor-Auth-Token");
+            if (!auth_token) {
                 console.log("No token; authorization denied");
                 alert("Could not authenticate!");
                 return;
@@ -118,9 +120,9 @@
 
             // Now initiate the websocket connection, attaching the header
             // with the token.
-            let ws = new WebSocket("ws://localhost:8080/ws/attach/" + connect_type + "/" + paseto_token);
+            let ws = new WebSocket("ws://localhost:8080/ws/attach/" + connect_type + "/" + auth_token);
             context.player = player;
-            context.token = paseto_token;
+            context.auth_token = auth_token;
             context.ws = ws;
             ws.onmessage = handle_narrative_event
 
@@ -131,14 +133,33 @@
             narrative.style.display = "inherit";
         }
 
+        // Handle a user inputting a command.
         async function handle_input(e) {
             e.preventDefault();
             context.ws.send(e.target.command.value);
             e.target.command.value = "";
-            // Put a small gap in the narrative output, to make it easier to read.
+            // Put a small gap in the narrative output, to make it easier to read the results.
             output_narrative_gap();
         }
 
+        // Evaluate a MOO expression on the server and return the result.
+        async function handle_eval(e, expr) {
+            e.preventDefault();
+            // HTTP POST with the body being the expression. And add in the X-Moor-Auth-Token header.
+            let result = await fetch("/eval", {
+                method: "POST",
+                body: expr,
+                headers: {
+                    "X-Moor-Auth-Token": context.auth_token
+                }
+            });
+            if (result.ok) {
+                let expr = await result.json();
+                console.log(expr);
+            } else {
+                console.log("Failed to evaluate expression!");
+            }
+        }
 
         // Attach event handlers to our elements in the DOM.
         document.addEventListener("DOMContentLoaded", function () {
@@ -253,6 +274,7 @@
 <div id="narrative">
 </div>
 <form id="entry" style="display: none;">
+    <label for="command_input">Do:</label>
     <input type="text" name="command" id="command_input"/>
     <button type="submit">Send</button>
 </form>

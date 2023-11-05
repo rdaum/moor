@@ -8,29 +8,33 @@ use serde_json::{json, Number};
 
 pub use web_host::WebHost;
 pub use web_host::{
-    connect_auth_handler, create_auth_handler, welcome_message_handler, ws_connect_attach_handler,
-    ws_create_attach_handler,
+    connect_auth_handler, create_auth_handler, eval_handler, welcome_message_handler,
+    ws_connect_attach_handler, ws_create_attach_handler,
 };
 
 #[derive(Serialize, Deserialize)]
-struct OID(i64);
+struct OID {
+    oid: i64,
+}
 
 #[derive(Serialize, Deserialize)]
 struct Error {
-    code: u8,
-    msg: String,
+    error_code: u8,
+    error_name: String,
+    error_msg: String,
 }
 
 pub fn var_as_json(v: &Var) -> serde_json::Value {
     match v.variant() {
         Variant::None => serde_json::Value::Null,
         Variant::Str(s) => serde_json::Value::String(s.to_string()),
-        Variant::Obj(o) => json!(OID(o.0)),
+        Variant::Obj(o) => json!(OID { oid: o.0 }),
         Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),
         Variant::Err(e) => json!(Error {
-            code: (*e) as u8,
-            msg: e.message().to_string(),
+            error_code: (*e) as u8,
+            error_name: e.name().to_string(),
+            error_msg: e.message().to_string(),
         }),
         Variant::List(l) => {
             let mut v = Vec::new();

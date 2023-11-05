@@ -1,7 +1,7 @@
 use crate::host::var_as_json;
 use crate::host::ws_connection::WebSocketConnection;
 use anyhow::anyhow;
-use axum::body::{boxed, Empty};
+use axum::body::{boxed, Bytes, Empty};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
 use axum::headers::HeaderValue;
 use axum::http::{HeaderMap, StatusCode};
@@ -61,7 +61,7 @@ impl WebHost {
     pub async fn attach_authenticated(
         &self,
         auth_token: AuthToken,
-        connect_type: ConnectType,
+        connect_type: Option<ConnectType>,
         peer_addr: SocketAddr,
     ) -> Result<(Objid, Uuid, ClientToken, RpcSendClient), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
@@ -359,6 +359,90 @@ pub async fn welcome_message_handler(
     response
 }
 
+/// Evaluate a MOO expression and return the result.
+pub async fn eval_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    expression: Bytes,
+) -> Response {
+    increment_counter!("web_host.eval");
+
+    let auth_token = match header_map.get("X-Moor-Auth-Token") {
+        Some(auth_token) => match auth_token.to_str() {
+            Ok(auth_token) => AuthToken(auth_token.to_string()),
+            Err(e) => {
+                error!("Unable to parse auth token: {}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        },
+        None => {
+            error!("No auth token provided");
+            return StatusCode::FORBIDDEN.into_response();
+        }
+    };
+
+    let (_player, client_id, client_token, mut rpc_client) = match host
+        .attach_authenticated(auth_token.clone(), None, addr)
+        .await
+    {
+        Ok(connection_details) => connection_details,
+        Err(WsHostError::AuthenticationFailed) => {
+            return Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(boxed(Empty::new()))
+                .unwrap();
+        }
+        Err(e) => {
+            error!("Unable to validate auth token: {}", e);
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(boxed(Empty::new()))
+                .unwrap();
+        }
+    };
+    let expression = String::from_utf8_lossy(&expression).to_string();
+
+    debug!("Evaluating expression: {}", expression);
+    let response = match rpc_client
+        .make_rpc_call(
+            client_id,
+            RpcRequest::Eval(client_token.clone(), auth_token, expression),
+        )
+        .await
+    {
+        Ok(rpc_response) => match rpc_response {
+            RpcResult::Success(RpcResponse::EvalResult(value)) => {
+                debug!("Eval result: {:?}", value);
+                Json(var_as_json(&value)).into_response()
+            }
+            RpcResult::Success(r) => {
+                error!("Unexpected response from RPC server: {:?}", r);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+            RpcResult::Failure(RpcRequestError::PermissionDenied) => {
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+            RpcResult::Failure(f) => {
+                error!("RPC failure in welcome message retrieval: {:?}", f);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        },
+        Err(e) => {
+            error!("RPC failure in welcome message retrieval: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
 async fn attach(
     ws: WebSocketUpgrade,
     addr: SocketAddr,
@@ -371,7 +455,7 @@ async fn attach(
     let auth_token = AuthToken(auth_token);
 
     let (player, client_id, client_token, rpc_client) = match host
-        .attach_authenticated(auth_token.clone(), connect_type, addr)
+        .attach_authenticated(auth_token.clone(), Some(connect_type), addr)
         .await
     {
         Ok(connection_details) => connection_details,

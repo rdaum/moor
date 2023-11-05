@@ -64,6 +64,7 @@ fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
         .route("/welcome", get(host::welcome_message_handler))
+        .route("/eval", post(host::eval_handler))
         .with_state(web_host);
 
     Ok(Router::new()
