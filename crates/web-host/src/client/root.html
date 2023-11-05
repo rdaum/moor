@@ -4,7 +4,111 @@
     <!-- Showdown markdown library -->
     <script src="https://cdn.jsdelivr.net/npm/showdown@2.0.3/dist/showdown.min.js"></script>
 
+
     <script lang="javascript">
+
+        // Converts a JSON representation of a MOO value into a MOO expression string
+        // JSON values look like:
+        //     number -> number
+        //     "string" -> "string"
+        //     { error_code: number, error_name: string (e.g. E_PROPNF), error_message: string } -> E_<error_name>
+        //     { oid: number } -> #<oid>
+        //     [ ... ] -> { ... }
+        function json_to_moo(json) {
+            if (typeof json === "number") {
+                return json.toString();
+            } else if (typeof json === "string") {
+                return "\"" + json + "\"";
+            } else if (typeof json === "object") {
+                if (json["error_code"]) {
+                    return json["error_name"];
+                } else if (json["oid"]) {
+                    return "#" + json["oid"];
+                } else if (Array.isArray(json)) {
+                    let result = "{";
+                    for (let i = 0; i < json.length; i++) {
+                        result += json_to_moo(json[i]);
+                        if (i < json.length - 1) {
+                            result += ", ";
+                        }
+                    }
+                    result += "}";
+                    return result;
+                } else {
+                    throw "Unknown object type: " + json;
+                }
+            } else {
+                throw "Unknown JSON type: " + json;
+            }
+        }
+
+
+        // Recursively descend a JSON result from eval, and turns object references into MooRPCObjects.
+        function transform_eval(json) {
+            if (typeof json != "object") {
+                return json;
+            }
+             if (json["oid"]) {
+                return new MoorRPCObject(json["oid"], context.auth_token);
+            } else if (Array.isArray(json)) {
+                let result = [];
+                for (let i = 0; i < json.length; i++) {
+                    result.push(transform_eval(json[i]));
+                }
+                return result;
+            } else {
+                let result = {};
+                for (let key in json) {
+                    result[key] = transform_eval(json[key]);
+                }
+                return result;
+            }
+        }
+
+        // Uses Eval call verbs and get properties from MOO objects.
+        class MoorRPCObject {
+            constructor(object_id, auth_token) {
+                this.object_id = object_id;
+                this.auth_token = auth_token;
+            }
+
+            // Call a verb on the object by eval.
+            // "return #<object_id>:<verb>(<args>)"
+            async invoke_verb(verb_name, args) {
+                let self = json_to_moo(this.object_id)
+                let verbargs = json_to_moo(args);
+                let expr = "return " + self + ":" + verb_name + "(" + verbargs + ")";
+                return perform_eval(this.auth_token, expr);
+            }
+        }
+
+        async function call_builtin(auth_token, builtin, args) {
+            let argument_elements = [];
+            for (let i = 0; i < args.length; i++) {
+                argument_elements.push(json_to_moo(args[i]));
+            }
+            let args_str = argument_elements.join(", ");
+            let expr = "return " + builtin + "(" + args_str + ");";
+            return perform_eval(auth_token, expr);
+        }
+
+        // Evaluate a MOO expression on the server and return the result.
+        async function perform_eval(auth_token, expr) {
+            // HTTP POST with the body being the expression. And add in the X-Moor-Auth-Token header.
+            let result = await fetch("/eval", {
+                method: "POST",
+                body: expr,
+                headers: {
+                    "X-Moor-Auth-Token": context.auth_token
+                }
+            });
+            if (result.ok) {
+                let expr = await result.json();
+                return transform_eval(expr);
+            } else {
+                console.log("Failed to evaluate expression!");
+            }
+        }
 
         // Global state.
         let context = {
@@ -87,17 +191,23 @@
         // Handle the connect phase in response to a user clicking the "Connect" button.
         async function connect(e) {
             e.preventDefault();
+            // Pick action (/auth/connect or /auth/create) depending on the action selected.
+            let action = document.getElementById("action").value;
+            let url = "/auth/" + action;
             let form = e.target;
             let data = new URLSearchParams();
             data.set("player", form.player.value);
             data.set("password", form.password.value);
-            let result = await fetch("/auth/connect", {
+            let result = await fetch(url, {
                 method: "POST",
                 body: data
             });
             if (result.ok) {
                 console.log("Connected!");
             } else {
+                // TODO: we will need to capture the rejection message from the server somehow, and display it.
+                //   Right now this is not possible through the existing LoginRequest/LoginResponse mechanism.
+                //   Also this alert() thing is ugly, we'll want to replace it with something more UI consistent.
                 console.log("Failed to connect!");
                 alert("Failed to authenticate!")
                 return;
@@ -127,6 +237,8 @@
             ws.onmessage = handle_narrative_event
 
             // Show the narrative panel, and hide the welcome panel.
+            let welcome_span = document.getElementById("login_area");
+            welcome_span.style.display = "none";
             let welcome_panel = document.getElementById("welcome");
             welcome_panel.style.display = "none";
             let narrative = document.getElementById("narrative");
@@ -140,25 +252,6 @@
             e.target.command.value = "";
             // Put a small gap in the narrative output, to make it easier to read the results.
             output_narrative_gap();
-        }
-
-        // Evaluate a MOO expression on the server and return the result.
-        async function handle_eval(e, expr) {
-            e.preventDefault();
-            // HTTP POST with the body being the expression. And add in the X-Moor-Auth-Token header.
-            let result = await fetch("/eval", {
-                method: "POST",
-                body: expr,
-                headers: {
-                    "X-Moor-Auth-Token": context.auth_token
-                }
-            });
-            if (result.ok) {
-                let expr = await result.json();
-                console.log(expr);
-            } else {
-                console.log("Failed to evaluate expression!");
-            }
         }
 
         // Attach event handlers to our elements in the DOM.
@@ -190,8 +283,12 @@
 
     </script>
     <style>
+        * {
+            font-family: 'Poppins', sans-serif;
+        }
+
         body {
-            background-color: #7fdbff;
+            background: #deddda;
         }
 
         li {
@@ -200,32 +297,27 @@
 
         .message {
             color: black;
-            background-color: white;
         }
 
         .system_message {
             color: darkred;
-            background-color: white;
         }
 
         .gap {
             color: white;
-            background-color: white;
             height: 10px;
         }
 
         #narrative {
-            padding: 5px;
-            font-family: monospace;
+            padding: 10px;
             display: none;
-            border-radius: 5px;
-            border-width: thick;
-            border-style: solid;
-            border-color: black;
             overflow-y: scroll;
-            background-color: white;
             height: calc(100vh - 100px);
             margin-bottom: 10px;
+
+            border-radius: 6px;
+            box-shadow: inset 5px 5px 8px #adacaa,
+            inset -5px -5px 8px #ffffff;
         }
 
         #narrative p {
@@ -234,17 +326,15 @@
 
         #welcome {
             padding: 10px;
-            font-family: arial, sans-serif;
-            border-radius: 5px;
-            border-width: thick;
-            border-style: solid;
-            border-color: black;
-            background-color: white;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+
+            border-radius: 6px;
+            box-shadow: inset 5px 5px 8px #adacaa,
+            inset -5px -5px 8px #ffffff;
         }
 
-        #welcome p {
-            margin: 0
-        }
+
 
         #anchor {
             overflow-anchor: auto;
@@ -256,27 +346,111 @@
             width: calc(100% - 100px);
         }
 
+        /* login area, shown until user connects */
+        #login_area {
+            /* center the login div to the surrounding page */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+
+
+            width: 600px;
+            padding: 10px;
+
+            border-radius: 6px;
+            background: #deddda;
+            box-shadow:  7px 7px 14px #babab7,
+            -7px -7px 14px #fffffd;
+        }
+
         #connect_form {
-            text-align: center;
+             /*each inner span is its own column, do not allow vertical break */
+            display: flex;
+            flex-direction: row;
+            /* padding between columns */
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: nowrap;
+        }
+
+        /* labels above inputs, each a column */
+        label, input{
+            display:flex;
+            flex-direction:column;
+        }
+
+        /* small font for the labels */
+        label {
+            font-size: 0.8rem;
+        }
+
+        /*neumorphic style for input fields and buttons*/
+         .input {
+             border: none;
+             padding: 1rem;
+             border-radius: 6px;
+             background: #deddda;
+             box-shadow: inset 5px 5px 10px #afafac,
+             inset -5px -5px 10px #ffffff;
+         }
+
+        .input:focus {
+            border-radius: 6px;
+            background: #deddda;
+            box-shadow: inset 5px 5px 10px #afafac,
+            inset -5px -5px 10px #ffffff;
+        }
+
+        .button {
+            border: none;
+            padding: 1rem;
+            border-radius: 6px;
+            background: linear-gradient(145deg, #eeece9, #c8c7c4);
+            box-shadow:  5px 5px 10px #afafac,
+            -5px -5px 10px #ffffff;
+        }
+        .button:focus {
+            border-radius: 6px;
+            background: linear-gradient(145deg, #eeece9, #c8c7c4);
+            box-shadow:  5px 5px 10px #afafac,
+            -5px -5px 10px #ffffff;
         }
     </style>
 </head>
 <body>
-<!-- welcome message, shown until user connects -->
-<div id="welcome">
+<!-- login area, shown until user connects -->
+<div id="login_area">
+    <!-- where the welcome message is displayed -->
+    <div id="welcome">
+    </div>
+    <!-- login form -->
+    <form id="connect_form">
+        <span>
+            <!-- connect or create -->
+            <select id="action" name="action" class="button">
+                <option value="connect">Connect</option>
+                <option value="create">Create</option>
+            </select>
+        </span>
+        <span>
+            <label for="player">Player</label>
+            <input type="text" id="player" name="player" class="input"/>
+        </span>
+        <span>
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="input"/>
+        </span>
+        <span>
+            <button type="submit" id="connect" class="button">Go</button>
+        </span>
+    </form>
 </div>
-<form id="connect_form">
-    <input type="text" name="player"/>
-    <input type="text" name="password"/>
-    <button type="submit">Connect</button>
-</form>
 <!-- output area, where narrative is displayed, new messages are added at bottom, and scroll is locked to bottom -->
 <div id="narrative">
 </div>
 <form id="entry" style="display: none;">
-    <label for="command_input">Do:</label>
-    <input type="text" name="command" id="command_input"/>
-    <button type="submit">Send</button>
+    <input type="text" name="command" id="command_input"  class="input"/>
 </form>
 </body>
 </html>
