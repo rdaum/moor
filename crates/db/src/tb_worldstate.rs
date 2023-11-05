@@ -651,7 +651,19 @@ impl DbTransaction for TupleBoxTransaction {
             obj,
             verbdefs,
         )
-        .await
+        .await?;
+
+        if verb_attrs.binary.is_some() {
+            object_relations::upsert_obj_uuid_value(
+                &self.tx,
+                WorldStateRelation::VerbProgram,
+                obj,
+                uuid,
+                verb_attrs.binary.unwrap(),
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     async fn add_object_verb(
