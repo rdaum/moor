@@ -1,0 +1,613 @@
+<!-- Smalltalk style browser;
+     3 panes top:
+       Left is objects, sys/inventory/location/owned.
+       Middle is related objects: children, ancestors, peers
+       Right is verbs/properties (tabbed)
+     Bottom is content/value
+     Lists in the object panes are sectioned by the type (e.g. children, ancestors, peers), but with
+       hotlinks at top to jump to the section.
+     Clicking an object in the first two panes fills the right-most pane with verbs/props
+       and fills the bottom pane with a description of the object, along with actions (clone,
+       recycle, etc.)
+     Click a property or verb in the right-most pane brings up an editor for that verb/value.
+     Editor for properties is a dynamic editor for values
+     Editor for verbs is a text editor. Hopefully eventually syntax highlighting.
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Browser</title>
+    <!-- Showdown markdown library -->
+    <script src="https://cdn.jsdelivr.net/npm/showdown@2.0.3/dist/showdown.min.js"></script>
+    <script src="moor.js"></script>
+    <script src="https://unpkg.com/monaco-editor@latest/min/vs/loader.js"></script>
+
+    <script>
+        class ObjListItem {
+            constructor(id, name, sysobj_label) {
+                this.id = id;
+                this.name = name;
+                this.sysobj_label = sysobj_label;
+            }
+        }
+
+        let context = {
+            auth_token: null,
+            system_objects: [],
+            owned_objects: [],
+            editor: null,
+            verbs: null,
+        }
+
+        // TODO: this is just a first crack at this, it's by no means complete.
+        const MooSyntax = {
+            // Set defaultToken to invalid to see what you do not tokenize yet
+            defaultToken: 'invalid',
+            tokenPostfix: '.moo',
+            ignoreCase: true,
+
+            keywords: [
+                'if', 'else', 'elseif', 'endif',
+                'while', 'endwhile',
+                'for', 'endfor',
+                'fork', 'endfork',
+                'try', 'endtry',
+                'catch', 'except',
+            ],
+
+            typeKeywords: [
+                'this',
+            ],
+
+            operators: [
+                '<=', '>=', '==', '!=', '+', '-',
+                '*', '/', '%',
+                '|', '^', '!', '~', '&&', '||', '?', ':', '=',
+                '@', '$',
+            ],
+
+            errors: [
+                'E_TYPE', 'E_DIV', 'E_PERM', 'E_PROPNF', 'E_VERBNF', 'E_VARNF', 'E_INVIND', 'E_RECMOVE', 'E_MAXREC',
+                'E_RANGE', 'E_ARGS', 'E_NACC', 'E_INVARG', 'E_QUOTA', 'E_FLOAT', 'E_NONE'
+            ],
+
+            // we include these common regular expressions
+            symbols: /[=><!~?:&|+\-*\/\^%]+/,
+            escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
+            digits: /\d+(_+\d+)*/,
+            octaldigits: /[0-7]+(_+[0-7]+)*/,
+            binarydigits: /[0-1]+(_+[0-1]+)*/,
+            hexdigits: /[[0-9a-fA-F]+(_+[0-9a-fA-F]+)*/,
+
+            // References $fdsfds_fdsaf $fcdsaf etc
+            sysref: /\$([a-zA-Z_][a-zA-Z0-9_]*)/,
+            // Object references
+            object_ref: /#(\d+)/,
+
+            // The main tokenizer for our languages
+            tokenizer: {
+
+                root: [
+                    [/[{}]/, 'delimiter.bracket'],
+                    {include: 'common'}
+                ],
+
+                common: [
+                    [/@object_ref/, 'type.namespace'],
+                    [/@sysref/, 'type.namespace'],
+
+                    // identifiers and keywords
+                    [/[a-z_$][\w$]*/, {
+                        cases: {
+                            '@errors': 'constant',
+                            '@typeKeywords': 'keyword',
+                            '@keywords': 'keyword',
+                            '@default': 'identifier'
+                        }
+                    }],
+
+
+                    // whitespace
+                    {include: '@whitespace'},
+
+                    // delimiters and operators
+                    [/[()\[\]]/, '@brackets'],
+                    [/[<>](?!@symbols)/, '@brackets'],
+                    [/@symbols/, {
+                        cases: {
+                            '@operators': 'delimiter',
+                            '@default': ''
+                        }
+                    }],
+
+
+                    // numbers
+                    [/(@digits)[eE]([\-+]?(@digits))?/, 'number.float'],
+                    [/(@digits)\.(@digits)([eE][\-+]?(@digits))?/, 'number.float'],
+                    [/0[xX](@hexdigits)/, 'number.hex'],
+                    [/0[oO]?(@octaldigits)/, 'number.octal'],
+                    [/0[bB](@binarydigits)/, 'number.binary'],
+                    [/(@digits)/, 'number'],
+
+                    // delimiter: after number because of .\d floats
+                    [/[;,.]/, 'delimiter'],
+
+                    // strings
+                    [/"([^"\\]|\\.)*$/, 'string.invalid'],  // non-teminated string
+                    [/"/, 'string', '@string_double'],
+                ],
+
+                whitespace: [
+                    [/[ \t\r\n]+/, ''],
+                ],
+
+                string_double: [
+                    [/[^\\"]+/, 'string'],
+                    [/@escapes/, 'string.escape'],
+                    [/\\./, 'string.escape.invalid'],
+                    [/"/, 'string', '@pop']
+                ],
+
+                bracketCounting: [
+                    [/\{/, 'delimiter.bracket', '@bracketCounting'],
+                    [/\}/, 'delimiter.bracket', '@pop'],
+                    {include: 'common'}
+                ],
+            },
+
+        };
+
+        // TODO: completion provider which works to lookup verbs / props for constant $references and #object_ids
+
+        function populate_object_list(objects, object_list_id) {
+            let object_list = document.getElementById(object_list_id);
+            object_list.innerHTML = "";
+            for (let i = 0; i < objects.length; i++) {
+                let object = objects[i];
+
+                let object_text = object.name + " (#" + object.id.object_id + ")";
+                if (object.sysobj_label) {
+                    object_text += " [$" + object.sysobj_label + "]";
+                }
+                let li = generateElements("<li>" + object_text + "</li>")[0];
+                li.classList.add(".object_item");
+                li.setAttribute("moo_object_id", object.id.object_id);
+                object_list.appendChild(li);
+            }
+        }
+
+        async function populate_verb_list(object, verb_list_id) {
+            let verbs = await object.get_verbs();
+            context.verbs = verbs;
+            let verb_list = document.getElementById(verb_list_id);
+            verb_list.innerHTML = "";
+            for (let i = 0; i < verbs.length; i++) {
+                let verb = verbs[i];
+                let li = document.createElement("li");
+                li.innerText = verb.verb_name;
+                li.classList.add(".verb_item");
+                li.setAttribute("moo_object_id", object.object_id);
+                li.setAttribute("moo_verb_name", verb.verb_name);
+                verb_list.appendChild(li);
+            }
+        }
+
+        async function populate_property_list(object, property_list_id) {
+            let properties = await object.get_properties();
+            let property_list = document.getElementById(property_list_id);
+            property_list.innerHTML = "";
+            for (let i = 0; i < properties.length; i++) {
+                let property = properties[i];
+                let li = document.createElement("li");
+                li.classList.add("property_item");
+                li.innerText = property;
+                property_list.appendChild(li);
+            }
+        }
+
+        function createEditor(editor_element) {
+            editor_element.innerHTML = "";
+            require(["vs/editor/editor.main"], function () {
+                monaco.languages.setMonarchTokensProvider("moo", MooSyntax);
+                let editor = monaco.editor.create(editor_element, {
+                    value: "",
+                    language: "moo",
+                    // This is where we'd stick our settings once we have a mode for MOO code
+                    // language: 'javascript',
+                    theme: 'vs-light',
+                    readOnly: false,
+                    roundedSelection: true,
+                    scrollBeyondLastLine: false,
+                    fixedOverflowWidgets: true,
+                    automaticLayout: true,
+                    minimap: {
+                        enabled: true,
+                    },
+                    fontSize: "12px",
+                    fontFamily: "monospace",
+                    colorDecorators: true,
+                    dragAndDrop: false,
+                    emptySelectionClipboard: false,
+                    autoClosingDelete: "never",
+                });
+                context.editor = editor;
+            });
+
+        }
+
+        async function populate_verb_editor(verb_name) {
+            // Find the verb object in the context.verbs array
+            let verb = context.verbs.find(function (v) {
+                return v.verb_name === verb_name;
+            });
+            if (!verb) {
+                alert("Verb not found: " + verb_name);
+                return;
+            }
+
+            let verb_source = await verb.get_code();
+
+            // The verb source is a Json array of strings.
+            let source = verb_source.join("\n");
+
+            // Fill the monaco code editor with the source
+            context.editor.getModel().setValue(source);
+            context.editor.getModel().setLanguage("moo");
+
+            // Set the verb owner, perms and args info in the toolbar
+            document.getElementById("verb_owner").innerText = "#" + verb.verb_info[0].object_id;
+            document.getElementById("verb_perms").innerText = verb.verb_info[1];
+            document.getElementById("verb_names").innerText = verb.verb_info[2];
+            document.getElementById("verb_args").innerText = verb.verb_args;
+
+            // Disable the other panels if they're enabled
+            document.getElementById("browser_object_info").style.display = "none";
+            document.getElementById("browser_property_editor").style.display = "none";
+
+            // And enable ours, if it's not.
+            let editor_element = document.getElementById("browser_verb_editor");
+            editor_element.style.display = "inherit";
+        }
+
+        async function verb_click(event) {
+            let target = event.target;
+            if (target.tagName === "LI") {
+                let verb_list = document.getElementById("browser_verbs");
+
+                // Add the selected style to the clicked item, and remove it from the others
+                let all_selected = verb_list.querySelector(".selected");
+                if (all_selected) {
+                    all_selected.classList.remove("selected");
+                }
+                target.classList.add("selected");
+
+
+                let verb = target.getAttribute("moo_verb_name");
+                await populate_verb_editor(verb);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", async function () {
+            // Check query string for the auth token
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+
+            if (token) {
+                context.auth_token = token;
+            } else {
+                alert("No auth token provided. Please log in.");
+            }
+
+            // Get the information we'll need to populate the object list
+            //      properties of #0 that are objects
+            //      owned objects of 'player'
+            sysobjects_query = "" +
+                "sysobjects = {}; " +
+                "for p in (properties(#0)) " +
+                "   pv = #0.(p); " +
+                "   if (typeof(pv) == 1 && valid(pv))" +
+                "       sysobjects = {@sysobjects, {p, pv, pv.name}}; " +
+                "   endif " +
+                "endfor " +
+                "return sysobjects;";
+
+            // Requires that the core support `.owned_objects`
+            owned_objects_query = "" +
+                "owned_objects = {}; " +
+                "for o in (player.owned_objects) " +
+                "   owned_objects = {@owned_objects, {o, o.name}}; " +
+                "endfor " +
+                "return owned_objects;";
+
+            // Get the system & owned objects
+            let system_objects = await perform_eval(context.auth_token, sysobjects_query);
+
+            // Results are [ [sysobj_label, object_id, object_name], ... ]
+            context.system_objects = system_objects.map(function (obj) {
+                return new ObjListItem(obj[1], obj[2], obj[0]);
+            });
+            populate_object_list(context.system_objects, "browser_roots_system");
+
+            let owned_objects = await perform_eval(context.auth_token, owned_objects_query);
+
+            // Results are [ [object_id, object_name], ... ]
+            context.owned_objects = owned_objects.map(function (obj) {
+                return new ObjListItem(obj[0], obj[1]);
+            });
+            populate_object_list(context.owned_objects, "browser_roots_owned");
+
+            // Set up the click handlers for the object lists
+            let system_object_list = document.getElementById("browser_roots_system");
+            system_object_list.addEventListener("click", async function (event) {
+                let target = event.target;
+                if (target.tagName === "LI") {
+                    // Add the selected style to the clicked item, and remove it from the others
+                    let selected = system_object_list.querySelector(".selected ");
+                    if (selected) {
+                        selected.classList.remove("selected");
+                    }
+                    target.classList.add("selected");
+
+                    let object_id = target.getAttribute("moo_object_id");
+                    let object = new MoorRPCObject(object_id, context.auth_token);
+                    await populate_verb_list(object, "browser_verbs");
+                    await populate_property_list(object, "browser_props");
+
+                    document.getElementById("browser_object_info").style.display = "inherit";
+                    document.getElementById("browser_verb_editor").style.display = "none";
+                    document.getElementById("browser_property_editor").style.display = "none";
+                }
+            });
+
+            // Set up click handlers for verbs
+            let verb_list = document.getElementById("browser_verbs");
+            verb_list.addEventListener("click", verb_click);
+
+            let editor_element = document.getElementById("monarch");
+            createEditor(editor_element);
+        });
+    </script>
+    <style>
+
+        body {
+            background: #deddda;
+        }
+
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            max-width: 700px;
+            background: #e5e5e5;
+            height: 300px;
+        }
+
+        .input {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .label {
+            width: 100%;
+            height: 20px;
+            padding: 10px 10px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            color: #7f7f7f;
+            transition: background 0.1s, color 0.1s;
+
+            border-radius: 6px 6px 0 0;
+            background: #e0e0e0;
+            box-shadow: -5px -5px 8px #5a5a5a,
+            5px 5px 8px #ffffff;
+        }
+
+        .label:hover {
+            background: #d8d8d8;
+        }
+
+        .label:active {
+            background: #ccc;
+        }
+
+        .input:focus + .label {
+            z-index: 1;
+        }
+
+        .input:checked + .label {
+            background: #fff;
+            color: #000;
+        }
+
+        @media (min-width: 600px) {
+            .label {
+                width: auto;
+            }
+        }
+
+        .tabbed_panel {
+            display: none;
+            width: 100%;
+            height: 90%;
+            border-radius: 6px;
+            background: #ffffff;
+            box-shadow: inset 5px 5px 8px #666666,
+            inset -5px -5px 0px #ffffff;
+            overflow: scroll;
+        }
+
+        @media (min-width: 600px) {
+            .tabbed_panel {
+                order: 99;
+            }
+        }
+
+        .input:checked + .label + .tabbed_panel {
+            display: block;
+        }
+
+        /** Grid layout for the code browser */
+        .container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: 300px 1fr;
+            grid-column-gap: 6px;
+            grid-row-gap: 20px;
+            grid-auto-flow: row;
+            grid-template-areas:
+                "roots relationships attributes"
+                "editor editor editor";
+            width: 100%;
+            /* height should be total window height - 20px for the header */
+            height: calc(100vh - 20px);
+        }
+
+
+        /** Should sit below anything in the top panel */
+        .editor {
+            grid-area: editor;
+            grid-column: span 3;
+            width: 100%;
+            height: 100%;
+            vertical-align: baseline;
+
+            border-radius: 6px;
+            background: #ffffff;
+            box-shadow: inset 5px 5px 8px #666666,
+            inset -5px -5px 0px #ffffff;
+        }
+
+        .verb_editor {
+            vertical-align: top;
+            overflow: scroll;
+        }
+
+        .roots {
+            grid-area: roots;
+        }
+
+        .relationships {
+            grid-area: relationships;
+        }
+
+        .attributes {
+            grid-area: attributes;
+        }
+
+        li {
+            list-style-type: none;
+            padding: 4px 16px;
+            border-bottom: 1px solid #e5e5e5;
+            cursor: pointer;
+            transition: background 0.1s, color 0.1s;
+            font-size: small;
+            font-family: monospace;
+        }
+
+        /* selected style for li is inverse */
+        li:hover {
+            background: #d8d8d8;
+        }
+
+        .selected {
+            background: #000;
+            color: #adacaa;
+        }
+
+        pre {
+            font-family: monospace;
+            font-size: small;
+        }
+
+        .verb_toolbar {
+            font-family: 'Poppins', sans-serif;
+            font-size: medium;
+            padding: 6px;
+        }
+        .verb_attr {
+            font-family: monospace;
+        }
+
+        /* align buttons right */
+        .toolbar_buttons {
+            float: right;
+            padding-left: 6px;
+        }
+    </style>
+</head>
+<body>
+<script lang="javascript">
+    require.config({paths: {'vs': 'https://unpkg.com/monaco-editor@latest/min/vs'}});
+    window.MonacoEnvironment = {getWorkerUrl: () => proxy};
+    let proxy = URL.createObjectURL(new Blob([`
+                self.MonacoEnvironment = {
+                    baseUrl: 'https://unpkg.com/monaco-editor@latest/min/'
+                };
+                importScripts('https://unpkg.com/monaco-editor@latest/min/vs/base/worker/workerMain.js');
+            `], {type: 'text/javascript'}));
+
+</script>
+<span id="browser_header"></span>
+<div id="browser" class="container">
+    <div id="browser_object_roots" class="roots top_panel">
+        <form class="tabs">
+            <input class="input" name="tabs" type="radio" id="tab-roots" checked="checked"/>
+            <label class="label" for="tab-roots">System</label>
+            <div id="browser_roots_system" class="tabbed_panel">
+
+            </div>
+            <input class="input" name="tabs" type="radio" id="tab-owned" checked="checked"/>
+            <label class="label" for="tab-owned">Owned</label>
+            <div id="browser_roots_owned" class="tabbed_panel">
+
+            </div>
+        </form>
+    </div>
+    <div id="browser_object_relationships" class="relationships top_panel">
+        <form class="tabs">
+            <input class="input" name="tabs" type="radio" id="tab-children" checked="checked"/>
+            <label class="label" for="tab-children">Children</label>
+            <div id="browser_object_children" class="tabbed_panel">
+            </div>
+            <input class="input" name="tabs" type="radio" id="tab-ancestors" checked="checked"/>
+            <label class="label" for="tab-ancestors">Ancestors</label>
+            <div id="browser_object_ancestor" class="tabbed_panel">
+            </div>
+        </form>
+    </div>
+    <div id="browser_attributes" class="attributes top_panel">
+        <form class="tabs">
+            <input class="input" name="tabs" type="radio" id="tab-verbs" checked="checked"/>
+            <label class="label" for="tab-verbs">Verbs</label>
+            <div id="browser_verbs" class="tabbed_panel">
+            </div>
+            <input class="input" name="tabs" type="radio" id="tab-props" checked="checked"/>
+            <label class="label" for="tab-props">Properties</label>
+            <div id="browser_props" class="tabbed_panel">
+            </div>
+        </form>
+    </div>
+
+    <div id="browser_verb_editor" class="verb_editor editor" style="display: inherit">
+        <span id="verb_info_toolbar" class="verb_toolbar">
+            <!-- TODO: edit perms -->
+            Permissions:<span id="verb_perms" class="verb_attr"></span>
+            <!-- TODO: edit owner -->
+            Owner:<span id="verb_owner"class="verb_attr"></span>
+            <!-- TODO: edit args -->
+            Arguments:<span id="verb_args"class="verb_attr"></span>
+            <!-- TODO: edit name -->
+            Names:<span id="verb_names"class="verb_attr"></span>
+            <span class="toolbar_buttons">
+                <button id="browser_verb_compile">Compile</button>
+                <button id="browser_verb_delete">Delete</button>
+            </span>
+        </span>
+
+        <div id="monarch" style="display: inherit; padding: 10px;"></div>
+    </div>
+    <div id="browser_object_info" style="display: none" class="editor"></div>
+    <div id="browser_property_editor" style="display: none" class="editor"></div>
+</div>
+</body>
+</html>

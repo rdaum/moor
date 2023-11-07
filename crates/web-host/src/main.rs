@@ -57,6 +57,7 @@ fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
             get(host::ws_connect_attach_handler),
         )
         .route("/", get(root_handler))
+        .route("/browser.html", get(client::browser_handler))
         .route("/moor.js", get(js_handler))
         .route(
             "/ws/attach/create/:token",

@@ -1,3 +1,3 @@
 mod root;
 
-pub use root::{js_handler, root_handler};
+pub use root::{browser_handler, js_handler, root_handler};
