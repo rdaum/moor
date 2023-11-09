@@ -415,7 +415,7 @@ impl Unparse {
                 Ok(stmt_lines)
             }
             StmtNode::Break { exit } => {
-                let mut base_str = "break".to_string();
+                let mut base_str = format!("{}break", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
                     base_str.push_str(
@@ -428,7 +428,7 @@ impl Unparse {
                 Ok(vec![base_str])
             }
             StmtNode::Continue { exit } => {
-                let mut base_str = "continue".to_string();
+                let mut base_str = format!("{}continue", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
                     base_str.push_str(
@@ -629,6 +629,10 @@ mod tests {
                        1;
                    endfork
                    2;"#; "labelled fork decompile")]
+    #[test_case(r#"while (1)
+                       continue;
+                       break;
+                   endwhile"#; "continue decompile")]
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();
