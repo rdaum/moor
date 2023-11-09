@@ -40,7 +40,6 @@ metrics-macros.workspace = true
 tmq.workspace = true
 uuid.workspace = true
 itertools.workspace = true
-paseto.workspace = true
 
 # HTTP/websockets layer
 axum.workspace = true

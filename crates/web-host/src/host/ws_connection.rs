@@ -212,11 +212,9 @@ impl WebSocketConnection {
             }
             RpcResult::Failure(e) => {
                 error!("Unhandled RPC error: {:?}", e);
-                return;
             }
             RpcResult::Success(s) => {
                 error!("Unexpected RPC success: {:?}", s);
-                return;
             }
         }
     }

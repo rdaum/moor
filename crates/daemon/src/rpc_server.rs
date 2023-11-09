@@ -6,7 +6,10 @@ use std::time::{Instant, SystemTime};
 use anyhow::{Context, Error};
 use futures_util::SinkExt;
 use metrics_macros::increment_counter;
-use ring::signature::Ed25519KeyPair;
+use rusty_paseto::core::{
+    Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
+};
+use rusty_paseto::prelude::Key;
 use serde_json::json;
 use tmq::publish::Publish;
 use tmq::{publish, reply, Multipart};
@@ -39,7 +42,7 @@ use crate::make_response;
 use crate::rpc_session::RpcSession;
 
 pub struct RpcServer {
-    keypair: Ed25519KeyPair,
+    keypair: Key<64>,
     publish: Arc<Mutex<Publish>>,
     world_state_source: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,
@@ -57,7 +60,7 @@ struct ConnectionRecord {
 
 impl RpcServer {
     pub async fn new(
-        keypair: Ed25519KeyPair,
+        keypair: Key<64>,
         connections_db_path: PathBuf,
         zmq_context: tmq::Context,
         narrative_endpoint: &str,
@@ -941,29 +944,39 @@ impl RpcServer {
     /// Construct a PASETO token for this client_id and player combination. This token is used to
     /// validate the client connection to the daemon for future requests.
     fn make_client_token(&self, client_id: Uuid) -> ClientToken {
-        let token = paseto::tokens::PasetoBuilder::new()
-            .set_ed25519_key(&self.keypair)
-            .set_issued_at(None)
-            .set_claim("client_id", json!(client_id.to_string()))
-            .set_issuer("moor")
-            .set_audience("moor_connection")
-            .set_footer(MOOR_SESSION_TOKEN_FOOTER)
-            .build()
+        let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
+            PasetoAsymmetricPrivateKey::from(self.keypair.as_ref());
+        let token = Paseto::<V4, Public>::default()
+            .set_footer(Footer::from(MOOR_SESSION_TOKEN_FOOTER))
+            .set_payload(Payload::from(
+                json!({
+                    "client_id": client_id.to_string(),
+                    "iss": "moor",
+                    "aud": "moor_connection",
+                })
+                .to_string()
+                .as_str(),
+            ))
+            .try_sign(&privkey)
             .expect("Unable to build Paseto token");
+
         ClientToken(token)
     }
 
     /// Construct a PASETO token for this player login. This token is used to provide credentials
     /// for requests, to allow reconnection with a different client_id.
     fn make_auth_token(&self, oid: Objid) -> AuthToken {
-        let token = paseto::tokens::PasetoBuilder::new()
-            .set_ed25519_key(&self.keypair)
-            .set_issued_at(None)
-            .set_claim("player", json!(oid.0))
-            .set_issuer("moor")
-            .set_audience("moor_credentials")
-            .set_footer(MOOR_AUTH_TOKEN_FOOTER)
-            .build()
+        let privkey = PasetoAsymmetricPrivateKey::from(self.keypair.as_ref());
+        let token = Paseto::<V4, Public>::default()
+            .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
+            .set_payload(Payload::from(
+                json!({
+                    "player": oid.0,
+                })
+                .to_string()
+                .as_str(),
+            ))
+            .try_sign(&privkey)
             .expect("Unable to build Paseto token");
         AuthToken(token)
     }
@@ -975,26 +988,25 @@ impl RpcServer {
         token: ClientToken,
         client_id: Uuid,
     ) -> Result<(), SessionError> {
-        let pk = paseto::tokens::PasetoPublicKey::ED25519KeyPair(&self.keypair);
-        let verified_token = paseto::tokens::validate_public_token(
-            &token.0,
-            Some(MOOR_SESSION_TOKEN_FOOTER),
+        let key: Key<32> = Key::from(&self.keypair[32..]);
+        let pk: PasetoAsymmetricPublicKey<V4, Public> =
+            PasetoAsymmetricPublicKey::try_from(&key).unwrap();
+        let verified_token = Paseto::<V4, Public>::try_verify(
+            token.0.as_str(),
             &pk,
-            &paseto::tokens::TimeBackend::Chrono,
+            Footer::from(MOOR_SESSION_TOKEN_FOOTER),
+            None,
         )
         .map_err(|e| {
             warn!(error = ?e, "Unable to parse/validate token");
             SessionError::InvalidToken
         })?;
 
-        // Issuer & audience must match.
-        let (Some(Some("moor")), Some(Some("moor_connection"))) = (
-            verified_token.get("iss").map(|s| s.as_str()),
-            verified_token.get("aud").map(|s| s.as_str()),
-        ) else {
-            debug!("Token does not contain valid issuer/audience");
-            return Err(SessionError::InvalidToken);
-        };
+        let verified_token = serde_json::from_str::<serde_json::Value>(verified_token.as_str())
+            .map_err(|e| {
+                warn!(error = ?e, "Unable to parse/validate token");
+                SessionError::InvalidToken
+            })?;
 
         // Does the token match the client it came from? If not, reject it.
         let Some(token_client_id) = verified_token.get("client_id") else {
@@ -1032,25 +1044,26 @@ impl RpcServer {
         token: AuthToken,
         objid: Option<Objid>,
     ) -> Result<Objid, SessionError> {
-        let pk = paseto::tokens::PasetoPublicKey::ED25519KeyPair(&self.keypair);
-        let verified_token = paseto::tokens::validate_public_token(
-            &token.0,
-            Some(MOOR_AUTH_TOKEN_FOOTER),
+        let key: Key<32> = Key::from(&self.keypair[32..]);
+        let pk: PasetoAsymmetricPublicKey<V4, Public> =
+            PasetoAsymmetricPublicKey::try_from(&key).unwrap();
+        let verified_token = Paseto::<V4, Public>::try_verify(
+            token.0.as_str(),
             &pk,
-            &paseto::tokens::TimeBackend::Chrono,
+            Footer::from(MOOR_AUTH_TOKEN_FOOTER),
+            None,
         )
         .map_err(|e| {
             warn!(error = ?e, "Unable to parse/validate token");
             SessionError::InvalidToken
         })?;
 
-        let (Some(Some("moor")), Some(Some("moor_credentials"))) = (
-            verified_token.get("iss").map(|s| s.as_str()),
-            verified_token.get("aud").map(|s| s.as_str()),
-        ) else {
-            debug!("Token does not contain valid issuer/audience");
-            return Err(SessionError::InvalidToken);
-        };
+        let verified_token = serde_json::from_str::<serde_json::Value>(verified_token.as_str())
+            .map_err(|e| {
+                warn!(error = ?e, "Unable to parse/validate token");
+                SessionError::InvalidToken
+            })
+            .unwrap();
 
         let Some(token_player) = verified_token.get("player") else {
             debug!("Token does not contain player");
@@ -1080,7 +1093,7 @@ impl RpcServer {
 }
 
 pub(crate) async fn zmq_loop(
-    keypair: Ed25519KeyPair,
+    keypair: Key<64>,
     connections_db_path: PathBuf,
     wss: Arc<dyn WorldStateSource>,
     scheduler: Scheduler,

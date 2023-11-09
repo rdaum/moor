@@ -35,7 +35,6 @@ tracing-chrome.workspace = true
 tmq.workspace = true
 uuid.workspace = true
 itertools.workspace = true
-paseto.workspace = true
 
 ## For console
 rustyline.workspace = true

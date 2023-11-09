@@ -46,5 +46,7 @@ serde.workspace = true
 chrono.workspace = true
 
 # Auth/Auth
-paseto.workspace = true
-ring.workspace = true
+rusty_paseto.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
+pem.workspace = true

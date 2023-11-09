@@ -673,7 +673,7 @@ async fn bf_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     Ok(Ret(v_list(
         players
             .iter()
-            .map(|oid| v_objid(oid))
+            .map(v_objid)
             .collect::<Vec<_>>()
             .as_slice(),
     )))

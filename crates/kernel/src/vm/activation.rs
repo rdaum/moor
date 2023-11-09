@@ -23,10 +23,6 @@ use crate::vm::VerbExecutionRequest;
 use moor_compiler::labels::{Label, Name};
 use moor_compiler::opcode::{Op, Program, EMPTY_PROGRAM};
 
-/// The maximum number of variables that can be in scope at any one time, including globals.
-/// This is a hard limit, and is used to size the activation's environment.
-pub const MAX_VARS: usize = 256;
-
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
 pub struct Caller {
@@ -78,7 +74,7 @@ pub(crate) struct Activation {
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Objid,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: SparseChunk<Var, MAX_VARS>,
+    pub(crate) environment: SparseChunk<Var>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active error handlers, each relative to a position in the valstack.

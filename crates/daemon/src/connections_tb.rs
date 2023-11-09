@@ -395,15 +395,11 @@ impl ConnectionsDB for ConnectionsTb {
 
     async fn is_valid_client(&self, client_id: Uuid) -> bool {
         let tx = self.tb.clone().start_tx();
-        let is_valid = match tx
+        let is_valid = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
             .await
             .seek_by_domain(client_id.as_bytes().as_sliceref())
-            .await
-        {
-            Ok(_) => true,
-            Err(_) => false,
-        };
+            .await.is_ok();
         tx.commit().await.expect("Unable to commit transaction");
         is_valid
     }

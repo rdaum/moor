@@ -3,12 +3,15 @@ use std::path::PathBuf;
 use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
+use ed25519_dalek::SigningKey;
 use metrics_exporter_prometheus::PrometheusBuilder;
+use pem::Pem;
+use rand::rngs::OsRng;
+use rusty_paseto::core::Key;
 use tmq::Multipart;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
-use {ring::rand::SystemRandom, ring::signature::Ed25519KeyPair};
 
 use moor_db::DatabaseBuilder;
 use moor_kernel::tasks::scheduler::Scheduler;
@@ -71,11 +74,19 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "keypair",
-        help = "file containing a pkcs8 ed25519, used for authenticating client connections",
-        default_value = "keypair.pkcs8"
+        value_name = "public_key",
+        help = "file containing a pkcs8 ed25519 public key, used for authenticating client connections",
+        default_value = "public_key.pem"
     )]
-    keypair: PathBuf,
+    public_key: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "private_key",
+        help = "file containing a pkcs8 ed25519 private key, used for authenticating client connections",
+        default_value = "private_key.pem"
+    )]
+    private_key: PathBuf,
 
     #[arg(
         long,
@@ -121,27 +132,36 @@ async fn main() {
         .expect("failed to install Prometheus recorder");
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
-    // the PASETO keypair from it...
-    let keypair = if args.keypair.exists() {
-        let keypair_bytes = std::fs::read(args.keypair).expect("Unable to read keypair file");
-        let keypair = Ed25519KeyPair::from_pkcs8(keypair_bytes.as_ref())
-            .expect("Unable to parse keypair file");
-        keypair
+    // the keypair from it...
+    let keypair = if args.public_key.exists() && args.private_key.exists() {
+        let privkey_pem = std::fs::read(args.private_key).expect("Unable to read private key");
+        let pubkey_pem = std::fs::read(args.public_key).expect("Unable to read public key");
+
+        let privkey_pem = pem::parse(privkey_pem).expect("Unable to parse private key");
+        let pubkey_pem = pem::parse(pubkey_pem).expect("Unable to parse public key");
+
+        let mut key_bytes = privkey_pem.contents().to_vec();
+        key_bytes.extend_from_slice(pubkey_pem.contents());
+
+        let key: Key<64> = Key::from(&key_bytes[0..64]);
+        key
     } else {
         // Otherwise, check to see if --generate-keypair was passed. If it was, generate a new
         // keypair and save it to the file; otherwise, error out.
 
         if args.generate_keypair {
-            let sys_rand = SystemRandom::new();
-            let key_pkcs8 =
-                Ed25519KeyPair::generate_pkcs8(&sys_rand).expect("Failed to generate pkcs8 key!");
-            let keypair =
-                Ed25519KeyPair::from_pkcs8(key_pkcs8.as_ref()).expect("Failed to parse keypair");
-            let pkcs8_keypair_bytes: &[u8] = key_pkcs8.as_ref();
+            let mut csprng = OsRng;
+            let signing_key: SigningKey = SigningKey::generate(&mut csprng);
+            let keypair: Key<64> = Key::from(signing_key.to_keypair_bytes());
 
-            // Now write it out...
-            std::fs::write(args.keypair, pkcs8_keypair_bytes)
-                .expect("Unable to write keypair file");
+            let privkey_pem = Pem::new("PRIVATE KEY", signing_key.to_bytes());
+            let pubkey_pem = Pem::new("PUBLIC KEY", signing_key.verifying_key().to_bytes());
+
+            // And write to the files...
+            std::fs::write(args.private_key, pem::encode(&privkey_pem))
+                .expect("Unable to write private key");
+            std::fs::write(args.public_key, pem::encode(&pubkey_pem))
+                .expect("Unable to write public key");
 
             keypair
         // Write

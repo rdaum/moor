@@ -276,7 +276,7 @@ impl Transaction {
 /// working set.
 pub(crate) struct CommitSet {
     pub(crate) ts: u64,
-    relations: SparseChunk<BaseRelation, 256>,
+    relations: SparseChunk<BaseRelation>,
 }
 
 impl CommitSet {

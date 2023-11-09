@@ -114,9 +114,7 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let msg_text = match msg {
-                                moor_values::model::Event::TextNotify(msg) => msg,
-                            };
+                            let moor_values::model::Event::TextNotify(msg_text) = msg;
                             self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(_request_id) => {
@@ -222,9 +220,7 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let msg_text = match msg {
-                                moor_values::model::Event::TextNotify(msg) => msg,
-                            };
+                            let moor_values::model::Event::TextNotify(msg_text) = msg;
                             self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(request_id) => {

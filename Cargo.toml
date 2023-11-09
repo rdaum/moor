@@ -64,7 +64,7 @@ itertools = "0.11.0"
 lazy_static = "1.4.0"
 num-traits = "0.2.17"
 rustyline = "12.0.0"
-sized-chunks = "0.7.0"
+sized-chunks = "0.6.5"
 strum = { version = "0.25.0", features = ["derive"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 yoke = "0.7.2"
@@ -105,5 +105,6 @@ test-case = "3.2.1"
 unindent = "0.2.3"
 
 # Auth/Auth
-paseto = "2.0.2"
-ring = { version = "*", features = ["std"] }
+rusty_paseto = { version = "0.6.0" }
+ed25519-dalek = { version = "2.0.0", features = ["zeroize", "pkcs8", "rand_core"] }
+pem = "3.0.2"
