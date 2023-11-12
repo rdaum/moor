@@ -1,7 +1,7 @@
 mod client;
 mod host;
 
-use crate::client::{js_handler, root_handler};
+use crate::client::{editor_handler, js_handler, root_handler};
 use crate::host::WebHost;
 use anyhow::Context;
 use axum::routing::{get, post};
@@ -59,6 +59,7 @@ fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
         .route("/", get(root_handler))
         .route("/browser.html", get(client::browser_handler))
         .route("/moor.js", get(js_handler))
+        .route("/editor.js", get(editor_handler))
         .route(
             "/ws/attach/create/:token",
             get(host::ws_create_attach_handler),
