@@ -12,11 +12,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO: use a more general purpose pager (e.g. my own pagebox)
-// TODO: persist pages & support >mem DBs (WAL -> disk, LRU page out, etc)
+// TODO: use a more general purpose pager (e.g. my own umbra-like buffer mgr)
 // TODO: store indexes in here, too (custom paged datastructure impl)
-// TODO: add fixed-size slotted page impl for Sized items, providing efficiency
-// TODO: verify locking/concurrency safety of this thing -- loom test + stateright?
+// TODO: add fixed-size slotted page impl for Sized items, providing more efficiency.
+// TODO: verify locking/concurrency safety of this thing -- loom test + stateright, or jepsen.
+// TODO: there is still some really gross stuff in here about the management of free space in
+//       pages in the allocator list. It's probably causing excessive fragmentation because we're
+//       considering only the reported available "content" area when fitting slots, and there seems
+//       to be a sporadic failure where we end up with a "Page not found" error in the allocator on
+//       free, meaning the page was not found in the used pages list.
 
 use std::io;
 use std::pin::Pin;
@@ -25,14 +29,19 @@ use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Mutex;
 
+use hi_sparse_bitset::BitSetInterface;
 use libc::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+use sized_chunks::SparseChunk;
 use thiserror::Error;
+use tracing::warn;
 
+pub use crate::tuplebox::slots::slotted_page::SlotId;
 use crate::tuplebox::slots::slotted_page::{
-    slot_page_empty_size, slot_page_overhead, PageWriteGuard, SlotId, SlottedPage,
+    slot_index_overhead, slot_page_empty_size, PageWriteGuard, SlottedPage,
 };
+use crate::tuplebox::RelationId;
 
-type PageId = usize;
+pub type PageId = usize;
 pub type TupleId = (PageId, SlotId);
 
 /// A region of memory backed by SlottedPages.
@@ -86,22 +95,43 @@ impl SlotBox {
         }
     }
 
+    /// Allocates a new slot for a tuple, somewhere in one of the pages we managed.
+    /// Does not allow tuples from different relations to mix on the same page.
     pub fn allocate(
         &self,
         size: usize,
+        relation_id: RelationId,
         initial_value: Option<&[u8]>,
     ) -> Result<TupleId, SlotBoxError> {
-        assert!(size <= (slot_page_empty_size(self.page_size) - slot_page_overhead()));
+        assert!(size <= (slot_page_empty_size(self.page_size)));
 
         let mut allocator = self.allocator.lock().unwrap();
-        let pid = allocator.allocate(
-            size + slot_page_overhead(),
+        let needed_space = size + slot_index_overhead();
+        let (pid, offset) = allocator.find_space(
+            relation_id,
+            needed_space,
             slot_page_empty_size(self.page_size),
         )?;
         let mut page_handle = self.page_for(pid);
-        let mut write_lock = page_handle.write_lock();
-        let insert_result = write_lock.allocate(size, initial_value)?;
-        Ok((pid, insert_result.0))
+        let free_space = page_handle.available_content_bytes();
+        // assert!(free_space >= size);
+        let mut page_write_lock = page_handle.write_lock();
+        if let Ok((slot_id, page_remaining, _)) = page_write_lock.allocate(size, initial_value) {
+            allocator.finish_alloc(pid, relation_id, offset, page_remaining);
+            return Ok((pid, slot_id));
+        }
+
+        // If we get here, then we failed to allocate on the page we wanted to, which means there's
+        // data coherence issues between the pages last-reported free space and the actual free
+        panic!(
+            "Page {} failed to allocate, we wanted {} bytes, but it only has {},\
+                but our records show it has {}, and its pid in that offset is {}",
+            pid,
+            size,
+            free_space,
+            allocator.available_page_space[relation_id.0][offset].0,
+            allocator.available_page_space[relation_id.0][offset].1
+        );
     }
 
     pub fn remove(&self, id: TupleId) -> Result<(), SlotBoxError> {
@@ -117,26 +147,25 @@ impl SlotBox {
 
     pub fn dncount(&self, id: TupleId) -> Result<(), SlotBoxError> {
         let page_handle = self.page_for(id.0);
-        page_handle.dncount(id.1)
+        if page_handle.dncount(id.1)? {
+            self.remove(id)?;
+        }
+        Ok(())
     }
 
-    fn do_remove(&self, write_lock: &mut PageWriteGuard, id: TupleId) -> Result<(), SlotBoxError> {
-        let (_, used, is_empty) = write_lock.remove_slot(id.1)?;
+    fn do_remove(&self, page_lock: &mut PageWriteGuard, id: TupleId) -> Result<(), SlotBoxError> {
+        let (new_free, _, is_empty) = page_lock.remove_slot(id.1)?;
 
-        // Remove from allocator.
+        // Update record in allocator.
         let mut allocator = self.allocator.lock().unwrap();
-        allocator.free(
-            id.0,
-            used + slot_page_overhead(),
-            slot_page_empty_size(self.page_size),
-        );
+        allocator.report_free(id.0, new_free, is_empty);
 
         // And if the page is completely free, then we can madvise DONTNEED it and let the OS free
         // it from our RSS.
         if is_empty {
             unsafe {
                 let result = libc::madvise(
-                    write_lock.page_ptr() as _,
+                    page_lock.page_ptr() as _,
                     self.page_size,
                     libc::MADV_DONTNEED,
                 );
@@ -154,7 +183,12 @@ impl SlotBox {
         Ok(slc)
     }
 
-    pub fn update(&self, id: TupleId, new_value: &[u8]) -> Result<TupleId, SlotBoxError> {
+    pub fn update(
+        &self,
+        relation_id: RelationId,
+        id: TupleId,
+        new_value: &[u8],
+    ) -> Result<TupleId, SlotBoxError> {
         // This lock scope has to be limited here, or we'll deadlock if we need to re-allocate.
         {
             let mut page_handle = self.page_for(id.0);
@@ -170,7 +204,7 @@ impl SlotBox {
             }
             self.do_remove(&mut page_write, id)?;
         }
-        let new_id = self.allocate(new_value.len(), Some(new_value))?;
+        let new_id = self.allocate(new_value.len(), relation_id, Some(new_value))?;
         Ok(new_id)
     }
 
@@ -186,14 +220,71 @@ impl SlotBox {
         f(existing);
         Ok(())
     }
+
+    pub fn num_pages(&self) -> usize {
+        let allocator = self.allocator.lock().unwrap();
+        allocator.available_page_space.len()
+    }
+
+    pub fn used_pages(&self) -> Vec<PageId> {
+        let allocator = self.allocator.lock().unwrap();
+        allocator
+            .available_page_space
+            .iter()
+            .flatten()
+            .map(|(_, pid)| *pid)
+            .collect()
+    }
+
+    pub fn mark_page_used(&self, relation_id: RelationId, free_space: usize, pid: PageId) {
+        let mut allocator = self.allocator.lock().unwrap();
+
+        let Some(available_page_space) = allocator.available_page_space.get_mut(relation_id.0)
+        else {
+            allocator
+                .available_page_space
+                .insert(relation_id.0, vec![(free_space, pid)]);
+            return;
+        };
+
+        // allocator.bitmap.insert(pid as usize);
+        available_page_space.push((free_space, pid));
+        available_page_space.sort_by(|a, b| a.0.cmp(&b.0));
+    }
 }
 
 impl SlotBox {
-    fn page_for<'a>(&self, page_num: usize) -> SlottedPage<'a> {
+    pub fn page_for<'a>(&self, page_num: usize) -> SlottedPage<'a> {
         let base_address = self.base_address.load(SeqCst);
         let page_address = unsafe { base_address.add(page_num * self.page_size) };
         let page_handle = SlottedPage::for_page(AtomicPtr::new(page_address), self.page_size);
         page_handle
+    }
+}
+
+fn find_empty<B: BitSetInterface>(bs: &B) -> usize {
+    let mut iter = bs.iter();
+
+    let mut pos: Option<usize> = None;
+    // Scan forward until we find the first empty bit.
+    loop {
+        match iter.next() {
+            Some(bit) => {
+                let p: usize = bit;
+                if bit != 0 && !bs.contains(p - 1) {
+                    return p - 1;
+                }
+                pos = Some(p);
+            }
+            // Nothing in the set, or we've reached the end.
+            None => {
+                let Some(pos) = pos else {
+                    return 0;
+                };
+
+                return pos + 1;
+            }
+        }
     }
 }
 
@@ -202,70 +293,121 @@ struct Allocator {
     // TODO: could keep two separate vectors here -- one with the page sizes, separate for the page
     //   ids, so that SIMD can be used to used to search and sort.
     //   Will look into it once/if benchmarking justifies it.
-    used_pages: Vec<(usize, PageId)>,
-    next_page: usize,
+    // The set of used pages, indexed by relation, in sorted order of the free space available in them.
+    available_page_space: SparseChunk<Vec<(usize, PageId)>, 64>,
+    bitmap: hi_sparse_bitset::BitSet<hi_sparse_bitset::config::_128bit>,
 }
 
 impl Allocator {
     fn new(max_pages: usize) -> Self {
         Self {
             max_pages,
-            used_pages: Vec::new(),
-            next_page: 0,
+            available_page_space: SparseChunk::new(),
+            bitmap: Default::default(),
         }
     }
 
-    fn allocate(&mut self, bytes: usize, empty_size: usize) -> Result<PageId, SlotBoxError> {
-        // Look for the first page with enough space in our vector of used pages, which is kept
-        // sorted by free space.
-        let found = self
-            .used_pages
-            .binary_search_by(|(free_space, _)| free_space.cmp(&bytes));
-
-        let pid = match found {
-            // Exact match, highly unlikely, but possible.
-            Ok(entry_num) => {
-                let entry = self.used_pages.remove(entry_num);
-                entry.1
+    /// Find room to allocate a new slot of the given size, does not do the actual allocation yet,
+    /// just finds the page to allocate it on.
+    /// Returns the page id, and the offset into the `available_page_space` vector for that relation.
+    fn find_space(
+        &mut self,
+        relation_id: RelationId,
+        bytes: usize,
+        empty_size: usize,
+    ) -> Result<(PageId, usize), SlotBoxError> {
+        // Do we have a used pages set for this relation? If not, we can start one, and allocate a
+        // new full page to it, and return. When we actually do the allocation, we'll be able to
+        // find the page in the used pages set.
+        let Some(available_page_space) = self.available_page_space.get_mut(relation_id.0) else {
+            let pid = find_empty(&self.bitmap);
+            if pid >= self.max_pages {
+                return Err(SlotBoxError::BoxFull(bytes, 0));
             }
-            // Out of room, need to allocate a new page.
-            Err(position) if position == self.used_pages.len() => {
-                // If we didn't find a page with enough space, then we need to allocate a new page.
-                if self.next_page >= self.max_pages {
-                    return Err(SlotBoxError::BoxFull(bytes, 0));
-                }
-                let pid = self.next_page;
-                self.next_page += 1;
-                self.used_pages.push((empty_size - bytes, pid));
-                pid
-            }
-            // Found a page we can split up.
-            Err(entry_num) => {
-                let entry = self.used_pages.get_mut(entry_num).unwrap();
-                assert!(entry.0 >= bytes);
-                entry.0 -= bytes;
-                entry.1
-            }
+            self.available_page_space
+                .insert(relation_id.0, vec![(empty_size, pid)]);
+            self.bitmap.insert(pid);
+            return Ok((pid, 0));
         };
 
-        self.used_pages.sort_by(|a, b| a.0.cmp(&b.0));
+        // Look for the first page with enough space in our vector of used pages, which is kept
+        // sorted by free space.
+        let found = available_page_space.binary_search_by(|(free_space, _)| free_space.cmp(&bytes));
 
-        return Ok(pid);
+        return match found {
+            // Exact match, highly unlikely, but possible.
+            Ok(entry_num) => Ok((available_page_space[entry_num].1, entry_num)),
+            // Out of room, need to allocate a new page.
+            Err(position) if position == available_page_space.len() => {
+                // If we didn't find a page with enough space, then we need to allocate a new page.
+                // Find first empty position in the bitset.
+                let first_empty = find_empty(&self.bitmap);
+                assert!(!self.bitmap.contains(first_empty));
+                assert!(!available_page_space
+                    .iter().any(|(_, p)| *p == first_empty));
+                if first_empty >= self.max_pages {
+                    return Err(SlotBoxError::BoxFull(bytes, 0));
+                }
+
+                let pid = first_empty as PageId;
+                available_page_space.push((empty_size, pid));
+
+                Ok((pid, available_page_space.len() - 1))
+            }
+            // Found a page we add to.
+            Err(entry_num) => {
+                let entry = available_page_space.get_mut(entry_num).unwrap();
+                Ok((entry.1, entry_num))
+            }
+        };
     }
 
-    fn free(&mut self, pid: PageId, bytes: usize, empty_size: usize) {
-        // Seek the page in the used_pages vector, and add the bytes back to its free space.
-        // If the page is now totally empty, then we can remove it from the used_pages vector.
-        let found = self
-            .used_pages
-            .iter_mut()
-            .find(|(_, p)| *p == pid)
-            .expect("Page not found");
-        found.0 += bytes;
-        if found.0 == empty_size {
-            self.used_pages.retain(|(_, p)| *p != pid);
+    fn finish_alloc(
+        &mut self,
+        pid: PageId,
+        relation_id: RelationId,
+        offset: usize,
+        page_remaining_bytes: usize,
+    ) {
+        let available_page_space = &mut self.available_page_space[relation_id.0];
+        let entry = &mut available_page_space[offset];
+        assert!(entry.0 >= page_remaining_bytes);
+        assert_eq!(entry.1, pid);
+
+        entry.0 = page_remaining_bytes;
+        // If we (unlikely) consumed all the bytes, then we can remove the page from the avail pages
+        // set.
+        if entry.0 == 0 {
+            available_page_space.remove(offset);
         }
-        self.used_pages.sort_by(|a, b| a.0.cmp(&b.0));
+        self.bitmap.insert(pid);
+        available_page_space.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    fn report_free(&mut self, pid: PageId, new_size: usize, is_empty: bool) {
+        // Seek the page in the available_page_space vectors, and add the bytes back to its free space.
+        // We don't know the relation id here, so we have to linear scan all of them.
+        for available_page_space in self.available_page_space.iter_mut() {
+            let Some(found) = available_page_space.iter_mut().find(|(_, p)| *p == pid) else {
+                continue;
+            };
+
+            found.0 = new_size;
+
+            // If the page is now totally empty, then we can remove it from the available_page_space vector.
+            if is_empty {
+                available_page_space.retain(|(_, p)| *p != pid);
+                self.bitmap.remove(pid);
+            }
+            available_page_space.sort_by(|a, b| a.0.cmp(&b.0));
+
+            return;
+        }
+
+        warn!(
+            "Page not found in used pages in allocator on free; pid {}",
+            pid
+        );
     }
 }
 
@@ -276,6 +418,7 @@ mod tests {
 
     use crate::tuplebox::slots::slotbox::{SlotBox, SlotBoxError, TupleId};
     use crate::tuplebox::slots::slotted_page::{slot_page_empty_size, slot_page_overhead};
+    use crate::tuplebox::RelationId;
 
     fn fill_until_full(sb: &mut SlotBox) -> Vec<(TupleId, Vec<u8>)> {
         let mut tuples = Vec::new();
@@ -283,9 +426,9 @@ mod tests {
         // fill until full... (SlotBoxError::BoxFull)
         loop {
             let mut rng = thread_rng();
-            let tuple_len = rng.gen_range(1..(slot_page_empty_size(32768) - slot_page_overhead()));
+            let tuple_len = rng.gen_range(1..(slot_page_empty_size(30000) - slot_page_overhead()));
             let tuple: Vec<u8> = rng.sample_iter(&Alphanumeric).take(tuple_len).collect();
-            match sb.allocate(tuple.len(), Some(&tuple)) {
+            match sb.allocate(tuple.len(), RelationId(0), Some(&tuple)) {
                 Ok(tuple_id) => {
                     tuples.push((tuple_id, tuple));
                 }
@@ -305,9 +448,15 @@ mod tests {
     fn test_basic_add_fill_etc() {
         let mut sb = SlotBox::new(32768, 32768 * 64);
         let tuples = fill_until_full(&mut sb);
-        for (id, tuple) in tuples {
-            let retrieved = sb.get(id).unwrap();
-            assert_eq!(tuple, *retrieved);
+        for (id, tuple) in &tuples {
+            let retrieved = sb.get(*id).unwrap();
+            assert_eq!(*tuple, *retrieved);
+        }
+        let used_pages = sb.used_pages();
+        assert_ne!(used_pages.len(), tuples.len());
+        // Now free them all the tuples.
+        for (id, _tuple) in tuples {
+            sb.remove(id).unwrap();
         }
     }
 

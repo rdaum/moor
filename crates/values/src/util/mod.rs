@@ -24,23 +24,21 @@ pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
 
     let mut had_wildcard = false;
     while let Some(v_c) = v_iter.next() {
-        match v_c {
-            '*' => {
-                if v_iter.peek().is_none() || w_iter.peek().is_none() {
-                    return true;
-                }
-                had_wildcard = true;
+        if v_c == '*' {
+            if v_iter.peek().is_none() || w_iter.peek().is_none() {
+                return true;
             }
-            _ => match w_iter.next() {
+            had_wildcard = true;
+        } else {
+            match w_iter.next() {
                 None => {
                     return had_wildcard;
                 }
-                Some(w_c) => {
-                    if w_c != v_c {
-                        return false;
-                    }
+                Some(w_c) if w_c != v_c => {
+                    return false;
                 }
-            },
+                _ => {}
+            }
         }
     }
     if w_iter.peek().is_some() || v_iter.peek().is_some() {

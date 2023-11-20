@@ -54,13 +54,13 @@ impl TupleRef {
 
 impl Drop for TupleRef {
     fn drop(&mut self) {
-        self.sb.dncount(self.id).expect("Unable to remove tuple");
+        self.sb.dncount(self.id).expect("Unable to dncount tuple");
     }
 }
 
 impl Clone for TupleRef {
     fn clone(&self) -> Self {
-        self.sb.upcount(self.id).expect("Unable to add tuple");
+        self.sb.upcount(self.id).expect("Unable to upcount tuple");
         Self {
             sb: self.sb.clone(),
             id: self.id,

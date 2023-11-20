@@ -25,8 +25,7 @@ use clap_derive::Parser;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::future::ready;
 use std::net::SocketAddr;
-use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::net::TcpListener;
 use tracing::info;
 
 #[derive(Parser, Debug)]
@@ -104,31 +103,23 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
 
-    let mut hup_signal =
-        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
-    let mut stop_signal =
-        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
-
     let ws_host = WebHost::new(args.rpc_server, args.narrative_server);
 
     let main_router = mk_routes(ws_host).expect("Unable to create main router");
 
     let address = &args.listen_address.parse::<SocketAddr>().unwrap();
     info!(address=?address, "Listening");
-    let axum_server = tokio::spawn(
-        axum::Server::bind(address)
-            .serve(main_router.into_make_service_with_connect_info::<SocketAddr>()),
-    );
 
-    select! {
-        _ = hup_signal.recv() => {
-            info!("HUP received, stopping...");
-            axum_server.abort();
-        },
-        _ = stop_signal.recv() => {
-            info!("STOP received, stopping...");
-            axum_server.abort();
-        }
-    }
+    let listener = TcpListener::bind(address)
+        .await
+        .expect("Unable to bind HTTP listener");
+
+    axum::serve(
+        listener,
+        main_router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
+
     Ok(())
 }

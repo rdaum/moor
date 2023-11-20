@@ -49,9 +49,9 @@ pub enum WorldStateRelation {
     ObjectPropertyValue = 8,
 }
 
-impl Into<RelationId> for WorldStateRelation {
-    fn into(self) -> RelationId {
-        RelationId(self as usize)
+impl From<WorldStateRelation> for RelationId {
+    fn from(val: WorldStateRelation) -> Self {
+        RelationId(val as usize)
     }
 }
 
@@ -190,7 +190,7 @@ async fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>
 }
 
 #[allow(dead_code)]
-async fn delete_if_exists<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+async fn delete_if_exists(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
@@ -263,8 +263,8 @@ mod tests {
         relations[ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        let db = TupleBox::new(1 << 24, 4096, None, &relations, WorldStateSequences::COUNT).await;
-        db
+        
+        TupleBox::new(1 << 24, 32768, None, &relations, WorldStateSequences::COUNT).await
     }
 
     /// Test simple relations mapping oid->oid (with secondary index), independent of all other

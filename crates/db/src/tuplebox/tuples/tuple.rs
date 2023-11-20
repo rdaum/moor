@@ -15,6 +15,7 @@
 use binary_layout::define_layout;
 use std::sync::Arc;
 
+use crate::tuplebox::RelationId;
 use moor_values::util::slice_ref::SliceRef;
 
 use crate::tuplebox::slots::{SlotBox, TupleId};
@@ -31,10 +32,16 @@ pub struct Tuple(TupleRef);
 
 impl Tuple {
     /// Allocate the given tuple in a slotbox.
-    pub fn allocate(sb: Arc<SlotBox>, ts: u64, domain: &[u8], codomain: &[u8]) -> TupleRef {
+    pub fn allocate(
+        relation_id: RelationId,
+        sb: Arc<SlotBox>,
+        ts: u64,
+        domain: &[u8],
+        codomain: &[u8],
+    ) -> TupleRef {
         let total_size = tuple_header::SIZE.unwrap() + domain.len() + codomain.len();
         let tuple_id = sb
-            .allocate(total_size, None)
+            .allocate(total_size, relation_id, None)
             .expect("Failed to allocate tuple");
         sb.update_with(tuple_id, |mut buffer| {
             {
@@ -55,12 +62,14 @@ impl Tuple {
         SliceRef::from_byte_source(Box::new(self.0.clone()))
     }
 
-    pub fn update_timestamp(&self, sb: Arc<SlotBox>, ts: u64) {
+    pub fn update_timestamp(&self, relation_id: RelationId, sb: Arc<SlotBox>, ts: u64) {
         let mut buffer = self.buffer().as_slice().to_vec();
         let mut header = tuple_header::View::new(&mut buffer);
         header.ts_mut().write(ts);
         let id = self.0.id;
-        let new_id = sb.update(self.0.id, buffer.as_slice()).unwrap();
+        let new_id = sb
+            .update(relation_id, self.0.id, buffer.as_slice())
+            .unwrap();
         assert_eq!(id, new_id);
     }
 
@@ -78,9 +87,9 @@ impl Tuple {
         let domain_size = tuple_header::View::new(buffer.as_slice())
             .domain_size()
             .read();
-        return buffer.slice(
+        buffer.slice(
             tuple_header::SIZE.unwrap()..tuple_header::SIZE.unwrap() + domain_size as usize,
-        );
+        )
     }
 
     pub fn codomain(&self) -> SliceRef {
@@ -92,9 +101,9 @@ impl Tuple {
         let codomain_size = tuple_header::View::new(buffer.as_slice())
             .codomain_size()
             .read() as usize;
-        return buffer.slice(
+        buffer.slice(
             tuple_header::SIZE.unwrap() + domain_size
                 ..tuple_header::SIZE.unwrap() + domain_size + codomain_size,
-        );
+        )
     }
 }

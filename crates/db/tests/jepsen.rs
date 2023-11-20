@@ -12,23 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::HashMap;
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
+pub mod support {
+    use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
+    use std::path::PathBuf;
     use std::sync::Arc;
 
-    use moor_db::testing::jepsen::{History, Type, Value};
-    use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
-    use moor_db::tuplebox::{RelationId, Transaction};
-
-    use moor_values::util::slice_ref::SliceRef;
-
-    use super::*;
-
     /// Build a test database with a bunch of relations
-    async fn test_db() -> Arc<TupleBox> {
+    pub async fn test_db(dir: PathBuf) -> Arc<TupleBox> {
         // Generate 10 test relations that we'll use for testing.
         let relations = (0..100)
             .map(|i| RelationInfo {
@@ -39,8 +29,23 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        TupleBox::new(1 << 24, 4096, None, &relations, 0).await
+        TupleBox::new(1 << 24, 4096, Some(dir), &relations, 0).await
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeSet, HashMap};
+    use std::sync::Arc;
+    use tracing_test::traced_test;
+
+    use moor_db::testing::jepsen::{History, Type, Value};
+    use moor_db::tuplebox::tb::TupleBox;
+    use moor_db::tuplebox::{RelationId, Transaction};
+
+    use moor_values::util::slice_ref::SliceRef;
+
+    use super::*;
 
     fn from_val(value: i64) -> SliceRef {
         SliceRef::from_bytes(&value.to_le_bytes()[..])
@@ -136,11 +141,14 @@ mod tests {
         }
     }
 
+    #[traced_test]
     #[tokio::test]
     async fn test_generate() {
-        let db = test_db().await;
+        let tmpdir = tempfile::tempdir().unwrap();
 
-        let lines = include_str!("jepsen-dataset1.json")
+        let db = support::test_db(tmpdir.path().into()).await;
+
+        let lines = include_str!("append-dataset.json")
             .lines()
             .filter(|l| !l.is_empty())
             .collect::<Vec<_>>();

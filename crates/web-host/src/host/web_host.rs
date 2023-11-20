@@ -15,10 +15,9 @@
 use crate::host::var_as_json;
 use crate::host::ws_connection::WebSocketConnection;
 use anyhow::anyhow;
-use axum::body::{boxed, Bytes, Empty};
+use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
-use axum::headers::HeaderValue;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
 use metrics_macros::increment_counter;
@@ -404,14 +403,14 @@ pub async fn eval_handler(
         Err(WsHostError::AuthenticationFailed) => {
             return Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
-                .body(boxed(Empty::new()))
+                .body(Body::empty())
                 .unwrap();
         }
         Err(e) => {
             error!("Unable to validate auth token: {}", e);
             return Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(boxed(Empty::new()))
+                .body(Body::empty())
                 .unwrap();
         }
     };
@@ -476,14 +475,14 @@ async fn attach(
         Err(WsHostError::AuthenticationFailed) => {
             return Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
-                .body(boxed(Empty::new()))
+                .body(Body::empty())
                 .unwrap();
         }
         Err(e) => {
             error!("Unable to validate auth token: {}", e);
             return Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(boxed(Empty::new()))
+                .body(Body::empty())
                 .unwrap();
         }
     };
@@ -501,7 +500,7 @@ async fn attach(
     else {
         return Response::builder()
             .status(StatusCode::UNAUTHORIZED)
-            .body(boxed(Empty::new()))
+            .body(Body::empty())
             .unwrap();
     };
 

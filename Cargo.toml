@@ -20,36 +20,37 @@ license = "GPL-3"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
-clap = "4.4.6"
-clap_derive = "4.4.2"
+clap = "4.4.12"
+clap_derive = "4.4.7"
 
 ## HTTP/websockets front-end
-axum = { version = "0.6.20", features = ["ws", "headers"] }
-serde_json = "1.0.107"
-serde = { version = "1.0.189", features = ["derive"] }
-serde_derive = "1.0.189"
-tower-http = { version = "0.4.4", features = ["add-extension", "auth", "compression-full", "trace"] }
+axum = { version = "0.7.3", features = ["ws"] }
+axum-extra = "0.9.1"
+serde_json = "1.0.108"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_derive = "1.0.193"
+tower-http = { version = "0.5.0", features = ["add-extension", "auth", "compression-full", "trace"] }
 
 ## Asynchronous transaction processing & networking
-futures = "0.3.28"
-futures-util = { version = "0.3.28", features = ["sink", "std"] }
-async-trait = "0.1.73"
-tokio = { version = "1.33.0", features = ["full"] }
+futures = "0.3.30"
+futures-util = { version = "0.3.30", features = ["sink", "std"] }
+async-trait = "0.1.76"
+tokio = { version = "1.35.1", features = ["full"] }
 tokio-test = "0.4.3"
-tokio-util = { version = "0.7.9",  features = ["full"] }
+tokio-util = { version = "0.7.10",  features = ["full"] }
 
 # Used for RPC daemon/client
 tmq = "0.4.0"
 
 ## Logging & tracing
-tracing = "0.1.39"
+tracing = "0.1.40"
 tracing-test = "0.2.4"
-tracing-subscriber = "0.3.17"
+tracing-subscriber = "0.3.18"
 tracing-chrome = "0.7.1"
-metrics-exporter-prometheus = "0.12.1"
+metrics-exporter-prometheus = "0.13.0"
 metrics = "0.21.1"
-metrics-util = { version = "0.15.1",  default-features = false, features = ["recency", "registry", "summary"] }
-metrics-macros = "0.7.0"
+metrics-util = { version = "0.16.0",  default-features = false, features = ["recency", "registry", "summary"] }
+metrics-macros = "0.7.1"
 
 # General usefullness
 atomic-wait = "1.1.0"
@@ -57,35 +58,35 @@ binary-layout = "3.2.0"
 bytes = "1.5.0"
 chrono = "0.4.31"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
-crossbeam-channel = "0.5.8"
+crossbeam-channel = "0.5.10"
 decorum = "0.3.1"  # For ordering & comparing our floats
-enum-primitive-derive = "0.2.2"
-inventory = "0.3.12"
-itertools = "0.11.0"
+enum-primitive-derive = "0.3.0"
+inventory = "0.3.14"
+itertools = "0.12.0"
 lazy_static = "1.4.0"
 num-traits = "0.2.17"
-rustyline = "12.0.0"
-sized-chunks = "0.6.5"
+rustyline = "13.0.0"
+sized-chunks = "0.7.0"
 strum = { version = "0.25.0", features = ["derive"] }
-uuid = { version = "1.4.1", features = ["v4"] }
-yoke = "0.7.2"
-yoke-derive = "0.7.2"
+uuid = { version = "1.6.1", features = ["v4"] }
+yoke = "0.7.3"
+yoke-derive = "0.7.3"
 
 ## Required for MOO builtins.
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
 md5 = "0.7.0" # For MOO's "string_hash"
 rand = "0.8.5"
 onig = { version = "6.4.0", default-features = false  }
-chrono-tz = "0.8.3"
-iana-time-zone = "0.1.57"
+chrono-tz = "0.8.5"
+iana-time-zone = "0.1.59"
 
 ## Compiler grammar/parser
-pest = "2.7.4"
-pest_derive = "2.7.4"
+pest = "2.7.5"
+pest_derive = "2.7.5"
 
 ## Error declaration/ handling
-anyhow = { version = "1.0.75", features = ["backtrace"] }
-thiserror = "1.0.49"
+anyhow = { version = "1.0.78", features = ["backtrace"] }
+thiserror = "1.0.53"
 
 ## For macro-ing
 paste = "1.0.14"
@@ -93,19 +94,21 @@ paste = "1.0.14"
 # For the DB & values layer.
 bincode = "2.0.0-rc.3" # For serializing/deserializing values
 im = "15.1.0" # Immutable data structures
-rocksdb = "0.21.0"
 text_io = "0.1.12" # Used for reading text dumps.
-libc = "0.2.149"
+libc = "0.2.151"
+okaywal = "0.3.1"
+io-uring = "0.6.2"
+hi_sparse_bitset = "0.3.0"
 
 # Dev dependencies
-tempfile = "3.8.0"
+tempfile = "3.9.0"
 
 # testing
 pretty_assertions = "1.4.0"
-test-case = "3.2.1"
+test-case = "3.3.1"
 unindent = "0.2.3"
 
 # Auth/Auth
 rusty_paseto = { version = "0.6.0" }
-ed25519-dalek = { version = "2.0.0", features = ["zeroize", "pkcs8", "rand_core"] }
-pem = "3.0.2"
+ed25519-dalek = { version = "2.1.0", features = ["zeroize", "pkcs8", "rand_core"] }
+pem = "3.0.3"

@@ -291,7 +291,7 @@ impl Transaction {
 /// working set.
 pub(crate) struct CommitSet {
     pub(crate) ts: u64,
-    relations: SparseChunk<BaseRelation>,
+    relations: SparseChunk<BaseRelation, 64>,
 }
 
 impl CommitSet {
@@ -310,7 +310,7 @@ impl CommitSet {
     /// Returns an iterator over the modified relations in the commit set, moving and consuming the
     /// commit set in the process.
     pub(crate) fn into_iter(self) -> impl IntoIterator<Item = BaseRelation> {
-        return self.relations.into_iter();
+        self.relations.into_iter()
     }
 
     /// Fork the given base relation into the commit set, if it's not already there.
@@ -342,10 +342,9 @@ impl TransientRelation {
     ) -> Result<(SliceRef, SliceRef), TupleError> {
         let tuple_id = self
             .domain_tuples
-            .get(domain.as_slice())
-            .map(|v| v.clone())
+            .get(domain.as_slice()).copied()
             .ok_or(TupleError::NotFound);
-        tuple_id.and_then(|id| Ok(self.tuples[id].clone()))
+        tuple_id.map(|id| self.tuples[id].clone())
     }
 
     /// Seek for tuples by their indexed codomain value, if there's an index. Panics if there is no
@@ -359,8 +358,7 @@ impl TransientRelation {
         // what they're doing.
         let codomain_domain = self.codomain_domain.as_ref().expect("No codomain index");
         let tuple_ids = codomain_domain
-            .get(codomain.as_slice())
-            .map(|v| v.clone())
+            .get(codomain.as_slice()).cloned()
             .ok_or(TupleError::NotFound)?;
         Ok(tuple_ids
             .iter()
@@ -375,8 +373,7 @@ impl TransientRelation {
         Ok(self
             .tuples
             .iter()
-            .filter(|t| f(t))
-            .map(|t| t.clone())
+            .filter(|t| f(t)).cloned()
             .collect())
     }
 
@@ -405,8 +402,7 @@ impl TransientRelation {
     ) -> Result<(), TupleError> {
         let tuple_id = self
             .domain_tuples
-            .get(domain.as_slice())
-            .map(|v| v.clone())
+            .get(domain.as_slice()).copied()
             .ok_or(TupleError::NotFound)?;
         if self.codomain_domain.is_some() {
             self.update_secondary(tuple_id, None, Some(codomain.clone()));
@@ -444,7 +440,6 @@ impl TransientRelation {
         let tuple_id = self
             .domain_tuples
             .remove(domain.as_slice())
-            .map(|v| v.clone())
             .ok_or(TupleError::NotFound)?;
 
         if self.codomain_domain.is_some() {
@@ -496,7 +491,8 @@ mod tests {
     }
 
     async fn test_db() -> Arc<TupleBox> {
-        let db = TupleBox::new(
+        
+        TupleBox::new(
             1 << 24,
             4096,
             None,
@@ -508,8 +504,7 @@ mod tests {
             }],
             0,
         )
-        .await;
-        db
+        .await
     }
 
     /// Verifies that base relations ("canonical") get updated when successful commits happen.
@@ -914,7 +909,7 @@ mod tests {
         for _ in 0..100 {
             let (domain, codomain) = random_tuple();
             // Update in `items` and insert, but only if we don't already have this same domain.
-            if items.iter().find(|(d, _)| d == &domain).is_some() {
+            if items.iter().any(|(d, _)| d == &domain) {
                 continue;
             }
             items.push((domain.clone(), codomain.clone()));

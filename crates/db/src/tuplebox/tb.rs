@@ -25,7 +25,6 @@ use tracing::info;
 
 use crate::tuplebox::backing::BackingStoreClient;
 use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::rocks_backing::RocksBackingStore;
 use crate::tuplebox::slots::SlotBox;
 use crate::tuplebox::tuples::TxTuple;
 use crate::tuplebox::tx::transaction::{CommitError, CommitSet, Transaction};
@@ -90,11 +89,12 @@ impl TupleBox {
         let backing_store = match path {
             None => None,
             Some(path) => {
-                let bs = RocksBackingStore::start(
+                let bs = crate::tuplebox::coldstorage::ColdStorage::start(
                     path,
-                    relations.to_vec(),
+                    relations,
                     &mut base_relations,
                     &mut sequences,
+                    slotbox.clone(),
                 )
                 .await;
                 info!("Backing store loaded, and write-ahead thread started...");
@@ -104,7 +104,7 @@ impl TupleBox {
 
         let sequences = sequences
             .into_iter()
-            .map(|s| AtomicU64::new(s))
+            .map(AtomicU64::new)
             .collect::<Vec<_>>();
 
         Arc::new(Self {
@@ -131,10 +131,10 @@ impl TupleBox {
     }
 
     pub fn next_ts(self: Arc<Self>) -> u64 {
-        let next_ts = self
+        
+        self
             .maximum_transaction
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        next_ts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Get the next value for the given sequence.
@@ -163,12 +163,12 @@ impl TupleBox {
         let sequence = &self.sequences[sequence_number];
         loop {
             let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
-            if let Ok(_) = sequence.compare_exchange(
+            if sequence.compare_exchange(
                 current,
                 std::cmp::max(current, value),
                 std::sync::atomic::Ordering::SeqCst,
                 std::sync::atomic::Ordering::SeqCst,
-            ) {
+            ).is_ok() {
                 return;
             }
         }
@@ -215,8 +215,8 @@ impl TupleBox {
                     match &tuple {
                         TxTuple::Insert(tref) => {
                             let t = tref.get();
-                            t.update_timestamp(self.slotbox.clone(), tx_ts);
-                            let forked_relation = commitset.fork(relation_id, &canonical);
+                            t.update_timestamp(relation_id, self.slotbox.clone(), tx_ts);
+                            let forked_relation = commitset.fork(relation_id, canonical);
                             forked_relation.upsert_tuple(tref.clone());
                             continue;
                         }
@@ -248,16 +248,20 @@ impl TupleBox {
 
                 // Otherwise apply the change into a new canonical relation, which is a CoW
                 // branching of the old one.
-                let forked_relation = commitset.fork(relation_id, &canonical);
+                let forked_relation = commitset.fork(relation_id, canonical);
                 match &tuple {
                     TxTuple::Insert(tref) | TxTuple::Update(tref) => {
                         let t = tref.get();
-                        t.update_timestamp(self.slotbox.clone(), tx_ts);
-                        let forked_relation = commitset.fork(relation_id, &canonical);
+                        t.update_timestamp(relation_id, self.slotbox.clone(), tx_ts);
+                        let forked_relation = commitset.fork(relation_id, canonical);
                         forked_relation.upsert_tuple(tref.clone());
                     }
                     TxTuple::Value(..) => {}
-                    TxTuple::Tombstone { ts: _, domain: k } => {
+                    TxTuple::Tombstone {
+                        ts: _,
+                        domain: k,
+                        tuple_id: _,
+                    } => {
                         forked_relation.remove_by_domain(k.clone());
                     }
                 }

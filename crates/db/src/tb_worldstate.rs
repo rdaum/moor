@@ -49,7 +49,7 @@ use crate::{object_relations, tuplebox, Database};
 
 // TODO: Totally arbitrary and needs profiling. Needs to be big enough to hold entire props and
 //   verbs.
-const PAGE_SIZE: usize = 32768;
+const PAGE_SIZE: usize = 65536;
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
 pub struct TupleBoxWorldStateSource {
@@ -121,7 +121,7 @@ impl DbTransaction for TupleBoxTransaction {
     async fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj)
             .await
-            .ok_or_else(|| WorldStateError::ObjectNotFound(obj))
+            .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
@@ -132,7 +132,7 @@ impl DbTransaction for TupleBoxTransaction {
     async fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj)
             .await
-            .ok_or_else(|| WorldStateError::ObjectNotFound(obj))
+            .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     async fn set_object_flags(
@@ -147,7 +147,7 @@ impl DbTransaction for TupleBoxTransaction {
     async fn get_object_name(&self, obj: Objid) -> Result<String, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
             .await
-            .ok_or_else(|| WorldStateError::ObjectNotFound(obj))
+            .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     async fn create_object(
@@ -228,14 +228,12 @@ impl DbTransaction for TupleBoxTransaction {
 
         // Now we can remove this object from all relevant column relations
         // First the simple ones which are keyed on the object id.
-        let oid_relations = vec![
-            WorldStateRelation::ObjectFlags,
+        let oid_relations = [WorldStateRelation::ObjectFlags,
             WorldStateRelation::ObjectName,
             WorldStateRelation::ObjectOwner,
             WorldStateRelation::ObjectParent,
             WorldStateRelation::ObjectLocation,
-            WorldStateRelation::ObjectVerbs,
-        ];
+            WorldStateRelation::ObjectVerbs];
         for rel in oid_relations.iter() {
             let relation = self.tx.relation((*rel).into()).await;
             relation
@@ -430,7 +428,7 @@ impl DbTransaction for TupleBoxTransaction {
                     c,
                 )
                 .await
-                .unwrap_or_else(|| PropDefs::empty()),
+                .unwrap_or_else(PropDefs::empty),
                 Some(props) => props,
             };
             let c_props = c_props.with_all_added(&new_props);
@@ -559,9 +557,8 @@ impl DbTransaction for TupleBoxTransaction {
                 .await
                 .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.clone()))?;
         Ok(verbdefs
-            .find_named(name.as_str())
-            .get(0)
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj, name))?
+            .find_named(name.as_str()).first()
+            .ok_or(WorldStateError::VerbNotFound(obj, name))?
             .clone())
     }
 
@@ -856,16 +853,16 @@ impl DbTransaction for TupleBoxTransaction {
                 Some(s) => s.as_str(),
             };
 
-            let new_prop = PropDef::new(
+            
+
+            PropDef::new(
                 p.uuid(),
                 p.definer(),
                 p.location(),
-                &name,
+                name,
                 new_flags.unwrap_or_else(|| p.flags()),
                 new_owner.unwrap_or_else(|| p.owner()),
-            );
-
-            new_prop
+            )
         }) else {
             return Err(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)));
         };
@@ -1072,7 +1069,7 @@ impl TupleBoxTransaction {
                     search_a,
                 )
                 .await
-                .unwrap_or_else(|| NOTHING);
+                .unwrap_or(NOTHING);
                 search_a = parent;
             }
 
@@ -1084,7 +1081,7 @@ impl TupleBoxTransaction {
                     search_b,
                 )
                 .await
-                .unwrap_or_else(|| NOTHING);
+                .unwrap_or(NOTHING);
                 search_b = parent;
             }
         }
@@ -1094,7 +1091,7 @@ impl TupleBoxTransaction {
 impl Database for TupleBoxWorldStateSource {
     fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = TupleBoxTransaction::new(self.db.clone());
-        return Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }));
+        Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 
     fn world_state_source(self: Box<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
@@ -1138,8 +1135,8 @@ mod tests {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        let db = TupleBox::new(1 << 24, 4096, None, &relations, WorldStateSequences::COUNT).await;
-        db
+        
+        TupleBox::new(1 << 24, 4096, None, &relations, WorldStateSequences::COUNT).await
     }
 
     #[tokio::test]

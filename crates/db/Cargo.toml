@@ -12,6 +12,8 @@ harness = false
 [dev-dependencies]
 tempfile.workspace = true
 rand.workspace = true
+serde_json.workspace = true
+serde.workspace = true
 criterion.workspace = true
 
 [dependencies]
@@ -37,7 +39,6 @@ metrics.workspace = true
 metrics-macros.workspace = true
 
 # For the DB layer.
-rocksdb.workspace = true
 crossbeam-channel.workspace = true
 bincode.workspace = true
 im.workspace = true
@@ -45,6 +46,9 @@ sized-chunks.workspace = true
 binary-layout.workspace = true
 libc.workspace = true
 atomic-wait.workspace = true
+okaywal.workspace = true
+io-uring.workspace = true
+hi_sparse_bitset.workspace = true
 
 # For testing & benching common bits
 serde_json.workspace = true

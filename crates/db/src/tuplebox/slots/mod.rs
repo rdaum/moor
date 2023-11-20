@@ -12,9 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub use crate::tuplebox::slots::slotbox::{SlotId, TupleId};
 // Export TupleId & SlotBox
+pub use crate::tuplebox::slots::slotbox::PageId;
 pub use crate::tuplebox::slots::slotbox::SlotBox;
-pub use crate::tuplebox::slots::slotbox::TupleId;
 
 mod slotbox;
 mod slotted_page;

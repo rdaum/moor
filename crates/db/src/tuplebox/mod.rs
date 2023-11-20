@@ -25,7 +25,8 @@
 mod backing;
 mod base_relation;
 
-pub mod rocks_backing;
+mod coldstorage;
+mod page_storage;
 mod slots;
 pub mod tb;
 mod tuples;

@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::slots::SlotBox;
-use crate::tuplebox::tuples::{Tuple, TupleRef};
+use crate::tuplebox::slots::{SlotBox, TupleId};
+use crate::tuplebox::tuples::TupleRef;
 use crate::tuplebox::RelationId;
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,
@@ -78,8 +78,31 @@ impl BaseRelation {
                 .as_mut()
                 .unwrap()
                 .entry(tuple.codomain().as_slice().to_vec())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(tuple_ref.clone());
+        }
+    }
+
+    /// Establish indexes on a tuple initial-loaded from secondary storage. Basically a, "trust us,
+    /// this exists" move.
+    pub fn index_tuple(&mut self, tuple_id: TupleId) {
+        let tuple_ref = TupleRef::new(self.slotbox.clone(), tuple_id);
+        self.tuples.insert(tuple_ref.clone());
+        let tuple = tuple_ref.get();
+
+        // Reset timestamp to 0, since this is a tuple initial-loaded from secondary storage.
+        tuple.update_timestamp(self.id, self.slotbox.clone(), 0);
+
+        // Update the domain index to point to the tuple...
+        self.index_domain
+            .insert(tuple.domain().as_slice().to_vec(), tuple_ref.clone());
+
+        // ... and update the secondary index if there is one.
+        if let Some(index) = &mut self.index_codomain {
+            index
+                .entry(tuple.codomain().as_slice().to_vec())
+                .or_insert_with(HashSet::new)
+                .insert(tuple_ref);
         }
     }
 
@@ -163,26 +186,8 @@ impl BaseRelation {
             }
         }
     }
-    /// Insert a net new tuple from the specific values; not used from the transaction logic, but
-    /// from the initial load of the database.
-    pub fn insert_tuple(&mut self, domain: &[u8], codomain: &[u8]) {
-        // First check the domain->tuple id index -- if it exists, that's an error, because we
-        // should only be inserting net new tuples.
-        assert!(self.index_domain.get(domain).is_none());
-        // Net new means allocating the tuple value in the slotbox, and then inserting it
-        // into the set of tuples and the index(es).
 
-        // We allocate the space for the tuple and copy it in the right format.
-        let new_tuple_ref = Tuple::allocate(self.slotbox.clone(), 0, domain, codomain);
-        // Insert into the tuple list and the index.
-        self.index_domain
-            .insert(domain.to_vec(), new_tuple_ref.clone());
-        self.tuples.insert(new_tuple_ref.clone());
-        if let Some(codomain_index) = &mut self.index_codomain {
-            codomain_index
-                .entry(codomain.to_vec())
-                .or_insert_with(HashSet::new)
-                .insert(new_tuple_ref);
-        }
+    pub fn len(&self) -> usize {
+        self.tuples.len()
     }
 }

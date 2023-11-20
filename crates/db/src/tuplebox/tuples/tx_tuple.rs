@@ -14,6 +14,7 @@
 
 use thiserror::Error;
 
+use crate::tuplebox::slots::TupleId;
 use crate::tuplebox::tuples::TupleRef;
 use moor_values::util::slice_ref::SliceRef;
 
@@ -35,7 +36,11 @@ pub enum TxTuple {
     /// Clone/fork a tuple from the base relation into our local working set.
     Value(TupleRef),
     /// Delete the tuple.
-    Tombstone { ts: u64, domain: SliceRef },
+    Tombstone {
+        ts: u64,
+        tuple_id: TupleId,
+        domain: SliceRef,
+    },
 }
 
 impl TxTuple {
@@ -44,13 +49,32 @@ impl TxTuple {
             TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => {
                 tref.get().domain()
             }
-            TxTuple::Tombstone { ts: _, domain: d } => d.clone(),
+            TxTuple::Tombstone {
+                ts: _,
+                tuple_id: _,
+                domain: d,
+            } => d.clone(),
         }
     }
+    pub fn tuple_id(&self) -> TupleId {
+        match self {
+            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.id,
+            TxTuple::Tombstone {
+                ts: _,
+                tuple_id: id,
+                domain: _,
+            } => *id,
+        }
+    }
+
     pub fn ts(&self) -> u64 {
         match self {
             TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.get().ts(),
-            TxTuple::Tombstone { ts, domain: _ } => *ts,
+            TxTuple::Tombstone {
+                ts,
+                tuple_id: _,
+                domain: _,
+            } => *ts,
         }
     }
 }

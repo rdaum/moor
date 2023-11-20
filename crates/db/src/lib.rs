@@ -21,10 +21,10 @@ use crate::loader::LoaderInterface;
 use crate::tb_worldstate::TupleBoxWorldStateSource;
 
 mod db_loader_client;
-mod db_tx;
+pub mod db_tx;
 mod db_worldstate;
 pub mod loader;
-mod object_relations;
+pub mod object_relations;
 pub mod tb_worldstate;
 pub mod tuplebox;
 
