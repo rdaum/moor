@@ -473,7 +473,7 @@ impl Scheduler {
                     let mut number_readblocked_tasks = 0;
                     let number_tasks =  inner.tasks.len();
 
-                    for (_, task) in &inner.tasks {
+                    for task in inner.tasks.values() {
                         if task.suspended {
                             number_suspended_tasks += 1;
                         }

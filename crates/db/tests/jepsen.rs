@@ -59,8 +59,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let db = TupleBox::new(1 << 24, 4096, None, &relations, 0).await;
-        db
+        
+        TupleBox::new(1 << 24, 4096, None, &relations, 0).await
     }
 
     fn from_val(value: i64) -> SliceRef {
@@ -74,7 +74,7 @@ mod tests {
 
     async fn check_expected(
         process: i64,
-        db: Arc<TupleBox>,
+        _db: Arc<TupleBox>,
         tx: &Transaction,
         relation: RelationId,
         expected_values: &Option<Vec<i64>>,
@@ -146,7 +146,7 @@ mod tests {
                     check_expected(
                         process,
                         db.clone(),
-                        &tx,
+                        tx,
                         relation,
                         &expected_values,
                         action_type,
@@ -201,7 +201,7 @@ mod tests {
                                     db.clone(),
                                     &tx,
                                     relation,
-                                    &values,
+                                    values,
                                     e.r#type,
                                 )
                                 .await;

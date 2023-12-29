@@ -484,7 +484,7 @@ impl RpcServer {
 
         // TODO: change result of login to return this information, rather than just Objid, so
         //   we're not dependent on this.
-        let connect_type = if args.get(0) == Some(&"create".to_string()) {
+        let connect_type = if args.first() == Some(&"create".to_string()) {
             ConnectType::Created
         } else {
             ConnectType::Connected

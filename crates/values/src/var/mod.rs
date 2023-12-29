@@ -246,24 +246,7 @@ impl PartialEq<Self> for Var {
 }
 
 impl PartialOrd<Self> for Var {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self.variant(), other.variant()) {
-            (Variant::None, Variant::None) => Some(Ordering::Equal),
-            (Variant::Str(l), Variant::Str(r)) => l.partial_cmp(r),
-            (Variant::Obj(l), Variant::Obj(r)) => l.partial_cmp(r),
-            (Variant::Int(l), Variant::Int(r)) => l.partial_cmp(r),
-            (Variant::Float(l), Variant::Float(r)) => R64::from(*l).partial_cmp(&R64::from(*r)),
-            (Variant::Err(l), Variant::Err(r)) => l.partial_cmp(r),
-            (Variant::List(l), Variant::List(r)) => l.partial_cmp(r),
-            (Variant::None, _) => Some(Ordering::Less),
-            (Variant::Str(_), _) => Some(Ordering::Less),
-            (Variant::Obj(_), _) => Some(Ordering::Less),
-            (Variant::Int(_), _) => Some(Ordering::Less),
-            (Variant::Float(_), _) => Some(Ordering::Less),
-            (Variant::Err(_), _) => Some(Ordering::Less),
-            (Variant::List(_), _) => Some(Ordering::Less),
-        }
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
 impl Ord for Var {
