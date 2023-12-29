@@ -16,7 +16,7 @@ use tokio::runtime::Runtime;
 /// Build a test database with a bunch of relations
 async fn test_db() -> Arc<TupleBox> {
     // Generate 10 test relations that we'll use for testing.
-    let relations = (0..100)
+    let relations = (0..63)
         .map(|i| RelationInfo {
             name: format!("relation_{}", i),
             domain_type_id: 0,
