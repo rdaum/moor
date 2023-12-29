@@ -1,48 +1,14 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
-#[derive(Debug, serde::Deserialize, Copy, Clone)]
-#[allow(non_camel_case_types)]
-pub enum Type {
-    invoke,
-    ok,
-    fail,
-}
-impl Type {
-    pub fn to_keyword(&self) -> &str {
-        match self {
-            Type::invoke => "invoke",
-            Type::ok => "ok",
-            Type::fail => "fail",
-        }
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct History {
-    pub f: String,
-    pub index: i64,
-    pub process: i64,
-    pub time: i64,
-    pub r#type: Type,
-    pub value: Vec<Value>,
-}
-
-// ["append",9,1]
-#[derive(Debug, serde::Deserialize)]
-#[serde(untagged)]
-#[allow(non_camel_case_types)]
-pub enum Value {
-    append(String, i64, i64),
-    r(String, i64, Option<Vec<i64>>),
-}
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
+    use moor_db::testing::jepsen::{History, Type, Value};
     use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
     use moor_db::tuplebox::{RelationId, Transaction};
+
     use moor_values::util::slice_ref::SliceRef;
 
     use super::*;
@@ -59,7 +25,6 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        
         TupleBox::new(1 << 24, 4096, None, &relations, 0).await
     }
 

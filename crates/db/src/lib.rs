@@ -10,10 +10,12 @@ mod db_loader_client;
 mod db_tx;
 mod db_worldstate;
 pub mod loader;
-pub mod mock;
 mod object_relations;
 pub mod tb_worldstate;
 pub mod tuplebox;
+
+#[doc(hidden)]
+pub mod testing;
 
 pub struct DatabaseBuilder {
     path: Option<std::path::PathBuf>,

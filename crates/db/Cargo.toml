@@ -5,11 +5,14 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bench]]
+name = "tb_single_thread"
+harness = false
+
 [dev-dependencies]
 tempfile.workspace = true
 rand.workspace = true
-serde_json.workspace = true
-serde.workspace = true
+criterion.workspace = true
 
 [dependencies]
 ## Own
@@ -41,4 +44,8 @@ im.workspace = true
 sized-chunks.workspace = true
 binary-layout.workspace = true
 libc.workspace = true
-atomic-wait = "1.1.0"
+atomic-wait.workspace = true
+
+# For testing & benching common bits
+serde_json.workspace = true
+serde.workspace = true
