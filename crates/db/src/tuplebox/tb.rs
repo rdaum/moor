@@ -116,6 +116,13 @@ impl TupleBox {
         Transaction::new(next_ts, self.slotbox.clone(), self.clone())
     }
 
+    pub fn next_ts(self: Arc<Self>) -> u64 {
+        let next_ts = self
+            .maximum_transaction
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        next_ts
+    }
+
     /// Get the next value for the given sequence.
     pub async fn sequence_next(self: Arc<Self>, sequence_number: usize) -> u64 {
         let sequence = &self.sequences[sequence_number];
@@ -219,7 +226,7 @@ impl TupleBox {
 
                 // Check the timestamp on the value, if it's newer than the read-timestamp,
                 // we have for this tuple then that's a conflict, because it means someone else has
-                // already committed a change to this key.
+                // already committed a change to this tuple.
                 let cv = cv.get();
                 if cv.ts() > tuple.ts() {
                     return Err(CommitError::TupleVersionConflict);

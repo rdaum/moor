@@ -204,6 +204,9 @@ impl WorkingSet {
         let relation = &self.relations[relation_id.0];
 
         for t in &relation.tuples {
+            if t.ts() > self.ts {
+                continue;
+            }
             match t {
                 TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => {
                     let t = t.get();

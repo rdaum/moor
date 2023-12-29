@@ -18,14 +18,14 @@ use crate::tuplebox::RelationId;
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
     /// The timestamp of this transaction, as granted to us by the tuplebox.
-    ts: u64,
+    pub(crate) ts: u64,
     /// Where we came from, for referencing back to the base relations.
     db: Arc<TupleBox>,
     slotbox: Arc<SlotBox>,
     /// The "working set" is the set of retrieved and/or modified tuples from base relations, known
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
-    working_set: RwLock<WorkingSet>,
+    pub(crate) working_set: RwLock<WorkingSet>,
     /// Local-only relations, which are not directly-derived from or committed to the base relations
     /// (though operations will exist for moving them from a transient relation to a base relation,
     /// and or moving tuples in them into commits in the working set..)
@@ -74,14 +74,15 @@ impl Transaction {
     pub async fn commit(&self) -> Result<(), CommitError> {
         let mut tries = 0;
         'retry: loop {
+            let commit_ts = self.db.clone().next_ts();
             let mut working_set = self.working_set.write().await;
-            let commit_set = self.db.prepare_commit_set(self.ts, &working_set).await?;
+            let commit_set = self.db.prepare_commit_set(commit_ts, &working_set).await?;
             match self.db.try_commit(commit_set).await {
                 Ok(_) => {
                     let mut blank_ws =
-                        WorkingSet::new(self.slotbox.clone(), &self.db.relation_info(), self.ts);
+                        WorkingSet::new(self.slotbox.clone(), &self.db.relation_info(), commit_ts);
                     std::mem::swap(&mut *working_set, &mut blank_ws);
-                    self.db.sync(self.ts, blank_ws).await;
+                    self.db.sync(commit_ts, blank_ws).await;
                     return Ok(());
                 }
                 Err(CommitError::RelationContentionConflict) => {
@@ -532,13 +533,11 @@ mod tests {
                 .seek_by_domain(attr(b"abc"))
                 .expect("Expected tuple to exist");
             let tuple = tref.get();
-            assert_eq!(tuple.ts(), 0);
             assert_eq!(tuple.codomain().as_slice(), b"123");
 
             let tuples = relation.seek_by_codomain(attr(b"123"));
             assert_eq!(tuples.len(), 1);
             let tuple = tuples.iter().next().unwrap().get();
-            assert_eq!(tuple.ts(), 0);
             assert_eq!(tuple.domain().as_slice(), b"abc");
             assert_eq!(tuple.codomain().as_slice(), b"123");
         }

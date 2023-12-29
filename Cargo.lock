@@ -1716,6 +1716,8 @@ dependencies = [
  "moor-values",
  "rand",
  "rocksdb",
+ "serde",
+ "serde_json",
  "sized-chunks",
  "strum",
  "tempfile",
