@@ -209,12 +209,13 @@ impl Allocator {
             .binary_search_by(|(free_space, _)| free_space.cmp(&bytes));
 
         let pid = match found {
+            // Exact match, highly unlikely, but possible.
             Ok(entry_num) => {
-                let entry = self.used_pages.get_mut(entry_num).unwrap();
-                entry.0 -= bytes;
+                let entry = self.used_pages.remove(entry_num);
                 entry.1
             }
-            Err(_) => {
+            // Out of room, need to allocate a new page.
+            Err(position) if position == self.used_pages.len() => {
                 // If we didn't find a page with enough space, then we need to allocate a new page.
                 if self.next_page >= self.max_pages {
                     return Err(SlotBoxError::BoxFull(bytes, 0));
@@ -223,6 +224,13 @@ impl Allocator {
                 self.next_page += 1;
                 self.used_pages.push((empty_size - bytes, pid));
                 pid
+            }
+            // Found a page we can split up.
+            Err(entry_num) => {
+                let entry = self.used_pages.get_mut(entry_num).unwrap();
+                assert!(entry.0 >= bytes);
+                entry.0 -= bytes;
+                entry.1
             }
         };
 
