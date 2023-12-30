@@ -269,7 +269,7 @@ mod tests {
         // fill until full... (SlotBoxError::BoxFull)
         loop {
             let mut rng = thread_rng();
-            let tuple_len = rng.gen_range(1..(slot_page_empty_size(4096) - slot_page_overhead()));
+            let tuple_len = rng.gen_range(1..(slot_page_empty_size(32768) - slot_page_overhead()));
             let tuple: Vec<u8> = rng.sample_iter(&Alphanumeric).take(tuple_len).collect();
             match sb.allocate(tuple.len(), Some(&tuple)) {
                 Ok(tuple_id) => {
@@ -289,7 +289,7 @@ mod tests {
     // and then scan back and verify their presence/equality.
     #[test]
     fn test_basic_add_fill_etc() {
-        let mut sb = SlotBox::new(4096, 4096 * 64);
+        let mut sb = SlotBox::new(32768, 32768 * 64);
         let tuples = fill_until_full(&mut sb);
         for (id, tuple) in tuples {
             let retrieved = sb.get(id).unwrap();
@@ -301,7 +301,7 @@ mod tests {
     // everything mmap DONTNEED'd, and we should be able to re-fill it again, too.
     #[test]
     fn test_full_fill_and_empty() {
-        let mut sb = SlotBox::new(4096, 4096 * 64);
+        let mut sb = SlotBox::new(32768, 32768 * 64);
         let tuples = fill_until_full(&mut sb);
         for (id, _) in &tuples {
             sb.remove(*id).unwrap();
@@ -316,7 +316,7 @@ mod tests {
     // fill back up again and verify the new presence.
     #[test]
     fn test_fill_and_free_and_refill_etc() {
-        let mut sb = SlotBox::new(4096, 4096 * 64);
+        let mut sb = SlotBox::new(32768, 32768 * 64);
         let mut tuples = fill_until_full(&mut sb);
         let mut rng = thread_rng();
         let mut freed_tuples = Vec::new();
