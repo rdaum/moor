@@ -230,7 +230,7 @@ impl<'a> SlottedPage<'a> {
 
     pub(crate) fn dncount(&self, slot_id: SlotId) -> Result<(), SlotBoxError> {
         let index_entry = self.get_index_entry_mut(slot_id);
-        let new_count = index_entry.refcount.fetch_sub(1, SeqCst) - 1;
+        let new_count = index_entry.refcount.fetch_sub(1, SeqCst);
         if new_count == 0 {
             self.remove_slot(slot_id)?;
         }
