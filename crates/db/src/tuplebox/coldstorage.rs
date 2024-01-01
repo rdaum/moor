@@ -108,7 +108,7 @@ impl ColdStorage {
                     .expect("Unable to read page")
             });
             // The allocator needs to know that this page is used.
-            slot_box.mark_page_used(relation_id, sb_page.free_space_bytes(), page_num);
+            slot_box.mark_page_used(relation_id, sb_page.available_content_bytes(), page_num);
             restored_slots
                 .entry(relation_id)
                 .or_insert_with(HashSet::new)
