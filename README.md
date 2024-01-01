@@ -134,7 +134,7 @@ The following are targeted as eventual goals / additions once 1.0 (fall 2023) is
 
 ## License.
 
-Currently licensed under the Apache 2.0 license. See LICENSE file for details.
+Currently licensed under the GPL v3.0 license. See the `LICENSE` file for details.
 
 ## Contribute and help!
 

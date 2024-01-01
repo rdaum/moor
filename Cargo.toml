@@ -16,7 +16,7 @@ members = [
 [workspace.package]
 edition = "2021"
 repository = "https://github.com/rdaum/moor.git"
-license = "Apache-2.0"
+license = "GPL-3"
 
 [workspace.dependencies]
 ## Command line arguments parsing.

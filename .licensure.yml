@@ -1,0 +1,33 @@
+licenses:
+  - files: any
+    ident: GPL-3.0
+    authors:
+      - name: Ryan Daum
+        email: ryan.daum@gmail.com
+    auto_template: true
+
+comments:
+  - columns: 80
+    extension: rs
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
+  - columns: 80
+    extension: pest
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
+
+excludes:
+  - \.gitignore
+  - .*lock
+  - \.git/.*
+  - \.idea/.*
+  - \.cargo/.*
+  - target/.*
+  - README.*
+  - LICENSE.*
+  - Dockerfile
+  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml)

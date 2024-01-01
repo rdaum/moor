@@ -1,3 +1,17 @@
+// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, version 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 //! In-memory database that provides transactional consistency through copy-on-write maps
 //! Base relations are `im` hashmaps -- persistent / functional / copy-on-writish hashmaps, which
 //! transactions obtain a fork of from `canonical`. At commit timestamps are checked and reconciled
