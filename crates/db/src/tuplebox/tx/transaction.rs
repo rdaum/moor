@@ -73,9 +73,10 @@ impl Transaction {
             next_transient_relation_id,
         }
     }
-    pub async fn sequence_next(&self, sequence_number: usize) -> u64 {
-        self.db.clone().sequence_next(sequence_number).await
+    pub async fn increment_sequence(&self, sequence_number: usize) -> u64 {
+        self.db.clone().increment_sequence(sequence_number).await
     }
+
     pub async fn sequence_current(&self, sequence_number: usize) -> u64 {
         self.db.clone().sequence_current(sequence_number).await
     }
@@ -342,7 +343,8 @@ impl TransientRelation {
     ) -> Result<(SliceRef, SliceRef), TupleError> {
         let tuple_id = self
             .domain_tuples
-            .get(domain.as_slice()).copied()
+            .get(domain.as_slice())
+            .copied()
             .ok_or(TupleError::NotFound);
         tuple_id.map(|id| self.tuples[id].clone())
     }
@@ -358,7 +360,8 @@ impl TransientRelation {
         // what they're doing.
         let codomain_domain = self.codomain_domain.as_ref().expect("No codomain index");
         let tuple_ids = codomain_domain
-            .get(codomain.as_slice()).cloned()
+            .get(codomain.as_slice())
+            .cloned()
             .ok_or(TupleError::NotFound)?;
         Ok(tuple_ids
             .iter()
@@ -370,11 +373,7 @@ impl TransientRelation {
         &self,
         f: &F,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
-        Ok(self
-            .tuples
-            .iter()
-            .filter(|t| f(t)).cloned()
-            .collect())
+        Ok(self.tuples.iter().filter(|t| f(t)).cloned().collect())
     }
 
     /// Insert a tuple into the relation.
@@ -402,7 +401,8 @@ impl TransientRelation {
     ) -> Result<(), TupleError> {
         let tuple_id = self
             .domain_tuples
-            .get(domain.as_slice()).copied()
+            .get(domain.as_slice())
+            .copied()
             .ok_or(TupleError::NotFound)?;
         if self.codomain_domain.is_some() {
             self.update_secondary(tuple_id, None, Some(codomain.clone()));
@@ -491,7 +491,6 @@ mod tests {
     }
 
     async fn test_db() -> Arc<TupleBox> {
-        
         TupleBox::new(
             1 << 24,
             4096,

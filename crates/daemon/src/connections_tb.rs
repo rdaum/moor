@@ -176,7 +176,7 @@ impl ConnectionsDB for ConnectionsTb {
             None => {
                 // The connection object is pulled from the sequence, then we invert it and subtract from
                 // -4 to get the connection object, since they always grow downwards from there.
-                let connection_id = self.tb.clone().sequence_next(0).await;
+                let connection_id = self.tb.clone().increment_sequence(0).await;
                 let connection_id: i64 = -4 - (connection_id as i64);
                 Objid(connection_id)
             }
@@ -413,7 +413,8 @@ impl ConnectionsDB for ConnectionsTb {
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
             .await
             .seek_by_domain(client_id.as_bytes().as_sliceref())
-            .await.is_ok();
+            .await
+            .is_ok();
         tx.commit().await.expect("Unable to commit transaction");
         is_valid
     }

@@ -160,7 +160,7 @@ impl DbTransaction for TupleBoxTransaction {
             None => {
                 let max = self
                     .tx
-                    .sequence_next(WorldStateSequences::MaximumObject as usize)
+                    .increment_sequence(WorldStateSequences::MaximumObject as usize)
                     .await;
                 Objid(max as i64)
             }
@@ -202,7 +202,10 @@ impl DbTransaction for TupleBoxTransaction {
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
         self.tx
-            .update_sequence_max(WorldStateSequences::MaximumObject as usize, id.0 as u64)
+            .update_sequence_max(
+                WorldStateSequences::MaximumObject as usize,
+                (id.0 + 1) as u64,
+            )
             .await;
 
         Ok(id)
@@ -228,12 +231,14 @@ impl DbTransaction for TupleBoxTransaction {
 
         // Now we can remove this object from all relevant column relations
         // First the simple ones which are keyed on the object id.
-        let oid_relations = [WorldStateRelation::ObjectFlags,
+        let oid_relations = [
+            WorldStateRelation::ObjectFlags,
             WorldStateRelation::ObjectName,
             WorldStateRelation::ObjectOwner,
             WorldStateRelation::ObjectParent,
             WorldStateRelation::ObjectLocation,
-            WorldStateRelation::ObjectVerbs];
+            WorldStateRelation::ObjectVerbs,
+        ];
         for rel in oid_relations.iter() {
             let relation = self.tx.relation((*rel).into()).await;
             relation
@@ -533,7 +538,8 @@ impl DbTransaction for TupleBoxTransaction {
         Ok(Objid(
             self.tx
                 .sequence_current(WorldStateSequences::MaximumObject as usize)
-                .await as i64,
+                .await as i64
+                - 1,
         ))
     }
 
@@ -557,7 +563,8 @@ impl DbTransaction for TupleBoxTransaction {
                 .await
                 .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.clone()))?;
         Ok(verbdefs
-            .find_named(name.as_str()).first()
+            .find_named(name.as_str())
+            .first()
             .ok_or(WorldStateError::VerbNotFound(obj, name))?
             .clone())
     }
@@ -853,8 +860,6 @@ impl DbTransaction for TupleBoxTransaction {
                 Some(s) => s.as_str(),
             };
 
-            
-
             PropDef::new(
                 p.uuid(),
                 p.definer(),
@@ -1135,7 +1140,6 @@ mod tests {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        
         TupleBox::new(1 << 24, 4096, None, &relations, WorldStateSequences::COUNT).await
     }
 
@@ -1162,6 +1166,22 @@ mod tests {
         assert_eq!(tx.get_object_parent(oid).await.unwrap(), NOTHING);
         assert_eq!(tx.get_object_location(oid).await.unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(oid).await.unwrap(), "test");
+        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+    }
+
+    #[tokio::test]
+    async fn test_create_object_fixed_id() {
+        let db = test_db().await;
+        let tx = TupleBoxTransaction::new(db);
+        // Force at 1.
+        let oid = tx
+            .create_object(Some(Objid(1)), ObjAttrs::default())
+            .await
+            .unwrap();
+        assert_eq!(oid, Objid(1));
+        // Now verify the next will be 2.
+        let oid2 = tx.create_object(None, ObjAttrs::default()).await.unwrap();
+        assert_eq!(oid2, Objid(2));
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
     }
 

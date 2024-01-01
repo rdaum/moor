@@ -131,26 +131,14 @@ impl TupleBox {
     }
 
     pub fn next_ts(self: Arc<Self>) -> u64 {
-        
-        self
-            .maximum_transaction
+        self.maximum_transaction
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
-    /// Get the next value for the given sequence.
-    pub async fn sequence_next(self: Arc<Self>, sequence_number: usize) -> u64 {
+    /// Increment this sequence and return its previous value.
+    pub async fn increment_sequence(self: Arc<Self>, sequence_number: usize) -> u64 {
         let sequence = &self.sequences[sequence_number];
-        loop {
-            let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
-            if let Ok(n) = sequence.compare_exchange(
-                current,
-                current + 1,
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            ) {
-                return n;
-            }
-        }
+        sequence.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Get the current value for the given sequence.
@@ -163,12 +151,15 @@ impl TupleBox {
         let sequence = &self.sequences[sequence_number];
         loop {
             let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
-            if sequence.compare_exchange(
-                current,
-                std::cmp::max(current, value),
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            ).is_ok() {
+            if sequence
+                .compare_exchange(
+                    current,
+                    std::cmp::max(current, value),
+                    std::sync::atomic::Ordering::SeqCst,
+                    std::sync::atomic::Ordering::SeqCst,
+                )
+                .is_ok()
+            {
                 return;
             }
         }
