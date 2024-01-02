@@ -96,7 +96,7 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        TupleBox::new(1 << 24, 4096, Some(dir), &relations, 0).await
+        TupleBox::new(1 << 24, Some(dir), &relations, 0).await
     }
 
     // Open a db in a test dir, fill it with some goop, close it, reopen it, and check that the goop is still there.
@@ -134,14 +134,19 @@ mod test {
         // Verify the WAL directory is not empty.
         assert!(std::fs::read_dir(format!("{}/wal", tmpdir_str))
             .unwrap()
-            .next().is_some());
-        {
+            .next()
+            .is_some());
+
+        // Now reopen the db and verify that the tuples are still there. We'll do this a few times, to make sure that
+        // the recovery is working.
+        for _ in 0..5 {
             let db = test_db(tmpdir.path().into()).await;
 
             // Verify the pages directory is not empty after recovery.
             assert!(std::fs::read_dir(format!("{}/pages", tmpdir_str))
                 .unwrap()
-                .next().is_some());
+                .next()
+                .is_some());
             let mut found = HashMap::new();
             // Verify all the tuples in all the relations are there
             for relation in tuples.keys() {

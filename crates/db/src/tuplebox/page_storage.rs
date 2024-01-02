@@ -12,6 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+// TODO: there's no way this is "robust" enough to be used in production
+
 use crate::tuplebox::slots::PageId;
 use crate::tuplebox::RelationId;
 use im::{HashMap, HashSet};

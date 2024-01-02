@@ -29,7 +29,7 @@ pub mod support {
             })
             .collect::<Vec<_>>();
 
-        TupleBox::new(1 << 24, 4096, Some(dir), &relations, 0).await
+        TupleBox::new(1 << 24, Some(dir), &relations, 0).await
     }
 }
 

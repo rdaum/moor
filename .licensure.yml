@@ -30,4 +30,4 @@ excludes:
   - README.*
   - LICENSE.*
   - Dockerfile
-  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml)
+  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out)

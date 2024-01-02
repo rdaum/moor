@@ -37,7 +37,6 @@ use rpc_common::RpcRequestError;
 use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
 
 const CONNECTIONS_DB_MEM_SIZE: usize = 1 << 26;
-const CONNECTIONS_DB_PAGE_SIZE: usize = 32768;
 pub struct ConnectionsTb {
     tb: Arc<TupleBox>,
 }
@@ -56,14 +55,7 @@ impl ConnectionsTb {
             .collect();
         relations[ConnectionRelation::ClientConnection as usize].secondary_indexed = true;
 
-        let tb = TupleBox::new(
-            CONNECTIONS_DB_MEM_SIZE,
-            CONNECTIONS_DB_PAGE_SIZE,
-            path,
-            &relations,
-            1,
-        )
-        .await;
+        let tb = TupleBox::new(CONNECTIONS_DB_MEM_SIZE, path, &relations, 1).await;
         Self { tb }
     }
 }

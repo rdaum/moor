@@ -263,8 +263,7 @@ mod tests {
         relations[ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        
-        TupleBox::new(1 << 24, 32768, None, &relations, WorldStateSequences::COUNT).await
+        TupleBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
     }
 
     /// Test simple relations mapping oid->oid (with secondary index), independent of all other

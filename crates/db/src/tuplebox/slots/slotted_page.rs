@@ -216,7 +216,7 @@ impl<'a> SlottedPage<'a> {
         let content_length = header.content_length as usize;
         let index_length = header.index_length as usize;
         let header_size = std::mem::size_of::<SlottedPageHeader>();
-        
+
         self.page_size - (index_length + content_length + header_size)
     }
 
@@ -370,6 +370,11 @@ impl<'a> SlottedPage<'a> {
         let index_entry = self.get_index_entry_mut(slot_id);
         let new_count = index_entry.refcount.fetch_sub(1, SeqCst);
         // Return true to indicate that the slot is now unused, but the slotbox will do the actual removal.
+        assert_ne!(
+            new_count, 0,
+            "attempt to double-free slot {}; how did it come to this?",
+            slot_id
+        );
         if new_count == 1 {
             return Ok(true);
         }
@@ -514,14 +519,14 @@ impl<'a> SlottedPage<'a> {
     fn header(&self) -> Pin<&SlottedPageHeader> {
         // Cast the base address to a pointear to the header
         let header_ptr = self.base_address.load(SeqCst) as *const SlottedPageHeader;
-        
+
         unsafe { Pin::new_unchecked(&*header_ptr) }
     }
 
     fn header_mut(&self) -> Pin<&mut SlottedPageHeader> {
         // Cast the base address to a pointer to the header
         let header_ptr = self.base_address.load(SeqCst) as *mut SlottedPageHeader;
-        
+
         unsafe { Pin::new_unchecked(&mut *header_ptr) }
     }
 
@@ -575,7 +580,7 @@ impl<'a> SlottedPage<'a> {
             + (slot_id * std::mem::size_of::<SlotIndexEntry>());
 
         let base_address = self.base_address.load(SeqCst);
-        
+
         unsafe {
             let slot_address = base_address.add(index_offset);
             Pin::new_unchecked(&*(slot_address as *const SlotIndexEntry))
@@ -586,7 +591,7 @@ impl<'a> SlottedPage<'a> {
         let index_offset = std::mem::size_of::<SlottedPageHeader>()
             + (slot_id * std::mem::size_of::<SlotIndexEntry>());
         let base_address = self.base_address.load(SeqCst);
-        
+
         unsafe {
             let slot_address = base_address.add(index_offset);
             Pin::new_unchecked(&mut *(slot_address as *mut SlotIndexEntry))
@@ -638,7 +643,7 @@ impl<'a> PageWriteGuard<'a> {
 
     fn header_mut(&self) -> Pin<&mut SlottedPageHeader> {
         let header_ptr = self.base_address as *mut SlottedPageHeader;
-        
+
         unsafe { Pin::new_unchecked(&mut *header_ptr) }
     }
 }
@@ -660,7 +665,7 @@ pub struct PageReadGuard<'a> {
 impl<'a> PageReadGuard<'a> {
     fn header(&self) -> Pin<&SlottedPageHeader> {
         let header_ptr = self.base_address as *const SlottedPageHeader;
-        
+
         unsafe { Pin::new_unchecked(&*header_ptr) }
     }
 

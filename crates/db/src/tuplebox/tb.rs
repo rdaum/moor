@@ -72,12 +72,11 @@ pub struct TupleBox {
 impl TupleBox {
     pub async fn new(
         memory_size: usize,
-        page_size: usize,
         path: Option<PathBuf>,
         relations: &[RelationInfo],
         num_sequences: usize,
     ) -> Arc<Self> {
-        let slotbox = Arc::new(SlotBox::new(page_size, memory_size));
+        let slotbox = Arc::new(SlotBox::new(memory_size));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
             base_relations.push(BaseRelation::new(slotbox.clone(), RelationId(rid), 0));

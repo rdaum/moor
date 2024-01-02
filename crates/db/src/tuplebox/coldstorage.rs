@@ -77,11 +77,11 @@ impl ColdStorage {
         };
 
         // Grab page storage and wait for all the writes to complete.
-        let mut cs = page_storage.lock().unwrap();
-        cs.wait_complete();
+        let mut ps = page_storage.lock().unwrap();
+        ps.wait_complete();
 
         // Get the sequence page, and load the sequences from it, if any.
-        if let Ok(Some(sequence_page)) = cs.read_sequence_page() {
+        if let Ok(Some(sequence_page)) = ps.read_sequence_page() {
             let sequence_page = sequence_page::View::new(&sequence_page[..]);
             let num_sequences = sequence_page.num_sequences().read();
             assert_eq!(num_sequences, sequences.len() as u64,
@@ -98,13 +98,13 @@ impl ColdStorage {
         }
 
         // Recover all the pages from cold storage and re-index all the tuples in them.
-        let ids = cs.list_pages();
+        let ids = ps.list_pages();
         let mut restored_slots = HashMap::new();
         let mut restored_bytes = 0;
         for (page_size, page_num, relation_id) in ids {
-            let sb_page = slot_box.page_for(page_num);
+            let sb_page = slot_box.restore(page_num).expect("Unable to get page");
             let slot_ids = sb_page.load(|buf| {
-                cs.read_page_buf(page_num, relation_id, buf)
+                ps.read_page_buf(page_num, relation_id, buf)
                     .expect("Unable to read page")
             });
             // The allocator needs to know that this page is used.
@@ -217,13 +217,11 @@ impl ColdStorage {
         // For syncing pages, we don't need to sync each individual tuple, we we just find the set of dirty pages
         // and sync them.
         // The pages that are modified will be need be read-locked while they are copied.
-        let mut dirty_tuple_count = 0;
         let mut dirty_pages = HashSet::new();
         for r in &ws.relations {
             for t in r.tuples() {
                 match t {
                     TxTuple::Insert(_) | TxTuple::Update(_) | TxTuple::Tombstone { .. } => {
-                        dirty_tuple_count += 1;
                         let (page_id, _slot_id) = t.tuple_id();
                         dirty_pages.insert((page_id, r.id));
                     }
@@ -234,12 +232,12 @@ impl ColdStorage {
             }
         }
 
-        let mut total_synced_tuples = 0;
-
         for (page_id, r) in &dirty_pages {
-            // Get the page for this tuple.
-            let page = slot_box.page_for(*page_id);
-            total_synced_tuples += page.num_active_slots();
+            // Get the slotboxy page for this tuple.
+            let Ok(page) = slot_box.page_for(*page_id) else {
+                // If the slot or page is already gone, ce la vie, we don't need to sync it.
+                continue;
+            };
 
             // Copy the page into the WAL entry directly.
             let wal_entry_buffer = make_wal_entry(
@@ -253,21 +251,6 @@ impl ColdStorage {
             );
             write_batch.push((*page_id, Some(wal_entry_buffer)));
         }
-
-        let mut total_tuples = 0;
-        for p in slot_box.used_pages() {
-            let page = slot_box.page_for(p);
-            total_tuples += page.num_active_slots();
-        }
-
-        debug!(
-            dirty_tuple_count,
-            dirt_pages = dirty_pages.len(),
-            num_relations = ws.relations.len(),
-            total_synced_tuples,
-            total_tuples,
-            "Syncing dirty pages to WAL"
-        );
 
         let mut sync_wal = wal.begin_entry().expect("Failed to begin WAL entry");
         for (_page_id, wal_entry_buf) in write_batch {
@@ -305,8 +288,9 @@ impl LogManager for WalManager {
         for chunk in chunks {
             Self::chunk_to_mutations(&chunk, &mut write_batch, &mut evicted);
         }
-        let mut cs = self.page_storage.lock().unwrap();
-        cs.write_batch(write_batch).expect("Unable to write batch");
+        let mut ps = self.page_storage.lock().unwrap();
+        ps.write_batch(write_batch).expect("Unable to write batch");
+
         Ok(())
     }
 
@@ -336,11 +320,11 @@ impl LogManager for WalManager {
             }
         }
 
-        let Ok(mut cs) = self.page_storage.lock() else {
+        let Ok(mut ps) = self.page_storage.lock() else {
             error!("Unable to lock cold storage");
             return Ok(());
         };
-        if let Err(e) = cs.write_batch(write_batch) {
+        if let Err(e) = ps.write_batch(write_batch) {
             error!("Unable to write batch: {:?}", e);
             return Ok(());
         };

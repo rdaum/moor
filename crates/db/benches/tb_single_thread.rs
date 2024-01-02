@@ -39,7 +39,7 @@ async fn test_db() -> Arc<TupleBox> {
         })
         .collect::<Vec<_>>();
 
-    TupleBox::new(1 << 24, 4096, None, &relations, 0).await
+    TupleBox::new(1 << 24, None, &relations, 0).await
 }
 
 fn from_val(value: i64) -> SliceRef {

@@ -43,14 +43,7 @@ mod test {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        TupleBox::new(
-            1 << 24,
-            4096,
-            Some(dir),
-            &relations,
-            WorldStateSequences::COUNT,
-        )
-        .await
+        TupleBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT).await
     }
 
     #[tokio::test]
@@ -99,14 +92,16 @@ mod test {
         // Verify the WAL directory is not empty.
         assert!(std::fs::read_dir(format!("{}/wal", tmpdir_str))
             .unwrap()
-            .next().is_some());
+            .next()
+            .is_some());
         {
             let db = test_db(tmpdir.path().into()).await;
 
             // Verify the pages directory is not empty after recovery.
             assert!(std::fs::read_dir(format!("{}/pages", tmpdir_str))
                 .unwrap()
-                .next().is_some());
+                .next()
+                .is_some());
 
             let tx = TupleBoxTransaction::new(db.clone());
 
