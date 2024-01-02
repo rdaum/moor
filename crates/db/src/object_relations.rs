@@ -21,7 +21,8 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::AsByteBuffer;
 
-use crate::tuplebox::{RelationId, Transaction, TupleError};
+use crate::tuplebox::tuples::TupleError;
+use crate::tuplebox::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]

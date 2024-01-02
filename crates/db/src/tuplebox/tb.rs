@@ -25,7 +25,7 @@ use tracing::info;
 
 use crate::tuplebox::backing::BackingStoreClient;
 use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::slots::SlotBox;
+use crate::tuplebox::tuples::SlotBox;
 use crate::tuplebox::tuples::TxTuple;
 use crate::tuplebox::tx::transaction::{CommitError, CommitSet, Transaction};
 use crate::tuplebox::tx::working_set::WorkingSet;

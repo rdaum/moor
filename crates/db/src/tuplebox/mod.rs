@@ -28,9 +28,9 @@ mod base_relation;
 mod coldstorage;
 mod page_storage;
 mod pool;
-mod slots;
+
 pub mod tb;
-mod tuples;
+pub mod tuples;
 mod tx;
 
 pub use tuples::TupleError;

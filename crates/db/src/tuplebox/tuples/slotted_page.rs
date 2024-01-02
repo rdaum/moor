@@ -35,7 +35,7 @@ use std::sync::atomic::{AtomicPtr, AtomicU16, AtomicU32};
 use atomic_wait::{wait, wake_all, wake_one};
 use tracing::error;
 
-use crate::tuplebox::slots::slotbox::SlotBoxError;
+use crate::tuplebox::tuples::slotbox::SlotBoxError;
 
 pub type SlotId = usize;
 
@@ -697,8 +697,8 @@ impl<'a> Drop for PageReadGuard<'a> {
 mod tests {
     use std::sync::atomic::AtomicPtr;
 
-    use crate::tuplebox::slots::slotbox::SlotBoxError;
-    use crate::tuplebox::slots::slotted_page::{
+    use crate::tuplebox::tuples::slotbox::SlotBoxError;
+    use crate::tuplebox::tuples::slotted_page::{
         slot_page_empty_size, SlotId, SlotIndexEntry, SlottedPage,
     };
 

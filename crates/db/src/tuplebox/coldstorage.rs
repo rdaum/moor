@@ -31,9 +31,9 @@ use tracing::{debug, error, info, warn};
 use crate::tuplebox::backing::{BackingStoreClient, WriterMessage};
 use crate::tuplebox::base_relation::BaseRelation;
 use crate::tuplebox::page_storage::{PageStore, PageStoreMutation};
-use crate::tuplebox::slots::{PageId, SlotBox, SlotId, TupleId};
 use crate::tuplebox::tb::RelationInfo;
 use crate::tuplebox::tuples::TxTuple;
+use crate::tuplebox::tuples::{PageId, SlotBox, SlotId, TupleId};
 use crate::tuplebox::tx::working_set::WorkingSet;
 use crate::tuplebox::RelationId;
 

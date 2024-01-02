@@ -22,8 +22,8 @@ use tokio::sync::RwLock;
 use moor_values::util::slice_ref::SliceRef;
 
 use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::slots::SlotBox;
 use crate::tuplebox::tb::TupleBox;
+use crate::tuplebox::tuples::SlotBox;
 use crate::tuplebox::tuples::TupleError;
 use crate::tuplebox::tx::relvar::RelVar;
 use crate::tuplebox::tx::working_set::WorkingSet;

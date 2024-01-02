@@ -12,19 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use thiserror::Error;
-
-use crate::tuplebox::slots::TupleId;
+use crate::tuplebox::tuples::TupleId;
 use crate::tuplebox::tuples::TupleRef;
 use moor_values::util::slice_ref::SliceRef;
-
-#[derive(Debug, Clone, Eq, PartialEq, Error)]
-pub enum TupleError {
-    #[error("Tuple not found")]
-    NotFound,
-    #[error("Tuple already exists")]
-    Duplicate,
-}
 
 /// Possible operations on tuples, in the context of a transaction .
 #[derive(Clone)]

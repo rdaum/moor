@@ -18,8 +18,8 @@ use std::sync::Arc;
 use crate::tuplebox::RelationId;
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::slots::{SlotBox, TupleId};
 use crate::tuplebox::tuples::TupleRef;
+use crate::tuplebox::tuples::{SlotBox, TupleId};
 
 define_layout!(tuple_header, LittleEndian, {
     ts: u64,
@@ -87,9 +87,8 @@ impl Tuple {
         let domain_size = tuple_header::View::new(buffer.as_slice())
             .domain_size()
             .read();
-        buffer.slice(
-            tuple_header::SIZE.unwrap()..tuple_header::SIZE.unwrap() + domain_size as usize,
-        )
+        buffer
+            .slice(tuple_header::SIZE.unwrap()..tuple_header::SIZE.unwrap() + domain_size as usize)
     }
 
     pub fn codomain(&self) -> SliceRef {

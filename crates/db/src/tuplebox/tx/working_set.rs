@@ -17,9 +17,9 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::slots::SlotBox;
 use crate::tuplebox::tb::{RelationInfo, TupleBox};
-use crate::tuplebox::tuples::{Tuple, TupleError, TxTuple};
+use crate::tuplebox::tuples::{SlotBox, TupleError};
+use crate::tuplebox::tuples::{Tuple, TxTuple};
 use crate::tuplebox::RelationId;
 
 /// The local tx "working set" of mutations to base relations, and consists of the set of operations
@@ -239,7 +239,9 @@ impl WorkingSet {
         }
 
         // Now we have a map of domain -> tuple, so we can just pull out the tuples and return them.
-        Ok(by_domain.into_values().map(|t| (t.domain(), t.codomain()))
+        Ok(by_domain
+            .into_values()
+            .map(|t| (t.domain(), t.codomain()))
             .collect())
     }
 

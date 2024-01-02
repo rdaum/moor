@@ -21,6 +21,7 @@ use strum::{EnumCount, IntoEnumIterator};
 use tracing::warn;
 use uuid::Uuid;
 
+use crate::tuplebox::tuples::TupleError;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -35,7 +36,6 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_none, Var};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
-use tuplebox::TupleError;
 
 use crate::db_tx::DbTransaction;
 use crate::db_worldstate::DbTxWorldState;
@@ -45,7 +45,7 @@ use crate::object_relations::{
 };
 use crate::tuplebox::tb::{RelationInfo, TupleBox};
 use crate::tuplebox::{CommitError, Transaction};
-use crate::{object_relations, tuplebox, Database};
+use crate::{object_relations, Database};
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
 pub struct TupleBoxWorldStateSource {

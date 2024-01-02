@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::slots::{SlotBox, TupleId};
 use crate::tuplebox::tuples::TupleRef;
+use crate::tuplebox::tuples::{SlotBox, TupleId};
 use crate::tuplebox::RelationId;
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,

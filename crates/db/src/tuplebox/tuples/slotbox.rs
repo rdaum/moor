@@ -22,6 +22,11 @@
 //       considering only the reported available "content" area when fitting slots, and there seems
 //       to be a sporadic failure where we end up with a "Page not found" error in the allocator on
 //       free, meaning the page was not found in the used pages list.
+// TODO: improve TupleRef so it can hold a direct address to the tuple, and not just an id.
+//       some swizzling will probably be required.  (though at this point we're never paging
+//       tuples out, so we may not need to swizzle). avoiding the lookup on every reference
+//       should improve performance massively.
+// TODO: rename me, _I_ am the tuplebox. The "slots" are just where my tuples get stored.
 
 use std::cmp::max;
 use std::pin::Pin;
@@ -34,8 +39,8 @@ use thiserror::Error;
 use tracing::error;
 
 use crate::tuplebox::pool::{Bid, BufferPool, PagerError};
-pub use crate::tuplebox::slots::slotted_page::SlotId;
-use crate::tuplebox::slots::slotted_page::{
+pub use crate::tuplebox::tuples::slotted_page::SlotId;
+use crate::tuplebox::tuples::slotted_page::{
     slot_index_overhead, slot_page_empty_size, SlottedPage,
 };
 use crate::tuplebox::RelationId;
@@ -437,8 +442,8 @@ mod tests {
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
 
-    use crate::tuplebox::slots::slotbox::{SlotBox, SlotBoxError, TupleId};
-    use crate::tuplebox::slots::slotted_page::slot_page_empty_size;
+    use crate::tuplebox::tuples::slotbox::{SlotBox, SlotBoxError, TupleId};
+    use crate::tuplebox::tuples::slotted_page::slot_page_empty_size;
     use crate::tuplebox::RelationId;
 
     fn fill_until_full(sb: &mut SlotBox) -> Vec<(TupleId, Vec<u8>)> {
