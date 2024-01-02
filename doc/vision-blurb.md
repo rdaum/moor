@@ -7,7 +7,7 @@ Relations
 
 ## What is?
 
-Moor is:
+"Moor" is:
 
   * A system for building shared, programmable, Internet-accessible virtual _social spaces_
   * A programming and authoring _tool_ for shared environments.
@@ -55,7 +55,7 @@ dwindled to a small but dedicated group of enthusiasts.
 
 And the server itself is aged; it is written in C -- is single threaded, with some known architectural limitations, and
 is not very easy to extend or modify. While there are newer versions and forks (such as Stunt, ToastStunt, etc.) that 
-address some of these issues, they are still based on the same original codebase and architecture -- remaining bound by
+address many of these issues, they are still based on the same original codebase and architecture -- remaining bound by
 the single-threaded, single-core model of the original.
 
 Moor is an attempt to reimagine LambdaMOO for the modern world, while retaining the core concepts and ideas that made
