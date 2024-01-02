@@ -22,7 +22,10 @@ use binary_layout::{define_layout, Field, LayoutAs};
 use im::{HashMap, HashSet};
 use okaywal::{Entry, EntryId, LogManager, SegmentReader, WriteAheadLog};
 use strum::FromRepr;
+use tokio::io::AsyncReadExt;
+use tokio::select;
 use tokio::sync::mpsc::UnboundedReceiver;
+use tokio_eventfd::EventFd;
 use tracing::{debug, error, info, warn};
 
 use crate::tuplebox::backing::{BackingStoreClient, WriterMessage};
@@ -61,7 +64,9 @@ impl ColdStorage {
         sequences: &mut Vec<u64>,
         slot_box: Arc<SlotBox>,
     ) -> BackingStoreClient {
-        let page_storage = Arc::new(Mutex::new(PageStore::new(path.join("pages"))));
+        let eventfd = EventFd::new(0, false).unwrap();
+
+        let page_storage = Arc::new(Mutex::new(PageStore::new(path.join("pages"), &eventfd)));
         let wal_manager = WalManager {
             page_storage: page_storage.clone(),
             slot_box: slot_box.clone(),
@@ -137,7 +142,13 @@ impl ColdStorage {
 
         // Start the listen loop
         let (writer_send, writer_receive) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(Self::listen_loop(writer_receive, wal, slot_box.clone()));
+        tokio::spawn(Self::listen_loop(
+            writer_receive,
+            wal,
+            slot_box.clone(),
+            page_storage.clone(),
+            eventfd,
+        ));
 
         // And return the client to it.
         BackingStoreClient::new(writer_send)
@@ -147,22 +158,33 @@ impl ColdStorage {
         mut writer_receive: UnboundedReceiver<WriterMessage>,
         wal: WriteAheadLog,
         slot_box: Arc<SlotBox>,
+        ps: Arc<Mutex<PageStore>>,
+        mut event_fd: EventFd,
     ) {
+        let mut buf = [0; 8];
         loop {
-            match writer_receive.recv().await {
-                Some(WriterMessage::Commit(ts, ws, sequences)) => {
-                    Self::perform_writes(wal.clone(), slot_box.clone(), ts, ws, sequences).await;
-                }
-                Some(WriterMessage::Shutdown) => {
-                    // Flush the WAL
-                    wal.shutdown().expect("Unable to flush WAL");
+            select! {
+                writer_message = writer_receive.recv() => {
+                    match writer_message {
+                        Some(WriterMessage::Commit(ts, ws, sequences)) => {
+                            Self::perform_writes(wal.clone(), slot_box.clone(), ts, ws, sequences).await;
+                        }
+                        Some(WriterMessage::Shutdown) => {
+                            // Flush the WAL
+                            wal.shutdown().expect("Unable to flush WAL");
 
-                    info!("Shutting down WAL writer thread");
-                    return;
-                }
-                None => {
-                    error!("Writer thread channel closed, shutting down");
-                    return;
+                            info!("Shutting down WAL writer thread");
+                            return;
+                        }
+                        None => {
+                            error!("Writer thread channel closed, shutting down");
+                            return;
+                        }
+                    }
+                },
+                // When the eventfd is triggered by the page store, we need to ask it to process completions.
+                _ = event_fd.read(&mut buf) => {
+                    let _ = ps.lock().unwrap().process_completions();
                 }
             }
         }

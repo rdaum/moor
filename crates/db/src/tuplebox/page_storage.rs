@@ -17,14 +17,16 @@
 use crate::tuplebox::slots::PageId;
 use crate::tuplebox::RelationId;
 use im::{HashMap, HashSet};
+use io_uring::squeue::Flags;
 use io_uring::types::Fd;
 use io_uring::{opcode, IoUring};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
-use std::os::fd::{IntoRawFd, RawFd};
+use std::os::fd::{AsRawFd, IntoRawFd, RawFd};
 use std::path::PathBuf;
 use std::pin::Pin;
-use tracing::info;
+use std::thread::yield_now;
+use tokio_eventfd::EventFd;
 
 pub(crate) enum PageStoreMutation {
     SyncRelationPage(RelationId, PageId, Box<[u8]>),
@@ -43,12 +45,17 @@ pub(crate) struct PageStore {
 }
 
 impl PageStore {
-    pub(crate) fn new(dir: PathBuf) -> Self {
+    pub(crate) fn new(dir: PathBuf, eventfd: &EventFd) -> Self {
         // Check for dir path, if not there, create.
         if !dir.exists() {
             std::fs::create_dir_all(&dir).unwrap();
         }
         let uring = IoUring::new(8).unwrap();
+
+        // Set up the eventfd...
+        let eventfd_fd = eventfd.as_raw_fd();
+        uring.submitter().register_eventfd(eventfd_fd).unwrap();
+
         Self {
             dir,
             uring,
@@ -57,15 +64,23 @@ impl PageStore {
         }
     }
 
+    // Blocking call to wait for all outstanding requests to complete.
     pub(crate) fn wait_complete(&mut self) {
-        info!("Waiting for {} completions", self.buffers.len());
         while !self.buffers.is_empty() {
             while let Some(completion) = self.uring.completion().next() {
                 let request_id = completion.user_data();
                 self.buffers.remove(&request_id);
             }
+            yield_now();
         }
-        info!("All completions done");
+    }
+
+    pub(crate) fn process_completions(&mut self) -> bool {
+        while let Some(completion) = self.uring.completion().next() {
+            let request_id = completion.user_data();
+            self.buffers.remove(&request_id);
+        }
+        self.buffers.is_empty()
     }
 
     pub(crate) fn list_pages(&self) -> HashSet<(usize, PageId, RelationId)> {
@@ -128,9 +143,8 @@ impl PageStore {
         Ok(())
     }
 
-    // TODO: batch submit + fsync
     pub(crate) fn write_batch(&mut self, batch: Vec<PageStoreMutation>) -> std::io::Result<()> {
-        // go through previous completions and remove the buffers
+        // We can't submit a new batch until all the previous requests have completed.
         while let Some(completion) = self.uring.completion().next() {
             let request_id = completion.user_data();
             self.buffers.remove(&request_id);
@@ -151,12 +165,26 @@ impl PageStore {
 
                     let write_e = opcode::Write::new(Fd(fd), data_ptr as _, len as _)
                         .build()
-                        .user_data(request_id);
+                        .user_data(request_id)
+                        .flags(Flags::IO_LINK);
                     unsafe {
                         self.uring
                             .submission()
                             .push(&write_e)
                             .expect("Unable to push write to submission queue");
+                    }
+
+                    // Tell the kernel to flush the file to disk after writing it, and this should be
+                    // linked to the write above.
+                    let fsync_e = opcode::Fsync::new(Fd(fd))
+                        .build()
+                        .user_data(request_id)
+                        .flags(Flags::IO_LINK);
+                    unsafe {
+                        self.uring
+                            .submission()
+                            .push(&fsync_e)
+                            .expect("Unable to push fsync to submission queue");
                     }
                 }
                 PageStoreMutation::SyncSequencePage(data) => {
@@ -171,20 +199,34 @@ impl PageStore {
 
                     let write_e = opcode::Write::new(Fd(fd), data_ptr as _, len as _)
                         .build()
-                        .user_data(request_id);
+                        .user_data(request_id)
+                        .flags(Flags::IO_LINK);
+
                     unsafe {
                         self.uring
                             .submission()
                             .push(&write_e)
                             .expect("Unable to push write to submission queue");
                     }
+
+                    let fsync_e = opcode::Fsync::new(Fd(fd))
+                        .build()
+                        .user_data(request_id)
+                        .flags(Flags::IO_LINK);
+                    unsafe {
+                        self.uring
+                            .submission()
+                            .push(&fsync_e)
+                            .expect("Unable to push fsync to submission queue");
+                    }
                 }
                 PageStoreMutation::DeleteRelationPage(_, _) => {
                     // TODO
                 }
             }
-            self.uring.submit()?;
+            self.uring.submit().expect("Unable to submit to io_uring");
         }
+
         Ok(())
     }
 }
