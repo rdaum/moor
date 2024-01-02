@@ -34,7 +34,7 @@ use crate::tuplebox::tuples::TxTuple;
 use crate::tuplebox::tx::working_set::WorkingSet;
 use crate::tuplebox::RelationId;
 
-/// Uses OkayWal + Marble as the persistent backing store & write-ahead-log for the tuplebox.
+/// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the tuplebox.
 pub struct ColdStorage {}
 
 define_layout!(sequence_page, LittleEndian, {
