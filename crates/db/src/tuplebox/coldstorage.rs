@@ -313,7 +313,8 @@ impl LogManager for WalManager {
             Self::chunk_to_mutations(&chunk, &mut write_batch, &mut evicted);
         }
         let mut ps = self.page_storage.lock().unwrap();
-        ps.write_batch(write_batch).expect("Unable to write batch");
+        ps.enqueue_page_mutations(write_batch)
+            .expect("Unable to write batch");
 
         Ok(())
     }
@@ -348,7 +349,7 @@ impl LogManager for WalManager {
             error!("Unable to lock cold storage");
             return Ok(());
         };
-        if let Err(e) = ps.write_batch(write_batch) {
+        if let Err(e) = ps.enqueue_page_mutations(write_batch) {
             error!("Unable to write batch: {:?}", e);
             return Ok(());
         };
