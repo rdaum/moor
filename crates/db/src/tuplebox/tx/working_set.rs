@@ -70,7 +70,7 @@ impl WorkingSet {
         let relation = &mut self.relations[relation_id.0];
 
         // Check local first.
-        if let Some(tuple_idx) = relation.domain_index.get(domain.as_slice()) {
+        if let Some(tuple_idx) = relation.domain_index.get(&domain) {
             let local_version = relation.tuples.get(*tuple_idx).unwrap();
             return match &local_version {
                 TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => {
@@ -91,12 +91,10 @@ impl WorkingSet {
             .await?;
         let tuple_idx = relation.tuples.len();
         relation.tuples.push(TxTuple::Value(canon_t.clone()));
-        relation
-            .domain_index
-            .insert(domain.as_slice().to_vec(), tuple_idx);
+        relation.domain_index.insert(domain, tuple_idx);
         if let Some(ref mut codomain_index) = relation.codomain_index {
             codomain_index
-                .entry(canon_t.codomain().as_slice().to_vec())
+                .entry(canon_t.codomain())
                 .or_insert_with(HashSet::new)
                 .insert(tuple_idx);
         }
@@ -139,7 +137,7 @@ impl WorkingSet {
         let relation = &mut self.relations[relation_id.0];
         let codomain_index = relation.codomain_index.as_ref().expect("No codomain index");
         let tuple_indexes = codomain_index
-            .get(codomain.as_slice())
+            .get(&codomain)
             .cloned()
             .unwrap_or_else(HashSet::new)
             .into_iter();
@@ -165,7 +163,7 @@ impl WorkingSet {
         let relation = &mut self.relations[relation_id.0];
 
         // If we already have a local version, that's a dupe, so return an error for that.
-        if relation.domain_index.get(domain.as_slice()).is_some() {
+        if relation.domain_index.get(&domain).is_some() {
             return Err(TupleError::Duplicate);
         }
 
@@ -187,9 +185,7 @@ impl WorkingSet {
             codomain.as_slice(),
         );
         relation.tuples.push(TxTuple::Insert(new_t.unwrap()));
-        relation
-            .domain_index
-            .insert(domain.as_slice().to_vec(), tuple_idx);
+        relation.domain_index.insert(domain, tuple_idx);
         relation.update_secondary(tuple_idx, None, Some(codomain.clone()));
 
         Ok(())
@@ -252,7 +248,7 @@ impl WorkingSet {
 
         // If we have an existing copy, we will update it, but keep its existing derivation
         // timestamp and operation type.
-        if let Some(tuple_idx) = relation.domain_index.get_mut(domain.as_slice()).cloned() {
+        if let Some(tuple_idx) = relation.domain_index.get_mut(&domain).cloned() {
             let existing = relation.tuples.get_mut(tuple_idx).expect("Tuple not found");
             let (replacement, old_value) = match &existing {
                 TxTuple::Tombstone { .. } => return Err(TupleError::NotFound),
@@ -305,9 +301,7 @@ impl WorkingSet {
             codomain.as_slice(),
         );
         relation.tuples.push(TxTuple::Update(new_t.unwrap()));
-        relation
-            .domain_index
-            .insert(domain.as_slice().to_vec(), tuple_idx);
+        relation.domain_index.insert(domain, tuple_idx);
         relation.update_secondary(tuple_idx, Some(old_codomain), Some(codomain.clone()));
         Ok(())
     }
@@ -327,7 +321,7 @@ impl WorkingSet {
         // timestamp.
         // If it's an insert, we have to keep it an insert, same for update, but if it's a delete,
         // we have to turn it into an update.
-        if let Some(tuple_idx) = relation.domain_index.get_mut(domain.as_slice()).cloned() {
+        if let Some(tuple_idx) = relation.domain_index.get_mut(&domain).cloned() {
             let existing = relation.tuples.get_mut(tuple_idx).expect("Tuple not found");
             let (replacement, old) = match &existing {
                 TxTuple::Insert(t) => {
@@ -405,9 +399,7 @@ impl WorkingSet {
             .await;
         let tuple_idx = relation.tuples.len();
         relation.tuples.push(operation);
-        relation
-            .domain_index
-            .insert(domain.as_slice().to_vec(), tuple_idx);
+        relation.domain_index.insert(domain, tuple_idx);
 
         // Remove the old codomain->domain index entry if it exists, and then add the new one.
         relation.update_secondary(tuple_idx, old.map(|o| o.0), Some(codomain.clone()));
@@ -425,7 +417,7 @@ impl WorkingSet {
         let relation = &mut self.relations[relation_id.0];
 
         // Delete is basically an update but where we stick a Tombstone.
-        if let Some(tuple_index) = relation.domain_index.get_mut(domain.as_slice()).cloned() {
+        if let Some(tuple_index) = relation.domain_index.get_mut(&domain).cloned() {
             let tuple_v = relation
                 .tuples
                 .get_mut(tuple_index)
@@ -464,9 +456,7 @@ impl WorkingSet {
             domain: domain.clone(),
             tuple_id: tuple.id(),
         });
-        relation
-            .domain_index
-            .insert(domain.as_slice().to_vec(), local_tuple_idx);
+        relation.domain_index.insert(domain, local_tuple_idx);
         relation.update_secondary(local_tuple_idx, Some(old_codomain), None);
         Ok(())
     }
@@ -476,8 +466,8 @@ impl WorkingSet {
 pub(crate) struct TxBaseRelation {
     pub id: RelationId,
     tuples: Vec<TxTuple>,
-    domain_index: HashMap<Vec<u8>, usize>,
-    codomain_index: Option<HashMap<Vec<u8>, HashSet<usize>>>,
+    domain_index: HashMap<SliceRef, usize>,
+    codomain_index: Option<HashMap<SliceRef, HashSet<usize>>>,
 }
 
 impl TxBaseRelation {
@@ -506,16 +496,14 @@ impl TxBaseRelation {
 
         // Clear out the old entry, if there was one.
         if let Some(old_codomain) = old_codomain {
-            let old_codomain_bytes = old_codomain.as_slice().to_vec();
             codomain_index
-                .entry(old_codomain_bytes)
+                .entry(old_codomain)
                 .or_insert_with(HashSet::new)
                 .remove(&tuple_id);
         }
         if let Some(new_codomain) = new_codomain {
-            let codomain_bytes = new_codomain.as_slice().to_vec();
             codomain_index
-                .entry(codomain_bytes)
+                .entry(new_codomain)
                 .or_insert_with(HashSet::new)
                 .insert(tuple_id);
         }

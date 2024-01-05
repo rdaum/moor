@@ -331,8 +331,8 @@ impl CommitSet {
 struct TransientRelation {
     _id: RelationId,
     tuples: Vec<(SliceRef, SliceRef)>,
-    domain_tuples: HashMap<Vec<u8>, usize>,
-    codomain_domain: Option<HashMap<Vec<u8>, HashSet<usize>>>,
+    domain_tuples: HashMap<SliceRef, usize>,
+    codomain_domain: Option<HashMap<SliceRef, HashSet<usize>>>,
 }
 
 impl TransientRelation {
@@ -343,7 +343,7 @@ impl TransientRelation {
     ) -> Result<(SliceRef, SliceRef), TupleError> {
         let tuple_idx = self
             .domain_tuples
-            .get(domain.as_slice())
+            .get(&domain)
             .copied()
             .ok_or(TupleError::NotFound);
         tuple_idx.map(|id| self.tuples[id].clone())
@@ -360,7 +360,7 @@ impl TransientRelation {
         // what they're doing.
         let codomain_domain = self.codomain_domain.as_ref().expect("No codomain index");
         let tuple_indexes = codomain_domain
-            .get(codomain.as_slice())
+            .get(&codomain)
             .cloned()
             .ok_or(TupleError::NotFound)?;
         Ok(tuple_indexes
@@ -382,13 +382,13 @@ impl TransientRelation {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if self.domain_tuples.contains_key(domain.as_slice()) {
+        if self.domain_tuples.contains_key(&domain) {
             return Err(TupleError::Duplicate);
         }
         let tuple_idx = self.tuples.len();
         self.tuples.push((domain.clone(), codomain.clone()));
         self.domain_tuples
-            .insert(domain.as_slice().to_vec(), tuple_idx)
+            .insert(domain, tuple_idx)
             .map(|_| ())
             .ok_or(TupleError::Duplicate)
     }
@@ -401,7 +401,7 @@ impl TransientRelation {
     ) -> Result<(), TupleError> {
         let tuple_idx = self
             .domain_tuples
-            .get(domain.as_slice())
+            .get(&domain)
             .copied()
             .ok_or(TupleError::NotFound)?;
         if self.codomain_domain.is_some() {
@@ -417,7 +417,7 @@ impl TransientRelation {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let tuple_idx = match self.domain_tuples.get(domain.as_slice()) {
+        let tuple_idx = match self.domain_tuples.get(&domain) {
             Some(tuple_idx) => {
                 self.tuples[*tuple_idx] = (domain, codomain.clone());
                 *tuple_idx
@@ -425,8 +425,7 @@ impl TransientRelation {
             None => {
                 let tuple_idx = self.tuples.len();
                 self.tuples.push((domain.clone(), codomain.clone()));
-                self.domain_tuples
-                    .insert(domain.as_slice().to_vec(), tuple_idx);
+                self.domain_tuples.insert(domain, tuple_idx);
                 tuple_idx
             }
         };
@@ -439,7 +438,7 @@ impl TransientRelation {
     pub async fn remove_by_domain(&mut self, domain: SliceRef) -> Result<(), TupleError> {
         let tuple_idx = self
             .domain_tuples
-            .remove(domain.as_slice())
+            .remove(&domain)
             .ok_or(TupleError::NotFound)?;
 
         if self.codomain_domain.is_some() {
@@ -462,13 +461,13 @@ impl TransientRelation {
         // Clear out the old entry, if there was one.
         if let Some(old_codomain) = old_codomain {
             index
-                .entry(old_codomain.as_slice().to_vec())
+                .entry(old_codomain)
                 .or_insert_with(HashSet::new)
                 .remove(&tuple_idx);
         }
         if let Some(new_codomain) = new_codomain {
             index
-                .entry(new_codomain.as_slice().to_vec())
+                .entry(new_codomain)
                 .or_insert_with(HashSet::new)
                 .insert(tuple_idx);
         }

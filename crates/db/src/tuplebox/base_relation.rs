@@ -55,11 +55,11 @@ pub struct BaseRelation {
 
     /// The domain-indexed tuples in this relation, which are in this case expressed purely as bytes.
     /// It is up to the caller to interpret them.
-    index_domain: im::HashMap<Vec<u8>, TupleRef>,
+    index_domain: im::HashMap<SliceRef, TupleRef>,
 
     /// Optional reverse index from codomain -> tuples, which is used to support (more) efficient
     /// reverse lookups.
-    index_codomain: Option<im::HashMap<Vec<u8>, HashSet<TupleRef>>>,
+    index_codomain: Option<im::HashMap<SliceRef, HashSet<TupleRef>>>,
 }
 
 impl BaseRelation {
@@ -87,7 +87,7 @@ impl BaseRelation {
             self.index_codomain
                 .as_mut()
                 .unwrap()
-                .entry(tuple.codomain().as_slice().to_vec())
+                .entry(tuple.codomain())
                 .or_default()
                 .insert(tuple.clone());
         }
@@ -102,20 +102,19 @@ impl BaseRelation {
         tuple.update_timestamp(self.id, self.slotbox.clone(), 0);
 
         // Update the domain index to point to the tuple...
-        self.index_domain
-            .insert(tuple.domain().as_slice().to_vec(), tuple.clone());
+        self.index_domain.insert(tuple.domain(), tuple.clone());
 
         // ... and update the secondary index if there is one.
         if let Some(index) = &mut self.index_codomain {
             index
-                .entry(tuple.codomain().as_slice().to_vec())
+                .entry(tuple.codomain())
                 .or_insert_with(HashSet::new)
                 .insert(tuple);
         }
     }
 
     pub fn seek_by_domain(&self, domain: SliceRef) -> Option<TupleRef> {
-        self.index_domain.get(domain.as_slice()).cloned()
+        self.index_domain.get(&domain).cloned()
     }
 
     pub fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(&self, f: &F) -> HashSet<TupleRef> {
@@ -131,7 +130,7 @@ impl BaseRelation {
         // We could do full-scan, but in this case we're going to assume that the caller knows
         // what they're doing.
         let codomain_index = self.index_codomain.as_ref().expect("No codomain index");
-        if let Some(tuple_refs) = codomain_index.get(codomain.as_slice()) {
+        if let Some(tuple_refs) = codomain_index.get(&codomain) {
             tuple_refs.iter().cloned().collect()
         } else {
             HashSet::new()
@@ -139,13 +138,13 @@ impl BaseRelation {
     }
     pub fn remove_by_domain(&mut self, domain: SliceRef) {
         // Seek the tuple id...
-        if let Some(tuple_ref) = self.index_domain.remove(domain.as_slice()) {
+        if let Some(tuple_ref) = self.index_domain.remove(&domain) {
             self.tuples.remove(&tuple_ref);
 
             // And remove from codomain index, if it exists in there
             if let Some(index) = &mut self.index_codomain {
                 index
-                    .entry(domain.as_slice().to_vec())
+                    .entry(domain)
                     .or_insert_with(HashSet::new)
                     .remove(&tuple_ref);
             }
@@ -155,16 +154,15 @@ impl BaseRelation {
     /// Update or insert a tuple into the relation.
     pub fn upsert_tuple(&mut self, tuple: TupleRef) {
         // First check the domain->tuple id index to see if we're inserting or updating.
-        let existing_tuple_ref = self.index_domain.get(tuple.domain().as_slice()).cloned();
+        let existing_tuple_ref = self.index_domain.get(&tuple.domain()).cloned();
         match existing_tuple_ref {
             None => {
                 // Insert into the tuple list and the index.
-                self.index_domain
-                    .insert(tuple.domain().as_slice().to_vec(), tuple.clone());
+                self.index_domain.insert(tuple.domain(), tuple.clone());
                 self.tuples.insert(tuple.clone());
                 if let Some(codomain_index) = &mut self.index_codomain {
                     codomain_index
-                        .entry(tuple.codomain().as_slice().to_vec())
+                        .entry(tuple.codomain())
                         .or_insert_with(HashSet::new)
                         .insert(tuple);
                 }
@@ -173,16 +171,15 @@ impl BaseRelation {
                 // We need the old value so we can update the codomain index.
                 if let Some(codomain_index) = &mut self.index_codomain {
                     codomain_index
-                        .entry(existing_tuple.codomain().as_slice().to_vec())
+                        .entry(existing_tuple.codomain())
                         .or_insert_with(HashSet::new)
                         .remove(&existing_tuple);
                     codomain_index
-                        .entry(tuple.codomain().as_slice().to_vec())
+                        .entry(tuple.codomain())
                         .or_insert_with(HashSet::new)
                         .insert(tuple.clone());
                 }
-                self.index_domain
-                    .insert(tuple.domain().as_slice().to_vec(), tuple.clone());
+                self.index_domain.insert(tuple.domain(), tuple.clone());
                 self.tuples.remove(&existing_tuple);
                 self.tuples.insert(tuple);
             }

@@ -13,6 +13,7 @@
 //
 
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::ops::RangeBounds;
 use std::sync::Arc;
 use yoke::Yoke;
@@ -50,6 +51,11 @@ impl Display for SliceRef {
     }
 }
 
+impl Hash for SliceRef {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state)
+    }
+}
 pub trait ByteSource: Send + Sync {
     fn as_slice(&self) -> &[u8];
     fn len(&self) -> usize;
