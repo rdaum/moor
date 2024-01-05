@@ -52,6 +52,7 @@ okaywal.workspace = true
 io-uring.workspace = true
 hi_sparse_bitset.workspace = true
 tokio-eventfd.workspace = true
+fast-counter.workspace = true
 
 # For testing & benching common bits
 serde_json.workspace = true

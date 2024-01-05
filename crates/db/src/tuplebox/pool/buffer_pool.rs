@@ -123,7 +123,7 @@ impl BufferPool {
 
 impl BufferPool {
     /// Allocate a buffer of the given size.
-    pub fn alloc(&self, size: usize) -> Result<(Bid, AtomicPtr<u8>, usize), PagerError> {
+    pub fn alloc(&mut self, size: usize) -> Result<(Bid, AtomicPtr<u8>, usize), PagerError> {
         if size > self.available_bytes.load(Ordering::SeqCst) {
             return Err(PagerError::InsufficientRoom {
                 desired: size,
@@ -138,7 +138,7 @@ impl BufferPool {
             return Err(PagerError::UnsupportedSize(1 << np2));
         }
 
-        let nearest_class = &self.size_classes[sc_idx];
+        let nearest_class = &mut self.size_classes[sc_idx];
         let block_size = nearest_class.block_size;
 
         // Ask the size class for its offset for allocation.
@@ -161,9 +161,9 @@ impl BufferPool {
 
     /// Free a buffer, completely deallocating it, by which we mean removing it from the index of
     /// used pages.
-    pub fn free(&self, page: Bid) -> Result<(), PagerError> {
+    pub fn free(&mut self, page: Bid) -> Result<(), PagerError> {
         let sc = Self::size_class_of(page);
-        let sc = &self.size_classes[sc as usize];
+        let sc = &mut self.size_classes[sc as usize];
         let block_size = sc.block_size;
         let offset = Self::offset_of(page);
         sc.free(offset / block_size)?;
@@ -186,9 +186,9 @@ impl BufferPool {
 
     /// Mark a buffer as restored, by which we mean adding it to the index of used pages at this position.
     /// This is used to restore a buffer from disk.
-    pub fn restore<T>(&self, page: Bid) -> Result<(AtomicPtr<T>, usize), PagerError> {
+    pub fn restore<T>(&mut self, page: Bid) -> Result<(AtomicPtr<T>, usize), PagerError> {
         let sc_num = Self::size_class_of(page);
-        let sc = &self.size_classes[sc_num as usize];
+        let sc = &mut self.size_classes[sc_num as usize];
         let block_size = sc.block_size;
         let offset = Self::offset_of(page);
 
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn test_buffer_allocation_perfect() {
         let capacity = MB_256;
-        let bp = BufferPool::new(capacity).unwrap();
+        let mut bp = BufferPool::new(capacity).unwrap();
 
         // Allocate buffers that fit just inside powers of 2, so no fragmentation will occur due to
         // rounding up nearest size.
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn test_buffer_allocation_fragmented() {
         let capacity = MB_256;
-        let bp = BufferPool::new(capacity).unwrap();
+        let mut bp = BufferPool::new(capacity).unwrap();
 
         // Allocate buffers that fit 10 bytes under some powers of 2, so we accumulate some
         // fragmentation.
@@ -347,7 +347,7 @@ mod tests {
     #[test]
     fn test_error_conditions() {
         let capacity = MB_256;
-        let bp = BufferPool::new(capacity).unwrap();
+        let mut bp = BufferPool::new(capacity).unwrap();
 
         // Test capacity limit
         let res = bp.alloc(capacity + 1);

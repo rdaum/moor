@@ -1013,6 +1013,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "281e452d3bad4005426416cdba5ccfd4f5c1280e10099e21db27f7c1c28347fc"
 
 [[package]]
+name = "fast-counter"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bf000f5d36bbfe94dd055f7fc5ec15e67cc674fd867a109b1c56577c37d8234"
+
+[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1917,6 +1923,7 @@ dependencies = [
  "bincode",
  "criterion",
  "crossbeam-channel",
+ "fast-counter",
  "hi_sparse_bitset",
  "human_bytes",
  "im",

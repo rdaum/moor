@@ -62,6 +62,7 @@ criterion = { version = "0.5.1", features = ["async_tokio"] }
 crossbeam-channel = "0.5.10"
 decorum = "0.3.1"  # For ordering & comparing our floats
 enum-primitive-derive = "0.3.0"
+fast-counter = "1.0.0"
 human_bytes = "0.4.3"
 inventory = "0.3.14"
 itertools = "0.12.0"

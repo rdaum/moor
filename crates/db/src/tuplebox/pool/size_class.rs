@@ -12,10 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use fast_counter::ConcurrentCounter;
 use std::io;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::sync::RwLock;
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 use hi_sparse_bitset::BitSetInterface;
 use human_bytes::human_bytes;
@@ -30,16 +30,11 @@ pub struct SizeClass {
     pub block_size: usize,
     pub base_addr: AtomicPtr<u8>,
     pub virt_size: usize,
-
-    inner: RwLock<SCInner>,
-
-    // stats
-    num_blocks_used: AtomicUsize,
-}
-
-struct SCInner {
     free_list: Vec<usize>,
     allocset: BitSet,
+
+    // stats
+    num_blocks_used: ConcurrentCounter,
 }
 
 fn find_first_empty(bs: &BitSet) -> usize {
@@ -101,24 +96,23 @@ impl SizeClass {
             block_size,
             base_addr: AtomicPtr::new(base_addr),
             virt_size,
-            inner: RwLock::new(SCInner {
-                free_list: vec![],
-                allocset: BitSet::new(),
-            }),
-            num_blocks_used: Default::default(),
+
+            free_list: vec![],
+            allocset: BitSet::new(),
+
+            num_blocks_used: ConcurrentCounter::new(0),
         })
     }
 
-    pub fn alloc(&self) -> Result<usize, PagerError> {
+    pub fn alloc(&mut self) -> Result<usize, PagerError> {
         // Check the free list first.
-        let mut inner = self.inner.write().unwrap();
-        if let Some(blocknum) = inner.free_list.pop() {
-            inner.allocset.insert(blocknum);
-            self.num_blocks_used.fetch_add(1, Ordering::SeqCst);
+        if let Some(blocknum) = self.free_list.pop() {
+            self.allocset.insert(blocknum);
+            self.num_blocks_used.add(1);
             return Ok(blocknum);
         }
 
-        let blocknum = find_first_empty(&inner.allocset);
+        let blocknum = find_first_empty(&self.allocset);
 
         if blocknum >= self.virt_size / self.block_size {
             return Err(PagerError::InsufficientRoom {
@@ -127,28 +121,23 @@ impl SizeClass {
             });
         }
 
-        inner.allocset.insert(blocknum);
-        self.num_blocks_used.fetch_add(1, Ordering::SeqCst);
+        self.allocset.insert(blocknum);
+        self.num_blocks_used.add(1);
         Ok(blocknum)
     }
 
-    pub fn restore(&self, blocknum: usize) -> Result<(), PagerError> {
-        // Assert
-        let mut inner = self.inner.write().unwrap();
-
+    pub fn restore(&mut self, blocknum: usize) -> Result<(), PagerError> {
         // Assert that the block is not already allocated.
-        if inner.allocset.contains(blocknum) {
+        if self.allocset.contains(blocknum) {
             return Err(PagerError::CouldNotAllocate);
         }
 
-        inner.allocset.insert(blocknum);
-        self.num_blocks_used.fetch_add(1, Ordering::SeqCst);
+        self.allocset.insert(blocknum);
+        self.num_blocks_used.add(1);
         Ok(())
     }
 
-    pub fn free(&self, blocknum: usize) -> Result<(), PagerError> {
-        let mut inner = self.inner.write().unwrap();
-
+    pub fn free(&mut self, blocknum: usize) -> Result<(), PagerError> {
         unsafe {
             let base_addr = self.base_addr.load(Ordering::SeqCst);
             let addr = base_addr.offset(blocknum as isize * self.block_size as isize);
@@ -162,16 +151,14 @@ impl SizeClass {
                 );
             }
         }
-        inner.allocset.remove(blocknum);
-        inner.free_list.push(blocknum);
-        self.num_blocks_used.fetch_sub(1, Ordering::SeqCst);
+        self.allocset.remove(blocknum);
+        self.free_list.push(blocknum);
+        self.num_blocks_used.add(1);
         Ok(())
     }
 
     #[allow(dead_code)] // Legitimate potential future use
-    pub fn page_out(&self, blocknum: usize) -> Result<(), PagerError> {
-        let mut inner = self.inner.write().unwrap();
-
+    pub fn page_out(&mut self, blocknum: usize) -> Result<(), PagerError> {
         unsafe {
             let addr = self.base_addr.load(Ordering::SeqCst);
             // Panic on fail here because this working is a fundamental invariant that we cannot
@@ -189,18 +176,17 @@ impl SizeClass {
                 );
             }
         }
-        inner.allocset.remove(blocknum);
-        self.num_blocks_used.fetch_sub(1, Ordering::SeqCst);
+        self.allocset.remove(blocknum);
+        self.num_blocks_used.add(1);
         Ok(())
     }
 
     pub fn is_allocated(&self, blocknum: usize) -> bool {
-        let inner = self.inner.read().unwrap();
-        inner.allocset.contains(blocknum)
+        self.allocset.contains(blocknum)
     }
 
     pub fn bytes_used(&self) -> usize {
-        self.num_blocks_used.load(Ordering::Relaxed) * self.block_size
+        self.num_blocks_used.sum() as usize
     }
 
     pub fn available(&self) -> usize {
