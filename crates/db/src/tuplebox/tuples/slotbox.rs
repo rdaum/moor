@@ -155,8 +155,7 @@ impl SlotBox {
         id: TupleId,
         new_value: &[u8],
     ) -> Result<Option<TupleRef>, SlotBoxError> {
-        // The lock scope has to be limited here, or we'll deadlock if we need to re-allocate.
-        {
+        let new_tup = {
             let mut inner = self.inner.lock().unwrap();
             let mut page_handle = inner.page_for(id.page)?;
 
@@ -169,8 +168,9 @@ impl SlotBox {
                 return Ok(None);
             }
             inner.do_remove(id)?;
-        }
-        let new_tup = self.allocate(new_value.len(), relation_id, Some(new_value))?;
+
+            inner.do_alloc(new_value.len(), relation_id, Some(new_value), &self)?
+        };
         Ok(Some(new_tup))
     }
 
@@ -199,29 +199,19 @@ impl SlotBox {
         allocator
             .available_page_space
             .iter()
+            .map(|ps| ps.pages())
             .flatten()
-            .map(
-                |PageSpace {
-                     available: _,
-                     bid: pid,
-                 }| pid.0 as PageId,
-            )
             .collect()
     }
 }
 
-struct PageSpace {
-    available: usize,
-    bid: Bid,
-}
-
 struct Inner {
+    // TODO: buffer pool has its own locks per size class, so we might not need this inside another lock
+    //   *but* the other two items here are not thread-safe, and we need to maintain consistency across the three.
+    //   so we can maybe get rid of the locks in the buffer pool...
     pool: BufferPool,
-    // TODO: could keep two separate vectors here -- one with the page sizes, separate for the page
-    //   ids, so that SIMD can be used to used to search and sort.
-    //   Will look into it once/if benchmarking justifies it.
     /// The set of used pages, indexed by relation, in sorted order of the free space available in them.
-    available_page_space: SparseChunk<Vec<PageSpace>, 64>,
+    available_page_space: SparseChunk<PageSpace, 64>,
     /// The "swizzelable" references to tuples, indexed by tuple id.
     /// There has to be a stable-memory address for each of these, as they are referenced by
     /// pointers in the TupleRefs themselves.
@@ -286,8 +276,8 @@ impl Inner {
             page,
             size,
             free_space,
-            self.available_page_space[relation_id.0][offset].available,
-            self.available_page_space[relation_id.0][offset].bid
+            self.available_page_space[relation_id.0].available[offset],
+            self.available_page_space[relation_id.0].block_ids[offset]
         );
     }
 
@@ -308,23 +298,14 @@ impl Inner {
     fn do_mark_page_used(&mut self, relation_id: RelationId, free_space: usize, pid: PageId) {
         let bid = Bid(pid as u64);
         let Some(available_page_space) = self.available_page_space.get_mut(relation_id.0) else {
-            self.available_page_space.insert(
-                relation_id.0,
-                vec![PageSpace {
-                    available: free_space,
-                    bid,
-                }],
-            );
+            self.available_page_space
+                .insert(relation_id.0, PageSpace::new(free_space, bid));
             return;
         };
 
-        // allocator.bitmap.insert(pid as usize);
-        available_page_space.push(PageSpace {
-            available: free_space,
-            bid,
-        });
-        available_page_space.sort_by(|a, b| a.available.cmp(&b.available));
+        available_page_space.insert(free_space, bid);
     }
+
     fn do_remove(&mut self, id: TupleId) -> Result<(), SlotBoxError> {
         let mut page_handle = self.page_for(id.page)?;
         let mut write_lock = page_handle.write_lock();
@@ -370,20 +351,13 @@ impl Inner {
         };
         match self.available_page_space.get_mut(relation_id.0) {
             Some(available_page_space) => {
-                available_page_space.push(PageSpace {
-                    available: slot_page_empty_size(actual_size),
-                    bid,
-                });
-                available_page_space.sort_by(|a, b| a.available.cmp(&b.available));
+                available_page_space.insert(slot_page_empty_size(actual_size), bid);
                 Ok((bid.0 as PageId, available_page_space.len() - 1))
             }
             None => {
                 self.available_page_space.insert(
                     relation_id.0,
-                    vec![PageSpace {
-                        available: slot_page_empty_size(actual_size),
-                        bid,
-                    }],
+                    PageSpace::new(slot_page_empty_size(actual_size), bid),
                 );
                 Ok((bid.0 as PageId, 0))
             }
@@ -407,33 +381,13 @@ impl Inner {
             return self.alloc(relation_id, page_size);
         };
 
-        // Look for the first page with enough space in our vector of used pages, which is kept
-        // sorted by free space.
-        let found = available_page_space.binary_search_by(
-            |PageSpace {
-                 available: free_space,
-                 bid: _,
-             }| free_space.cmp(&tuple_size),
-        );
+        // Can we find some room?
+        if let Some(found) = available_page_space.find_room(tuple_size) {
+            return Ok(found);
+        }
 
-        return match found {
-            // Exact match, highly unlikely, but possible.
-            Ok(entry_num) => {
-                let exact_match = (available_page_space[entry_num].bid, entry_num);
-                let pid = exact_match.0 .0 as PageId;
-                Ok((pid, entry_num))
-            }
-            // Out of room, need to allocate a new page.
-            Err(position) if position == available_page_space.len() => {
-                // If we didn't find a page with enough space, then we need to allocate a new page.
-                return self.alloc(relation_id, page_size);
-            }
-            // Found a page we add to.
-            Err(entry_num) => {
-                let entry = available_page_space.get_mut(entry_num).unwrap();
-                Ok((entry.bid.0 as PageId, entry_num))
-            }
-        };
+        // Out of room, need to allocate a new page.
+        return self.alloc(relation_id, page_size);
     }
 
     fn finish_alloc(
@@ -444,46 +398,21 @@ impl Inner {
         page_remaining_bytes: usize,
     ) {
         let available_page_space = &mut self.available_page_space[relation_id.0];
-        let entry = &mut available_page_space[offset];
-
-        entry.available = page_remaining_bytes;
-        // If we (unlikely) consumed all the bytes, then we can remove the page from the avail pages
-        // set.
-        if entry.available == 0 {
-            available_page_space.remove(offset);
-        }
-        available_page_space.sort_by(|a, b| a.available.cmp(&b.available));
+        available_page_space.finish(offset, page_remaining_bytes);
     }
 
     fn report_free(&mut self, pid: PageId, new_size: usize, is_empty: bool) {
         // Seek the page in the available_page_space vectors, and add the bytes back to its free space.
         // We don't know the relation id here, so we have to linear scan all of them.
         for available_page_space in self.available_page_space.iter_mut() {
-            let Some(found) = available_page_space.iter_mut().find(
-                |PageSpace {
-                     available: _,
-                     bid: p,
-                 }| p.0 == pid as u64,
-            ) else {
-                continue;
-            };
-
-            found.available = new_size;
-
-            // If the page is now totally empty, then we can remove it from the available_page_space vector.
-            if is_empty {
-                available_page_space.retain(
-                    |PageSpace {
-                         available: _,
-                         bid: p,
-                     }| p.0 != pid as u64,
-                );
-                self.pool
-                    .free(Bid(pid as u64))
-                    .expect("Could not free page");
+            if available_page_space.update_page(pid, new_size, is_empty) {
+                if is_empty {
+                    self.pool
+                        .free(Bid(pid as u64))
+                        .expect("Could not free page");
+                }
+                return;
             }
-            available_page_space.sort_by(|a, b| a.available.cmp(&b.available));
-
             return;
         }
 
@@ -491,6 +420,110 @@ impl Inner {
             "Page not found in used pages in allocator on free; pid {}; could be double-free, dangling weak reference?",
             pid
         );
+    }
+}
+
+/// The amount of space available for each page known to the allocator for a relation.
+/// Kept in two vectors, one for the available space, and one for the page ids, and kept sorted by
+/// available space, with the page ids in the same order.
+struct PageSpace {
+    available: Vec<usize>,
+    block_ids: Vec<Bid>,
+}
+impl PageSpace {
+    fn new(available: usize, bid: Bid) -> Self {
+        Self {
+            available: vec![available],
+            block_ids: vec![bid],
+        }
+    }
+
+    fn sort(&mut self) {
+        // sort both vectors by available space, keeping the block ids in order with the available
+        let mut pairs = self
+            .available
+            .iter()
+            .cloned()
+            .zip(self.block_ids.iter())
+            .collect::<Vec<_>>();
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        self.available = pairs.iter().map(|(a, _)| *a).collect();
+        self.block_ids = pairs.iter().map(|(_, b)| *b).cloned().collect();
+    }
+
+    fn insert(&mut self, available: usize, bid: Bid) {
+        self.available.push(available);
+        self.block_ids.push(bid);
+        self.sort();
+    }
+
+    fn seek(&self, pid: PageId) -> Option<usize> {
+        self.block_ids.iter().position(|bid| bid.0 == pid as u64)
+    }
+
+    /// Update the allocation record for the page.
+    fn update_page(&mut self, pid: PageId, available: usize, is_empty: bool) -> bool {
+        let Some(index) = self.seek(pid) else {
+            return false;
+        };
+
+        // If the page is now totally empty, then we can remove it from the available_page_space vector.
+        if is_empty {
+            self.available.remove(index);
+            self.block_ids.remove(index);
+        } else {
+            self.available[index] = available;
+        }
+        self.sort();
+        true
+    }
+
+    /// Find which page in this relation has room for a tuple of the given size.
+    fn find_room(&self, available: usize) -> Option<(PageId, usize)> {
+        // Look for the first page with enough space in our vector of used pages, which is kept
+        // sorted by free space.
+        let found = self
+            .available
+            .binary_search_by(|free_space| free_space.cmp(&available));
+
+        return match found {
+            // Exact match, highly unlikely, but possible.
+            Ok(entry_num) => {
+                let exact_match = (self.block_ids[entry_num], entry_num);
+                let pid = exact_match.0 .0 as PageId;
+                Some((pid, entry_num))
+            }
+            // Out of room, our caller will need to allocate a new page.
+            Err(position) if position == self.available.len() => {
+                // If we didn't find a page with enough space, then we need to allocate a new page.
+                return None;
+            }
+            // Found a page we add to.
+            Err(entry_num) => {
+                let page = self.block_ids[entry_num];
+                Some((page.0 as PageId, entry_num))
+            }
+        };
+    }
+
+    fn finish(&mut self, offset: usize, page_remaining_bytes: usize) {
+        self.available[offset] = page_remaining_bytes;
+
+        // If we (unlikely) consumed all the bytes, then we can remove the page from the avail pages
+        // set.
+        if page_remaining_bytes == 0 {
+            self.available.remove(offset);
+            self.block_ids.remove(offset);
+        }
+        self.sort();
+    }
+
+    fn pages(&self) -> impl Iterator<Item = PageId> + '_ {
+        self.block_ids.iter().map(|bid| bid.0 as PageId)
+    }
+
+    fn len(&self) -> usize {
+        self.available.len()
     }
 }
 

@@ -182,10 +182,10 @@ impl TupleBox {
     /// add it to the commit set.
     pub(crate) async fn prepare_commit_set<'a>(
         &self,
-        tx_ts: u64,
+        commit_ts: u64,
         tx_working_set: &WorkingSet,
     ) -> Result<CommitSet, CommitError> {
-        let mut commitset = CommitSet::new(tx_ts);
+        let mut commitset = CommitSet::new(commit_ts);
 
         for (relation_id, local_relation) in tx_working_set.relations.iter().enumerate() {
             let relation_id = RelationId(relation_id);
@@ -204,7 +204,7 @@ impl TupleBox {
                 let Some(cv) = canon_tuple else {
                     match &tuple {
                         TxTuple::Insert(t) => {
-                            t.update_timestamp(relation_id, self.slotbox.clone(), tx_ts);
+                            t.update_timestamp(relation_id, self.slotbox.clone(), commit_ts);
                             let forked_relation = commitset.fork(relation_id, canonical);
                             forked_relation.upsert_tuple(t.clone());
                             continue;
@@ -223,7 +223,7 @@ impl TupleBox {
                 // If the timestamp in our working tuple is our own ts, that's a conflict, because
                 // it means someone else has already committed a change to this tuple that we
                 // thought was net-new (and so used our own TS)
-                if tuple.ts() == tx_ts {
+                if tuple.ts() == commit_ts {
                     return Err(CommitError::TupleVersionConflict);
                 };
 
@@ -239,7 +239,7 @@ impl TupleBox {
                 let forked_relation = commitset.fork(relation_id, canonical);
                 match &tuple {
                     TxTuple::Insert(t) | TxTuple::Update(t) => {
-                        t.update_timestamp(relation_id, self.slotbox.clone(), tx_ts);
+                        t.update_timestamp(relation_id, self.slotbox.clone(), commit_ts);
                         let forked_relation = commitset.fork(relation_id, canonical);
                         forked_relation.upsert_tuple(t.clone());
                     }
