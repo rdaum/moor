@@ -203,11 +203,10 @@ impl TupleBox {
                 //   here.
                 let Some(cv) = canon_tuple else {
                     match &tuple {
-                        TxTuple::Insert(tref) => {
-                            let t = tref.get();
+                        TxTuple::Insert(t) => {
                             t.update_timestamp(relation_id, self.slotbox.clone(), tx_ts);
                             let forked_relation = commitset.fork(relation_id, canonical);
-                            forked_relation.upsert_tuple(tref.clone());
+                            forked_relation.upsert_tuple(t.clone());
                             continue;
                         }
                         TxTuple::Tombstone { .. } => {
@@ -231,7 +230,6 @@ impl TupleBox {
                 // Check the timestamp on the value, if it's newer than the read-timestamp,
                 // we have for this tuple then that's a conflict, because it means someone else has
                 // already committed a change to this tuple.
-                let cv = cv.get();
                 if cv.ts() > tuple.ts() {
                     return Err(CommitError::TupleVersionConflict);
                 }
@@ -240,11 +238,10 @@ impl TupleBox {
                 // branching of the old one.
                 let forked_relation = commitset.fork(relation_id, canonical);
                 match &tuple {
-                    TxTuple::Insert(tref) | TxTuple::Update(tref) => {
-                        let t = tref.get();
+                    TxTuple::Insert(t) | TxTuple::Update(t) => {
                         t.update_timestamp(relation_id, self.slotbox.clone(), tx_ts);
                         let forked_relation = commitset.fork(relation_id, canonical);
-                        forked_relation.upsert_tuple(tref.clone());
+                        forked_relation.upsert_tuple(t.clone());
                     }
                     TxTuple::Value(..) => {}
                     TxTuple::Tombstone {

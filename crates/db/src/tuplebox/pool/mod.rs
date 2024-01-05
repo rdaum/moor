@@ -39,4 +39,7 @@ pub enum PagerError {
 
     #[error("Invalid page access")]
     CouldNotAccess,
+
+    #[error("Invalid tuple pointer")]
+    InvalidTuplePointer,
 }

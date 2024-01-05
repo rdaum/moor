@@ -222,6 +222,29 @@ impl BufferPool {
         Ok((AtomicPtr::new(addr), sc.block_size))
     }
 
+    /// Find the buffer id (bid) for a given pointer. Can be used to identify the page
+    /// that a pointer belongs to, in case of page fault.
+    #[allow(dead_code)] // Legitimate potential future use
+    pub fn identify_page<T>(&self, ptr: AtomicPtr<T>) -> Result<Bid, PagerError> {
+        // Look at the address ranges for each size class to find the one that contains the pointer.
+        for (sc_idx, sc) in self.size_classes.iter().enumerate() {
+            let base = sc.base_addr.load(Ordering::SeqCst);
+            let base = base as usize;
+            let end = base + sc.virt_size;
+            let ptr = ptr.load(Ordering::SeqCst) as usize;
+            if ptr >= base && ptr < end {
+                // Found the size class that contains the pointer. Now we need to find the offset
+                // within the size class.
+                let offset = ptr - base;
+                let offset = offset / sc.block_size;
+                let offset = offset * sc.block_size;
+                let bid = Self::newbid(offset, sc_idx as u8);
+                return Ok(bid);
+            }
+        }
+        Err(PagerError::InvalidTuplePointer)
+    }
+
     /// Get the total reserved capacity of the buffer pool.
     #[allow(dead_code)] // Legitimate potential future use
     pub fn capacity_bytes(&self) -> usize {

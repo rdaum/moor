@@ -12,17 +12,22 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use slotbox::{PageId, SlotBox, SlotBoxError, SlotId, TupleId};
+pub use slotbox::{PageId, SlotBox, SlotBoxError, SlotId};
 use thiserror::Error;
-pub use tuple::Tuple;
-pub use tuple_ref::TupleRef;
+pub use tuple::TupleRef;
 pub use tx_tuple::TxTuple;
 
+mod slot_ptr;
 mod slotbox;
 mod slotted_page;
 mod tuple;
-mod tuple_ref;
 mod tx_tuple;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct TupleId {
+    pub page: PageId,
+    pub slot: SlotId,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum TupleError {

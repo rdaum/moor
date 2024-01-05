@@ -123,7 +123,7 @@ mod test {
                 let r_tups: Vec<_> = db
                     .with_relation(relation, |r| {
                         let tuples = r.predicate_scan(&|_| true);
-                        tuples.iter().map(|t| to_val(t.get().domain())).collect()
+                        tuples.iter().map(|t| to_val(t.domain())).collect()
                     })
                     .await;
                 expected.insert(relation, r_tups);
@@ -159,7 +159,7 @@ mod test {
                         for t in expected_tuples {
                             let t = from_val(*t);
                             let v = r.seek_by_domain(t).unwrap();
-                            tups.push(to_val(v.get().domain()));
+                            tups.push(to_val(v.domain()));
                         }
                         tups
                     })

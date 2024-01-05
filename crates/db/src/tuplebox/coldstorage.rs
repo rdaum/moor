@@ -69,7 +69,6 @@ impl ColdStorage {
         let page_storage = Arc::new(Mutex::new(PageStore::new(path.join("pages"), &eventfd)));
         let wal_manager = WalManager {
             page_storage: page_storage.clone(),
-            slot_box: slot_box.clone(),
         };
         // Do initial recovery of anything left in the WAL before starting up, which should
         // flush everything to page storage, from which we can then go and load it.
@@ -107,27 +106,27 @@ impl ColdStorage {
         let mut restored_slots = HashMap::new();
         let mut restored_bytes = 0;
         for (page_size, page_num, relation_id) in ids {
-            let sb_page = slot_box.restore(page_num).expect("Unable to get page");
-            let slot_ids = sb_page.load(|buf| {
-                ps.read_page_buf(page_num, relation_id, buf)
-                    .expect("Unable to read page")
-            });
-            // The allocator needs to know that this page is used.
-            slot_box.mark_page_used(relation_id, sb_page.available_content_bytes(), page_num);
+            let tuple_ids = slot_box
+                .clone()
+                .load_page(relation_id, page_num, |buf| {
+                    ps.read_page_buf(page_num, relation_id, buf)
+                        .expect("Unable to read page")
+                })
+                .expect("Unable to get page");
+
             restored_slots
                 .entry(relation_id)
                 .or_insert_with(HashSet::new)
-                .insert((page_num, slot_ids));
+                .insert(tuple_ids);
             restored_bytes += page_size;
         }
 
         // Now iterate all the slots we restored, and re-establish their indexes in the relations they belong to.
         let mut restored_count = 0;
-        for (relation_id, pages) in restored_slots {
-            for (page_num, slot_ids) in pages {
-                let relation = &mut relations[relation_id.0];
-                for slot_id in slot_ids {
-                    let tuple_id: TupleId = (page_num, slot_id);
+        for (relation_id, relation_tuple_ids) in restored_slots {
+            for page_tuple_ids in relation_tuple_ids {
+                for tuple_id in page_tuple_ids {
+                    let relation = &mut relations[relation_id.0];
                     relation.index_tuple(tuple_id);
                     restored_count += 1;
                 }
@@ -182,7 +181,8 @@ impl ColdStorage {
                         }
                     }
                 },
-                // When the eventfd is triggered by the page store, we need to ask it to process completions.
+                // When the eventfd is triggered by the page store, we need to ask it to process
+                // completions.
                 _ = event_fd.read(&mut buf) => {
                     let _ = ps.lock().unwrap().process_completions();
                 }
@@ -244,7 +244,10 @@ impl ColdStorage {
             for t in r.tuples() {
                 match t {
                     TxTuple::Insert(_) | TxTuple::Update(_) | TxTuple::Tombstone { .. } => {
-                        let (page_id, _slot_id) = t.tuple_id();
+                        let TupleId {
+                            page: page_id,
+                            slot: _slot_id,
+                        } = t.tuple_id();
                         dirty_pages.insert((page_id, r.id));
                     }
                     TxTuple::Value(_) => {
@@ -290,7 +293,6 @@ struct WalManager {
     // TODO: having a lock on the cold storage should not be necessary, but it is not !Sync, despite
     //  it supposedly being thread safe.
     page_storage: Arc<Mutex<PageStore>>,
-    slot_box: Arc<SlotBox>,
 }
 
 impl Debug for WalManager {
@@ -350,12 +352,6 @@ impl LogManager for WalManager {
             error!("Unable to write batch: {:?}", e);
             return Ok(());
         };
-
-        for tuple_id in evicted {
-            if let Err(e) = self.slot_box.remove(tuple_id) {
-                warn!(?tuple_id, e = ?e, "Failed to evict page from slot box");
-            }
-        }
 
         Ok(())
     }
@@ -491,7 +487,10 @@ impl WalManager {
                     pid as PageId,
                     relation_id,
                 ));
-                to_evict.push((pid as PageId, slot_id as SlotId));
+                to_evict.push(TupleId {
+                    page: pid as PageId,
+                    slot: slot_id as SlotId,
+                });
             }
         }
     }

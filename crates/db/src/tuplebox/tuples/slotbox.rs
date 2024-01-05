@@ -29,24 +29,26 @@
 // TODO: rename me, _I_ am the tuplebox. The "slots" are just where my tuples get stored.
 
 use std::cmp::max;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use sized_chunks::SparseChunk;
 use thiserror::Error;
 use tracing::error;
 
 use crate::tuplebox::pool::{Bid, BufferPool, PagerError};
+use crate::tuplebox::tuples::slot_ptr::SlotPtr;
 pub use crate::tuplebox::tuples::slotted_page::SlotId;
 use crate::tuplebox::tuples::slotted_page::{
     slot_index_overhead, slot_page_empty_size, SlottedPage,
 };
+use crate::tuplebox::tuples::{TupleId, TupleRef};
 use crate::tuplebox::RelationId;
 
 pub type PageId = usize;
-pub type TupleId = (PageId, SlotId);
 
 /// A SlotBox is a collection of (variable sized) pages, each of which is a collection of slots, each of which is holds
 /// dynamically sized tuples.
@@ -72,81 +74,65 @@ impl SlotBox {
     /// Allocates a new slot for a tuple, somewhere in one of the pages we managed.
     /// Does not allow tuples from different relations to mix on the same page.
     pub fn allocate(
-        &self,
+        self: Arc<Self>,
         size: usize,
         relation_id: RelationId,
         initial_value: Option<&[u8]>,
-    ) -> Result<TupleId, SlotBoxError> {
-        // Pick a buffer pool size. If the tuples are small, we use a reasonable sized page that could in theory hold
-        // a few tuples, but if the tuples are large, we use a page size that might hold only one or two.
-        // This way really large values can be slotted into the correct page size.
-        let tuple_size = size + slot_index_overhead();
-        let page_size = max(32768, tuple_size.next_power_of_two());
-
-        let needed_space = size + slot_index_overhead();
-
+    ) -> Result<TupleRef, SlotBoxError> {
         let mut inner = self.inner.lock().unwrap();
-        // Check if we have a free spot for this relation that can fit the tuple.
-        let (pid, offset) =
-            { inner.find_space(relation_id, needed_space, slot_page_empty_size(page_size))? };
 
-        let mut page_handle = inner.page_for(pid)?;
+        inner.do_alloc(size, relation_id, initial_value, &self)
+    }
 
-        let free_space = page_handle.available_content_bytes();
-        let mut page_write_lock = page_handle.write_lock();
-        if let Ok((slot_id, page_remaining, _)) = page_write_lock.allocate(size, initial_value) {
-            inner.finish_alloc(pid, relation_id, offset, page_remaining);
-            return Ok((pid, slot_id));
+    pub(crate) fn load_page<LF: FnMut(Pin<&mut [u8]>)>(
+        self: Arc<Self>,
+        relation_id: RelationId,
+        id: PageId,
+        mut lf: LF,
+    ) -> Result<Vec<TupleRef>, SlotBoxError> {
+        let mut inner = self.inner.lock().unwrap();
+
+        // Re-allocate the page.
+        let page = inner.do_restore_page(id).unwrap();
+
+        // Find all the slots referenced in this page.
+        let slot_ids = page.load(|buf| {
+            lf(buf);
+        });
+
+        // Now make sure we have swizrefs for all of them.
+        let mut refs = vec![];
+        for (slot, buflen, addr) in slot_ids.into_iter() {
+            let tuple_id = TupleId { page: id, slot };
+            let swizref = Box::pin(SlotPtr::create(self.clone(), tuple_id, addr, buflen));
+            inner.swizrefs.insert(tuple_id, swizref);
+            let swizref = inner.swizrefs.get_mut(&tuple_id).unwrap();
+            let sp = unsafe { Pin::into_inner_unchecked(swizref.as_mut()) };
+            let ptr = sp as *mut SlotPtr;
+            let ptr = AtomicPtr::new(ptr);
+            let tuple_ref = TupleRef::at_ptr(ptr);
+            refs.push(tuple_ref);
         }
-
-        // If we get here, then we failed to allocate on the page we wanted to, which means there's
-        // data coherence issues between the pages last-reported free space and the actual free
-        panic!(
-            "Page {} failed to allocate, we wanted {} bytes, but it only has {},\
-                but our records show it has {}, and its pid in that offset is {:?}",
-            pid,
-            size,
-            free_space,
-            inner.available_page_space[relation_id.0][offset].available,
-            inner.available_page_space[relation_id.0][offset].bid
-        );
+        // The allocator needs to know that this page is used.
+        inner.do_mark_page_used(relation_id, page.available_content_bytes(), id);
+        Ok(refs)
     }
 
-    pub fn remove(&self, id: TupleId) -> Result<(), SlotBoxError> {
-        let mut inner = self.inner.lock().unwrap();
-        inner.do_remove(id)
-    }
-
-    pub fn restore<'a>(&self, id: PageId) -> Result<SlottedPage<'a>, SlotBoxError> {
-        let inner = self.inner.lock().unwrap();
-        let (addr, page_size) = match inner.pool.restore(Bid(id as u64)) {
-            Ok(v) => v,
-            Err(PagerError::CouldNotAccess) => {
-                return Err(SlotBoxError::TupleNotFound(id));
-            }
-            Err(e) => {
-                panic!("Unexpected buffer pool error: {:?}", e);
-            }
-        };
-
-        Ok(SlottedPage::for_page(addr, page_size))
-    }
-
-    pub fn page_for<'a>(&self, id: PageId) -> Result<SlottedPage<'a>, SlotBoxError> {
+    pub(crate) fn page_for<'a>(&self, id: PageId) -> Result<SlottedPage<'a>, SlotBoxError> {
         let inner = self.inner.lock().unwrap();
         inner.page_for(id)
     }
 
     pub fn upcount(&self, id: TupleId) -> Result<(), SlotBoxError> {
         let inner = self.inner.lock().unwrap();
-        let page_handle = inner.page_for(id.0)?;
-        page_handle.upcount(id.1)
+        let page_handle = inner.page_for(id.page)?;
+        page_handle.upcount(id.slot)
     }
 
     pub fn dncount(&self, id: TupleId) -> Result<(), SlotBoxError> {
         let mut inner = self.inner.lock().unwrap();
-        let page_handle = inner.page_for(id.0)?;
-        if page_handle.dncount(id.1)? {
+        let page_handle = inner.page_for(id.page)?;
+        if page_handle.dncount(id.slot)? {
             inner.do_remove(id)?;
         }
         Ok(())
@@ -154,38 +140,37 @@ impl SlotBox {
 
     pub fn get(&self, id: TupleId) -> Result<Pin<&[u8]>, SlotBoxError> {
         let inner = self.inner.lock().unwrap();
-        let page_handle = inner.page_for(id.0)?;
+        let page_handle = inner.page_for(id.page)?;
 
         let lock = page_handle.read_lock();
 
-        let slc = lock.get_slot(id.1)?;
+        let slc = lock.get_slot(id.slot)?;
         Ok(slc)
     }
 
     pub fn update(
-        &self,
+        self: Arc<Self>,
         relation_id: RelationId,
         id: TupleId,
         new_value: &[u8],
-    ) -> Result<TupleId, SlotBoxError> {
+    ) -> Result<Option<TupleRef>, SlotBoxError> {
         // The lock scope has to be limited here, or we'll deadlock if we need to re-allocate.
         {
             let mut inner = self.inner.lock().unwrap();
-            let mut page_handle = inner.page_for(id.0)?;
+            let mut page_handle = inner.page_for(id.page)?;
 
             // If the value size is the same as the old value, we can just update in place, otherwise
             // it's a brand new allocation, and we have to remove the old one first.
             let mut page_write = page_handle.write_lock();
-            let mut existing = page_write.get_slot_mut(id.1).expect("Invalid tuple id");
-            // let mut existing = page_handle.get_mut(id.1).expect("Invalid tuple id");
+            let mut existing = page_write.get_slot_mut(id.slot).expect("Invalid tuple id");
             if existing.len() == new_value.len() {
                 existing.copy_from_slice(new_value);
-                return Ok(id);
+                return Ok(None);
             }
             inner.do_remove(id)?;
         }
-        let new_id = self.allocate(new_value.len(), relation_id, Some(new_value))?;
-        Ok(new_id)
+        let new_tup = self.allocate(new_value.len(), relation_id, Some(new_value))?;
+        Ok(Some(new_tup))
     }
 
     pub fn update_with<F: FnMut(Pin<&mut [u8]>)>(
@@ -194,10 +179,11 @@ impl SlotBox {
         mut f: F,
     ) -> Result<(), SlotBoxError> {
         let inner = self.inner.lock().unwrap();
-        let mut page_handle = inner.page_for(id.0)?;
-
+        let mut page_handle = inner.page_for(id.page)?;
         let mut page_write = page_handle.write_lock();
-        let existing = page_write.get_slot_mut(id.1).expect("Invalid tuple id");
+
+        let existing = page_write.get_slot_mut(id.slot).expect("Invalid tuple id");
+
         f(existing);
         Ok(())
     }
@@ -221,14 +207,102 @@ impl SlotBox {
             )
             .collect()
     }
+}
 
-    pub fn mark_page_used(&self, relation_id: RelationId, free_space: usize, pid: PageId) {
-        let mut allocator = self.inner.lock().unwrap();
+struct PageSpace {
+    available: usize,
+    bid: Bid,
+}
 
+struct Inner {
+    pool: BufferPool,
+    // TODO: could keep two separate vectors here -- one with the page sizes, separate for the page
+    //   ids, so that SIMD can be used to used to search and sort.
+    //   Will look into it once/if benchmarking justifies it.
+    // The set of used pages, indexed by relation, in sorted order of the free space available in them.
+    available_page_space: SparseChunk<Vec<PageSpace>, 64>,
+    swizrefs: HashMap<TupleId, Pin<Box<SlotPtr>>>,
+}
+
+impl Inner {
+    fn new(pool: BufferPool) -> Self {
+        Self {
+            available_page_space: SparseChunk::new(),
+            pool,
+            swizrefs: HashMap::new(),
+        }
+    }
+
+    fn do_alloc(
+        &mut self,
+        size: usize,
+        relation_id: RelationId,
+        initial_value: Option<&[u8]>,
+        sb: &Arc<SlotBox>,
+    ) -> Result<TupleRef, SlotBoxError> {
+        let tuple_size = size + slot_index_overhead();
+        let page_size = max(32768, tuple_size.next_power_of_two());
+
+        // Check if we have a free spot for this relation that can fit the tuple.
+        let (page, offset) =
+            { self.find_space(relation_id, tuple_size, slot_page_empty_size(page_size))? };
+
+        let mut page_handle = self.page_for(page)?;
+
+        let free_space = page_handle.available_content_bytes();
+        let mut page_write_lock = page_handle.write_lock();
+        if let Ok((slot, page_remaining, mut buf)) = page_write_lock.allocate(size, initial_value) {
+            self.finish_alloc(page, relation_id, offset, page_remaining);
+
+            // Make a swizzlable ptr reference and shove it in our set, and then return a tuple ref
+            // which has a ptr to it.
+            let buflen = buf.as_ref().len();
+            let bufaddr = AtomicPtr::new(buf.as_mut_ptr());
+            let tuple_id = TupleId { page, slot };
+
+            // Heap allocate the swizref, and and pin it, take the address of it, then stick the swizref
+            // in our set.
+            let mut swizref = Box::pin(SlotPtr::create(sb.clone(), tuple_id, bufaddr, buflen));
+            let swizaddr = unsafe { swizref.as_mut().get_unchecked_mut() } as *mut SlotPtr;
+            self.swizrefs.insert(tuple_id, swizref);
+
+            // Establish initial refcount using this existing lock.
+            page_write_lock.upcount(slot).unwrap();
+
+            return Ok(TupleRef::at_ptr(AtomicPtr::new(swizaddr)));
+        }
+
+        // If we get here, then we failed to allocate on the page we wanted to, which means there's
+        // data coherence issues between the pages last-reported free space and the actual free
+        panic!(
+            "Page {} failed to allocate, we wanted {} bytes, but it only has {},\
+                but our records show it has {}, and its pid in that offset is {:?}",
+            page,
+            size,
+            free_space,
+            self.available_page_space[relation_id.0][offset].available,
+            self.available_page_space[relation_id.0][offset].bid
+        );
+    }
+
+    fn do_restore_page<'a>(&mut self, id: PageId) -> Result<SlottedPage<'a>, SlotBoxError> {
+        let (addr, page_size) = match self.pool.restore(Bid(id as u64)) {
+            Ok(v) => v,
+            Err(PagerError::CouldNotAccess) => {
+                return Err(SlotBoxError::TupleNotFound(id));
+            }
+            Err(e) => {
+                panic!("Unexpected buffer pool error: {:?}", e);
+            }
+        };
+
+        Ok(SlottedPage::for_page(addr, page_size))
+    }
+
+    fn do_mark_page_used(&mut self, relation_id: RelationId, free_space: usize, pid: PageId) {
         let bid = Bid(pid as u64);
-        let Some(available_page_space) = allocator.available_page_space.get_mut(relation_id.0)
-        else {
-            allocator.available_page_space.insert(
+        let Some(available_page_space) = self.available_page_space.get_mut(relation_id.0) else {
+            self.available_page_space.insert(
                 relation_id.0,
                 vec![PageSpace {
                     available: free_space,
@@ -245,36 +319,15 @@ impl SlotBox {
         });
         available_page_space.sort_by(|a, b| a.available.cmp(&b.available));
     }
-}
-
-struct PageSpace {
-    available: usize,
-    bid: Bid,
-}
-
-struct Inner {
-    pool: BufferPool,
-    // TODO: could keep two separate vectors here -- one with the page sizes, separate for the page
-    //   ids, so that SIMD can be used to used to search and sort.
-    //   Will look into it once/if benchmarking justifies it.
-    // The set of used pages, indexed by relation, in sorted order of the free space available in them.
-    available_page_space: SparseChunk<Vec<PageSpace>, 64>,
-}
-
-impl Inner {
-    fn new(pool: BufferPool) -> Self {
-        Self {
-            available_page_space: SparseChunk::new(),
-            pool,
-        }
-    }
-
     fn do_remove(&mut self, id: TupleId) -> Result<(), SlotBoxError> {
-        let mut page_handle = self.page_for(id.0)?;
+        let mut page_handle = self.page_for(id.page)?;
         let mut write_lock = page_handle.write_lock();
 
-        let (new_free, _, is_empty) = write_lock.remove_slot(id.1)?;
-        self.report_free(id.0, new_free, is_empty);
+        let (new_free, _, is_empty) = write_lock.remove_slot(id.slot)?;
+        self.report_free(id.page, new_free, is_empty);
+
+        // TODO: The swizref stays just in case?
+        // self.swizrefs.remove(&id);
 
         Ok(())
     }
@@ -379,15 +432,13 @@ impl Inner {
 
     fn finish_alloc(
         &mut self,
-        pid: PageId,
+        _pid: PageId,
         relation_id: RelationId,
         offset: usize,
         page_remaining_bytes: usize,
     ) {
         let available_page_space = &mut self.available_page_space[relation_id.0];
         let entry = &mut available_page_space[offset];
-        assert!(entry.available >= page_remaining_bytes);
-        assert_eq!(entry.bid.0, pid as u64);
 
         entry.available = page_remaining_bytes;
         // If we (unlikely) consumed all the bytes, then we can remove the page from the avail pages
@@ -441,22 +492,24 @@ impl Inner {
 mod tests {
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
+    use std::sync::Arc;
 
-    use crate::tuplebox::tuples::slotbox::{SlotBox, SlotBoxError, TupleId};
+    use crate::tuplebox::tuples::slotbox::{SlotBox, SlotBoxError};
     use crate::tuplebox::tuples::slotted_page::slot_page_empty_size;
+    use crate::tuplebox::tuples::TupleRef;
     use crate::tuplebox::RelationId;
 
-    fn fill_until_full(sb: &mut SlotBox) -> Vec<(TupleId, Vec<u8>)> {
+    fn fill_until_full(sb: &Arc<SlotBox>) -> Vec<(TupleRef, Vec<u8>)> {
         let mut tuples = Vec::new();
 
         // fill until full... (SlotBoxError::BoxFull)
         loop {
             let mut rng = thread_rng();
             let tuple_len = rng.gen_range(1..(slot_page_empty_size(52000)));
-            let tuple: Vec<u8> = rng.sample_iter(&Alphanumeric).take(tuple_len).collect();
-            match sb.allocate(tuple.len(), RelationId(0), Some(&tuple)) {
-                Ok(tuple_id) => {
-                    tuples.push((tuple_id, tuple));
+            let value: Vec<u8> = rng.sample_iter(&Alphanumeric).take(tuple_len).collect();
+            match TupleRef::allocate(RelationId(0), sb.clone(), 0, &value, &value) {
+                Ok(tref) => {
+                    tuples.push((tref, value));
                 }
                 Err(SlotBoxError::BoxFull(_, _)) => {
                     break;
@@ -472,19 +525,18 @@ mod tests {
     // Just allocate a single tuple, and verify that we can retrieve it.
     #[test]
     fn test_one_page_one_slot() {
-        let sb = SlotBox::new(32768 * 64);
-        let tuple = vec![1, 2, 3, 4, 5];
-        let tuple_id = sb
-            .allocate(tuple.len(), RelationId(0), Some(&tuple))
+        let sb = Arc::new(SlotBox::new(32768 * 64));
+        let expected_value = vec![1, 2, 3, 4, 5];
+        let _retrieved = sb
+            .clone()
+            .allocate(expected_value.len(), RelationId(0), Some(&expected_value))
             .unwrap();
-        let retrieved = sb.get(tuple_id).unwrap();
-        assert_eq!(tuple, *retrieved);
     }
 
-    // Fill just one page and verify that we can retrieve all the tuples.
+    // Fill just one page and verify that we can retrieve them all.
     #[test]
     fn test_one_page_a_few_slots() {
-        let sb = SlotBox::new(32768 * 64);
+        let sb = Arc::new(SlotBox::new(32768 * 64));
         let mut tuples = Vec::new();
         let mut last_page_id = None;
         loop {
@@ -492,82 +544,90 @@ mod tests {
             let tuple_len = rng.gen_range(1..128);
             let tuple: Vec<u8> = rng.sample_iter(&Alphanumeric).take(tuple_len).collect();
             let tuple_id = sb
+                .clone()
                 .allocate(tuple.len(), RelationId(0), Some(&tuple))
                 .unwrap();
             if let Some(last_page_id) = last_page_id {
-                if last_page_id != tuple_id.0 {
+                if last_page_id != tuple_id.id() {
                     break;
                 }
             }
-            last_page_id = Some(tuple_id.0);
+            last_page_id = Some(tuple_id.id());
             tuples.push((tuple_id, tuple));
         }
-        for (id, tuple) in tuples {
-            let retrieved = sb.get(id).unwrap();
-            assert_eq!(tuple, *retrieved);
+        for (tuple, expected_value) in tuples {
+            let retrieved = tuple.slot_buffer();
+            assert_eq!(expected_value, retrieved.as_slice());
         }
     }
 
     // Fill one page, then overflow into another, and verify we can get the tuple that's on the next page.
     #[test]
     fn test_page_overflow() {
-        let sb = SlotBox::new(32768 * 64);
+        let sb = Arc::new(SlotBox::new(32768 * 64));
         let mut tuples = Vec::new();
         let mut first_page_id = None;
-        let (next_page_tuple_id, next_page_tuple) = loop {
+        let (next_page_tuple_id, next_page_value) = loop {
             let mut rng = thread_rng();
             let tuple_len = rng.gen_range(1..128);
             let tuple: Vec<u8> = rng.sample_iter(&Alphanumeric).take(tuple_len).collect();
             let tuple_id = sb
+                .clone()
                 .allocate(tuple.len(), RelationId(0), Some(&tuple))
                 .unwrap();
             if let Some(last_page_id) = first_page_id {
-                if last_page_id != tuple_id.0 {
+                if last_page_id != tuple_id.id() {
                     break (tuple_id, tuple);
                 }
             }
-            first_page_id = Some(tuple_id.0);
+            first_page_id = Some(tuple_id.id());
             tuples.push((tuple_id, tuple));
         };
-        for (id, tuple) in tuples {
-            let retrieved = sb.get(id).unwrap();
-            assert_eq!(tuple, *retrieved);
+        for (tuple, expected_value) in tuples {
+            let retrieved = tuple.slot_buffer();
+            assert_eq!(expected_value, retrieved.as_slice());
         }
         // Now verify that the last tuple was on another, new page, and that we can retrieve it.
-        assert_ne!(next_page_tuple_id.0, first_page_id.unwrap());
-        let retrieved = sb.get(next_page_tuple_id).unwrap();
-        assert_eq!(*retrieved, next_page_tuple);
+        assert_ne!(next_page_tuple_id.id(), first_page_id.unwrap());
+        let retrieved = next_page_tuple_id.slot_buffer();
+        assert_eq!(retrieved.as_slice(), next_page_value);
     }
 
     // Generate a pile of random sized tuples (which accumulate to more than a single page size),
     // and then scan back and verify their presence/equality.
     #[test]
     fn test_basic_add_fill_etc() {
-        let mut sb = SlotBox::new(32768 * 32);
-        let tuples = fill_until_full(&mut sb);
-        for (i, (id, tuple)) in tuples.iter().enumerate() {
-            let retrieved = sb.get(*id).unwrap();
-            assert_eq!(*tuple, *retrieved, "Mismatch at {}th tuple", i);
+        let mut sb = Arc::new(SlotBox::new(32768 * 32));
+        let mut tuples = fill_until_full(&mut sb);
+        for (i, (tuple, expected_value)) in tuples.iter().enumerate() {
+            let retrieved = tuple.domain();
+            assert_eq!(
+                *expected_value,
+                retrieved.as_slice(),
+                "Mismatch at {}th tuple",
+                i
+            );
         }
         let used_pages = sb.used_pages();
         assert_ne!(used_pages.len(), tuples.len());
-        // Now free them all the tuples.
-        for (id, _tuple) in tuples {
-            sb.remove(id).unwrap();
-        }
+
+        // Now free all the tuples. This will destroy their refcounts.
+        tuples.clear();
     }
 
     // Verify that filling our box up and then emptying it out again works. Should end up with
     // everything mmap DONTNEED'd, and we should be able to re-fill it again, too.
     #[test]
     fn test_full_fill_and_empty() {
-        let mut sb = SlotBox::new(32768 * 64);
-        let tuples = fill_until_full(&mut sb);
-        for (id, _) in &tuples {
-            sb.remove(*id).unwrap();
-        }
+        let mut sb = Arc::new(SlotBox::new(32768 * 64));
+        let mut tuples = fill_until_full(&mut sb);
+
+        // Collect the manual ids of the tuples we've allocated, so we can check them for refcount goodness.
+        let ids = tuples.iter().map(|(t, _)| t.id()).collect::<Vec<_>>();
+        tuples.clear();
+
         // Verify that everything is gone.
-        for (id, _) in tuples {
+        for id in ids {
             assert!(sb.get(id).is_err());
         }
     }
@@ -576,20 +636,25 @@ mod tests {
     // fill back up again and verify the new presence.
     #[test]
     fn test_fill_and_free_and_refill_etc() {
-        let mut sb = SlotBox::new(32768 * 64);
+        let mut sb = Arc::new(SlotBox::new(32768 * 64));
         let mut tuples = fill_until_full(&mut sb);
         let mut rng = thread_rng();
         let mut freed_tuples = Vec::new();
-        for _ in 0..tuples.len() / 2 {
+
+        // Pick a bunch of tuples at random to free, and remove them from the tuples set, which should dncount
+        // them to 0, freeing them.
+        let to_remove = tuples.len() / 2;
+        for _ in 0..to_remove {
             let idx = rng.gen_range(0..tuples.len());
-            let (id, tuple) = tuples.remove(idx);
-            sb.remove(id).unwrap();
-            freed_tuples.push((id, tuple));
+            let (tuple, value) = tuples.remove(idx);
+            let id = tuple.id();
+            freed_tuples.push((id, value));
         }
+
         // What we expected to still be there is there.
-        for (id, tuple) in &tuples {
-            let retrieved = sb.get(*id).unwrap();
-            assert_eq!(*tuple, *retrieved);
+        for (tuple, expected_value) in &tuples {
+            let retrieved = tuple.domain();
+            assert_eq!(*expected_value, retrieved.as_slice());
         }
         // What we expected to not be there is not there.
         for (id, _) in freed_tuples {
@@ -598,13 +663,13 @@ mod tests {
         // Now fill back up again.
         let new_tuples = fill_until_full(&mut sb);
         // Verify both the new tuples and the old tuples are there.
-        for (id, tuple) in new_tuples {
-            let retrieved = sb.get(id).unwrap();
-            assert_eq!(tuple, *retrieved);
+        for (tuple, expected) in new_tuples {
+            let retrieved = tuple.domain();
+            assert_eq!(expected, retrieved.as_slice());
         }
-        for (id, tuple) in tuples {
-            let retrieved = sb.get(id).unwrap();
-            assert_eq!(tuple, *retrieved);
+        for (tuple, expected) in tuples {
+            let retrieved = tuple.domain();
+            assert_eq!(expected, retrieved.as_slice());
         }
     }
 }

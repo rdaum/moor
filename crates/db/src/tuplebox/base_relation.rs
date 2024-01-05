@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
+use crate::tuplebox::tuples::SlotBox;
 use crate::tuplebox::tuples::TupleRef;
-use crate::tuplebox::tuples::{SlotBox, TupleId};
 use crate::tuplebox::RelationId;
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,
@@ -71,38 +71,35 @@ impl BaseRelation {
             panic!("Relation already has a secondary index");
         }
         self.index_codomain = Some(im::HashMap::new());
-        for tuple_ref in self.tuples.iter() {
-            let tuple = tuple_ref.get();
+        for tuple in self.tuples.iter() {
             // ... update the secondary index.
             self.index_codomain
                 .as_mut()
                 .unwrap()
                 .entry(tuple.codomain().as_slice().to_vec())
                 .or_default()
-                .insert(tuple_ref.clone());
+                .insert(tuple.clone());
         }
     }
 
-    /// Establish indexes on a tuple initial-loaded from secondary storage. Basically a, "trust us,
+    /// Establish indexes for a tuple initial-loaded from secondary storage. Basically a, "trust us,
     /// this exists" move.
-    pub fn index_tuple(&mut self, tuple_id: TupleId) {
-        let tuple_ref = TupleRef::new(self.slotbox.clone(), tuple_id);
-        self.tuples.insert(tuple_ref.clone());
-        let tuple = tuple_ref.get();
+    pub fn index_tuple(&mut self, tuple: TupleRef) {
+        self.tuples.insert(tuple.clone());
 
         // Reset timestamp to 0, since this is a tuple initial-loaded from secondary storage.
         tuple.update_timestamp(self.id, self.slotbox.clone(), 0);
 
         // Update the domain index to point to the tuple...
         self.index_domain
-            .insert(tuple.domain().as_slice().to_vec(), tuple_ref.clone());
+            .insert(tuple.domain().as_slice().to_vec(), tuple.clone());
 
         // ... and update the secondary index if there is one.
         if let Some(index) = &mut self.index_codomain {
             index
                 .entry(tuple.codomain().as_slice().to_vec())
                 .or_insert_with(HashSet::new)
-                .insert(tuple_ref);
+                .insert(tuple);
         }
     }
 
@@ -113,10 +110,7 @@ impl BaseRelation {
     pub fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(&self, f: &F) -> HashSet<TupleRef> {
         self.tuples
             .iter()
-            .filter(|t| {
-                let t = t.get();
-                f(&(t.domain(), t.codomain()))
-            })
+            .filter(|t| f(&(t.domain(), t.codomain())))
             .cloned()
             .collect()
     }
@@ -148,41 +142,38 @@ impl BaseRelation {
     }
 
     /// Update or insert a tuple into the relation.
-    pub fn upsert_tuple(&mut self, new_tuple_ref: TupleRef) {
-        let tuple = new_tuple_ref.get();
+    pub fn upsert_tuple(&mut self, tuple: TupleRef) {
         // First check the domain->tuple id index to see if we're inserting or updating.
         let existing_tuple_ref = self.index_domain.get(tuple.domain().as_slice()).cloned();
         match existing_tuple_ref {
             None => {
                 // Insert into the tuple list and the index.
                 self.index_domain
-                    .insert(tuple.domain().as_slice().to_vec(), new_tuple_ref.clone());
-                self.tuples.insert(new_tuple_ref.clone());
+                    .insert(tuple.domain().as_slice().to_vec(), tuple.clone());
+                self.tuples.insert(tuple.clone());
                 if let Some(codomain_index) = &mut self.index_codomain {
                     codomain_index
                         .entry(tuple.codomain().as_slice().to_vec())
                         .or_insert_with(HashSet::new)
-                        .insert(new_tuple_ref);
+                        .insert(tuple);
                 }
             }
             Some(existing_tuple) => {
                 // We need the old value so we can update the codomain index.
-                let old_value = existing_tuple.get();
-
                 if let Some(codomain_index) = &mut self.index_codomain {
                     codomain_index
-                        .entry(old_value.codomain().as_slice().to_vec())
+                        .entry(existing_tuple.codomain().as_slice().to_vec())
                         .or_insert_with(HashSet::new)
                         .remove(&existing_tuple);
                     codomain_index
                         .entry(tuple.codomain().as_slice().to_vec())
                         .or_insert_with(HashSet::new)
-                        .insert(new_tuple_ref.clone());
+                        .insert(tuple.clone());
                 }
                 self.index_domain
-                    .insert(tuple.domain().as_slice().to_vec(), new_tuple_ref.clone());
+                    .insert(tuple.domain().as_slice().to_vec(), tuple.clone());
                 self.tuples.remove(&existing_tuple);
-                self.tuples.insert(new_tuple_ref);
+                self.tuples.insert(tuple);
             }
         }
     }

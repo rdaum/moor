@@ -341,12 +341,12 @@ impl TransientRelation {
         &self,
         domain: SliceRef,
     ) -> Result<(SliceRef, SliceRef), TupleError> {
-        let tuple_id = self
+        let tuple_idx = self
             .domain_tuples
             .get(domain.as_slice())
             .copied()
             .ok_or(TupleError::NotFound);
-        tuple_id.map(|id| self.tuples[id].clone())
+        tuple_idx.map(|id| self.tuples[id].clone())
     }
 
     /// Seek for tuples by their indexed codomain value, if there's an index. Panics if there is no
@@ -359,11 +359,11 @@ impl TransientRelation {
         // We could do full-scan, but in this case we're going to assume that the caller knows
         // what they're doing.
         let codomain_domain = self.codomain_domain.as_ref().expect("No codomain index");
-        let tuple_ids = codomain_domain
+        let tuple_indexes = codomain_domain
             .get(codomain.as_slice())
             .cloned()
             .ok_or(TupleError::NotFound)?;
-        Ok(tuple_ids
+        Ok(tuple_indexes
             .iter()
             .map(|tid| self.tuples[*tid].clone())
             .collect())
@@ -385,10 +385,10 @@ impl TransientRelation {
         if self.domain_tuples.contains_key(domain.as_slice()) {
             return Err(TupleError::Duplicate);
         }
-        let tuple_id = self.tuples.len();
+        let tuple_idx = self.tuples.len();
         self.tuples.push((domain.clone(), codomain.clone()));
         self.domain_tuples
-            .insert(domain.as_slice().to_vec(), tuple_id)
+            .insert(domain.as_slice().to_vec(), tuple_idx)
             .map(|_| ())
             .ok_or(TupleError::Duplicate)
     }
@@ -399,15 +399,15 @@ impl TransientRelation {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let tuple_id = self
+        let tuple_idx = self
             .domain_tuples
             .get(domain.as_slice())
             .copied()
             .ok_or(TupleError::NotFound)?;
         if self.codomain_domain.is_some() {
-            self.update_secondary(tuple_id, None, Some(codomain.clone()));
+            self.update_secondary(tuple_idx, None, Some(codomain.clone()));
         }
-        self.tuples[tuple_id] = (domain, codomain);
+        self.tuples[tuple_idx] = (domain, codomain);
         Ok(())
     }
 
@@ -417,41 +417,41 @@ impl TransientRelation {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let tuple_id = match self.domain_tuples.get(domain.as_slice()) {
-            Some(tuple_id) => {
-                self.tuples[*tuple_id] = (domain, codomain.clone());
-                *tuple_id
+        let tuple_idx = match self.domain_tuples.get(domain.as_slice()) {
+            Some(tuple_idx) => {
+                self.tuples[*tuple_idx] = (domain, codomain.clone());
+                *tuple_idx
             }
             None => {
-                let tuple_id = self.tuples.len();
+                let tuple_idx = self.tuples.len();
                 self.tuples.push((domain.clone(), codomain.clone()));
                 self.domain_tuples
-                    .insert(domain.as_slice().to_vec(), tuple_id);
-                tuple_id
+                    .insert(domain.as_slice().to_vec(), tuple_idx);
+                tuple_idx
             }
         };
-        self.update_secondary(tuple_id, None, Some(codomain.clone()));
+        self.update_secondary(tuple_idx, None, Some(codomain.clone()));
 
         Ok(())
     }
 
     /// Remove a tuple from the relation.
     pub async fn remove_by_domain(&mut self, domain: SliceRef) -> Result<(), TupleError> {
-        let tuple_id = self
+        let tuple_idx = self
             .domain_tuples
             .remove(domain.as_slice())
             .ok_or(TupleError::NotFound)?;
 
         if self.codomain_domain.is_some() {
-            self.update_secondary(tuple_id, None, None);
+            self.update_secondary(tuple_idx, None, None);
         }
-        self.tuples.remove(tuple_id);
+        self.tuples.remove(tuple_idx);
         Ok(())
     }
 
     pub(crate) fn update_secondary(
         &mut self,
-        tuple_id: usize,
+        tuple_idx: usize,
         old_codomain: Option<SliceRef>,
         new_codomain: Option<SliceRef>,
     ) {
@@ -464,13 +464,13 @@ impl TransientRelation {
             index
                 .entry(old_codomain.as_slice().to_vec())
                 .or_insert_with(HashSet::new)
-                .remove(&tuple_id);
+                .remove(&tuple_idx);
         }
         if let Some(new_codomain) = new_codomain {
             index
                 .entry(new_codomain.as_slice().to_vec())
                 .or_insert_with(HashSet::new)
-                .insert(tuple_id);
+                .insert(tuple_idx);
         }
     }
 }
@@ -536,15 +536,14 @@ mod tests {
         // Verify canonical state.
         {
             let relation = &db.canonical.read().await[0];
-            let tref = relation
+            let tuple = relation
                 .seek_by_domain(attr(b"abc"))
                 .expect("Expected tuple to exist");
-            let tuple = tref.get();
             assert_eq!(tuple.codomain().as_slice(), b"123");
 
             let tuples = relation.seek_by_codomain(attr(b"123"));
             assert_eq!(tuples.len(), 1);
-            let tuple = tuples.iter().next().unwrap().get();
+            let tuple = tuples.iter().next().unwrap();
             assert_eq!(tuple.domain().as_slice(), b"abc");
             assert_eq!(tuple.codomain().as_slice(), b"123");
         }

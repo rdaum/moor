@@ -96,6 +96,7 @@ impl SliceRef {
             b.as_slice()
         }))
     }
+
     #[must_use]
     pub fn from_bytes(buf: &[u8]) -> Self {
         Self(Yoke::attach_to_cart(

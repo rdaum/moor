@@ -32,10 +32,9 @@ use std::pin::Pin;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
 use std::sync::atomic::{AtomicPtr, AtomicU16, AtomicU32};
 
+use crate::tuplebox::tuples::slotbox::SlotBoxError;
 use atomic_wait::{wait, wake_all, wake_one};
 use tracing::error;
-
-use crate::tuplebox::tuples::slotbox::SlotBoxError;
 
 pub type SlotId = usize;
 
@@ -120,12 +119,12 @@ struct SlotIndexEntry {
     // The number of live references to this slot
     refcount: AtomicU16,
     // The offset of the slot in the content region
-    offset: u16,
+    offset: u32,
     // The allocated length of the slot in the content region. This remains constant for the life
     // of the slot, even if it is freed and re-used.
-    allocated: u16,
+    allocated: u32,
     // The actual in-use length of the data. When a slot is freed, this is set to 0.
-    used_bytes: u16,
+    used_bytes: u32,
 
     _pin: std::marker::PhantomPinned,
 }
@@ -135,11 +134,11 @@ impl SlotIndexEntry {
     fn alloc(mut self: Pin<&mut Self>, content_position: usize, size: usize) {
         unsafe {
             let index_entry = self.as_mut().get_unchecked_mut();
-            index_entry.offset = content_position as u16;
+            index_entry.offset = content_position as u32;
 
             // Net-new slots always have their full size used in their new index entry.
-            index_entry.used_bytes = size as u16;
-            index_entry.allocated = size as u16;
+            index_entry.used_bytes = size as u32;
+            index_entry.allocated = size as u32;
             index_entry.refcount = AtomicU16::new(0);
             index_entry.used = true;
         }
@@ -150,7 +149,7 @@ impl SlotIndexEntry {
         unsafe {
             let entry = self.as_mut().get_unchecked_mut();
             entry.used = true;
-            entry.used_bytes = size as u16;
+            entry.used_bytes = size as u32;
         }
     }
 
@@ -201,6 +200,7 @@ impl<'a> SlottedPage<'a> {
     }
 
     /// How much space is available in this page?
+    #[allow(dead_code)]
     pub fn free_space_bytes(&self) -> usize {
         let header = self.header();
         let used = (header.num_slots * std::mem::size_of::<SlotIndexEntry>() as u32) as usize
@@ -300,7 +300,10 @@ impl<'a> SlottedPage<'a> {
     /// Load into this page from an external byte source, which is assumed to be in our page
     /// format, and then reset all refcounts to 0, clear lock state, and return the set of all valid
     /// slot IDs.
-    pub fn load<LF: FnMut(Pin<&mut [u8]>)>(&self, mut lf: LF) -> Vec<SlotId> {
+    pub(crate) fn load<LF: FnMut(Pin<&mut [u8]>)>(
+        &self,
+        mut lf: LF,
+    ) -> Vec<(SlotId, usize, AtomicPtr<u8>)> {
         // First copy in the physical bytes into our address.
         let memory_as_slice = unsafe {
             Pin::new_unchecked(std::slice::from_raw_parts_mut(
@@ -315,17 +318,24 @@ impl<'a> SlottedPage<'a> {
         header.lock_state.store(0, SeqCst);
         header.writer_wake_counter.store(0, SeqCst);
 
-        // Now reset all the refcounts to 0, and collect the list of all active slots.,
-        let mut slot_ids = vec![];
+        // Now reset all the refcounts to 1, and collect the list of all active slots.,
+        let mut slots = vec![];
         let num_slots = header.num_slots;
         for i in 0..num_slots {
             let index_entry = self.get_index_entry_mut(i as usize);
             if index_entry.used {
-                index_entry.refcount.store(0, SeqCst);
-                slot_ids.push(i as SlotId);
+                index_entry.refcount.store(1, SeqCst);
+                let slot_id = i as SlotId;
+                let ptr = unsafe {
+                    self.base_address
+                        .load(SeqCst)
+                        .offset(index_entry.offset as isize)
+                };
+                let ptr = AtomicPtr::new(ptr);
+                slots.push((slot_id, index_entry.used_bytes as usize, ptr));
             }
         }
-        slot_ids
+        slots
     }
 
     /// Copy the contents of this page into a slice.
@@ -421,22 +431,16 @@ impl<'a> SlottedPage<'a> {
         let offset = index_entry.offset as usize;
         let length = index_entry.used_bytes as usize;
 
+        assert!(
+            offset + length <= self.page_size,
+            "slot {} is out of bounds",
+            slot_id
+        );
+
         let memory_as_slice = unsafe {
             std::slice::from_raw_parts_mut(self.base_address.load(SeqCst), self.page_size)
         };
         Ok(unsafe { Pin::new_unchecked(&mut memory_as_slice[offset..offset + length]) })
-    }
-
-    pub fn num_active_slots(&self) -> usize {
-        let ns = self.header().num_slots as usize;
-        let mut total = 0;
-        for i in 0..ns {
-            let index_entry = self.get_index_entry(i);
-            if index_entry.used {
-                total += 1;
-            }
-        }
-        total
     }
 }
 
@@ -607,10 +611,6 @@ pub struct PageWriteGuard<'a> {
 }
 
 impl<'a> PageWriteGuard<'a> {
-    pub fn page_ptr(&self) -> *mut u8 {
-        self.base_address
-    }
-
     pub fn get_slot_mut(&mut self, slot_id: SlotId) -> Result<Pin<&'a mut [u8]>, SlotBoxError> {
         let sp = SlottedPage {
             base_address: AtomicPtr::new(self.base_address),
@@ -639,6 +639,15 @@ impl<'a> PageWriteGuard<'a> {
             _marker: Default::default(),
         };
         sp.remove_slot(slot_id)
+    }
+
+    pub fn upcount(&mut self, slot_id: SlotId) -> Result<(), SlotBoxError> {
+        let sp = SlottedPage {
+            base_address: AtomicPtr::new(self.base_address),
+            page_size: self.page_size,
+            _marker: Default::default(),
+        };
+        sp.upcount(slot_id)
     }
 
     fn header_mut(&self) -> Pin<&mut SlottedPageHeader> {

@@ -36,9 +36,7 @@ pub enum TxTuple {
 impl TxTuple {
     pub fn domain(&self) -> SliceRef {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => {
-                tref.get().domain()
-            }
+            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.domain(),
             TxTuple::Tombstone {
                 ts: _,
                 tuple_id: _,
@@ -48,7 +46,7 @@ impl TxTuple {
     }
     pub fn tuple_id(&self) -> TupleId {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.id,
+            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.id(),
             TxTuple::Tombstone {
                 ts: _,
                 tuple_id: id,
@@ -59,7 +57,7 @@ impl TxTuple {
 
     pub fn ts(&self) -> u64 {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.get().ts(),
+            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.ts(),
             TxTuple::Tombstone {
                 ts,
                 tuple_id: _,
