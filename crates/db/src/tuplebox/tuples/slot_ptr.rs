@@ -89,10 +89,10 @@ impl SlotPtr {
     }
 
     #[inline]
-    pub fn byte_source(&self) -> Box<dyn ByteSource> {
-        Box::new(SlotByteSource {
+    pub fn byte_source(&self) -> SlotByteSource {
+        SlotByteSource {
             ptr: self as *const SlotPtr,
-        })
+        }
     }
 
     #[inline]

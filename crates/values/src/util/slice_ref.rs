@@ -26,7 +26,7 @@ use yoke::Yoke;
 /// storage, and we can avoid making copies of the data when doing things like splitting nodes
 /// or appending to the rope etc.
 #[derive(Clone)]
-pub struct SliceRef(Yoke<&'static [u8], Arc<Box<dyn ByteSource>>>);
+pub struct SliceRef(Yoke<&'static [u8], Arc<dyn ByteSource>>);
 
 impl Debug for SliceRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -91,13 +91,12 @@ impl ByteSource for EmptyByteSource {
 impl SliceRef {
     #[must_use]
     pub fn empty() -> Self {
-        Self(Yoke::attach_to_cart(
-            Arc::new(Box::new(EmptyByteSource)),
-            |b| b.as_slice(),
-        ))
+        Self(Yoke::attach_to_cart(Arc::new(EmptyByteSource {}), |b| {
+            b.as_slice()
+        }))
     }
     #[must_use]
-    pub fn from_byte_source(byte_source: Box<dyn ByteSource>) -> Self {
+    pub fn from_byte_source(byte_source: impl ByteSource + 'static) -> Self {
         Self(Yoke::attach_to_cart(Arc::new(byte_source), |b| {
             b.as_slice()
         }))
@@ -106,16 +105,15 @@ impl SliceRef {
     #[must_use]
     pub fn from_bytes(buf: &[u8]) -> Self {
         Self(Yoke::attach_to_cart(
-            Arc::new(Box::new(VectorByteSource(buf.to_vec()))),
+            Arc::new(VectorByteSource(buf.to_vec())),
             |b| b.as_slice(),
         ))
     }
     #[must_use]
     pub fn from_vec(buf: Vec<u8>) -> Self {
-        Self(Yoke::attach_to_cart(
-            Arc::new(Box::new(VectorByteSource(buf))),
-            |b| b.as_slice(),
-        ))
+        Self(Yoke::attach_to_cart(Arc::new(VectorByteSource(buf)), |b| {
+            b.as_slice()
+        }))
     }
     #[must_use]
     pub fn split_at(&self, offset: usize) -> (Self, Self) {
