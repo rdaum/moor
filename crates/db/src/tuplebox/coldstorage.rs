@@ -14,12 +14,12 @@
 
 //! TODO: replace OkayWAL with our own implementation, using io_uring.
 
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use binary_layout::{define_layout, Field, LayoutAs};
-use im::{HashMap, HashSet};
 use okaywal::{Entry, EntryId, LogManager, SegmentReader, WriteAheadLog};
 use strum::FromRepr;
 use tokio::io::AsyncReadExt;
