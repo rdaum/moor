@@ -121,7 +121,7 @@ impl BufferPool {
 
 impl BufferPool {
     /// Allocate a buffer of the given size.
-    pub fn alloc(&mut self, size: usize) -> Result<(Bid, AtomicPtr<u8>, usize), PagerError> {
+    pub fn alloc(&mut self, size: usize) -> Result<(Bid, *mut u8, usize), PagerError> {
         if size > self.available_bytes.load(Ordering::SeqCst) {
             return Err(PagerError::InsufficientRoom {
                 desired: size,
@@ -152,7 +152,7 @@ impl BufferPool {
 
         // Note that this is the actual address, that is, it does not have the size-class encoded
         // in it (aka PagePointer)
-        let addr = self.resolve_ptr(bid).unwrap().0;
+        let addr = self.resolve_ptr::<u8>(bid).unwrap().0;
 
         Ok((bid, addr, block_size))
     }
@@ -196,14 +196,14 @@ impl BufferPool {
         self.allocated_bytes.fetch_add(block_size, Ordering::SeqCst);
         self.available_bytes.fetch_sub(block_size, Ordering::SeqCst);
 
-        let addr = sc.base_addr.load(Ordering::SeqCst);
+        let addr = sc.base_addr;
         let addr = unsafe { addr.add(offset) }.cast::<T>();
 
         Ok((AtomicPtr::new(addr), block_size))
     }
 
     /// Returns the physical pointer and page size for a page.
-    pub fn resolve_ptr<T>(&self, bid: Bid) -> Result<(AtomicPtr<T>, usize), PagerError> {
+    pub fn resolve_ptr<T>(&self, bid: Bid) -> Result<(*mut u8, usize), PagerError> {
         if !Self::is_allocated(self, bid) {
             return Err(PagerError::CouldNotAccess);
         }
@@ -214,10 +214,10 @@ impl BufferPool {
 
         assert!(offset < sc.virt_size, "Offset out of bound for size class");
 
-        let addr = sc.base_addr.load(Ordering::SeqCst);
+        let addr = sc.base_addr;
         let addr = unsafe { addr.add(offset) }.cast::<T>();
 
-        Ok((AtomicPtr::new(addr), sc.block_size))
+        Ok((addr as _, sc.block_size))
     }
 
     /// Find the buffer id (bid) for a given pointer. Can be used to identify the page
@@ -226,8 +226,7 @@ impl BufferPool {
     pub fn identify_page<T>(&self, ptr: AtomicPtr<T>) -> Result<Bid, PagerError> {
         // Look at the address ranges for each size class to find the one that contains the pointer.
         for (sc_idx, sc) in self.size_classes.iter().enumerate() {
-            let base = sc.base_addr.load(Ordering::SeqCst);
-            let base = base as usize;
+            let base = sc.base_addr as usize;
             let end = base + sc.virt_size;
             let ptr = ptr.load(Ordering::SeqCst) as usize;
             if ptr >= base && ptr < end {

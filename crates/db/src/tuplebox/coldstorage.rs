@@ -241,7 +241,7 @@ impl ColdStorage {
         // and sync them.
         // The pages that are modified will be need be read-locked while they are copied.
         let mut dirty_pages = HashSet::new();
-        for r in &ws.relations {
+        for r in ws.relations.iter() {
             for t in r.tuples() {
                 match t {
                     TxTuple::Insert(_) | TxTuple::Update(_) | TxTuple::Tombstone { .. } => {

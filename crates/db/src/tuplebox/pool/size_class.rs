@@ -14,7 +14,6 @@
 
 use std::io;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, Ordering};
 
 use human_bytes::human_bytes;
 use libc::{madvise, MADV_DONTNEED, MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
@@ -26,7 +25,7 @@ type BitSet = hi_sparse_bitset::BitSet<hi_sparse_bitset::config::_128bit>;
 
 pub struct SizeClass {
     pub block_size: usize,
-    pub base_addr: AtomicPtr<u8>,
+    pub base_addr: *mut u8,
     pub virt_size: usize,
     free_list: Vec<usize>,
     allocset: BitSet,
@@ -35,6 +34,9 @@ pub struct SizeClass {
     // stats
     num_blocks_used: u32,
 }
+
+unsafe impl Send for SizeClass {}
+unsafe impl Sync for SizeClass {}
 
 impl SizeClass {
     pub fn new_anon(block_size: usize, virt_size: usize) -> Result<Self, PagerError> {
@@ -68,7 +70,7 @@ impl SizeClass {
         // Build the bitmap index
         Ok(Self {
             block_size,
-            base_addr: AtomicPtr::new(base_addr),
+            base_addr,
             virt_size,
 
             free_list: vec![],
@@ -115,7 +117,7 @@ impl SizeClass {
 
     pub fn free(&mut self, blocknum: usize) -> Result<(), PagerError> {
         unsafe {
-            let base_addr = self.base_addr.load(Ordering::SeqCst);
+            let base_addr = self.base_addr;
             let addr = base_addr.offset(blocknum as isize * self.block_size as isize);
             // Panic on fail here because this working is a fundamental invariant that we cannot
             // recover from.
@@ -136,7 +138,7 @@ impl SizeClass {
     #[allow(dead_code)] // Legitimate potential future use
     pub fn page_out(&mut self, blocknum: usize) -> Result<(), PagerError> {
         unsafe {
-            let addr = self.base_addr.load(Ordering::SeqCst);
+            let addr = self.base_addr;
             // Panic on fail here because this working is a fundamental invariant that we cannot
             // recover from.
             let madv_result = madvise(
@@ -173,7 +175,7 @@ impl SizeClass {
 impl Drop for SizeClass {
     fn drop(&mut self) {
         let result = unsafe {
-            let base_addr = self.base_addr.load(Ordering::SeqCst);
+            let base_addr = self.base_addr;
             libc::munmap(
                 base_addr.cast::<libc::c_void>(),
                 self.virt_size as libc::size_t,

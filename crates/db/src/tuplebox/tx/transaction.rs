@@ -35,11 +35,10 @@ pub struct Transaction {
     pub(crate) ts: u64,
     /// Where we came from, for referencing back to the base relations.
     db: Arc<TupleBox>,
-    slotbox: Arc<SlotBox>,
     /// The "working set" is the set of retrieved and/or modified tuples from base relations, known
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
-    pub(crate) working_set: RwLock<WorkingSet>,
+    pub(crate) working_set: RwLock<Option<WorkingSet>>,
     /// Local-only relations, which are not directly-derived from or committed to the base relations
     /// (though operations will exist for moving them from a transient relation to a base relation,
     /// and or moving tuples in them into commits in the working set..)
@@ -66,13 +65,13 @@ impl Transaction {
 
         Self {
             ts,
-            slotbox,
             db,
-            working_set: RwLock::new(ws),
+            working_set: RwLock::new(Some(ws)),
             transient_relations: RwLock::new(HashMap::new()),
             next_transient_relation_id,
         }
     }
+
     pub async fn increment_sequence(&self, sequence_number: usize) -> u64 {
         self.db.clone().increment_sequence(sequence_number).await
     }
@@ -91,13 +90,14 @@ impl Transaction {
         'retry: loop {
             let commit_ts = self.db.clone().next_ts();
             let mut working_set = self.working_set.write().await;
-            let commit_set = self.db.prepare_commit_set(commit_ts, &working_set).await?;
+            let commit_set = self
+                .db
+                .prepare_commit_set(commit_ts, &working_set.as_ref().unwrap())
+                .await?;
             match self.db.try_commit(commit_set).await {
                 Ok(_) => {
-                    let mut blank_ws =
-                        WorkingSet::new(self.slotbox.clone(), &self.db.relation_info(), commit_ts);
-                    std::mem::swap(&mut *working_set, &mut blank_ws);
-                    self.db.sync(commit_ts, blank_ws).await;
+                    let commit_ws = working_set.take().unwrap();
+                    self.db.sync(commit_ts, commit_ws).await;
                     return Ok(());
                 }
                 Err(CommitError::RelationContentionConflict) => {
@@ -115,7 +115,7 @@ impl Transaction {
     }
 
     pub async fn rollback(&self) -> Result<(), CommitError> {
-        self.working_set.write().await.clear();
+        self.working_set.write().await.as_mut().unwrap().clear();
         // Clear out the active transaction.
         self.db.abort_transaction(self.ts).await;
         Ok(())
@@ -157,7 +157,10 @@ impl Transaction {
     ) -> Result<(SliceRef, SliceRef), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.seek_by_domain(&self.db, relation_id, domain).await
+            ws.as_mut()
+                .unwrap()
+                .seek_by_domain(&self.db, relation_id, domain)
+                .await
         } else {
             let ts = self.transient_relations.read().await;
             ts.get(&relation_id)
@@ -174,7 +177,10 @@ impl Transaction {
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.seek_by_codomain(&self.db, relation_id, codomain).await
+            ws.as_mut()
+                .unwrap()
+                .seek_by_codomain(&self.db, relation_id, codomain)
+                .await
         } else {
             let ts = self.transient_relations.read().await;
             ts.get(&relation_id)
@@ -194,7 +200,9 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.insert_tuple(&self.db, relation_id, domain, codomain)
+            ws.as_mut()
+                .unwrap()
+                .insert_tuple(&self.db, relation_id, domain, codomain)
                 .await
         } else {
             let mut ts = self.transient_relations.write().await;
@@ -211,8 +219,11 @@ impl Transaction {
         f: &F,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
         if relation_id.is_base_relation() {
-            let ws = self.working_set.read().await;
-            ws.predicate_scan(&self.db, relation_id, f).await
+            let mut ws = self.working_set.write().await;
+            ws.as_mut()
+                .unwrap()
+                .predicate_scan(&self.db, relation_id, f)
+                .await
         } else {
             let ts = self.transient_relations.read().await;
             ts.get(&relation_id)
@@ -233,7 +244,9 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.update_tuple(&self.db, relation_id, domain, codomain)
+            ws.as_mut()
+                .unwrap()
+                .update_tuple(&self.db, relation_id, domain, codomain)
                 .await
         } else {
             let mut ts = self.transient_relations.write().await;
@@ -254,7 +267,9 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.upsert_tuple(&self.db, relation_id, domain, codomain)
+            ws.as_mut()
+                .unwrap()
+                .upsert_tuple(&self.db, relation_id, domain, codomain)
                 .await
         } else {
             let mut ts = self.transient_relations.write().await;
@@ -274,7 +289,10 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.remove_by_domain(&self.db, relation_id, domain).await
+            ws.as_mut()
+                .unwrap()
+                .remove_by_domain(&self.db, relation_id, domain)
+                .await
         } else {
             let mut ts = self.transient_relations.write().await;
             ts.get_mut(&relation_id)

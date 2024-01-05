@@ -318,7 +318,7 @@ impl Inner {
     }
 
     fn page_for<'a>(&self, page_num: usize) -> Result<SlottedPage<'a>, SlotBoxError> {
-        let (page_address, page_size) = match self.pool.resolve_ptr(Bid(page_num as u64)) {
+        let (page_address, page_size) = match self.pool.resolve_ptr::<u8>(Bid(page_num as u64)) {
             Ok(v) => v,
             Err(PagerError::CouldNotAccess) => {
                 return Err(SlotBoxError::TupleNotFound(page_num));
@@ -327,7 +327,6 @@ impl Inner {
                 panic!("Unexpected buffer pool error: {:?}", e);
             }
         };
-        let page_address = page_address.load(SeqCst);
         let page_handle = SlottedPage::for_page(page_address, page_size);
         Ok(page_handle)
     }
