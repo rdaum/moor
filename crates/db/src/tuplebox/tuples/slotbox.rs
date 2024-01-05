@@ -12,21 +12,22 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO: implement a more general purpose pager that handles LRU eviction
-//       and so can be used for larger-than-ram datasets (means adding a pagetable for Pid->Bid)
+// TODO: add fixed-size slotted page impl for Sized items, should be way more efficient for the
+//       most common case of fixed-size tuples.
+// TODO: implement the ability to expire and page-out tuples based on LRU or random/second
+//       chance eviction (ala leanstore). will require separate PageIds from Bids, and will
+//       involve rewriting SlotPtr on the fly to point to a new page when restored.
+//       SlotPtr will also get a new field for last-access-time, so that we can do our eviction
 // TODO: store indexes in here, too (custom paged datastructure impl)
-// TODO: add fixed-size slotted page impl for Sized items, providing more efficiency.
-// TODO: verify locking/concurrency safety of this thing -- loom test + stateright, or jepsen.
+// TODO: verify locking/concurrency safety of this thing -- loom test, stateright, or jepsen, etc.
 // TODO: there is still some really gross stuff in here about the management of free space in
 //       pages in the allocator list. It's probably causing excessive fragmentation because we're
 //       considering only the reported available "content" area when fitting slots, and there seems
 //       to be a sporadic failure where we end up with a "Page not found" error in the allocator on
 //       free, meaning the page was not found in the used pages list.
-// TODO: improve TupleRef so it can hold a direct address to the tuple, and not just an id.
-//       some swizzling will probably be required.  (though at this point we're never paging
-//       tuples out, so we may not need to swizzle). avoiding the lookup on every reference
-//       should improve performance massively.
-// TODO: rename me, _I_ am the tuplebox. The "slots" are just where my tuples get stored.
+//       whether any of this is worth futzing with after the fixed-size impl is done, I don't know.
+// TODO: rename me, _I_ am the tuplebox. The "slots" are just where my tuples get stored. tho once
+//       indexes are in here, things will get confusing (everything here assumes pages hold tuples)
 
 use std::cmp::max;
 use std::collections::HashMap;
@@ -219,8 +220,13 @@ struct Inner {
     // TODO: could keep two separate vectors here -- one with the page sizes, separate for the page
     //   ids, so that SIMD can be used to used to search and sort.
     //   Will look into it once/if benchmarking justifies it.
-    // The set of used pages, indexed by relation, in sorted order of the free space available in them.
+    /// The set of used pages, indexed by relation, in sorted order of the free space available in them.
     available_page_space: SparseChunk<Vec<PageSpace>, 64>,
+    /// The "swizzelable" references to tuples, indexed by tuple id.
+    /// There has to be a stable-memory address for each of these, as they are referenced by
+    /// pointers in the TupleRefs themselves.
+    // TODO: This needs to be broken down by page id, too, so that we can manage swap-in/swap-out at
+    //   the page granularity.
     swizrefs: HashMap<TupleId, Pin<Box<SlotPtr>>>,
 }
 
