@@ -20,6 +20,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use binary_layout::{define_layout, Field, LayoutAs};
+use human_bytes::human_bytes;
 use okaywal::{Entry, EntryId, LogManager, SegmentReader, WriteAheadLog};
 use strum::FromRepr;
 use tokio::io::AsyncReadExt;
@@ -133,10 +134,10 @@ impl ColdStorage {
             }
         }
         info!(
-            "Restored & re-indexed {} tuples from coldstorage across {} relations, in {} bytes",
+            "Restored & re-indexed {} tuples from coldstorage across {} relations, in {}",
             restored_count,
             relations.len(),
-            restored_bytes
+            human_bytes(restored_bytes as f64)
         );
 
         // Start the listen loop
