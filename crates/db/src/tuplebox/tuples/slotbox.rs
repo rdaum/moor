@@ -32,7 +32,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::{Arc, Mutex};
 
@@ -110,7 +109,6 @@ impl SlotBox {
             let swizref = inner.swizrefs.get_mut(&tuple_id).unwrap();
             let sp = unsafe { Pin::into_inner_unchecked(swizref.as_mut()) };
             let ptr = sp as *mut SlotPtr;
-            let ptr = AtomicPtr::new(ptr);
             let tuple_ref = TupleRef::at_ptr(ptr);
             refs.push(tuple_ref);
         }
@@ -253,7 +251,7 @@ impl Inner {
             // Make a swizzlable ptr reference and shove it in our set, and then return a tuple ref
             // which has a ptr to it.
             let buflen = buf.as_ref().len();
-            let bufaddr = AtomicPtr::new(buf.as_mut_ptr());
+            let bufaddr = buf.as_mut_ptr();
             let tuple_id = TupleId { page, slot };
 
             // Heap allocate the swizref, and and pin it, take the address of it, then stick the swizref
@@ -265,7 +263,7 @@ impl Inner {
             // Establish initial refcount using this existing lock.
             page_write_lock.upcount(slot).unwrap();
 
-            return Ok(TupleRef::at_ptr(AtomicPtr::new(swizaddr)));
+            return Ok(TupleRef::at_ptr(swizaddr));
         }
 
         // If we get here, then we failed to allocate on the page we wanted to, which means there's
@@ -292,7 +290,7 @@ impl Inner {
             }
         };
 
-        Ok(SlottedPage::for_page(addr, page_size))
+        Ok(SlottedPage::for_page(addr.load(SeqCst), page_size))
     }
 
     fn do_mark_page_used(&mut self, relation_id: RelationId, free_space: usize, pid: PageId) {
@@ -330,7 +328,7 @@ impl Inner {
             }
         };
         let page_address = page_address.load(SeqCst);
-        let page_handle = SlottedPage::for_page(AtomicPtr::new(page_address), page_size);
+        let page_handle = SlottedPage::for_page(page_address, page_size);
         Ok(page_handle)
     }
 
@@ -529,9 +527,10 @@ impl PageSpace {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
-    use std::sync::Arc;
 
     use crate::tuplebox::tuples::slotbox::{SlotBox, SlotBoxError};
     use crate::tuplebox::tuples::slotted_page::slot_page_empty_size;

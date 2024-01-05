@@ -12,8 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use slotbox::{PageId, SlotBox, SlotBoxError, SlotId};
 use thiserror::Error;
+
+pub use slotbox::{PageId, SlotBox, SlotBoxError, SlotId};
 pub use tuple::TupleRef;
 pub use tx_tuple::TxTuple;
 

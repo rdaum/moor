@@ -12,12 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use fast_counter::ConcurrentCounter;
 use std::io;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use hi_sparse_bitset::BitSetInterface;
 use human_bytes::human_bytes;
 use libc::{madvise, MADV_DONTNEED, MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use tracing::info;
@@ -32,34 +30,10 @@ pub struct SizeClass {
     pub virt_size: usize,
     free_list: Vec<usize>,
     allocset: BitSet,
+    highest_block: usize,
 
     // stats
-    num_blocks_used: ConcurrentCounter,
-}
-
-fn find_first_empty(bs: &BitSet) -> usize {
-    let mut iter = bs.iter();
-
-    let mut pos = None;
-    // Scan forward until we find the first empty bit.
-    loop {
-        match iter.next() {
-            Some(bit) => {
-                if bit != 0 && !bs.contains(bit - 1) {
-                    return bit - 1;
-                }
-                pos = Some(bit);
-            }
-            // Nothing in the set, or we've reached the end.
-            None => {
-                let Some(pos) = pos else {
-                    return 0;
-                };
-
-                return pos + 1;
-            }
-        }
-    }
+    num_blocks_used: u32,
 }
 
 impl SizeClass {
@@ -99,8 +73,9 @@ impl SizeClass {
 
             free_list: vec![],
             allocset: BitSet::new(),
+            highest_block: 0,
 
-            num_blocks_used: ConcurrentCounter::new(0),
+            num_blocks_used: 0,
         })
     }
 
@@ -108,11 +83,12 @@ impl SizeClass {
         // Check the free list first.
         if let Some(blocknum) = self.free_list.pop() {
             self.allocset.insert(blocknum);
-            self.num_blocks_used.add(1);
+            self.num_blocks_used += 1;
             return Ok(blocknum);
         }
 
-        let blocknum = find_first_empty(&self.allocset);
+        let blocknum = self.highest_block;
+        self.highest_block += 1;
 
         if blocknum >= self.virt_size / self.block_size {
             return Err(PagerError::InsufficientRoom {
@@ -122,7 +98,7 @@ impl SizeClass {
         }
 
         self.allocset.insert(blocknum);
-        self.num_blocks_used.add(1);
+        self.num_blocks_used += 1;
         Ok(blocknum)
     }
 
@@ -133,7 +109,7 @@ impl SizeClass {
         }
 
         self.allocset.insert(blocknum);
-        self.num_blocks_used.add(1);
+        self.num_blocks_used += 1;
         Ok(())
     }
 
@@ -153,7 +129,7 @@ impl SizeClass {
         }
         self.allocset.remove(blocknum);
         self.free_list.push(blocknum);
-        self.num_blocks_used.add(1);
+        self.num_blocks_used += 1;
         Ok(())
     }
 
@@ -177,7 +153,7 @@ impl SizeClass {
             }
         }
         self.allocset.remove(blocknum);
-        self.num_blocks_used.add(1);
+        self.num_blocks_used += 1;
         Ok(())
     }
 
@@ -186,7 +162,7 @@ impl SizeClass {
     }
 
     pub fn bytes_used(&self) -> usize {
-        self.num_blocks_used.sum() as usize
+        self.num_blocks_used as usize
     }
 
     pub fn available(&self) -> usize {
@@ -208,26 +184,5 @@ impl Drop for SizeClass {
             let err = io::Error::last_os_error();
             panic!("Unable to munmap buffer pool: {err}");
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::tuplebox::pool::size_class::{find_first_empty, BitSet};
-
-    #[test]
-    fn test_bitset_seek() {
-        let mut bs = BitSet::new();
-        assert_eq!(find_first_empty(&bs), 0);
-        bs.insert(0);
-        assert_eq!(find_first_empty(&bs), 1);
-        bs.insert(1);
-        assert_eq!(find_first_empty(&bs), 2);
-        bs.remove(0);
-        assert_eq!(find_first_empty(&bs), 0);
-        bs.insert(1);
-        bs.insert(2);
-        bs.remove(1);
-        assert_eq!(find_first_empty(&bs), 1);
     }
 }

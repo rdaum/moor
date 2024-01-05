@@ -13,11 +13,9 @@
 //
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tuples::SlotBox;
 use crate::tuplebox::tuples::TupleRef;
 use crate::tuplebox::RelationId;
 
@@ -48,8 +46,6 @@ pub struct BaseRelation {
     /// The last successful committer's tx timestamp
     pub(crate) ts: u64,
 
-    slotbox: Arc<SlotBox>,
-
     /// The current tuples in this relation.
     tuples: im::HashSet<TupleRef>,
 
@@ -63,11 +59,10 @@ pub struct BaseRelation {
 }
 
 impl BaseRelation {
-    pub fn new(slotbox: Arc<SlotBox>, id: RelationId, timestamp: u64) -> Self {
+    pub fn new(id: RelationId, timestamp: u64) -> Self {
         Self {
             id,
             ts: timestamp,
-            slotbox,
             tuples: im::HashSet::new(),
             index_domain: im::HashMap::new(),
             index_codomain: None,
@@ -99,7 +94,7 @@ impl BaseRelation {
         self.tuples.insert(tuple.clone());
 
         // Reset timestamp to 0, since this is a tuple initial-loaded from secondary storage.
-        tuple.update_timestamp(self.id, self.slotbox.clone(), 0);
+        tuple.update_timestamp(0);
 
         // Update the domain index to point to the tuple...
         self.index_domain.insert(tuple.domain(), tuple.clone());

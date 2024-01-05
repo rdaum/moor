@@ -12,38 +12,33 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::define_layout;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
-use std::sync::atomic::AtomicPtr;
-use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
 
-use crate::tuplebox::RelationId;
 use moor_values::util::slice_ref::SliceRef;
 
 use crate::tuplebox::tuples::slot_ptr::SlotPtr;
 use crate::tuplebox::tuples::{SlotBox, SlotBoxError, TupleId};
-
-const MAGIC_MARKER: u32 = 0xcafebabe;
-
-define_layout!(tuple_header, LittleEndian, {
-    magic_marker: u32,
-    ts: u64,
-    domain_size: u32,
-    codomain_size: u32,
-});
+use crate::tuplebox::RelationId;
 
 pub struct TupleRef {
-    sp: AtomicPtr<SlotPtr>,
+    sp: *mut SlotPtr,
 }
 
+#[repr(C)]
+struct Header {
+    ts: u64,
+    domain_size: u32,
+}
+
+unsafe impl Send for TupleRef {}
+unsafe impl Sync for TupleRef {}
 impl TupleRef {
     // Wrap an existing SlotPtr.
     // Note: to avoid deadlocking at construction, assumes that the tuple is already upcounted by the
     // caller.
-    pub(crate) fn at_ptr(sp: AtomicPtr<SlotPtr>) -> Self {
-        
+    pub(crate) fn at_ptr(sp: *mut SlotPtr) -> Self {
         Self { sp }
     }
     /// Allocate the given tuple in a slotbox.
@@ -54,72 +49,61 @@ impl TupleRef {
         domain: &[u8],
         codomain: &[u8],
     ) -> Result<TupleRef, SlotBoxError> {
-        let total_size = tuple_header::SIZE.unwrap() + domain.len() + codomain.len();
+        let total_size = std::mem::size_of::<Header>() + domain.len() + codomain.len();
         let tuple_ref = sb.clone().allocate(total_size, relation_id, None)?;
         sb.update_with(tuple_ref.id(), |mut buffer| {
             let domain_len = domain.len();
-            let codomain_len = codomain.len();
             {
-                let mut header = tuple_header::View::new(buffer.as_mut().get_mut());
-                header.magic_marker_mut().write(MAGIC_MARKER);
-                header.ts_mut().write(ts);
-                header.domain_size_mut().write(domain_len as u32);
-                header.codomain_size_mut().write(codomain_len as u32);
+                let header_ptr = buffer.as_mut().as_mut_ptr() as *mut Header;
+                let header = unsafe { &mut *header_ptr };
+                header.ts = ts;
+                header.domain_size = domain_len as u32;
             }
-            let start_pos = tuple_header::SIZE.unwrap();
+            let start_pos = std::mem::size_of::<Header>();
             buffer[start_pos..start_pos + domain_len].copy_from_slice(domain);
             buffer[start_pos + domain_len..].copy_from_slice(codomain);
         })?;
         Ok(tuple_ref)
     }
 
+    /// The id of the tuple.
+    #[inline]
     pub fn id(&self) -> TupleId {
         self.resolve_slot_ptr().as_ref().id()
     }
 
     /// Update the timestamp of the tuple.
-    pub fn update_timestamp(&self, relation_id: RelationId, sb: Arc<SlotBox>, ts: u64) {
-        let mut buffer = self.slot_buffer().as_slice().to_vec();
-        let mut header = tuple_header::View::new(&mut buffer);
-        header.ts_mut().write(ts);
-        let id = self.resolve_slot_ptr().as_ref().id();
-        // The update method will return a new tuple ID if the tuple is moved, and it should *not*
-        // for timestamp updates.
-        assert!(sb
-            .update(relation_id, id, buffer.as_slice())
-            .unwrap()
-            .is_none());
+    #[inline]
+    pub fn update_timestamp(&self, ts: u64) {
+        let header = self.header_mut();
+        header.ts = ts;
     }
 
     /// The timestamp of the tuple.
+    #[inline]
     pub fn ts(&self) -> u64 {
-        let buffer = self.slot_buffer();
-        let header = tuple_header::View::new(buffer.as_slice());
-        assert_eq!(header.magic_marker().read(), MAGIC_MARKER);
-        header.ts().read()
+        let header = self.header();
+        header.ts
     }
 
     /// The domain of the tuple.
+    #[inline]
     pub fn domain(&self) -> SliceRef {
+        let header = self.header();
+        let domain_size = header.domain_size as usize;
         let buffer = self.slot_buffer();
-        let header = tuple_header::View::new(buffer.as_slice());
-        assert_eq!(header.magic_marker().read(), MAGIC_MARKER);
-        let domain_size = header.domain_size().read();
-        buffer
-            .slice(tuple_header::SIZE.unwrap()..tuple_header::SIZE.unwrap() + domain_size as usize)
+        let domain_start = std::mem::size_of::<Header>();
+        buffer.slice(domain_start..domain_start + domain_size)
     }
 
     /// The codomain of the tuple.
+    #[inline]
     pub fn codomain(&self) -> SliceRef {
+        let header = self.header();
+        let domain_size = header.domain_size as usize;
         let buffer = self.slot_buffer();
-        let header = tuple_header::View::new(buffer.as_slice());
-        assert_eq!(header.magic_marker().read(), MAGIC_MARKER);
-        let domain_size = header.domain_size().read() as usize;
-        let codomain_size = header.codomain_size().read() as usize;
-        buffer.slice(
-            tuple_header::SIZE.unwrap() + domain_size
-                ..tuple_header::SIZE.unwrap() + domain_size + codomain_size,
-        )
+        let codomain_start = std::mem::size_of::<Header>() + domain_size;
+        buffer.slice(codomain_start..)
     }
 
     /// The raw buffer of the tuple, including the header, not dividing up the domain and codomain.
@@ -130,15 +114,32 @@ impl TupleRef {
 }
 
 impl TupleRef {
-    fn resolve_slot_ptr(&self) -> Pin<&mut SlotPtr> {
-        unsafe { Pin::new_unchecked(&mut *self.sp.load(SeqCst)) }
+    #[inline]
+    fn header(&self) -> &Header {
+        let slot_ptr = self.resolve_slot_ptr();
+        let header: *const Header = slot_ptr.as_ptr();
+        unsafe { &*header }
     }
 
+    #[inline]
+    fn header_mut(&self) -> &mut Header {
+        let slot_ptr = self.resolve_slot_ptr();
+        let header: *mut Header = slot_ptr.as_mut_ptr();
+        unsafe { &mut *header }
+    }
+
+    #[inline]
+    fn resolve_slot_ptr(&self) -> Pin<&mut SlotPtr> {
+        unsafe { Pin::new_unchecked(&mut *self.sp) }
+    }
+
+    #[inline]
     fn upcount(&self) {
         let slot_ptr = self.resolve_slot_ptr();
         slot_ptr.upcount();
     }
 
+    #[inline]
     fn dncount(&self) {
         let slot_ptr = self.resolve_slot_ptr();
         slot_ptr.dncount();
@@ -170,9 +171,7 @@ impl Drop for TupleRef {
 impl Clone for TupleRef {
     fn clone(&self) -> Self {
         self.upcount();
-        let addr = self.sp.load(SeqCst);
-        Self {
-            sp: AtomicPtr::new(addr),
-        }
+        let sp = self.sp;
+        Self { sp }
     }
 }

@@ -12,9 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_values::util::slice_ref::SliceRef;
+
 use crate::tuplebox::tuples::TupleId;
 use crate::tuplebox::tuples::TupleRef;
-use moor_values::util::slice_ref::SliceRef;
 
 /// Possible operations on tuples, in the context of a transaction .
 #[derive(Clone)]

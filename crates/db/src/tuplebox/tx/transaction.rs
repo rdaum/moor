@@ -157,8 +157,7 @@ impl Transaction {
     ) -> Result<(SliceRef, SliceRef), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.seek_by_domain(self.db.clone(), relation_id, domain)
-                .await
+            ws.seek_by_domain(&self.db, relation_id, domain).await
         } else {
             let ts = self.transient_relations.read().await;
             ts.get(&relation_id)
@@ -175,8 +174,7 @@ impl Transaction {
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.seek_by_codomain(self.db.clone(), relation_id, codomain)
-                .await
+            ws.seek_by_codomain(&self.db, relation_id, codomain).await
         } else {
             let ts = self.transient_relations.read().await;
             ts.get(&relation_id)
@@ -196,7 +194,7 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.insert_tuple(self.db.clone(), relation_id, domain, codomain)
+            ws.insert_tuple(&self.db, relation_id, domain, codomain)
                 .await
         } else {
             let mut ts = self.transient_relations.write().await;
@@ -214,7 +212,7 @@ impl Transaction {
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
         if relation_id.is_base_relation() {
             let ws = self.working_set.read().await;
-            ws.predicate_scan(self.db.clone(), relation_id, f).await
+            ws.predicate_scan(&self.db, relation_id, f).await
         } else {
             let ts = self.transient_relations.read().await;
             ts.get(&relation_id)
@@ -235,7 +233,7 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.update_tuple(self.db.clone(), relation_id, domain, codomain)
+            ws.update_tuple(&self.db, relation_id, domain, codomain)
                 .await
         } else {
             let mut ts = self.transient_relations.write().await;
@@ -256,7 +254,7 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.upsert_tuple(self.db.clone(), relation_id, domain, codomain)
+            ws.upsert_tuple(&self.db, relation_id, domain, codomain)
                 .await
         } else {
             let mut ts = self.transient_relations.write().await;
@@ -276,8 +274,7 @@ impl Transaction {
     ) -> Result<(), TupleError> {
         if relation_id.is_base_relation() {
             let mut ws = self.working_set.write().await;
-            ws.remove_by_domain(self.db.clone(), relation_id, domain)
-                .await
+            ws.remove_by_domain(&self.db, relation_id, domain).await
         } else {
             let mut ts = self.transient_relations.write().await;
             ts.get_mut(&relation_id)

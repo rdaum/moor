@@ -23,10 +23,8 @@
 //! and as long as the sum of all *used* pages remains lower than physical memory, we can allocate
 //! freely without worrying about complicated page splitting strategies.
 //!
-//! For now each sice class is using a simple bitmap index to manage allocation. This is not really
-//! the most ideal structure (O(N) lookup, but O(1) free), but it's simplest to implement for now.
-//! Some simple optimizations can be done to add a per-size-class free list, and later add more
-//! sophisticated allocation strategies can be used.
+//! For now each sice class is using a simple bitmap index to manage allocation + a free list to
+//! manage block allocation.
 
 use std::cmp::max;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};

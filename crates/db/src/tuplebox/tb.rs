@@ -79,7 +79,7 @@ impl TupleBox {
         let slotbox = Arc::new(SlotBox::new(memory_size));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
-            base_relations.push(BaseRelation::new(slotbox.clone(), RelationId(rid), 0));
+            base_relations.push(BaseRelation::new(RelationId(rid), 0));
             if r.secondary_indexed {
                 base_relations.last_mut().unwrap().add_secondary_index();
             }
@@ -204,7 +204,7 @@ impl TupleBox {
                 let Some(cv) = canon_tuple else {
                     match &tuple {
                         TxTuple::Insert(t) => {
-                            t.update_timestamp(relation_id, self.slotbox.clone(), commit_ts);
+                            t.update_timestamp(commit_ts);
                             let forked_relation = commitset.fork(relation_id, canonical);
                             forked_relation.upsert_tuple(t.clone());
                             continue;
@@ -239,7 +239,7 @@ impl TupleBox {
                 let forked_relation = commitset.fork(relation_id, canonical);
                 match &tuple {
                     TxTuple::Insert(t) | TxTuple::Update(t) => {
-                        t.update_timestamp(relation_id, self.slotbox.clone(), commit_ts);
+                        t.update_timestamp(commit_ts);
                         let forked_relation = commitset.fork(relation_id, canonical);
                         forked_relation.upsert_tuple(t.clone());
                     }

@@ -39,7 +39,7 @@ impl WorkingSet {
         for (i, r) in schema.iter().enumerate() {
             relations.push(TxBaseRelation {
                 id: RelationId(i),
-                tuples: vec![],
+                tuples: Vec::new(),
                 domain_index: HashMap::new(),
                 codomain_index: if r.secondary_indexed {
                     Some(HashMap::new())
@@ -63,7 +63,7 @@ impl WorkingSet {
 
     pub(crate) async fn seek_by_domain(
         &mut self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(SliceRef, SliceRef), TupleError> {
@@ -103,7 +103,7 @@ impl WorkingSet {
 
     pub(crate) async fn seek_by_codomain(
         &mut self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         codomain: SliceRef,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
@@ -129,9 +129,7 @@ impl WorkingSet {
         // By performing the seek, we'll materialize the tuples into our local working set, which
         // will in turn update the codomain index for those tuples.
         for tuple in tuples_for_codomain {
-            let _ = self
-                .seek_by_domain(db.clone(), relation_id, tuple.domain())
-                .await;
+            let _ = self.seek_by_domain(&db, relation_id, tuple.domain()).await;
         }
 
         let relation = &mut self.relations[relation_id.0];
@@ -155,7 +153,7 @@ impl WorkingSet {
 
     pub(crate) async fn insert_tuple(
         &mut self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
@@ -193,7 +191,7 @@ impl WorkingSet {
 
     pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
         &self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         f: F,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
@@ -239,7 +237,7 @@ impl WorkingSet {
 
     pub(crate) async fn update_tuple(
         &mut self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
@@ -310,7 +308,7 @@ impl WorkingSet {
     /// committing it to the canonical base relations.
     pub(crate) async fn upsert_tuple(
         &mut self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
@@ -410,7 +408,7 @@ impl WorkingSet {
     /// committing the delete to the canonical base relations.
     pub(crate) async fn remove_by_domain(
         &mut self,
-        db: Arc<TupleBox>,
+        db: &Arc<TupleBox>,
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(), TupleError> {

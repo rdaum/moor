@@ -1305,9 +1305,9 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hi_sparse_bitset"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05d6eacc15e99d47897f7ea74c3c7a5a9ddf9051b616433d377ef686226a3b42"
+checksum = "c3d608d5f3820f93ce18d242a48ebc108125a9660bad78f2c809fef210da12b5"
 dependencies = [
  "num-traits",
  "wide",

@@ -101,7 +101,7 @@ text_io = "0.1.12" # Used for reading text dumps.
 libc = "0.2.151"
 okaywal = "0.3.1"
 io-uring = "0.6.2"
-hi_sparse_bitset = "0.3.0"
+hi_sparse_bitset = "0.4.0"
 
 # Dev dependencies
 tempfile = "3.9.0"
