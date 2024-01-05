@@ -13,7 +13,7 @@
 //
 
 pub mod support {
-    use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
+    use moor_db::tuplebox::{RelationInfo, TupleBox};
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -40,7 +40,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use moor_db::testing::jepsen::{History, Type, Value};
-    use moor_db::tuplebox::tb::TupleBox;
+    use moor_db::tuplebox::TupleBox;
     use moor_db::tuplebox::{RelationId, Transaction};
 
     use moor_values::util::slice_ref::SliceRef;

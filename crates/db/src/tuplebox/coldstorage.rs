@@ -34,7 +34,7 @@ use crate::tuplebox::page_storage::{PageStore, PageStoreMutation};
 use crate::tuplebox::tb::RelationInfo;
 use crate::tuplebox::tuples::TxTuple;
 use crate::tuplebox::tuples::{PageId, SlotBox, SlotId, TupleId};
-use crate::tuplebox::tx::working_set::WorkingSet;
+use crate::tuplebox::tx::WorkingSet;
 use crate::tuplebox::RelationId;
 
 /// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the tuplebox.

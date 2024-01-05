@@ -26,6 +26,7 @@ use crate::tuplebox::RelationId;
 /// we will attempt to make permanent when the transaction commits.
 /// The working set is also referred to for reads/updates during the lifetime of the transaction.  
 /// It effectively "is" the transaction in regards to *base relations*.
+// TODO: see comments on BaseRelation, changes there will reqiure changes here.
 pub struct WorkingSet {
     pub(crate) ts: u64,
     pub(crate) slotbox: Arc<SlotBox>,

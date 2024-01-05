@@ -29,12 +29,13 @@ mod coldstorage;
 mod page_storage;
 mod pool;
 
-pub mod tb;
-pub mod tuples;
+mod tb;
+mod tuples;
 mod tx;
 
+pub use tb::{RelationInfo, TupleBox};
 pub use tuples::TupleError;
-pub use tx::transaction::{CommitError, Transaction};
+pub use tx::{CommitError, Transaction};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RelationId(pub usize);

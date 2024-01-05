@@ -21,6 +21,7 @@ use crate::tuplebox::RelationId;
 /// A reference / handle / pointer to a relation, the actual operations are managed through the
 /// transaction.
 /// A more convenient handle tied to the lifetime of the transaction.
+// TODO: see comments on BaseRelation. changes there will require changes here.
 pub struct RelVar<'a> {
     pub(crate) tx: &'a Transaction,
     pub(crate) id: RelationId,

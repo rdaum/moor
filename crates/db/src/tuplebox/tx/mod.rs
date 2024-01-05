@@ -12,6 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod relvar;
-pub mod transaction;
-pub mod working_set;
+mod relvar;
+mod transaction;
+mod working_set;
+
+pub use transaction::{CommitError, CommitSet, Transaction};
+pub use working_set::WorkingSet;

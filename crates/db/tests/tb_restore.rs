@@ -19,8 +19,8 @@ mod test {
     use std::sync::Arc;
 
     use moor_db::testing::jepsen::{History, Type, Value};
-    use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
     use moor_db::tuplebox::{RelationId, Transaction};
+    use moor_db::tuplebox::{RelationInfo, TupleBox};
     use moor_values::util::slice_ref::SliceRef;
 
     fn from_val(value: i64) -> SliceRef {

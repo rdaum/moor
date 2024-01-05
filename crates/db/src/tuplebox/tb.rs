@@ -27,8 +27,8 @@ use crate::tuplebox::backing::BackingStoreClient;
 use crate::tuplebox::base_relation::BaseRelation;
 use crate::tuplebox::tuples::SlotBox;
 use crate::tuplebox::tuples::TxTuple;
-use crate::tuplebox::tx::transaction::{CommitError, CommitSet, Transaction};
-use crate::tuplebox::tx::working_set::WorkingSet;
+use crate::tuplebox::tx::WorkingSet;
+use crate::tuplebox::tx::{CommitError, CommitSet, Transaction};
 use crate::tuplebox::RelationId;
 
 /// Meta-data about a relation

@@ -18,7 +18,7 @@
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::tuplebox::tx::working_set::WorkingSet;
+use crate::tuplebox::tx::WorkingSet;
 
 pub struct BackingStoreClient {
     sender: UnboundedSender<WriterMessage>,

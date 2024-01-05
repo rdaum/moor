@@ -17,7 +17,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use moor_db::testing::jepsen::{History, Type, Value};
-use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
+use moor_db::tuplebox::{RelationInfo, TupleBox};
 use moor_values::util::slice_ref::SliceRef;
 use std::collections::HashMap;
 use std::sync::Arc;

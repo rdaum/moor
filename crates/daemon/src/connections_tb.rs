@@ -25,9 +25,7 @@ use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use moor_db::tuplebox;
-use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
-use moor_db::tuplebox::RelationId;
+use moor_db::tuplebox::{RelationId, RelationInfo, Transaction, TupleBox};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
@@ -77,7 +75,7 @@ enum ConnectionRelation {
 
 impl ConnectionsTb {
     async fn most_recent_client_connection(
-        tx: &tuplebox::Transaction,
+        tx: &Transaction,
         connection_obj: Objid,
     ) -> Result<Vec<(SliceRef, SystemTime)>, SessionError> {
         let clients = tx

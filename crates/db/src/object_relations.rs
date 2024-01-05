@@ -21,7 +21,7 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::AsByteBuffer;
 
-use crate::tuplebox::tuples::TupleError;
+use crate::tuplebox::TupleError;
 use crate::tuplebox::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
@@ -248,7 +248,7 @@ mod tests {
         get_object_by_codomain, get_object_value, insert_object_value, upsert_object_value,
         WorldStateRelation, WorldStateSequences,
     };
-    use crate::tuplebox::tb::{RelationInfo, TupleBox};
+    use crate::tuplebox::{RelationInfo, TupleBox};
 
     async fn test_db() -> Arc<TupleBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()

@@ -17,7 +17,7 @@ mod test {
     use moor_db::db_tx::DbTransaction;
     use moor_db::object_relations::{WorldStateRelation, WorldStateSequences};
     use moor_db::tb_worldstate::TupleBoxTransaction;
-    use moor_db::tuplebox::tb::{RelationInfo, TupleBox};
+    use moor_db::tuplebox::{RelationInfo, TupleBox};
     use moor_values::model::defset::HasUuid;
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::r#match::VerbArgsSpec;

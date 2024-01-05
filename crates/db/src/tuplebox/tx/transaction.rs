@@ -290,7 +290,7 @@ impl Transaction {
 
 /// A set of tuples to be committed to the canonical base relations, based on a transaction's
 /// working set.
-pub(crate) struct CommitSet {
+pub struct CommitSet {
     pub(crate) ts: u64,
     relations: SparseChunk<BaseRelation, 64>,
 }

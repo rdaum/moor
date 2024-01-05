@@ -21,7 +21,7 @@ use strum::{EnumCount, IntoEnumIterator};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::tuplebox::tuples::TupleError;
+use crate::tuplebox::TupleError;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -43,8 +43,8 @@ use crate::loader::LoaderInterface;
 use crate::object_relations::{
     get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
-use crate::tuplebox::tb::{RelationInfo, TupleBox};
 use crate::tuplebox::{CommitError, Transaction};
+use crate::tuplebox::{RelationInfo, TupleBox};
 use crate::{object_relations, Database};
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
@@ -1113,7 +1113,7 @@ mod tests {
     use crate::db_tx::DbTransaction;
     use crate::object_relations::{WorldStateRelation, WorldStateSequences};
     use crate::tb_worldstate::TupleBoxTransaction;
-    use crate::tuplebox::tb::{RelationInfo, TupleBox};
+    use crate::tuplebox::{RelationInfo, TupleBox};
 
     async fn test_db() -> Arc<TupleBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
