@@ -60,9 +60,7 @@ pub struct Fork {
 }
 
 /// Represents the set of parameters passed to the VM for execution.
-pub struct VmExecParams<'a> {
-    pub world_state: &'a mut dyn WorldState,
-    pub session: Arc<dyn Session>,
+pub struct VmExecParams {
     pub scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     pub max_stack_depth: usize,
     pub ticks_left: usize,
@@ -159,8 +157,10 @@ impl VM {
     /// Main VM opcode execution. The actual meat of the machine.
     pub async fn exec<'a>(
         &self,
-        exec_params: &mut VmExecParams<'a>,
+        exec_params: &VmExecParams,
         state: &mut VMExecState,
+        world_state: &'a mut dyn WorldState,
+        session: Arc<dyn Session>,
         tick_slice: usize,
     ) -> ExecutionResult {
         // Before executing, check stack depth...
@@ -175,7 +175,9 @@ impl VM {
         // executing elsewhere. It will be up to the function to interpret the counter.
         // Functions that did not set a trampoline are assumed to be complete.
         if !state.stack.is_empty() && state.top().bf_index.is_some() {
-            return self.reenter_builtin_function(state, exec_params).await;
+            return self
+                .reenter_builtin_function(state, exec_params, world_state, session)
+                .await;
         }
 
         // Try to consume & execute as many opcodes as we can without returning back to the task
@@ -537,20 +539,20 @@ impl VM {
                     let (propname, obj) = (state.pop(), state.pop());
 
                     return self
-                        .resolve_property(state, exec_params.world_state, propname, obj)
+                        .resolve_property(state, world_state, propname, obj)
                         .await;
                 }
                 Op::PushGetProp => {
                     let peeked = state.peek(2);
                     let (propname, obj) = (peeked[1].clone(), peeked[0].clone());
                     return self
-                        .resolve_property(state, exec_params.world_state, propname, obj)
+                        .resolve_property(state, world_state, propname, obj)
                         .await;
                 }
                 Op::PutProp => {
                     let (rhs, propname, obj) = (state.pop(), state.pop(), state.pop());
                     return self
-                        .set_property(state, exec_params.world_state, propname, obj, rhs)
+                        .set_property(state, world_state, propname, obj, rhs)
                         .await;
                 }
                 Op::Fork { id, fv_offset } => {
@@ -581,9 +583,7 @@ impl VM {
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_TYPE);
                     };
-                    return self
-                        .prepare_pass_verb(state, exec_params.world_state, &args[..])
-                        .await;
+                    return self.prepare_pass_verb(state, world_state, &args[..]).await;
                 }
                 Op::CallVerb => {
                     let (args, verb, obj) = (state.pop(), state.pop(), state.pop());
@@ -594,13 +594,7 @@ impl VM {
                         }
                     };
                     return self
-                        .prepare_call_verb(
-                            state,
-                            exec_params.world_state,
-                            *obj,
-                            verb.as_str(),
-                            &args[..],
-                        )
+                        .prepare_call_verb(state, world_state, *obj, verb.as_str(), &args[..])
                         .await;
                 }
                 Op::Return => {
@@ -620,7 +614,14 @@ impl VM {
                         return self.push_error(state, E_ARGS);
                     };
                     return self
-                        .call_builtin_function(state, id.0 as usize, &args[..], exec_params)
+                        .call_builtin_function(
+                            state,
+                            id.0 as usize,
+                            &args[..],
+                            exec_params,
+                            world_state,
+                            session,
+                        )
                         .await;
                 }
                 Op::PushLabel(label) => {

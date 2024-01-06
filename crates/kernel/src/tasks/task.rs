@@ -35,11 +35,10 @@ use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::{
     parse_command, parse_into_words, ParseCommandError, ParsedCommand,
 };
-use crate::tasks::moo_vm_host::MooVmHost;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart};
-use crate::tasks::vm_host::{VMHost, VMHostResponse};
+use crate::tasks::vm_host::{VMHostResponse, VmHost};
 use crate::tasks::{TaskDescription, TaskId, VerbCall};
 
 /// A task is a concurrent, transactionally isolated, thread of execution. It starts with the
@@ -75,7 +74,7 @@ pub(crate) struct Task {
     /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
     pub(crate) perms: Objid,
     /// The actual VM host which is managing the execution of this task.
-    pub(crate) vm_host: MooVmHost,
+    pub(crate) vm_host: VmHost,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -184,7 +183,7 @@ impl Task {
         // Spawn a new MOO VM host.
         // TODO: here is where we'd make a choice about alternative VM/VM Host implementations.
         let scheduler_control_sender = control_sender.clone();
-        let vm_host = MooVmHost::new(
+        let vm_host = VmHost::new(
             max_stack_depth,
             max_ticks,
             Duration::from_secs(max_seconds),

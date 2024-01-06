@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 use moor_values::model::world_state::WorldState;
@@ -23,6 +24,7 @@ use moor_values::var::{v_int, Var};
 use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
 use crate::builtins::{BfCallState, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
+use crate::tasks::sessions::Session;
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::Activation;
 use crate::vm::vm_unwind::FinallyReason;
@@ -236,7 +238,9 @@ impl VM {
         vm_state: &mut VMExecState,
         bf_func_num: usize,
         args: &[Var],
-        exec_args: &mut VmExecParams<'a>,
+        exec_args: &VmExecParams,
+        world_state: &'a mut dyn WorldState,
+        session: Arc<dyn Session>,
     ) -> ExecutionResult {
         if bf_func_num >= self.builtins.len() {
             return self.raise_error(vm_state, E_VARNF);
@@ -266,8 +270,8 @@ impl VM {
         let mut bf_args = BfCallState {
             exec_state: vm_state,
             name: BUILTIN_DESCRIPTORS[bf_func_num].name.clone(),
-            world_state: exec_args.world_state,
-            session: exec_args.session.clone(),
+            world_state,
+            session: session.clone(),
             args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
             ticks_left: exec_args.ticks_left,
@@ -290,7 +294,9 @@ impl VM {
     pub(crate) async fn reenter_builtin_function<'a>(
         &self,
         vm_state: &mut VMExecState,
-        exec_args: &mut VmExecParams<'a>,
+        exec_args: &VmExecParams,
+        world_state: &'a mut dyn WorldState,
+        session: Arc<dyn Session>,
     ) -> ExecutionResult {
         trace!(
             bf_index = vm_state.top().bf_index,
@@ -307,12 +313,12 @@ impl VM {
 
         let bf = self.builtins[vm_state.top().bf_index.unwrap()].clone();
         let verb_name = vm_state.top().verb_name.clone();
-        let sessions = exec_args.session.clone();
+        let sessions = session.clone();
         let args = vm_state.top().args.clone();
         let mut bf_args = BfCallState {
             exec_state: vm_state,
             name: verb_name,
-            world_state: exec_args.world_state,
+            world_state,
             session: sessions,
             args,
             scheduler_sender: exec_args.scheduler_sender.clone(),

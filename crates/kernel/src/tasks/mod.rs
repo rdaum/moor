@@ -20,7 +20,6 @@ pub mod command_parse;
 pub mod scheduler;
 pub mod sessions;
 
-mod moo_vm_host;
 mod task;
 pub mod task_messages;
 pub mod vm_host;
@@ -52,9 +51,8 @@ pub struct TaskDescription {
 }
 
 pub mod vm_test_utils {
-    use crate::tasks::moo_vm_host::MooVmHost;
     use crate::tasks::sessions::Session;
-    use crate::tasks::vm_host::{VMHost, VMHostResponse};
+    use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
     use crate::vm::VmExecParams;
     use moor_values::model::world_state::WorldState;
@@ -70,13 +68,10 @@ pub mod vm_test_utils {
         args: Vec<Var>,
     ) -> Var {
         let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut vm_host =
-            MooVmHost::new(20, 90_000, Duration::from_secs(5), session.clone(), scs_tx);
+        let mut vm_host = VmHost::new(20, 90_000, Duration::from_secs(5), session.clone(), scs_tx);
 
         let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
         let _vm_exec_params = VmExecParams {
-            world_state,
-            session: session.clone(),
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
             ticks_left: 90_000,
