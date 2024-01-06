@@ -12,8 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+mod bitarray;
 pub mod bitenum;
+mod bitset;
 pub mod slice_ref;
+
+pub use bitarray::*;
+pub use bitset::*;
 
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'

@@ -35,7 +35,7 @@ use std::pin::Pin;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::{Arc, Mutex};
 
-use sized_chunks::SparseChunk;
+use moor_values::util::{BitArray, Bitset64};
 use thiserror::Error;
 use tracing::error;
 
@@ -188,8 +188,8 @@ impl SlotBox {
     }
 
     pub fn num_pages(&self) -> usize {
-        let inner = self.inner.lock().unwrap();
-        inner.available_page_space.len()
+        let mut inner = self.inner.lock().unwrap();
+        inner.available_page_space.size()
     }
 
     pub fn used_pages(&self) -> Vec<PageId> {
@@ -197,7 +197,7 @@ impl SlotBox {
         allocator
             .available_page_space
             .iter()
-            .map(|ps| ps.pages())
+            .map(|(_, ps)| ps.pages())
             .flatten()
             .collect()
     }
@@ -209,7 +209,7 @@ struct Inner {
     //   so we can maybe get rid of the locks in the buffer pool...
     pool: BufferPool,
     /// The set of used pages, indexed by relation, in sorted order of the free space available in them.
-    available_page_space: SparseChunk<PageSpace, 64>,
+    available_page_space: BitArray<PageSpace, 64, Bitset64<1>>,
     /// The "swizzelable" references to tuples, indexed by tuple id.
     /// There has to be a stable-memory address for each of these, as they are referenced by
     /// pointers in the TupleRefs themselves.
@@ -221,7 +221,7 @@ struct Inner {
 impl Inner {
     fn new(pool: BufferPool) -> Self {
         Self {
-            available_page_space: SparseChunk::new(),
+            available_page_space: BitArray::new(),
             pool,
             swizrefs: HashMap::new(),
         }
@@ -297,7 +297,7 @@ impl Inner {
         let bid = Bid(pid as u64);
         let Some(available_page_space) = self.available_page_space.get_mut(relation_id.0) else {
             self.available_page_space
-                .insert(relation_id.0, PageSpace::new(free_space, bid));
+                .set(relation_id.0, PageSpace::new(free_space, bid));
             return;
         };
 
@@ -352,7 +352,7 @@ impl Inner {
                 Ok((bid.0 as PageId, available_page_space.len() - 1))
             }
             None => {
-                self.available_page_space.insert(
+                self.available_page_space.set(
                     relation_id.0,
                     PageSpace::new(slot_page_empty_size(actual_size), bid),
                 );
@@ -394,14 +394,14 @@ impl Inner {
         offset: usize,
         page_remaining_bytes: usize,
     ) {
-        let available_page_space = &mut self.available_page_space[relation_id.0];
+        let available_page_space = self.available_page_space.get_mut(relation_id.0).unwrap();
         available_page_space.finish(offset, page_remaining_bytes);
     }
 
     fn report_free(&mut self, pid: PageId, new_size: usize, is_empty: bool) {
         // Seek the page in the available_page_space vectors, and add the bytes back to its free space.
         // We don't know the relation id here, so we have to linear scan all of them.
-        for available_page_space in self.available_page_space.iter_mut() {
+        for (_, available_page_space) in self.available_page_space.iter_mut() {
             if available_page_space.update_page(pid, new_size, is_empty) {
                 if is_empty {
                     self.pool

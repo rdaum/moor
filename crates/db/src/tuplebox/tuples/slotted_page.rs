@@ -608,6 +608,7 @@ impl<'a> PageWriteGuard<'a> {
         sp.get_slot_mut(slot_id)
     }
 
+    #[inline]
     pub fn allocate(
         &mut self,
         size: usize,
@@ -620,6 +621,7 @@ impl<'a> PageWriteGuard<'a> {
         };
         sp.allocate(size, initial_value)
     }
+
     pub fn remove_slot(&mut self, slot_id: SlotId) -> Result<(usize, usize, bool), SlotBoxError> {
         let sp = SlottedPage {
             base_address: self.base_address,

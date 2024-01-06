@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_values::util::{BitArray, Bitset64};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -29,36 +30,51 @@ use crate::tuplebox::RelationId;
 // TODO: see comments on BaseRelation, changes there will reqiure changes here.
 pub struct WorkingSet {
     pub(crate) ts: u64,
+    pub(crate) schema: Vec<RelationInfo>,
     pub(crate) slotbox: Arc<SlotBox>,
-    pub(crate) relations: Vec<TxBaseRelation>,
+    pub(crate) relations: BitArray<TxBaseRelation, 64, Bitset64<1>>,
 }
 
 impl WorkingSet {
     pub(crate) fn new(slotbox: Arc<SlotBox>, schema: &[RelationInfo], ts: u64) -> Self {
-        let mut relations = Vec::new();
-        for (i, r) in schema.iter().enumerate() {
-            relations.push(TxBaseRelation {
-                id: RelationId(i),
-                tuples: Vec::new(),
-                domain_index: HashMap::new(),
-                codomain_index: if r.secondary_indexed {
-                    Some(HashMap::new())
-                } else {
-                    None
-                },
-            });
-        }
+        let relations = BitArray::new();
         Self {
             ts,
             slotbox,
+            schema: schema.to_vec(),
             relations,
         }
     }
 
     pub(crate) fn clear(&mut self) {
         for rel in self.relations.iter_mut() {
-            rel.clear();
+            // let Some(rel) = rel else { continue };
+            rel.1.clear();
         }
+    }
+
+    fn get_relation_mut<'a>(
+        relation_id: RelationId,
+        schema: &[RelationInfo],
+        relations: &'a mut BitArray<TxBaseRelation, 64, Bitset64<1>>,
+    ) -> &'a mut TxBaseRelation {
+        if relations.check(relation_id.0) {
+            return relations.get_mut(relation_id.0).unwrap();
+        }
+        let r = &schema[relation_id.0];
+        let new_relation = TxBaseRelation {
+            id: relation_id,
+            tuples: Vec::new(),
+            domain_index: HashMap::new(),
+            codomain_index: if r.secondary_indexed {
+                Some(HashMap::new())
+            } else {
+                None
+            },
+        };
+
+        relations.set(relation_id.0, new_relation);
+        relations.get_mut(relation_id.0).unwrap()
     }
 
     pub(crate) async fn seek_by_domain(
@@ -67,7 +83,7 @@ impl WorkingSet {
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(SliceRef, SliceRef), TupleError> {
-        let relation = &mut self.relations[relation_id.0];
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // Check local first.
         if let Some(tuple_idx) = relation.domain_index.get(&domain) {
@@ -114,7 +130,7 @@ impl WorkingSet {
         // TODO: There is likely a way to optimize this so we're not doing this when not necessary.
         //   but we'll need a round of really good coherence tests before we can do that.
         let tuples_for_codomain = {
-            let relation = &self.relations[relation_id.0];
+            let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
             // If there's no secondary index, we panic.  You should not have tried this.
             if relation.codomain_index.is_none() {
@@ -132,7 +148,7 @@ impl WorkingSet {
             let _ = self.seek_by_domain(&db, relation_id, tuple.domain()).await;
         }
 
-        let relation = &mut self.relations[relation_id.0];
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
         let codomain_index = relation.codomain_index.as_ref().expect("No codomain index");
         let tuple_indexes = codomain_index
             .get(&codomain)
@@ -158,7 +174,7 @@ impl WorkingSet {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let relation = &mut self.relations[relation_id.0];
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // If we already have a local version, that's a dupe, so return an error for that.
         if relation.domain_index.get(&domain).is_some() {
@@ -190,7 +206,7 @@ impl WorkingSet {
     }
 
     pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
-        &self,
+        &mut self,
         db: &Arc<TupleBox>,
         relation_id: RelationId,
         f: F,
@@ -208,8 +224,7 @@ impl WorkingSet {
         // Now pull in the local working set.
         // Apply any changes to the tuples we've already collected, and add in any inserts, and
         // remove any tombstones.
-        let relation = &self.relations[relation_id.0];
-
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
         for t in &relation.tuples {
             if t.ts() > self.ts {
                 continue;
@@ -242,7 +257,7 @@ impl WorkingSet {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let relation = &mut self.relations[relation_id.0];
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // If we have an existing copy, we will update it, but keep its existing derivation
         // timestamp and operation type.
@@ -313,7 +328,7 @@ impl WorkingSet {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let relation = &mut self.relations[relation_id.0];
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // If we have an existing copy, we will update it, but keep its existing derivation
         // timestamp.
@@ -412,7 +427,7 @@ impl WorkingSet {
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(), TupleError> {
-        let relation = &mut self.relations[relation_id.0];
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // Delete is basically an update but where we stick a Tombstone.
         if let Some(tuple_index) = relation.domain_index.get_mut(&domain).cloned() {

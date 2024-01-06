@@ -15,7 +15,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use sized_chunks::SparseChunk;
+use moor_values::util::{BitArray, Bitset64};
 use thiserror::Error;
 use tokio::sync::RwLock;
 
@@ -307,26 +307,26 @@ impl Transaction {
 /// working set.
 pub struct CommitSet {
     pub(crate) ts: u64,
-    relations: SparseChunk<BaseRelation, 64>,
+    relations: BitArray<BaseRelation, 64, Bitset64<1>>,
 }
 
 impl CommitSet {
     pub(crate) fn new(ts: u64) -> Self {
         Self {
             ts,
-            relations: SparseChunk::new(),
+            relations: BitArray::new(),
         }
     }
 
     /// Returns an iterator over the modified relations in the commit set.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &BaseRelation> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (usize, &BaseRelation)> {
         return self.relations.iter();
     }
 
     /// Returns an iterator over the modified relations in the commit set, moving and consuming the
     /// commit set in the process.
-    pub(crate) fn into_iter(self) -> impl IntoIterator<Item = BaseRelation> {
-        self.relations.into_iter()
+    pub(crate) fn into_iter(self) -> impl IntoIterator<Item = (usize, BaseRelation)> {
+        self.relations.take_all().into_iter()
     }
 
     /// Fork the given base relation into the commit set, if it's not already there.
@@ -337,7 +337,7 @@ impl CommitSet {
     ) -> &mut BaseRelation {
         if self.relations.get(relation_id.0).is_none() {
             let r = canonical.clone();
-            self.relations.insert(relation_id.0, r);
+            self.relations.set(relation_id.0, r);
         }
         self.relations.get_mut(relation_id.0).unwrap()
     }

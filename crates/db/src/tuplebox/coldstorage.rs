@@ -242,14 +242,14 @@ impl ColdStorage {
         // The pages that are modified will be need be read-locked while they are copied.
         let mut dirty_pages = HashSet::new();
         for r in ws.relations.iter() {
-            for t in r.tuples() {
+            for t in r.1.tuples() {
                 match t {
                     TxTuple::Insert(_) | TxTuple::Update(_) | TxTuple::Tombstone { .. } => {
                         let TupleId {
                             page: page_id,
                             slot: _slot_id,
                         } = t.tuple_id();
-                        dirty_pages.insert((page_id, r.id));
+                        dirty_pages.insert((page_id, r.1.id));
                     }
                     TxTuple::Value(_) => {
                         // Untouched value (view), noop, should already exist in backing store.

@@ -22,9 +22,7 @@ use yoke::Yoke;
 /// from, and a range within that storage.
 /// In this way it's possible to safely and conveniently pass around the 'slices' of things without
 /// worrying about lifetimes and borrowing.
-/// This is used here for the pieces of the rope, which can all be slices out of common buffer
-/// storage, and we can avoid making copies of the data when doing things like splitting nodes
-/// or appending to the rope etc.
+/// Used generally for passing around zero copy tuples, pieces of tuples, values, strings, etc.
 #[derive(Clone)]
 pub struct SliceRef(Yoke<&'static [u8], Arc<dyn ByteSource>>);
 

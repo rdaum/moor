@@ -19,12 +19,12 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use moor_db::testing::jepsen::{History, Type, Value};
 use moor_db::tuplebox::{RelationInfo, TupleBox};
 use moor_values::util::slice_ref::SliceRef;
-use sized_chunks::SparseChunk;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // This is a struct that tells Criterion.rs to use the "futures" crate's current-thread executor
 use moor_db::tuplebox::{RelationId, Transaction};
+use moor_values::util::{BitArray, Bitset64};
 use tokio::runtime::Runtime;
 
 /// Build a test database with a bunch of relations
@@ -66,19 +66,19 @@ fn load_history() -> Vec<History> {
 async fn list_append_workload(
     db: Arc<TupleBox>,
     events: &Vec<History>,
-    processes: &mut SparseChunk<Arc<Transaction>, 64>,
+    processes: &mut BitArray<Arc<Transaction>, 64, Bitset64<1>>,
 ) {
     for e in events {
         match e.r#type {
             Type::invoke => {
                 // Start a transaction.
                 let tx = Arc::new(db.clone().start_tx());
-                let existing = processes.insert(e.process as usize, tx.clone());
                 assert!(
-                    existing.is_none(),
-                    "T{} already exists uncommitted",
+                    !processes.check(e.process as usize),
+                    "T{} already exists committed",
                     e.process
                 );
+                processes.set(e.process as usize, tx.clone());
                 // Execute the actions
                 for ev in &e.value {
                     match ev {
@@ -106,11 +106,11 @@ async fn list_append_workload(
                 }
             }
             Type::ok => {
-                let tx = processes.remove(e.process as usize).unwrap();
+                let tx = processes.erase(e.process as usize).unwrap();
                 tx.commit().await.unwrap();
             }
             Type::fail => {
-                let tx = processes.remove(e.process as usize).unwrap();
+                let tx = processes.erase(e.process as usize).unwrap();
                 tx.rollback().await.unwrap();
             }
         }
@@ -123,7 +123,7 @@ async fn do_insert_workload(iters: u64, events: &Vec<History>) -> Duration {
         let db = test_db().await;
 
         // Where to track the transactions running.
-        let mut processes = SparseChunk::new();
+        let mut processes = BitArray::new();
 
         let start = Instant::now();
         list_append_workload(db, events, &mut processes).await;

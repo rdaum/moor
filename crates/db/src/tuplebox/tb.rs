@@ -187,8 +187,8 @@ impl TupleBox {
     ) -> Result<CommitSet, CommitError> {
         let mut commitset = CommitSet::new(commit_ts);
 
-        for (relation_id, local_relation) in tx_working_set.relations.iter().enumerate() {
-            let relation_id = RelationId(relation_id);
+        for (_, local_relation) in tx_working_set.relations.iter() {
+            let relation_id = local_relation.id;
             // scan through the local working set, and for each tuple, check to see if it's safe to
             // commit. If it is, then we'll add it to the commit set.
             // note we're not actually committing yet, just producing a candidate commit set
@@ -267,7 +267,7 @@ impl TupleBox {
         // We have to hold a lock during the duration of this. If we fail, we will loop back
         // and retry.
         let mut canonical = self.canonical.write().await;
-        for relation in commit_set.iter() {
+        for (_, relation) in commit_set.iter() {
             // Did the relation get committed to by someone else in the interim? If so, return
             // back to the transaction letting it know that, and it can decide if it wants to
             // retry.
@@ -279,7 +279,7 @@ impl TupleBox {
         // Everything passed, so we can commit the changes by swapping in the new canonical
         // before releasing the lock.
         let commit_ts = commit_set.ts;
-        for relation in commit_set.into_iter() {
+        for (_, relation) in commit_set.into_iter() {
             let idx = relation.id.0;
             canonical[idx] = relation;
             // And update the timestamp on the canonical relation.

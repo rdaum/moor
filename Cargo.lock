@@ -1933,6 +1933,7 @@ dependencies = [
  "metrics 0.21.1",
  "metrics-macros",
  "moor-values",
+ "num-traits",
  "okaywal",
  "rand",
  "serde",
