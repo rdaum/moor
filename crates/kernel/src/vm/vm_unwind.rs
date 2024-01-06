@@ -13,7 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
-use tracing::{debug, trace};
+use tracing::trace;
 
 use moor_values::model::verbs::VerbFlag;
 use moor_values::var::error::{Error, ErrorPack};
@@ -22,7 +22,7 @@ use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use moor_values::NOTHING;
 
 use crate::vm::activation::{Activation, HandlerType};
-use crate::vm::{ExecutionResult, VM};
+use crate::vm::{ExecutionResult, VMExecState, VM};
 use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
 use moor_compiler::labels::{Label, Offset};
 
@@ -85,11 +85,11 @@ impl FinallyReason {
 impl VM {
     /// Find the currently active catch handler for a given error code, if any.
     /// Then return the stack offset (from now) of the activation frame containing the handler.
-    fn find_handler_active(&self, raise_code: Error) -> Option<usize> {
+    fn find_handler_active(&self, state: &mut VMExecState, raise_code: Error) -> Option<usize> {
         // Scan activation frames and their stacks, looking for the first _Catch we can find.
-        let mut frame = self.stack.len() - 1;
+        let mut frame = state.stack.len() - 1;
         loop {
-            let activation = &self.stack.get(frame)?;
+            let activation = &state.stack.get(frame)?;
             for handler in &activation.handler_stack {
                 if let HandlerType::Catch(cnt) = handler.handler_type {
                     // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
@@ -162,11 +162,11 @@ impl VM {
     }
 
     /// Compose a backtrace list of strings for an error, starting from the current stack frame.
-    fn error_backtrace_list(&self, raise_msg: &str) -> Vec<Var> {
+    fn error_backtrace_list(&self, state: &mut VMExecState, raise_msg: &str) -> Vec<Var> {
         // Walk live activation frames and produce a written representation of a traceback for each
         // frame.
         let mut backtrace_list = vec![];
-        for (i, a) in self.stack.iter().rev().enumerate() {
+        for (i, a) in state.stack.iter().rev().enumerate() {
             let mut pieces = vec![];
             if i != 0 {
                 pieces.push("... called from ".to_string());
@@ -200,61 +200,61 @@ impl VM {
     /// Raise an error.
     /// Finds the catch handler for the given error if there is one, and unwinds the stack to it.
     /// If there is no handler, creates an 'Uncaught' reason with backtrace, and unwinds with that.
-    fn raise_error_pack(&mut self, p: ErrorPack) -> ExecutionResult {
+    fn raise_error_pack(&self, state: &mut VMExecState, p: ErrorPack) -> ExecutionResult {
         trace!(error = ?p, "raising error");
 
         // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
-        let handler_activ = self.find_handler_active(p.code);
+        let handler_activ = self.find_handler_active(state, p.code);
 
         let why = if let Some(handler_active_num) = handler_activ {
             FinallyReason::Raise {
                 code: p.code,
                 msg: p.msg,
-                stack: self.make_stack_list(&self.stack, handler_active_num),
+                stack: self.make_stack_list(&state.stack, handler_active_num),
             }
         } else {
             FinallyReason::Uncaught(UncaughtException {
                 code: p.code,
                 msg: p.msg.clone(),
                 value: p.value,
-                stack: self.make_stack_list(&self.stack, 0),
-                backtrace: self.error_backtrace_list(p.msg.as_str()),
+                stack: self.make_stack_list(&state.stack, 0),
+                backtrace: self.error_backtrace_list(state, p.msg.as_str()),
             })
         };
 
-        self.unwind_stack(why)
+        self.unwind_stack(state, why)
     }
 
     /// Push an error to the stack and raise it.
-    pub(crate) fn push_error(&mut self, code: Error) -> ExecutionResult {
+    pub(crate) fn push_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "push_error");
-        self.push(&v_err(code));
+        state.push(&v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        if let Some(activation) = self.stack.last() {
+        if let Some(activation) = state.stack.last() {
             if activation
                 .verb_info
                 .verbdef()
                 .flags()
                 .contains(VerbFlag::Debug)
             {
-                return self.raise_error_pack(code.make_error_pack(None));
+                return self.raise_error_pack(state, code.make_error_pack(None));
             }
         }
         ExecutionResult::More
     }
 
     /// Same as push_error, but for returns from builtin functions.
-    pub(crate) fn push_bf_error(&mut self, code: Error) -> ExecutionResult {
+    pub(crate) fn push_bf_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "push_bf_error");
         // No matter what, the error value has to be on the stack of the *calling* verb, not on this
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
         // function. If we stack_unwind, it will propagate to parent. Otherwise, it will be popped
         // by the parent anyways.
-        self.parent_activation_mut().push(v_err(code));
+        state.parent_activation_mut().push(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
-        let verb_frame = self.stack.iter().rev().find(|a| a.bf_index.is_none());
+        let verb_frame = state.stack.iter().rev().find(|a| a.bf_index.is_none());
         if let Some(activation) = verb_frame {
             if activation
                 .verb_info
@@ -262,30 +262,35 @@ impl VM {
                 .flags()
                 .contains(VerbFlag::Debug)
             {
-                return self.raise_error_pack(code.make_error_pack(None));
+                return self.raise_error_pack(state, code.make_error_pack(None));
             }
         }
         // If we're not unwinding, we need to pop the builtin function's activation frame.
-        self.stack.pop();
+        state.stack.pop();
         ExecutionResult::More
     }
 
     /// Push an error to the stack with a description and raise it.
-    pub(crate) fn push_error_msg(&mut self, code: Error, msg: String) -> ExecutionResult {
+    pub(crate) fn push_error_msg(
+        &self,
+        state: &mut VMExecState,
+        code: Error,
+        msg: String,
+    ) -> ExecutionResult {
         trace!(?code, msg, "push_error_msg");
-        self.push(&v_err(code));
+        state.push(&v_err(code));
 
-        self.raise_error(code)
+        self.raise_error(state, code)
     }
 
     /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
     /// want.
-    pub(crate) fn raise_error(&mut self, code: Error) -> ExecutionResult {
+    pub(crate) fn raise_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "maybe_raise_error");
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
-        let verb_frame = self.stack.iter().rev().find(|a| a.bf_index.is_none());
+        let verb_frame = state.stack.iter().rev().find(|a| a.bf_index.is_none());
         if let Some(activation) = verb_frame {
             if activation
                 .verb_info
@@ -293,16 +298,16 @@ impl VM {
                 .flags()
                 .contains(VerbFlag::Debug)
             {
-                return self.raise_error_pack(code.make_error_pack(None));
+                return self.raise_error_pack(state, code.make_error_pack(None));
             }
         }
         ExecutionResult::More
     }
 
     /// Explicitly raise an error, regardless of the 'd' bit.
-    pub(crate) fn throw_error(&mut self, code: Error) -> ExecutionResult {
+    pub(crate) fn throw_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "raise_error");
-        self.raise_error_pack(code.make_error_pack(None))
+        self.raise_error_pack(state, code.make_error_pack(None))
     }
 
     /// Unwind the stack with the given reason and return an execution result back to the VM loop
@@ -310,12 +315,13 @@ impl VM {
     /// Contains all the logic for handling the various reasons for exiting a verb execution:
     ///     * Error raises of various kinds
     ///     * Return values
-    pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
-        debug!(?why, this = ?self.top().this, from = self.top().verb_name,
-               line = self.top().find_line_no(self.top().pc).unwrap_or(0),
-               "unwind_stack");
+    pub(crate) fn unwind_stack(
+        &self,
+        state: &mut VMExecState,
+        why: FinallyReason,
+    ) -> ExecutionResult {
         // Walk activation stack from bottom to top, tossing frames as we go.
-        while let Some(a) = self.stack.last_mut() {
+        while let Some(a) = state.stack.last_mut() {
             while a.valstack.pop().is_some() {
                 // Check the handler stack to see if we've hit a finally or catch handler that
                 // was registered for this position in the value stack.
@@ -386,7 +392,7 @@ impl VM {
             // the returned value up out of the interpreter loop.
             // Otherwise pop off this activation, and continue unwinding.
             if let FinallyReason::Return(value) = &why {
-                if self.stack.len() == 1 {
+                if state.stack.len() == 1 {
                     return ExecutionResult::Complete(value.clone());
                 }
             }
@@ -402,9 +408,9 @@ impl VM {
                 return ExecutionResult::Exception(why);
             }
 
-            self.stack.pop().expect("Stack underflow");
+            state.stack.pop().expect("Stack underflow");
 
-            if self.stack.is_empty() {
+            if state.stack.is_empty() {
                 return ExecutionResult::Complete(v_none());
             }
             // TODO builtin function unwinding stuff
@@ -414,8 +420,7 @@ impl VM {
             // (Unless we're the final activation, in which case that should have been handled
             // above)
             if let FinallyReason::Return(value) = &why {
-                self.push(value);
-                trace!(value = ?value, verb_name = self.top().verb_name, "RETURN");
+                state.push(value);
                 return ExecutionResult::More;
             }
         }

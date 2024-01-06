@@ -197,8 +197,7 @@ impl SlotBox {
         allocator
             .available_page_space
             .iter()
-            .map(|(_, ps)| ps.pages())
-            .flatten()
+            .flat_map(|(_, ps)| ps.pages())
             .collect()
     }
 }
@@ -384,7 +383,7 @@ impl Inner {
         }
 
         // Out of room, need to allocate a new page.
-        return self.alloc(relation_id, page_size);
+        self.alloc(relation_id, page_size)
     }
 
     fn finish_alloc(
@@ -489,7 +488,7 @@ impl PageSpace {
             .entries
             .binary_search_by(|entry| decode(*entry).1.cmp(&available));
 
-        return match found {
+        match found {
             // Exact match, highly unlikely, but possible.
             Ok(entry_num) => {
                 // We only want the lower 64 bits, ala
@@ -500,14 +499,14 @@ impl PageSpace {
             // Out of room, our caller will need to allocate a new page.
             Err(position) if position == self.entries.len() => {
                 // If we didn't find a page with enough space, then we need to allocate a new page.
-                return None;
+                None
             }
             // Found a page we add to.
             Err(entry_num) => {
                 let pid = self.entries[entry_num] as u64;
                 Some((pid as PageId, entry_num))
             }
-        };
+        }
     }
 
     fn finish(&mut self, offset: usize, page_remaining_bytes: usize) {

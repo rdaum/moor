@@ -37,7 +37,7 @@ use moor_values::var::Var;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::TaskId;
-use crate::vm::{ExecutionResult, VM};
+use crate::vm::{ExecutionResult, VMExecState};
 
 /// The arguments and other state passed to a built-in function.
 pub struct BfCallState<'a> {
@@ -45,8 +45,9 @@ pub struct BfCallState<'a> {
     pub(crate) name: String,
     /// Arguments passed to the function.
     pub(crate) args: Vec<Var>,
-    /// Reference back to the VM, to be able to retrieve stack frames and other state.
-    pub(crate) vm: &'a mut VM,
+    /// The current execution state of this task in this VM, including the stack
+    /// so that BFs can inspect and manipulate it.
+    pub(crate) exec_state: &'a mut VMExecState,
     /// Handle to the current database transaction.
     pub(crate) world_state: &'a mut dyn WorldState,
     /// For connection / message management.
@@ -61,11 +62,11 @@ pub struct BfCallState<'a> {
 
 impl BfCallState<'_> {
     pub fn caller_perms(&self) -> Objid {
-        self.vm.caller_perms()
+        self.exec_state.caller_perms()
     }
 
     pub fn task_perms_who(&self) -> Objid {
-        self.vm.task_perms()
+        self.exec_state.task_perms()
     }
     pub async fn task_perms(&self) -> Result<Perms, WorldStateError> {
         let who = self.task_perms_who();

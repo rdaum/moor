@@ -70,7 +70,7 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .check_obj_owner_perms(*player)
         .map_err(world_state_err)?;
 
-    let event = NarrativeEvent::notify_text(bf_args.vm.caller(), msg.to_string());
+    let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
     if let Err(send_error) = bf_args.session.send_event(*player, event).await {
         warn!(
             "Unable to send message to player: #{}: {}",
@@ -141,7 +141,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
     if !perms.check_is_wizard().map_err(world_state_err)? && perms_for != perms.who {
         return Err(E_PERM);
     }
-    bf_args.vm.set_task_perms(perms_for);
+    bf_args.exec_state.set_task_perms(perms_for);
 
     Ok(Ret(v_none()))
 }
@@ -153,7 +153,7 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     }
 
     // We have to exempt ourselves from the callers list.
-    let callers = bf_args.vm.callers()[1..].to_vec();
+    let callers = bf_args.exec_state.callers()[1..].to_vec();
     Ok(Ret(v_list(
         &callers
             .iter()
@@ -184,7 +184,7 @@ async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    Ok(Ret(v_int(bf_args.vm.top().task_id as i64)))
+    Ok(Ret(v_int(bf_args.exec_state.top().task_id as i64)))
 }
 bf_declare!(task_id, bf_task_id);
 
@@ -392,12 +392,12 @@ async fn bf_read<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         let Variant::Obj(requested_player) = bf_args.args[0].variant() else {
             return Err(E_INVARG);
         };
-        let player = bf_args.vm.top().player;
+        let player = bf_args.exec_state.top().player;
         if *requested_player != player {
             // We log this because we'd like to know if cores are trying to do this.
             warn!(
                 requested_player = ?requested_player,
-                caller = ?bf_args.vm.caller(),
+                caller = ?bf_args.exec_state.caller(),
                 ?player,
                 "read() called with non-current player");
             return Err(E_INVARG);
@@ -419,7 +419,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
     bf_args
         .scheduler_sender
         .send((
-            bf_args.vm.top().task_id,
+            bf_args.exec_state.top().task_id,
             SchedulerControlMsg::DescribeOtherTasks(send),
         ))
         .expect("scheduler is not listening");
@@ -473,7 +473,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     // Not sure this is *exactly* what MOO does, but it's close enough for now.
     let victim_task_id = *victim_task_id as TaskId;
 
-    if victim_task_id == bf_args.vm.top().task_id {
+    if victim_task_id == bf_args.exec_state.top().task_id {
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
     }
 
@@ -481,7 +481,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     bf_args
         .scheduler_sender
         .send((
-            bf_args.vm.top().task_id,
+            bf_args.exec_state.top().task_id,
             SchedulerControlMsg::KillTask {
                 victim_task_id,
                 sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
@@ -517,7 +517,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let task_id = *resume_task_id as TaskId;
 
     // Resuming ourselves makes no sense, it's not suspended. E_INVARG.
-    if task_id == bf_args.vm.top().task_id {
+    if task_id == bf_args.exec_state.top().task_id {
         return Err(E_INVARG);
     }
 
@@ -525,7 +525,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     bf_args
         .scheduler_sender
         .send((
-            bf_args.vm.top().task_id,
+            bf_args.exec_state.top().task_id,
             SchedulerControlMsg::ResumeTask {
                 queued_task_id: task_id,
                 sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
@@ -594,7 +594,7 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
     bf_args
         .scheduler_sender
         .send((
-            bf_args.vm.top().task_id,
+            bf_args.exec_state.top().task_id,
             SchedulerControlMsg::BootPlayer {
                 player: *player,
                 sender_permissions: task_perms,
@@ -673,9 +673,17 @@ async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
     }
 
     if is_error {
-        error!("SERVER_LOG {}: {}", bf_args.vm.top().player, message);
+        error!(
+            "SERVER_LOG {}: {}",
+            bf_args.exec_state.top().player,
+            message
+        );
     } else {
-        info!("SERVER_LOG {}: {}", bf_args.vm.top().player, message);
+        info!(
+            "SERVER_LOG {}: {}",
+            bf_args.exec_state.top().player,
+            message
+        );
     }
 
     Ok(Ret(v_none()))
@@ -758,7 +766,7 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     };
 
     let tramp = bf_args
-        .vm
+        .exec_state
         .top()
         .bf_trampoline
         .unwrap_or(BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE);
@@ -775,13 +783,13 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
             // setup-for-eval result here.
             return Ok(VmInstr(ExecutionResult::PerformEval {
                 permissions: bf_args.task_perms_who(),
-                player: bf_args.vm.top().player,
+                player: bf_args.exec_state.top().player,
                 program,
             }));
         }
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
             // Value must be on stack,  and we then wrap that up in the {success, value} tuple.
-            let value = bf_args.vm.pop();
+            let value = bf_args.exec_state.pop();
             Ok(Ret(v_list(&[v_bool(true), value])))
         }
         _ => {

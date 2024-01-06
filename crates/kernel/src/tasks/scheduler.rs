@@ -42,8 +42,8 @@ use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart};
 use crate::tasks::{TaskDescription, TaskId};
-use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
+use crate::vm::UncaughtException;
 use moor_compiler::codegen::compile;
 use moor_compiler::CompileError;
 

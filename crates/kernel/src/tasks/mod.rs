@@ -56,7 +56,7 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHost, VMHostResponse};
     use crate::tasks::VerbCall;
-    use crate::vm::vm_execute::VmExecParams;
+    use crate::vm::VmExecParams;
     use moor_values::model::world_state::WorldState;
     use moor_values::var::Var;
     use moor_values::SYSTEM_OBJECT;

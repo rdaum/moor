@@ -19,9 +19,9 @@ use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::vm_host::{VMHost, VMHostResponse};
 use crate::tasks::{TaskId, VerbCall};
-use crate::vm::vm_execute::VmExecParams;
-use crate::vm::vm_unwind::FinallyReason;
+use crate::vm::VmExecParams;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
+use crate::vm::{FinallyReason, VMExecState};
 use async_trait::async_trait;
 use moor_compiler::labels::Name;
 use moor_compiler::opcode::Program;
@@ -40,6 +40,7 @@ use tracing::{trace, warn};
 /// A 'host' for running the MOO virtual machine inside a task.
 pub struct MooVmHost {
     vm: VM,
+    exec_state: VMExecState,
     /// The maximum stack depth for this task
     max_stack_depth: usize,
     /// The amount of ticks (opcode executions) allotted to this task
@@ -61,10 +62,12 @@ impl MooVmHost {
         scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     ) -> Self {
         let vm = VM::new();
+        let exec_state = VMExecState::new();
         let (run_watch_send, run_watch_recv) = tokio::sync::watch::channel(false);
         // Created in an initial suspended state.
         Self {
             vm,
+            exec_state,
             max_stack_depth,
             max_ticks,
             max_time,
@@ -122,8 +125,10 @@ impl VMHost<Program> for MooVmHost {
         self.start_execution(task_id, call_request).await
     }
     async fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
-        self.vm.tick_count = 0;
-        self.vm.exec_fork_vector(fork_request, task_id).await;
+        self.exec_state.tick_count = 0;
+        self.vm
+            .exec_fork_vector(&mut self.exec_state, fork_request, task_id)
+            .await;
         self.run_watch_send.send(!suspended).unwrap();
     }
     /// Start execution of a verb request.
@@ -132,18 +137,18 @@ impl VMHost<Program> for MooVmHost {
         task_id: TaskId,
         verb_execution_request: VerbExecutionRequest,
     ) {
-        self.vm.start_time = Some(SystemTime::now());
-        self.vm.tick_count = 0;
+        self.exec_state.start_time = Some(SystemTime::now());
+        self.exec_state.tick_count = 0;
         self.vm
-            .exec_call_request(task_id, verb_execution_request)
+            .exec_call_request(&mut self.exec_state, task_id, verb_execution_request)
             .await;
         self.run_watch_send.send(true).unwrap();
     }
     async fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
-        self.vm.start_time = Some(SystemTime::now());
-        self.vm.tick_count = 0;
+        self.exec_state.start_time = Some(SystemTime::now());
+        self.exec_state.tick_count = 0;
         self.vm
-            .exec_eval_request(task_id, player, player, program)
+            .exec_eval_request(&mut self.exec_state, task_id, player, player, program)
             .await;
         self.run_watch_send.send(true).unwrap();
     }
@@ -158,7 +163,7 @@ impl VMHost<Program> for MooVmHost {
             .unwrap();
 
         // Check ticks and seconds, and abort the task if we've exceeded the limits.
-        let time_left = match self.vm.start_time {
+        let time_left = match self.exec_state.start_time {
             Some(start_time) => {
                 let elapsed = start_time.elapsed().expect("Could not get elapsed time");
                 if elapsed > self.max_time {
@@ -168,23 +173,26 @@ impl VMHost<Program> for MooVmHost {
             }
             None => None,
         };
-        if self.vm.tick_count >= self.max_ticks {
-            return AbortLimit(AbortLimitReason::Ticks(self.vm.tick_count));
+        if self.exec_state.tick_count >= self.max_ticks {
+            return AbortLimit(AbortLimitReason::Ticks(self.exec_state.tick_count));
         }
-        let exec_params = VmExecParams {
+        let mut exec_params = VmExecParams {
             world_state,
             session: self.sessions.clone(),
             scheduler_sender: self.scheduler_control_sender.clone(),
             max_stack_depth: self.max_stack_depth,
-            ticks_left: self.max_ticks - self.vm.tick_count,
+            ticks_left: self.max_ticks - self.exec_state.tick_count,
             time_left,
         };
-        let pre_exec_tick_count = self.vm.tick_count;
+        let pre_exec_tick_count = self.exec_state.tick_count;
 
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
-        let mut result = self.vm.exec(exec_params, self.max_ticks).await;
+        let mut result = self
+            .vm
+            .exec(&mut exec_params, &mut self.exec_state, self.max_ticks)
+            .await;
 
-        let post_exec_tick_count = self.vm.tick_count;
+        let post_exec_tick_count = self.exec_state.tick_count;
         trace!(
             task_id,
             executed_ticks = post_exec_tick_count - pre_exec_tick_count,
@@ -204,8 +212,8 @@ impl VMHost<Program> for MooVmHost {
                 } => {
                     trace!(task_id, call = ?call, "Task continue, call into verb");
 
-                    self.vm.top_mut().bf_trampoline_arg = trampoline_arg;
-                    self.vm.top_mut().bf_trampoline = trampoline;
+                    self.exec_state.top_mut().bf_trampoline_arg = trampoline_arg;
+                    self.exec_state.top_mut().bf_trampoline = trampoline;
 
                     let program = Self::decode_program(
                         resolved_verb.verbdef().binary_type(),
@@ -220,7 +228,9 @@ impl VMHost<Program> for MooVmHost {
                         program,
                     };
 
-                    self.vm.exec_call_request(task_id, call_request).await;
+                    self.vm
+                        .exec_call_request(&mut self.exec_state, task_id, call_request)
+                        .await;
                     return ContinueOk;
                 }
                 ExecutionResult::PerformEval {
@@ -229,7 +239,7 @@ impl VMHost<Program> for MooVmHost {
                     program,
                 } => {
                     self.vm
-                        .exec_eval_request(0, permissions, player, program)
+                        .exec_eval_request(&mut self.exec_state, 0, permissions, player, program)
                         .await;
                     return ContinueOk;
                 }
@@ -242,7 +252,7 @@ impl VMHost<Program> for MooVmHost {
                         session: self.sessions.clone(),
                         max_stack_depth: self.max_stack_depth,
                         scheduler_sender: self.scheduler_control_sender.clone(),
-                        ticks_left: self.max_ticks - self.vm.tick_count,
+                        ticks_left: self.max_ticks - self.exec_state.tick_count,
                         time_left,
                     };
                     // Ask the VM to execute the builtin function.
@@ -250,7 +260,12 @@ impl VMHost<Program> for MooVmHost {
                     // After this we will loop around and check the result.
                     result = self
                         .vm
-                        .call_builtin_function(bf_offset, &args, &mut exec_params)
+                        .call_builtin_function(
+                            &mut self.exec_state,
+                            bf_offset,
+                            &args,
+                            &mut exec_params,
+                        )
                         .await;
                     continue;
                 }
@@ -295,9 +310,9 @@ impl VMHost<Program> for MooVmHost {
     /// Resume what you were doing after suspension.
     async fn resume_execution(&mut self, value: Var) {
         // coming back from suspend, we need a return value to feed back to `bf_suspend`
-        self.vm.top_mut().push(value);
-        self.vm.start_time = Some(SystemTime::now());
-        self.vm.tick_count = 0;
+        self.exec_state.top_mut().push(value);
+        self.exec_state.start_time = Some(SystemTime::now());
+        self.exec_state.tick_count = 0;
         self.run_watch_send.send(true).unwrap();
     }
     fn is_running(&self) -> bool {
@@ -313,28 +328,31 @@ impl VMHost<Program> for MooVmHost {
         }
     }
     fn set_variable(&mut self, task_id_var: Name, value: Var) {
-        self.vm
+        self.exec_state
             .top_mut()
             .set_var_offset(task_id_var, value)
             .expect("Could not set forked task id");
     }
     fn permissions(&self) -> Objid {
-        self.vm.top().permissions
+        self.exec_state.top().permissions
     }
     fn verb_name(&self) -> String {
-        self.vm.top().verb_name.clone()
+        self.exec_state.top().verb_name.clone()
     }
     fn verb_definer(&self) -> Objid {
-        self.vm.top().verb_definer()
+        self.exec_state.top().verb_definer()
     }
     fn this(&self) -> Objid {
-        self.vm.top().this
+        self.exec_state.top().this
     }
     fn line_number(&self) -> usize {
-        self.vm.top().find_line_no(self.vm.top().pc).unwrap_or(0)
+        self.exec_state
+            .top()
+            .find_line_no(self.exec_state.top().pc)
+            .unwrap_or(0)
     }
 
     fn args(&self) -> Vec<Var> {
-        self.vm.top().args.clone()
+        self.exec_state.top().args.clone()
     }
 }

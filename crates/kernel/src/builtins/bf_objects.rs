@@ -135,7 +135,7 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     };
 
     let tramp = bf_args
-        .vm
+        .exec_state
         .top()
         .bf_trampoline
         .unwrap_or(BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE);
@@ -166,10 +166,10 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                     verb_name: "initialize".to_string(),
                     location: new_obj,
                     this: new_obj,
-                    player: bf_args.vm.top().player,
+                    player: bf_args.exec_state.top().player,
                     args: vec![],
                     argstr: "".to_string(),
-                    caller: bf_args.vm.top().this,
+                    caller: bf_args.exec_state.top().this,
                 },
                 trampoline: Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE),
                 command: None,
@@ -178,7 +178,7 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         }
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
             // The trampoline argument is the object we just created.
-            let Some(new_obj) = bf_args.vm.top().bf_trampoline_arg.clone() else {
+            let Some(new_obj) = bf_args.exec_state.top().bf_trampoline_arg.clone() else {
                 panic!("Missing/invalid trampoline argument for bf_create");
             };
             Ok(Ret(new_obj))
@@ -211,7 +211,7 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     // object, so we'll do it manually here.
 
     'outer: loop {
-        let tramp = bf_args.vm.top().bf_trampoline;
+        let tramp = bf_args.exec_state.top().bf_trampoline;
         match tramp {
             None => {
                 // Starting out, we need to call "recycle" on the object, if it exists.
@@ -255,10 +255,10 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                                 verb_name: "recycle".to_string(),
                                 location: *obj,
                                 this: *obj,
-                                player: bf_args.vm.top().player,
+                                player: bf_args.exec_state.top().player,
                                 args: vec![],
                                 argstr: "".to_string(),
-                                caller: bf_args.vm.top().this,
+                                caller: bf_args.exec_state.top().this,
                             },
                             trampoline: Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC),
                             trampoline_arg: Some(contents),
@@ -267,9 +267,9 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.
-                        bf_args.vm.top_mut().bf_trampoline =
+                        bf_args.exec_state.top_mut().bf_trampoline =
                             Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
-                        bf_args.vm.top_mut().bf_trampoline_arg = Some(contents);
+                        bf_args.exec_state.top_mut().bf_trampoline_arg = Some(contents);
                         // Fall through to the next case.
                     }
                     Err(e) => {
@@ -282,15 +282,16 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 // Check the arguments, which must be a list of objects. IF it's empty, we can
                 // move onto DONE_MOVE, if not, take the head of the list, and call :exitfunc on it
                 // (if it exists), and then back to this state.
-                let contents = bf_args.vm.top().bf_trampoline_arg.clone().unwrap();
+                let contents = bf_args.exec_state.top().bf_trampoline_arg.clone().unwrap();
                 let Variant::List(contents) = contents.variant() else {
                     panic!("Invalid trampoline argument for bf_recycle");
                 };
                 'inner: loop {
                     debug!(?obj, contents = ?contents, "Calling :exitfunc for objects contents");
                     if contents.is_empty() {
-                        bf_args.vm.top_mut().bf_trampoline_arg = None;
-                        bf_args.vm.top_mut().bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE);
+                        bf_args.exec_state.top_mut().bf_trampoline_arg = None;
+                        bf_args.exec_state.top_mut().bf_trampoline =
+                            Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE);
                         continue 'outer;
                     }
                     let (head_obj, contents) = contents.pop_front();
@@ -306,7 +307,7 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                         .await
                     else {
                         // If there's no :exitfunc, we can just move on to the next object.
-                        bf_args.vm.top_mut().bf_trampoline_arg = Some(contents);
+                        bf_args.exec_state.top_mut().bf_trampoline_arg = Some(contents);
                         continue 'inner;
                     };
                     // Call :exitfunc on the head object.
@@ -317,10 +318,10 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                             verb_name: "exitfunc".to_string(),
                             location: *head_obj,
                             this: *head_obj,
-                            player: bf_args.vm.top().player,
+                            player: bf_args.exec_state.top().player,
                             args: vec![v_objid(*obj)],
                             argstr: "".to_string(),
-                            caller: bf_args.vm.top().this,
+                            caller: bf_args.exec_state.top().this,
                         },
                         trampoline: Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC),
                         trampoline_arg: Some(contents),
@@ -399,7 +400,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     //    3    => return v_none
 
     let mut tramp = bf_args
-        .vm
+        .exec_state
         .top()
         .bf_trampoline
         .unwrap_or(BF_MOVE_TRAMPOLINE_START_ACCEPT);
@@ -428,10 +429,10 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                                 verb_name: "accept".to_string(),
                                 location: *whereto,
                                 this: *whereto,
-                                player: bf_args.vm.top().player,
+                                player: bf_args.exec_state.top().player,
                                 args: vec![v_objid(*what)],
                                 argstr: "".to_string(),
-                                caller: bf_args.vm.top().this,
+                                caller: bf_args.exec_state.top().this,
                             },
                             trampoline: Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC),
                             trampoline_arg: None,
@@ -459,7 +460,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 // Accept verb has been called, and returned. Check the result. Should be on stack,
                 // unless short-circuited, in which case we assume *false*
                 let result = if !shortcircuit {
-                    bf_args.vm.top().peek_top().unwrap()
+                    bf_args.exec_state.top().peek_top().unwrap()
                 } else {
                     v_int(0)
                 };
@@ -504,10 +505,10 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                                 verb_name: "exitfunc".to_string(),
                                 location: original_location,
                                 this: original_location,
-                                player: bf_args.vm.top().player,
+                                player: bf_args.exec_state.top().player,
                                 args: vec![v_objid(*what)],
                                 argstr: "".to_string(),
-                                caller: bf_args.vm.top().this,
+                                caller: bf_args.exec_state.top().this,
                             },
                             command: None,
                             trampoline: Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC),
@@ -548,10 +549,10 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                                 verb_name: "enterfunc".to_string(),
                                 location: *whereto,
                                 this: *whereto,
-                                player: bf_args.vm.top().player,
+                                player: bf_args.exec_state.top().player,
                                 args: vec![v_objid(*what)],
                                 argstr: "".to_string(),
-                                caller: bf_args.vm.top().this,
+                                caller: bf_args.exec_state.top().this,
                             },
                             command: None,
                             trampoline: Some(3),
@@ -667,7 +668,7 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
 
     // If the object was player, update the VM's copy of the perms.
     if *obj == bf_args.task_perms().await.map_err(world_state_err)?.who {
-        bf_args.vm.set_task_perms(*obj);
+        bf_args.exec_state.set_task_perms(*obj);
     }
 
     Ok(Ret(v_none()))
@@ -685,11 +686,7 @@ async fn bf_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .map_err(world_state_err)?;
 
     Ok(Ret(v_list(
-        players
-            .iter()
-            .map(v_objid)
-            .collect::<Vec<_>>()
-            .as_slice(),
+        players.iter().map(v_objid).collect::<Vec<_>>().as_slice(),
     )))
 }
 bf_declare!(players, bf_players);

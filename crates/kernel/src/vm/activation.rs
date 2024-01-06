@@ -66,6 +66,10 @@ pub(crate) struct HandlerLabel {
 }
 
 /// Activation frame for the call stack.
+// TODO: move everything MOO-specific into a sub-struct as an attribute:
+//   catch handlers
+//   opcode stream
+//   trampoline args?
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Activation {
     /// The task ID of the task that owns this VM and this stack of activations.

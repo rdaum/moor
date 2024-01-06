@@ -89,7 +89,7 @@ impl Transaction {
             let mut working_set = self.working_set.write().await;
             let commit_set = self
                 .db
-                .prepare_commit_set(commit_ts, &working_set.as_ref().unwrap())
+                .prepare_commit_set(commit_ts, working_set.as_ref().unwrap())
                 .await?;
             match self.db.try_commit(commit_set).await {
                 Ok(_) => {

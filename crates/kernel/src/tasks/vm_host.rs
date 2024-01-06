@@ -17,7 +17,7 @@ use std::time::Duration;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::{TaskId, VerbCall};
-use crate::vm::vm_unwind::UncaughtException;
+use crate::vm::UncaughtException;
 use crate::vm::{Fork, VerbExecutionRequest};
 use async_trait::async_trait;
 use moor_compiler::labels::Name;

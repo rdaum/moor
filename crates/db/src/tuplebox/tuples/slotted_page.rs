@@ -284,7 +284,7 @@ impl<'a> SlottedPage<'a> {
 
         // Add the index entry and expand the index region.
         let mut index_entry = self.get_index_entry_mut(self.header_mut().num_slots as SlotId);
-        index_entry.as_mut().alloc(content_position as usize, size);
+        index_entry.as_mut().alloc(content_position, size);
 
         // Update the header
         let header = self.header_mut();
