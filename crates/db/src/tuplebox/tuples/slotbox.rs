@@ -274,8 +274,8 @@ impl Inner {
             page,
             size,
             free_space,
-            self.available_page_space[relation_id.0].available[offset],
-            self.available_page_space[relation_id.0].block_ids[offset]
+            self.available_page_space[relation_id.0].entries[offset] >> 64,
+            self.available_page_space[relation_id.0].entries[offset] & 0xFFFF_FFFF_FFFF
         );
     }
 
@@ -424,38 +424,43 @@ impl Inner {
 /// Kept in two vectors, one for the available space, and one for the page ids, and kept sorted by
 /// available space, with the page ids in the same order.
 struct PageSpace {
-    available: Vec<usize>,
-    block_ids: Vec<Bid>,
+    // Lower 64 bits of the page id, upper 64 bits are the size
+    // In this way we can sort by available space, and keep the page ids in the same order
+    // without a lot of gymnastics, and hopefully eventually use some SIMD instructions to do
+    // the sorting?
+    entries: Vec<u128>,
 }
+
+#[inline(always)]
+fn decode(i: u128) -> (PageId, usize) {
+    ((i & 0xFFFF_FFFF_FFFF) as PageId, (i >> 64) as usize)
+}
+
+#[inline(always)]
+fn encode(pid: PageId, available: usize) -> u128 {
+    (available as u128) << 64 | pid as u128
+}
+
 impl PageSpace {
     fn new(available: usize, bid: Bid) -> Self {
         Self {
-            available: vec![available],
-            block_ids: vec![bid],
+            entries: vec![encode(bid.0 as PageId, available)],
         }
     }
 
     fn sort(&mut self) {
-        // sort both vectors by available space, keeping the block ids in order with the available
-        let mut pairs = self
-            .available
-            .iter()
-            .cloned()
-            .zip(self.block_ids.iter())
-            .collect::<Vec<_>>();
-        pairs.sort_by(|a, b| a.0.cmp(&b.0));
-        self.available = pairs.iter().map(|(a, _)| *a).collect();
-        self.block_ids = pairs.iter().map(|(_, b)| *b).cloned().collect();
+        self.entries.sort()
     }
 
     fn insert(&mut self, available: usize, bid: Bid) {
-        self.available.push(available);
-        self.block_ids.push(bid);
+        self.entries.push(encode(bid.0 as PageId, available));
         self.sort();
     }
 
     fn seek(&self, pid: PageId) -> Option<usize> {
-        self.block_ids.iter().position(|bid| bid.0 == pid as u64)
+        self.entries
+            .iter()
+            .position(|entry| decode(*entry).0 == pid)
     }
 
     /// Update the allocation record for the page.
@@ -466,10 +471,11 @@ impl PageSpace {
 
         // If the page is now totally empty, then we can remove it from the available_page_space vector.
         if is_empty {
-            self.available.remove(index);
-            self.block_ids.remove(index);
+            self.entries.remove(index);
         } else {
-            self.available[index] = available;
+            // Otherwise, update the available space.
+            let (pid, _) = decode(self.entries[index]);
+            self.entries[index] = encode(pid, available);
         }
         self.sort();
         true
@@ -480,47 +486,50 @@ impl PageSpace {
         // Look for the first page with enough space in our vector of used pages, which is kept
         // sorted by free space.
         let found = self
-            .available
-            .binary_search_by(|free_space| free_space.cmp(&available));
+            .entries
+            .binary_search_by(|entry| decode(*entry).1.cmp(&available));
 
         return match found {
             // Exact match, highly unlikely, but possible.
             Ok(entry_num) => {
-                let exact_match = (self.block_ids[entry_num], entry_num);
-                let pid = exact_match.0 .0 as PageId;
-                Some((pid, entry_num))
+                // We only want the lower 64 bits, ala
+                //
+                let pid = (self.entries[entry_num] & 0xFFFF_FFFF_FFFFu128) as u64;
+                Some((pid as PageId, entry_num))
             }
             // Out of room, our caller will need to allocate a new page.
-            Err(position) if position == self.available.len() => {
+            Err(position) if position == self.entries.len() => {
                 // If we didn't find a page with enough space, then we need to allocate a new page.
                 return None;
             }
             // Found a page we add to.
             Err(entry_num) => {
-                let page = self.block_ids[entry_num];
-                Some((page.0 as PageId, entry_num))
+                let pid = self.entries[entry_num] as u64;
+                Some((pid as PageId, entry_num))
             }
         };
     }
 
     fn finish(&mut self, offset: usize, page_remaining_bytes: usize) {
-        self.available[offset] = page_remaining_bytes;
+        let (pid, _) = decode(self.entries[offset]);
+        self.entries[offset] = encode(pid, page_remaining_bytes);
 
         // If we (unlikely) consumed all the bytes, then we can remove the page from the avail pages
         // set.
         if page_remaining_bytes == 0 {
-            self.available.remove(offset);
-            self.block_ids.remove(offset);
+            self.entries.remove(offset);
         }
         self.sort();
     }
 
     fn pages(&self) -> impl Iterator<Item = PageId> + '_ {
-        self.block_ids.iter().map(|bid| bid.0 as PageId)
+        self.entries
+            .iter()
+            .map(|entry| (entry & 0xFFFF_FFFF_FFFF) as PageId)
     }
 
     fn len(&self) -> usize {
-        self.available.len()
+        self.entries.len()
     }
 }
 
@@ -708,5 +717,15 @@ mod tests {
             let retrieved = tuple.domain();
             assert_eq!(expected, retrieved.as_slice());
         }
+    }
+
+    #[test]
+    fn encode_decode() {
+        let pid = 12345;
+        let available = 54321;
+        let encoded = super::encode(pid, available);
+        let (decoded_pid, decoded_available) = super::decode(encoded);
+        assert_eq!(pid, decoded_pid);
+        assert_eq!(available, decoded_available);
     }
 }
