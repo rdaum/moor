@@ -272,7 +272,7 @@ impl ColdStorage {
                 Some(*r),
                 0,
                 ts,
-                page.page_size,
+                page.page_size as usize,
                 |buf| page.save_into(buf),
             );
             write_batch.push((*page_id, Some(wal_entry_buffer)));

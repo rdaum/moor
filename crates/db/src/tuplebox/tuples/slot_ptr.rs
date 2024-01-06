@@ -26,7 +26,7 @@ use crate::tuplebox::tuples::{SlotBox, TupleId};
 pub struct SlotPtr {
     sb: Arc<SlotBox>,
     id: TupleId,
-    buflen: usize,
+    buflen: u32,
     bufaddr: *mut u8,
 
     _pin: std::marker::PhantomPinned,
@@ -46,7 +46,7 @@ impl SlotPtr {
             sb: sb.clone(),
             id: tuple_id,
             bufaddr,
-            buflen,
+            buflen: buflen as u32,
             _pin: std::marker::PhantomPinned,
         }
     }
@@ -85,7 +85,7 @@ impl SlotPtr {
     #[inline]
     fn buffer(&self) -> &[u8] {
         let buf_addr = self.as_ptr();
-        unsafe { std::slice::from_raw_parts(buf_addr, self.buflen) }
+        unsafe { std::slice::from_raw_parts(buf_addr, self.buflen as usize) }
     }
 
     #[inline]

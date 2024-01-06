@@ -15,7 +15,6 @@
 // TODO: support sorted indices, too.
 // TODO: 'join' and transitive closure -> datalog-style variable unification
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -55,9 +54,6 @@ pub struct TupleBox {
     // TODO: take a look at Adnan's thread-sharded approach described in section 3.1
     //   (https://www.vldb.org/pvldb/vol16/p1426-alhomssi.pdf) -- "Ordered Snapshot Instant Commit"
     maximum_transaction: AtomicU64,
-    /// The set of currently active transactions, which will be used to prune old unreferenced
-    /// versions of tuples.
-    active_transactions: RwLock<HashSet<u64>>,
     /// Monotonically incrementing sequence counters.
     sequences: Vec<AtomicU64>,
     /// The copy-on-write set of current canonical base relations.
@@ -109,7 +105,6 @@ impl TupleBox {
         Arc::new(Self {
             relation_info: relations.to_vec(),
             maximum_transaction: AtomicU64::new(0),
-            active_transactions: RwLock::new(HashSet::new()),
             canonical: RwLock::new(base_relations),
             sequences,
             backing_store,
@@ -285,14 +280,8 @@ impl TupleBox {
             // And update the timestamp on the canonical relation.
             canonical[idx].ts = commit_ts;
         }
-        // Clear out the active transaction.
-        self.active_transactions.write().await.remove(&commit_ts);
 
         Ok(())
-    }
-
-    pub(crate) async fn abort_transaction(&self, ts: u64) {
-        self.active_transactions.write().await.remove(&ts);
     }
 
     pub async fn sync(&self, ts: u64, world_state: WorkingSet) {

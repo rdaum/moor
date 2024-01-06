@@ -61,5 +61,4 @@ metrics-util.workspace = true
 metrics-macros.workspace = true
 
 # For the DB layer.
-crossbeam-channel.workspace = true
 bincode.workspace = true

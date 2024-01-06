@@ -41,7 +41,6 @@ metrics.workspace = true
 metrics-macros.workspace = true
 
 # For the DB layer.
-crossbeam-channel.workspace = true
 bincode.workspace = true
 im.workspace = true
 sized-chunks.workspace = true

@@ -31,8 +31,6 @@ use crate::tuplebox::RelationId;
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
-    /// The timestamp of this transaction, as granted to us by the tuplebox.
-    pub(crate) ts: u64,
     /// Where we came from, for referencing back to the base relations.
     db: Arc<TupleBox>,
     /// The "working set" is the set of retrieved and/or modified tuples from base relations, known
@@ -64,7 +62,6 @@ impl Transaction {
         let next_transient_relation_id = RelationId::transient(db.relation_info().len());
 
         Self {
-            ts,
             db,
             working_set: RwLock::new(Some(ws)),
             transient_relations: RwLock::new(HashMap::new()),
@@ -116,8 +113,6 @@ impl Transaction {
 
     pub async fn rollback(&self) -> Result<(), CommitError> {
         self.working_set.write().await.as_mut().unwrap().clear();
-        // Clear out the active transaction.
-        self.db.abort_transaction(self.ts).await;
         Ok(())
     }
 
