@@ -15,7 +15,9 @@
 use crate::util::slice_ref::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
+use itertools::Itertools;
 use std::convert::TryInto;
+use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
 
 pub trait HasUuid {
@@ -24,16 +26,34 @@ pub trait HasUuid {
 
 pub trait Named {
     fn matches_name(&self, name: &str) -> bool;
+    fn names(&self) -> Vec<&str>;
 }
 
 /// A container for verb or property defs.
 /// Immutable, and can be iterated over in sequence, or searched by name.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Defs<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> {
     bytes: SliceRef,
     _phantom: std::marker::PhantomData<T>,
 }
 
+impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Display for Defs<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names = self
+            .iter()
+            .map(|p| p.names().iter().map(|s| s.to_string()).join(":"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        f.write_fmt(format_args!("{{{}}}", names))
+    }
+}
+
+impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Debug for Defs<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Just use the display
+        Display::fmt(self, f)
+    }
+}
 pub struct DefsIter<T: AsByteBuffer> {
     position: usize,
     buffer: SliceRef,

@@ -40,11 +40,11 @@ use thiserror::Error;
 use tracing::error;
 
 use crate::tuplebox::pool::{Bid, BufferPool, PagerError};
-use crate::tuplebox::tuples::slot_ptr::SlotPtr;
 pub use crate::tuplebox::tuples::slotted_page::SlotId;
 use crate::tuplebox::tuples::slotted_page::{
     slot_index_overhead, slot_page_empty_size, SlottedPage,
 };
+use crate::tuplebox::tuples::tuple_ptr::TuplePtr;
 use crate::tuplebox::tuples::{TupleId, TupleRef};
 use crate::tuplebox::RelationId;
 
@@ -104,11 +104,11 @@ impl SlotBox {
         let mut refs = vec![];
         for (slot, buflen, addr) in slot_ids.into_iter() {
             let tuple_id = TupleId { page: id, slot };
-            let swizref = Box::pin(SlotPtr::create(self.clone(), tuple_id, addr, buflen));
+            let swizref = Box::pin(TuplePtr::create(self.clone(), tuple_id, addr, buflen));
             inner.swizrefs.insert(tuple_id, swizref);
             let swizref = inner.swizrefs.get_mut(&tuple_id).unwrap();
             let sp = unsafe { Pin::into_inner_unchecked(swizref.as_mut()) };
-            let ptr = sp as *mut SlotPtr;
+            let ptr = sp as *mut TuplePtr;
             let tuple_ref = TupleRef::at_ptr(ptr);
             refs.push(tuple_ref);
         }
@@ -214,7 +214,7 @@ struct Inner {
     /// pointers in the TupleRefs themselves.
     // TODO: This needs to be broken down by page id, too, so that we can manage swap-in/swap-out at
     //   the page granularity.
-    swizrefs: HashMap<TupleId, Pin<Box<SlotPtr>>>,
+    swizrefs: HashMap<TupleId, Pin<Box<TuplePtr>>>,
 }
 
 impl Inner {
@@ -236,46 +236,42 @@ impl Inner {
         let tuple_size = size + slot_index_overhead();
         let page_size = max(32768, tuple_size.next_power_of_two());
 
-        // Check if we have a free spot for this relation that can fit the tuple.
-        let (page, offset) =
-            { self.find_space(relation_id, tuple_size, slot_page_empty_size(page_size))? };
+        // Our selected page should not in theory get taken while we're holding this allocation lock,
+        // but to be paranoid, we'll loop around and try again if it does.
+        let mut tries = 0;
+        loop {
+            // Check if we have a free spot for this relation that can fit the tuple.
+            let (page, offset) =
+                { self.find_space(relation_id, tuple_size, slot_page_empty_size(page_size))? };
+            let mut page_handle = self.page_for(page)?;
+            let mut page_write_lock = page_handle.write_lock();
+            if let Ok((slot, page_remaining, mut buf)) =
+                page_write_lock.allocate(size, initial_value)
+            {
+                self.finish_alloc(page, relation_id, offset, page_remaining);
 
-        let mut page_handle = self.page_for(page)?;
+                // Make a swizzlable ptr reference and shove it in our set, and then return a tuple ref
+                // which has a ptr to it.
+                let buflen = buf.as_ref().len();
+                let bufaddr = buf.as_mut_ptr();
+                let tuple_id = TupleId { page, slot };
 
-        let free_space = page_handle.available_content_bytes();
-        let mut page_write_lock = page_handle.write_lock();
-        if let Ok((slot, page_remaining, mut buf)) = page_write_lock.allocate(size, initial_value) {
-            self.finish_alloc(page, relation_id, offset, page_remaining);
+                // Heap allocate the swizref, and and pin it, take the address of it, then stick the swizref
+                // in our set.
+                let mut swizref = Box::pin(TuplePtr::create(sb.clone(), tuple_id, bufaddr, buflen));
+                let swizaddr = unsafe { swizref.as_mut().get_unchecked_mut() } as *mut TuplePtr;
+                self.swizrefs.insert(tuple_id, swizref);
 
-            // Make a swizzlable ptr reference and shove it in our set, and then return a tuple ref
-            // which has a ptr to it.
-            let buflen = buf.as_ref().len();
-            let bufaddr = buf.as_mut_ptr();
-            let tuple_id = TupleId { page, slot };
+                // Establish initial refcount using this existing lock.
+                page_write_lock.upcount(slot).unwrap();
 
-            // Heap allocate the swizref, and and pin it, take the address of it, then stick the swizref
-            // in our set.
-            let mut swizref = Box::pin(SlotPtr::create(sb.clone(), tuple_id, bufaddr, buflen));
-            let swizaddr = unsafe { swizref.as_mut().get_unchecked_mut() } as *mut SlotPtr;
-            self.swizrefs.insert(tuple_id, swizref);
-
-            // Establish initial refcount using this existing lock.
-            page_write_lock.upcount(slot).unwrap();
-
-            return Ok(TupleRef::at_ptr(swizaddr));
+                return Ok(TupleRef::at_ptr(swizaddr));
+            }
+            tries += 1;
+            if tries > 50 {
+                panic!("Could not allocate tuple after {tries} tries");
+            }
         }
-
-        // If we get here, then we failed to allocate on the page we wanted to, which means there's
-        // data coherence issues between the pages last-reported free space and the actual free
-        panic!(
-            "Page {} failed to allocate, we wanted {} bytes, but it only has {},\
-                but our records show it has {}, and its pid in that offset is {:?}",
-            page,
-            size,
-            free_space,
-            self.available_page_space[relation_id.0].entries[offset] >> 64,
-            self.available_page_space[relation_id.0].entries[offset] & 0xFFFF_FFFF_FFFF
-        );
     }
 
     fn do_restore_page<'a>(&mut self, id: PageId) -> Result<SlottedPage<'a>, SlotBoxError> {
@@ -601,8 +597,18 @@ mod tests {
             tuples.push((tuple_id, tuple));
         }
         for (tuple, expected_value) in tuples {
-            let retrieved = tuple.slot_buffer();
-            assert_eq!(expected_value, retrieved.as_slice());
+            let retrieved_domain = tuple.slot_buffer();
+            let retrieved_codomain = tuple.slot_buffer();
+            assert_eq!(
+                expected_value,
+                retrieved_domain.as_slice(),
+                "Tuple domain mismatch"
+            );
+            assert_eq!(
+                expected_value,
+                retrieved_codomain.as_slice(),
+                "Tuple codomain mismatch"
+            );
         }
     }
 
@@ -645,10 +651,17 @@ mod tests {
         let mut sb = Arc::new(SlotBox::new(32768 * 32));
         let mut tuples = fill_until_full(&mut sb);
         for (i, (tuple, expected_value)) in tuples.iter().enumerate() {
-            let retrieved = tuple.domain();
+            let retrieved_domain = tuple.domain();
+            let retrieved_codomain = tuple.codomain();
             assert_eq!(
                 *expected_value,
-                retrieved.as_slice(),
+                retrieved_domain.as_slice(),
+                "Mismatch at {}th tuple",
+                i
+            );
+            assert_eq!(
+                *expected_value,
+                retrieved_codomain.as_slice(),
                 "Mismatch at {}th tuple",
                 i
             );
@@ -698,8 +711,10 @@ mod tests {
 
         // What we expected to still be there is there.
         for (tuple, expected_value) in &tuples {
-            let retrieved = tuple.domain();
-            assert_eq!(*expected_value, retrieved.as_slice());
+            let retrieved_domain = tuple.domain();
+            let retrieved_codomain = tuple.codomain();
+            assert_eq!(*expected_value, retrieved_domain.as_slice());
+            assert_eq!(*expected_value, retrieved_codomain.as_slice());
         }
         // What we expected to not be there is not there.
         for (id, _) in freed_tuples {
@@ -709,17 +724,21 @@ mod tests {
         let new_tuples = fill_until_full(&mut sb);
         // Verify both the new tuples and the old tuples are there.
         for (tuple, expected) in new_tuples {
-            let retrieved = tuple.domain();
-            assert_eq!(expected, retrieved.as_slice());
+            let retrieved_domain = tuple.domain();
+            let retrieved_codomain = tuple.codomain();
+            assert_eq!(expected, retrieved_domain.as_slice());
+            assert_eq!(expected, retrieved_codomain.as_slice());
         }
         for (tuple, expected) in tuples {
-            let retrieved = tuple.domain();
-            assert_eq!(expected, retrieved.as_slice());
+            let retrieved_domain = tuple.domain();
+            let retrieved_codomain = tuple.codomain();
+            assert_eq!(expected, retrieved_domain.as_slice());
+            assert_eq!(expected, retrieved_codomain.as_slice());
         }
     }
 
     #[test]
-    fn encode_decode() {
+    fn alloc_encode_decode() {
         let pid = 12345;
         let available = 54321;
         let encoded = super::encode(pid, available);

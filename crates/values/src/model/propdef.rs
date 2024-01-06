@@ -129,6 +129,10 @@ impl Named for PropDef {
     fn matches_name(&self, name: &str) -> bool {
         self.name().to_lowercase() == name.to_lowercase().as_str()
     }
+
+    fn names(&self) -> Vec<&str> {
+        vec![self.name()]
+    }
 }
 
 impl HasUuid for PropDef {

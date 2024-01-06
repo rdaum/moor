@@ -17,7 +17,7 @@ use moor_values::util::slice_ref::SliceRef;
 use crate::tuplebox::tuples::TupleId;
 use crate::tuplebox::tuples::TupleRef;
 
-/// Possible operations on tuples, in the context of a transaction .
+/// Possible operations on tuples, in the context local to a transaction.
 #[derive(Clone)]
 pub enum TxTuple {
     /// Insert tuple into the relation.

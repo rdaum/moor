@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use moor_values::model::defset::HasUuid;
+use moor_values::model::defset::{HasUuid, Named};
 use moor_values::model::objects::ObjFlag;
 use moor_values::AsByteBuffer;
 use strum::EnumCount;

@@ -15,13 +15,13 @@
 use thiserror::Error;
 
 pub use slotbox::{PageId, SlotBox, SlotBoxError, SlotId};
-pub use tuple::TupleRef;
+pub use tuple_ref::TupleRef;
 pub use tx_tuple::TxTuple;
 
-mod slot_ptr;
 mod slotbox;
 mod slotted_page;
-mod tuple;
+mod tuple_ptr;
+mod tuple_ref;
 mod tx_tuple;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]

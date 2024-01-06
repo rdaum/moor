@@ -33,6 +33,7 @@ use crate::tasks::VerbCall;
 use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
 use moor_compiler::builtins::offset_for_builtin;
+use moor_values::model::defset::Named;
 
 /*
 Function: int valid (obj object)

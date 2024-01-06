@@ -23,7 +23,7 @@ use crate::tuplebox::tuples::{SlotBox, TupleId};
 /// which allows the SlotBox to manage the lifetime of the tuple, swizzling it in and out of memory as needed.
 /// Adds a layer of indirection to each tuple access, but is better than passing around tuple ids + slotbox
 /// references.
-pub struct SlotPtr {
+pub struct TuplePtr {
     sb: Arc<SlotBox>,
     id: TupleId,
     buflen: u32,
@@ -32,17 +32,17 @@ pub struct SlotPtr {
     _pin: std::marker::PhantomPinned,
 }
 
-unsafe impl Send for SlotPtr {}
-unsafe impl Sync for SlotPtr {}
+unsafe impl Send for TuplePtr {}
+unsafe impl Sync for TuplePtr {}
 
-impl SlotPtr {
+impl TuplePtr {
     pub(crate) fn create(
         sb: Arc<SlotBox>,
         tuple_id: TupleId,
         bufaddr: *mut u8,
         buflen: usize,
     ) -> Self {
-        SlotPtr {
+        TuplePtr {
             sb: sb.clone(),
             id: tuple_id,
             bufaddr,
@@ -52,21 +52,21 @@ impl SlotPtr {
     }
 }
 
-impl PartialEq for SlotPtr {
+impl PartialEq for TuplePtr {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl Eq for SlotPtr {}
+impl Eq for TuplePtr {}
 
-impl Hash for SlotPtr {
+impl Hash for TuplePtr {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state)
     }
 }
 
-impl SlotPtr {
+impl TuplePtr {
     #[inline]
     pub fn id(&self) -> TupleId {
         self.id
@@ -91,7 +91,7 @@ impl SlotPtr {
     #[inline]
     pub fn byte_source(&self) -> SlotByteSource {
         SlotByteSource {
-            ptr: self as *const SlotPtr,
+            ptr: self as *const TuplePtr,
         }
     }
 
@@ -108,7 +108,7 @@ impl SlotPtr {
 
 /// So we can build SliceRefs off of SlotPtrs
 pub struct SlotByteSource {
-    ptr: *const SlotPtr,
+    ptr: *const TuplePtr,
 }
 
 unsafe impl Send for SlotByteSource {}

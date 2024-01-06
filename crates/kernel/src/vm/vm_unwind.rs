@@ -25,6 +25,7 @@ use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::{ExecutionResult, VMExecState, VM};
 use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
 use moor_compiler::labels::{Label, Offset};
+use moor_values::model::defset::Named;
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct UncaughtException {

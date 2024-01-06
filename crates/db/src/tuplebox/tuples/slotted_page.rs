@@ -44,7 +44,7 @@ pub type SlotId = u32;
 // In this way both a madvise DONTNEEDed and an otherwise empty page generally are effectively
 // identical, and we can just start using them right away in a null-state without doing any
 // initialization.
-#[repr(C)]
+#[repr(C, align(8))]
 struct SlottedPageHeader {
     // The number of bytes used in the page
     used_bytes: u32,
@@ -92,12 +92,13 @@ impl SlottedPageHeader {
 
     // Update accounting for the presence of a new entry.
     fn add_entry(mut self: Pin<&mut Self>, size: usize) -> SlotId {
+        let padded_size = (size + 7) & !7;
         unsafe {
             let new_slot = self.num_slots as SlotId;
             let header = self.as_mut().get_unchecked_mut();
             header.used_bytes += size as u32;
             header.num_slots += 1;
-            header.content_length += size as u32;
+            header.content_length += padded_size as u32;
             header.index_length += std::mem::size_of::<SlotIndexEntry>() as u32;
             new_slot
         }
@@ -114,7 +115,7 @@ impl SlottedPageHeader {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(8))]
 struct SlotIndexEntry {
     used: bool,
     // The number of live references to this slot
@@ -132,14 +133,32 @@ struct SlotIndexEntry {
 
 impl SlotIndexEntry {
     // Update accounting for the presence of a new entry.
-    fn alloc(mut self: Pin<&mut Self>, content_position: usize, size: usize) {
+    fn alloc(
+        mut self: Pin<&mut Self>,
+        content_position: usize,
+        content_length: usize,
+        tuple_size: usize,
+    ) {
+        // The content must be always rounded up to the nearest 8-byte boundary.
+        assert_eq!(
+            content_position % 8,
+            0,
+            "content position {} is not 8-byte aligned",
+            content_position
+        );
+        assert_eq!(
+            content_length % 8,
+            0,
+            "content length {} is not 8-byte aligned",
+            content_length
+        );
         unsafe {
             let index_entry = self.as_mut().get_unchecked_mut();
             index_entry.offset = content_position as u32;
 
             // Net-new slots always have their full size used in their new index entry.
-            index_entry.used_bytes = size as u32;
-            index_entry.allocated = size as u32;
+            index_entry.used_bytes = tuple_size as u32;
+            index_entry.allocated = content_length as u32;
             index_entry.refcount = 0;
             index_entry.used = true;
         }
@@ -207,7 +226,7 @@ impl<'a> SlottedPage<'a> {
         let used = (header.num_slots * std::mem::size_of::<SlotIndexEntry>() as u32) as usize
             + header.used_bytes as usize
             + std::mem::size_of::<SlottedPageHeader>();
-        self.page_size as usize - used
+        (self.page_size as usize).saturating_sub(used)
     }
 
     /// How many bytes are available for appending to this page (i.e. not counting the space
@@ -218,7 +237,8 @@ impl<'a> SlottedPage<'a> {
         let index_length = header.index_length as usize;
         let header_size = std::mem::size_of::<SlottedPageHeader>();
 
-        self.page_size as usize - (index_length + content_length + header_size)
+        let avail = index_length + content_length + header_size;
+        (self.page_size as usize).saturating_sub(avail)
     }
 
     /// Add the slot into the page, copying it into the memory region, and returning the slot id
@@ -233,6 +253,7 @@ impl<'a> SlottedPage<'a> {
         if !can_fit {
             return Err(SlotBoxError::BoxFull(size, self.available_content_bytes()));
         }
+        let header = self.header_mut();
         if let Some(fit_slot) = fit_slot {
             let content_position = self.offset_of(fit_slot).unwrap().0;
             let memory_as_slice = unsafe {
@@ -250,7 +271,7 @@ impl<'a> SlottedPage<'a> {
             index_entry.as_mut().mark_used(size);
 
             // Update used bytes in the header
-            let header = self.header_mut();
+            let header = header;
             header.add_used(size);
 
             let slc = unsafe {
@@ -259,40 +280,49 @@ impl<'a> SlottedPage<'a> {
             return Ok((fit_slot, self.available_content_bytes(), slc));
         }
 
-        // Do we have enough room to add new content?
-        let avail = self.available_content_bytes();
-        if avail < size + std::mem::size_of::<SlotIndexEntry>() {
+        // Find position and verify that we can fit the slot.
+        let current_content_length = header.content_length as usize;
+        let current_index_end = header.index_length as usize;
+        let content_size = (size + 7) & !7;
+        let content_start_position =
+            self.page_size as usize - current_content_length - content_size;
+
+        // Align to 8-byte boundary cuz that's what we'll actually need.
+        let content_start_position = (content_start_position + 7) & !7;
+
+        // If the content start bleeds over into the index (+ our new entry), then we can't fit the slot.
+        let index_entry_size = std::mem::size_of::<SlotIndexEntry>();
+        if content_start_position <= current_index_end + index_entry_size {
             return Err(SlotBoxError::BoxFull(
-                size + std::mem::size_of::<SlotIndexEntry>(),
-                avail,
+                size + index_entry_size,
+                self.available_content_bytes(),
             ));
         }
 
-        // Add the slot to the content region. The start offset is PAGE_SIZE - content_length -
-        // slot_length. So first thing, copy the bytes into the content region at that position.
-        let content_length = self.header_mut().content_length as usize;
-        let content_position = self.page_size as usize - content_length - size;
         let memory_as_slice =
             unsafe { std::slice::from_raw_parts_mut(self.base_address, self.page_size as usize) };
 
         // If there's an initial value provided, copy it in.
         if let Some(initial_value) = initial_value {
-            assert_eq!(initial_value.len(), size);
-            memory_as_slice[content_position..content_position + size]
+            memory_as_slice[content_start_position..content_start_position + size]
                 .copy_from_slice(initial_value);
         }
 
         // Add the index entry and expand the index region.
-        let mut index_entry = self.get_index_entry_mut(self.header_mut().num_slots as SlotId);
-        index_entry.as_mut().alloc(content_position, size);
+        let mut index_entry = self.get_index_entry_mut(header.num_slots as SlotId);
+        index_entry
+            .as_mut()
+            .alloc(content_start_position, content_size, size);
 
-        // Update the header
-        let header = self.header_mut();
+        // Update the header to subtract the used space.
+        let header = header;
         let new_slot = header.add_entry(size);
 
         // Return the slot id and the number of bytes remaining to append at the end.
         let slc = unsafe {
-            Pin::new_unchecked(&mut memory_as_slice[content_position..content_position + size])
+            Pin::new_unchecked(
+                &mut memory_as_slice[content_start_position..content_start_position + size],
+            )
         };
         Ok((new_slot, self.available_content_bytes(), slc))
     }
@@ -399,6 +429,9 @@ impl<'a> SlottedPage<'a> {
         let offset = index_entry.offset as usize;
         let length = index_entry.used_bytes as usize;
 
+        // Must be 8-byte aligned.
+        assert_eq!(offset % 8, 0, "slot {} is not 8-byte aligned", slot_id);
+
         let memory_as_slice =
             unsafe { std::slice::from_raw_parts(self.base_address, self.page_size as usize) };
         Ok(unsafe { Pin::new_unchecked(&memory_as_slice[offset..offset + length]) })
@@ -418,6 +451,9 @@ impl<'a> SlottedPage<'a> {
         }
         let offset = index_entry.offset as usize;
         let length = index_entry.used_bytes as usize;
+
+        // Must be 8-byte aligned.
+        assert_eq!(offset % 8, 0, "slot {} is not 8-byte aligned", slot_id);
 
         assert!(
             offset + length <= self.page_size as usize,
@@ -561,7 +597,12 @@ impl<'a> SlottedPage<'a> {
         let index_length = header.index_length as isize;
         let content_length = header.content_length as isize;
         let header_size = std::mem::size_of::<SlottedPageHeader>() as isize;
-        let avail = (self.page_size as isize) - (index_length + content_length + header_size);
+        let total_needed = index_length + content_length + header_size;
+
+        // Align to 8-byte boundary cuz that's what we'll actually need.
+        let total_needed = (total_needed + 7) & !7;
+
+        let avail = (self.page_size as isize) - total_needed;
         if avail < size as isize {
             return (true, None);
         }
@@ -576,6 +617,13 @@ impl<'a> SlottedPage<'a> {
 
         unsafe {
             let slot_address = base_address.add(index_offset);
+
+            assert_eq!(
+                slot_address as usize % 8,
+                0,
+                "slot {} is not 8-byte aligned",
+                slot_id
+            );
             Pin::new_unchecked(&*(slot_address as *const SlotIndexEntry))
         }
     }
@@ -587,6 +635,13 @@ impl<'a> SlottedPage<'a> {
 
         unsafe {
             let slot_address = base_address.add(index_offset);
+
+            assert_eq!(
+                slot_address as usize % 8,
+                0,
+                "slot {} is not 8-byte aligned",
+                slot_id
+            );
             Pin::new_unchecked(&mut *(slot_address as *mut SlotIndexEntry))
         }
     }
@@ -714,6 +769,10 @@ mod tests {
                 assert!(matches!(result, Err(SlotBoxError::BoxFull(_, _))));
                 break;
             }
+            // Sometimes we can cease allocation because that's how the cookie crumbles with padding,
+            if matches!(result, Err(SlotBoxError::BoxFull(_, _))) {
+                break;
+            }
             // Otherwise, we should be getting a slot id and a new avail that is smaller than the
             // previous avail.
             let (tid, new_avail, _) = result.unwrap();
@@ -839,16 +898,21 @@ mod tests {
         // Fill the page with random slots.
         let collected_slots = random_fill(&page);
         // Then remove them all and verify it is now completely empty.
-        let mut remaining = page.free_space_bytes();
+        let mut old_remaining = page.available_content_bytes();
         let mut last_is_empty = false;
-        for (tid, _) in &collected_slots {
+        for (i, (tid, _)) in collected_slots.iter().enumerate() {
             let (new_remaining, _, empty) = page.remove_slot(*tid).unwrap();
-            assert!(new_remaining >= remaining);
-            remaining = new_remaining;
+            assert!(
+                new_remaining >= old_remaining,
+                "new_remaining {} should be >= old_remaining {} on {i}th iteration",
+                new_remaining,
+                old_remaining
+            );
+            old_remaining = new_remaining;
             last_is_empty = empty;
         }
         assert!(last_is_empty);
-        assert_eq!(remaining, slot_page_empty_size(4096));
+        assert_eq!(old_remaining, slot_page_empty_size(4096));
         assert_eq!(page.free_space_bytes(), slot_page_empty_size(4096));
     }
 }

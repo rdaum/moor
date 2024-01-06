@@ -19,9 +19,11 @@ use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
 use moor_kernel::textdump::load_db::textdump_load;
+use moor_values::model::defset::Named;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbs::{BinaryType, VerbFlag};
 use moor_values::model::world_state::WorldStateSource;
+use moor_values::model::CommitResult;
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
@@ -34,7 +36,7 @@ fn testsuite_dir() -> PathBuf {
 }
 
 /// Create a minimal Db to support the test harness.
-async fn load_db(db: &mut TupleBoxWorldStateSource) {
+async fn load_textdump(db: &mut TupleBoxWorldStateSource) {
     let mut tx = db.loader_client().unwrap();
     textdump_load(
         tx.as_mut(),
@@ -42,7 +44,7 @@ async fn load_db(db: &mut TupleBoxWorldStateSource) {
     )
     .await
     .expect("Could not load textdump");
-    tx.commit().await.unwrap();
+    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 }
 
 async fn compile_verbs(db: &mut TupleBoxWorldStateSource, verbs: &[(&str, &Program)]) {
@@ -61,8 +63,26 @@ async fn compile_verbs(db: &mut TupleBoxWorldStateSource, verbs: &[(&str, &Progr
         )
         .await
         .unwrap();
+
+        // Verify it was added.
+        let verb = tx
+            .get_verb(Objid(3), SYSTEM_OBJECT, verb_name)
+            .await
+            .unwrap();
+        assert!(verb.matches_name(verb_name));
     }
-    tx.commit().await.unwrap();
+    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+
+    // And then verify that again in a new transaction.
+    let mut tx = db.new_world_state().await.unwrap();
+    for (verb_name, _) in verbs {
+        let verb = tx
+            .get_verb(Objid(3), SYSTEM_OBJECT, verb_name)
+            .await
+            .unwrap();
+        assert!(verb.matches_name(verb_name));
+    }
+    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 }
 
 async fn eval(db: &mut TupleBoxWorldStateSource, expression: &str) -> Var {
@@ -104,7 +124,7 @@ async fn run_basic_test(test_dir: &str) {
     // Frustratingly the individual test lines are not independent, so we need to run them in a
     // single database.
     let (mut db, _) = TupleBoxWorldStateSource::open(None, 1 << 30).await;
-    load_db(&mut db).await;
+    load_textdump(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await;
         let output = eval(&mut db, expected_output).await;

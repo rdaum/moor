@@ -18,18 +18,20 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tuples::slot_ptr::SlotPtr;
+use crate::tuplebox::tuples::tuple_ptr::TuplePtr;
 use crate::tuplebox::tuples::{SlotBox, SlotBoxError, TupleId};
 use crate::tuplebox::RelationId;
 
 pub struct TupleRef {
-    sp: *mut SlotPtr,
+    // Yo dawg I heard you like pointers, so I put a pointer in your pointer.
+    sp: *mut TuplePtr,
 }
 
-#[repr(C)]
+#[repr(C, align(8))]
 struct Header {
     ts: u64,
     domain_size: u32,
+    codomain_size: u32,
 }
 
 unsafe impl Send for TupleRef {}
@@ -38,7 +40,7 @@ impl TupleRef {
     // Wrap an existing SlotPtr.
     // Note: to avoid deadlocking at construction, assumes that the tuple is already upcounted by the
     // caller.
-    pub(crate) fn at_ptr(sp: *mut SlotPtr) -> Self {
+    pub(crate) fn at_ptr(sp: *mut TuplePtr) -> Self {
         Self { sp }
     }
     /// Allocate the given tuple in a slotbox.
@@ -53,15 +55,19 @@ impl TupleRef {
         let tuple_ref = sb.clone().allocate(total_size, relation_id, None)?;
         sb.update_with(tuple_ref.id(), |mut buffer| {
             let domain_len = domain.len();
+            let codomain_len = codomain.len();
             {
                 let header_ptr = buffer.as_mut().as_mut_ptr() as *mut Header;
                 let header = unsafe { &mut *header_ptr };
                 header.ts = ts;
                 header.domain_size = domain_len as u32;
+                header.codomain_size = codomain_len as u32;
             }
             let start_pos = std::mem::size_of::<Header>();
+            let codomain_start = start_pos + domain_len;
+            let codomain_end = codomain_start + codomain_len;
             buffer[start_pos..start_pos + domain_len].copy_from_slice(domain);
-            buffer[start_pos + domain_len..].copy_from_slice(codomain);
+            buffer[codomain_start..codomain_end].copy_from_slice(codomain);
         })?;
         Ok(tuple_ref)
     }
@@ -101,9 +107,10 @@ impl TupleRef {
     pub fn codomain(&self) -> SliceRef {
         let header = self.header();
         let domain_size = header.domain_size as usize;
+        let codomain_size = header.codomain_size as usize;
         let buffer = self.slot_buffer();
         let codomain_start = std::mem::size_of::<Header>() + domain_size;
-        buffer.slice(codomain_start..)
+        buffer.slice(codomain_start..codomain_start + codomain_size)
     }
 
     /// The raw buffer of the tuple, including the header, not dividing up the domain and codomain.
@@ -129,7 +136,7 @@ impl TupleRef {
     }
 
     #[inline]
-    fn resolve_slot_ptr(&self) -> Pin<&mut SlotPtr> {
+    fn resolve_slot_ptr(&self) -> Pin<&mut TuplePtr> {
         unsafe { Pin::new_unchecked(&mut *self.sp) }
     }
 

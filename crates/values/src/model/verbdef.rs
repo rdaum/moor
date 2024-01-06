@@ -117,9 +117,17 @@ impl VerbDef {
         let view = self.get_header_view();
         view.args().read()
     }
+}
+
+impl Named for VerbDef {
+    fn matches_name(&self, name: &str) -> bool {
+        self.names()
+            .iter()
+            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.to_lowercase().as_str()))
+    }
 
     #[must_use]
-    pub fn names(&self) -> Vec<&str> {
+    fn names(&self) -> Vec<&str> {
         let view = self.get_header_view();
         let num_names = view.num_names().read() as usize;
         let offset = verbdef::names::OFFSET;
@@ -134,14 +142,6 @@ impl VerbDef {
             names.push(std::str::from_utf8(name_slice).unwrap());
         }
         names
-    }
-}
-
-impl Named for VerbDef {
-    fn matches_name(&self, name: &str) -> bool {
-        self.names()
-            .iter()
-            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.to_lowercase().as_str()))
     }
 }
 
@@ -178,7 +178,7 @@ pub type VerbDefs = Defs<VerbDef>;
 
 #[cfg(test)]
 mod tests {
-    use crate::model::defset::HasUuid;
+    use crate::model::defset::{HasUuid, Named};
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::verbdef::{VerbDef, VerbDefs};
     use crate::model::verbs::VerbFlag;

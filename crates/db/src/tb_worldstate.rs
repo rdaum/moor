@@ -22,7 +22,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::tuplebox::TupleError;
-use moor_values::model::defset::HasUuid;
+use moor_values::model::defset::{HasUuid, Named};
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
 use moor_values::model::propdef::{PropDef, PropDefs};
@@ -1099,7 +1099,7 @@ mod tests {
 
     use strum::{EnumCount, IntoEnumIterator};
 
-    use moor_values::model::defset::HasUuid;
+    use moor_values::model::defset::{HasUuid, Named};
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::objset::ObjSet;
     use moor_values::model::r#match::VerbArgsSpec;
@@ -1135,7 +1135,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_object() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = TupleBoxTransaction::new(db.clone());
         let oid = tx
             .create_object(
                 None,
@@ -1156,6 +1156,11 @@ mod tests {
         assert_eq!(tx.get_object_location(oid).await.unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(oid).await.unwrap(), "test");
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+
+        // Verify existence in a new transaction.
+        let tx = TupleBoxTransaction::new(db);
+        assert!(tx.object_valid(oid).await.unwrap());
+        assert_eq!(tx.get_object_owner(oid).await.unwrap(), NOTHING);
     }
 
     #[tokio::test]
@@ -1607,7 +1612,7 @@ mod tests {
     #[tokio::test]
     async fn test_verb_add_update() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = TupleBoxTransaction::new(db.clone());
         let oid = tx
             .create_object(
                 None,
@@ -1658,6 +1663,13 @@ mod tests {
         // resolve with the new name.
         let vh = tx.resolve_verb(oid, "test2".into(), None).await.unwrap();
         assert_eq!(vh.names(), vec!["test2"]);
+
+        // Now commit, and try to resolve again.
+        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        let tx = TupleBoxTransaction::new(db);
+        let vh = tx.resolve_verb(oid, "test2".into(), None).await.unwrap();
+        assert_eq!(vh.names(), vec!["test2"]);
+        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
     }
 
     #[tokio::test]
@@ -1797,7 +1809,7 @@ mod tests {
     #[tokio::test]
     async fn test_verb_resolve() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = TupleBoxTransaction::new(db.clone());
 
         let a = tx
             .create_object(
@@ -1847,6 +1859,46 @@ mod tests {
             .unwrap()
             .uuid();
         assert_eq!(tx.get_verb_binary(a, v_uuid).await.unwrap(), vec![]);
+
+        // Add a second verb with a different name
+        tx.add_object_verb(
+            a,
+            a,
+            vec!["test2".into()],
+            vec![],
+            BinaryType::LambdaMoo18X,
+            BitEnum::new(),
+            VerbArgsSpec::this_none_this(),
+        )
+        .await
+        .unwrap();
+
+        // Verify we can get it
+        assert_eq!(
+            tx.resolve_verb(a, "test2".into(), None)
+                .await
+                .unwrap()
+                .names(),
+            vec!["test2"]
+        );
+        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+
+        // Verify existence in a new transaction.
+        let tx = TupleBoxTransaction::new(db);
+        assert_eq!(
+            tx.resolve_verb(a, "test".into(), None)
+                .await
+                .unwrap()
+                .names(),
+            vec!["test"]
+        );
+        assert_eq!(
+            tx.resolve_verb(a, "test2".into(), None)
+                .await
+                .unwrap()
+                .names(),
+            vec!["test2"]
+        );
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
     }
 
