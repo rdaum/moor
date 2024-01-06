@@ -597,17 +597,11 @@ mod tests {
             tuples.push((tuple_id, tuple));
         }
         for (tuple, expected_value) in tuples {
-            let retrieved_domain = tuple.slot_buffer();
-            let retrieved_codomain = tuple.slot_buffer();
+            let retrieved_buffer = tuple.slot_buffer();
             assert_eq!(
                 expected_value,
-                retrieved_domain.as_slice(),
-                "Tuple domain mismatch"
-            );
-            assert_eq!(
-                expected_value,
-                retrieved_codomain.as_slice(),
-                "Tuple codomain mismatch"
+                retrieved_buffer.as_slice(),
+                "Slot value mismatch"
             );
         }
     }
