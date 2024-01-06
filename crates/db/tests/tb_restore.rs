@@ -131,6 +131,10 @@ mod test {
             db.shutdown().await;
             expected
         };
+        // Sleep for a bit to encourage any buffers to flush, etc.
+        // TODO: ew.
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
         // Verify the WAL directory is not empty.
         assert!(std::fs::read_dir(format!("{}/wal", tmpdir_str))
             .unwrap()
