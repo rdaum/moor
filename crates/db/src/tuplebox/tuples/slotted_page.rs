@@ -693,6 +693,7 @@ impl<'a> PageWriteGuard<'a> {
         sp.remove_slot(slot_id)
     }
 
+    #[inline(always)]
     pub fn upcount(&mut self, slot_id: SlotId) -> Result<(), SlotBoxError> {
         let sp = SlottedPage {
             base_address: self.base_address,
@@ -711,6 +712,7 @@ impl<'a> PageWriteGuard<'a> {
 }
 
 impl<'a> Drop for PageWriteGuard<'a> {
+    #[inline(always)]
     fn drop(&mut self) {
         let header = self.header_mut();
         header.unlock_for_writes();
@@ -725,13 +727,14 @@ pub struct PageReadGuard<'a> {
 }
 
 impl<'a> PageReadGuard<'a> {
+    #[inline(always)]
     fn header(&self) -> Pin<&SlottedPageHeader> {
         let header_ptr = self.base_address as *const SlottedPageHeader;
 
         unsafe { Pin::new_unchecked(&*header_ptr) }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, SlotBoxError> {
         let sp = SlottedPage {
             base_address: self.base_address as _,
@@ -743,6 +746,7 @@ impl<'a> PageReadGuard<'a> {
 }
 
 impl<'a> Drop for PageReadGuard<'a> {
+    #[inline(always)]
     fn drop(&mut self) {
         let header = self.header();
         // Decrement the state by 2 to remove one read-lock.

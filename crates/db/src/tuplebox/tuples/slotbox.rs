@@ -117,6 +117,7 @@ impl SlotBox {
         Ok(refs)
     }
 
+    #[inline(always)]
     pub(crate) fn page_for<'a>(&self, id: PageId) -> Result<SlottedPage<'a>, SlotBoxError> {
         let inner = self.inner.lock().unwrap();
         inner.page_for(id)
@@ -128,12 +129,14 @@ impl SlotBox {
         page_handle.refcount(id.slot)
     }
 
+    #[inline(always)]
     pub fn upcount(&self, id: TupleId) -> Result<(), SlotBoxError> {
         let inner = self.inner.lock().unwrap();
         let page_handle = inner.page_for(id.page)?;
         page_handle.upcount(id.slot)
     }
 
+    #[inline(always)]
     pub fn dncount(&self, id: TupleId) -> Result<(), SlotBoxError> {
         let mut inner = self.inner.lock().unwrap();
         let page_handle = inner.page_for(id.page)?;
@@ -143,6 +146,7 @@ impl SlotBox {
         Ok(())
     }
 
+    #[inline(always)]
     pub fn get(&self, id: TupleId) -> Result<Pin<&[u8]>, SlotBoxError> {
         let inner = self.inner.lock().unwrap();
         let page_handle = inner.page_for(id.page)?;
@@ -448,15 +452,18 @@ impl PageSpace {
         }
     }
 
+    #[inline(always)]
     fn sort(&mut self) {
         self.entries.sort()
     }
 
+    #[inline(always)]
     fn insert(&mut self, available: usize, bid: Bid) {
         self.entries.push(encode(bid.0 as PageId, available));
         self.sort();
     }
 
+    #[inline(always)]
     fn seek(&self, pid: PageId) -> Option<usize> {
         self.entries
             .iter()
@@ -529,6 +536,7 @@ impl PageSpace {
             .map(|entry| (entry & 0xFFFF_FFFF_FFFF) as PageId)
     }
 
+    #[inline(always)]
     fn len(&self) -> usize {
         self.entries.len()
     }
