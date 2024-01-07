@@ -23,8 +23,7 @@ use moor_values::var::Var;
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 async fn create_worldstate() -> TupleBoxWorldStateSource {
-    TupleBoxWorldStateSource::open(None, 1 << 30).await;
-    let (ws_source, _) = TupleBoxWorldStateSource::open(None, 1 << 30).await;
+    let (ws_source, _) = TupleBoxWorldStateSource::open(None, 1 << 28).await;
     let mut tx = ws_source.new_world_state().await.unwrap();
     let _sysobj = tx
         .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
