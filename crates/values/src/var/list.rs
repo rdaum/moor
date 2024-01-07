@@ -44,16 +44,8 @@ impl List {
 
     #[must_use]
     pub fn push(&self, v: &Var) -> Var {
-        let mut new_list = Vec::with_capacity(self.inner.len() + 1);
-        new_list.extend_from_slice(&self.inner);
+        let mut new_list = (*self.inner).clone();
         new_list.push(v.clone());
-        Variant::List(Self::from_vec(new_list)).into()
-    }
-
-    #[must_use]
-    pub fn back(&self) -> Var {
-        let mut new_list = Vec::with_capacity(self.inner.len() - 1);
-        new_list.extend_from_slice(&self.inner[..self.inner.len() - 1]);
         Variant::List(Self::from_vec(new_list)).into()
     }
 
@@ -63,27 +55,22 @@ impl List {
         if self.inner.is_empty() {
             return (v_empty_list(), v_empty_list());
         }
-        let mut new_list = Vec::with_capacity(self.inner.len() - 1);
-        new_list.extend_from_slice(&self.inner[1..]);
-        (
-            self.inner[0].clone(),
-            Variant::List(Self::from_vec(new_list)).into(),
-        )
+        let mut new_list = (*self.inner).clone();
+        let item = new_list.remove(0);
+        (item.clone(), Variant::List(Self::from_vec(new_list)).into())
     }
 
     #[must_use]
     pub fn append(&self, other: &Self) -> Var {
-        let mut new_list = Vec::with_capacity(self.inner.len() + other.inner.len());
-        new_list.extend_from_slice(&self.inner);
+        let mut new_list = (*self.inner).clone();
         new_list.extend_from_slice(&other.inner);
         Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
     pub fn remove_at(&self, index: usize) -> Var {
-        let mut new_list = Vec::with_capacity(self.inner.len() - 1);
-        new_list.extend_from_slice(&self.inner[..index]);
-        new_list.extend_from_slice(&self.inner[index + 1..]);
+        let mut new_list = (*self.inner).clone();
+        new_list.remove(index);
         Variant::List(Self::from_vec(new_list)).into()
     }
 
@@ -158,7 +145,7 @@ impl List {
 
     #[must_use]
     pub fn set(&self, index: usize, value: &Var) -> Var {
-        let mut new_vec = self.inner.as_slice().to_vec();
+        let mut new_vec = (*self.inner).clone();
         new_vec[index] = value.clone();
         Variant::List(Self::from_vec(new_vec)).into()
     }

@@ -326,11 +326,7 @@ async fn bf_rmatch<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(rmatch, bf_rmatch);
 
-fn substitute(
-    template: &str,
-    subs: &[(isize, isize)],
-    source: &str,
-) -> Result<String, moor_values::var::error::Error> {
+fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<String, Error> {
     // textual patterns of form %<int> (e.g. %1, %9, %11) are replaced by the text matched by the
     // offsets (1-indexed) into source given by the corresponding value in `subs`.
 

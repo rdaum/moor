@@ -136,6 +136,7 @@ where
         self.bitset.fill(StorageType::zero());
     }
 
+    #[inline]
     fn last(&self) -> Option<usize> {
         for (i, b) in self.bitset.iter().enumerate() {
             if !b.is_zero() {
@@ -148,22 +149,27 @@ where
         None
     }
 
+    #[inline]
     fn is_empty(&self) -> bool {
         self.bitset.iter().all(|x| x.is_zero())
     }
 
+    #[inline]
     fn size(&self) -> usize {
         self.bitset.iter().map(|x| x.count_ones() as usize).sum()
     }
 
+    #[inline]
     fn bit_width(&self) -> usize {
         Self::STORAGE_BIT_WIDTH
     }
 
+    #[inline]
     fn capacity(&self) -> usize {
         Self::BITSET_WIDTH
     }
 
+    #[inline]
     fn storage_width(&self) -> usize {
         Self::STORAGE_WIDTH
     }

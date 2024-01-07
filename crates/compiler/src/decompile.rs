@@ -108,10 +108,10 @@ impl Decompile {
             if predicate(self.position, op) {
                 // We'll need a copy of the matching opcode we terminated at.
                 let final_op = self.next()?;
-                if self.statements.len() > old_len {
-                    return Ok((self.statements.split_off(old_len), final_op));
+                return if self.statements.len() > old_len {
+                    Ok((self.statements.split_off(old_len), final_op))
                 } else {
-                    return Ok((vec![], final_op));
+                    Ok((vec![], final_op))
                 };
             }
             self.decompile()?;

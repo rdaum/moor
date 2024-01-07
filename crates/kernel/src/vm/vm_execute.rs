@@ -123,9 +123,9 @@ pub enum ExecutionResult {
 macro_rules! binary_bool_op {
     ( $state:ident, $op:tt ) => {
         let rhs = $state.pop();
-        let lhs = $state.pop();
+        let lhs = $state.peek_top();
         let result = if lhs $op rhs { 1 } else { 0 };
-        $state.push(&v_int(result))
+        $state.update(0, &v_int(result))
     };
 }
 
@@ -216,11 +216,12 @@ impl VM {
                     id,
                 } => {
                     // Pop the count and list off the stack. We push back later when we re-enter.
-                    // TODO LambdaMOO had optimization here where it would only peek and update.
-                    // But I had some difficulty getting stack values right, so will do this simpler
-                    // for now and revisit later.
-                    let (count, list) = (&state.pop(), &state.pop());
+
+                    let (count, list) = state.peek2();
                     let Variant::Int(count) = count.variant() else {
+                        state.pop();
+                        state.pop();
+
                         // If the result of raising error was just to push the value -- that is, we
                         // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                         // So we preemptively jump (here and below for List) and then raise the error.
@@ -229,12 +230,18 @@ impl VM {
                     };
                     let count = *count as usize;
                     let Variant::List(l) = list.variant() else {
+                        state.pop();
+                        state.pop();
+
                         state.jump(label);
                         return self.raise_error(state, E_TYPE);
                     };
 
                     // If we've exhausted the list, pop the count and list and jump out.
                     if count >= l.len() {
+                        state.pop();
+                        state.pop();
+
                         state.jump(label);
                         continue;
                     }
@@ -243,8 +250,7 @@ impl VM {
                     // then increment the count, rewind the program counter to the top of the loop, and
                     // continue.
                     state.set_env(id, &l[count]);
-                    state.push(list);
-                    state.push(&v_int((count + 1) as i64));
+                    state.update(0, &v_int((count + 1) as i64));
                 }
                 Op::ForRange {
                     end_label: label,
@@ -300,8 +306,6 @@ impl VM {
                     state.push(&val);
                 }
                 Op::Imm(slot) => {
-                    // TODO Peek ahead to see if the next operation is 'pop' and if so, just throw away.
-                    // MOO uses this to optimize verbdoc/comments, etc.
                     match state.top().lookahead() {
                         Some(Op::Pop) => {
                             // skip
@@ -316,29 +320,33 @@ impl VM {
                 }
                 Op::MkEmptyList => state.push(&v_empty_list()),
                 Op::ListAddTail => {
-                    let tail = state.pop();
-                    let list = state.pop();
+                    let (tail, list) = (state.pop(), state.peek_top());
                     let Variant::List(list) = list.variant() else {
+                        state.pop();
                         return self.push_error(state, E_TYPE);
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-                    state.push(&list.push(&tail));
+                    state.update(0, &list.push(&tail));
                 }
                 Op::ListAppend => {
-                    let tail = state.pop();
-                    let list = state.pop();
+                    let (tail, list) = (state.pop(), state.peek_top());
+
                     let Variant::List(list) = list.variant() else {
+                        state.pop();
+
                         return self.push_error(state, E_TYPE);
                     };
 
                     let Variant::List(tail) = tail.variant() else {
+                        state.pop();
+
                         return self.push_error(state, E_TYPE);
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-                    let new_list = list.iter().chain(tail.iter());
-                    state.push(&v_list(&new_list.cloned().collect::<Vec<_>>()));
+                    let new_list = list.append(&tail);
+                    state.update(0, &new_list);
                 }
                 Op::IndexSet => {
                     // collection[index] = value

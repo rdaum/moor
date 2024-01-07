@@ -260,7 +260,9 @@ impl PartialEq<Self> for Var {
 }
 
 impl PartialOrd<Self> for Var {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for Var {
