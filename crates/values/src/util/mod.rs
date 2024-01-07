@@ -70,6 +70,53 @@ pub fn quote_str(s: &str) -> String {
     output
 }
 
+pub fn parse_into_words(input: &str) -> Vec<String> {
+    // Initialize state variables.
+    let mut in_quotes = false;
+    let mut previous_char_was_backslash = false;
+
+    // Define the fold function's logic as a closure.
+    let accumulate_words = |mut acc: Vec<String>, c| {
+        if previous_char_was_backslash {
+            // Handle escaped characters.
+            if let Some(last_word) = acc.last_mut() {
+                last_word.push(c);
+            } else {
+                acc.push(c.to_string());
+            }
+            previous_char_was_backslash = false;
+        } else if c == '\\' {
+            // Mark the next character as escaped.
+            previous_char_was_backslash = true;
+        } else if c == '"' {
+            // Toggle whether we're inside quotes.
+            in_quotes = !in_quotes;
+        } else if c.is_whitespace() && !in_quotes {
+            // Add a new empty string to the accumulator if we've reached a whitespace boundary.
+            if let Some(last_word) = acc.last() {
+                if !last_word.is_empty() {
+                    acc.push(String::new());
+                }
+            }
+        } else {
+            // Append the current character to the last word in the accumulator,
+            // or create a new word if there isn't one yet.
+            if let Some(last_word) = acc.last_mut() {
+                last_word.push(c);
+            } else {
+                acc.push(c.to_string());
+            }
+        }
+        acc
+    };
+
+    // Use the fold function to accumulate the words in the input string.
+    let words = input.chars().fold(vec![], accumulate_words);
+
+    // Filter out empty strings and return the result.
+    words.into_iter().filter(|w| !w.is_empty()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::util::{quote_str, verbname_cmp};

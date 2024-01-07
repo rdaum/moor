@@ -6,7 +6,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
 

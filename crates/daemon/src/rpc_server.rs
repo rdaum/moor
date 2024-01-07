@@ -31,13 +31,13 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use moor_kernel::tasks::command_parse::parse_into_words;
 use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::TaskId;
 use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::NarrativeEvent;
+use moor_values::util::parse_into_words;
 use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
 use moor_values::var::Var;

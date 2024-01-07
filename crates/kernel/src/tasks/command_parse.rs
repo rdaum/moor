@@ -20,6 +20,7 @@ use lazy_static::lazy_static;
 
 use moor_values::model::r#match::{PrepSpec, Preposition, PREP_LIST};
 use moor_values::model::WorldStateError;
+use moor_values::util;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_str, Var};
 
@@ -103,53 +104,6 @@ fn match_preposition(prep: &str) -> Option<Prep> {
         .cloned()
 }
 
-pub fn parse_into_words(input: &str) -> Vec<String> {
-    // Initialize state variables.
-    let mut in_quotes = false;
-    let mut previous_char_was_backslash = false;
-
-    // Define the fold function's logic as a closure.
-    let accumulate_words = |mut acc: Vec<String>, c| {
-        if previous_char_was_backslash {
-            // Handle escaped characters.
-            if let Some(last_word) = acc.last_mut() {
-                last_word.push(c);
-            } else {
-                acc.push(c.to_string());
-            }
-            previous_char_was_backslash = false;
-        } else if c == '\\' {
-            // Mark the next character as escaped.
-            previous_char_was_backslash = true;
-        } else if c == '"' {
-            // Toggle whether we're inside quotes.
-            in_quotes = !in_quotes;
-        } else if c.is_whitespace() && !in_quotes {
-            // Add a new empty string to the accumulator if we've reached a whitespace boundary.
-            if let Some(last_word) = acc.last() {
-                if !last_word.is_empty() {
-                    acc.push(String::new());
-                }
-            }
-        } else {
-            // Append the current character to the last word in the accumulator,
-            // or create a new word if there isn't one yet.
-            if let Some(last_word) = acc.last_mut() {
-                last_word.push(c);
-            } else {
-                acc.push(c.to_string());
-            }
-        }
-        acc
-    };
-
-    // Use the fold function to accumulate the words in the input string.
-    let words = input.chars().fold(vec![], accumulate_words);
-
-    // Filter out empty strings and return the result.
-    words.into_iter().filter(|w| !w.is_empty()).collect()
-}
-
 #[async_trait]
 pub trait ParseMatcher {
     async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError>;
@@ -186,7 +140,7 @@ where
     };
 
     // Get word list
-    let words = parse_into_words(&command);
+    let words = util::parse_into_words(&command);
     if words.is_empty() {
         return Err(ParseCommandError::EmptyCommand);
     }
@@ -218,7 +172,7 @@ where
     let verb = parts.next().unwrap_or_default().to_string();
     let argstr = parts.next().unwrap_or_default().to_string();
 
-    let words = parse_into_words(&argstr);
+    let words = util::parse_into_words(&argstr);
 
     // Normal MOO command
     // Find preposition, if any
@@ -279,6 +233,7 @@ where
 #[cfg(test)]
 mod tests {
     use moor_values::model::r#match::Preposition;
+    use moor_values::util::parse_into_words;
     use moor_values::var::v_str;
     use moor_values::{FAILED_MATCH, NOTHING};
 
