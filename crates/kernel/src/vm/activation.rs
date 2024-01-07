@@ -113,6 +113,16 @@ pub(crate) struct Activation {
     pub(crate) bf_trampoline_arg: Option<Var>,
 }
 
+fn set_constants(a: &mut Activation) {
+    a.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
+    a.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
+    a.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
+    a.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
+    a.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
+    a.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
+    a.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
+}
+
 impl Activation {
     pub fn for_call(task_id: TaskId, verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
@@ -139,16 +149,11 @@ impl Activation {
             permissions: verb_owner,
         };
 
+        set_constants(&mut a);
+
         a.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
         a.set_gvar(GlobalName::player, v_objid(verb_call_request.call.player));
         a.set_gvar(GlobalName::caller, v_objid(verb_call_request.call.caller));
-        a.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
-        a.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
-        a.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
-        a.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
-        a.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
-        a.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
-        a.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
         a.set_gvar(
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
@@ -215,16 +220,10 @@ impl Activation {
             permissions,
         };
 
+        set_constants(&mut a);
         a.set_gvar(GlobalName::this, v_objid(player));
         a.set_gvar(GlobalName::player, v_objid(player));
         a.set_gvar(GlobalName::caller, v_objid(player));
-        a.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
-        a.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
-        a.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
-        a.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
-        a.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
-        a.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
-        a.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
         a.set_gvar(GlobalName::verb, v_str("eval"));
         a.set_gvar(GlobalName::args, v_empty_list());
         a.set_gvar(GlobalName::argstr, v_str(""));

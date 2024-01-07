@@ -142,7 +142,7 @@ pub fn workload_commits(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
     let mut group = c.benchmark_group("throughput");
-    group.sample_size(100);
+    group.sample_size(1000);
     group.measurement_time(Duration::from_secs(10));
     group.throughput(criterion::Throughput::Elements(tx_count as u64));
     group.bench_function("commit_rate", |b| {

@@ -11,10 +11,15 @@ inventory.workspace = true
 test-case.workspace = true
 unindent.workspace = true
 pretty_assertions.workspace = true
+criterion.workspace = true
 
 [[test]]
 name = "basic-testsuite"
 path = "testsuite/basic/basic_suite.rs"
+
+[[bench]]
+name = "vm_benches"
+harness = false
 
 [dependencies]
 

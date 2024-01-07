@@ -387,6 +387,12 @@ impl VmHost {
             .unwrap_or(0)
     }
 
+    pub fn reset_ticks(&mut self) {
+        self.vm_exec_state.tick_count = 0;
+    }
+    pub fn reset_time(&mut self) {
+        self.vm_exec_state.start_time = Some(SystemTime::now());
+    }
     pub fn args(&self) -> Vec<Var> {
         self.vm_exec_state.top().args.clone()
     }
