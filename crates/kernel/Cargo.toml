@@ -35,7 +35,7 @@ async-trait.workspace = true
 decorum.workspace = true
 text_io.workspace = true
 bytes.workspace = true
-strum.worksspace = true
+strum.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 
