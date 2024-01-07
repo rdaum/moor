@@ -197,11 +197,26 @@ fn opcode_throughput(c: &mut Criterion) {
     group.bench_function("list_append_loop", |b| {
         b.to_async(&rt).iter_custom(|iters| {
             do_program(
+                r#"while(1)
+                            base_list = {};
+                            for i in [0..1000]
+                                base_list = {@base_list, i};
+                            endfor
+                          endwhile"#,
+                num_ticks,
+                iters,
+            )
+        });
+    });
+    // Measure how costly it is to append to a list
+    group.bench_function("list_set", |b| {
+        b.to_async(&rt).iter_custom(|iters| {
+            do_program(
                 r#"while(1) 
-                            base_list = {}; 
-                            for i in [0..1000] 
-                                base_list = {@base_list, i}; 
-                            endfor 
+                            list = {1};
+                            for i in [0..10000] 
+                                list[1] = i;
+                            endfor
                           endwhile"#,
                 num_ticks,
                 iters,
