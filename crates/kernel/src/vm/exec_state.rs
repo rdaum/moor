@@ -80,10 +80,12 @@ impl VMExecState {
         callers
     }
 
+    #[inline]
     pub(crate) fn top_mut(&mut self) -> &mut Activation {
         self.stack.last_mut().expect("activation stack underflow")
     }
 
+    #[inline]
     pub(crate) fn top(&self) -> &Activation {
         self.stack.last().expect("activation stack underflow")
     }
@@ -132,6 +134,7 @@ impl VMExecState {
     }
 
     /// Pop a value off the value stack.
+    #[inline]
     pub(crate) fn pop(&mut self) -> Var {
         self.top_mut().pop().unwrap_or_else(|| {
             panic!(
@@ -143,37 +146,44 @@ impl VMExecState {
     }
 
     /// Push a value onto the value stack
+    #[inline]
     pub(crate) fn push(&mut self, v: &Var) {
         self.top_mut().push(v.clone())
     }
 
     /// Non-destructively peek in the value stack at the given offset.
+    #[inline]
     pub(crate) fn peek(&self, amt: usize) -> Vec<Var> {
         self.top().peek(amt)
     }
 
     /// Return the top of the value stack.
+    #[inline]
     pub(crate) fn peek_top(&self) -> Var {
         self.top().peek_top().expect("stack underflow")
     }
 
     /// Return the next opcode in the program stream.
+    #[inline]
     pub(crate) fn next_op(&mut self) -> Option<Op> {
         self.top_mut().next_op()
     }
 
     /// Jump to the given label.
+    #[inline]
     pub(crate) fn jump(&mut self, label: Label) {
         self.top_mut().jump(label)
     }
 
     /// Return the value of a local variable.
+    #[inline]
     pub(crate) fn get_env(&self, id: Name) -> Option<&Var> {
         self.top().environment.get(id.0 as usize)
     }
 
     /// Set the value of a local variable.
+    #[inline]
     pub(crate) fn set_env(&mut self, id: Name, v: &Var) {
-        self.top_mut().environment.insert(id.0 as usize, v.clone());
+        self.top_mut().environment.set(id.0 as usize, v.clone());
     }
 }

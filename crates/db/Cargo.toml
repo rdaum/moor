@@ -43,7 +43,6 @@ metrics-macros.workspace = true
 # For the DB layer.
 bincode.workspace = true
 im.workspace = true
-sized-chunks.workspace = true
 binary-layout.workspace = true
 libc.workspace = true
 atomic-wait.workspace = true

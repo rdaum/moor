@@ -13,6 +13,7 @@
 //
 
 use crate::util::BitsetTrait;
+use std::fmt::{Debug, Formatter};
 use std::mem::MaybeUninit;
 use std::ops::Index;
 
@@ -21,7 +22,7 @@ use std::ops::Index;
 // Until then, don't mess up.
 pub struct BitArray<X, const RANGE_WIDTH: usize, BitsetType>
 where
-    BitsetType: BitsetTrait + std::default::Default,
+    BitsetType: BitsetTrait + Default,
 {
     pub(crate) bitset: BitsetType,
     storage: Box<[MaybeUninit<X>; RANGE_WIDTH]>,
@@ -29,7 +30,7 @@ where
 
 impl<X, const RANGE_WIDTH: usize, BitsetType> BitArray<X, RANGE_WIDTH, BitsetType>
 where
-    BitsetType: BitsetTrait + std::default::Default,
+    BitsetType: BitsetTrait + Default,
 {
     pub fn new() -> Self {
         Self {
@@ -162,7 +163,7 @@ where
         self.bitset.is_empty()
     }
 
-    pub fn size(&mut self) -> usize {
+    pub fn len(&mut self) -> usize {
         self.bitset.size()
     }
 
@@ -208,9 +209,26 @@ where
     }
 }
 
+impl<X, const RANGE_WIDTH: usize, BitsetType> PartialEq for BitArray<X, RANGE_WIDTH, BitsetType>
+where
+    BitsetType: BitsetTrait + Default,
+    X: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl<X, const RANGE_WIDTH: usize, BitsetType> Eq for BitArray<X, RANGE_WIDTH, BitsetType>
+where
+    BitsetType: BitsetTrait + Default,
+    X: Eq,
+{
+}
+
 impl<X, const RANGE_WIDTH: usize, BitsetType> Default for BitArray<X, RANGE_WIDTH, BitsetType>
 where
-    BitsetType: BitsetTrait + std::default::Default,
+    BitsetType: BitsetTrait + Default,
 {
     fn default() -> Self {
         Self::new()
@@ -219,7 +237,7 @@ where
 
 impl<X, const RANGE_WIDTH: usize, BitsetType> Index<usize> for BitArray<X, RANGE_WIDTH, BitsetType>
 where
-    BitsetType: BitsetTrait + std::default::Default,
+    BitsetType: BitsetTrait + Default,
 {
     type Output = X;
 
@@ -230,7 +248,7 @@ where
 
 impl<X, const RANGE_WIDTH: usize, BitsetType> Drop for BitArray<X, RANGE_WIDTH, BitsetType>
 where
-    BitsetType: BitsetTrait + std::default::Default,
+    BitsetType: BitsetTrait + Default,
 {
     fn drop(&mut self) {
         for i in 0..RANGE_WIDTH {
@@ -239,6 +257,30 @@ where
             }
         }
         self.bitset.clear();
+    }
+}
+
+impl<X, const RANGE_WIDTH: usize, BitsetType> Debug for BitArray<X, RANGE_WIDTH, BitsetType>
+where
+    BitsetType: BitsetTrait + Default,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BitArray({}) = {{", self.bitset.size())
+    }
+}
+
+impl<X, const RANGE_WIDTH: usize, BitsetType> Clone for BitArray<X, RANGE_WIDTH, BitsetType>
+where
+    BitsetType: BitsetTrait + Default,
+    X: Clone,
+{
+    fn clone(&self) -> Self {
+        let mut new = Self::new();
+        for (idx, v) in self.iter() {
+            let v = v.clone();
+            new.set(idx, v);
+        }
+        new
     }
 }
 
@@ -263,7 +305,7 @@ mod test {
         vec.erase(0);
         assert_eq!(vec.first_empty(), Some(0));
         assert_eq!(vec.last_used_pos(), Some(2));
-        assert_eq!(vec.size(), 2);
+        assert_eq!(vec.len(), 2);
         vec.set(0, 126);
         assert_eq!(vec.get(0), Some(&126));
         assert_eq!(vec.update(0, 123), Some(126));

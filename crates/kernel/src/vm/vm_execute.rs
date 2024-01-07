@@ -17,7 +17,6 @@ use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 
 use moor_compiler::labels::{Name, Offset};
-use tracing::trace;
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
@@ -192,16 +191,6 @@ impl VM {
 
             state.tick_count += 1;
 
-            trace!(
-                pc = state.top().pc,
-                ?op,
-                this = ?state.top().this,
-                player = ?state.top().player,
-                stack = ?state.top().valstack,
-                tick_count = state.tick_count,
-                tick_slice,
-                "exec"
-            );
             match op {
                 Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                     let cond = state.pop();
@@ -263,13 +252,13 @@ impl VM {
                 } => {
                     // Pull the range ends off the stack.
                     // TODO LambdaMOO had optimization here where it would only peek and update.
-                    // But I had some difficulty getting stack values right, so will do this simpler
-                    // for now and revisit later.
+                    //   But I had some difficulty getting stack values right, so will do this simpler
+                    //   for now and revisit later.
                     let (to, from) = (&state.pop(), &state.pop());
 
                     // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
-                    // Given we're 64-bit this is highly unlikely to ever be a concern for us, but
-                    // we also don't want to *crash* on obscene values, so impl that here.
+                    //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
+                    //   we also don't want to *crash* on obscene values, so impl that here.
 
                     let next_val = match (to.variant(), from.variant()) {
                         (Variant::Int(to_i), Variant::Int(from_i)) => {

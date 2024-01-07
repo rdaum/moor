@@ -189,7 +189,7 @@ impl SlotBox {
 
     pub fn num_pages(&self) -> usize {
         let mut inner = self.inner.lock().unwrap();
-        inner.available_page_space.size()
+        inner.available_page_space.len()
     }
 
     pub fn used_pages(&self) -> Vec<PageId> {

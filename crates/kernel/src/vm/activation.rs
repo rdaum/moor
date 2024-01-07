@@ -13,8 +13,6 @@
 //
 
 use moor_values::NOTHING;
-use sized_chunks::SparseChunk;
-use tracing::trace;
 use uuid::Uuid;
 
 use moor_compiler::GlobalName;
@@ -36,6 +34,7 @@ use crate::tasks::TaskId;
 use crate::vm::VerbExecutionRequest;
 use moor_compiler::labels::{Label, Name};
 use moor_compiler::opcode::{Op, Program, EMPTY_PROGRAM};
+use moor_values::util::{BitArray, Bitset32};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -92,7 +91,7 @@ pub(crate) struct Activation {
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Objid,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: SparseChunk<Var, 256>,
+    pub(crate) environment: BitArray<Var, 256, Bitset32<8>>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active error handlers, each relative to a position in the valstack.
@@ -126,7 +125,7 @@ fn set_constants(a: &mut Activation) {
 impl Activation {
     pub fn for_call(task_id: TaskId, verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
-        let environment = SparseChunk::new();
+        let environment = BitArray::new();
 
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
         let mut a = Self {
@@ -183,7 +182,7 @@ impl Activation {
     }
 
     pub fn for_eval(task_id: TaskId, permissions: Objid, player: Objid, program: Program) -> Self {
-        let environment = SparseChunk::new();
+        let environment = BitArray::new();
 
         let verb_info = VerbInfo::new(
             // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
@@ -256,11 +255,10 @@ impl Activation {
             SliceRef::empty(),
         );
 
-        trace!(bf_name, bf_index, ?args, "for_bf_call");
         Self {
             task_id,
             program: EMPTY_PROGRAM.clone(),
-            environment: SparseChunk::new(),
+            environment: BitArray::new(),
             valstack: vec![],
             handler_stack: vec![],
             pc: 0,
@@ -306,18 +304,21 @@ impl Activation {
         self.verb_info.verbdef().owner()
     }
 
+    #[inline]
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
-        self.environment.insert(gname as usize, value);
+        self.environment.set(gname as usize, value);
     }
 
+    #[inline]
     pub fn set_var_offset(&mut self, offset: Name, value: Var) -> Result<(), Error> {
         if offset.0 as usize >= self.environment.len() {
             return Err(E_VARNF);
         }
-        self.environment[offset.0 as usize] = value;
+        self.environment.set(offset.0 as usize, value);
         Ok(())
     }
 
+    #[inline]
     pub fn next_op(&mut self) -> Option<Op> {
         if !self.pc < self.program.main_vector.len() {
             return None;
@@ -327,20 +328,41 @@ impl Activation {
         Some(op)
     }
 
+    #[inline]
     pub fn lookahead(&self) -> Option<Op> {
         self.program.main_vector.get(self.pc).cloned()
     }
 
+    #[inline]
     pub fn skip(&mut self) {
         self.pc += 1;
     }
 
+    #[inline]
     pub fn pop(&mut self) -> Option<Var> {
         self.valstack.pop()
     }
 
+    #[inline]
     pub fn push(&mut self, v: Var) {
         self.valstack.push(v)
+    }
+
+    #[inline]
+    pub fn peek_top(&self) -> Option<Var> {
+        self.valstack.last().cloned()
+    }
+
+    #[inline]
+    pub fn peek(&self, width: usize) -> Vec<Var> {
+        let l = self.valstack.len();
+        Vec::from(&self.valstack[l - width..])
+    }
+
+    #[inline]
+    pub fn jump(&mut self, label_id: Label) {
+        let label = &self.program.jump_labels[label_id.0 as usize];
+        self.pc = label.position.0;
     }
 
     pub fn push_handler_label(&mut self, handler_type: HandlerType) {
@@ -358,20 +380,5 @@ impl Activation {
             return None;
         }
         self.handler_stack.pop()
-    }
-
-    pub fn peek_top(&self) -> Option<Var> {
-        self.valstack.last().cloned()
-    }
-
-    pub fn peek(&self, width: usize) -> Vec<Var> {
-        let l = self.valstack.len();
-        Vec::from(&self.valstack[l - width..])
-    }
-
-    pub fn jump(&mut self, label_id: Label) {
-        let label = &self.program.jump_labels[label_id.0 as usize];
-        trace!("Jump to {}", label.position.0);
-        self.pc = label.position.0;
     }
 }

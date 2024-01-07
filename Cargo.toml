@@ -68,7 +68,6 @@ itertools = "0.12.0"
 lazy_static = "1.4.0"
 num-traits = "0.2.17"
 rustyline = "13.0.0"
-sized-chunks = "0.7.0"
 strum = { version = "0.25.0", features = ["derive"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 yoke = "0.7.3"

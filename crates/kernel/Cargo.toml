@@ -35,10 +35,9 @@ async-trait.workspace = true
 decorum.workspace = true
 text_io.workspace = true
 bytes.workspace = true
-strum.workspace = true
+strum.worksspace = true
 uuid.workspace = true
 chrono.workspace = true
-sized-chunks.workspace = true
 
 ## Required for MOO builtins.
 pwhash.workspace = true
