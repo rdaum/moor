@@ -23,7 +23,7 @@ use moor_values::var::Var;
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 async fn create_worldstate() -> TupleBoxWorldStateSource {
-    TupleBoxWorldStateSource::open(None, 1 << 30).await.0;
+    TupleBoxWorldStateSource::open(None, 1 << 30).await;
     let (ws_source, _) = TupleBoxWorldStateSource::open(None, 1 << 30).await;
     let mut tx = ws_source.new_world_state().await.unwrap();
     let _sysobj = tx
@@ -175,6 +175,34 @@ fn opcode_throughput(c: &mut Criterion) {
         b.to_async(&rt).iter_custom(|iters| {
             do_program(
                 "while(1) for i in [1..1000000] endfor endwhile",
+                num_ticks,
+                iters,
+            )
+        });
+    });
+    // Measure range iteration over a static list
+    group.bench_function("for_in_static_list_loop", |b| {
+        b.to_async(&rt).iter_custom(|iters| {
+            do_program(
+                r#"while(1)
+                            for i in ({1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10})
+                            endfor
+                          endwhile"#,
+                num_ticks,
+                iters,
+            )
+        });
+    });
+    // Measure how costly it is to append to a list
+    group.bench_function("list_append_loop", |b| {
+        b.to_async(&rt).iter_custom(|iters| {
+            do_program(
+                r#"while(1) 
+                            base_list = {}; 
+                            for i in [0..1000] 
+                                base_list = {@base_list, i}; 
+                            endfor 
+                          endwhile"#,
                 num_ticks,
                 iters,
             )
