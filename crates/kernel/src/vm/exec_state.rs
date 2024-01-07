@@ -157,6 +157,18 @@ impl VMExecState {
         self.top().peek(amt)
     }
 
+    /// Return the top two values on the value stack.
+    #[inline]
+    pub(crate) fn peek2(&self) -> (Var, Var) {
+        self.top().peek2()
+    }
+
+    /// Update at a set offset in the value stack.
+    #[inline]
+    pub(crate) fn update(&mut self, amt: usize, v: &Var) {
+        self.top_mut().update(amt, v.clone())
+    }
+
     /// Return the top of the value stack.
     #[inline]
     pub(crate) fn peek_top(&self) -> Var {

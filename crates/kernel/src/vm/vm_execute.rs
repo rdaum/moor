@@ -251,10 +251,7 @@ impl VM {
                     id,
                 } => {
                     // Pull the range ends off the stack.
-                    // TODO LambdaMOO had optimization here where it would only peek and update.
-                    //   But I had some difficulty getting stack values right, so will do this simpler
-                    //   for now and revisit later.
-                    let (to, from) = (&state.pop(), &state.pop());
+                    let (to, from) = state.peek2();
 
                     // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
                     //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
@@ -263,30 +260,38 @@ impl VM {
                     let next_val = match (to.variant(), from.variant()) {
                         (Variant::Int(to_i), Variant::Int(from_i)) => {
                             if from_i > to_i {
+                                state.pop();
+                                state.pop();
                                 state.jump(label);
+
                                 continue;
                             }
                             v_int(from_i + 1)
                         }
                         (Variant::Obj(to_o), Variant::Obj(from_o)) => {
                             if from_o.0 > to_o.0 {
+                                state.pop();
+                                state.pop();
                                 state.jump(label);
+
                                 continue;
                             }
                             v_obj(from_o.0 + 1)
                         }
                         (_, _) => {
+                            state.pop();
+                            state.pop();
                             // Make sure we've jumped out of the loop before raising the error,
                             // because in verbs that aren't `d' we could end up continuing on in
                             // the loop (with a messed up stack) otherwise.
                             state.jump(label);
+
                             return self.raise_error(state, E_TYPE);
                         }
                     };
 
-                    state.set_env(id, from);
-                    state.push(&next_val);
-                    state.push(to);
+                    state.update(1, &next_val);
+                    state.set_env(id, &from);
                 }
                 Op::Pop => {
                     state.pop();

@@ -360,6 +360,19 @@ impl Activation {
     }
 
     #[inline]
+    pub fn peek2(&self) -> (Var, Var) {
+        let l = self.valstack.len();
+        let (a, b) = (&self.valstack[l - 1], &self.valstack[l - 2]);
+        (a.clone(), b.clone())
+    }
+
+    #[inline]
+    pub fn update(&mut self, amt: usize, v: Var) {
+        let l = self.valstack.len();
+        self.valstack[l - amt - 1] = v;
+    }
+
+    #[inline]
     pub fn jump(&mut self, label_id: Label) {
         let label = &self.program.jump_labels[label_id.0 as usize];
         self.pc = label.position.0;
