@@ -39,6 +39,7 @@ where
         }
     }
 
+    #[inline]
     pub fn push(&mut self, x: X) -> Option<usize> {
         let pos = self.bitset.first_empty()?;
         assert!(pos < RANGE_WIDTH);
@@ -49,6 +50,7 @@ where
         Some(pos)
     }
 
+    #[inline]
     pub fn pop(&mut self) -> Option<X> {
         let pos = self.bitset.last()?;
         self.bitset.unset(pos);
@@ -56,6 +58,7 @@ where
         Some(unsafe { old.assume_init() })
     }
 
+    #[inline]
     pub fn last(&self) -> Option<&X> {
         self.bitset
             .last()
@@ -94,7 +97,6 @@ where
 
     #[inline]
     pub fn get(&self, pos: usize) -> Option<&X> {
-        assert!(pos < RANGE_WIDTH);
         if self.bitset.check(pos) {
             Some(unsafe { self.storage[pos].assume_init_ref() })
         } else {
@@ -104,7 +106,6 @@ where
 
     #[inline]
     pub fn get_mut(&mut self, pos: usize) -> Option<&mut X> {
-        assert!(pos < RANGE_WIDTH);
         if self.bitset.check(pos) {
             Some(unsafe { self.storage[pos].assume_init_mut() })
         } else {
@@ -114,8 +115,11 @@ where
 
     #[inline]
     pub fn set(&mut self, pos: usize, x: X) {
-        assert!(pos < RANGE_WIDTH);
         unsafe {
+            // Drop old value if it exists
+            if self.bitset.check(pos) {
+                self.storage[pos].assume_init_drop();
+            }
             self.storage[pos].as_mut_ptr().write(x);
         };
         self.bitset.set(pos);
@@ -141,7 +145,6 @@ where
     // Erase without updating index, used by update and erase
     #[inline]
     fn take_internal(&mut self, pos: usize) -> Option<X> {
-        assert!(pos < RANGE_WIDTH);
         if self.bitset.check(pos) {
             let old = std::mem::replace(&mut self.storage[pos], MaybeUninit::uninit());
             Some(unsafe { old.assume_init() })
@@ -150,6 +153,7 @@ where
         }
     }
 
+    #[inline]
     pub fn clear(&mut self) {
         for i in 0..RANGE_WIDTH {
             if self.bitset.check(i) {
@@ -159,10 +163,12 @@ where
         self.bitset.clear();
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.bitset.is_empty()
     }
 
+    #[inline]
     pub fn len(&mut self) -> usize {
         self.bitset.size()
     }
