@@ -45,11 +45,6 @@ async fn test_db() -> Arc<TupleBox> {
 fn from_val(value: i64) -> SliceRef {
     SliceRef::from_bytes(&value.to_le_bytes()[..])
 }
-fn to_val(value: SliceRef) -> i64 {
-    let mut bytes = [0; 8];
-    bytes.copy_from_slice(value.as_slice());
-    i64::from_le_bytes(bytes)
-}
 
 fn load_history() -> Vec<History> {
     let lines = include_str!("list-append-dataset.json")

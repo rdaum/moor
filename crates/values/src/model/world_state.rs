@@ -155,6 +155,8 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), WorldStateError>;
 
     /// Add a property for the given object.
+    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
+    #[allow(clippy::too_many_arguments)]
     async fn define_property(
         &mut self,
         perms: Objid,
@@ -174,6 +176,8 @@ pub trait WorldState: Send + Sync {
     ) -> Result<(), WorldStateError>;
 
     /// Add a verb to the given object.
+    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
+    #[allow(clippy::too_many_arguments)]
     async fn add_verb(
         &mut self,
         perms: Objid,

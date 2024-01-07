@@ -29,9 +29,9 @@ use std::thread::yield_now;
 use tokio_eventfd::EventFd;
 
 pub(crate) enum PageStoreMutation {
-    SyncRelationPage(RelationId, PageId, Box<[u8]>),
-    SyncSequencePage(Box<[u8]>),
-    DeleteRelationPage(PageId, RelationId),
+    SyncRelation(RelationId, PageId, Box<[u8]>),
+    SyncSequence(Box<[u8]>),
+    DeleteRelation(PageId, RelationId),
 }
 
 /// Manages the directory of pages, one file per page.
@@ -183,7 +183,7 @@ impl PageStore {
             let request_id = self.next_request_id;
             self.next_request_id += 1;
             match mutation {
-                PageStoreMutation::SyncRelationPage(relation_id, page_id, data) => {
+                PageStoreMutation::SyncRelation(relation_id, page_id, data) => {
                     let path = self.dir.join(format!("{}_{}.page", page_id, relation_id.0));
                     let len = data.len();
                     let mut options = OpenOptions::new();
@@ -217,7 +217,7 @@ impl PageStore {
                             .expect("Unable to push fsync to submission queue");
                     }
                 }
-                PageStoreMutation::SyncSequencePage(data) => {
+                PageStoreMutation::SyncSequence(data) => {
                     let path = self.dir.join("sequences.page");
 
                     let len = data.len();
@@ -250,7 +250,7 @@ impl PageStore {
                             .expect("Unable to push fsync to submission queue");
                     }
                 }
-                PageStoreMutation::DeleteRelationPage(_, _) => {
+                PageStoreMutation::DeleteRelation(_, _) => {
                     // TODO
                 }
             }

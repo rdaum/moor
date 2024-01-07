@@ -90,7 +90,7 @@ impl BaseRelation {
 
     /// Establish indexes for a tuple initial-loaded from secondary storage. Basically a, "trust us,
     /// this exists" move.
-    pub fn index_tuple(&mut self, tuple: TupleRef) {
+    pub fn index_tuple(&mut self, mut tuple: TupleRef) {
         self.tuples.insert(tuple.clone());
 
         // Reset timestamp to 0, since this is a tuple initial-loaded from secondary storage.

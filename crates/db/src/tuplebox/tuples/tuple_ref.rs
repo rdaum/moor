@@ -69,6 +69,9 @@ impl TupleRef {
             buffer[start_pos..start_pos + domain_len].copy_from_slice(domain);
             buffer[codomain_start..codomain_end].copy_from_slice(codomain);
         })?;
+
+        // Initial refcount should be 1, because we have a reference to it.
+        assert_eq!(tuple_ref.resolve_slot_ptr().refcount(), 1);
         Ok(tuple_ref)
     }
 
@@ -80,7 +83,7 @@ impl TupleRef {
 
     /// Update the timestamp of the tuple.
     #[inline]
-    pub fn update_timestamp(&self, ts: u64) {
+    pub fn update_timestamp(&mut self, ts: u64) {
         let header = self.header_mut();
         header.ts = ts;
     }
@@ -129,14 +132,19 @@ impl TupleRef {
     }
 
     #[inline]
-    fn header_mut(&self) -> &mut Header {
-        let slot_ptr = self.resolve_slot_ptr();
-        let header: *mut Header = slot_ptr.as_mut_ptr();
+    fn header_mut(&mut self) -> &mut Header {
+        let slot_ptr = self.resolve_slot_ptr_mut();
+        let header: *mut Header = unsafe { slot_ptr.get_unchecked_mut() }.as_mut_ptr();
         unsafe { &mut *header }
     }
 
     #[inline]
-    fn resolve_slot_ptr(&self) -> Pin<&mut TuplePtr> {
+    fn resolve_slot_ptr(&self) -> Pin<&TuplePtr> {
+        unsafe { Pin::new_unchecked(&*self.sp) }
+    }
+
+    #[inline]
+    fn resolve_slot_ptr_mut(&mut self) -> Pin<&mut TuplePtr> {
         unsafe { Pin::new_unchecked(&mut *self.sp) }
     }
 

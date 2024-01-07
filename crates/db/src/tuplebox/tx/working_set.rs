@@ -488,6 +488,10 @@ impl TxBaseRelation {
         self.tuples.iter()
     }
 
+    pub fn tuples_mut(&mut self) -> impl Iterator<Item = &mut TxTuple> {
+        self.tuples.iter_mut()
+    }
+
     pub(crate) fn clear(&mut self) {
         self.tuples.clear();
         self.domain_index.clear();

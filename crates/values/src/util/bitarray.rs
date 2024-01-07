@@ -169,7 +169,7 @@ where
     }
 
     #[inline]
-    pub fn len(&mut self) -> usize {
+    pub fn len(&self) -> usize {
         self.bitset.size()
     }
 

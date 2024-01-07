@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex};
 
 use moor_values::util::{BitArray, Bitset64};
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::tuplebox::pool::{Bid, BufferPool, PagerError};
 pub use crate::tuplebox::tuples::slotted_page::SlotId;
@@ -122,6 +122,12 @@ impl SlotBox {
         inner.page_for(id)
     }
 
+    pub fn refcount(&self, id: TupleId) -> Result<u16, SlotBoxError> {
+        let inner = self.inner.lock().unwrap();
+        let page_handle = inner.page_for(id.page)?;
+        page_handle.refcount(id.slot)
+    }
+
     pub fn upcount(&self, id: TupleId) -> Result<(), SlotBoxError> {
         let inner = self.inner.lock().unwrap();
         let page_handle = inner.page_for(id.page)?;
@@ -188,7 +194,7 @@ impl SlotBox {
     }
 
     pub fn num_pages(&self) -> usize {
-        let mut inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap();
         inner.available_page_space.len()
     }
 
@@ -394,8 +400,6 @@ impl Inner {
     }
 
     fn report_free(&mut self, pid: PageId, new_size: usize, is_empty: bool) {
-        // Seek the page in the available_page_space vectors, and add the bytes back to its free space.
-        // We don't know the relation id here, so we have to linear scan all of them.
         for (_, available_page_space) in self.available_page_space.iter_mut() {
             if available_page_space.update_page(pid, new_size, is_empty) {
                 if is_empty {
@@ -405,10 +409,11 @@ impl Inner {
                 }
                 return;
             }
-            return;
         }
 
-        error!(
+        // TODO: initial textdump load seems to have a problem with initial inserts having a too-low refcount?
+        //   but once the DB is established, it's fine. So maybe this is a problem with insert tuple allocation?
+        warn!(
             "Page not found in used pages in allocator on free; pid {}; could be double-free, dangling weak reference?",
             pid
         );
@@ -460,6 +465,7 @@ impl PageSpace {
 
     /// Update the allocation record for the page.
     fn update_page(&mut self, pid: PageId, available: usize, is_empty: bool) -> bool {
+        // Page does not exist in this relation, so we can't update it.
         let Some(index) = self.seek(pid) else {
             return false;
         };
@@ -642,8 +648,8 @@ mod tests {
     // and then scan back and verify their presence/equality.
     #[test]
     fn test_basic_add_fill_etc() {
-        let mut sb = Arc::new(SlotBox::new(32768 * 32));
-        let mut tuples = fill_until_full(&mut sb);
+        let sb = Arc::new(SlotBox::new(32768 * 32));
+        let mut tuples = fill_until_full(&sb);
         for (i, (tuple, expected_value)) in tuples.iter().enumerate() {
             let retrieved_domain = tuple.domain();
             let retrieved_codomain = tuple.codomain();
@@ -671,8 +677,8 @@ mod tests {
     // everything mmap DONTNEED'd, and we should be able to re-fill it again, too.
     #[test]
     fn test_full_fill_and_empty() {
-        let mut sb = Arc::new(SlotBox::new(32768 * 64));
-        let mut tuples = fill_until_full(&mut sb);
+        let sb = Arc::new(SlotBox::new(32768 * 64));
+        let mut tuples = fill_until_full(&sb);
 
         // Collect the manual ids of the tuples we've allocated, so we can check them for refcount goodness.
         let ids = tuples.iter().map(|(t, _)| t.id()).collect::<Vec<_>>();
@@ -688,8 +694,8 @@ mod tests {
     // fill back up again and verify the new presence.
     #[test]
     fn test_fill_and_free_and_refill_etc() {
-        let mut sb = Arc::new(SlotBox::new(32768 * 64));
-        let mut tuples = fill_until_full(&mut sb);
+        let sb = Arc::new(SlotBox::new(32768 * 64));
+        let mut tuples = fill_until_full(&sb);
         let mut rng = thread_rng();
         let mut freed_tuples = Vec::new();
 
@@ -715,7 +721,7 @@ mod tests {
             assert!(sb.get(id).is_err());
         }
         // Now fill back up again.
-        let new_tuples = fill_until_full(&mut sb);
+        let new_tuples = fill_until_full(&sb);
         // Verify both the new tuples and the old tuples are there.
         for (tuple, expected) in new_tuples {
             let retrieved_domain = tuple.domain();

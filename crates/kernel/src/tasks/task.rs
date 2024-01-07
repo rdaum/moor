@@ -151,6 +151,8 @@ async fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize,
 }
 
 impl Task {
+    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
+    #[allow(clippy::too_many_arguments)]
     pub async fn run(
         task_id: TaskId,
         task_start: TaskStart,

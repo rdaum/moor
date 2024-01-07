@@ -285,6 +285,8 @@ impl Scheduler {
     /// (This path is really only used for the invocations from the serving processes like login,
     /// user_connected, or the do_command invocation which precedes an internal parser attempt.)
     #[instrument(skip(self, session))]
+    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
+    #[allow(clippy::too_many_arguments)]
     pub async fn submit_verb_task(
         &self,
         player: Objid,
@@ -1160,6 +1162,8 @@ impl Inner {
         }
     }
 
+    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
+    #[allow(clippy::too_many_arguments)]
     async fn new_task(
         &mut self,
         task_start: TaskStart,

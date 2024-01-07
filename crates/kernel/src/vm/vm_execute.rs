@@ -347,7 +347,7 @@ impl VM {
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-                    let new_list = list.append(&tail);
+                    let new_list = list.append(tail);
                     state.update(0, &new_list);
                 }
                 Op::IndexSet => {

@@ -1003,8 +1003,7 @@ impl RpcServer {
         client_id: Uuid,
     ) -> Result<(), SessionError> {
         let key: Key<32> = Key::from(&self.keypair[32..]);
-        let pk: PasetoAsymmetricPublicKey<V4, Public> =
-            PasetoAsymmetricPublicKey::try_from(&key).unwrap();
+        let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
             token.0.as_str(),
             &pk,
@@ -1059,8 +1058,7 @@ impl RpcServer {
         objid: Option<Objid>,
     ) -> Result<Objid, SessionError> {
         let key: Key<32> = Key::from(&self.keypair[32..]);
-        let pk: PasetoAsymmetricPublicKey<V4, Public> =
-            PasetoAsymmetricPublicKey::try_from(&key).unwrap();
+        let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
             token.0.as_str(),
             &pk,

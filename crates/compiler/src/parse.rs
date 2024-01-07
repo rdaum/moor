@@ -143,17 +143,15 @@ fn parse_arglist(
     names: Rc<RefCell<Names>>,
     pairs: pest::iterators::Pairs<Rule>,
 ) -> Result<Vec<Arg>, CompileError> {
-    for pair in pairs {
-        match pair.as_rule() {
-            Rule::exprlist => {
-                return parse_exprlist(names, pair.into_inner());
-            }
-            _ => {
-                panic!("Unimplemented arglist: {:?}", pair);
-            }
-        }
-    }
-    Ok(vec![])
+    let Some(first) = pairs.peek() else {
+        return Ok(vec![]);
+    };
+
+    let Rule::exprlist = first.as_rule() else {
+        panic!("Unimplemented arglist: {:?}", first);
+    };
+
+    return parse_exprlist(names, first.into_inner());
 }
 
 fn parse_except_codes(

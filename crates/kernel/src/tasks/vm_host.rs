@@ -206,7 +206,7 @@ impl VmHost {
         if self.vm_exec_state.tick_count >= self.max_ticks {
             return AbortLimit(AbortLimitReason::Ticks(self.vm_exec_state.tick_count));
         }
-        let mut exec_params = VmExecParams {
+        let exec_params = VmExecParams {
             scheduler_sender: self.scheduler_control_sender.clone(),
             max_stack_depth: self.max_stack_depth,
             ticks_left: self.max_ticks - self.vm_exec_state.tick_count,
@@ -218,7 +218,7 @@ impl VmHost {
         let mut result = self
             .vm
             .exec(
-                &mut exec_params,
+                &exec_params,
                 &mut self.vm_exec_state,
                 world_state,
                 self.sessions.clone(),
@@ -281,7 +281,7 @@ impl VmHost {
                     bf_func_num: bf_offset,
                     arguments: args,
                 } => {
-                    let mut exec_params = VmExecParams {
+                    let exec_params = VmExecParams {
                         max_stack_depth: self.max_stack_depth,
                         scheduler_sender: self.scheduler_control_sender.clone(),
                         ticks_left: self.max_ticks - self.vm_exec_state.tick_count,
@@ -296,7 +296,7 @@ impl VmHost {
                             &mut self.vm_exec_state,
                             bf_offset,
                             &args,
-                            &mut exec_params,
+                            &exec_params,
                             world_state,
                             self.sessions.clone(),
                         )

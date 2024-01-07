@@ -359,7 +359,7 @@ impl Activation {
 
     #[inline]
     pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
-        return &self.valstack[amt];
+        &self.valstack[amt]
     }
 
     #[inline]

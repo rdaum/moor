@@ -271,7 +271,6 @@ impl<'a> SlottedPage<'a> {
             index_entry.as_mut().mark_used(size);
 
             // Update used bytes in the header
-            let header = header;
             header.add_used(size);
 
             let slc = unsafe {
@@ -315,7 +314,6 @@ impl<'a> SlottedPage<'a> {
             .alloc(content_start_position, content_size, size);
 
         // Update the header to subtract the used space.
-        let header = header;
         let new_slot = header.add_entry(size);
 
         // Return the slot id and the number of bytes remaining to append at the end.
@@ -392,6 +390,14 @@ impl<'a> SlottedPage<'a> {
             header.clear();
         }
         Ok((self.available_content_bytes(), slot_size, is_empty))
+    }
+
+    pub(crate) fn refcount(&self, slot_id: SlotId) -> Result<u16, SlotBoxError> {
+        let index_entry = self.get_index_entry(slot_id);
+        if !index_entry.used {
+            return Err(SlotBoxError::TupleNotFound(slot_id as usize));
+        }
+        Ok(index_entry.refcount)
     }
 
     pub(crate) fn upcount(&self, slot_id: SlotId) -> Result<(), SlotBoxError> {

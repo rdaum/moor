@@ -27,7 +27,7 @@ pub use web_host::{
 };
 
 #[derive(Serialize, Deserialize)]
-struct OID {
+struct Oid {
     oid: i64,
 }
 
@@ -42,7 +42,7 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
     match v.variant() {
         Variant::None => serde_json::Value::Null,
         Variant::Str(s) => serde_json::Value::String(s.to_string()),
-        Variant::Obj(o) => json!(OID { oid: o.0 }),
+        Variant::Obj(o) => json!(Oid { oid: o.0 }),
         Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),
         Variant::Err(e) => json!(Error {

@@ -78,7 +78,7 @@ impl TuplePtr {
     }
 
     #[inline]
-    pub(crate) fn as_mut_ptr<T>(&self) -> *mut T {
+    pub(crate) fn as_mut_ptr<T>(&mut self) -> *mut T {
         self.bufaddr as *mut T
     }
 
@@ -93,6 +93,11 @@ impl TuplePtr {
         SlotByteSource {
             ptr: self as *const TuplePtr,
         }
+    }
+
+    #[inline]
+    pub fn refcount(&self) -> u16 {
+        self.sb.refcount(self.id).unwrap()
     }
 
     #[inline]

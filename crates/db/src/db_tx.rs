@@ -127,6 +127,8 @@ pub trait DbTransaction {
     ) -> Result<(), WorldStateError>;
 
     /// Define a new verb on the given object.
+    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
+    #[allow(clippy::too_many_arguments)]
     async fn add_object_verb(
         &self,
         location: Objid,

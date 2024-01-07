@@ -443,7 +443,7 @@ impl WalManager {
         to_evict: &mut Vec<TupleId>,
     ) {
         // The first N bytes have to be WAL_MAGIC or this is an invalid chunk.
-        if chunk.len() < wal_entry::header::OFFSET {
+        if chunk.len() < wal_entry::data::OFFSET {
             warn!("Chunk is too small to be valid");
             return;
         }
@@ -470,7 +470,7 @@ impl WalManager {
                 // page number.
                 let relation_id = RelationId(wal_entry.header().relation_id().read() as usize);
 
-                write_mutations.push(PageStoreMutation::SyncRelationPage(
+                write_mutations.push(PageStoreMutation::SyncRelation(
                     relation_id,
                     pid as PageId,
                     data,
@@ -479,13 +479,13 @@ impl WalManager {
             WalEntryType::SequenceSync => {
                 // Write current state of sequences to the sequence page. Ignores page id, slot id.
                 // Data is the contents of the sequence page.
-                write_mutations.push(PageStoreMutation::SyncSequencePage(data));
+                write_mutations.push(PageStoreMutation::SyncSequence(data));
             }
             WalEntryType::Delete => {
                 // Delete
                 let relation_id = RelationId(wal_entry.header().relation_id().read() as usize);
                 let slot_id = wal_entry.header().slot_id().read();
-                write_mutations.push(PageStoreMutation::DeleteRelationPage(
+                write_mutations.push(PageStoreMutation::DeleteRelation(
                     pid as PageId,
                     relation_id,
                 ));

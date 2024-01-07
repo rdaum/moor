@@ -178,17 +178,17 @@ impl TupleBox {
     pub(crate) async fn prepare_commit_set<'a>(
         &self,
         commit_ts: u64,
-        tx_working_set: &WorkingSet,
+        tx_working_set: &mut WorkingSet,
     ) -> Result<CommitSet, CommitError> {
         let mut commitset = CommitSet::new(commit_ts);
 
-        for (_, local_relation) in tx_working_set.relations.iter() {
+        for (_, local_relation) in tx_working_set.relations.iter_mut() {
             let relation_id = local_relation.id;
             // scan through the local working set, and for each tuple, check to see if it's safe to
             // commit. If it is, then we'll add it to the commit set.
             // note we're not actually committing yet, just producing a candidate commit set
             let canonical = &self.canonical.read().await[relation_id.0];
-            for tuple in local_relation.tuples() {
+            for mut tuple in local_relation.tuples_mut() {
                 let canon_tuple = canonical.seek_by_domain(tuple.domain().clone());
 
                 // If there's no value there, and our local is not tombstoned and we're not doing
@@ -197,7 +197,7 @@ impl TupleBox {
                 // TODO: it should be possible to do this without having the fork logic exist twice
                 //   here.
                 let Some(cv) = canon_tuple else {
-                    match &tuple {
+                    match &mut tuple {
                         TxTuple::Insert(t) => {
                             t.update_timestamp(commit_ts);
                             let forked_relation = commitset.fork(relation_id, canonical);
@@ -232,7 +232,7 @@ impl TupleBox {
                 // Otherwise apply the change into a new canonical relation, which is a CoW
                 // branching of the old one.
                 let forked_relation = commitset.fork(relation_id, canonical);
-                match &tuple {
+                match &mut tuple {
                     TxTuple::Insert(t) | TxTuple::Update(t) => {
                         t.update_timestamp(commit_ts);
                         let forked_relation = commitset.fork(relation_id, canonical);

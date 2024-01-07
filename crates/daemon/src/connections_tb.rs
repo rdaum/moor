@@ -60,6 +60,8 @@ impl ConnectionsTb {
 
 #[repr(usize)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display)]
+// Don't warn about same-prefix, "I did that on purpose"
+#[allow(clippy::enum_variant_names)]
 enum ConnectionRelation {
     // One to many, client id <-> connection/player object. Secondary index will seek on object id.
     ClientConnection = 0,
