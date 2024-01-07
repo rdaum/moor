@@ -23,6 +23,8 @@ use crate::tuplebox::tuples::{SlotBox, TupleId};
 /// which allows the SlotBox to manage the lifetime of the tuple, swizzling it in and out of memory as needed.
 /// Adds a layer of indirection to each tuple access, but is better than passing around tuple ids + slotbox
 /// references.
+
+// TODO: rather than decoding a tuple out of a buffer in the slot, the slot should just hold the tuple structure
 pub struct TuplePtr {
     sb: Arc<SlotBox>,
     id: TupleId,

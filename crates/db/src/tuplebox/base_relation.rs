@@ -39,6 +39,7 @@ use crate::tuplebox::RelationId;
 //   modified to support CoW/shared ownership of the tree nodes, like the im::HashMap does.
 //   if we're going to support on-disk indexes, use a CoW B+Tree, which I have implemented elsewhere,
 //   but will need to bring in here, optimize, and provide loving care to.
+// TODO: support bitmap indexes
 #[derive(Clone)]
 pub struct BaseRelation {
     pub(crate) id: RelationId,
