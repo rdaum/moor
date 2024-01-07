@@ -132,15 +132,19 @@ macro_rules! binary_bool_op {
 macro_rules! binary_var_op {
     ( $vm:ident, $state:ident, $op:tt ) => {
         let rhs = $state.pop();
-        let lhs = $state.pop();
+        let lhs = $state.peek_top();
         let result = lhs.$op(&rhs);
         match result {
-            Ok(result) => $state.push(&result),
-            Err(err_code) => return $vm.push_error($state, err_code),
+            Ok(result) => $state.update(0, &result),
+            Err(err_code) => {
+                $state.pop();
+                return $vm.push_error($state, err_code);
+            }
         }
     };
 }
 
+#[inline]
 pub(crate) fn one_to_zero_index(v: &Var) -> Result<usize, Error> {
     let Variant::Int(index) = v.variant() else {
         return Err(E_TYPE);
@@ -185,9 +189,7 @@ impl VM {
             // Otherwise, start poppin' opcodes.
             // We panic here if we run out of opcodes, as that means there's a bug in either the
             // compiler or in opcode execution.
-            let op = state.next_op().expect(
-                "Unexpected program termination; opcode stream should end with RETURN or DONE",
-            );
+            let op = state.next_op();
 
             state.tick_count += 1;
 
@@ -349,30 +351,27 @@ impl VM {
                     state.update(0, &new_list);
                 }
                 Op::IndexSet => {
-                    // collection[index] = value
-                    let value = state.pop(); /* rhs value */
-
-                    // Index into range, must be int.
-                    let index = state.pop();
-
-                    let lhs = state.pop(); /* lhs except last index, should be list or str */
-
+                    let (rhs, index, lhs) = (state.pop(), state.pop(), state.peek_top());
                     let i = match one_to_zero_index(&index) {
                         Ok(i) => i,
-                        Err(e) => return self.push_error(state, e),
+                        Err(e) => {
+                            state.pop();
+                            return self.push_error(state, e);
+                        }
                     };
-                    match lhs.index_set(i, &value) {
+                    match lhs.index_set(i, &rhs) {
                         Ok(v) => {
-                            state.push(&v);
+                            state.update(0, &v);
                         }
                         Err(e) => {
+                            state.pop();
                             return self.push_error(state, e);
                         }
                     }
                 }
                 Op::MakeSingletonList => {
-                    let v = state.pop();
-                    state.push(&v_list(&[v]))
+                    let v = state.peek_top();
+                    state.update(0, &v_list(&[v]));
                 }
                 Op::PutTemp => {
                     state.top_mut().temp = state.peek_top();
@@ -419,7 +418,7 @@ impl VM {
                     // Explicit division by zero check to raise E_DIV.
                     // Note that LambdaMOO consider 1/0.0 to be E_DIV, but Rust permits it, creating
                     // `inf`. I'll follow Rust's lead here, unless it leads to problems.
-                    let divargs = state.peek(2);
+                    let divargs = state.peek_range(2);
                     if let Variant::Int(0) = divargs[1].variant() {
                         return self.push_error(state, E_DIV);
                     };
@@ -451,14 +450,17 @@ impl VM {
                     }
                 }
                 Op::Not => {
-                    let v = !state.pop().is_true();
-                    state.push(&v_bool(v));
+                    let v = !state.peek_top().is_true();
+                    state.update(0, &v_bool(v));
                 }
                 Op::UnaryMinus => {
-                    let v = state.pop();
+                    let v = state.peek_top();
                     match v.negative() {
-                        Err(e) => return self.push_error(state, e),
-                        Ok(v) => state.push(&v),
+                        Err(e) => {
+                            state.pop();
+                            return self.push_error(state, e);
+                        }
+                        Ok(v) => state.update(0, &v),
                     }
                 }
                 Op::Push(ident) => {
@@ -472,8 +474,7 @@ impl VM {
                     state.set_env(ident, &v);
                 }
                 Op::PushRef => {
-                    let peek = state.peek(2);
-                    let (index, list) = (peek[1].clone(), peek[0].clone());
+                    let (index, list) = state.peek2();
                     let index = match one_to_zero_index(&index) {
                         Ok(i) => i,
                         Err(e) => return self.push_error(state, e),
@@ -484,38 +485,51 @@ impl VM {
                     }
                 }
                 Op::Ref => {
-                    let index = state.pop();
-                    let l = state.pop();
+                    let (index, l) = (state.pop(), state.peek_top());
                     let index = match one_to_zero_index(&index) {
                         Ok(i) => i,
-                        Err(e) => return self.push_error(state, e),
+                        Err(e) => {
+                            state.pop();
+                            return self.push_error(state, e);
+                        }
                     };
+
                     match l.index(index) {
-                        Err(e) => return self.push_error(state, e),
-                        Ok(v) => state.push(&v),
+                        Err(e) => {
+                            state.pop();
+                            return self.push_error(state, e);
+                        }
+                        Ok(v) => state.update(0, &v),
                     }
                 }
                 Op::RangeRef => {
-                    let (to, from, base) = (state.pop(), state.pop(), state.pop());
+                    let (to, from, base) = (state.pop(), state.pop(), state.peek_top());
                     match (to.variant(), from.variant()) {
                         (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
-                            Err(e) => return self.push_error(state, e),
-                            Ok(v) => state.push(&v),
+                            Err(e) => {
+                                state.pop();
+                                return self.push_error(state, e);
+                            }
+                            Ok(v) => state.update(0, &v),
                         },
                         (_, _) => return self.push_error(state, E_TYPE),
                     };
                 }
                 Op::RangeSet => {
                     let (value, to, from, base) =
-                        (state.pop(), state.pop(), state.pop(), state.pop());
+                        (state.pop(), state.pop(), state.pop(), state.peek_top());
                     match (to.variant(), from.variant()) {
                         (Variant::Int(to), Variant::Int(from)) => {
                             match base.rangeset(value, *from, *to) {
-                                Err(e) => return self.push_error(state, e),
-                                Ok(v) => state.push(&v),
+                                Err(e) => {
+                                    state.pop();
+                                    return self.push_error(state, e);
+                                }
+                                Ok(v) => state.update(0, &v),
                             }
                         }
                         _ => {
+                            state.pop();
                             return self.push_error(state, E_TYPE);
                         }
                     }
@@ -530,32 +544,48 @@ impl VM {
                     state.push(&v.clone());
                 }
                 Op::Length(offset) => {
-                    let vsr = &state.top().valstack;
-                    let v = &vsr[offset.0];
+                    let v = state.peek_abs(offset.0);
                     match v.len() {
-                        Ok(v) => state.push(&v),
+                        Ok(l) => state.push(&l),
                         Err(e) => return self.push_error(state, e),
                     }
                 }
                 Op::GetProp => {
-                    let (propname, obj) = (state.pop(), state.pop());
+                    let (propname, obj) = (state.pop(), state.peek_top());
 
-                    return self
+                    match self
                         .resolve_property(state, world_state, propname, obj)
-                        .await;
+                        .await
+                    {
+                        Ok(v) => state.update(0, &v),
+                        Err(e) => {
+                            state.pop();
+                            return self.push_error(state, e);
+                        }
+                    }
                 }
                 Op::PushGetProp => {
-                    let peeked = state.peek(2);
-                    let (propname, obj) = (peeked[1].clone(), peeked[0].clone());
-                    return self
+                    let (propname, obj) = state.peek2();
+                    match self
                         .resolve_property(state, world_state, propname, obj)
-                        .await;
+                        .await
+                    {
+                        Ok(v) => state.push(&v),
+                        Err(e) => return self.push_error(state, e),
+                    }
                 }
                 Op::PutProp => {
-                    let (rhs, propname, obj) = (state.pop(), state.pop(), state.pop());
-                    return self
+                    let (rhs, propname, obj) = (state.pop(), state.pop(), state.peek_top());
+                    match self
                         .set_property(state, world_state, propname, obj, rhs)
-                        .await;
+                        .await
+                    {
+                        Ok(v) => state.update(0, &v),
+                        Err(e) => {
+                            state.pop();
+                            return self.push_error(state, e);
+                        }
+                    }
                 }
                 Op::Fork { id, fv_offset } => {
                     // Delay time should be on stack

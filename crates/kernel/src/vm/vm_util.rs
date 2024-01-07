@@ -15,11 +15,12 @@
 use tracing::debug;
 
 use moor_values::model::world_state::WorldState;
+use moor_values::var::error::Error;
 use moor_values::var::error::Error::{E_INVIND, E_TYPE};
 use moor_values::var::variant::Variant;
 use moor_values::var::Var;
 
-use crate::vm::{ExecutionResult, VMExecState, VM};
+use crate::vm::{VMExecState, VM};
 
 impl VM {
     /// VM-level property resolution.
@@ -29,13 +30,13 @@ impl VM {
         world_state: &mut dyn WorldState,
         propname: Var,
         obj: Var,
-    ) -> ExecutionResult {
+    ) -> Result<Var, Error> {
         let Variant::Str(propname) = propname.variant() else {
-            return self.push_error(state, E_TYPE);
+            return Err(E_TYPE);
         };
 
         let Variant::Obj(obj) = obj.variant() else {
-            return self.push_error(state, E_INVIND);
+            return Err(E_INVIND);
         };
 
         let result = world_state
@@ -45,11 +46,10 @@ impl VM {
             Ok(v) => v,
             Err(e) => {
                 debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                return self.push_error(state, e.to_error_code());
+                return Err(e.to_error_code());
             }
         };
-        state.push(&v);
-        ExecutionResult::More
+        Ok(v)
     }
 
     /// VM-level property assignment
@@ -60,11 +60,11 @@ impl VM {
         propname: Var,
         obj: Var,
         value: Var,
-    ) -> ExecutionResult {
+    ) -> Result<Var, Error> {
         let (propname, obj) = match (propname.variant(), obj.variant()) {
             (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
             (_, _) => {
-                return self.push_error(state, E_TYPE);
+                return Err(E_TYPE);
             }
         };
 
@@ -73,13 +73,8 @@ impl VM {
             .await;
 
         match update_result {
-            Ok(()) => {
-                state.push(&value);
-            }
-            Err(e) => {
-                return self.push_error(state, e.to_error_code());
-            }
+            Ok(()) => Ok(value),
+            Err(e) => Err(e.to_error_code()),
         }
-        ExecutionResult::More
     }
 }

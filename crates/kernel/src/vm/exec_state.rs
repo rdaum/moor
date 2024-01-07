@@ -151,10 +151,19 @@ impl VMExecState {
         self.top_mut().push(v.clone())
     }
 
-    /// Non-destructively peek in the value stack at the given offset.
+    /// Non-destructively peek a range of values from the value stack.
+    /// Returns top N values, where N is the given amount.
     #[inline]
-    pub(crate) fn peek(&self, amt: usize) -> Vec<Var> {
-        self.top().peek(amt)
+    pub(crate) fn peek_range(&self, amt: usize) -> Vec<Var> {
+        self.top().peek_range(amt)
+    }
+
+    /// Non-destructively return a value at a specific absolute offset in the value stack.
+    /// Not computed relative to the top of the stack, used by the Length opcode, which
+    /// has specific knowledge of the stack layout.
+    #[inline]
+    pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
+        self.top().peek_abs(amt)
     }
 
     /// Return the top two values on the value stack.
@@ -177,7 +186,7 @@ impl VMExecState {
 
     /// Return the next opcode in the program stream.
     #[inline]
-    pub(crate) fn next_op(&mut self) -> Option<Op> {
+    pub(crate) fn next_op(&mut self) -> Op {
         self.top_mut().next_op()
     }
 

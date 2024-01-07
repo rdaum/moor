@@ -319,13 +319,11 @@ impl Activation {
     }
 
     #[inline]
-    pub fn next_op(&mut self) -> Option<Op> {
-        if !self.pc < self.program.main_vector.len() {
-            return None;
-        }
+    pub fn next_op(&mut self) -> Op {
+        assert!(self.pc < self.program.main_vector.len(), "pc out of bounds");
         let op = self.program.main_vector[self.pc].clone();
         self.pc += 1;
-        Some(op)
+        op
     }
 
     #[inline]
@@ -354,9 +352,14 @@ impl Activation {
     }
 
     #[inline]
-    pub fn peek(&self, width: usize) -> Vec<Var> {
+    pub fn peek_range(&self, width: usize) -> Vec<Var> {
         let l = self.valstack.len();
         Vec::from(&self.valstack[l - width..])
+    }
+
+    #[inline]
+    pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
+        return &self.valstack[amt];
     }
 
     #[inline]
