@@ -13,12 +13,12 @@
 //
 
 pub mod support {
-    use moor_db::tuplebox::{RelationInfo, TupleBox};
+    use moor_db::rdb::{RelBox, RelationInfo};
     use std::path::PathBuf;
     use std::sync::Arc;
 
     /// Build a test database with a bunch of relations
-    pub async fn test_db(dir: PathBuf) -> Arc<TupleBox> {
+    pub async fn test_db(dir: PathBuf) -> Arc<RelBox> {
         // Generate 10 test relations that we'll use for testing.
         let relations = (0..100)
             .map(|i| RelationInfo {
@@ -29,7 +29,7 @@ pub mod support {
             })
             .collect::<Vec<_>>();
 
-        TupleBox::new(1 << 24, Some(dir), &relations, 0).await
+        RelBox::new(1 << 24, Some(dir), &relations, 0).await
     }
 }
 
@@ -39,9 +39,9 @@ mod tests {
     use std::sync::Arc;
     use tracing_test::traced_test;
 
+    use moor_db::rdb::RelBox;
+    use moor_db::rdb::{RelationId, Transaction};
     use moor_db::testing::jepsen::{History, Type, Value};
-    use moor_db::tuplebox::TupleBox;
-    use moor_db::tuplebox::{RelationId, Transaction};
 
     use moor_values::util::slice_ref::SliceRef;
 
@@ -58,7 +58,7 @@ mod tests {
 
     async fn check_expected(
         process: i64,
-        _db: Arc<TupleBox>,
+        _db: Arc<RelBox>,
         tx: &Transaction,
         relation: RelationId,
         expected_values: &Option<Vec<i64>>,
@@ -94,7 +94,7 @@ mod tests {
 
     async fn check_completion(
         process: i64,
-        db: Arc<TupleBox>,
+        db: Arc<RelBox>,
         tx: &Transaction,
         values: Vec<Value>,
         action_type: Type,

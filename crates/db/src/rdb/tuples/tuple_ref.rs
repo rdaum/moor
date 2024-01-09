@@ -18,9 +18,10 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tuples::tuple_ptr::TuplePtr;
-use crate::tuplebox::tuples::{SlotBox, SlotBoxError, TupleId};
-use crate::tuplebox::RelationId;
+use crate::rdb::paging::TuplePtr;
+use crate::rdb::paging::{TupleBox, TupleBoxError};
+use crate::rdb::tuples::TupleId;
+use crate::rdb::RelationId;
 
 pub struct TupleRef {
     // Yo dawg I heard you like pointers, so I put a pointer in your pointer.
@@ -37,20 +38,20 @@ struct Header {
 unsafe impl Send for TupleRef {}
 unsafe impl Sync for TupleRef {}
 impl TupleRef {
-    // Wrap an existing SlotPtr.
+    // Wrap an existing TuplePtr.
     // Note: to avoid deadlocking at construction, assumes that the tuple is already upcounted by the
     // caller.
-    pub(crate) fn at_ptr(sp: *mut TuplePtr) -> Self {
+    pub(crate) fn at_tptr(sp: *mut TuplePtr) -> Self {
         Self { sp }
     }
     /// Allocate the given tuple in a slotbox.
     pub fn allocate(
         relation_id: RelationId,
-        sb: Arc<SlotBox>,
+        sb: Arc<TupleBox>,
         ts: u64,
         domain: &[u8],
         codomain: &[u8],
-    ) -> Result<TupleRef, SlotBoxError> {
+    ) -> Result<TupleRef, TupleBoxError> {
         let total_size = std::mem::size_of::<Header>() + domain.len() + codomain.len();
         let tuple_ref = sb.clone().allocate(total_size, relation_id, None)?;
         sb.update_with(tuple_ref.id(), |mut buffer| {

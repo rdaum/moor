@@ -21,7 +21,8 @@ use strum::{EnumCount, IntoEnumIterator};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::tuplebox::TupleError;
+use crate::rdb::TupleError;
+use crate::Database;
 use moor_values::model::defset::{HasUuid, Named};
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::objset::ObjSet;
@@ -40,19 +41,19 @@ use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 use crate::db_tx::DbTransaction;
 use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
-use crate::object_relations::{
+use crate::odb::object_relations;
+use crate::odb::object_relations::{
     get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
-use crate::tuplebox::{CommitError, Transaction};
-use crate::tuplebox::{RelationInfo, TupleBox};
-use crate::{object_relations, Database};
+use crate::rdb::{CommitError, Transaction};
+use crate::rdb::{RelBox, RelationInfo};
 
-/// An implementation of `WorldState` / `WorldStateSource` that uses the TupleBox as its backing
-pub struct TupleBoxWorldStateSource {
-    db: Arc<TupleBox>,
+/// An implementation of `WorldState` / `WorldStateSource` that uses the rdb as its backing
+pub struct RelBoxWorldState {
+    db: Arc<RelBox>,
 }
 
-impl TupleBoxWorldStateSource {
+impl RelBoxWorldState {
     pub async fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
@@ -69,7 +70,7 @@ impl TupleBoxWorldStateSource {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         // Same with "contents".
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
-        let db = TupleBox::new(memory_size, path, &relations, WorldStateSequences::COUNT).await;
+        let db = RelBox::new(memory_size, path, &relations, WorldStateSequences::COUNT).await;
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
@@ -83,19 +84,19 @@ impl TupleBoxWorldStateSource {
 }
 
 #[async_trait]
-impl WorldStateSource for TupleBoxWorldStateSource {
+impl WorldStateSource for RelBoxWorldState {
     async fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
-        let tx = TupleBoxTransaction::new(self.db.clone());
+        let tx = RelBoxTransaction::new(self.db.clone());
         return Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }));
     }
 }
 
-pub struct TupleBoxTransaction {
+pub struct RelBoxTransaction {
     tx: Transaction,
 }
 
 #[async_trait]
-impl DbTransaction for TupleBoxTransaction {
+impl DbTransaction for RelBoxTransaction {
     async fn get_players(&self) -> Result<ObjSet, WorldStateError> {
         // TODO: this is going to be not-at-all performant in the long run, and we'll need a way to
         //   cache this or index it better
@@ -304,7 +305,7 @@ impl DbTransaction for TupleBoxTransaction {
             for p in old_props.iter() {
                 if old_ancestors.contains(&p.definer()) {
                     delort_props.push(p.uuid());
-                    object_relations::delete_composite_if_exists::<Objid>(
+                    object_relations::delete_composite_if_exists(
                         &self.tx,
                         WorldStateRelation::ObjectPropertyValue,
                         o,
@@ -343,7 +344,7 @@ impl DbTransaction for TupleBoxTransaction {
                 for p in old_props.iter() {
                     if old_ancestors.contains(&p.definer()) {
                         inherited_props.push(p.uuid());
-                        object_relations::delete_composite_if_exists::<Objid>(
+                        object_relations::delete_composite_if_exists(
                             &self.tx,
                             WorldStateRelation::ObjectPropertyValue,
                             c,
@@ -1003,8 +1004,8 @@ impl DbTransaction for TupleBoxTransaction {
     }
 }
 
-impl TupleBoxTransaction {
-    pub fn new(db: Arc<TupleBox>) -> Self {
+impl RelBoxTransaction {
+    pub fn new(db: Arc<RelBox>) -> Self {
         let tx = db.start_tx();
         Self { tx }
     }
@@ -1082,9 +1083,9 @@ impl TupleBoxTransaction {
     }
 }
 
-impl Database for TupleBoxWorldStateSource {
+impl Database for RelBoxWorldState {
     fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
-        let tx = TupleBoxTransaction::new(self.db.clone());
+        let tx = RelBoxTransaction::new(self.db.clone());
         Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 
@@ -1111,11 +1112,11 @@ mod tests {
     use moor_values::NOTHING;
 
     use crate::db_tx::DbTransaction;
-    use crate::object_relations::{WorldStateRelation, WorldStateSequences};
-    use crate::tb_worldstate::TupleBoxTransaction;
-    use crate::tuplebox::{RelationInfo, TupleBox};
+    use crate::odb::object_relations::{WorldStateRelation, WorldStateSequences};
+    use crate::odb::rb_worldstate::RelBoxTransaction;
+    use crate::rdb::{RelBox, RelationInfo};
 
-    async fn test_db() -> Arc<TupleBox> {
+    async fn test_db() -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -1129,13 +1130,13 @@ mod tests {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        TupleBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
+        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
     }
 
     #[tokio::test]
     async fn test_create_object() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
         let oid = tx
             .create_object(
                 None,
@@ -1158,7 +1159,7 @@ mod tests {
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
 
         // Verify existence in a new transaction.
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
         assert!(tx.object_valid(oid).await.unwrap());
         assert_eq!(tx.get_object_owner(oid).await.unwrap(), NOTHING);
     }
@@ -1166,7 +1167,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_object_fixed_id() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
         // Force at 1.
         let oid = tx
             .create_object(Some(Objid(1)), ObjAttrs::default())
@@ -1182,7 +1183,7 @@ mod tests {
     #[tokio::test]
     async fn test_parent_children() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
 
         // Single parent/child relationship.
         let a = tx
@@ -1281,7 +1282,7 @@ mod tests {
     #[tokio::test]
     async fn test_descendants() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
 
         let a = tx
             .create_object(
@@ -1373,7 +1374,7 @@ mod tests {
     #[tokio::test]
     async fn test_location_contents() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
 
         let a = tx
             .create_object(
@@ -1483,7 +1484,7 @@ mod tests {
     #[tokio::test]
     async fn test_object_move_commits() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
 
         let a = tx
             .create_object(
@@ -1541,7 +1542,7 @@ mod tests {
 
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
 
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
         assert_eq!(tx.get_object_location(b).await.unwrap(), a);
         assert_eq!(tx.get_object_location(c).await.unwrap(), a);
         let contents = tx
@@ -1565,7 +1566,7 @@ mod tests {
         assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::from(&[b]));
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
 
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
         assert_eq!(tx.get_object_location(b).await.unwrap(), c);
         assert_eq!(tx.get_object_location(c).await.unwrap(), a);
         assert_eq!(tx.get_object_contents(a).await.unwrap(), ObjSet::from(&[c]));
@@ -1576,7 +1577,7 @@ mod tests {
     #[tokio::test]
     async fn test_simple_property() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
 
         let oid = tx
             .create_object(
@@ -1612,7 +1613,7 @@ mod tests {
     #[tokio::test]
     async fn test_verb_add_update() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
         let oid = tx
             .create_object(
                 None,
@@ -1666,7 +1667,7 @@ mod tests {
 
         // Now commit, and try to resolve again.
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
         let vh = tx.resolve_verb(oid, "test2".into(), None).await.unwrap();
         assert_eq!(vh.names(), vec!["test2"]);
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
@@ -1675,7 +1676,7 @@ mod tests {
     #[tokio::test]
     async fn test_transitive_property_resolution() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
 
         let a = tx
             .create_object(
@@ -1748,7 +1749,7 @@ mod tests {
     #[tokio::test]
     async fn test_transitive_property_resolution_clear_property() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
 
         let a = tx
             .create_object(
@@ -1809,7 +1810,7 @@ mod tests {
     #[tokio::test]
     async fn test_verb_resolve() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db.clone());
+        let tx = RelBoxTransaction::new(db.clone());
 
         let a = tx
             .create_object(
@@ -1884,7 +1885,7 @@ mod tests {
         assert_eq!(tx.commit().await, Ok(CommitResult::Success));
 
         // Verify existence in a new transaction.
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
         assert_eq!(
             tx.resolve_verb(a, "test".into(), None)
                 .await
@@ -1905,7 +1906,7 @@ mod tests {
     #[tokio::test]
     async fn test_verb_resolve_inherited() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
 
         let a = tx
             .create_object(
@@ -1975,7 +1976,7 @@ mod tests {
     #[tokio::test]
     async fn test_verb_resolve_wildcard() {
         let db = test_db().await;
-        let tx = TupleBoxTransaction::new(db);
+        let tx = RelBoxTransaction::new(db);
         let a = tx
             .create_object(
                 None,

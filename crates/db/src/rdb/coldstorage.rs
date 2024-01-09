@@ -29,16 +29,17 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_eventfd::EventFd;
 use tracing::{debug, error, info, warn};
 
-use crate::tuplebox::backing::{BackingStoreClient, WriterMessage};
-use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::page_storage::{PageStore, PageStoreMutation};
-use crate::tuplebox::tb::RelationInfo;
-use crate::tuplebox::tuples::TxTuple;
-use crate::tuplebox::tuples::{PageId, SlotBox, SlotId, TupleId};
-use crate::tuplebox::tx::WorkingSet;
-use crate::tuplebox::RelationId;
+use crate::rdb::backing::{BackingStoreClient, WriterMessage};
+use crate::rdb::base_relation::BaseRelation;
+use crate::rdb::page_storage::{PageStore, PageStoreMutation};
+use crate::rdb::paging::TupleBox;
+use crate::rdb::paging::{PageId, SlotId};
+use crate::rdb::relbox::RelationInfo;
+use crate::rdb::tuples::{TupleId, TxTuple};
+use crate::rdb::tx::WorkingSet;
+use crate::rdb::RelationId;
 
-/// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the tuplebox.
+/// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the rdb.
 pub struct ColdStorage {}
 
 define_layout!(sequence_page, LittleEndian, {
@@ -63,7 +64,7 @@ impl ColdStorage {
         _schema: &[RelationInfo],
         relations: &mut [BaseRelation],
         sequences: &mut Vec<u64>,
-        slot_box: Arc<SlotBox>,
+        tuple_box: Arc<TupleBox>,
     ) -> BackingStoreClient {
         let eventfd = EventFd::new(0, false).unwrap();
 
@@ -90,7 +91,7 @@ impl ColdStorage {
             let sequence_page = sequence_page::View::new(&sequence_page[..]);
             let num_sequences = sequence_page.num_sequences().read();
             assert_eq!(num_sequences, sequences.len() as u64,
-                "Number of sequences in the sequence page does not match the number of sequences in the tuplebox");
+                "Number of sequences in the sequence page does not match the number of sequences in the rdb");
             let sequences_bytes = sequence_page.sequences().to_vec();
             let sequence_size = sequence::SIZE.unwrap() as u64;
             for i in 0..num_sequences {
@@ -107,7 +108,7 @@ impl ColdStorage {
         let mut restored_slots = HashMap::new();
         let mut restored_bytes = 0;
         for (page_size, page_num, relation_id) in ids {
-            let tuple_ids = slot_box
+            let tuple_ids = tuple_box
                 .clone()
                 .load_page(relation_id, page_num, |buf| {
                     ps.read_page_buf(page_num, relation_id, buf)
@@ -145,7 +146,7 @@ impl ColdStorage {
         tokio::spawn(Self::listen_loop(
             writer_receive,
             wal,
-            slot_box.clone(),
+            tuple_box.clone(),
             page_storage.clone(),
             eventfd,
         ));
@@ -157,7 +158,7 @@ impl ColdStorage {
     async fn listen_loop(
         mut writer_receive: UnboundedReceiver<WriterMessage>,
         wal: WriteAheadLog,
-        slot_box: Arc<SlotBox>,
+        tuple_box: Arc<TupleBox>,
         ps: Arc<Mutex<PageStore>>,
         mut event_fd: EventFd,
     ) {
@@ -167,7 +168,7 @@ impl ColdStorage {
                 writer_message = writer_receive.recv() => {
                     match writer_message {
                         Some(WriterMessage::Commit(ts, ws, sequences)) => {
-                            Self::perform_writes(wal.clone(), slot_box.clone(), ts, ws, sequences).await;
+                            Self::perform_writes(wal.clone(), tuple_box.clone(), ts, ws, sequences).await;
                         }
                         Some(WriterMessage::Shutdown) => {
                             // Flush the WAL
@@ -195,7 +196,7 @@ impl ColdStorage {
     /// the changes durable.
     async fn perform_writes(
         wal: WriteAheadLog,
-        slot_box: Arc<SlotBox>,
+        tuple_box: Arc<TupleBox>,
         ts: u64,
         ws: WorkingSet,
         sequences: Vec<u64>,
@@ -260,7 +261,7 @@ impl ColdStorage {
 
         for (page_id, r) in &dirty_pages {
             // Get the slotboxy page for this tuple.
-            let Ok(page) = slot_box.page_for(*page_id) else {
+            let Ok(page) = tuple_box.page_for(*page_id) else {
                 // If the slot or page is already gone, ce la vie, we don't need to sync it.
                 continue;
             };

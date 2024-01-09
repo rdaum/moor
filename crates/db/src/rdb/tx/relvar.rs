@@ -14,9 +14,9 @@
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tuples::TupleError;
-use crate::tuplebox::tx::transaction::Transaction;
-use crate::tuplebox::RelationId;
+use crate::rdb::tuples::TupleError;
+use crate::rdb::tx::transaction::Transaction;
+use crate::rdb::RelationId;
 
 /// A reference / handle / pointer to a relation, the actual operations are managed through the
 /// transaction.

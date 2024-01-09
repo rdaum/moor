@@ -21,8 +21,8 @@ use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
 use moor_values::AsByteBuffer;
 
-use crate::tuplebox::TupleError;
-use crate::tuplebox::{RelationId, Transaction};
+use crate::rdb::TupleError;
+use crate::rdb::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]
@@ -204,7 +204,7 @@ async fn delete_if_exists(
     }
 }
 
-pub async fn delete_composite_if_exists<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub async fn delete_composite_if_exists(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
@@ -243,14 +243,14 @@ mod tests {
     use moor_values::model::objset::ObjSet;
     use moor_values::var::objid::Objid;
 
-    use crate::object_relations::WorldStateRelation::ObjectParent;
-    use crate::object_relations::{
+    use crate::odb::object_relations::WorldStateRelation::ObjectParent;
+    use crate::odb::object_relations::{
         get_object_by_codomain, get_object_value, insert_object_value, upsert_object_value,
         WorldStateRelation, WorldStateSequences,
     };
-    use crate::tuplebox::{RelationInfo, TupleBox};
+    use crate::rdb::{RelBox, RelationInfo};
 
-    async fn test_db() -> Arc<TupleBox> {
+    async fn test_db() -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -264,7 +264,7 @@ mod tests {
         relations[ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        TupleBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
+        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
     }
 
     /// Test simple relations mapping oid->oid (with secondary index), independent of all other

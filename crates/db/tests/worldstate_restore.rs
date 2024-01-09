@@ -15,9 +15,9 @@
 #[cfg(test)]
 mod test {
     use moor_db::db_tx::DbTransaction;
-    use moor_db::object_relations::{WorldStateRelation, WorldStateSequences};
-    use moor_db::tb_worldstate::TupleBoxTransaction;
-    use moor_db::tuplebox::{RelationInfo, TupleBox};
+    use moor_db::odb::RelBoxTransaction;
+    use moor_db::odb::{WorldStateRelation, WorldStateSequences};
+    use moor_db::rdb::{RelBox, RelationInfo};
     use moor_values::model::defset::HasUuid;
     use moor_values::model::objects::ObjAttrs;
     use moor_values::model::r#match::VerbArgsSpec;
@@ -29,7 +29,7 @@ mod test {
     use std::sync::Arc;
     use strum::{EnumCount, IntoEnumIterator};
 
-    pub async fn test_db(dir: PathBuf) -> Arc<TupleBox> {
+    pub async fn test_db(dir: PathBuf) -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -43,7 +43,7 @@ mod test {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        TupleBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT).await
+        RelBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT).await
     }
 
     #[tokio::test]
@@ -54,7 +54,7 @@ mod test {
         let a = {
             let db = test_db(tmpdir.path().into()).await;
 
-            let tx = TupleBoxTransaction::new(db.clone());
+            let tx = RelBoxTransaction::new(db.clone());
 
             let a = tx
                 .create_object(
@@ -103,7 +103,7 @@ mod test {
                 .next()
                 .is_some());
 
-            let tx = TupleBoxTransaction::new(db.clone());
+            let tx = RelBoxTransaction::new(db.clone());
 
             let v_uuid = tx
                 .resolve_verb(a, "test".into(), None)

@@ -14,7 +14,7 @@
 
 use moor_compiler::codegen::compile;
 use moor_compiler::opcode::Program;
-use moor_db::tb_worldstate::TupleBoxWorldStateSource;
+use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
@@ -36,7 +36,7 @@ fn testsuite_dir() -> PathBuf {
 }
 
 /// Create a minimal Db to support the test harness.
-async fn load_textdump(db: &mut TupleBoxWorldStateSource) {
+async fn load_textdump(db: &mut RelBoxWorldState) {
     let mut tx = db.loader_client().unwrap();
     textdump_load(
         tx.as_mut(),
@@ -47,7 +47,7 @@ async fn load_textdump(db: &mut TupleBoxWorldStateSource) {
     assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 }
 
-async fn compile_verbs(db: &mut TupleBoxWorldStateSource, verbs: &[(&str, &Program)]) {
+async fn compile_verbs(db: &mut RelBoxWorldState, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().await.unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec();
@@ -85,7 +85,7 @@ async fn compile_verbs(db: &mut TupleBoxWorldStateSource, verbs: &[(&str, &Progr
     assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 }
 
-async fn eval(db: &mut TupleBoxWorldStateSource, expression: &str) -> Var {
+async fn eval(db: &mut RelBoxWorldState, expression: &str) -> Var {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     compile_verbs(db, &[("test", &binary)]).await;
     let mut state = db.new_world_state().await.unwrap();
@@ -123,7 +123,7 @@ async fn run_basic_test(test_dir: &str) {
 
     // Frustratingly the individual test lines are not independent, so we need to run them in a
     // single database.
-    let (mut db, _) = TupleBoxWorldStateSource::open(None, 1 << 30).await;
+    let (mut db, _) = RelBoxWorldState::open(None, 1 << 30).await;
     load_textdump(&mut db).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
         let evaluated = eval(&mut db, input).await;

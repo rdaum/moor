@@ -18,10 +18,10 @@ use std::sync::Arc;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tb::{RelationInfo, TupleBox};
-use crate::tuplebox::tuples::{SlotBox, TupleError};
-use crate::tuplebox::tuples::{TupleRef, TxTuple};
-use crate::tuplebox::RelationId;
+use crate::rdb::paging::TupleBox;
+use crate::rdb::relbox::{RelBox, RelationInfo};
+use crate::rdb::tuples::{TupleRef, TxTuple};
+use crate::rdb::{RelationId, TupleError};
 
 /// The local tx "working set" of mutations to base relations, and consists of the set of operations
 /// we will attempt to make permanent when the transaction commits.
@@ -31,12 +31,12 @@ use crate::tuplebox::RelationId;
 pub struct WorkingSet {
     pub(crate) ts: u64,
     pub(crate) schema: Vec<RelationInfo>,
-    pub(crate) slotbox: Arc<SlotBox>,
+    pub(crate) slotbox: Arc<TupleBox>,
     pub(crate) relations: BitArray<TxBaseRelation, 64, Bitset64<1>>,
 }
 
 impl WorkingSet {
-    pub(crate) fn new(slotbox: Arc<SlotBox>, schema: &[RelationInfo], ts: u64) -> Self {
+    pub(crate) fn new(slotbox: Arc<TupleBox>, schema: &[RelationInfo], ts: u64) -> Self {
         let relations = BitArray::new();
         Self {
             ts,
@@ -79,7 +79,7 @@ impl WorkingSet {
 
     pub(crate) async fn seek_by_domain(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(SliceRef, SliceRef), TupleError> {
@@ -119,7 +119,7 @@ impl WorkingSet {
 
     pub(crate) async fn seek_by_codomain(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         codomain: SliceRef,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
@@ -169,7 +169,7 @@ impl WorkingSet {
 
     pub(crate) async fn insert_tuple(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
@@ -207,7 +207,7 @@ impl WorkingSet {
 
     pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         f: F,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
@@ -252,7 +252,7 @@ impl WorkingSet {
 
     pub(crate) async fn update_tuple(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
@@ -323,7 +323,7 @@ impl WorkingSet {
     /// committing it to the canonical base relations.
     pub(crate) async fn upsert_tuple(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
@@ -423,7 +423,7 @@ impl WorkingSet {
     /// committing the delete to the canonical base relations.
     pub(crate) async fn remove_by_domain(
         &mut self,
-        db: &Arc<TupleBox>,
+        db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(), TupleError> {

@@ -19,7 +19,7 @@ use human_bytes::human_bytes;
 use libc::{madvise, MADV_DONTNEED, MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use tracing::info;
 
-use crate::tuplebox::pool::PagerError;
+use crate::rdb::pool::PagerError;
 
 type BitSet = hi_sparse_bitset::BitSet<hi_sparse_bitset::config::_128bit>;
 

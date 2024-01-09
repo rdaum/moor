@@ -18,16 +18,15 @@ use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::WorldStateError;
 
 use crate::loader::LoaderInterface;
-use crate::tb_worldstate::TupleBoxWorldStateSource;
+use crate::odb::RelBoxWorldState;
 
 mod db_loader_client;
 pub mod db_tx;
 mod db_worldstate;
 pub mod loader;
-pub mod object_relations;
-pub mod tb_worldstate;
-pub mod tuplebox;
+pub mod rdb;
 
+pub mod odb;
 #[doc(hidden)]
 pub mod testing;
 
@@ -63,8 +62,7 @@ impl DatabaseBuilder {
     /// database was newly created, and false if it was already present.
     pub async fn open_db(&self) -> Result<(Box<dyn Database>, bool), String> {
         let (db, fresh) =
-            TupleBoxWorldStateSource::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40))
-                .await;
+            RelBoxWorldState::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40)).await;
         Ok((Box::new(db), fresh))
     }
 }

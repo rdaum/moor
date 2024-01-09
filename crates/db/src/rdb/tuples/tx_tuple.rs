@@ -14,8 +14,8 @@
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tuples::TupleId;
-use crate::tuplebox::tuples::TupleRef;
+use crate::rdb::tuples::TupleId;
+use crate::rdb::tuples::TupleRef;
 
 /// Possible operations on tuples, in the context local to a transaction.
 #[derive(Clone)]

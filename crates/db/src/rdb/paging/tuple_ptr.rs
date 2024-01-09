@@ -15,18 +15,18 @@
 use std::hash::Hash;
 use std::sync::Arc;
 
+use crate::rdb::paging::TupleBox;
+use crate::rdb::tuples::TupleId;
 use moor_values::util::slice_ref::ByteSource;
 
-use crate::tuplebox::tuples::{SlotBox, TupleId};
-
-/// A reference to a tuple in a SlotBox, owned by the SlotBox itself. TupleRefs are given a pointer to these,
-/// which allows the SlotBox to manage the lifetime of the tuple, swizzling it in and out of memory as needed.
-/// Adds a layer of indirection to each tuple access, but is better than passing around tuple ids + slotbox
+/// A reference to a tuple in a TupleBox, managed by the TupleBox itself. TupleRefs are given a pointer to these,
+/// which allows the TupleBox to manage the lifetime of the tuple, swizzling it in and out of memory as needed.
+/// Adds a layer of indirection to each tuple access, but is better than passing around tuple ids + TupleBox
 /// references.
 
 // TODO: rather than decoding a tuple out of a buffer in the slot, the slot should just hold the tuple structure
 pub struct TuplePtr {
-    sb: Arc<SlotBox>,
+    sb: Arc<TupleBox>,
     id: TupleId,
     buflen: u32,
     bufaddr: *mut u8,
@@ -39,7 +39,7 @@ unsafe impl Sync for TuplePtr {}
 
 impl TuplePtr {
     pub(crate) fn create(
-        sb: Arc<SlotBox>,
+        sb: Arc<TupleBox>,
         tuple_id: TupleId,
         bufaddr: *mut u8,
         buflen: usize,
@@ -113,7 +113,7 @@ impl TuplePtr {
     }
 }
 
-/// So we can build SliceRefs off of SlotPtrs
+/// So we can build SliceRefs off of TuplePtrs
 pub struct SlotByteSource {
     ptr: *const TuplePtr,
 }

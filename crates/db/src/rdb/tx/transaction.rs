@@ -21,18 +21,18 @@ use tokio::sync::RwLock;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::tb::TupleBox;
-use crate::tuplebox::tuples::SlotBox;
-use crate::tuplebox::tuples::TupleError;
-use crate::tuplebox::tx::relvar::RelVar;
-use crate::tuplebox::tx::working_set::WorkingSet;
-use crate::tuplebox::RelationId;
+use crate::rdb::base_relation::BaseRelation;
+use crate::rdb::paging::TupleBox;
+use crate::rdb::relbox::RelBox;
+use crate::rdb::tuples::TupleError;
+use crate::rdb::tx::relvar::RelVar;
+use crate::rdb::tx::working_set::WorkingSet;
+use crate::rdb::RelationId;
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
     /// Where we came from, for referencing back to the base relations.
-    db: Arc<TupleBox>,
+    db: Arc<RelBox>,
     /// The "working set" is the set of retrieved and/or modified tuples from base relations, known
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
@@ -57,7 +57,7 @@ pub enum CommitError {
 }
 
 impl Transaction {
-    pub fn new(ts: u64, slotbox: Arc<SlotBox>, db: Arc<TupleBox>) -> Self {
+    pub fn new(ts: u64, slotbox: Arc<TupleBox>, db: Arc<RelBox>) -> Self {
         let ws = WorkingSet::new(slotbox.clone(), &db.relation_info(), ts);
         let next_transient_relation_id = RelationId::transient(db.relation_info().len());
 
@@ -490,17 +490,17 @@ mod tests {
 
     use moor_values::util::slice_ref::SliceRef;
 
-    use crate::tuplebox::tb::{RelationInfo, TupleBox};
-    use crate::tuplebox::tuples::TupleError;
-    use crate::tuplebox::tx::transaction::CommitError;
-    use crate::tuplebox::{RelationId, Transaction};
+    use crate::rdb::relbox::{RelBox, RelationInfo};
+    use crate::rdb::tuples::TupleError;
+    use crate::rdb::tx::transaction::CommitError;
+    use crate::rdb::{RelationId, Transaction};
 
     fn attr(slice: &[u8]) -> SliceRef {
         SliceRef::from_bytes(slice)
     }
 
-    async fn test_db() -> Arc<TupleBox> {
-        TupleBox::new(
+    async fn test_db() -> Arc<RelBox> {
+        RelBox::new(
             1 << 24,
             None,
             &[RelationInfo {

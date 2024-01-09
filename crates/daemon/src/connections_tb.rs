@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! An implementation of the connections db that uses tuplebox.
+//! An implementation of the connections db that uses rdb.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -25,7 +25,7 @@ use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use moor_db::tuplebox::{RelationId, RelationInfo, Transaction, TupleBox};
+use moor_db::rdb::{RelBox, RelationId, RelationInfo, Transaction};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::util::slice_ref::SliceRef;
 use moor_values::var::objid::Objid;
@@ -36,7 +36,7 @@ use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
 
 const CONNECTIONS_DB_MEM_SIZE: usize = 1 << 26;
 pub struct ConnectionsTb {
-    tb: Arc<TupleBox>,
+    tb: Arc<RelBox>,
 }
 
 impl ConnectionsTb {
@@ -53,7 +53,7 @@ impl ConnectionsTb {
             .collect();
         relations[ConnectionRelation::ClientConnection as usize].secondary_indexed = true;
 
-        let tb = TupleBox::new(CONNECTIONS_DB_MEM_SIZE, path, &relations, 1).await;
+        let tb = RelBox::new(CONNECTIONS_DB_MEM_SIZE, path, &relations, 1).await;
         Self { tb }
     }
 }

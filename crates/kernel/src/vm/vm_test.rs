@@ -36,7 +36,7 @@ mod tests {
     use moor_compiler::labels::Names;
     use moor_compiler::opcode::Op::*;
     use moor_compiler::opcode::{Op, Program};
-    use moor_db::tb_worldstate::TupleBoxWorldStateSource;
+    use moor_db::odb::RelBoxWorldState;
     use moor_values::model::{Event, NarrativeEvent};
     use test_case::test_case;
 
@@ -52,8 +52,8 @@ mod tests {
     }
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
-    async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TupleBoxWorldStateSource {
-        let (state, _) = TupleBoxWorldStateSource::open(None, 1 << 30).await;
+    async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> RelBoxWorldState {
+        let (state, _) = RelBoxWorldState::open(None, 1 << 30).await;
         let mut tx = state.new_world_state().await.unwrap();
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
@@ -101,7 +101,7 @@ mod tests {
         state
     }
 
-    async fn test_db_with_verb(verb_name: &str, program: &Program) -> TupleBoxWorldStateSource {
+    async fn test_db_with_verb(verb_name: &str, program: &Program) -> RelBoxWorldState {
         test_db_with_verbs(&[(verb_name, program)]).await
     }
 

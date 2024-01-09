@@ -16,19 +16,19 @@
 //! Does not measure single-item reads, deletes, or updates, or concurrent access.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use moor_db::rdb::{RelBox, RelationInfo};
 use moor_db::testing::jepsen::{History, Type, Value};
-use moor_db::tuplebox::{RelationInfo, TupleBox};
 use moor_values::util::slice_ref::SliceRef;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // This is a struct that tells Criterion.rs to use the "futures" crate's current-thread executor
-use moor_db::tuplebox::RelationId;
+use moor_db::rdb::RelationId;
 use moor_values::util::{BitArray, Bitset64};
 use tokio::runtime::Runtime;
 
 /// Build a test database with a bunch of relations
-async fn test_db() -> Arc<TupleBox> {
+async fn test_db() -> Arc<RelBox> {
     // Generate 10 test relations that we'll use for testing.
     let relations = (0..63)
         .map(|i| RelationInfo {
@@ -39,7 +39,7 @@ async fn test_db() -> Arc<TupleBox> {
         })
         .collect::<Vec<_>>();
 
-    TupleBox::new(1 << 24, None, &relations, 0).await
+    RelBox::new(1 << 24, None, &relations, 0).await
 }
 
 fn from_val(value: i64) -> SliceRef {
@@ -68,7 +68,7 @@ async fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duratio
 
         let start = Instant::now();
 
-        black_box(for e in events {
+        for e in events {
             match e.r#type {
                 Type::invoke => {
                     // Start a transaction.
@@ -114,7 +114,8 @@ async fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duratio
                     tx.rollback().await.unwrap();
                 }
             }
-        });
+        }
+        black_box(());
         cumulative += start.elapsed();
     }
     cumulative
@@ -131,7 +132,7 @@ async fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duratio
         let mut processes: BitArray<_, 256, Bitset64<8>> = BitArray::new();
         let start = Instant::now();
 
-        black_box(for e in events {
+        for e in events {
             match e.r#type {
                 Type::invoke => {
                     // Start a transaction.
@@ -181,7 +182,8 @@ async fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duratio
                     tx.rollback().await.unwrap();
                 }
             }
-        });
+        }
+        black_box(());
         cumulative += start.elapsed();
     }
     cumulative

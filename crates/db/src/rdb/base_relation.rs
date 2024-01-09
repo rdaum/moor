@@ -16,8 +16,8 @@ use std::collections::HashSet;
 
 use moor_values::util::slice_ref::SliceRef;
 
-use crate::tuplebox::tuples::TupleRef;
-use crate::tuplebox::RelationId;
+use crate::rdb::tuples::TupleRef;
+use crate::rdb::RelationId;
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,
 /// with a default (hash) index on the domain and an optional (hash) index on the codomain.

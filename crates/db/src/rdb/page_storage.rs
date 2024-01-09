@@ -14,8 +14,8 @@
 
 // TODO: there's no way this is "robust" enough to be used in production
 
-use crate::tuplebox::tuples::PageId;
-use crate::tuplebox::RelationId;
+use crate::rdb::paging::PageId;
+use crate::rdb::RelationId;
 use io_uring::squeue::Flags;
 use io_uring::types::Fd;
 use io_uring::{opcode, IoUring};

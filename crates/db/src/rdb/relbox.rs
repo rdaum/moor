@@ -22,13 +22,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::tuplebox::backing::BackingStoreClient;
-use crate::tuplebox::base_relation::BaseRelation;
-use crate::tuplebox::tuples::SlotBox;
-use crate::tuplebox::tuples::TxTuple;
-use crate::tuplebox::tx::WorkingSet;
-use crate::tuplebox::tx::{CommitError, CommitSet, Transaction};
-use crate::tuplebox::RelationId;
+use crate::rdb::backing::BackingStoreClient;
+use crate::rdb::base_relation::BaseRelation;
+use crate::rdb::paging::TupleBox;
+use crate::rdb::tuples::TxTuple;
+use crate::rdb::tx::WorkingSet;
+use crate::rdb::tx::{CommitError, CommitSet, Transaction};
+use crate::rdb::RelationId;
 
 /// Meta-data about a relation
 #[derive(Clone, Debug)]
@@ -43,12 +43,12 @@ pub struct RelationInfo {
     pub secondary_indexed: bool,
 }
 
-/// The tuplebox is the set of relations, referenced by their unique (usize) relation ID.
+/// The rdb is the set of relations, referenced by their unique (usize) relation ID.
 /// It exposes interfaces for starting & managing transactions on those relations.
 /// It is, essentially, a micro database.
 // TODO: locking in general here is (probably) safe, but not optimal. optimistic locking would be
 //   better for various portions here.
-pub struct TupleBox {
+pub struct RelBox {
     relation_info: Vec<RelationInfo>,
     /// The monotonically increasing transaction ID "timestamp" counter.
     // TODO: take a look at Adnan's thread-sharded approach described in section 3.1
@@ -60,19 +60,19 @@ pub struct TupleBox {
     // TODO: this is a candidate for an optimistic lock.
     pub(crate) canonical: RwLock<Vec<BaseRelation>>,
 
-    slotbox: Arc<SlotBox>,
+    slotbox: Arc<TupleBox>,
 
     backing_store: Option<BackingStoreClient>,
 }
 
-impl TupleBox {
+impl RelBox {
     pub async fn new(
         memory_size: usize,
         path: Option<PathBuf>,
         relations: &[RelationInfo],
         num_sequences: usize,
     ) -> Arc<Self> {
-        let slotbox = Arc::new(SlotBox::new(memory_size));
+        let slotbox = Arc::new(TupleBox::new(memory_size));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
             base_relations.push(BaseRelation::new(RelationId(rid), 0));
@@ -84,7 +84,7 @@ impl TupleBox {
         let backing_store = match path {
             None => None,
             Some(path) => {
-                let bs = crate::tuplebox::coldstorage::ColdStorage::start(
+                let bs = crate::rdb::coldstorage::ColdStorage::start(
                     path,
                     relations,
                     &mut base_relations,

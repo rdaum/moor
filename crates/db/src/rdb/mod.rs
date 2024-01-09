@@ -29,11 +29,12 @@ mod coldstorage;
 mod page_storage;
 mod pool;
 
-mod tb;
+mod paging;
+mod relbox;
 mod tuples;
 mod tx;
 
-pub use tb::{RelationInfo, TupleBox};
+pub use relbox::{RelBox, RelationInfo};
 pub use tuples::TupleError;
 pub use tx::{CommitError, Transaction};
 

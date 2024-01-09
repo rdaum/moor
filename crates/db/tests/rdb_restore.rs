@@ -18,9 +18,9 @@ mod test {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use moor_db::rdb::{RelBox, RelationInfo};
+    use moor_db::rdb::{RelationId, Transaction};
     use moor_db::testing::jepsen::{History, Type, Value};
-    use moor_db::tuplebox::{RelationId, Transaction};
-    use moor_db::tuplebox::{RelationInfo, TupleBox};
     use moor_values::util::slice_ref::SliceRef;
 
     fn from_val(value: i64) -> SliceRef {
@@ -33,7 +33,7 @@ mod test {
     }
 
     async fn fill_db(
-        db: Arc<TupleBox>,
+        db: Arc<RelBox>,
         events: &Vec<History>,
         processes: &mut HashMap<i64, Arc<Transaction>>,
     ) {
@@ -85,7 +85,7 @@ mod test {
             }
         }
     }
-    pub async fn test_db(dir: PathBuf) -> Arc<TupleBox> {
+    pub async fn test_db(dir: PathBuf) -> Arc<RelBox> {
         // Generate 10 test relations that we'll use for testing.
         let relations = (0..100)
             .map(|i| RelationInfo {
@@ -96,7 +96,7 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        TupleBox::new(1 << 24, Some(dir), &relations, 0).await
+        RelBox::new(1 << 24, Some(dir), &relations, 0).await
     }
 
     // Open a db in a test dir, fill it with some goop, close it, reopen it, and check that the goop is still there.

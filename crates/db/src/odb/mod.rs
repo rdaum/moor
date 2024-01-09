@@ -12,28 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use thiserror::Error;
+mod object_relations;
+mod rb_worldstate;
 
-pub use slotbox::{PageId, SlotBox, SlotBoxError, SlotId};
-pub use tuple_ref::TupleRef;
-pub use tx_tuple::TxTuple;
-
-mod slotbox;
-mod slotted_page;
-mod tuple_ptr;
-mod tuple_ref;
-mod tx_tuple;
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct TupleId {
-    pub page: PageId,
-    pub slot: SlotId,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Error)]
-pub enum TupleError {
-    #[error("Tuple not found")]
-    NotFound,
-    #[error("Tuple already exists")]
-    Duplicate,
-}
+pub use object_relations::{WorldStateRelation, WorldStateSequences};
+pub use rb_worldstate::{RelBoxTransaction, RelBoxWorldState};

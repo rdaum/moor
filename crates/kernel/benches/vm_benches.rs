@@ -1,3 +1,17 @@
+// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, version 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 //! Benchmarks of various virtual machine executions
 //! In general attempting to keep isolated from the object/world-state and simply execute
 //! program code that doesn't interact with the DB, to measure opcode execution efficiency.
@@ -9,7 +23,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Runtime;
 
 use moor_compiler::codegen::compile;
-use moor_db::tb_worldstate::TupleBoxWorldStateSource;
+use moor_db::odb::RelBoxWorldState;
 use moor_kernel::tasks::scheduler::AbortLimitReason;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::vm_host::{VMHostResponse, VmHost};
@@ -22,8 +36,8 @@ use moor_values::util::bitenum::BitEnum;
 use moor_values::var::Var;
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
-async fn create_worldstate() -> TupleBoxWorldStateSource {
-    let (ws_source, _) = TupleBoxWorldStateSource::open(None, 1 << 24).await;
+async fn create_worldstate() -> RelBoxWorldState {
+    let (ws_source, _) = RelBoxWorldState::open(None, 1 << 24).await;
     let mut tx = ws_source.new_world_state().await.unwrap();
     let _sysobj = tx
         .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
@@ -73,7 +87,7 @@ pub async fn prepare_call_verb(
 }
 
 async fn prepare_vm_execution(
-    ws_source: &mut TupleBoxWorldStateSource,
+    ws_source: &mut RelBoxWorldState,
     program: &str,
     max_ticks: usize,
 ) -> VmHost {

@@ -29,8 +29,8 @@
 use std::cmp::max;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-use crate::tuplebox::pool::size_class::SizeClass;
-use crate::tuplebox::pool::{Bid, PagerError};
+use crate::rdb::pool::size_class::SizeClass;
+use crate::rdb::pool::{Bid, PagerError};
 
 // 32k -> 1MB page sizes supported.
 // TODO: If we end up with values bigger than 1MB, they should probably be handled by "external" pages,
@@ -261,8 +261,8 @@ impl BufferPool {
 
 #[cfg(test)]
 mod tests {
-    use crate::tuplebox::pool::buffer_pool::{BufferPool, HIGHEST_SIZE_CLASS_POWER_OF};
-    use crate::tuplebox::pool::PagerError;
+    use crate::rdb::pool::buffer_pool::{BufferPool, HIGHEST_SIZE_CLASS_POWER_OF};
+    use crate::rdb::pool::PagerError;
 
     const MB_256: usize = 1 << 28;
 

@@ -35,7 +35,7 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed, Release, SeqCst};
 use atomic_wait::{wait, wake_all, wake_one};
 use tracing::error;
 
-use crate::tuplebox::tuples::slotbox::SlotBoxError;
+use crate::rdb::paging::TupleBoxError;
 
 pub type SlotId = u32;
 
@@ -45,7 +45,7 @@ pub type SlotId = u32;
 // identical, and we can just start using them right away in a null-state without doing any
 // initialization.
 #[repr(C, align(8))]
-struct SlottedPageHeader {
+struct PageHeader {
     // The number of bytes used in the page
     used_bytes: u32,
     // The length of our slots index in bytes. Starts at initial zero.
@@ -65,7 +65,7 @@ struct SlottedPageHeader {
     _pin: std::marker::PhantomPinned,
 }
 
-impl SlottedPageHeader {
+impl PageHeader {
     /// Explicit unlock. Used by both the guard
     fn unlock_for_writes(self: Pin<&mut Self>) {
         self.lock_state.store(0, Release);
@@ -99,7 +99,7 @@ impl SlottedPageHeader {
             header.used_bytes += size as u32;
             header.num_slots += 1;
             header.content_length += padded_size as u32;
-            header.index_length += std::mem::size_of::<SlotIndexEntry>() as u32;
+            header.index_length += std::mem::size_of::<IndexEntry>() as u32;
             new_slot
         }
     }
@@ -116,7 +116,7 @@ impl SlottedPageHeader {
 }
 
 #[repr(C, align(8))]
-struct SlotIndexEntry {
+struct IndexEntry {
     used: bool,
     // The number of live references to this slot
     refcount: u16,
@@ -131,7 +131,7 @@ struct SlotIndexEntry {
     _pin: std::marker::PhantomPinned,
 }
 
-impl SlotIndexEntry {
+impl IndexEntry {
     // Update accounting for the presence of a new entry.
     fn alloc(
         mut self: Pin<&mut Self>,
@@ -203,15 +203,15 @@ pub fn slot_page_empty_size(page_size: usize) -> usize {
 }
 
 pub const fn slot_page_overhead() -> usize {
-    std::mem::size_of::<SlottedPageHeader>()
+    std::mem::size_of::<PageHeader>()
 }
 
 pub const fn slot_index_overhead() -> usize {
-    std::mem::size_of::<SlotIndexEntry>()
+    std::mem::size_of::<IndexEntry>()
 }
 
 impl<'a> SlottedPage<'a> {
-    pub fn for_page(base_address: *mut u8, page_size: usize) -> Self {
+    pub(crate) fn for_page(base_address: *mut u8, page_size: usize) -> Self {
         Self {
             base_address,
             page_size: page_size as u32,
@@ -221,24 +221,24 @@ impl<'a> SlottedPage<'a> {
 
     /// How much space is available in this page?
     #[allow(dead_code)]
-    pub fn free_space_bytes(&self) -> usize {
+    pub(crate) fn free_space_bytes(&self) -> usize {
         let header = self.header();
-        let used = (header.num_slots * std::mem::size_of::<SlotIndexEntry>() as u32) as usize
+        let used = (header.num_slots * std::mem::size_of::<IndexEntry>() as u32) as usize
             + header.used_bytes as usize
-            + std::mem::size_of::<SlottedPageHeader>();
+            + std::mem::size_of::<PageHeader>();
         (self.page_size as usize).saturating_sub(used)
     }
 
     /// How many bytes are available for appending to this page (i.e. not counting the space
     /// we could re-use, via e.g. used_bytes)
-    pub fn available_content_bytes(&self) -> usize {
+    pub(crate) fn available_content_bytes(&self) -> usize {
         let header = self.header();
         let content_length = header.content_length as usize;
         let index_length = header.index_length as usize;
-        let header_size = std::mem::size_of::<SlottedPageHeader>();
+        let header_size = std::mem::size_of::<PageHeader>();
 
-        let avail = index_length + content_length + header_size;
-        (self.page_size as usize).saturating_sub(avail)
+        let consumed = index_length + content_length + header_size;
+        (self.page_size as usize).saturating_sub(consumed)
     }
 
     /// Add the slot into the page, copying it into the memory region, and returning the slot id
@@ -247,11 +247,11 @@ impl<'a> SlottedPage<'a> {
         &self,
         size: usize,
         initial_value: Option<&[u8]>,
-    ) -> Result<(SlotId, usize, Pin<&'a mut [u8]>), SlotBoxError> {
+    ) -> Result<(SlotId, usize, Pin<&'a mut [u8]>), TupleBoxError> {
         // See if we can use an existing slot to put the slot in, or if there's any fit at all.
         let (can_fit, fit_slot) = self.find_fit(size);
         if !can_fit {
-            return Err(SlotBoxError::BoxFull(size, self.available_content_bytes()));
+            return Err(TupleBoxError::BoxFull(size, self.available_content_bytes()));
         }
         let header = self.header_mut();
         if let Some(fit_slot) = fit_slot {
@@ -290,9 +290,9 @@ impl<'a> SlottedPage<'a> {
         let content_start_position = (content_start_position + 7) & !7;
 
         // If the content start bleeds over into the index (+ our new entry), then we can't fit the slot.
-        let index_entry_size = std::mem::size_of::<SlotIndexEntry>();
+        let index_entry_size = std::mem::size_of::<IndexEntry>();
         if content_start_position <= current_index_end + index_entry_size {
-            return Err(SlotBoxError::BoxFull(
+            return Err(TupleBoxError::BoxFull(
                 size + index_entry_size,
                 self.available_content_bytes(),
             ));
@@ -362,14 +362,14 @@ impl<'a> SlottedPage<'a> {
     }
 
     /// Copy the contents of this page into a slice.
-    pub fn save_into(&self, buf: &mut [u8]) {
+    pub(crate) fn save_into(&self, buf: &mut [u8]) {
         let _ = self.read_lock();
         let memory_as_slice =
             unsafe { std::slice::from_raw_parts_mut(self.base_address, self.page_size as usize) };
         buf.copy_from_slice(memory_as_slice);
     }
 
-    fn remove_slot(&self, slot_id: SlotId) -> Result<(usize, usize, bool), SlotBoxError> {
+    fn remove_slot(&self, slot_id: SlotId) -> Result<(usize, usize, bool), TupleBoxError> {
         // TODO: slots at start of content-length can be removed by shrinking the content-length
         //   portion.
 
@@ -392,21 +392,21 @@ impl<'a> SlottedPage<'a> {
         Ok((self.available_content_bytes(), slot_size, is_empty))
     }
 
-    pub(crate) fn refcount(&self, slot_id: SlotId) -> Result<u16, SlotBoxError> {
+    pub(crate) fn refcount(&self, slot_id: SlotId) -> Result<u16, TupleBoxError> {
         let index_entry = self.get_index_entry(slot_id);
         if !index_entry.used {
-            return Err(SlotBoxError::TupleNotFound(slot_id as usize));
+            return Err(TupleBoxError::TupleNotFound(slot_id as usize));
         }
         Ok(index_entry.refcount)
     }
 
-    pub(crate) fn upcount(&self, slot_id: SlotId) -> Result<(), SlotBoxError> {
+    pub(crate) fn upcount(&self, slot_id: SlotId) -> Result<(), TupleBoxError> {
         let mut index_entry = self.get_index_entry_mut(slot_id);
         unsafe { index_entry.as_mut().get_unchecked_mut() }.refcount += 1;
         Ok(())
     }
 
-    pub(crate) fn dncount(&self, slot_id: SlotId) -> Result<bool, SlotBoxError> {
+    pub(crate) fn dncount(&self, slot_id: SlotId) -> Result<bool, TupleBoxError> {
         let mut index_entry = self.get_index_entry_mut(slot_id);
         unsafe { index_entry.as_mut().get_unchecked_mut() }.refcount -= 1;
         if index_entry.refcount == 0 {
@@ -415,7 +415,8 @@ impl<'a> SlottedPage<'a> {
         Ok(false)
     }
 
-    fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, SlotBoxError> {
+    #[allow(dead_code)]
+    pub(crate) fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, TupleBoxError> {
         // Check that the index is in bounds
         let num_slots = self.header().num_slots as SlotId;
         if slot_id >= num_slots {
@@ -423,14 +424,14 @@ impl<'a> SlottedPage<'a> {
                 "slot_id {} is out of bounds for page with {} slots",
                 slot_id, num_slots
             );
-            return Err(SlotBoxError::TupleNotFound(slot_id as usize));
+            return Err(TupleBoxError::TupleNotFound(slot_id as usize));
         }
 
         // Read the index entry;
         let index_entry = self.get_index_entry(slot_id);
         if !index_entry.used {
             error!("slot_id {} is not used, invalid tuple", slot_id);
-            return Err(SlotBoxError::TupleNotFound(slot_id as usize));
+            return Err(TupleBoxError::TupleNotFound(slot_id as usize));
         }
         let offset = index_entry.offset as usize;
         let length = index_entry.used_bytes as usize;
@@ -443,17 +444,17 @@ impl<'a> SlottedPage<'a> {
         Ok(unsafe { Pin::new_unchecked(&memory_as_slice[offset..offset + length]) })
     }
 
-    fn get_slot_mut(&self, slot_id: SlotId) -> Result<Pin<&'a mut [u8]>, SlotBoxError> {
+    fn get_slot_mut(&self, slot_id: SlotId) -> Result<Pin<&'a mut [u8]>, TupleBoxError> {
         // Check that the index is in bounds
         let num_slots = self.header().num_slots as SlotId;
         if slot_id >= num_slots {
-            return Err(SlotBoxError::TupleNotFound(slot_id as usize));
+            return Err(TupleBoxError::TupleNotFound(slot_id as usize));
         }
 
         // Read the index entry;
         let index_entry = self.get_index_entry(slot_id);
         if !index_entry.used {
-            return Err(SlotBoxError::TupleNotFound(slot_id as usize));
+            return Err(TupleBoxError::TupleNotFound(slot_id as usize));
         }
         let offset = index_entry.offset as usize;
         let length = index_entry.used_bytes as usize;
@@ -550,27 +551,27 @@ impl<'a> SlottedPage<'a> {
     }
 
     #[inline]
-    fn header(&self) -> Pin<&SlottedPageHeader> {
+    fn header(&self) -> Pin<&PageHeader> {
         // Cast the base address to a pointear to the header
-        let header_ptr = self.base_address as *const SlottedPageHeader;
+        let header_ptr = self.base_address as *const PageHeader;
 
         unsafe { Pin::new_unchecked(&*header_ptr) }
     }
 
     #[inline]
-    fn header_mut(&self) -> Pin<&mut SlottedPageHeader> {
+    fn header_mut(&self) -> Pin<&mut PageHeader> {
         // Cast the base address to a pointer to the header
-        let header_ptr = self.base_address as *mut SlottedPageHeader;
+        let header_ptr = self.base_address as *mut PageHeader;
 
         unsafe { Pin::new_unchecked(&mut *header_ptr) }
     }
 
     /// Return the offset, size of the slot at the given index.
-    fn offset_of(&self, tid: SlotId) -> Result<(usize, usize), SlotBoxError> {
+    fn offset_of(&self, tid: SlotId) -> Result<(usize, usize), TupleBoxError> {
         // Check that the index is in bounds
         let num_slots = self.header().num_slots as SlotId;
         if tid >= num_slots {
-            return Err(SlotBoxError::TupleNotFound(tid as usize));
+            return Err(TupleBoxError::TupleNotFound(tid as usize));
         }
 
         // Read the index entry;
@@ -602,7 +603,7 @@ impl<'a> SlottedPage<'a> {
 
         let index_length = header.index_length as isize;
         let content_length = header.content_length as isize;
-        let header_size = std::mem::size_of::<SlottedPageHeader>() as isize;
+        let header_size = std::mem::size_of::<PageHeader>() as isize;
         let total_needed = index_length + content_length + header_size;
 
         // Align to 8-byte boundary cuz that's what we'll actually need.
@@ -615,9 +616,9 @@ impl<'a> SlottedPage<'a> {
         (avail >= size as isize, None)
     }
 
-    fn get_index_entry(&self, slot_id: SlotId) -> Pin<&SlotIndexEntry> {
-        let index_offset = std::mem::size_of::<SlottedPageHeader>()
-            + ((slot_id as usize) * std::mem::size_of::<SlotIndexEntry>());
+    fn get_index_entry(&self, slot_id: SlotId) -> Pin<&IndexEntry> {
+        let index_offset = std::mem::size_of::<PageHeader>()
+            + ((slot_id as usize) * std::mem::size_of::<IndexEntry>());
 
         let base_address = self.base_address;
 
@@ -630,13 +631,13 @@ impl<'a> SlottedPage<'a> {
                 "slot {} is not 8-byte aligned",
                 slot_id
             );
-            Pin::new_unchecked(&*(slot_address as *const SlotIndexEntry))
+            Pin::new_unchecked(&*(slot_address as *const IndexEntry))
         }
     }
 
-    fn get_index_entry_mut(&self, slot_id: SlotId) -> Pin<&mut SlotIndexEntry> {
-        let index_offset = std::mem::size_of::<SlottedPageHeader>()
-            + ((slot_id as usize) * std::mem::size_of::<SlotIndexEntry>());
+    fn get_index_entry_mut(&self, slot_id: SlotId) -> Pin<&mut IndexEntry> {
+        let index_offset = std::mem::size_of::<PageHeader>()
+            + ((slot_id as usize) * std::mem::size_of::<IndexEntry>());
         let base_address = self.base_address;
 
         unsafe {
@@ -648,7 +649,7 @@ impl<'a> SlottedPage<'a> {
                 "slot {} is not 8-byte aligned",
                 slot_id
             );
-            Pin::new_unchecked(&mut *(slot_address as *mut SlotIndexEntry))
+            Pin::new_unchecked(&mut *(slot_address as *mut IndexEntry))
         }
     }
 }
@@ -661,12 +662,8 @@ pub struct PageWriteGuard<'a> {
 }
 
 impl<'a> PageWriteGuard<'a> {
-    pub fn get_slot_mut(&mut self, slot_id: SlotId) -> Result<Pin<&'a mut [u8]>, SlotBoxError> {
-        let sp = SlottedPage {
-            base_address: self.base_address,
-            page_size: self.page_size,
-            _marker: Default::default(),
-        };
+    pub fn get_slot_mut(&mut self, slot_id: SlotId) -> Result<Pin<&'a mut [u8]>, TupleBoxError> {
+        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
         sp.get_slot_mut(slot_id)
     }
 
@@ -675,38 +672,25 @@ impl<'a> PageWriteGuard<'a> {
         &mut self,
         size: usize,
         initial_value: Option<&[u8]>,
-    ) -> Result<(SlotId, usize, Pin<&'a mut [u8]>), SlotBoxError> {
-        let sp = SlottedPage {
-            base_address: self.base_address,
-            page_size: self.page_size,
-            _marker: Default::default(),
-        };
+    ) -> Result<(SlotId, usize, Pin<&'a mut [u8]>), TupleBoxError> {
+        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
         sp.allocate(size, initial_value)
     }
 
-    pub fn remove_slot(&mut self, slot_id: SlotId) -> Result<(usize, usize, bool), SlotBoxError> {
-        let sp = SlottedPage {
-            base_address: self.base_address,
-            page_size: self.page_size,
-            _marker: Default::default(),
-        };
+    pub fn remove_slot(&mut self, slot_id: SlotId) -> Result<(usize, usize, bool), TupleBoxError> {
+        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
         sp.remove_slot(slot_id)
     }
 
     #[inline(always)]
-    pub fn upcount(&mut self, slot_id: SlotId) -> Result<(), SlotBoxError> {
-        let sp = SlottedPage {
-            base_address: self.base_address,
-            page_size: self.page_size,
-            _marker: Default::default(),
-        };
+    pub fn upcount(&mut self, slot_id: SlotId) -> Result<(), TupleBoxError> {
+        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
         sp.upcount(slot_id)
     }
 
     #[inline]
-    fn header_mut(&self) -> Pin<&mut SlottedPageHeader> {
-        let header_ptr = self.base_address as *mut SlottedPageHeader;
-
+    fn header_mut(&self) -> Pin<&mut PageHeader> {
+        let header_ptr = self.base_address as *mut PageHeader;
         unsafe { Pin::new_unchecked(&mut *header_ptr) }
     }
 }
@@ -728,19 +712,16 @@ pub struct PageReadGuard<'a> {
 
 impl<'a> PageReadGuard<'a> {
     #[inline(always)]
-    fn header(&self) -> Pin<&SlottedPageHeader> {
-        let header_ptr = self.base_address as *const SlottedPageHeader;
+    fn header(&self) -> Pin<&PageHeader> {
+        let header_ptr = self.base_address as *const PageHeader;
 
         unsafe { Pin::new_unchecked(&*header_ptr) }
     }
 
     #[inline(always)]
-    pub fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, SlotBoxError> {
-        let sp = SlottedPage {
-            base_address: self.base_address as _,
-            page_size: self.page_size as _,
-            _marker: Default::default(),
-        };
+    #[allow(dead_code)]
+    pub(crate) fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, TupleBoxError> {
+        let sp = SlottedPage::for_page(self.base_address as *mut u8, self.page_size as usize);
         sp.get_slot(slot_id)
     }
 }
@@ -762,10 +743,8 @@ impl<'a> Drop for PageReadGuard<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tuplebox::tuples::slotbox::SlotBoxError;
-    use crate::tuplebox::tuples::slotted_page::{
-        slot_page_empty_size, SlotId, SlotIndexEntry, SlottedPage,
-    };
+    use crate::rdb::paging::slotted_page::{slot_page_empty_size, IndexEntry, SlotId, SlottedPage};
+    use crate::rdb::paging::TupleBoxError;
 
     fn random_fill(page: &SlottedPage) -> Vec<(SlotId, Vec<u8>)> {
         let mut collected_slots = vec![];
@@ -775,12 +754,12 @@ mod tests {
             let result = page.allocate(size, Some(&vec![123; size]));
             // If avail can't fit the size of the slot plus the index entry, then we should be
             // getting an error.
-            if avail < size + std::mem::size_of::<SlotIndexEntry>() {
-                assert!(matches!(result, Err(SlotBoxError::BoxFull(_, _))));
+            if avail < size + std::mem::size_of::<IndexEntry>() {
+                assert!(matches!(result, Err(TupleBoxError::BoxFull(_, _))));
                 break;
             }
             // Sometimes we can cease allocation because that's how the cookie crumbles with padding,
-            if matches!(result, Err(SlotBoxError::BoxFull(_, _))) {
+            if matches!(result, Err(TupleBoxError::BoxFull(_, _))) {
                 break;
             }
             // Otherwise, we should be getting a slot id and a new avail that is smaller than the
@@ -845,7 +824,7 @@ mod tests {
             page.remove_slot(*tid).unwrap();
             assert!(matches!(
                 page.get_slot(*tid),
-                Err(SlotBoxError::TupleNotFound(_))
+                Err(TupleBoxError::TupleNotFound(_))
             ));
             removed_slots.push(*tid);
         }
