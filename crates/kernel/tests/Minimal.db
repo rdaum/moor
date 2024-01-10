@@ -1,0 +1,76 @@
+** LambdaMOO Database, Format Version 1 **
+4
+1
+0
+1
+3
+#0
+System Object
+
+16
+3
+-1
+-1
+-1
+1
+-1
+2
+1
+do_login_command
+3
+173
+-1
+0
+0
+#1
+Root Class
+
+16
+3
+-1
+-1
+-1
+-1
+0
+-1
+0
+0
+0
+#2
+The First Room
+
+0
+3
+-1
+3
+-1
+1
+-1
+3
+1
+eval
+3
+88
+-2
+0
+0
+#3
+Wizard
+
+7
+3
+2
+-1
+-1
+1
+-1
+-1
+0
+0
+0
+#0:0
+return #3;
+.
+0 clocks
+0 queued tasks
+0 suspended tasks

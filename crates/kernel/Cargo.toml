@@ -12,6 +12,7 @@ test-case.workspace = true
 unindent.workspace = true
 pretty_assertions.workspace = true
 criterion.workspace = true
+text-diff.workspace = true
 
 [[test]]
 name = "basic-testsuite"

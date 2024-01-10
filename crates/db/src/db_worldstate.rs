@@ -291,7 +291,7 @@ impl WorldState for DbTxWorldState {
         //   `E_INVARG'
 
         self.tx
-            .set_property_info(obj, ph.uuid(), attrs.owner, attrs.flags, attrs.name)
+            .update_property_definition(obj, ph.uuid(), attrs.owner, attrs.flags, attrs.name)
             .await?;
         Ok(())
     }

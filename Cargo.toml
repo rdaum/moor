@@ -69,6 +69,7 @@ lazy_static = "1.4.0"
 num-traits = "0.2.17"
 rustyline = "13.0.0"
 strum = { version = "0.25.0", features = ["derive"] }
+text-diff = "0.4.0"
 uuid = { version = "1.6.1", features = ["v4"] }
 yoke = "0.7.3"
 yoke-derive = "0.7.3"

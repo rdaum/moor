@@ -258,7 +258,7 @@ impl Inner {
             })
             .map_or_else(
                 || Err(TupleBoxError::TupleNotFound(id.slot as usize)),
-                |v| Ok(v),
+                Ok,
             )
     }
 

@@ -17,8 +17,11 @@ use uuid::Uuid;
 
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::ObjAttrs;
+use moor_values::model::objset::ObjSet;
+use moor_values::model::propdef::PropDefs;
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
+use moor_values::model::verbdef::VerbDefs;
 use moor_values::model::verbs::{BinaryType, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
@@ -68,14 +71,18 @@ impl LoaderInterface for DbTxWorldState {
             .await?;
         Ok(())
     }
-    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, WorldStateError> {
-        Ok(self
-            .tx
-            .get_properties(obj)
-            .await?
-            .find_first_named(pname)
-            .map(|p| p.uuid()))
+
+    async fn get_property_value(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<Option<Var>, WorldStateError> {
+        let Ok(propval) = self.tx.retrieve_property(obj, uuid).await else {
+            return Ok(None);
+        };
+        Ok(Some(propval))
     }
+
     async fn define_property(
         &self,
         definer: Objid,
@@ -90,7 +97,7 @@ impl LoaderInterface for DbTxWorldState {
             .await?;
         Ok(())
     }
-    async fn set_update_property(
+    async fn set_property(
         &self,
         objid: Objid,
         propname: &str,
@@ -111,7 +118,7 @@ impl LoaderInterface for DbTxWorldState {
 
         // And then set the flags and owner the child had.
         self.tx
-            .set_property_info(objid, propdef.uuid(), Some(owner), Some(flags), None)
+            .update_property_definition(objid, propdef.uuid(), Some(owner), Some(flags), None)
             .await?;
         Ok(())
     }
@@ -119,5 +126,35 @@ impl LoaderInterface for DbTxWorldState {
     async fn commit(&self) -> Result<CommitResult, WorldStateError> {
         let cr = self.tx.commit().await?;
         Ok(cr)
+    }
+
+    async fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
+        self.tx.get_objects().await
+    }
+
+    async fn get_players(&self) -> Result<ObjSet, WorldStateError> {
+        self.tx.get_players().await
+    }
+
+    async fn get_object(&self, objid: Objid) -> Result<ObjAttrs, WorldStateError> {
+        Ok(ObjAttrs {
+            owner: Some(self.tx.get_object_owner(objid).await?),
+            name: Some(self.tx.get_object_name(objid).await?),
+            parent: Some(self.tx.get_object_parent(objid).await?),
+            location: Some(self.tx.get_object_location(objid).await?),
+            flags: Some(self.tx.get_object_flags(objid).await?),
+        })
+    }
+
+    async fn get_object_verbs(&self, objid: Objid) -> Result<VerbDefs, WorldStateError> {
+        self.tx.get_verbs(objid).await
+    }
+
+    async fn get_verb_binary(&self, objid: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError> {
+        self.tx.get_verb_binary(objid, uuid).await
+    }
+
+    async fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError> {
+        self.tx.get_properties(objid).await
     }
 }

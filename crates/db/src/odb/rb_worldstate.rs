@@ -97,6 +97,15 @@ pub struct RelBoxTransaction {
 
 #[async_trait]
 impl DbTransaction for RelBoxTransaction {
+    async fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
+        get_all_object_keys_matching(
+            &self.tx,
+            WorldStateRelation::ObjectFlags,
+            |_, _: BitEnum<ObjFlag>| true,
+        )
+        .await
+    }
+
     async fn get_players(&self) -> Result<ObjSet, WorldStateError> {
         // TODO: this is going to be not-at-all performant in the long run, and we'll need a way to
         //   cache this or index it better
@@ -831,7 +840,7 @@ impl DbTransaction for RelBoxTransaction {
         Ok(u)
     }
 
-    async fn set_property_info(
+    async fn update_property_definition(
         &self,
         obj: Objid,
         uuid: Uuid,

@@ -35,6 +35,9 @@ pub trait DbTransaction {
     /// Check the validity of the given object.
     async fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError>;
 
+    /// Get the list of all objects
+    async fn get_objects(&self) -> Result<ObjSet, WorldStateError>;
+
     /// Set the flags of an object.
     async fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError>;
 
@@ -162,7 +165,7 @@ pub trait DbTransaction {
     ) -> Result<Uuid, WorldStateError>;
 
     /// Set the property info on the given object.
-    async fn set_property_info(
+    async fn update_property_definition(
         &self,
         obj: Objid,
         uuid: Uuid,

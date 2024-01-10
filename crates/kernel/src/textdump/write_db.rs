@@ -1,0 +1,248 @@
+use std::collections::BTreeMap;
+
+use moor_compiler::opcode::Program;
+use moor_db::loader::LoaderInterface;
+use moor_values::model::defset::{HasUuid, Named};
+use moor_values::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
+use moor_values::model::verbs::{BinaryType, VerbFlag};
+use moor_values::util::bitenum::BitEnum;
+use moor_values::util::slice_ref::SliceRef;
+use moor_values::var::objid::Objid;
+use moor_values::var::v_none;
+use moor_values::{AsByteBuffer, NOTHING};
+
+use crate::textdump::{
+    Object, Propval, Textdump, Verb, Verbdef, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
+    VF_DOBJSHIFT, VF_IOBJSHIFT,
+};
+
+/// What we use if the passed-in format at write time is None
+pub const MOOR_TEXTDUMP_DB_VERSION: &str = "** moor Textdump DB Version 1 **";
+
+/// Convert verbargs spec to flags & preps accordingly
+fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
+    let flags = flags.to_u16();
+    let dobjflags = match arg.dobj {
+        ArgSpec::None => VF_ASPEC_NONE,
+        ArgSpec::Any => VF_ASPEC_ANY,
+        ArgSpec::This => VF_ASPEC_THIS,
+    };
+    let iobjflags = match arg.iobj {
+        ArgSpec::None => VF_ASPEC_NONE,
+        ArgSpec::Any => VF_ASPEC_ANY,
+        ArgSpec::This => VF_ASPEC_THIS,
+    };
+    let prepflags = match arg.prep {
+        PrepSpec::None => -1,
+        PrepSpec::Any => -2,
+        PrepSpec::Other(p) => p as i16,
+    };
+
+    let arg_flags = dobjflags << VF_DOBJSHIFT | iobjflags << VF_IOBJSHIFT;
+    (flags | arg_flags, prepflags)
+}
+
+/// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
+/// exists in the transaction.
+pub async fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdump {
+    // To create the objects list, we need to scan all objects.
+    // For now, the expectation would be we can simply iterate from 0 to max object, checking validity of each
+    // object, and then adding it to the list.
+
+    // Find all the ids
+    let object_ids = tx.get_objects().await.expect("Failed to get objects");
+
+    // Retrieve all the objects
+    let mut db_objects = BTreeMap::new();
+    for id in object_ids.iter() {
+        db_objects.insert(id, tx.get_object(id).await.expect("Failed to get object"));
+    }
+
+    // Build a map of parent -> children
+    let mut children_map = BTreeMap::new();
+    for id in db_objects.keys() {
+        let obj = db_objects.get(id).expect("Failed to get object");
+        let parent = obj.parent.unwrap();
+        children_map
+            .entry(parent)
+            .or_insert_with(Vec::new)
+            .push(*id);
+    }
+
+    // Same with location -> contents
+    let mut contents_map = BTreeMap::new();
+    for id in db_objects.keys() {
+        let obj = db_objects.get(id).expect("Failed to get object");
+        let location = obj.location.unwrap();
+        contents_map
+            .entry(location)
+            .or_insert_with(Vec::new)
+            .push(*id);
+    }
+
+    // Objid -> Object
+    let mut objects = BTreeMap::new();
+
+    // (Objid, usize) -> Verb, where usize is the verb number (0-indexed)
+    let mut verbs = BTreeMap::new();
+
+    for (db_objid, db_obj) in db_objects.iter() {
+        // To find 'next' for contents, we seek the contents of our location, and find the object right after
+        // the current object in that vector
+        let location = db_obj.location.unwrap();
+
+        let next = if location != NOTHING {
+            let roommates = contents_map
+                .get_mut(&location)
+                .expect("Failed to get contents");
+
+            let position = roommates
+                .iter()
+                .position(|x| x == db_objid)
+                .expect("Failed to find object in contents of location");
+            // If position is at the end, 'next' is -1.
+            if position == roommates.len() - 1 {
+                Objid(-1)
+            } else {
+                roommates[position + 1]
+            }
+        } else {
+            NOTHING
+        };
+
+        // To find 'contents' we're looking for the first object whose location is the current object
+        let contents = match contents_map.get_mut(db_objid) {
+            Some(contents) => *contents.first().unwrap_or(&Objid(-1)),
+            None => NOTHING,
+        };
+
+        let parent = db_obj.parent.unwrap();
+
+        // Same for 'sibling' using children/parent
+        let siblings = children_map
+            .get_mut(&parent)
+            .expect("Failed to get siblings");
+        let position = siblings
+            .iter()
+            .position(|x| x == db_objid)
+            .expect("Failed to find object in siblings");
+        let sibling = if position == siblings.len() - 1 {
+            NOTHING
+        } else {
+            siblings[position + 1]
+        };
+
+        // To find child, we need to find the first object whose parent is the current object
+        let child = match children_map.get_mut(db_objid) {
+            Some(children) => *children.first().unwrap_or(&NOTHING),
+            None => NOTHING,
+        };
+
+        // Find the verbdefs and transform them into textdump verbdefs
+        let db_verbdefs = tx
+            .get_object_verbs(*db_objid)
+            .await
+            .expect("Failed to get verbs");
+        let verbdefs = db_verbdefs
+            .iter()
+            .map(|db_verbdef| {
+                let name = db_verbdef.names().join(" ");
+                let owner = db_verbdef.owner();
+                let (flags, prep) = cv_arg(db_verbdef.flags(), db_verbdef.args());
+                Verbdef {
+                    name,
+                    owner,
+                    flags,
+                    prep,
+                }
+            })
+            .collect();
+        // Produce the verbmap
+        for (verbnum, verb) in db_verbdefs.iter().enumerate() {
+            // Get and decompile the binary. We only support MOO for now.
+            if verb.binary_type() != BinaryType::LambdaMoo18X {
+                panic!("Unsupported binary type: {:?}", verb.binary_type());
+            }
+
+            let binary = tx
+                .get_verb_binary(*db_objid, verb.uuid())
+                .await
+                .expect("Failed to get verb binary");
+
+            let program = Program::from_sliceref(SliceRef::from_vec(binary));
+
+            let program = if !program.main_vector.is_empty() {
+                let ast = moor_compiler::decompile::program_to_tree(&program)
+                    .expect("Failed to decompile verb binary");
+                let program =
+                    moor_compiler::unparse::unparse(&ast).expect("Failed to decompile verb binary");
+                Some(program.join("\n"))
+            } else {
+                None
+            };
+            let objid = *db_objid;
+            verbs.insert(
+                (objid, verbnum),
+                Verb {
+                    objid,
+                    verbnum,
+                    program,
+                },
+            );
+        }
+
+        let db_propdefs = tx.get_object_properties(*db_objid).await.unwrap();
+        let propdefs = db_propdefs.iter().map(|p| p.name().into()).collect();
+
+        let mut propvals = vec![];
+        for p in db_propdefs.iter() {
+            let (is_clear, value) = match tx.get_property_value(*db_objid, p.uuid()).await {
+                Ok(Some(v)) => (false, v),
+                Ok(None) => (true, v_none()),
+                Err(e) => panic!("Failed to get property value: {}", e),
+            };
+            let owner = p.owner();
+            let flags = p.flags().to_u16() as u8;
+            propvals.push(Propval {
+                value,
+                owner,
+                flags,
+                is_clear,
+            });
+        }
+        // To construct the child linkage list, we need to scan all objects, and find all objects whose parent
+        // is the current object, and add them to the list.
+        let obj = Object {
+            id: *db_objid,
+            owner: db_obj.owner.unwrap(),
+            location: db_obj.location.unwrap(),
+            contents,
+            next,
+            parent,
+            child,
+            sibling,
+            name: db_obj.name.clone().unwrap(),
+            flags: db_obj.flags.unwrap().to_u16() as _,
+            verbdefs,
+            propdefs,
+            propvals,
+        };
+
+        objects.insert(*db_objid, obj);
+    }
+
+    let users = tx
+        .get_players()
+        .await
+        .expect("Failed to get players list")
+        .iter()
+        .collect();
+
+    
+    Textdump {
+        version: version.unwrap_or(MOOR_TEXTDUMP_DB_VERSION).to_string(),
+        objects,
+        users,
+        verbs,
+    }
+}

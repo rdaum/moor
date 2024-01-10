@@ -29,7 +29,7 @@ use tracing::info;
 
 use moor_db::DatabaseBuilder;
 use moor_kernel::tasks::scheduler::Scheduler;
-use moor_kernel::textdump::load_db::textdump_load;
+use moor_kernel::textdump::textdump_load;
 use rpc_common::{RpcRequestError, RpcResponse, RpcResult};
 
 use crate::rpc_server::zmq_loop;

@@ -16,8 +16,11 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use moor_values::model::objects::ObjAttrs;
+use moor_values::model::objset::ObjSet;
+use moor_values::model::propdef::PropDefs;
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
+use moor_values::model::verbdef::VerbDefs;
 use moor_values::model::verbs::VerbFlag;
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::util::bitenum::BitEnum;
@@ -25,9 +28,10 @@ use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
-/// WorldState could provide, but potentially different constraints/semantics.
+/// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
 #[async_trait]
 pub trait LoaderInterface {
+    /// For reading textdumps...
     async fn create_object(
         &self,
         objid: Option<Objid>,
@@ -48,7 +52,11 @@ pub trait LoaderInterface {
         binary: Vec<u8>,
     ) -> Result<(), WorldStateError>;
 
-    async fn get_property(&self, obj: Objid, pname: &str) -> Result<Option<Uuid>, WorldStateError>;
+    async fn get_property_value(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<Option<Var>, WorldStateError>;
     async fn define_property(
         &self,
         definer: Objid,
@@ -58,7 +66,8 @@ pub trait LoaderInterface {
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
-    async fn set_update_property(
+
+    async fn set_property(
         &self,
         objid: Objid,
         propname: &str,
@@ -68,4 +77,24 @@ pub trait LoaderInterface {
     ) -> Result<(), WorldStateError>;
 
     async fn commit(&self) -> Result<CommitResult, WorldStateError>;
+
+    // For writing textdumps...
+
+    /// Get the list of all active objects in the database
+    async fn get_objects(&self) -> Result<ObjSet, WorldStateError>;
+
+    /// Get the list of all players.
+    async fn get_players(&self) -> Result<ObjSet, WorldStateError>;
+
+    /// Get the attributes of a given object
+    async fn get_object(&self, objid: Objid) -> Result<ObjAttrs, WorldStateError>;
+
+    /// Get the verbs living on a given object
+    async fn get_object_verbs(&self, objid: Objid) -> Result<VerbDefs, WorldStateError>;
+
+    /// Get the binary for a given verb
+    async fn get_verb_binary(&self, objid: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError>;
+
+    /// Get the properties defined on a given object
+    async fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError>;
 }

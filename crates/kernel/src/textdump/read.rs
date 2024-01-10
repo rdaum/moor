@@ -13,7 +13,7 @@
 //
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, Read};
+use std::io::{BufRead, BufReader, Read};
 
 use moor_values::model::WorldStateError;
 use text_io::scan;
@@ -24,11 +24,20 @@ use moor_values::var::error::Error;
 use moor_values::var::objid::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var, VarType};
 
-use crate::textdump::{Object, Propval, Textdump, TextdumpReader, Verb, Verbdef};
+use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
 use moor_compiler::labels::Label;
 
 const TYPE_CLEAR: i64 = 5;
 
+pub struct TextdumpReader<R: Read> {
+    reader: BufReader<R>,
+}
+
+impl<R: Read> TextdumpReader<R> {
+    pub fn new(reader: BufReader<R>) -> Self {
+        Self { reader }
+    }
+}
 #[derive(Debug, thiserror::Error)]
 pub enum TextdumpReaderError {
     #[error("could not open file: {0}")]
@@ -236,11 +245,10 @@ impl<R: Read> TextdumpReader<R> {
                 return Ok(Verb {
                     objid: Objid(oid),
                     verbnum,
-                    program,
+                    program: Some(program),
                 });
             }
             program.push_str(line.as_str());
-            program.push('\n');
         }
     }
 

@@ -18,7 +18,7 @@ use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::vm_test_utils::call_verb;
-use moor_kernel::textdump::load_db::textdump_load;
+use moor_kernel::textdump::textdump_load;
 use moor_values::model::defset::Named;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbs::{BinaryType, VerbFlag};
