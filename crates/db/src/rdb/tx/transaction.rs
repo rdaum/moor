@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use moor_values::util::{BitArray, Bitset64};
@@ -37,11 +36,6 @@ pub struct Transaction {
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
     pub(crate) working_set: RwLock<Option<WorkingSet>>,
-    /// Local-only relations, which are not directly-derived from or committed to the base relations
-    /// (though operations will exist for moving them from a transient relation to a base relation,
-    /// and or moving tuples in them into commits in the working set..)
-    transient_relations: RwLock<HashMap<RelationId, TransientRelation>>,
-    next_transient_relation_id: RelationId,
 }
 
 /// Errors which can occur during a commit.
@@ -59,13 +53,10 @@ pub enum CommitError {
 impl Transaction {
     pub fn new(ts: u64, slotbox: Arc<TupleBox>, db: Arc<RelBox>) -> Self {
         let ws = WorkingSet::new(slotbox.clone(), &db.relation_info(), ts);
-        let next_transient_relation_id = RelationId::transient(db.relation_info().len());
 
         Self {
             db,
             working_set: RwLock::new(Some(ws)),
-            transient_relations: RwLock::new(HashMap::new()),
-            next_transient_relation_id,
         }
     }
 
@@ -125,24 +116,6 @@ impl Transaction {
         }
     }
 
-    /// Create a new (transient) relation in the transaction's local context. The relation will not
-    /// persist past the length of the transaction, and will be discarded at commit or rollback.
-    pub async fn new_relation(&mut self) -> RelVar {
-        let rid = self.next_transient_relation_id;
-        self.next_transient_relation_id.0 += 1;
-        let mut ts = self.transient_relations.write().await;
-        ts.insert(
-            rid,
-            TransientRelation {
-                _id: rid,
-                tuples: vec![],
-                domain_tuples: HashMap::new(),
-                codomain_domain: None,
-            },
-        );
-        RelVar { tx: self, id: rid }
-    }
-
     /// Attempt to retrieve a tuple from the transaction's working set by its domain, or from the
     /// canonical base relations if it's not found in the working set.
     pub(crate) async fn seek_by_domain(
@@ -150,19 +123,11 @@ impl Transaction {
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(SliceRef, SliceRef), TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .seek_by_domain(&self.db, relation_id, domain)
-                .await
-        } else {
-            let ts = self.transient_relations.read().await;
-            ts.get(&relation_id)
-                .ok_or(TupleError::NotFound)?
-                .seek_by_domain(domain)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .seek_by_domain(&self.db, relation_id, domain)
+            .await
     }
 
     pub(crate) async fn seek_by_codomain(
@@ -170,19 +135,11 @@ impl Transaction {
         relation_id: RelationId,
         codomain: SliceRef,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .seek_by_codomain(&self.db, relation_id, codomain)
-                .await
-        } else {
-            let ts = self.transient_relations.read().await;
-            ts.get(&relation_id)
-                .ok_or(TupleError::NotFound)?
-                .seek_by_codomain(codomain)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .seek_by_codomain(&self.db, relation_id, codomain)
+            .await
     }
 
     /// Attempt to insert a tuple into the transaction's working set, with the intent of eventually
@@ -193,19 +150,11 @@ impl Transaction {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .insert_tuple(&self.db, relation_id, domain, codomain)
-                .await
-        } else {
-            let mut ts = self.transient_relations.write().await;
-            ts.get_mut(&relation_id)
-                .ok_or(TupleError::NotFound)?
-                .insert_tuple(domain, codomain)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .insert_tuple(&self.db, relation_id, domain, codomain)
+            .await
     }
 
     pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
@@ -213,20 +162,11 @@ impl Transaction {
         relation_id: RelationId,
         f: &F,
     ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .predicate_scan(&self.db, relation_id, f)
-                .await
-        } else {
-            let ts = self.transient_relations.read().await;
-            ts.get(&relation_id)
-                .ok_or(TupleError::NotFound)
-                .unwrap()
-                .predicate_scan(f)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .predicate_scan(&self.db, relation_id, f)
+            .await
     }
 
     /// Attempt to update a tuple in the transaction's working set, with the intent of eventually
@@ -237,19 +177,11 @@ impl Transaction {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .update_tuple(&self.db, relation_id, domain, codomain)
-                .await
-        } else {
-            let mut ts = self.transient_relations.write().await;
-            ts.get_mut(&relation_id)
-                .ok_or(TupleError::NotFound)?
-                .update_tuple(domain, codomain)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .update_tuple(&self.db, relation_id, domain, codomain)
+            .await
     }
 
     /// Attempt to upsert a tuple in the transaction's working set, with the intent of eventually
@@ -260,19 +192,11 @@ impl Transaction {
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .upsert_tuple(&self.db, relation_id, domain, codomain)
-                .await
-        } else {
-            let mut ts = self.transient_relations.write().await;
-            ts.get_mut(&relation_id)
-                .ok_or(TupleError::NotFound)?
-                .upsert_tuple(domain, codomain)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .upsert_tuple(&self.db, relation_id, domain, codomain)
+            .await
     }
 
     /// Attempt to delete a tuple in the transaction's working set, with the intent of eventually
@@ -282,19 +206,11 @@ impl Transaction {
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(), TupleError> {
-        if relation_id.is_base_relation() {
-            let mut ws = self.working_set.write().await;
-            ws.as_mut()
-                .unwrap()
-                .remove_by_domain(&self.db, relation_id, domain)
-                .await
-        } else {
-            let mut ts = self.transient_relations.write().await;
-            ts.get_mut(&relation_id)
-                .ok_or(TupleError::NotFound)?
-                .remove_by_domain(domain)
-                .await
-        }
+        let mut ws = self.working_set.write().await;
+        ws.as_mut()
+            .unwrap()
+            .remove_by_domain(&self.db, relation_id, domain)
+            .await
     }
 }
 
@@ -338,151 +254,6 @@ impl CommitSet {
     }
 }
 
-struct TransientRelation {
-    _id: RelationId,
-    tuples: Vec<(SliceRef, SliceRef)>,
-    domain_tuples: HashMap<SliceRef, usize>,
-    codomain_domain: Option<HashMap<SliceRef, HashSet<usize>>>,
-}
-
-impl TransientRelation {
-    /// Seek for a tuple by its indexed domain value.
-    pub async fn seek_by_domain(
-        &self,
-        domain: SliceRef,
-    ) -> Result<(SliceRef, SliceRef), TupleError> {
-        let tuple_idx = self
-            .domain_tuples
-            .get(&domain)
-            .copied()
-            .ok_or(TupleError::NotFound);
-        tuple_idx.map(|id| self.tuples[id].clone())
-    }
-
-    /// Seek for tuples by their indexed codomain value, if there's an index. Panics if there is no
-    /// secondary index.
-    pub async fn seek_by_codomain(
-        &self,
-        codomain: SliceRef,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
-        // Attempt to seek on codomain without an index is a panic.
-        // We could do full-scan, but in this case we're going to assume that the caller knows
-        // what they're doing.
-        let codomain_domain = self.codomain_domain.as_ref().expect("No codomain index");
-        let tuple_indexes = codomain_domain
-            .get(&codomain)
-            .cloned()
-            .ok_or(TupleError::NotFound)?;
-        Ok(tuple_indexes
-            .iter()
-            .map(|tid| self.tuples[*tid].clone())
-            .collect())
-    }
-
-    pub async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
-        &self,
-        f: &F,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
-        Ok(self.tuples.iter().filter(|t| f(t)).cloned().collect())
-    }
-
-    /// Insert a tuple into the relation.
-    pub async fn insert_tuple(
-        &mut self,
-        domain: SliceRef,
-        codomain: SliceRef,
-    ) -> Result<(), TupleError> {
-        if self.domain_tuples.contains_key(&domain) {
-            return Err(TupleError::Duplicate);
-        }
-        let tuple_idx = self.tuples.len();
-        self.tuples.push((domain.clone(), codomain.clone()));
-        self.domain_tuples
-            .insert(domain, tuple_idx)
-            .map(|_| ())
-            .ok_or(TupleError::Duplicate)
-    }
-
-    /// Update a tuple in the relation.
-    pub async fn update_tuple(
-        &mut self,
-        domain: SliceRef,
-        codomain: SliceRef,
-    ) -> Result<(), TupleError> {
-        let tuple_idx = self
-            .domain_tuples
-            .get(&domain)
-            .copied()
-            .ok_or(TupleError::NotFound)?;
-        if self.codomain_domain.is_some() {
-            self.update_secondary(tuple_idx, None, Some(codomain.clone()));
-        }
-        self.tuples[tuple_idx] = (domain, codomain);
-        Ok(())
-    }
-
-    /// Upsert a tuple into the relation.
-    pub async fn upsert_tuple(
-        &mut self,
-        domain: SliceRef,
-        codomain: SliceRef,
-    ) -> Result<(), TupleError> {
-        let tuple_idx = match self.domain_tuples.get(&domain) {
-            Some(tuple_idx) => {
-                self.tuples[*tuple_idx] = (domain, codomain.clone());
-                *tuple_idx
-            }
-            None => {
-                let tuple_idx = self.tuples.len();
-                self.tuples.push((domain.clone(), codomain.clone()));
-                self.domain_tuples.insert(domain, tuple_idx);
-                tuple_idx
-            }
-        };
-        self.update_secondary(tuple_idx, None, Some(codomain.clone()));
-
-        Ok(())
-    }
-
-    /// Remove a tuple from the relation.
-    pub async fn remove_by_domain(&mut self, domain: SliceRef) -> Result<(), TupleError> {
-        let tuple_idx = self
-            .domain_tuples
-            .remove(&domain)
-            .ok_or(TupleError::NotFound)?;
-
-        if self.codomain_domain.is_some() {
-            self.update_secondary(tuple_idx, None, None);
-        }
-        self.tuples.remove(tuple_idx);
-        Ok(())
-    }
-
-    pub(crate) fn update_secondary(
-        &mut self,
-        tuple_idx: usize,
-        old_codomain: Option<SliceRef>,
-        new_codomain: Option<SliceRef>,
-    ) {
-        let Some(index) = self.codomain_domain.as_mut() else {
-            return;
-        };
-
-        // Clear out the old entry, if there was one.
-        if let Some(old_codomain) = old_codomain {
-            index
-                .entry(old_codomain)
-                .or_insert_with(HashSet::new)
-                .remove(&tuple_idx);
-        }
-        if let Some(new_codomain) = new_codomain {
-            index
-                .entry(new_codomain)
-                .or_insert_with(HashSet::new)
-                .insert(tuple_idx);
-        }
-    }
-}
 #[cfg(test)]
 mod tests {
     use rand::Rng;

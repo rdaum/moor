@@ -42,10 +42,6 @@ pub use tx::{CommitError, Transaction};
 pub struct RelationId(pub usize);
 
 impl RelationId {
-    pub fn transient(id: usize) -> Self {
-        RelationId(id | (1 << 63))
-    }
-
     // If the top bit (63rd) bit is not set, then this is a base relation.
     pub fn is_base_relation(&self) -> bool {
         self.0 & (1 << 63) == 0
