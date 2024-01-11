@@ -118,8 +118,8 @@ where
     let relation = tx.relation(RelationId(rel as usize)).await;
     let Ok(all_tuples) = relation
         .predicate_scan(&|t| {
-            let oid = Objid::from_sliceref(t.0.clone());
-            pred(oid, Codomain::from_sliceref(t.1.clone()))
+            let oid = Objid::from_sliceref(t.domain());
+            pred(oid, Codomain::from_sliceref(t.codomain()))
         })
         .await
     else {
@@ -127,7 +127,9 @@ where
             "Unable to scan relation".to_string(),
         ));
     };
-    let objs = all_tuples.into_iter().map(|v| Objid::from_sliceref(v.0));
+    let objs = all_tuples
+        .into_iter()
+        .map(|v| Objid::from_sliceref(v.domain()));
     Ok(ObjSet::from_oid_iter(objs))
 }
 
@@ -138,7 +140,7 @@ pub async fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
 ) -> Option<Codomain> {
     let relation = tx.relation(RelationId(rel as usize)).await;
     match relation.seek_by_domain(oid.as_sliceref()).await {
-        Ok(v) => Some(Codomain::from_sliceref(v.1)),
+        Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
@@ -154,7 +156,7 @@ pub async fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuf
     let objs = result
         .expect("Unable to seek by codomain")
         .into_iter()
-        .map(|v| Objid::from_sliceref(v.0));
+        .map(|v| Objid::from_sliceref(v.domain()));
     ObjSet::from_oid_iter(objs)
 }
 
@@ -167,7 +169,7 @@ pub async fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize)).await;
     match relation.seek_by_domain(key_bytes).await {
-        Ok(v) => Some(Codomain::from_sliceref(v.1)),
+        Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }

@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -26,6 +27,13 @@ use crate::rdb::RelationId;
 pub struct TupleRef {
     // Yo dawg I heard you like pointers, so I put a pointer in your pointer.
     sp: *mut TuplePtr,
+}
+
+impl Debug for TupleRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let id = self.id();
+        write!(f, "TupleRef({}/{})", id.page, id.slot)
+    }
 }
 
 #[repr(C, align(8))]

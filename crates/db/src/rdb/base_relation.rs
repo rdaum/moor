@@ -56,7 +56,7 @@ pub struct BaseRelation {
 
     /// Optional reverse index from codomain -> tuples, which is used to support (more) efficient
     /// reverse lookups.
-    index_codomain: Option<im::HashMap<SliceRef, HashSet<TupleRef>>>,
+    index_codomain: Option<im::HashMap<SliceRef, im::HashSet<TupleRef>>>,
 }
 
 impl BaseRelation {
@@ -102,10 +102,7 @@ impl BaseRelation {
 
         // ... and update the secondary index if there is one.
         if let Some(index) = &mut self.index_codomain {
-            index
-                .entry(tuple.codomain())
-                .or_insert_with(HashSet::new)
-                .insert(tuple);
+            index.entry(tuple.codomain()).or_default().insert(tuple);
         }
     }
 
@@ -113,12 +110,8 @@ impl BaseRelation {
         self.index_domain.get(&domain).cloned()
     }
 
-    pub fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(&self, f: &F) -> HashSet<TupleRef> {
-        self.tuples
-            .iter()
-            .filter(|t| f(&(t.domain(), t.codomain())))
-            .cloned()
-            .collect()
+    pub fn predicate_scan<F: Fn(&TupleRef) -> bool>(&self, f: &F) -> HashSet<TupleRef> {
+        self.tuples.iter().filter(|t| f(t)).cloned().collect()
     }
 
     pub fn seek_by_codomain(&self, codomain: SliceRef) -> HashSet<TupleRef> {
@@ -139,10 +132,7 @@ impl BaseRelation {
 
             // And remove from codomain index, if it exists in there
             if let Some(index) = &mut self.index_codomain {
-                index
-                    .entry(domain)
-                    .or_insert_with(HashSet::new)
-                    .remove(&tuple_ref);
+                index.entry(domain).or_default().remove(&tuple_ref);
             }
         }
     }
@@ -159,7 +149,7 @@ impl BaseRelation {
                 if let Some(codomain_index) = &mut self.index_codomain {
                     codomain_index
                         .entry(tuple.codomain())
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(tuple);
                 }
             }
@@ -168,11 +158,11 @@ impl BaseRelation {
                 if let Some(codomain_index) = &mut self.index_codomain {
                     codomain_index
                         .entry(existing_tuple.codomain())
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .remove(&existing_tuple);
                     codomain_index
                         .entry(tuple.codomain())
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(tuple.clone());
                 }
                 self.index_domain.insert(tuple.domain(), tuple.clone());

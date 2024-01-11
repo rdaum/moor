@@ -74,7 +74,7 @@ mod tests {
 
         let got = tuples
             .iter()
-            .map(|t| to_val(t.0.clone()))
+            .map(|t| to_val(t.domain().clone()))
             .collect::<BTreeSet<_>>();
 
         if let Some(values) = expected_values {
@@ -106,13 +106,13 @@ mod tests {
 
                     // The value mentioned should have been added to the relation successfully
                     // (at invoke)
-                    let (domain, _) = tx
+                    let t = tx
                         .relation(relation)
                         .await
                         .seek_by_domain(from_val(expect_val))
                         .await
                         .unwrap();
-                    let val = to_val(domain);
+                    let val = to_val(t.domain());
                     assert_eq!(
                         val,
                         expect_val,

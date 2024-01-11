@@ -22,7 +22,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::Error;
 use async_trait::async_trait;
 use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use moor_db::rdb::{RelBox, RelationId, RelationInfo, Transaction};
@@ -90,20 +90,20 @@ impl ConnectionsTb {
         // Seek the most recent activity for the connection, so pull in the activity relation for
         // each client.
         let mut times = Vec::new();
-        for (client, _) in clients {
+        for client in clients {
             if let Ok(last_activity) = tx
                 .relation(RelationId(ConnectionRelation::ClientActivity as usize))
                 .await
-                .seek_by_domain(client.clone())
+                .seek_by_domain(client.domain())
                 .await
             {
                 let epoch_time_millis: u128 =
-                    u128::from_le_bytes(last_activity.1.as_slice().try_into().unwrap());
+                    u128::from_le_bytes(last_activity.codomain().as_slice().try_into().unwrap());
                 let time = SystemTime::UNIX_EPOCH + Duration::from_millis(epoch_time_millis as u64);
-                times.push((client.clone(), time));
+                times.push((client.domain(), time));
             } else {
                 warn!(
-                    ?client,
+                    client = ?client.domain(),
                     ?connection_obj,
                     "Unable to find last activity for client"
                 );
@@ -147,11 +147,11 @@ impl ConnectionsDB for ConnectionsTb {
             error!(?from_connection, ?to_player, "No client ids for connection");
             return Err(Error::msg("No client ids for connection"));
         }
-        for (client_id, _) in client_ids {
+        for client_id in client_ids {
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
                 .await
-                .update_tuple(client_id.clone(), to_player.as_sliceref())
+                .update_tuple(client_id.domain().clone(), to_player.as_sliceref())
                 .await;
         }
         tx.commit().await?;
@@ -250,19 +250,15 @@ impl ConnectionsDB for ConnectionsTb {
             .relation(RelationId(ConnectionRelation::ClientPingTime as usize))
             .await;
         let expired = last_ping_relation
-            .predicate_scan(&|(_, last_ping_time)| {
-                let last_ping_time = sliceref_as_time(last_ping_time.clone());
+            .predicate_scan(&|ping| {
+                let last_ping_time = sliceref_as_time(ping.codomain());
                 last_ping_time < timeout_threshold
             })
             .await
             .expect("Unable to scan last ping relation");
 
-        for (client_id, last_ping_time) in expired {
-            debug!(
-                "Expiring connection for client {:?} because last_ping_time = {:?}",
-                client_id,
-                sliceref_as_time(last_ping_time)
-            );
+        for expired_ping in expired {
+            let client_id = expired_ping.domain().clone();
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
                 .await
@@ -320,7 +316,8 @@ impl ConnectionsDB for ConnectionsTb {
             .await
             .expect("Unable to seek client name");
         tx.commit().await.expect("Unable to commit transaction");
-        Ok(String::from_utf8(name.1.as_slice().to_vec()).expect("Invalid UTF-8 in client name"))
+        Ok(String::from_utf8(name.codomain().as_slice().to_vec())
+            .expect("Invalid UTF-8 in client name"))
     }
 
     async fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
@@ -337,15 +334,15 @@ impl ConnectionsDB for ConnectionsTb {
         };
 
         let mut times = Vec::new();
-        for (client, _) in clients {
+        for client in clients {
             if let Ok(connect_time) = tx
                 .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
                 .await
-                .seek_by_domain(client.clone())
+                .seek_by_domain(client.domain())
                 .await
             {
-                let time = sliceref_as_time(connect_time.1);
-                times.push((client.clone(), time));
+                let time = sliceref_as_time(connect_time.codomain());
+                times.push((client.domain(), time));
             }
         }
         times.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
@@ -370,8 +367,8 @@ impl ConnectionsDB for ConnectionsTb {
         };
 
         let mut client_ids = Vec::new();
-        for (client, _) in clients {
-            let client_id = Uuid::from_slice(client.as_slice()).expect("Invalid UUID");
+        for client in clients {
+            let client_id = Uuid::from_slice(client.domain().as_slice()).expect("Invalid UUID");
             client_ids.push(client_id);
         }
         tx.commit().await.expect("Unable to commit transaction");
@@ -390,8 +387,8 @@ impl ConnectionsDB for ConnectionsTb {
             .await
             .expect("Unable to scan client connection relation");
 
-        for (_, connection) in clients {
-            let connection = Objid::from_sliceref(connection);
+        for client in clients {
+            let connection = Objid::from_sliceref(client.codomain());
             connections.insert(connection);
         }
 
@@ -419,7 +416,7 @@ impl ConnectionsDB for ConnectionsTb {
             .seek_by_domain(client_id.as_bytes().as_sliceref())
             .await
         {
-            Ok((_, connection)) => Some(Objid::from_sliceref(connection)),
+            Ok(connection) => Some(Objid::from_sliceref(connection.codomain())),
             Err(_) => None,
         };
         tx.commit().await.expect("Unable to commit transaction");

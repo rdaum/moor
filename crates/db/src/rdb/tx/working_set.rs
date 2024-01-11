@@ -82,16 +82,14 @@ impl WorkingSet {
         db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
-    ) -> Result<(SliceRef, SliceRef), TupleError> {
+    ) -> Result<TupleRef, TupleError> {
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // Check local first.
         if let Some(tuple_idx) = relation.domain_index.get(&domain) {
             let local_version = relation.tuples.get(*tuple_idx).unwrap();
             return match &local_version {
-                TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => {
-                    Ok((t.domain().clone(), t.codomain().clone()))
-                }
+                TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => Ok(t.clone()),
                 TxTuple::Tombstone { .. } => Err(TupleError::NotFound),
             };
         }
@@ -114,7 +112,7 @@ impl WorkingSet {
                 .or_insert_with(HashSet::new)
                 .insert(tuple_idx);
         }
-        Ok((canon_t.domain(), canon_t.codomain()))
+        Ok(canon_t)
     }
 
     pub(crate) async fn seek_by_codomain(
@@ -122,7 +120,7 @@ impl WorkingSet {
         db: &Arc<RelBox>,
         relation_id: RelationId,
         codomain: SliceRef,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+    ) -> Result<HashSet<TupleRef>, TupleError> {
         // The codomain index is not guaranteed to be up to date with the working set, so we need
         // to go back to the canonical relation, get the list of domains, then materialize them into
         // our local working set -- which will update the codomain index -- and then actually
@@ -158,9 +156,7 @@ impl WorkingSet {
         let tuples = tuple_indexes.filter_map(|tid| {
             let t = relation.tuples.get(tid).expect("Tuple not found");
             match &t {
-                TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => {
-                    Some((t.domain(), t.codomain()))
-                }
+                TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => Some(t.clone()),
                 TxTuple::Tombstone { .. } => None,
             }
         });
@@ -205,12 +201,12 @@ impl WorkingSet {
         Ok(())
     }
 
-    pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
+    pub(crate) async fn predicate_scan<F: Fn(&TupleRef) -> bool>(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
         f: F,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+    ) -> Result<Vec<TupleRef>, TupleError> {
         // First collect all the tuples from the canonical relation, indexing them by domain.
         let tuples = db
             .with_relation(relation_id, |relation| relation.predicate_scan(&f))
@@ -231,7 +227,7 @@ impl WorkingSet {
             }
             match t {
                 TxTuple::Insert(t) | TxTuple::Update(t) | TxTuple::Value(t) => {
-                    if f(&(t.domain(), t.codomain())) {
+                    if f(t) {
                         by_domain.insert(t.domain().as_slice().to_vec(), t.clone());
                     } else {
                         by_domain.remove(t.domain().as_slice());
@@ -244,10 +240,7 @@ impl WorkingSet {
         }
 
         // Now we have a map of domain -> tuple, so we can just pull out the tuples and return them.
-        Ok(by_domain
-            .into_values()
-            .map(|t| (t.domain(), t.codomain()))
-            .collect())
+        Ok(by_domain.into_values().collect())
     }
 
     pub(crate) async fn update_tuple(

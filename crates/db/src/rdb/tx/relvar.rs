@@ -13,8 +13,9 @@
 //
 
 use moor_values::util::slice_ref::SliceRef;
+use std::collections::HashSet;
 
-use crate::rdb::tuples::TupleError;
+use crate::rdb::tuples::{TupleError, TupleRef};
 use crate::rdb::tx::transaction::Transaction;
 use crate::rdb::RelationId;
 
@@ -29,10 +30,7 @@ pub struct RelVar<'a> {
 
 impl<'a> RelVar<'a> {
     /// Seek for a tuple by its indexed domain value.
-    pub async fn seek_by_domain(
-        &self,
-        domain: SliceRef,
-    ) -> Result<(SliceRef, SliceRef), TupleError> {
+    pub async fn seek_by_domain(&self, domain: SliceRef) -> Result<TupleRef, TupleError> {
         self.tx.seek_by_domain(self.id, domain).await
     }
 
@@ -41,7 +39,7 @@ impl<'a> RelVar<'a> {
     pub async fn seek_by_codomain(
         &self,
         codomain: SliceRef,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+    ) -> Result<HashSet<TupleRef>, TupleError> {
         self.tx.seek_by_codomain(self.id, codomain).await
     }
 
@@ -77,10 +75,10 @@ impl<'a> RelVar<'a> {
         self.tx.remove_by_domain(self.id, domain).await
     }
 
-    pub async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
+    pub async fn predicate_scan<F: Fn(&TupleRef) -> bool>(
         &self,
         f: &F,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+    ) -> Result<Vec<TupleRef>, TupleError> {
         self.tx.predicate_scan(self.id, f).await
     }
 }

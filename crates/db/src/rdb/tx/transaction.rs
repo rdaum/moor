@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use moor_values::util::{BitArray, Bitset64};
@@ -23,7 +24,7 @@ use moor_values::util::slice_ref::SliceRef;
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::RelBox;
-use crate::rdb::tuples::TupleError;
+use crate::rdb::tuples::{TupleError, TupleRef};
 use crate::rdb::tx::relvar::RelVar;
 use crate::rdb::tx::working_set::WorkingSet;
 use crate::rdb::RelationId;
@@ -122,7 +123,7 @@ impl Transaction {
         &self,
         relation_id: RelationId,
         domain: SliceRef,
-    ) -> Result<(SliceRef, SliceRef), TupleError> {
+    ) -> Result<TupleRef, TupleError> {
         let mut ws = self.working_set.write().await;
         ws.as_mut()
             .unwrap()
@@ -134,7 +135,7 @@ impl Transaction {
         &self,
         relation_id: RelationId,
         codomain: SliceRef,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+    ) -> Result<HashSet<TupleRef>, TupleError> {
         let mut ws = self.working_set.write().await;
         ws.as_mut()
             .unwrap()
@@ -157,11 +158,11 @@ impl Transaction {
             .await
     }
 
-    pub(crate) async fn predicate_scan<F: Fn(&(SliceRef, SliceRef)) -> bool>(
+    pub(crate) async fn predicate_scan<F: Fn(&TupleRef) -> bool>(
         &self,
         relation_id: RelationId,
         f: &F,
-    ) -> Result<Vec<(SliceRef, SliceRef)>, TupleError> {
+    ) -> Result<Vec<TupleRef>, TupleError> {
         let mut ws = self.working_set.write().await;
         ws.as_mut()
             .unwrap()
@@ -262,7 +263,7 @@ mod tests {
     use moor_values::util::slice_ref::SliceRef;
 
     use crate::rdb::relbox::{RelBox, RelationInfo};
-    use crate::rdb::tuples::TupleError;
+    use crate::rdb::tuples::{TupleError, TupleRef};
     use crate::rdb::tx::transaction::CommitError;
     use crate::rdb::{RelationId, Transaction};
 
@@ -301,15 +302,21 @@ mod tests {
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap().1,
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .codomain(),
             attr(b"123")
         );
-        assert_eq!(
-            tx.seek_by_codomain(rid, attr(b"123"))
-                .await
-                .expect("Expected secondary seek to succeed"),
-            vec![(attr(b"abc"), attr(b"123"))]
-        );
+        let t = tx
+            .seek_by_codomain(rid, attr(b"123"))
+            .await
+            .expect("Expected secondary seek to succeed");
+        let compare_t = t
+            .iter()
+            .map(|t| (t.domain().clone(), t.codomain().clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(compare_t, vec![(attr(b"abc"), attr(b"123"))]);
 
         tx.commit().await.expect("Expected commit to succeed");
 
@@ -349,7 +356,7 @@ mod tests {
             tx.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"123"
         );
@@ -360,7 +367,7 @@ mod tests {
             tx.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"123"
         );
@@ -374,7 +381,7 @@ mod tests {
             tx.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"321"
         );
@@ -385,7 +392,7 @@ mod tests {
             tx.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"321"
         );
@@ -396,7 +403,7 @@ mod tests {
             tx.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"666"
         );
@@ -407,18 +414,21 @@ mod tests {
             tx.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"666"
         );
 
         // And verify secondary index...
-        assert_eq!(
-            tx.seek_by_codomain(rid, attr(b"666"))
-                .await
-                .expect("Expected secondary seek to succeed"),
-            vec![(attr(b"abc"), attr(b"666"))]
-        );
+        let t = tx
+            .seek_by_codomain(rid, attr(b"666"))
+            .await
+            .expect("Expected secondary seek to succeed");
+        let compare_t = t
+            .iter()
+            .map(|t| (t.domain().clone(), t.codomain().clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(compare_t, vec![(attr(b"abc"), attr(b"666"))]);
     }
 
     /// Much the same as above, but test for deletion logic instead of update.
@@ -451,7 +461,10 @@ mod tests {
             .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap().1,
+            tx.seek_by_domain(rid, attr(b"abc"))
+                .await
+                .unwrap()
+                .codomain(),
             attr(b"321")
         );
         tx.commit().await.expect("Expected commit to succeed");
@@ -462,13 +475,17 @@ mod tests {
             .seek_by_domain(rid, attr(b"abc"))
             .await
             .expect("Expected tuple to exist");
-        assert_eq!(tuple.1.as_slice(), b"321");
-        assert_eq!(
-            tx.seek_by_codomain(rid, attr(b"321"))
-                .await
-                .expect("Expected secondary seek to succeed"),
-            vec![(attr(b"abc"), attr(b"321"))]
-        );
+        assert_eq!(tuple.codomain().as_slice(), b"321");
+
+        let t = tx
+            .seek_by_codomain(rid, attr(b"321"))
+            .await
+            .expect("Expected secondary seek to succeed");
+        let compare_t = t
+            .iter()
+            .map(|t| (t.domain().clone(), t.codomain().clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(compare_t, vec![(attr(b"abc"), attr(b"321"))]);
     }
 
     /// Two transactions both starting with nothing present for a tuple.
@@ -520,7 +537,7 @@ mod tests {
             tx1.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"123"
         );
@@ -532,7 +549,7 @@ mod tests {
             tx2.seek_by_domain(rid, attr(b"abc"))
                 .await
                 .unwrap()
-                .1
+                .codomain()
                 .as_slice(),
             b"321"
         );
@@ -554,9 +571,10 @@ mod tests {
         (domain, codomain)
     }
 
-    fn assert_same(tuples: &[(SliceRef, SliceRef)], items: &[(Vec<u8>, Vec<u8>)]) {
+    fn assert_same(tuples: &[TupleRef], items: &[(Vec<u8>, Vec<u8>)]) {
         assert_eq!(tuples.len(), items.len());
-        for (domain, codomain) in tuples {
+        for t in tuples {
+            let (domain, codomain) = (t.domain().clone(), t.codomain().clone());
             let idx = items
                 .iter()
                 .position(|(d, _)| d == domain.as_slice())
@@ -584,8 +602,8 @@ mod tests {
 
             let mut domains = b_results
                 .iter()
-                .map(|(d, _)| d.as_slice())
-                .collect::<Vec<&[u8]>>();
+                .map(|d| d.clone().domain().as_slice().to_vec())
+                .collect::<Vec<_>>();
             domains.sort();
             assert_eq!(domains, expected);
         }
