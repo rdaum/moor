@@ -256,10 +256,7 @@ impl Inner {
 
                 TupleRef::at_tptr(tptr_ptr)
             })
-            .map_or_else(
-                || Err(TupleBoxError::TupleNotFound(id.slot as usize)),
-                Ok,
-            )
+            .map_or_else(|| Err(TupleBoxError::TupleNotFound(id.slot as usize)), Ok)
     }
 
     fn do_restore_page<'a>(&mut self, id: PageId) -> Result<SlottedPage<'a>, TupleBoxError> {
@@ -503,11 +500,6 @@ impl PageSpace {
         let (pid, _) = decode(self.entries[offset]);
         self.entries[offset] = encode(pid, page_remaining_bytes);
 
-        // If we (unlikely) consumed all the bytes, then we can remove the page from the avail pages
-        // set.
-        if page_remaining_bytes == 0 {
-            self.entries.remove(offset);
-        }
         self.sort();
     }
 
