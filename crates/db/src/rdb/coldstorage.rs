@@ -245,14 +245,17 @@ impl ColdStorage {
         for r in ws.relations.iter() {
             for t in r.1.tuples() {
                 match t {
-                    TxTuple::Insert(_) | TxTuple::Update(_) | TxTuple::Tombstone { .. } => {
-                        let TupleId {
-                            page: page_id,
-                            slot: _slot_id,
-                        } = t.tuple_id();
-                        dirty_pages.insert((page_id, r.1.id));
+                    TxTuple::Insert(new_tuple) => {
+                        dirty_pages.insert((new_tuple.id().page, r.1.id));
                     }
-                    TxTuple::Value(_) => {
+                    TxTuple::Update(old_id, new_tuple) => {
+                        dirty_pages.insert((new_tuple.id().page, r.1.id));
+                        dirty_pages.insert((old_id.page, r.1.id));
+                    }
+                    TxTuple::Tombstone { tuple_id, .. } => {
+                        dirty_pages.insert((tuple_id.page, r.1.id));
+                    }
+                    TxTuple::Value(_, _) => {
                         // Untouched value (view), noop, should already exist in backing store.
                     }
                 }

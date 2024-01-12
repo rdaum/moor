@@ -23,9 +23,9 @@ pub enum TxTuple {
     /// Insert tuple into the relation.
     Insert(TupleRef),
     /// Update an existing tuple in the relation whose domain matches.
-    Update(TupleRef),
+    Update(TupleId, TupleRef),
     /// Clone/fork a tuple from the base relation into our local working set.
-    Value(TupleRef),
+    Value(TupleId, TupleRef),
     /// Delete the tuple.
     Tombstone {
         ts: u64,
@@ -37,7 +37,9 @@ pub enum TxTuple {
 impl TxTuple {
     pub fn domain(&self) -> SliceRef {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.domain(),
+            TxTuple::Insert(tref) | TxTuple::Update(_, tref) | TxTuple::Value(_, tref) => {
+                tref.domain()
+            }
             TxTuple::Tombstone {
                 ts: _,
                 tuple_id: _,
@@ -45,20 +47,25 @@ impl TxTuple {
             } => d.clone(),
         }
     }
-    pub fn tuple_id(&self) -> TupleId {
+
+    /// Return the "origin" tuple id for this tuple, which is the tuple id of the tuple that
+    /// this tuple was forked from, if any.  Inserts do not have an origin tuple id, as they
+    /// are not forked from any existing tuple.
+    pub fn origin_tuple_id(&self) -> TupleId {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.id(),
+            TxTuple::Update(id, _) | TxTuple::Value(id, _) => *id,
             TxTuple::Tombstone {
                 ts: _,
                 tuple_id: id,
                 domain: _,
             } => *id,
+            TxTuple::Insert(_) => panic!("Inserts do not have an origin tuple id"),
         }
     }
 
     pub fn ts(&self) -> u64 {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(tref) | TxTuple::Value(tref) => tref.ts(),
+            TxTuple::Insert(tref) | TxTuple::Update(_, tref) | TxTuple::Value(_, tref) => tref.ts(),
             TxTuple::Tombstone {
                 ts,
                 tuple_id: _,

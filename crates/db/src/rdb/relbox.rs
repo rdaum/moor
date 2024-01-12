@@ -189,19 +189,18 @@ impl RelBox {
             // note we're not actually committing yet, just producing a candidate commit set
             let canonical = &self.canonical.read().await[relation_id.0];
             for mut tuple in local_relation.tuples_mut() {
+                // Look for the most recent version for this domain in the canonical relation.
                 let canon_tuple = canonical.seek_by_domain(tuple.domain().clone());
 
                 // If there's no value there, and our local is not tombstoned and we're not doing
                 // an insert -- that's already a conflict.
                 // Otherwise we can straight-away insert into the canonical base relation.
-                // TODO: it should be possible to do this without having the fork logic exist twice
-                //   here.
                 let Some(cv) = canon_tuple else {
                     match &mut tuple {
                         TxTuple::Insert(t) => {
                             t.update_timestamp(commit_ts);
                             let forked_relation = commitset.fork(relation_id, canonical);
-                            forked_relation.upsert_tuple(t.clone());
+                            forked_relation.insert_tuple(t.clone());
                             continue;
                         }
                         TxTuple::Tombstone { .. } => {
@@ -233,10 +232,13 @@ impl RelBox {
                 // branching of the old one.
                 let forked_relation = commitset.fork(relation_id, canonical);
                 match &mut tuple {
-                    TxTuple::Insert(t) | TxTuple::Update(t) => {
+                    TxTuple::Update(_, t) => {
                         t.update_timestamp(commit_ts);
                         let forked_relation = commitset.fork(relation_id, canonical);
-                        forked_relation.upsert_tuple(t.clone());
+                        forked_relation.update_tuple(cv.id(), t.clone());
+                    }
+                    TxTuple::Insert(_) => {
+                        panic!("Unexpected insert");
                     }
                     TxTuple::Value(..) => {}
                     TxTuple::Tombstone {
