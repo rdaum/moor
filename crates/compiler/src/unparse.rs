@@ -79,7 +79,7 @@ impl Expr {
     }
 }
 
-const INDENT_LEVEL: usize = 4;
+const INDENT_LEVEL: usize = 2;
 
 impl Unparse {
     fn new(names: Names) -> Self {
@@ -112,12 +112,19 @@ impl Unparse {
         if !aggressive {
             return format!("{var}");
         }
+
         if let Variant::Str(s) = var.variant() {
             let s = s.as_str();
-            if !s.contains(' ') {
+
+            // If the string contains anything that isn't alphanumeric and _, it's
+            // not a valid ident and needs to be quoted. Likewise if it begins with a non-alpha/underscore
+            let needs_quotes = s.chars().any(|c| !c.is_alphanumeric() && c != '_')
+                || (s.chars().next().unwrap().is_numeric() && !s.starts_with('_'));
+
+            if !needs_quotes {
                 s.into()
             } else {
-                quote_str(s)
+                format!("({})", quote_str(s))
             }
         } else {
             format!("{var}")
@@ -132,6 +139,14 @@ impl Unparse {
                 self.unparse_expr(expr).unwrap()
             }
         };
+        let brace_if_lower_eq = |expr: &Expr| -> String {
+            if expr.precedence() <= current_expr.precedence() {
+                format!("({})", self.unparse_expr(expr).unwrap())
+            } else {
+                self.unparse_expr(expr).unwrap()
+            }
+        };
+
         match current_expr {
             Expr::Assign { left, right } => {
                 let left_frag = self.unparse_expr(left)?;
@@ -154,27 +169,27 @@ impl Unparse {
                 "{} {} {}",
                 brace_if_lower(left_expr),
                 op,
-                brace_if_lower(right_expr)
+                brace_if_lower_eq(right_expr)
             )),
             Expr::And(left, right) => Ok(format!(
                 "{} && {}",
                 brace_if_lower(left),
-                brace_if_lower(right)
+                brace_if_lower_eq(right)
             )),
             Expr::Or(left, right) => Ok(format!(
                 "{} || {}",
                 brace_if_lower(left),
-                brace_if_lower(right)
+                brace_if_lower_eq(right)
             )),
             Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_lower(expr))),
             Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
                     (Expr::VarExpr(var), Expr::VarExpr(_)) if var.is_root() => String::from("$"),
-                    _ => format!("{}.", self.unparse_expr(location).unwrap()),
+                    _ => format!("{}.", brace_if_lower(location)),
                 };
                 let prop = match &**property {
                     Expr::VarExpr(var) => self.unparse_var(var, true).to_string(),
-                    _ => format!("({})", self.unparse_expr(property)?),
+                    _ => format!("({})", brace_if_lower(property)),
                 };
                 Ok(format!("{location}{prop}"))
             }
@@ -185,11 +200,11 @@ impl Unparse {
             } => {
                 let location = match (&**location, &**verb) {
                     (Expr::VarExpr(var), Expr::VarExpr(_)) if var.is_root() => String::from("$"),
-                    _ => format!("{}:", self.unparse_expr(location).unwrap()),
+                    _ => format!("{}:", brace_if_lower(location)),
                 };
                 let verb = match &**verb {
                     Expr::VarExpr(var) => self.unparse_var(var, true),
-                    _ => format!("({})", self.unparse_expr(verb).unwrap()),
+                    _ => format!("({})", brace_if_lower(verb)),
                 };
                 let mut buffer = String::new();
                 buffer.push_str(format!("{location}{verb}").as_str());
@@ -209,8 +224,8 @@ impl Unparse {
             Expr::Range { base, from, to } => Ok(format!(
                 "{}[{}..{}]",
                 brace_if_lower(base),
-                brace_if_lower(from),
-                brace_if_lower(to)
+                self.unparse_expr(from).unwrap(),
+                self.unparse_expr(to).unwrap()
             )),
             Expr::Cond {
                 condition,
@@ -218,9 +233,9 @@ impl Unparse {
                 alternative,
             } => Ok(format!(
                 "{} ? {} | {}",
-                self.unparse_expr(condition).unwrap(),
-                self.unparse_expr(consequence).unwrap(),
-                self.unparse_expr(alternative).unwrap()
+                brace_if_lower_eq(condition),
+                self.unparse_expr(consequence)?,
+                brace_if_lower_eq(alternative)
             )),
             Expr::Catch {
                 trye,
@@ -239,11 +254,11 @@ impl Unparse {
                 buffer.push('\'');
                 Ok(buffer)
             }
-            Expr::Index(lvalue, index) => Ok(format!(
-                "{}[{}]",
-                self.unparse_expr(lvalue).unwrap(),
-                self.unparse_expr(index).unwrap()
-            )),
+            Expr::Index(lvalue, index) => {
+                let left = brace_if_lower(lvalue);
+                let right = self.unparse_expr(index).unwrap();
+                Ok(format!("{}[{}]", left, right))
+            }
             Expr::List(list) => {
                 let mut buffer = String::new();
                 buffer.push('{');
@@ -588,40 +603,40 @@ mod tests {
     #[test_case("return;\n"; "Empty return")]
     #[test_case("return 20;\n";"return with args")]
     #[test_case(r#"
-    if (expression)
-        statements;
-    endif
-    "#; "simple if")]
+  if (expression)
+    statements;
+  endif
+  "#; "simple if")]
     #[test_case(r#"
-    if (expr)
-        1;
-    elseif (expr)
-        2;
-    elseif (expr)
-        3;
-    else
-        4;
-    endif
-    "#; "if elseif chain")]
+  if (expr)
+    1;
+  elseif (expr)
+    2;
+  elseif (expr)
+    3;
+  else
+    4;
+  endif
+  "#; "if elseif chain")]
     #[test_case("`x.y ! E_PROPNF, E_PERM => 17';\n"; "catch expression")]
     #[test_case("method(a, b, c);\n"; "call function")]
     #[test_case(r#"
-    try
-        statements;
-        statements;
-    except e (E_DIV)
-        statements;
-    except e (E_PERM)
-        statements;
-    endtry
-    "#; "exception handling")]
+  try
+    statements;
+    statements;
+  except e (E_DIV)
+    statements;
+  except e (E_PERM)
+    statements;
+  endtry
+  "#; "exception handling")]
     #[test_case(r#"
-    try
-        basic;
-    finally
-        finalize();
-    endtry
-    "#; "try finally")]
+  try
+    basic;
+  finally
+    finalize();
+  endtry
+  "#; "try finally")]
     #[test_case(r#"return "test";"#; "string literal")]
     #[test_case(r#"return "test \"test\"";"#; "string literal with escaped quote")]
     #[test_case(r#"return #1.test;"#; "property access")]
@@ -630,23 +645,33 @@ mod tests {
     #[test_case(r#"return $test(1);"#; "sysverb")]
     #[test_case(r#"return $options;"#; "sysprop")]
     #[test_case(r#"options = "test";
-    return #0.(options);"#; "sysobj prop expr")]
+  return #0.(options);"#; "sysobj prop expr")]
     #[test_case(r#"{a, b, ?c, @d} = args;"#; "scatter assign")]
     #[test_case(r#"{?a = 5} = args;"#; "scatter assign optional expression argument")]
     #[test_case(r#"5;
-                   fork (5)
-                       1;
-                   endfork
-                   2;"#; "unlabelled fork decompile")]
+           fork (5)
+             1;
+           endfork
+           2;"#; "unlabelled fork decompile")]
     #[test_case(r#"5;
-                   fork tst (5)
-                       1;
-                   endfork
-                   2;"#; "labelled fork decompile")]
+           fork tst (5)
+             1;
+           endfork
+           2;"#; "labelled fork decompile")]
     #[test_case(r#"while (1)
-                       continue;
-                       break;
-                   endwhile"#; "continue decompile")]
+             continue;
+             break;
+           endwhile"#; "continue decompile")]
+    #[test_case(r#"this:("@listgag")();"#; "verb expr escaping @")]
+    #[test_case(r#"this:("listgag()")();"#; "verb expr escaping brackets ")]
+    #[test_case(r#"1 ^ 2;"#; "exponents")]
+    #[test_case(r#"(a + b)[1];"#; "index precedence")]
+    #[test_case(r#"a ? b | (c ? d | e);"#; "conditional precedence")]
+    #[test_case(r#"1 ^ (2 + 3);"#; "exponent precedence")]
+    #[test_case(r#"(1 + 2) ^ (2 + 3);"#; "exponent precedence 2")]
+    #[test_case(r#"verb[1..5 - 1];"#; "range precedence")]
+    #[test_case(r#"1 && ((a = 5) && 3);"#; "and/or precedence")]
+    #[test_case(r#"n + 10 in a;"#; "in precedence")]
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();
@@ -665,49 +690,57 @@ mod tests {
     #[test]
     pub fn unparse_complex_function() {
         let body = r#"
-        brief = args && args[1];
-        player:tell(this:namec_for_look_self(brief));
-        things = this:visible_of(setremove(this:contents(), player));
-        integrate = {};
-        try
-            if (this.integration_enabled)
-                for i in (things)
-                    if (this:ok_to_integrate(i) && (!brief || !is_player(i)))
-                        integrate = {@integrate, i};
-                        things = setremove(things, i);
-                    endif
-                endfor
-                "for i in (this:obvious_exits(player))";
-                for i in (this:exits())
-                    if (this:ok_to_integrate(i))
-                        integrate = setadd(integrate, i);
-                        "changed so prevent exits from being integrated twice in the case of doors and the like";
-                    endif
-                endfor
-            endif
-        except (E_INVARG)
-            player:tell("Error in integration: ");
-        endtry
-        if (!brief)
-            desc = this:description(integrate);
-            if (desc)
-                player:tell_lines(desc);
-            else
-                player:tell("You see nothing special.");
-            endif
-        endif
-        "there's got to be a better way to do this, but.";
-        if (topic = this:topic_msg())
-            if (0)
-                this.topic_sign:show_topic();
-            else
-                player:tell(this.topic_sign:integrate_room_msg());
-            endif
-        endif
-        "this:tell_contents(things, this.ctype);";
-        this:tell_contents(things);
-        "#;
+    brief = args && args[1];
+    player:tell(this:namec_for_look_self(brief));
+    things = this:visible_of(setremove(this:contents(), player));
+    integrate = {};
+    try
+      if (this.integration_enabled)
+        for i in (things)
+          if (this:ok_to_integrate(i) && (!brief || !is_player(i)))
+            integrate = {@integrate, i};
+            things = setremove(things, i);
+          endif
+        endfor
+        "for i in (this:obvious_exits(player))";
+        for i in (this:exits())
+          if (this:ok_to_integrate(i))
+            integrate = setadd(integrate, i);
+            "changed so prevent exits from being integrated twice in the case of doors and the like";
+          endif
+        endfor
+      endif
+    except (E_INVARG)
+      player:tell("Error in integration: ");
+    endtry
+    if (!brief)
+      desc = this:description(integrate);
+      if (desc)
+        player:tell_lines(desc);
+      else
+        player:tell("You see nothing special.");
+      endif
+    endif
+    "there's got to be a better way to do this, but.";
+    if (topic = this:topic_msg())
+      if (0)
+        this.topic_sign:show_topic();
+      else
+        player:tell(this.topic_sign:integrate_room_msg());
+      endif
+    endif
+    "this:tell_contents(things, this.ctype);";
+    this:tell_contents(things);
+    "#;
         let stripped = unindent(body);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn regress_test() {
+        let program = r#"n + 10 in a;"#;
+        let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
     }

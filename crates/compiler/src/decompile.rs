@@ -344,6 +344,9 @@ impl Decompile {
                 self.statements.push(Stmt::new(s, line_num));
             }
             Op::Fork { fv_offset, id } => {
+                // Delay time should be on stack.
+                let delay_time = self.pop_expr()?;
+
                 // Grab the fork vector at `fv_offset` and start decompilation from there, using
                 // a brand new decompiler
                 let mut fork_decompile = Decompile {
@@ -361,7 +364,7 @@ impl Decompile {
                 self.statements.push(Stmt::new(
                     StmtNode::Fork {
                         id,
-                        time: Expr::Length,
+                        time: delay_time,
                         body: fork_decompile.statements,
                     },
                     line_num,

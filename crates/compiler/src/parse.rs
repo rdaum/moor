@@ -196,6 +196,8 @@ fn parse_expr(
             | Op::infix(Rule::gte, Assoc::Left)
             | Op::infix(Rule::lte, Assoc::Left))
         // TODO 5 bitwise shiftleft/shiftright if we ever get them.
+        // 5. In operator ended up above add
+        .op(Op::infix(Rule::in_range, Assoc::Left))
         // 4. Add & subtract same precedence
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
         // 3. * / % all same precedence
@@ -204,8 +206,6 @@ fn parse_expr(
             | Op::infix(Rule::modulus, Assoc::Left))
         // Exponent is higher than multiply/divide (not present in C)
         .op(Op::infix(Rule::pow, Assoc::Left))
-        // Not sure if this is correct
-        .op(Op::infix(Rule::in_range, Assoc::Left))
         // 2. Unary negation & logical-not
         .op(Op::prefix(Rule::neg) | Op::prefix(Rule::not))
         // 1. Indexing/suffix operator generally.
