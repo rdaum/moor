@@ -230,10 +230,14 @@ impl CodegenState {
             .map(|s| {
                 let kind_label = match s.kind {
                     ScatterKind::Required => ScatterLabel::Required(s.id),
-                    ScatterKind::Optional if s.expr.is_some() => {
-                        ScatterLabel::Optional(s.id, Some(self.make_jump_label(None)))
-                    }
-                    ScatterKind::Optional => ScatterLabel::Optional(s.id, None),
+                    ScatterKind::Optional => ScatterLabel::Optional(
+                        s.id,
+                        if s.expr.is_some() {
+                            Some(self.make_jump_label(None))
+                        } else {
+                            None
+                        },
+                    ),
                     ScatterKind::Rest => ScatterLabel::Rest(s.id),
                 };
                 (s, kind_label)

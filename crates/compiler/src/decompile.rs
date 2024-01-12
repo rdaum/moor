@@ -355,10 +355,6 @@ impl Decompile {
                     statements: vec![],
                 };
                 let fv_len = self.program.fork_vectors[fv_offset.0].len();
-                eprintln!(
-                    "decompiling fork vector {}, vector size {}",
-                    fv_offset.0, fv_len
-                );
                 while fork_decompile.position < fv_len {
                     fork_decompile.decompile()?;
                 }
@@ -577,14 +573,16 @@ impl Decompile {
                 // We need to go through and collect the jump labels for the expressions in
                 // optional scatters. We will use this later to compute the end of optional
                 // assignment expressions in the scatter.
-                let mut jump_labels = vec![];
-                for (label_num, scatter_label) in labels.iter().enumerate() {
+                let mut opt_jump_labels = vec![];
+                for scatter_label in labels.iter() {
                     if let ScatterLabel::Optional(_, Some(label)) = scatter_label {
-                        jump_labels.push((label_num, label));
+                        opt_jump_labels.push(label);
                     }
                 }
+                opt_jump_labels.push(&done);
 
-                for (label_num, scatter_label) in labels.iter().enumerate() {
+                let mut label_pos = 0;
+                for scatter_label in labels.iter() {
                     let scatter_item = match scatter_label {
                         ScatterLabel::Required(id) => ScatterItem {
                             kind: ScatterKind::Required,
@@ -596,43 +594,41 @@ impl Decompile {
                             id: *id,
                             expr: None,
                         },
-                        ScatterLabel::Optional(id, assign_id) => {
-                            let opt_assign = if assign_id.is_some() {
-                                // The labels inside each optional scatters are jumps to the _start_ of the
-                                // expression inside it, so to know the end of the expression we will look at the
-                                // next label after our own (if any), or done.
-                                let mut next_label = None;
-                                for jumps in &jump_labels {
-                                    if jumps.0 <= label_num {
-                                        continue;
-                                    }
-                                    next_label = Some(*jumps.1);
-                                }
-                                let next_label = next_label.unwrap_or(done);
-                                let _ = self.decompile_statements_up_to(&next_label)?;
-                                let assign_expr = self.pop_expr()?;
-                                let Expr::Assign { left: _, right } = assign_expr else {
-                                    return Err(MalformedProgram(
-                                        "expected assign for optional scatter assignment"
-                                            .to_string(),
-                                    ));
-                                };
-                                // We need to eat the 'pop' after us that is present in the program
-                                // stream.
-                                // It's not clear to me why we have to do this vs the way LambdaMOO
-                                // is decompiling this, but this is what works, otherwise we get
-                                // a hanging pop.
-                                let _ = self.next()?;
-                                Some(*right)
-                            } else {
-                                None
+                        ScatterLabel::Optional(id, Some(_)) => {
+                            // The labels inside each optional scatters are jumps to the _start_ of the
+                            // expression inside it, so to know the end of the expression we will look at the
+                            // next label after it (if any), or done.
+                            let next_label = opt_jump_labels[label_pos + 1];
+                            label_pos += 1;
+                            let _ = self.decompile_statements_up_to(next_label)?;
+                            let assign_expr = self.pop_expr()?;
+                            let Expr::Assign { left: _, right } = assign_expr else {
+                                return Err(MalformedProgram(
+                                    format!(
+                                        "expected assign for optional scatter assignment; got {:?}",
+                                        assign_expr
+                                    )
+                                    .to_string(),
+                                ));
                             };
+                            // We need to eat the 'pop' after us that is present in the program
+                            // stream.
+                            // It's not clear to me why we have to do this vs the way LambdaMOO
+                            // is decompiling this, but this is what works, otherwise we get
+                            // a hanging pop.
+                            let _ = self.next()?;
+
                             ScatterItem {
                                 kind: ScatterKind::Optional,
                                 id: *id,
-                                expr: opt_assign,
+                                expr: Some(*right),
                             }
                         }
+                        ScatterLabel::Optional(id, None) => ScatterItem {
+                            kind: ScatterKind::Optional,
+                            id: *id,
+                            expr: None,
+                        },
                     };
                     scatter_items.push(scatter_item);
                 }
@@ -995,6 +991,13 @@ mod tests {
         "this:tell_contents(things, this.ctype);";
         this:tell_contents(things);
         "#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn regression_scatter() {
+        let program = r#"{things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
