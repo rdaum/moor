@@ -18,7 +18,7 @@ use uuid::Uuid;
 use moor_values::model::defset::HasUuid;
 use moor_values::model::objects::ObjAttrs;
 use moor_values::model::objset::ObjSet;
-use moor_values::model::propdef::PropDefs;
+use moor_values::model::propdef::{PropDef, PropDefs};
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbdef::VerbDefs;
@@ -70,17 +70,6 @@ impl LoaderInterface for DbTxWorldState {
             )
             .await?;
         Ok(())
-    }
-
-    async fn get_property_value(
-        &self,
-        obj: Objid,
-        uuid: Uuid,
-    ) -> Result<Option<Var>, WorldStateError> {
-        let Ok(propval) = self.tx.retrieve_property(obj, uuid).await else {
-            return Ok(None);
-        };
-        Ok(Some(propval))
     }
 
     async fn define_property(
@@ -156,5 +145,62 @@ impl LoaderInterface for DbTxWorldState {
 
     async fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError> {
         self.tx.get_properties(objid).await
+    }
+
+    async fn get_property_value(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<Option<Var>, WorldStateError> {
+        match self.tx.retrieve_property(obj, uuid).await {
+            Ok(propval) => Ok(Some(propval)),
+            // Property is 'clear'
+            Err(WorldStateError::PropertyNotFound(_, _)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    // propvals in textdumps have wonky logic which resolve relative to position of propdefs
+    // in the inheritance hierarchy of the object
+    // So we need to walk ourselves up to the root of the inheritance hierarchy, and then return
+    // the values for each of the properties defined by that object, in the order of the properties
+    // defined by that object.
+    // This should then map the the propdefs for each of those properties.
+    // The bulk of this work should be done by the loader_client, which will give us that entire
+    // hierarchy in a single call.
+    // Really this is just a way of reordering our local propdefs to match the inheritance hierarchy.
+    // which is something LambdaMOO does automagically internally, but we don't bother to.
+    async fn get_all_property_values(
+        &self,
+        this: Objid,
+    ) -> Result<Vec<(PropDef, Option<Var>)>, WorldStateError> {
+        // Get the property definitions for ourselves, and this is how we will resolve
+        // the updated flags, owners, etc. on us vs the definition.
+        let propdefs = self.tx.get_properties(this).await?;
+
+        // First get the entire inheritance hierarchy.
+        let hierarchy = self.tx.ancestors(this).await?;
+
+        // Now get the property definitions for each of those objects, but only for the props which
+        // are defined by that object.
+        // At the same time, get the values.
+        let mut properties = vec![];
+        for obj in hierarchy.iter() {
+            let obj_propdefs = self.tx.get_properties(obj).await?;
+            for p in obj_propdefs.iter() {
+                if p.definer() != obj {
+                    continue;
+                }
+                let local_def = propdefs.iter().find(|pd| pd.uuid() == p.uuid()).unwrap();
+                let value = match self.tx.retrieve_property(this, p.uuid()).await {
+                    Ok(propval) => Some(propval),
+                    // Property is 'clear'
+                    Err(WorldStateError::PropertyNotFound(_, _)) => None,
+                    Err(e) => return Err(e),
+                };
+                properties.push((local_def, value));
+            }
+        }
+        Ok(properties)
     }
 }

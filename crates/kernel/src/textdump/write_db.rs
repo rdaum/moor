@@ -191,20 +191,33 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
             );
         }
 
-        let db_propdefs = tx.get_object_properties(*db_objid).await.unwrap();
-        let propdefs = db_propdefs.iter().map(|p| p.name().into()).collect();
+        // let db_propdefs = tx.get_object_properties(*db_objid).await.unwrap();
+        // let propdefs: Vec<_> = db_propdefs
+        //     .iter()
+        //     .filter(|p| p.definer() == *db_objid && p.location() == *db_objid)
+        //     .map(|p| p.name().into())
+        //     .collect();
+
+        // propvals have wonky logic which resolve relative to position in the inheritance hierarchy of
+        // propdefs up to the root. So we grab that all from the loader_client, and then we can just
+        // iterate through them all.
+        let properties = tx.get_all_property_values(*db_objid).await.unwrap();
+
+        let mut propdefs = vec![];
+        for (p, _) in &properties {
+            if p.definer() != *db_objid {
+                break;
+            }
+            propdefs.push(p.name().into());
+        }
 
         let mut propvals = vec![];
-        for p in db_propdefs.iter() {
-            let (is_clear, value) = match tx.get_property_value(*db_objid, p.uuid()).await {
-                Ok(Some(v)) => (false, v),
-                Ok(None) => (true, v_none()),
-                Err(e) => panic!("Failed to get property value: {}", e),
-            };
+        for (p, value) in properties {
             let owner = p.owner();
             let flags = p.flags().to_u16() as u8;
+            let is_clear = value.is_none();
             propvals.push(Propval {
-                value,
+                value: value.unwrap_or(v_none()),
                 owner,
                 flags,
                 is_clear,

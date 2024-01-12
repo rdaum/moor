@@ -3,7 +3,7 @@ mod test {
     use moor_db::loader::LoaderInterface;
     use moor_db::odb::RelBoxWorldState;
     use moor_db::Database;
-    use moor_kernel::textdump::{make_textdump, textdump_load, TextdumpReader};
+    use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
     use moor_values::model::r#match::VerbArgsSpec;
     use moor_values::model::verbs::VerbFlag;
     use moor_values::model::world_state::WorldStateSource;
@@ -22,8 +22,8 @@ mod test {
         File::open(minimal_db.clone()).unwrap()
     }
 
-    async fn load_textdump(tx: Arc<dyn LoaderInterface>, path: &str) {
-        textdump_load(tx.clone(), path)
+    async fn load_textdump_file(tx: Arc<dyn LoaderInterface>, path: &str) {
+        textdump_load(tx.clone(), PathBuf::from(path))
             .await
             .expect("Could not load textdump");
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
@@ -34,7 +34,7 @@ mod test {
         let mut output = Vec::new();
         let textdump = make_textdump(
             tx.clone(),
-            Some("** LambdaMOO Database, Format Version 1 **"),
+            Some("** LambdaMOO Database, Format Version 4 **"),
         )
         .await;
 
@@ -57,7 +57,7 @@ mod test {
         let td = tdr.read_textdump().expect("Failed to read textdump");
 
         // Version spec
-        assert_eq!(td.version, "** LambdaMOO Database, Format Version 1 **");
+        assert_eq!(td.version, "** LambdaMOO Database, Format Version 4 **");
 
         // Minimal DB has 1 user, #3,
         assert_eq!(td.users, vec![Objid(3)]);
@@ -164,7 +164,7 @@ mod test {
         let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
         let db = Arc::new(db);
         let tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.clone(), minimal_db.to_str().unwrap())
+        textdump_load(tx.clone(), PathBuf::from(minimal_db))
             .await
             .unwrap();
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
@@ -199,13 +199,13 @@ mod test {
 
     /// Load minimal into a db, then write a new textdump, and they should be the same-ish.
     #[tokio::test]
-    async fn load_into_db_then_write() {
+    async fn load_minimal_into_db_then_compare() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
         let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
         let db = Arc::new(db);
-        load_textdump(
+        load_textdump_file(
             db.clone().loader_client().unwrap(),
             minimal_db.to_str().unwrap(),
         )
@@ -220,5 +220,35 @@ mod test {
         let output = write_textdump(db).await;
 
         assert_diff(&input, &output, "", 0);
+    }
+
+    /// Load a big (JHCore-DEV-2.db) core into a db, then write a new textdump, and then reload
+    /// the core to verify it can be loaded.
+    #[tokio::test]
+    // This is an expensive test, so it's not run by default.
+    #[ignore]
+    async fn load_write_reload_big_core() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
+
+        let textdump = {
+            let (db, _) = RelBoxWorldState::open(None, 1 << 34).await;
+            let db = Arc::new(db);
+            load_textdump_file(
+                db.clone().loader_client().unwrap(),
+                minimal_db.to_str().unwrap(),
+            )
+            .await;
+
+            write_textdump(db).await
+        };
+
+        // Now load that same core back in to a new DB, and hope we don't blow up anywhere.
+        let (db, _) = RelBoxWorldState::open(None, 1 << 34).await;
+        let db = Arc::new(db);
+        let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
+        let _ = read_textdump(db.clone().loader_client().unwrap(), buffered_string_reader)
+            .await
+            .unwrap();
     }
 }

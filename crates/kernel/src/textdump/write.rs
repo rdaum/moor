@@ -5,6 +5,7 @@ use moor_values::var::objid::Objid;
 use moor_values::var::{variant, Var, VarType};
 use variant::Variant;
 
+use crate::textdump::read::TYPE_CLEAR;
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
 
 pub struct TextdumpWriter<W: io::Write> {
@@ -26,7 +27,11 @@ impl<W: io::Write> TextdumpWriter<W> {
         )
     }
 
-    fn write_var(&mut self, var: &Var) -> Result<(), io::Error> {
+    fn write_var(&mut self, var: &Var, is_clear: bool) -> Result<(), io::Error> {
+        if is_clear {
+            writeln!(self.writer, "{}", TYPE_CLEAR)?;
+            return Ok(());
+        }
         match var.variant() {
             Variant::Int(i) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_INT as i64, i)?;
@@ -38,26 +43,28 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
             }
             Variant::Err(e) => {
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, e)?;
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, *e as u8)?;
             }
             Variant::List(l) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_LIST as i64, l.len())?;
                 for v in l.iter() {
-                    self.write_var(v)?;
+                    self.write_var(v, false)?;
                 }
             }
             Variant::None => {
                 writeln!(self.writer, "{}", VarType::TYPE_NONE as i64)?;
             }
             Variant::Float(f) => {
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_FLOAT as i64, f)?;
+                // For MOO compat we need to do the same as:
+                // 	sprintf(buffer, "%%.%dg\n", DBL_DIG + 4);
+                writeln!(self.writer, "{}\n{:+e}", VarType::TYPE_FLOAT as i64, f)?;
             }
         }
         Ok(())
     }
 
     fn write_propval(&mut self, propval: &Propval) -> Result<(), io::Error> {
-        self.write_var(&propval.value)?;
+        self.write_var(&propval.value, propval.is_clear)?;
         writeln!(self.writer, "{}", propval.owner.0)?;
         writeln!(self.writer, "{}", propval.flags)?;
         Ok(())

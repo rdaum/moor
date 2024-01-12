@@ -987,6 +987,26 @@ impl DbTransaction for RelBoxTransaction {
         Ok((propdef, v_none()))
     }
 
+    async fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        let mut ancestors = vec![];
+        let mut search = obj;
+        loop {
+            if search == NOTHING {
+                break;
+            }
+            ancestors.push(search);
+            let parent = object_relations::get_object_value(
+                &self.tx,
+                WorldStateRelation::ObjectParent,
+                search,
+            )
+            .await
+            .unwrap_or(NOTHING);
+            search = parent;
+        }
+        Ok(ObjSet::from(&ancestors))
+    }
+
     async fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
         let ov: Option<Objid> =
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj)
@@ -1018,6 +1038,7 @@ impl RelBoxTransaction {
         let tx = db.start_tx();
         Self { tx }
     }
+
     pub(crate) async fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let children = object_relations::get_object_by_codomain(
             &self.tx,

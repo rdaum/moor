@@ -16,7 +16,7 @@
 /// file.
 use std::collections::BTreeMap;
 
-pub use load_db::textdump_load;
+pub use load_db::{read_textdump, textdump_load};
 use moor_values::var::objid::Objid;
 use moor_values::var::Var;
 pub use read::TextdumpReader;

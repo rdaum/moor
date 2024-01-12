@@ -210,7 +210,7 @@ async fn main() {
                 .clone()
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(loader_interface.clone(), textdump.to_str().unwrap())
+            textdump_load(loader_interface.clone(), textdump)
                 .await
                 .unwrap();
             let duration = start.elapsed();

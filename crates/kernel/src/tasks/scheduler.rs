@@ -773,17 +773,21 @@ impl Scheduler {
                         return;
                     };
 
+                    info!("Creating textdump...");
                     let textdump = make_textdump(
                         loader_client,
                         // TODO: just to be compatible with LambdaMOO import for now, hopefully.
-                        Some("** LambdaMOO Database, Format Version 1 **"),
+                        Some("** LambdaMOO Database, Format Version 4 **"),
                     )
                     .await;
+
+                    info!("Writing textdump to {}", textdump_path.display());
 
                     let mut writer = TextdumpWriter::new(&mut output);
                     if let Err(e) = writer.write_textdump(&textdump) {
                         error!(?e, "Could not write textdump");
                     }
+                    info!("Textdump written to {}", textdump_path.display());
                 });
                 vec![]
             }

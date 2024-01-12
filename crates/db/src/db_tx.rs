@@ -35,6 +35,9 @@ pub trait DbTransaction {
     /// Check the validity of the given object.
     async fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError>;
 
+    /// Returns all the ancestors (+ self) of the given object, in order from self to root.
+    async fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError>;
+
     /// Get the list of all objects
     async fn get_objects(&self) -> Result<ObjSet, WorldStateError>;
 

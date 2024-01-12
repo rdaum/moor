@@ -27,7 +27,7 @@ use moor_values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Va
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
 use moor_compiler::labels::Label;
 
-const TYPE_CLEAR: i64 = 5;
+pub const TYPE_CLEAR: i64 = 5;
 
 pub struct TextdumpReader<R: Read> {
     reader: BufReader<R>,

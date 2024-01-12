@@ -47,6 +47,7 @@ pub mod moo {
 }
 
 /// The emitted parse tree from the parse phase of the compiler.
+#[derive(Debug)]
 pub struct Parse {
     pub stmts: Vec<Stmt>,
     pub names: Names,
@@ -314,7 +315,7 @@ fn parse_expr(
                 Box::new(rhs.unwrap()),
             )),
             Rule::pow => Ok(Expr::Binary(
-                BinaryOp::Eq,
+                BinaryOp::Exp,
                 Box::new(lhs?),
                 Box::new(rhs.unwrap()),
             )),

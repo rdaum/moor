@@ -999,6 +999,56 @@ mod tests {
     }
 
     #[test]
+    fn regress() {
+        let program = r#""Usage:  @make-setter <object>.<property>";
+"Write the standard :set_foo verb for a property.";
+"Works by copying $code_utils:standard_set_property";
+if (!player.programmer)
+player:tell("I don't understand that.");
+elseif ((!dobjstr) || (!(spec = $code_utils:parse_propref(dobjstr))))
+player:tell_lines($code_utils:verb_usage());
+return;
+elseif ($command_utils:object_match_failed(what = player:my_match_object(whatname = spec[1]), whatname))
+elseif (!$perm_utils:controls(player, what))
+player:tell("You don't own ", what:title(), ".");
+elseif (!(info = property_info(what, propname = spec[2])))
+player:tell(what:titlec(), " has no \"", propname, "\" property.");
+elseif ((index(propname, " ") || index(propname, "\"")) || index(propname, "*"))
+player:tell("The standard setter verb won't work; you can't have a space, a quotation mark, or an asterisk in a verb name.");
+elseif (!$perm_utils:controls_prop(player, what, propname))
+player:tell("You don't own ", what:title(), ".", propname, ".");
+elseif (index(info[2], "c") && (!player.wizard))
+player:tell(what:titlec(), ".", propname, " is +c, so the standard setter verb won't work.  @chmod it, or write your own verb.");
+elseif ($code_utils:find_verb_named_1_based(what, verbname = "set_" + propname))
+player:tell(what:titlec(), " already has a ", verbname, " verb.");
+else
+code = listdelete(verb_code($code_utils, "standard_set_property"), 2);
+for v in (verbs(what))
+if (match(v, "^%(set_[^ ]+%|.* set_[^ ]+%)"))
+vname = strsub($string_utils:explode(v)[1], "*", "");
+if (((verb_code(what, vname) == code) && ((oldinfo = verb_info(what, vname))[1] == player)) && (oldinfo[2] == "rx"))
+set_task_perms(player);
+set_verb_info(what, vname, {player, "rx", (v + " ") + verbname});
+player:tell(what:titlec(), " already had a standard setter verb; it's now named \"", (v + " ") + verbname, "\".");
+return;
+endif
+endif
+endfor
+set_task_perms(player);
+add_verb(what, {player, "rx", verbname}, {"this", "none", "this"});
+set_verb_code(what, verbname, code);
+if ((player.wizard && (!index(info[2], "c"))) && (!info[1].wizard))
+player:tell(what:titlec(), ".", propname, " is !c and owned by ", info[1]:name(), ", so this verb doesn't need wizard permissions.  \"@chown ", what, ":", verbname, " to ", info[1], "\" to give ", info[1]:name(), " the verb.");
+endif
+player:tell("Wrote ", what:title(), ":", verbname, ".");
+endif
+return 0 && "Automatically Added Return";
+"Metadata 202106";"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
     fn regression_scatter() {
         let program = r#"{things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;"#;
         let (parse, decompiled) = parse_decompile(program);

@@ -14,7 +14,9 @@
 
 use std::collections::BTreeMap;
 use std::fs::File;
+use std::io;
 use std::io::BufReader;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use metrics_macros::increment_counter;
@@ -89,7 +91,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 #[tracing::instrument(skip(ldr))]
 pub async fn textdump_load(
     ldr: Arc<dyn LoaderInterface>,
-    path: &str,
+    path: PathBuf,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
@@ -98,7 +100,15 @@ pub async fn textdump_load(
         File::open(path).map_err(|e| TextdumpReaderError::CouldNotOpenFile(e.to_string()))?;
 
     let br = BufReader::new(corefile);
-    let mut tdr = TextdumpReader::new(br);
+
+    read_textdump(ldr, br).await?
+}
+
+pub async fn read_textdump<T: io::Read>(
+    loader: Arc<dyn LoaderInterface>,
+    reader: BufReader<T>,
+) -> Result<Result<(), TextdumpReaderError>, TextdumpReaderError> {
+    let mut tdr = TextdumpReader::new(reader);
     let td = tdr.read_textdump()?;
 
     info!("Instantiating objects");
@@ -108,19 +118,20 @@ pub async fn textdump_load(
         trace!(
             objid = ?objid, name=o.name, flags=?flags, "Creating object",
         );
-        ldr.create_object(
-            Some(*objid),
-            ObjAttrs::new()
-                // .owner(o.owner)
-                // .location(o.location)
-                .name(o.name.as_str())
-                // .parent(o.parent)
-                .flags(flags),
-        )
-        .await
-        .map_err(|e| {
-            TextdumpReaderError::LoadError(format!("creating object {}", objid), e.clone())
-        })?;
+        loader
+            .create_object(
+                Some(*objid),
+                ObjAttrs::new()
+                    // .owner(o.owner)
+                    // .location(o.location)
+                    .name(o.name.as_str())
+                    // .parent(o.parent)
+                    .flags(flags),
+            )
+            .await
+            .map_err(|e| {
+                TextdumpReaderError::LoadError(format!("creating object {}", objid), e.clone())
+            })?;
 
         increment_counter!("textdump.created_objects");
     }
@@ -128,13 +139,20 @@ pub async fn textdump_load(
     info!("Setting object attributes (parent/location/owner)");
     for (objid, o) in &td.objects {
         trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
-        ldr.set_object_owner(*objid, o.owner).await.map_err(|e| {
-            TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
-        })?;
-        ldr.set_object_parent(*objid, o.parent).await.map_err(|e| {
-            TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
-        })?;
-        ldr.set_object_location(*objid, o.location)
+        loader
+            .set_object_owner(*objid, o.owner)
+            .await
+            .map_err(|e| {
+                TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
+            })?;
+        loader
+            .set_object_parent(*objid, o.parent)
+            .await
+            .map_err(|e| {
+                TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
+            })?;
+        loader
+            .set_object_location(*objid, o.location)
             .await
             .map_err(|e| {
                 TextdumpReaderError::LoadError(format!("setting location of {}", objid), e.clone())
@@ -153,21 +171,22 @@ pub async fn textdump_load(
             if resolved.definer == *objid {
                 trace!(definer = ?objid.0, name = resolved.name, "Defining property");
                 let value = Some(resolved.value);
-                ldr.define_property(
-                    resolved.definer,
-                    *objid,
-                    resolved.name.as_str(),
-                    resolved.owner,
-                    flags,
-                    value,
-                )
-                .await
-                .map_err(|e| {
-                    TextdumpReaderError::LoadError(
-                        format!("defining property on {}", objid),
-                        e.clone(),
+                loader
+                    .define_property(
+                        resolved.definer,
+                        *objid,
+                        resolved.name.as_str(),
+                        resolved.owner,
+                        flags,
+                        value,
                     )
-                })?;
+                    .await
+                    .map_err(|e| {
+                        TextdumpReaderError::LoadError(
+                            format!("defining property on {}", objid),
+                            e.clone(),
+                        )
+                    })?;
             }
             increment_counter!("textdump.defined_properties");
         }
@@ -181,7 +200,8 @@ pub async fn textdump_load(
             trace!(objid = ?objid.0, name = resolved.name, flags = ?flags, "Setting property");
             let value = (!p.is_clear).then(|| p.value.clone());
 
-            ldr.set_property(*objid, resolved.name.as_str(), p.owner, flags, value)
+            loader
+                .set_property(*objid, resolved.name.as_str(), p.owner, flags, value)
                 .await
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
@@ -221,8 +241,6 @@ pub async fn textdump_load(
 
             let names: Vec<&str> = v.name.split(' ').collect();
 
-            // If the verb program is missing, then it's an empty program, and we'll put in
-            // an empty binary.
             let program = match td.verbs.get(&(*objid, vn)) {
                 Some(verb) if verb.program.is_some() => {
                     compile(verb.program.clone().unwrap().as_str()).map_err(|e| {
@@ -232,6 +250,8 @@ pub async fn textdump_load(
                         )
                     })?
                 }
+                // If the verb program is missing, then it's an empty program, and we'll put in
+                // an empty binary.
                 _ => Program {
                     literals: vec![],
                     jump_labels: vec![],
@@ -246,7 +266,8 @@ pub async fn textdump_load(
                 // Encode the binary (for now using bincode)
                 program.with_byte_buffer(|d| Vec::from(d));
 
-            ldr.add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
+            loader
+                .add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
                 .await
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
@@ -262,5 +283,5 @@ pub async fn textdump_load(
 
     info!("Import complete.");
 
-    Ok(())
+    Ok(Ok(()))
 }

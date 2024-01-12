@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use moor_values::model::objects::ObjAttrs;
 use moor_values::model::objset::ObjSet;
-use moor_values::model::propdef::PropDefs;
+use moor_values::model::propdef::{PropDef, PropDefs};
 use moor_values::model::props::PropFlag;
 use moor_values::model::r#match::VerbArgsSpec;
 use moor_values::model::verbdef::VerbDefs;
@@ -52,11 +52,6 @@ pub trait LoaderInterface: Send + Sync {
         binary: Vec<u8>,
     ) -> Result<(), WorldStateError>;
 
-    async fn get_property_value(
-        &self,
-        obj: Objid,
-        uuid: Uuid,
-    ) -> Result<Option<Var>, WorldStateError>;
     async fn define_property(
         &self,
         definer: Objid,
@@ -97,4 +92,17 @@ pub trait LoaderInterface: Send + Sync {
 
     /// Get the properties defined on a given object
     async fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError>;
+
+    async fn get_property_value(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<Option<Var>, WorldStateError>;
+
+    /// Returns all the property values from the root of the inheritance hierarchy down to the
+    /// bottom, for the given object.
+    async fn get_all_property_values(
+        &self,
+        objid: Objid,
+    ) -> Result<Vec<(PropDef, Option<Var>)>, WorldStateError>;
 }
