@@ -30,7 +30,7 @@ use moor_values::var::Var;
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
 #[async_trait]
-pub trait LoaderInterface {
+pub trait LoaderInterface: Send + Sync {
     /// For reading textdumps...
     async fn create_object(
         &self,

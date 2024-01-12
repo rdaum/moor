@@ -238,18 +238,22 @@ impl<R: Read> TextdumpReader<R> {
         let header = self.read_string()?;
         let (oid, verbnum): (i64, usize);
         scan!(header.bytes() => "#{}:{}", oid, verbnum);
-        let mut program = String::new();
+
+        // Collect lines
+        let mut program_lines = vec![];
         loop {
             let line = self.read_string()?;
             if line.trim() == "." {
-                return Ok(Verb {
-                    objid: Objid(oid),
-                    verbnum,
-                    program: Some(program),
-                });
+                break;
             }
-            program.push_str(line.as_str());
+            program_lines.push(line);
         }
+        let program = program_lines.join("\n");
+        Ok(Verb {
+            objid: Objid(oid),
+            verbnum,
+            program: Some(program),
+        })
     }
 
     pub fn read_textdump(&mut self) -> Result<Textdump, TextdumpReaderError> {

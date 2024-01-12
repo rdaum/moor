@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use moor_compiler::opcode::Program;
 use moor_db::loader::LoaderInterface;
@@ -44,7 +45,7 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
 
 /// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
 /// exists in the transaction.
-pub async fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdump {
+pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) -> Textdump {
     // To create the objects list, we need to scan all objects.
     // For now, the expectation would be we can simply iterate from 0 to max object, checking validity of each
     // object, and then adding it to the list.
@@ -170,7 +171,6 @@ pub async fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> T
                 .expect("Failed to get verb binary");
 
             let program = Program::from_sliceref(SliceRef::from_vec(binary));
-
             let program = if !program.main_vector.is_empty() {
                 let ast = moor_compiler::decompile::program_to_tree(&program)
                     .expect("Failed to decompile verb binary");
@@ -238,7 +238,6 @@ pub async fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> T
         .iter()
         .collect();
 
-    
     Textdump {
         version: version.unwrap_or(MOOR_TEXTDUMP_DB_VERSION).to_string(),
         objects,

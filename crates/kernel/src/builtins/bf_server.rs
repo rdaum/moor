@@ -799,6 +799,26 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(eval, bf_eval);
 
+async fn bf_dump_database<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+    bf_args
+        .task_perms()
+        .await
+        .map_err(world_state_err)?
+        .check_wizard()
+        .map_err(world_state_err)?;
+
+    bf_args
+        .scheduler_sender
+        .send((
+            bf_args.exec_state.top().task_id,
+            SchedulerControlMsg::Checkpoint,
+        ))
+        .map_err(|_| Error::E_QUOTA)?;
+
+    Ok(Ret(v_bool(true)))
+}
+bf_declare!(dump_database, bf_dump_database);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) {
         self.builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
@@ -829,5 +849,6 @@ impl VM {
         self.builtins[offset_for_builtin("listeners")] = Arc::new(BfListeners {});
         self.builtins[offset_for_builtin("eval")] = Arc::new(BfEval {});
         self.builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
+        self.builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
     }
 }

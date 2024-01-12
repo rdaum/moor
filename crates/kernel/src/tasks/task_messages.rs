@@ -115,4 +115,6 @@ pub enum SchedulerControlMsg {
         player: Objid,
         sender_permissions: Perms,
     },
+    /// Task is requesting that a textdump checkpoint happen, to the configured file.
+    Checkpoint,
 }

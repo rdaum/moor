@@ -7,17 +7,17 @@ use variant::Variant;
 
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
 
-pub struct TextdumpWriter<W: std::io::Write> {
+pub struct TextdumpWriter<W: io::Write> {
     writer: W,
 }
 
-impl<W: std::io::Write> TextdumpWriter<W> {
+impl<W: io::Write> TextdumpWriter<W> {
     pub fn new(writer: W) -> Self {
         Self { writer }
     }
 }
 
-impl<W: std::io::Write> TextdumpWriter<W> {
+impl<W: io::Write> TextdumpWriter<W> {
     fn write_verbdef(&mut self, verbdef: &Verbdef) -> Result<(), io::Error> {
         writeln!(
             self.writer,

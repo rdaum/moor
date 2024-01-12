@@ -36,10 +36,10 @@ fn testsuite_dir() -> PathBuf {
 }
 
 /// Create a minimal Db to support the test harness.
-async fn load_textdump(db: &mut RelBoxWorldState) {
-    let mut tx = db.loader_client().unwrap();
+async fn load_textdump(db: Arc<dyn Database>) {
+    let tx = db.loader_client().unwrap();
     textdump_load(
-        tx.as_mut(),
+        tx.clone(),
         testsuite_dir().join("Minimal.db").to_str().unwrap(),
     )
     .await
@@ -47,7 +47,7 @@ async fn load_textdump(db: &mut RelBoxWorldState) {
     assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 }
 
-async fn compile_verbs(db: &mut RelBoxWorldState, verbs: &[(&str, &Program)]) {
+async fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().await.unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec();
@@ -85,9 +85,9 @@ async fn compile_verbs(db: &mut RelBoxWorldState, verbs: &[(&str, &Program)]) {
     assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 }
 
-async fn eval(db: &mut RelBoxWorldState, expression: &str) -> Var {
+async fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> Var {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
-    compile_verbs(db, &[("test", &binary)]).await;
+    compile_verbs(db.clone(), &[("test", &binary)]).await;
     let mut state = db.new_world_state().await.unwrap();
     let result = call_verb(
         state.as_mut(),
@@ -123,11 +123,12 @@ async fn run_basic_test(test_dir: &str) {
 
     // Frustratingly the individual test lines are not independent, so we need to run them in a
     // single database.
-    let (mut db, _) = RelBoxWorldState::open(None, 1 << 30).await;
-    load_textdump(&mut db).await;
+    let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
+    let db = Arc::new(db);
+    load_textdump(db.clone()).await;
     for (line_num, (input, expected_output)) in zipped.enumerate() {
-        let evaluated = eval(&mut db, input).await;
-        let output = eval(&mut db, expected_output).await;
+        let evaluated = eval(db.clone(), input).await;
+        let output = eval(db.clone(), expected_output).await;
         assert_eq!(evaluated, output, "{test_dir}: line {line_num}: {input}")
     }
 }

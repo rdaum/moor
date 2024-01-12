@@ -13,6 +13,7 @@
 //
 
 pub mod builtins;
+pub mod config;
 pub mod matching;
 pub mod tasks;
 pub mod textdump;

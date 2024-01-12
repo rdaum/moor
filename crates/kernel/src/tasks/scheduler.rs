@@ -13,9 +13,11 @@
 //
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use crate::textdump::{make_textdump, TextdumpWriter};
 use bincode::{Decode, Encode};
 use metrics_macros::{gauge, increment_counter};
 use thiserror::Error;
@@ -37,6 +39,7 @@ use SchedulerError::{
     TaskAbortedCancelled, TaskAbortedError, TaskAbortedException, TaskAbortedLimit,
 };
 
+use crate::config::Config;
 use crate::tasks::scheduler::SchedulerError::TaskNotFound;
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
@@ -46,6 +49,7 @@ use crate::vm::Fork;
 use crate::vm::UncaughtException;
 use moor_compiler::codegen::compile;
 use moor_compiler::CompileError;
+use moor_db::Database;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(5);
@@ -57,6 +61,7 @@ pub struct Scheduler {
     inner: Arc<RwLock<Inner>>,
     control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     control_receiver: Arc<Mutex<UnboundedReceiver<(TaskId, SchedulerControlMsg)>>>,
+    config: Arc<Config>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode)]
@@ -147,7 +152,7 @@ enum TaskHandleResult {
 
 struct Inner {
     running: bool,
-    state_source: Arc<dyn WorldStateSource>,
+    database: Arc<dyn Database + Send + Sync>,
     next_task_id: usize,
     tasks: HashMap<TaskId, TaskControl>,
     input_requests: HashMap<Uuid, TaskId>,
@@ -155,16 +160,18 @@ struct Inner {
 
 /// Public facing interface for the scheduler.
 impl Scheduler {
-    pub fn new(state_source: Arc<dyn WorldStateSource>) -> Self {
+    pub fn new(database: Arc<dyn Database + Send + Sync>, config: Config) -> Self {
+        let config = Arc::new(config);
         let (control_sender, control_receiver) = tokio::sync::mpsc::unbounded_channel();
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 running: Default::default(),
-                state_source,
+                database,
                 next_task_id: Default::default(),
                 tasks: HashMap::new(),
                 input_requests: Default::default(),
             })),
+            config: config.clone(),
             control_sender,
             control_receiver: Arc::new(Mutex::new(control_receiver)),
         }
@@ -539,6 +546,7 @@ impl Scheduler {
     }
 
     /// Handle task-origin'd scheduler control messages.
+    /// Note: this function should never be allowed to panic, as it is called from the scheduler main loop.
     async fn handle_task_control_msg(
         &self,
         task_id: TaskId,
@@ -739,6 +747,46 @@ impl Scheduler {
                 // Task is asking to boot a player.
                 vec![TaskHandleResult::Disconnect(task_id, player)]
             }
+            SchedulerControlMsg::Checkpoint => {
+                increment_counter!("scheduler,checkpoint");
+                let Some(textdump_path) = self.config.textdump_output.clone() else {
+                    error!("Cannot textdump as textdump_file not configured");
+                    return vec![];
+                };
+
+                // TODO: fork a task to do this, so we're not blocking the scheduler thread.
+                let loader_client = {
+                    let inner = self.inner.write().await;
+
+                    match inner.database.clone().loader_client() {
+                        Ok(tx) => tx,
+                        Err(e) => {
+                            error!(?e, "Could not start transaction for checkpoint");
+                            return vec![];
+                        }
+                    }
+                };
+
+                tokio::spawn(async move {
+                    let Ok(mut output) = File::create(&textdump_path) else {
+                        error!("Could not open textdump file for writing");
+                        return;
+                    };
+
+                    let textdump = make_textdump(
+                        loader_client,
+                        // TODO: just to be compatible with LambdaMOO import for now, hopefully.
+                        Some("** LambdaMOO Database, Format Version 1 **"),
+                    )
+                    .await;
+
+                    let mut writer = TextdumpWriter::new(&mut output);
+                    if let Err(e) = writer.write_textdump(&textdump) {
+                        error!(?e, "Could not write textdump");
+                    }
+                });
+                vec![]
+            }
         }
     }
 }
@@ -848,7 +896,10 @@ impl Inner {
             task.suspended = false;
 
             let world_state = self
-                .state_source
+                .database
+                .clone()
+                .world_state_source()
+                .expect("Could not get world state source")
                 .new_world_state()
                 .await
                 // This is a rather drastic system problem if it happens, and it's best to just die.
@@ -1061,7 +1112,10 @@ impl Inner {
 
         // Follow the usual task resume logic.
         let world_state = self
-            .state_source
+            .database
+            .clone()
+            .world_state_source()
+            .expect("Unable to create world state source from database")
             .new_world_state()
             .await
             .expect("Could not start transaction for resumed task. Panic.");
@@ -1094,7 +1148,10 @@ impl Inner {
 
         // Create a new transaction.
         let world_state = self
-            .state_source
+            .database
+            .clone()
+            .world_state_source()
+            .expect("Unable to get world source from database")
             .new_world_state()
             .await
             .expect("Could not start transaction for resumed task. Panic.");
@@ -1180,7 +1237,11 @@ impl Inner {
         self.next_task_id += 1;
         let (task_control_sender, task_control_receiver) = tokio::sync::mpsc::unbounded_channel();
 
-        let state_source = self.state_source.clone();
+        let state_source = self
+            .database
+            .clone()
+            .world_state_source()
+            .expect("Unable to instantiate database");
         let task_control = TaskControl {
             task_id,
             player,
@@ -1197,7 +1258,6 @@ impl Inner {
         // TODO: support a queue-size on concurrent executing tasks and allow them to sit in an
         //   initially suspended state without spawning a worker thread, until the queue has space.
         // Spawn the task's thread.
-        let state_source = self.state_source.clone();
         tokio::spawn(async move {
             debug!(?task_id, ?task_start, "Starting up task");
             Task::run(

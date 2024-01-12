@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test {
+    use moor_db::loader::LoaderInterface;
     use moor_db::odb::RelBoxWorldState;
     use moor_db::Database;
     use moor_kernel::textdump::{make_textdump, textdump_load, TextdumpReader};
@@ -12,6 +13,7 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
+    use std::sync::Arc;
     use text_diff::assert_diff;
 
     fn get_minimal_db() -> File {
@@ -20,19 +22,18 @@ mod test {
         File::open(minimal_db.clone()).unwrap()
     }
 
-    async fn load_textdump(db: &mut RelBoxWorldState, path: &str) {
-        let mut tx = db.loader_client().unwrap();
-        textdump_load(tx.as_mut(), path)
+    async fn load_textdump(tx: Arc<dyn LoaderInterface>, path: &str) {
+        textdump_load(tx.clone(), path)
             .await
             .expect("Could not load textdump");
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
     }
 
-    async fn write_textdump(db: &mut RelBoxWorldState) -> String {
-        let mut tx = db.loader_client().unwrap();
+    async fn write_textdump(db: Arc<RelBoxWorldState>) -> String {
+        let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
         let textdump = make_textdump(
-            tx.as_mut(),
+            tx.clone(),
             Some("** LambdaMOO Database, Format Version 1 **"),
         )
         .await;
@@ -160,9 +161,10 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (mut db, _) = RelBoxWorldState::open(None, 1 << 30).await;
-        let mut tx = db.loader_client().unwrap();
-        textdump_load(tx.as_mut(), minimal_db.to_str().unwrap())
+        let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
+        let db = Arc::new(db);
+        let tx = db.clone().loader_client().unwrap();
+        textdump_load(tx.clone(), minimal_db.to_str().unwrap())
             .await
             .unwrap();
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
@@ -201,8 +203,13 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (mut db, _) = RelBoxWorldState::open(None, 1 << 30).await;
-        load_textdump(&mut db, minimal_db.to_str().unwrap()).await;
+        let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
+        let db = Arc::new(db);
+        load_textdump(
+            db.clone().loader_client().unwrap(),
+            minimal_db.to_str().unwrap(),
+        )
+        .await;
 
         // Read input as string, and compare.
         let corefile = File::open(minimal_db).unwrap();
@@ -210,7 +217,7 @@ mod test {
         let input = String::from_utf8(br.bytes().map(|b| b.unwrap()).collect())
             .expect("Failed to convert input to string");
 
-        let output = write_textdump(&mut db).await;
+        let output = write_textdump(db).await;
 
         assert_diff(&input, &output, "", 0);
     }

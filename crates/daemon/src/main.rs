@@ -28,6 +28,7 @@ use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 
 use moor_db::DatabaseBuilder;
+use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::textdump_load;
 use rpc_common::{RpcRequestError, RpcResponse, RpcResult};
@@ -59,6 +60,13 @@ struct Args {
 
     #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
     textdump: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_name = "textdump-output",
+        help = "Path to textdump file to write on `dump_database()`, if any"
+    )]
+    textdump_out: Option<PathBuf>,
 
     #[arg(
         short,
@@ -188,7 +196,7 @@ async fn main() {
 
     info!("Daemon starting...");
     let db_source_builder = DatabaseBuilder::new().with_path(args.db.clone());
-    let (mut db_source, freshly_made) = db_source_builder.open_db().await.unwrap();
+    let (db_source, freshly_made) = db_source_builder.open_db().await.unwrap();
     info!(path = ?args.db, "Opened database");
 
     // If the database already existed, do not try to import the textdump...
@@ -198,10 +206,11 @@ async fn main() {
         } else {
             info!("Loading textdump...");
             let start = std::time::Instant::now();
-            let mut loader_interface = db_source
+            let loader_interface = db_source
+                .clone()
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(loader_interface.as_mut(), textdump.to_str().unwrap())
+            textdump_load(loader_interface.clone(), textdump.to_str().unwrap())
                 .await
                 .unwrap();
             let duration = start.elapsed();
@@ -219,11 +228,18 @@ async fn main() {
     let mut stop_signal =
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
+    let config = Config {
+        textdump_output: args.textdump_out,
+    };
+
+    let state_source = db_source
+        .clone()
+        .world_state_source()
+        .expect("Could not get world state source from db");
     // The pieces from core we're going to use:
     //   Our DB.
-    let state_source = db_source.world_state_source().unwrap();
     //   Our scheduler.
-    let scheduler = Scheduler::new(state_source.clone());
+    let scheduler = Scheduler::new(db_source, config);
 
     // The scheduler thread:
     let loop_scheduler = scheduler.clone();

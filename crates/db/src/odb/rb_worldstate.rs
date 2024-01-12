@@ -1093,13 +1093,13 @@ impl RelBoxTransaction {
 }
 
 impl Database for RelBoxWorldState {
-    fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
+    fn loader_client(self: Arc<Self>) -> Result<Arc<dyn LoaderInterface>, WorldStateError> {
         let tx = RelBoxTransaction::new(self.db.clone());
-        Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
+        Ok(Arc::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 
-    fn world_state_source(self: Box<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
-        Ok(Arc::new(*self))
+    fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
+        Ok(self)
     }
 }
 

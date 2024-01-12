@@ -15,6 +15,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Arc;
 
 use metrics_macros::increment_counter;
 use tracing::{info, span, trace};
@@ -87,7 +88,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 
 #[tracing::instrument(skip(ldr))]
 pub async fn textdump_load(
-    ldr: &mut dyn LoaderInterface,
+    ldr: Arc<dyn LoaderInterface>,
     path: &str,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");

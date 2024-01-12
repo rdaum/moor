@@ -36,8 +36,8 @@ pub struct DatabaseBuilder {
 }
 
 pub trait Database {
-    fn loader_client(&mut self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
-    fn world_state_source(self: Box<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError>;
+    fn loader_client(self: Arc<Self>) -> Result<Arc<dyn LoaderInterface>, WorldStateError>;
+    fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError>;
 }
 
 impl DatabaseBuilder {
@@ -60,10 +60,10 @@ impl DatabaseBuilder {
 
     /// Returns a new database instance. The second value in the result tuple is true if the
     /// database was newly created, and false if it was already present.
-    pub async fn open_db(&self) -> Result<(Box<dyn Database>, bool), String> {
+    pub async fn open_db(&self) -> Result<(Arc<dyn Database + Send + Sync>, bool), String> {
         let (db, fresh) =
             RelBoxWorldState::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40)).await;
-        Ok((Box::new(db), fresh))
+        Ok((Arc::new(db), fresh))
     }
 }
 
