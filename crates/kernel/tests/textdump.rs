@@ -1,15 +1,19 @@
 #[cfg(test)]
 mod test {
+    use moor_compiler::opcode::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::odb::RelBoxWorldState;
     use moor_db::Database;
     use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
+    use moor_values::model::defset::{HasUuid, Named};
     use moor_values::model::r#match::VerbArgsSpec;
     use moor_values::model::verbs::VerbFlag;
     use moor_values::model::world_state::WorldStateSource;
     use moor_values::model::CommitResult;
+    use moor_values::util::slice_ref::SliceRef;
     use moor_values::var::objid::Objid;
-    use moor_values::SYSTEM_OBJECT;
+    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+    use std::collections::BTreeSet;
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
@@ -29,14 +33,10 @@ mod test {
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
     }
 
-    async fn write_textdump(db: Arc<RelBoxWorldState>) -> String {
+    async fn write_textdump(db: Arc<RelBoxWorldState>, version: &str) -> String {
         let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
-        let textdump = make_textdump(
-            tx.clone(),
-            Some("** LambdaMOO Database, Format Version 4 **"),
-        )
-        .await;
+        let textdump = make_textdump(tx.clone(), Some(version)).await;
 
         let mut writer = moor_kernel::textdump::TextdumpWriter::new(&mut output);
         writer
@@ -57,7 +57,7 @@ mod test {
         let td = tdr.read_textdump().expect("Failed to read textdump");
 
         // Version spec
-        assert_eq!(td.version, "** LambdaMOO Database, Format Version 4 **");
+        assert_eq!(td.version, "** LambdaMOO Database, Format Version 1 **");
 
         // Minimal DB has 1 user, #3,
         assert_eq!(td.users, vec![Objid(3)]);
@@ -217,7 +217,7 @@ mod test {
         let input = String::from_utf8(br.bytes().map(|b| b.unwrap()).collect())
             .expect("Failed to convert input to string");
 
-        let output = write_textdump(db).await;
+        let output = write_textdump(db, "** LambdaMOO Database, Format Version 1 **").await;
 
         assert_diff(&input, &output, "", 0);
     }
@@ -231,24 +231,141 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
 
-        let textdump = {
-            let (db, _) = RelBoxWorldState::open(None, 1 << 34).await;
-            let db = Arc::new(db);
-            load_textdump_file(
-                db.clone().loader_client().unwrap(),
-                minimal_db.to_str().unwrap(),
-            )
-            .await;
+        let (db1, _) = RelBoxWorldState::open(None, 1 << 34).await;
+        let db1 = Arc::new(db1);
+        load_textdump_file(
+            db1.clone().loader_client().unwrap(),
+            minimal_db.to_str().unwrap(),
+        )
+        .await;
 
-            write_textdump(db).await
-        };
+        let textdump =
+            write_textdump(db1.clone(), "** LambdaMOO Database, Format Version 4 **").await;
 
         // Now load that same core back in to a new DB, and hope we don't blow up anywhere.
-        let (db, _) = RelBoxWorldState::open(None, 1 << 34).await;
-        let db = Arc::new(db);
+        let (db2, _) = RelBoxWorldState::open(None, 1 << 34).await;
+        let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
-        let _ = read_textdump(db.clone().loader_client().unwrap(), buffered_string_reader)
+        let lc = db2.clone().loader_client().unwrap();
+        let _ = read_textdump(lc.clone(), buffered_string_reader)
             .await
             .unwrap();
+        assert_eq!(lc.commit().await.unwrap(), CommitResult::Success);
+
+        // Now go through the properties and verbs of all the objects on db1, and verify that
+        // they're the same on db2.
+        let tx1 = db1.loader_client().unwrap();
+        let tx2 = db2.loader_client().unwrap();
+        let objects1 = tx1.get_objects().await.unwrap();
+        let objects2 = tx2.get_objects().await.unwrap();
+        let objects1 = objects1.iter().collect::<BTreeSet<_>>();
+        let objects2 = objects2.iter().collect::<BTreeSet<_>>();
+        assert_eq!(objects1, objects2);
+
+        for o in objects1 {
+            // set of properties should be the same
+            let o1_props = tx1.get_object_properties(o).await.unwrap();
+            let o2_props = tx2.get_object_properties(o).await.unwrap();
+            let mut o1_props = o1_props.iter().collect::<Vec<_>>();
+            let mut o2_props = o2_props.iter().collect::<Vec<_>>();
+
+            o1_props.sort_by(|a, b| a.name().cmp(b.name()));
+            o2_props.sort_by(|a, b| a.name().cmp(b.name()));
+
+            // We want to do equality testing, but ignore the UUID which can be different
+            // between textdump loads...
+            assert_eq!(o1_props.len(), o2_props.len());
+            let zipped = o1_props.iter().zip(o2_props.iter());
+            for (i, prop) in zipped.enumerate() {
+                let (p1, p2) = prop;
+
+                assert_eq!(p1.name(), p2.name(), "{}.{}, name mismatch", o, p1.name(),);
+
+                assert_eq!(
+                    p1.definer(),
+                    p2.definer(),
+                    "{}.{}, definer mismatch ({} != {})",
+                    o,
+                    p1.name(),
+                    p1.definer(),
+                    p2.definer()
+                );
+                // location
+                assert_eq!(
+                    p1.location(),
+                    p2.location(),
+                    "{}.{}, location mismatch",
+                    o,
+                    p1.name()
+                );
+                assert_eq!(
+                    p1.flags(),
+                    p2.flags(),
+                    "{}.{}, flags mismatch",
+                    o,
+                    p1.name(),
+                );
+                assert_eq!(
+                    p1.owner(),
+                    p2.owner(),
+                    "{}.{}, owner mismatch",
+                    o,
+                    p1.name(),
+                );
+
+                let value1 = tx1.get_property_value(o, p1.uuid()).await.unwrap();
+                let value2 = tx2.get_property_value(o, p2.uuid()).await.unwrap();
+
+                assert_eq!(
+                    value1,
+                    value2,
+                    "{}.{}, value mismatch ({}th value checked)",
+                    o,
+                    p1.name(),
+                    i
+                );
+            }
+
+            // Now compare verbdefs
+            let o1_verbs = tx1.get_object_verbs(o).await.unwrap();
+            let o2_verbs = tx2.get_object_verbs(o).await.unwrap();
+            let o1_verbs = o1_verbs.iter().collect::<Vec<_>>();
+            let o2_verbs = o2_verbs.iter().collect::<Vec<_>>();
+
+            assert_eq!(o1_verbs.len(), o2_verbs.len());
+            for (v1, v2) in o1_verbs.iter().zip(o2_verbs.iter()) {
+                let v1_name = v1.names().join(" ").to_string();
+                assert_eq!(v1.names(), v2.names(), "{}:{}, name mismatch", o, v1_name);
+
+                assert_eq!(v1.owner(), v2.owner(), "{}:{}, owner mismatch", o, v1_name);
+                assert_eq!(v1.flags(), v2.flags(), "{}:{}, flags mismatch", o, v1_name);
+                assert_eq!(v1.args(), v2.args(), "{}:{}, args mismatch", o, v1_name);
+
+                // We want to actually decode and compare the opcode streams rather than
+                // the binary, so that we can make meaningful error reports.
+                let binary1 = tx1.get_verb_binary(o, v1.uuid()).await.unwrap();
+                let binary2 = tx2.get_verb_binary(o, v2.uuid()).await.unwrap();
+
+                let program1 = moor_compiler::decompile::program_to_tree(&Program::from_sliceref(
+                    SliceRef::from_vec(binary1),
+                ))
+                .unwrap();
+                let program2 = moor_compiler::decompile::program_to_tree(&Program::from_sliceref(
+                    SliceRef::from_vec(binary2),
+                ))
+                .unwrap();
+
+                assert_eq!(
+                    program1.names, program2.names,
+                    "{}:{}, variable names mismatch",
+                    o, v1_name
+                );
+                assert_eq!(
+                    program1.stmts, program2.stmts,
+                    "{}:{}, statements mismatch",
+                    o, v1_name
+                );
+            }
+        }
     }
 }
