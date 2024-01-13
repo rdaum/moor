@@ -84,6 +84,11 @@ impl WorldState for DbTxWorldState {
         self.tx.get_object_location(obj).await
     }
 
+    async fn object_bytes(&self, perms: Objid, obj: Objid) -> Result<usize, WorldStateError> {
+        self.perms(perms).await?.check_wizard()?;
+        self.tx.get_object_size_bytes(obj).await
+    }
+
     #[tracing::instrument(skip(self))]
     async fn create_object(
         &mut self,

@@ -95,6 +95,9 @@ pub trait DbTransaction {
     /// Get the contents of the given object.
     async fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError>;
 
+    /// Get the stored size of the given object & all its properties, verbs, etc.
+    async fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError>;
+
     /// Set the location of the given object.
     async fn set_object_location(&self, obj: Objid, location: Objid)
         -> Result<(), WorldStateError>;

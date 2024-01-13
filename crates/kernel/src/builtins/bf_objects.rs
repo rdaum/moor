@@ -347,15 +347,6 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(recycle, bf_recycle);
 
-/*
-Function: int object_bytes (obj object)
-Returns the number of bytes of the server's memory required to store the given object, including the space used by the values of all of its non-clear properties and by the verbs and properties defined directly on the object. Raised E_INVARG if object is not a valid object and E_PERM if the programmer is not a wizard.
- */
-
-/*
-Function: obj max_object ()
-Returns the largest object number yet assigned to a created object. Note that the object with this number may no longer exist; it may have been recycled. The next object created will be assigned the object number one larger than the value of max_object().
- */
 async fn bf_max_object<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);

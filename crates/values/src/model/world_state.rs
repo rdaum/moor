@@ -64,6 +64,9 @@ pub trait WorldState: Send + Sync {
     /// Get the location of the given object.
     async fn location_of(&self, perms: Objid, obj: Objid) -> Result<Objid, WorldStateError>;
 
+    /// Return the number of bytes used by the given object and all its attributes.
+    async fn object_bytes(&self, perms: Objid, obj: Objid) -> Result<usize, WorldStateError>;
+
     /// Create a new object, assigning it a new unique object id.
     /// If owner is #-1, the object's is set to itself.
     /// Note it is the caller's responsibility to execute :initialize).

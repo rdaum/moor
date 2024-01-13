@@ -118,7 +118,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | binary_hash   |          |                                                                                                              |
 | decode_binary |          | Probably won't implement, see README.md                                                                      |
 | encode_binary |          | "                                                                                                            |
-| object_bytes  | &check;  | Fake value. Only there to make JHCore happy. Actually calculating this would be tricky                       |
+| object_bytes  | &check;  |                                                                                                              |
 
 ### Server
 

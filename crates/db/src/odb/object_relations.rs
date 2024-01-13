@@ -146,6 +146,19 @@ pub async fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     }
 }
 
+pub async fn tuple_size_for_object_domain(
+    tx: &Transaction,
+    rel: WorldStateRelation,
+    oid: Objid,
+) -> Option<usize> {
+    let relation = tx.relation(RelationId(rel as usize)).await;
+    match relation.seek_by_domain(oid.as_sliceref()).await {
+        Ok(t) => Some(t.slot_buffer().len()),
+        Err(TupleError::NotFound) => None,
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
+}
+
 pub async fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
@@ -160,6 +173,18 @@ pub async fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuf
     ObjSet::from_oid_iter(objs)
 }
 
+pub async fn tuple_size_for_object_codomain(
+    tx: &Transaction,
+    rel: WorldStateRelation,
+    oid: Objid,
+) -> Option<usize> {
+    let relation = tx.relation(RelationId(rel as usize)).await;
+    match relation.seek_by_codomain(oid.as_sliceref()).await {
+        Ok(ts) => Some(ts.iter().map(|t| t.slot_buffer().len()).sum()),
+        Err(TupleError::NotFound) => None,
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
+}
 pub async fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
@@ -170,6 +195,21 @@ pub async fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer
     let relation = tx.relation(RelationId(rel as usize)).await;
     match relation.seek_by_domain(key_bytes).await {
         Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
+        Err(TupleError::NotFound) => None,
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+pub async fn tuple_size_composite(
+    tx: &Transaction,
+    rel: WorldStateRelation,
+    oid: Objid,
+    uuid: Uuid,
+) -> Option<usize> {
+    let key_bytes = composite_key_for(oid, &uuid);
+    let relation = tx.relation(RelationId(rel as usize)).await;
+    match relation.seek_by_domain(key_bytes).await {
+        Ok(t) => Some(t.slot_buffer().len()),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }

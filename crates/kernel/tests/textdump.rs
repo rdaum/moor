@@ -178,7 +178,7 @@ mod test {
         let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
         let db = Arc::new(db);
         let tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.clone(), PathBuf::from(minimal_db))
+        textdump_load(tx.clone(), minimal_db)
             .await
             .unwrap();
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);

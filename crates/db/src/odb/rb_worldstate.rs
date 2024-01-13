@@ -1014,6 +1014,113 @@ impl DbTransaction for RelBoxTransaction {
         Ok(ov.is_some())
     }
 
+    async fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
+        let mut size = 0;
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectFlags,
+            obj,
+        )
+        .await
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectName,
+            obj,
+        )
+        .await
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectOwner,
+            obj,
+        )
+        .await
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectParent,
+            obj,
+        )
+        .await
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            obj,
+        )
+        .await
+        .unwrap_or(0);
+
+        if let Some(verbs) = object_relations::get_object_value::<VerbDefs>(
+            &self.tx,
+            WorldStateRelation::ObjectVerbs,
+            obj,
+        )
+        .await
+        {
+            size += object_relations::tuple_size_for_object_domain(
+                &self.tx,
+                WorldStateRelation::ObjectVerbs,
+                obj,
+            )
+            .await
+            .unwrap_or(0);
+
+            for v in verbs.iter() {
+                size += object_relations::tuple_size_composite(
+                    &self.tx,
+                    WorldStateRelation::VerbProgram,
+                    obj,
+                    v.uuid(),
+                )
+                .await
+                .unwrap_or(0)
+            }
+        };
+
+        if let Some(props) = object_relations::get_object_value::<PropDefs>(
+            &self.tx,
+            WorldStateRelation::ObjectPropDefs,
+            obj,
+        )
+        .await
+        {
+            size += object_relations::tuple_size_for_object_domain(
+                &self.tx,
+                WorldStateRelation::ObjectPropDefs,
+                obj,
+            )
+            .await
+            .unwrap_or(0);
+
+            for p in props.iter() {
+                size += object_relations::tuple_size_composite(
+                    &self.tx,
+                    WorldStateRelation::ObjectPropertyValue,
+                    obj,
+                    p.uuid(),
+                )
+                .await
+                .unwrap_or(0)
+            }
+        };
+
+        size += object_relations::tuple_size_for_object_codomain(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            obj,
+        )
+        .await
+        .unwrap_or(0);
+
+        Ok(size)
+    }
+
     async fn commit(&self) -> Result<CommitResult, WorldStateError> {
         match self.tx.commit().await {
             Ok(_) => Ok(CommitResult::Success),

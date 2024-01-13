@@ -174,16 +174,20 @@ async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 bf_declare!(length, bf_length);
 
 async fn bf_object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
-    // TODO: we fake this to make cores work. But in reality calculating the size of an object
-    // would be too expensive and awkward in general. We'd need to go looking for all its verbs
-    // and properties and add them up. So we just return 128 for now.
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
-    let Variant::Obj(_) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+    let Variant::Obj(o) = bf_args.args[0].variant() else {
+        return Err(E_INVARG);
     };
-    Ok(Ret(v_int(128)))
+    if !bf_args.world_state.valid(*o).await? {
+        return Err(E_INVARG);
+    };
+    let size = bf_args
+        .world_state
+        .object_bytes(bf_args.caller_perms(), *o)
+        .await?;
+    Ok(Ret(v_int(size as i64)))
 }
 bf_declare!(object_bytes, bf_object_bytes);
 
