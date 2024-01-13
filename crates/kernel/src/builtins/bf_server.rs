@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -819,6 +820,61 @@ async fn bf_dump_database<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 }
 bf_declare!(dump_database, bf_dump_database);
 
+async fn bf_memory_usage<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+    if !bf_args.args.is_empty() {
+        return Err(E_INVARG);
+    }
+
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .await
+        .map_err(world_state_err)?
+        .check_wizard()
+        .map_err(world_state_err)?;
+
+    // Get system page size
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if page_size == -1 {
+        return Err(Error::E_QUOTA);
+    }
+
+    // Then read /proc/self/statm
+    let mut statm = String::new();
+    std::fs::File::open("/proc/self/statm")
+        .map_err(|_| Error::E_QUOTA)?
+        .read_to_string(&mut statm)
+        .map_err(|_| Error::E_QUOTA)?;
+
+    // Split on whitespace -- then we have VmSize and VmRSS in pages
+    let mut statm = statm.split_whitespace();
+    let vm_size = statm
+        .next()
+        .ok_or(Error::E_QUOTA)?
+        .parse::<i64>()
+        .map_err(|_| Error::E_QUOTA)?;
+    let vm_rss = statm
+        .next()
+        .ok_or(Error::E_QUOTA)?
+        .parse::<i64>()
+        .map_err(|_| Error::E_QUOTA)?;
+
+    // Return format for memory_usage is:
+    // {block-size, nused, nfree}
+    //
+    // "where block-size is the size in bytes of a particular class of memory
+    // fragments, nused is the number of such fragments currently in use in the server,
+    // and nfree is the number of such fragments that have been reserved for use but are
+    // currently free.
+    // So for our purposes, block-size = our page size, nfree is vm_size - vm_rss, and nused is vm_rss.
+    let block_size = v_int(page_size);
+    let nused = v_int(vm_rss * page_size);
+    let nfree = v_int((vm_size - vm_rss) * page_size);
+
+    Ok(Ret(v_list(&[block_size, nused, nfree])))
+}
+bf_declare!(memory_usage, bf_memory_usage);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) {
         self.builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
@@ -850,5 +906,6 @@ impl VM {
         self.builtins[offset_for_builtin("eval")] = Arc::new(BfEval {});
         self.builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
         self.builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
+        self.builtins[offset_for_builtin("memory_usage")] = Arc::new(BfMemoryUsage {});
     }
 }

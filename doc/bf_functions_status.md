@@ -127,7 +127,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | server_version      | &check;  | Hardcoded value, should derive from bin crate                            |
 | renumber            |          |                                                                          |
 | reset_max_object    |          |                                                                          |
-| memory_usage        |          |                                                                          |
+| memory_usage        | &check;  |                                                                          |
 | shutdown            | &check;  |                                                                          |
 | dump_database       | &check;  |                                                                          |
 | db_disk_size        |          |                                                                          |
