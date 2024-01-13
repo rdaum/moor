@@ -868,8 +868,8 @@ async fn bf_memory_usage<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
     // currently free.
     // So for our purposes, block-size = our page size, nfree is vm_size - vm_rss, and nused is vm_rss.
     let block_size = v_int(page_size);
-    let nused = v_int(vm_rss * page_size);
-    let nfree = v_int((vm_size - vm_rss) * page_size);
+    let nused = v_int(vm_rss);
+    let nfree = v_int(vm_size - vm_rss);
 
     Ok(Ret(v_list(&[block_size, nused, nfree])))
 }
