@@ -129,7 +129,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 | reset_max_object    |          |                                                                          |
 | memory_usage        |          |                                                                          |
 | shutdown            | &check;  |                                                                          |
-| dump_database       |          |                                                                          |
+| dump_database       | &check;  |                                                                          |
 | db_disk_size        |          |                                                                          |
 | connected_players   | &check;  |                                                                          |
 | connected_seconds   | &check;  |                                                                          |
