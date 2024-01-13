@@ -295,6 +295,9 @@ pub trait WorldState: Send + Sync {
         obj: Objid,
     ) -> Result<(String, Vec<String>), WorldStateError>;
 
+    /// Returns the (rough) total number of bytes used by database storage subsystem.
+    async fn db_usage(&self) -> Result<usize, WorldStateError>;
+
     /// Commit all modifications made to the state of this world since the start of its transaction.
     async fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
 

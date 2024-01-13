@@ -875,6 +875,32 @@ async fn bf_memory_usage<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
 }
 bf_declare!(memory_usage, bf_memory_usage);
 
+async fn db_disk_size<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+    // Syntax:  db_disk_size()   => int
+    //
+    // Returns the number of bytes currently occupied by the database on disk.
+    if !bf_args.args.is_empty() {
+        return Err(E_INVARG);
+    }
+
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .await
+        .map_err(world_state_err)?
+        .check_wizard()
+        .map_err(world_state_err)?;
+
+    let disk_size = bf_args
+        .world_state
+        .db_usage()
+        .await
+        .map_err(world_state_err)?;
+
+    Ok(Ret(v_int(disk_size as i64)))
+}
+bf_declare!(db_disk_size, db_disk_size);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) {
         self.builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
@@ -907,5 +933,6 @@ impl VM {
         self.builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
         self.builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
         self.builtins[offset_for_builtin("memory_usage")] = Arc::new(BfMemoryUsage {});
+        self.builtins[offset_for_builtin("db_disk_size")] = Arc::new(BfDbDiskSize {});
     }
 }

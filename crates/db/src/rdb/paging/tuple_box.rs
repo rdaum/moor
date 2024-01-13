@@ -157,9 +157,18 @@ impl TupleBox {
         Ok(())
     }
 
+    pub fn used_bytes(&self) -> usize {
+        let inner = self.inner.lock().unwrap();
+        inner.pool.allocated_bytes()
+    }
+
     pub fn num_pages(&self) -> usize {
         let inner = self.inner.lock().unwrap();
-        inner.available_page_space.len()
+        inner
+            .available_page_space
+            .iter()
+            .map(|(_, ps)| ps.len())
+            .sum()
     }
 
     pub fn used_pages(&self) -> Vec<PageId> {

@@ -297,6 +297,10 @@ impl RelBox {
         }
     }
 
+    pub async fn db_usage_bytes(&self) -> usize {
+        self.slotbox.used_bytes()
+    }
+
     pub async fn shutdown(&self) {
         if let Some(bs) = &self.backing_store {
             bs.shutdown().await;

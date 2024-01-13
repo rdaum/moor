@@ -796,6 +796,10 @@ impl WorldState for DbTxWorldState {
         Ok((name, aliases))
     }
 
+    async fn db_usage(&self) -> Result<usize, WorldStateError> {
+        self.tx.db_usage().await
+    }
+
     #[tracing::instrument(skip(self))]
     async fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
         self.tx.commit().await

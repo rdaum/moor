@@ -103,6 +103,10 @@ impl Transaction {
         }
     }
 
+    pub async fn db_usage_bytes(&self) -> usize {
+        self.db.db_usage_bytes().await
+    }
+
     pub async fn rollback(&self) -> Result<(), CommitError> {
         self.working_set.write().await.as_mut().unwrap().clear();
         Ok(())

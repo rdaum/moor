@@ -247,13 +247,13 @@ impl BufferPool {
     pub fn capacity_bytes(&self) -> usize {
         self.capacity_bytes.load(Ordering::Relaxed)
     }
-    /// Get the total used space in the buffer pool.
+    /// Get the total usable free space in the buffer pool.
     #[allow(dead_code)] // Legitimate potential future use
     pub fn available_bytes(&self) -> usize {
         self.available_bytes.load(Ordering::Relaxed)
     }
-    /// Get the total usable free space in the buffer pool.
-    #[allow(dead_code)] // Legitimate potential future use
+
+    /// Get the total used space in the buffer pool.
     pub fn allocated_bytes(&self) -> usize {
         self.allocated_bytes.load(Ordering::Relaxed)
     }

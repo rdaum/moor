@@ -198,6 +198,9 @@ pub trait DbTransaction {
         name: String,
     ) -> Result<(PropDef, Var), WorldStateError>;
 
+    /// Return the (rough) size of the database in bytes.
+    async fn db_usage(&self) -> Result<usize, WorldStateError>;
+
     /// Attempt to commit the transaction, returning the result of the commit.
     async fn commit(&self) -> Result<CommitResult, WorldStateError>;
 

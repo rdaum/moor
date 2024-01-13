@@ -1138,6 +1138,10 @@ impl DbTransaction for RelBoxTransaction {
             Err(e) => Err(WorldStateError::DatabaseError(e.to_string())),
         }
     }
+
+    async fn db_usage(&self) -> Result<usize, WorldStateError> {
+        Ok(self.tx.db_usage_bytes().await)
+    }
 }
 
 impl RelBoxTransaction {
