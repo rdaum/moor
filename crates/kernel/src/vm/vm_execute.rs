@@ -329,7 +329,7 @@ impl VM {
                             continue;
                         }
                         _ => {
-                            state.push(val.clone());
+                            state.push(val);
                         }
                     }
                 }
@@ -341,7 +341,7 @@ impl VM {
                             continue;
                         }
                         _ => {
-                            let value = &state.top().program.literals[slot.0 as usize].clone();
+                            let value = &state.top().program.literals[slot.0 as usize];
                             state.push(value.clone());
                         }
                     }
