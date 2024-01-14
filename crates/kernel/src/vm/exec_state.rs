@@ -205,6 +205,6 @@ impl VMExecState {
     /// Set the value of a local variable.
     #[inline]
     pub(crate) fn set_env(&mut self, id: &Name, v: Var) {
-        self.top_mut().environment.set(id.0 as usize, v.clone());
+        self.top_mut().environment.set(id.0 as usize, v);
     }
 }

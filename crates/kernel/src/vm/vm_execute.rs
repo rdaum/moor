@@ -426,13 +426,13 @@ impl VM {
                     binary_bool_op!(state, <=);
                 }
                 Op::In => {
-                    let lhs = state.pop();
-                    let rhs = state.pop();
+                    let (lhs, rhs) = (state.pop(), state.peek_top());
                     let r = lhs.index_in(&rhs);
                     if let Variant::Err(e) = r.variant() {
+                        state.pop();
                         return self.push_error(state, *e);
                     }
-                    state.push(r);
+                    state.update(0, r);
                 }
                 Op::Mul => {
                     binary_var_op!(self, state, mul);
@@ -764,13 +764,7 @@ impl VM {
                     continue;
                 }
                 Op::Exit { stack, label } => {
-                    return self.unwind_stack(
-                        state,
-                        FinallyReason::Exit {
-                            stack,
-                            label,
-                        },
-                    );
+                    return self.unwind_stack(state, FinallyReason::Exit { stack, label });
                 }
                 Op::Scatter {
                     nargs,

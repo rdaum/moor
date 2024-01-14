@@ -323,6 +323,8 @@ impl Activation {
         assert!(self.pc < self.program.main_vector.len(), "pc out of bounds");
         let op = &self.program.main_vector[self.pc];
         self.pc += 1;
+        // TODO: It would be nice to avoid the clone here, and hold a reference in the execution loop, but
+        //   that leads to borrow issues.
         op.clone()
     }
 
