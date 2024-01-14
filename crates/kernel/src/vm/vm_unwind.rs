@@ -229,7 +229,7 @@ impl VM {
     /// Push an error to the stack and raise it.
     pub(crate) fn push_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "push_error");
-        state.push(&v_err(code));
+        state.push(v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = state.stack.last() {
             if activation
@@ -279,7 +279,7 @@ impl VM {
         msg: String,
     ) -> ExecutionResult {
         trace!(?code, msg, "push_error_msg");
-        state.push(&v_err(code));
+        state.push(v_err(code));
 
         self.raise_error(state, code)
     }
@@ -338,7 +338,7 @@ impl VM {
                         }
                         // Jump to the label pointed to by the finally label and then continue on
                         // executing.
-                        a.jump(label);
+                        a.jump(&label);
                         a.push(v_int(why_num as i64));
                         trace!(jump = ?label, ?why, "matched finally handler");
                         return ExecutionResult::More;
@@ -353,7 +353,7 @@ impl VM {
                         let Some(handler) = a.pop_applicable_handler() else {
                             continue;
                         };
-                        let HandlerType::CatchLabel(pushed_label) = handler.handler_type else {
+                        let HandlerType::CatchLabel(pushed_label) = &handler.handler_type else {
                             panic!("Expected CatchLabel");
                         };
 
@@ -385,7 +385,7 @@ impl VM {
             // Exit with a jump.. let's go...
             if let FinallyReason::Exit { label, .. } = why {
                 trace!("Exit with a jump");
-                a.jump(label);
+                a.jump(&label);
                 return ExecutionResult::More;
             }
 
@@ -421,7 +421,7 @@ impl VM {
             // (Unless we're the final activation, in which case that should have been handled
             // above)
             if let FinallyReason::Return(value) = &why {
-                state.push(value);
+                state.push(value.clone());
                 return ExecutionResult::More;
             }
         }

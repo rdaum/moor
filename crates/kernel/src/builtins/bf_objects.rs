@@ -452,7 +452,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 // Accept verb has been called, and returned. Check the result. Should be on stack,
                 // unless short-circuited, in which case we assume *false*
                 let result = if !shortcircuit {
-                    bf_args.exec_state.top().peek_top().unwrap()
+                    bf_args.exec_state.top().peek_top().unwrap().clone()
                 } else {
                     v_int(0)
                 };

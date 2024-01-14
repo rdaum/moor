@@ -147,8 +147,8 @@ impl VMExecState {
 
     /// Push a value onto the value stack
     #[inline]
-    pub(crate) fn push(&mut self, v: &Var) {
-        self.top_mut().push(v.clone())
+    pub(crate) fn push(&mut self, v: Var) {
+        self.top_mut().push(v)
     }
 
     /// Non-destructively peek a range of values from the value stack.
@@ -168,19 +168,19 @@ impl VMExecState {
 
     /// Return the top two values on the value stack.
     #[inline]
-    pub(crate) fn peek2(&self) -> (Var, Var) {
+    pub(crate) fn peek2(&self) -> (&Var, &Var) {
         self.top().peek2()
     }
 
     /// Update at a set offset in the value stack.
     #[inline]
-    pub(crate) fn update(&mut self, amt: usize, v: &Var) {
-        self.top_mut().update(amt, v.clone())
+    pub(crate) fn update(&mut self, amt: usize, v: Var) {
+        self.top_mut().update(amt, v)
     }
 
     /// Return the top of the value stack.
     #[inline]
-    pub(crate) fn peek_top(&self) -> Var {
+    pub(crate) fn peek_top(&self) -> &Var {
         self.top().peek_top().expect("stack underflow")
     }
 
@@ -192,19 +192,19 @@ impl VMExecState {
 
     /// Jump to the given label.
     #[inline]
-    pub(crate) fn jump(&mut self, label: Label) {
+    pub(crate) fn jump(&mut self, label: &Label) {
         self.top_mut().jump(label)
     }
 
     /// Return the value of a local variable.
     #[inline]
-    pub(crate) fn get_env(&self, id: Name) -> Option<&Var> {
+    pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
         self.top().environment.get(id.0 as usize)
     }
 
     /// Set the value of a local variable.
     #[inline]
-    pub(crate) fn set_env(&mut self, id: Name, v: &Var) {
+    pub(crate) fn set_env(&mut self, id: &Name, v: Var) {
         self.top_mut().environment.set(id.0 as usize, v.clone());
     }
 }

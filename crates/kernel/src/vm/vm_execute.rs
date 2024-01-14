@@ -124,8 +124,8 @@ macro_rules! binary_bool_op {
     ( $state:ident, $op:tt ) => {
         let rhs = $state.pop();
         let lhs = $state.peek_top();
-        let result = if lhs $op rhs { 1 } else { 0 };
-        $state.update(0, &v_int(result))
+        let result = if lhs $op &rhs { 1 } else { 0 };
+        $state.update(0, v_int(result))
     };
 }
 
@@ -135,7 +135,7 @@ macro_rules! binary_var_op {
         let lhs = $state.peek_top();
         let result = lhs.$op(&rhs);
         match result {
-            Ok(result) => $state.update(0, &result),
+            Ok(result) => $state.update(0, result),
             Err(err_code) => {
                 $state.pop();
                 return $vm.push_error($state, err_code);
@@ -197,20 +197,20 @@ impl VM {
                 Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
                     let cond = state.pop();
                     if !cond.is_true() {
-                        state.jump(label);
+                        state.jump(&label);
                     }
                 }
                 Op::Jump { label } => {
-                    state.jump(label);
+                    state.jump(&label);
                 }
                 Op::WhileId {
                     id,
                     end_label: label,
                 } => {
-                    state.set_env(id, &state.peek_top());
+                    state.set_env(&id, state.peek_top().clone());
                     let cond = state.pop();
                     if !cond.is_true() {
-                        state.jump(label);
+                        state.jump(&label);
                     }
                 }
                 Op::ForList {
@@ -227,7 +227,7 @@ impl VM {
                         // If the result of raising error was just to push the value -- that is, we
                         // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                         // So we preemptively jump (here and below for List) and then raise the error.
-                        state.jump(label);
+                        state.jump(&label);
                         return self.raise_error(state, E_TYPE);
                     };
                     let count = *count as usize;
@@ -235,7 +235,7 @@ impl VM {
                         state.pop();
                         state.pop();
 
-                        state.jump(label);
+                        state.jump(&label);
                         return self.raise_error(state, E_TYPE);
                     };
 
@@ -244,80 +244,82 @@ impl VM {
                         state.pop();
                         state.pop();
 
-                        state.jump(label);
+                        state.jump(&label);
                         continue;
                     }
 
                     // Track iteration count for range; set id to current list element for the count,
                     // then increment the count, rewind the program counter to the top of the loop, and
                     // continue.
-                    state.set_env(id, &l[count]);
-                    state.update(0, &v_int((count + 1) as i64));
+                    state.set_env(&id, l[count].clone());
+                    state.update(0, v_int((count + 1) as i64));
                 }
                 Op::ForRange {
                     end_label: label,
                     id,
                 } => {
                     // Pull the range ends off the stack.
-                    let (to, from) = state.peek2();
+                    let (from, next_val) = {
+                        let (to, from) = state.peek2();
 
-                    // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
-                    //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
-                    //   we also don't want to *crash* on obscene values, so impl that here.
+                        // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
+                        //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
+                        //   we also don't want to *crash* on obscene values, so impl that here.
 
-                    let next_val = match (to.variant(), from.variant()) {
-                        (Variant::Int(to_i), Variant::Int(from_i)) => {
-                            if from_i > to_i {
-                                state.pop();
-                                state.pop();
-                                state.jump(label);
+                        let next_val = match (to.variant(), from.variant()) {
+                            (Variant::Int(to_i), Variant::Int(from_i)) => {
+                                if from_i > to_i {
+                                    state.pop();
+                                    state.pop();
+                                    state.jump(&label);
 
-                                continue;
+                                    continue;
+                                }
+                                v_int(from_i + 1)
                             }
-                            v_int(from_i + 1)
-                        }
-                        (Variant::Obj(to_o), Variant::Obj(from_o)) => {
-                            if from_o.0 > to_o.0 {
-                                state.pop();
-                                state.pop();
-                                state.jump(label);
+                            (Variant::Obj(to_o), Variant::Obj(from_o)) => {
+                                if from_o.0 > to_o.0 {
+                                    state.pop();
+                                    state.pop();
+                                    state.jump(&label);
 
-                                continue;
+                                    continue;
+                                }
+                                v_obj(from_o.0 + 1)
                             }
-                            v_obj(from_o.0 + 1)
-                        }
-                        (_, _) => {
-                            state.pop();
-                            state.pop();
-                            // Make sure we've jumped out of the loop before raising the error,
-                            // because in verbs that aren't `d' we could end up continuing on in
-                            // the loop (with a messed up stack) otherwise.
-                            state.jump(label);
+                            (_, _) => {
+                                state.pop();
+                                state.pop();
+                                // Make sure we've jumped out of the loop before raising the error,
+                                // because in verbs that aren't `d' we could end up continuing on in
+                                // the loop (with a messed up stack) otherwise.
+                                state.jump(&label);
 
-                            return self.raise_error(state, E_TYPE);
-                        }
+                                return self.raise_error(state, E_TYPE);
+                            }
+                        };
+                        (from.clone(), next_val)
                     };
-
-                    state.update(1, &next_val);
-                    state.set_env(id, &from);
+                    state.update(1, next_val);
+                    state.set_env(&id, from);
                 }
                 Op::Pop => {
                     state.pop();
                 }
                 Op::ImmNone => {
-                    state.push(&v_none());
+                    state.push(v_none());
                 }
                 Op::ImmBigInt(val) => {
-                    state.push(&v_int(val));
+                    state.push(v_int(val));
                 }
                 Op::ImmInt(val) => {
-                    state.push(&v_int(val as i64));
+                    state.push(v_int(val as i64));
                 }
                 Op::ImmObjid(val) => {
-                    state.push(&v_objid(val));
+                    state.push(v_objid(val));
                 }
                 Op::ImmErr(val) => {
-                    state.push(&v_err(val));
+                    state.push(v_err(val));
                 }
                 Op::Val(val) => {
                     match state.top().lookahead() {
@@ -327,7 +329,7 @@ impl VM {
                             continue;
                         }
                         _ => {
-                            state.push(&val);
+                            state.push(val.clone());
                         }
                     }
                 }
@@ -340,11 +342,11 @@ impl VM {
                         }
                         _ => {
                             let value = &state.top().program.literals[slot.0 as usize].clone();
-                            state.push(value);
+                            state.push(value.clone());
                         }
                     }
                 }
-                Op::ImmEmptyList => state.push(&v_empty_list()),
+                Op::ImmEmptyList => state.push(v_empty_list()),
                 Op::ListAddTail => {
                     let (tail, list) = (state.pop(), state.peek_top());
                     let Variant::List(list) = list.variant() else {
@@ -353,7 +355,7 @@ impl VM {
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-                    state.update(0, &list.push(&tail));
+                    state.update(0, list.push(&tail));
                 }
                 Op::ListAppend => {
                     let (tail, list) = (state.pop(), state.peek_top());
@@ -372,7 +374,7 @@ impl VM {
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
                     let new_list = list.append(tail);
-                    state.update(0, &new_list);
+                    state.update(0, new_list);
                 }
                 Op::IndexSet => {
                     let (rhs, index, lhs) = (state.pop(), state.pop(), state.peek_top());
@@ -385,7 +387,7 @@ impl VM {
                     };
                     match lhs.index_set(i, &rhs) {
                         Ok(v) => {
-                            state.update(0, &v);
+                            state.update(0, v);
                         }
                         Err(e) => {
                             state.pop();
@@ -395,14 +397,14 @@ impl VM {
                 }
                 Op::MakeSingletonList => {
                     let v = state.peek_top();
-                    state.update(0, &v_list(&[v]));
+                    state.update(0, v_list(&[v.clone()]));
                 }
                 Op::PutTemp => {
-                    state.top_mut().temp = state.peek_top();
+                    state.top_mut().temp = state.peek_top().clone();
                 }
                 Op::PushTemp => {
                     let tmp = state.top().temp.clone();
-                    state.push(&tmp);
+                    state.push(tmp);
                     state.top_mut().temp = v_none();
                 }
                 Op::Eq => {
@@ -430,7 +432,7 @@ impl VM {
                     if let Variant::Err(e) = r.variant() {
                         return self.push_error(state, *e);
                     }
-                    state.push(&r);
+                    state.push(r);
                 }
                 Op::Mul => {
                     binary_var_op!(self, state, mul);
@@ -460,7 +462,7 @@ impl VM {
                 Op::And(label) => {
                     let v = state.peek_top().is_true();
                     if !v {
-                        state.jump(label)
+                        state.jump(&label)
                     } else {
                         state.pop();
                     }
@@ -468,14 +470,14 @@ impl VM {
                 Op::Or(label) => {
                     let v = state.peek_top().is_true();
                     if v {
-                        state.jump(label);
+                        state.jump(&label);
                     } else {
                         state.pop();
                     }
                 }
                 Op::Not => {
                     let v = !state.peek_top().is_true();
-                    state.update(0, &v_bool(v));
+                    state.update(0, v_bool(v));
                 }
                 Op::UnaryMinus => {
                     let v = state.peek_top();
@@ -484,28 +486,28 @@ impl VM {
                             state.pop();
                             return self.push_error(state, e);
                         }
-                        Ok(v) => state.update(0, &v),
+                        Ok(v) => state.update(0, v),
                     }
                 }
                 Op::Push(ident) => {
-                    let Some(v) = state.get_env(ident) else {
+                    let Some(v) = state.get_env(&ident) else {
                         return self.push_error(state, E_VARNF);
                     };
-                    state.push(&v.clone());
+                    state.push(v.clone());
                 }
                 Op::Put(ident) => {
                     let v = state.peek_top();
-                    state.set_env(ident, &v);
+                    state.set_env(&ident, v.clone());
                 }
                 Op::PushRef => {
                     let (index, list) = state.peek2();
-                    let index = match one_to_zero_index(&index) {
+                    let index = match one_to_zero_index(index) {
                         Ok(i) => i,
                         Err(e) => return self.push_error(state, e),
                     };
                     match list.index(index) {
                         Err(e) => return self.push_error(state, e),
-                        Ok(v) => state.push(&v),
+                        Ok(v) => state.push(v),
                     }
                 }
                 Op::Ref => {
@@ -523,7 +525,7 @@ impl VM {
                             state.pop();
                             return self.push_error(state, e);
                         }
-                        Ok(v) => state.update(0, &v),
+                        Ok(v) => state.update(0, v),
                     }
                 }
                 Op::RangeRef => {
@@ -534,7 +536,7 @@ impl VM {
                                 state.pop();
                                 return self.push_error(state, e);
                             }
-                            Ok(v) => state.update(0, &v),
+                            Ok(v) => state.update(0, v),
                         },
                         (_, _) => return self.push_error(state, E_TYPE),
                     };
@@ -549,7 +551,7 @@ impl VM {
                                     state.pop();
                                     return self.push_error(state, e);
                                 }
-                                Ok(v) => state.update(0, &v),
+                                Ok(v) => state.update(0, v),
                             }
                         }
                         _ => {
@@ -559,18 +561,18 @@ impl VM {
                     }
                 }
                 Op::GPut { id } => {
-                    state.set_env(id, &state.peek_top());
+                    state.set_env(&id, state.peek_top().clone());
                 }
                 Op::GPush { id } => {
-                    let Some(v) = state.get_env(id) else {
+                    let Some(v) = state.get_env(&id) else {
                         return self.push_error(state, E_VARNF);
                     };
-                    state.push(&v.clone());
+                    state.push(v.clone());
                 }
                 Op::Length(offset) => {
                     let v = state.peek_abs(offset.0);
                     match v.len() {
-                        Ok(l) => state.push(&l),
+                        Ok(l) => state.push(l),
                         Err(e) => return self.push_error(state, e),
                     }
                 }
@@ -578,10 +580,10 @@ impl VM {
                     let (propname, obj) = (state.pop(), state.peek_top());
 
                     match self
-                        .resolve_property(state, world_state, propname, obj)
+                        .resolve_property(state, world_state, propname.clone(), obj.clone())
                         .await
                     {
-                        Ok(v) => state.update(0, &v),
+                        Ok(v) => state.update(0, v),
                         Err(e) => {
                             state.pop();
                             return self.push_error(state, e);
@@ -591,20 +593,26 @@ impl VM {
                 Op::PushGetProp => {
                     let (propname, obj) = state.peek2();
                     match self
-                        .resolve_property(state, world_state, propname, obj)
+                        .resolve_property(state, world_state, propname.clone(), obj.clone())
                         .await
                     {
-                        Ok(v) => state.push(&v),
+                        Ok(v) => state.push(v),
                         Err(e) => return self.push_error(state, e),
                     }
                 }
                 Op::PutProp => {
                     let (rhs, propname, obj) = (state.pop(), state.pop(), state.peek_top());
                     match self
-                        .set_property(state, world_state, propname, obj, rhs)
+                        .set_property(
+                            state,
+                            world_state,
+                            propname.clone(),
+                            obj.clone(),
+                            rhs.clone(),
+                        )
                         .await
                     {
-                        Ok(v) => state.update(0, &v),
+                        Ok(v) => state.update(0, v),
                         Err(e) => {
                             state.pop();
                             return self.push_error(state, e);
@@ -699,7 +707,7 @@ impl VM {
                         .push_handler_label(HandlerType::Catch(num_excepts));
                 }
                 Op::EndCatch(label) | Op::EndExcept(label) => {
-                    let is_catch = op == Op::EndCatch(label);
+                    let is_catch = matches!(op, Op::EndCatch(_));
                     let v = if is_catch { state.pop() } else { v_none() };
 
                     let handler = state
@@ -715,9 +723,9 @@ impl VM {
                         state.top_mut().handler_stack.pop();
                     }
                     if is_catch {
-                        state.push(&v);
+                        state.push(v);
                     }
-                    state.jump(label);
+                    state.jump(&label);
                 }
                 Op::EndFinally => {
                     let Some(finally_handler) = state.top_mut().pop_applicable_handler() else {
@@ -726,8 +734,8 @@ impl VM {
                     let HandlerType::Finally(_) = finally_handler.handler_type else {
                         panic!("Handler is not a finally handler")
                     };
-                    state.push(&v_int(0) /* fallthrough */);
-                    state.push(&v_int(0));
+                    state.push(v_int(0) /* fallthrough */);
+                    state.push(v_int(0));
                 }
                 Op::Continue => {
                     let why = state.pop();
@@ -752,11 +760,17 @@ impl VM {
                     }
                 }
                 Op::ExitId(label) => {
-                    state.jump(label);
+                    state.jump(&label);
                     continue;
                 }
                 Op::Exit { stack, label } => {
-                    return self.unwind_stack(state, FinallyReason::Exit { stack, label });
+                    return self.unwind_stack(
+                        state,
+                        FinallyReason::Exit {
+                            stack,
+                            label,
+                        },
+                    );
                 }
                 Op::Scatter {
                     nargs,
@@ -767,10 +781,13 @@ impl VM {
                     ..
                 } => {
                     let have_rest = rest <= nargs;
-                    let rhs = state.peek_top();
-                    let Variant::List(rhs_values) = rhs.variant() else {
-                        state.pop();
-                        return self.push_error(state, E_TYPE);
+                    let rhs_values = {
+                        let rhs = state.peek_top();
+                        let Variant::List(rhs_values) = rhs.variant() else {
+                            state.pop();
+                            return self.push_error(state, E_TYPE);
+                        };
+                        rhs_values.clone()
                     };
 
                     let len = rhs_values.len();
@@ -788,6 +805,7 @@ impl VM {
                     };
                     let mut jump_where = None;
                     let mut args_iter = rhs_values.iter();
+
                     for label in labels.iter() {
                         match label {
                             ScatterLabel::Rest(id) => {
@@ -799,14 +817,14 @@ impl VM {
                                     v.push(rest.clone());
                                 }
                                 let rest = v_list(&v);
-                                state.set_env(*id, &rest);
+                                state.set_env(id, rest);
                             }
                             ScatterLabel::Required(id) => {
                                 let Some(arg) = args_iter.next() else {
                                     return self.push_error(state, E_ARGS);
                                 };
 
-                                state.set_env(*id, arg);
+                                state.set_env(id, arg.clone());
                             }
                             ScatterLabel::Optional(id, jump_to) => {
                                 if nopt_avail > 0 {
@@ -814,15 +832,15 @@ impl VM {
                                     let Some(arg) = args_iter.next() else {
                                         return self.push_error(state, E_ARGS);
                                     };
-                                    state.set_env(*id, arg);
+                                    state.set_env(id, arg.clone());
                                 } else if jump_where.is_none() && jump_to.is_some() {
                                     jump_where = *jump_to;
                                 }
                             }
                         }
                     }
-                    match jump_where {
-                        None => state.jump(done),
+                    match &jump_where {
+                        None => state.jump(&done),
                         Some(jump_where) => state.jump(jump_where),
                     }
                 }

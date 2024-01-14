@@ -321,9 +321,9 @@ impl Activation {
     #[inline]
     pub fn next_op(&mut self) -> Op {
         assert!(self.pc < self.program.main_vector.len(), "pc out of bounds");
-        let op = self.program.main_vector[self.pc].clone();
+        let op = &self.program.main_vector[self.pc];
         self.pc += 1;
-        op
+        op.clone()
     }
 
     #[inline]
@@ -347,8 +347,8 @@ impl Activation {
     }
 
     #[inline]
-    pub fn peek_top(&self) -> Option<Var> {
-        self.valstack.last().cloned()
+    pub fn peek_top(&self) -> Option<&Var> {
+        self.valstack.last()
     }
 
     #[inline]
@@ -363,10 +363,10 @@ impl Activation {
     }
 
     #[inline]
-    pub fn peek2(&self) -> (Var, Var) {
+    pub fn peek2(&self) -> (&Var, &Var) {
         let l = self.valstack.len();
         let (a, b) = (&self.valstack[l - 1], &self.valstack[l - 2]);
-        (a.clone(), b.clone())
+        (a, b)
     }
 
     #[inline]
@@ -376,7 +376,7 @@ impl Activation {
     }
 
     #[inline]
-    pub fn jump(&mut self, label_id: Label) {
+    pub fn jump(&mut self, label_id: &Label) {
         let label = &self.program.jump_labels[label_id.0 as usize];
         self.pc = label.position.0;
     }
