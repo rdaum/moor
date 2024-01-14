@@ -22,7 +22,7 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Runtime;
 
-use moor_compiler::codegen::compile;
+use moor_compiler::compile;
 use moor_db::odb::RelBoxWorldState;
 use moor_kernel::tasks::scheduler::AbortLimitReason;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};

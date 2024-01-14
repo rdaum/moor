@@ -14,7 +14,7 @@
 
 #[cfg(test)]
 mod test {
-    use moor_compiler::opcode::Program;
+    use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::odb::RelBoxWorldState;
     use moor_db::Database;
@@ -178,9 +178,7 @@ mod test {
         let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
         let db = Arc::new(db);
         let tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.clone(), minimal_db)
-            .await
-            .unwrap();
+        textdump_load(tx.clone(), minimal_db).await.unwrap();
         assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
 
         // Check a few things in a new transaction.
@@ -360,11 +358,11 @@ mod test {
                 let binary1 = tx1.get_verb_binary(o, v1.uuid()).await.unwrap();
                 let binary2 = tx2.get_verb_binary(o, v2.uuid()).await.unwrap();
 
-                let program1 = moor_compiler::decompile::program_to_tree(&Program::from_sliceref(
+                let program1 = moor_compiler::program_to_tree(&Program::from_sliceref(
                     SliceRef::from_vec(binary1),
                 ))
                 .unwrap();
-                let program2 = moor_compiler::decompile::program_to_tree(&Program::from_sliceref(
+                let program2 = moor_compiler::program_to_tree(&Program::from_sliceref(
                     SliceRef::from_vec(binary2),
                 ))
                 .unwrap();

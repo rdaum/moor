@@ -27,7 +27,7 @@ use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::builtins::offset_for_builtin;
+use moor_compiler::offset_for_builtin;
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();

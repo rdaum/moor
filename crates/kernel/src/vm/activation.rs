@@ -32,8 +32,9 @@ use moor_values::var::{
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
 use crate::vm::VerbExecutionRequest;
-use moor_compiler::labels::{Label, Name};
-use moor_compiler::opcode::{Op, Program, EMPTY_PROGRAM};
+use moor_compiler::Program;
+use moor_compiler::{Label, Name};
+use moor_compiler::{Op, EMPTY_PROGRAM};
 use moor_values::util::{BitArray, Bitset32};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}

@@ -47,7 +47,7 @@ use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart
 use crate::tasks::{TaskDescription, TaskId};
 use crate::vm::Fork;
 use crate::vm::UncaughtException;
-use moor_compiler::codegen::compile;
+use moor_compiler::compile;
 use moor_compiler::CompileError;
 use moor_db::Database;
 

@@ -30,8 +30,8 @@ use crate::vm::activation::Activation;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VM};
 use crate::vm::{VMExecState, VmExecParams};
-use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
-use moor_compiler::opcode::Program;
+use moor_compiler::Program;
+use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_values::model::verb_info::VerbInfo;
 
 pub(crate) fn args_literal(args: &[Var]) -> String {

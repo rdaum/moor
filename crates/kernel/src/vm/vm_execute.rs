@@ -16,13 +16,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 
-use moor_compiler::labels::{Name, Offset};
+use moor_compiler::{Name, Offset};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::{TaskId, VerbCall};
-use moor_compiler::opcode::{Op, Program, ScatterLabel};
+use moor_compiler::Program;
+use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::verb_info::VerbInfo;
 use moor_values::model::world_state::WorldState;
 use moor_values::var::error::Error;

@@ -28,7 +28,7 @@ use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::builtins::offset_for_builtin;
+use moor_compiler::offset_for_builtin;
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }

@@ -32,7 +32,7 @@ use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::tasks::VerbCall;
 use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
-use moor_compiler::builtins::offset_for_builtin;
+use moor_compiler::offset_for_builtin;
 use moor_values::model::defset::Named;
 
 /*

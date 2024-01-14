@@ -27,15 +27,17 @@ mod tests {
     use moor_values::var::{
         v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, v_str, Var,
     };
+
     use moor_values::NOTHING;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
     use crate::tasks::vm_test_utils::call_verb;
-    use moor_compiler::codegen::compile;
-    use moor_compiler::labels::Names;
-    use moor_compiler::opcode::Op::*;
-    use moor_compiler::opcode::{Op, Program};
+    use moor_compiler::compile;
+    use moor_compiler::Names;
+    use moor_compiler::Op;
+    use moor_compiler::Op::*;
+    use moor_compiler::Program;
     use moor_db::odb::RelBoxWorldState;
     use moor_values::model::{Event, NarrativeEvent};
     use test_case::test_case;

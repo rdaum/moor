@@ -22,8 +22,8 @@ use std::sync::Arc;
 use metrics_macros::increment_counter;
 use tracing::{info, span, trace};
 
-use moor_compiler::codegen::compile;
-use moor_compiler::opcode::Program;
+use moor_compiler::compile;
+use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
 use moor_values::model::objects::{ObjAttrs, ObjFlag};
 use moor_values::model::props::PropFlag;

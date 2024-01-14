@@ -24,8 +24,9 @@ use crate::ast::{
 use crate::builtins::make_labels_builtins;
 use crate::decompile::DecompileError::{MalformedProgram, NameNotFound};
 use crate::labels::{JumpLabel, Label, Name};
-use crate::opcode::{Op, Program, ScatterLabel};
+use crate::opcode::{Op, ScatterLabel};
 use crate::parse::Parse;
+use crate::program::Program;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {

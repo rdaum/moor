@@ -25,7 +25,7 @@ use moor_values::var::objid::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var, VarType};
 
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
-use moor_compiler::labels::Label;
+use moor_compiler::Label;
 
 pub const TYPE_CLEAR: i64 = 5;
 

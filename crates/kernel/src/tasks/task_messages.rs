@@ -17,7 +17,7 @@ use crate::tasks::{TaskDescription, TaskId};
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
 
-use moor_compiler::opcode::Program;
+use moor_compiler::Program;
 use moor_values::model::permissions::Perms;
 use moor_values::model::world_state::WorldState;
 use moor_values::model::CommandError;

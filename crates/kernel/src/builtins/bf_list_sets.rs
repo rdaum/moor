@@ -18,7 +18,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use onig::{Region, SearchOptions, SyntaxOperator};
 
-use moor_compiler::builtins::offset_for_builtin;
+use moor_compiler::offset_for_builtin;
 use moor_values::var::error::Error;
 use moor_values::var::error::Error::{E_INVARG, E_TYPE};
 use moor_values::var::variant::Variant;

@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_compiler::codegen::compile;
-use moor_compiler::opcode::Program;
+use moor_compiler::compile;
+use moor_compiler::Program;
 use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;

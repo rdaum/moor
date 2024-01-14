@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use moor_compiler::builtins::BUILTIN_DESCRIPTORS;
+use moor_compiler::BUILTIN_DESCRIPTORS;
 
 use crate::builtins::bf_server::BfNoop;
 use crate::builtins::BuiltinFunction;

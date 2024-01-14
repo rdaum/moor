@@ -27,8 +27,9 @@ use crate::ast::{
 use crate::builtins::make_builtin_labels;
 use crate::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::opcode::Op::Jump;
-use crate::opcode::{Op, Program, ScatterLabel};
+use crate::opcode::{Op, ScatterLabel};
 use crate::parse::parse_program;
+use crate::program::Program;
 use crate::CompileError;
 
 pub struct Loop {

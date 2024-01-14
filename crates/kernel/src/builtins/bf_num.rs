@@ -27,7 +27,7 @@ use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::builtins::offset_for_builtin;
+use moor_compiler::offset_for_builtin;
 
 async fn bf_abs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {

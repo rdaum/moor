@@ -16,16 +16,25 @@ use bincode::{Decode, Encode};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 use thiserror::Error;
 
-pub mod ast;
-pub mod builtins;
-pub mod codegen;
-pub mod decompile;
-pub mod labels;
-pub mod parse;
-pub mod unparse;
+mod ast;
+mod builtins;
+mod codegen;
+mod decompile;
+mod labels;
+mod parse;
+mod unparse;
 
 mod codegen_tests;
-pub mod opcode;
+mod opcode;
+mod program;
+
+pub use crate::builtins::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
+pub use crate::codegen::compile;
+pub use crate::decompile::program_to_tree;
+pub use crate::labels::{JumpLabel, Label, Name, Names, Offset};
+pub use crate::opcode::{Op, ScatterLabel};
+pub use crate::program::{Program, EMPTY_PROGRAM};
+pub use crate::unparse::unparse;
 
 #[macro_use]
 extern crate pest_derive;

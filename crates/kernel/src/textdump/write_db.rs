@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use moor_compiler::opcode::Program;
+use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
 use moor_values::model::defset::{HasUuid, Named};
 use moor_values::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
@@ -186,10 +186,10 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
 
             let program = Program::from_sliceref(SliceRef::from_vec(binary));
             let program = if !program.main_vector.is_empty() {
-                let ast = moor_compiler::decompile::program_to_tree(&program)
+                let ast = moor_compiler::program_to_tree(&program)
                     .expect("Failed to decompile verb binary");
                 let program =
-                    moor_compiler::unparse::unparse(&ast).expect("Failed to decompile verb binary");
+                    moor_compiler::unparse(&ast).expect("Failed to decompile verb binary");
                 Some(program.join("\n"))
             } else {
                 None

@@ -38,12 +38,12 @@ use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
 use crate::vm::VM;
-use moor_compiler::builtins::offset_for_builtin;
-use moor_compiler::codegen::compile;
-use moor_compiler::decompile::program_to_tree;
-use moor_compiler::opcode::Program;
-use moor_compiler::unparse::unparse;
+use moor_compiler::compile;
+use moor_compiler::offset_for_builtin;
+use moor_compiler::program_to_tree;
+use moor_compiler::unparse;
 use moor_compiler::GlobalName;
+use moor_compiler::Program;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {

@@ -37,10 +37,8 @@ use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
-use moor_compiler::builtins::{
-    offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS,
-};
-use moor_compiler::codegen::compile;
+use moor_compiler::compile;
+use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 
 async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     increment_counter!("vm.bf_noop.calls");
