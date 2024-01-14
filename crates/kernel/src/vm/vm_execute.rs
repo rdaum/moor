@@ -29,7 +29,7 @@ use moor_values::var::error::Error;
 use moor_values::var::error::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::objid::Objid;
 use moor_values::var::variant::Variant;
-use moor_values::var::{v_bool, v_empty_list, v_int, v_list, v_none, v_obj, Var};
+use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
 
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
@@ -304,8 +304,32 @@ impl VM {
                 Op::Pop => {
                     state.pop();
                 }
+                Op::ImmNone => {
+                    state.push(&v_none());
+                }
+                Op::ImmBigInt(val) => {
+                    state.push(&v_int(val));
+                }
+                Op::ImmInt(val) => {
+                    state.push(&v_int(val as i64));
+                }
+                Op::ImmObjid(val) => {
+                    state.push(&v_objid(val));
+                }
+                Op::ImmErr(val) => {
+                    state.push(&v_err(val));
+                }
                 Op::Val(val) => {
-                    state.push(&val);
+                    match state.top().lookahead() {
+                        Some(Op::Pop) => {
+                            // skip
+                            state.top_mut().skip();
+                            continue;
+                        }
+                        _ => {
+                            state.push(&val);
+                        }
+                    }
                 }
                 Op::Imm(slot) => {
                     match state.top().lookahead() {
@@ -315,12 +339,12 @@ impl VM {
                             continue;
                         }
                         _ => {
-                            let value = state.top().program.literals[slot.0 as usize].clone();
-                            state.push(&value);
+                            let value = &state.top().program.literals[slot.0 as usize].clone();
+                            state.push(value);
                         }
                     }
                 }
-                Op::MkEmptyList => state.push(&v_empty_list()),
+                Op::ImmEmptyList => state.push(&v_empty_list()),
                 Op::ListAddTail => {
                     let (tail, list) = (state.pop(), state.peek_top());
                     let Variant::List(list) = list.variant() else {

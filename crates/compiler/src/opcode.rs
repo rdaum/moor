@@ -16,6 +16,8 @@ use std::fmt::{Display, Formatter};
 
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
+use moor_values::var::error::Error;
+use moor_values::var::objid::Objid;
 
 use moor_values::var::Var;
 
@@ -47,8 +49,13 @@ pub enum Op {
     },
     Pop,
     Val(Var),
+    ImmNone,
+    ImmBigInt(i64),
+    ImmInt(i32),
+    ImmErr(Error),
+    ImmObjid(Objid),
+    ImmEmptyList,
     Imm(Label),
-    MkEmptyList,
     ListAddTail,
     ListAppend,
     IndexSet,

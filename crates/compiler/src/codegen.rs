@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use tracing::error;
 
+use moor_values::var::variant::Variant;
 use moor_values::var::{v_int, Var};
 
 use crate::ast::{
@@ -323,8 +324,28 @@ impl CodegenState {
     fn generate_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
         match expr {
             Expr::VarExpr(v) => {
-                let literal = self.add_literal(v);
-                self.emit(Op::Imm(literal));
+                match v.variant() {
+                    Variant::None => {
+                        self.emit(Op::ImmNone);
+                    }
+                    Variant::Obj(oid) => {
+                        self.emit(Op::ImmObjid(*oid));
+                    }
+                    Variant::Int(ref i) => {
+                        if i <= &(i32::MAX as i64) {
+                            self.emit(Op::ImmInt(*i as i32));
+                        } else {
+                            self.emit(Op::ImmBigInt(*i));
+                        }
+                    }
+                    Variant::Err(e) => {
+                        self.emit(Op::ImmErr(*e));
+                    }
+                    _ => {
+                        let literal = self.add_literal(v);
+                        self.emit(Op::Imm(literal));
+                    }
+                };
                 self.push_stack(1);
             }
             Expr::Id(ident) => {
@@ -715,8 +736,10 @@ impl CodegenState {
     }
 
     fn generate_arg_list(&mut self, args: &Vec<Arg>) -> Result<(), CompileError> {
+        // TODO: Check recursion down to see if all literal values, and if so reduce to a Imm value with the full list,
+        //  instead of concatenation with MkSingletonList.
         if args.is_empty() {
-            self.emit(Op::MkEmptyList);
+            self.emit(Op::ImmEmptyList);
             self.push_stack(1);
             return Ok(());
         }

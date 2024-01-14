@@ -15,7 +15,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use moor_values::var::variant::Variant;
-use moor_values::var::Var;
+use moor_values::var::{v_err, v_int, v_none, v_objid, Var};
 
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
@@ -537,7 +537,7 @@ impl Decompile {
                     args,
                 })
             }
-            Op::MkEmptyList => {
+            Op::ImmEmptyList => {
                 self.push_expr(Expr::List(vec![]));
             }
             Op::MakeSingletonList => {
@@ -833,6 +833,21 @@ impl Decompile {
                 // TODO: MOO has "return ptr - 2;"  -- doing something with the iteration, that
                 //   I may not be able to do with the current structure. See if I need to
                 unreachable!("should have been handled other decompilation branches")
+            }
+            Op::ImmNone => {
+                self.push_expr(Expr::VarExpr(v_none()));
+            }
+            Op::ImmInt(i) => {
+                self.push_expr(Expr::VarExpr(v_int(i as i64)));
+            }
+            Op::ImmBigInt(i) => {
+                self.push_expr(Expr::VarExpr(v_int(i)));
+            }
+            Op::ImmErr(e) => {
+                self.push_expr(Expr::VarExpr(v_err(e)));
+            }
+            Op::ImmObjid(oid) => {
+                self.push_expr(Expr::VarExpr(v_objid(oid)));
             }
         }
         Ok(())

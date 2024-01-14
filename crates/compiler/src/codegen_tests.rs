@@ -18,9 +18,10 @@ mod tests {
     use crate::codegen::compile;
     use crate::labels::{Label, Name, Offset};
     use crate::CompileError;
-    use moor_values::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF};
+    use moor_values::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
     use moor_values::var::objid::Objid;
-    use moor_values::var::{v_int, v_obj};
+    use moor_values::var::v_int;
+    use moor_values::SYSTEM_OBJECT;
 
     use crate::opcode::Op::*;
     use crate::opcode::ScatterLabel;
@@ -29,9 +30,10 @@ mod tests {
     fn test_simple_add_expr() {
         let program = "1 + 2;";
         let binary = compile(program).unwrap();
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        assert_eq!(binary.main_vector, vec![Imm(one), Imm(two), Add, Pop, Done]);
+        assert_eq!(
+            binary.main_vector,
+            vec![ImmInt(1), ImmInt(2), Add, Pop, Done]
+        );
     }
 
     #[test]
@@ -40,8 +42,6 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
         /*
            "  0: 124 NUM 1",
            "  1: 125 NUM 2",
@@ -53,7 +53,7 @@ mod tests {
         */
         assert_eq!(
             binary.main_vector,
-            vec![Imm(one), Imm(two), Add, Put(a), Pop, Done],
+            vec![ImmInt(1), ImmInt(2), Add, Put(a), Pop, Done],
         );
     }
 
@@ -63,12 +63,19 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
 
         assert_eq!(
             binary.main_vector,
-            vec![Imm(one), Imm(two), Add, Put(a), Pop, Push(a), Return, Done]
+            vec![
+                ImmInt(1),
+                ImmInt(2),
+                Add,
+                Put(a),
+                Pop,
+                Push(a),
+                Return,
+                Done
+            ]
         );
     }
 
@@ -76,12 +83,6 @@ mod tests {
     fn test_if_stmt() {
         let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
         let binary = compile(program).unwrap();
-
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        let three = binary.find_literal(3.into());
-        let five = binary.find_literal(5.into());
-        let six = binary.find_literal(6.into());
 
         /*
          0: 124                   NUM 1
@@ -105,21 +106,21 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
-                Imm(two),
+                ImmInt(1),
+                ImmInt(2),
                 Eq,
                 If(1.into()),
-                Imm(five),
+                ImmInt(5),
                 Return,
                 Jump { label: 0.into() },
-                Imm(two),
-                Imm(three),
+                ImmInt(2),
+                ImmInt(3),
                 Eq,
                 Eif(2.into()),
-                Imm(three),
+                ImmInt(3),
                 Return,
                 Jump { label: 0.into() },
-                Imm(six),
+                ImmInt(6),
                 Return,
                 Done
             ]
@@ -132,7 +133,6 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let x = binary.find_var("x");
-        let one = binary.find_literal(1.into());
 
         /*
         " 0: 124                   NUM 1",
@@ -147,10 +147,10 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
+                ImmInt(1),
                 While(1.into()),
                 Push(x),
-                Imm(one),
+                ImmInt(1),
                 Add,
                 Put(x),
                 Pop,
@@ -169,8 +169,6 @@ mod tests {
 
         let x = binary.find_var("x");
         let chuckles = binary.find_var("chuckles");
-        let one = binary.find_literal(1.into());
-        let five = binary.find_literal(5.into());
 
         /*
                  0: 124                   NUM 1
@@ -191,18 +189,18 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
+                ImmInt(1),
                 WhileId {
                     id: chuckles,
                     end_label: 1.into()
                 },
                 Push(x),
-                Imm(one),
+                ImmInt(1),
                 Add,
                 Put(x),
                 Pop,
                 Push(x),
-                Imm(five),
+                ImmInt(5),
                 Gt,
                 If(3.into()),
                 ExitId(1.into()),
@@ -220,8 +218,6 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let x = binary.find_var("x");
-        let one = binary.find_literal(1.into());
-        let five = binary.find_literal(5.into());
 
         /*
         "  0: 124                   NUM 1",
@@ -243,15 +239,15 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
+                ImmInt(1),
                 While(1.into()),
                 Push(x),
-                Imm(one),
+                ImmInt(1),
                 Add,
                 Put(x),
                 Pop,
                 Push(x),
-                Imm(five),
+                ImmInt(5),
                 Eq,
                 If(3.into()),
                 Exit {
@@ -277,10 +273,6 @@ mod tests {
 
         let b = binary.find_var("b");
         let x = binary.find_var("x");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        let three = binary.find_literal(3.into());
-        let five = binary.find_literal(5.into());
 
         /*
         "  0: 124                   NUM 1",
@@ -302,11 +294,11 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(two),
+                ImmInt(2),
                 ListAddTail,
-                Imm(three),
+                ImmInt(3),
                 ListAddTail,
                 Val(v_int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
                 ForList {
@@ -314,7 +306,7 @@ mod tests {
                     end_label: 1.into()
                 },
                 Push(x),
-                Imm(five),
+                ImmInt(5),
                 Add,
                 Put(b),
                 Pop,
@@ -335,8 +327,6 @@ mod tests {
         let a = binary.find_var("a");
         let n = binary.find_var("n");
         let tell = binary.find_literal("tell".into());
-        let one = binary.find_literal(1.into());
-        let five = binary.find_literal(5.into());
 
         /*
          0: 124                   NUM 1
@@ -353,8 +343,8 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
-                Imm(five),
+                ImmInt(1),
+                ImmInt(5),
                 ForRange {
                     id: n,
                     end_label: 1.into()
@@ -383,7 +373,7 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0.into()),
+                ImmInt(5),
                 Fork {
                     fv_offset: 0.into(),
                     id: None
@@ -412,13 +402,12 @@ mod tests {
 
         let player = binary.find_var("player");
         let fid = binary.find_var("fid");
-        let five = binary.find_literal(5.into());
         let tell = binary.find_literal("tell".into());
 
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(five),
+                ImmInt(5),
                 Fork {
                     fv_offset: 0.into(),
                     id: Some(fid)
@@ -446,9 +435,6 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        let three = binary.find_literal(3.into());
 
         /*
          0: 124                   NUM 1
@@ -462,11 +448,11 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
+                ImmInt(1),
                 And(0.into()),
-                Imm(two),
+                ImmInt(2),
                 Or(1.into()),
-                Imm(three),
+                ImmInt(3),
                 Put(a),
                 Pop,
                 Done
@@ -521,10 +507,6 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        let three = binary.find_literal(3.into());
-        let four = binary.find_literal(4.into());
 
         /*
          0: 124                   NUM 1
@@ -540,13 +522,13 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(one),
-                Imm(two),
+                ImmInt(1),
+                ImmInt(2),
                 Eq,
                 IfQues(0.into()),
-                Imm(three),
+                ImmInt(3),
                 Jump { label: 1.into() },
-                Imm(four),
+                ImmInt(4),
                 Put(a),
                 Pop,
                 Done
@@ -591,7 +573,7 @@ mod tests {
         let binary = compile(program).unwrap();
         assert_eq!(
             binary.main_vector,
-            vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done]
+            vec![Imm(0.into()), ImmInt(1), Ref, Return, Done]
         );
     }
 
@@ -601,14 +583,7 @@ mod tests {
         let binary = compile(program).unwrap();
         assert_eq!(
             binary.main_vector,
-            vec![
-                Imm(0.into()),
-                Imm(1.into()),
-                Imm(2.into()),
-                RangeRef,
-                Return,
-                Done
-            ]
+            vec![Imm(0.into()), ImmInt(1), ImmInt(2), RangeRef, Return, Done]
         );
     }
 
@@ -622,8 +597,8 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(a),
+                ImmInt(2),
                 Imm(0.into()),
-                Imm(1.into()),
                 PutTemp,
                 IndexSet,
                 Put(a),
@@ -645,9 +620,9 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(a),
+                ImmInt(2),
+                ImmInt(4),
                 Imm(0.into()),
-                Imm(1.into()),
-                Imm(2.into()),
                 PutTemp,
                 RangeSet,
                 Put(a),
@@ -666,13 +641,13 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0.into()),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(1.into()),
+                ImmInt(2),
                 ListAddTail,
-                Imm(2.into()),
+                ImmInt(3),
                 ListAddTail,
-                Imm(0.into()),
+                ImmInt(1),
                 Ref,
                 Return,
                 Done
@@ -687,14 +662,14 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0.into()),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(1.into()),
+                ImmInt(2),
                 ListAddTail,
-                Imm(2.into()),
+                ImmInt(3),
                 ListAddTail,
-                Imm(0.into()),
-                Imm(1.into()),
+                ImmInt(1),
+                ImmInt(2),
                 RangeRef,
                 Return,
                 Done
@@ -709,9 +684,6 @@ mod tests {
 
         let a = binary.find_var("a");
         let b = binary.find_var("b");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        let three = binary.find_literal(3.into());
 
         /*
          0: 124                   NUM 1
@@ -734,16 +706,16 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             [
-                Imm(one),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(two),
+                ImmInt(2),
                 ListAddTail,
-                Imm(three),
+                ImmInt(3),
                 ListAddTail,
                 Put(a),
                 Pop,
                 Push(a),
-                Imm(two),
+                ImmInt(2),
                 Length(0.into()),
                 RangeRef,
                 Put(b),
@@ -772,8 +744,8 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(args),
-                Imm(0.into()),
-                Imm(1.into()),
+                ImmInt(1),
+                ImmInt(2),
                 RangeRef,
                 CheckListForSplice,
                 Return,
@@ -788,8 +760,6 @@ mod tests {
         let binary = compile(program).unwrap();
 
         let a = binary.find_var("a");
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
         /*
          0: 112 009 008         * TRY_FINALLY 8
          3: 124                   NUM 1
@@ -805,11 +775,11 @@ mod tests {
             binary.main_vector,
             vec![
                 TryFinally(0.into()),
-                Imm(one),
+                ImmInt(1),
                 Put(a),
                 Pop,
                 EndFinally,
-                Imm(two),
+                ImmInt(2),
                 Put(a),
                 Pop,
                 Continue,
@@ -825,11 +795,6 @@ mod tests {
 
         let a = binary.find_var("a");
         let b = binary.find_var("b");
-        let e_invarg = binary.find_literal(E_INVARG.into());
-        let e_propnf = binary.find_literal(E_PROPNF.into());
-        let one = binary.find_literal(1.into());
-        let two = binary.find_literal(2.into());
-        let three = binary.find_literal(3.into());
 
         /*
           0: 100 000               PUSH_LITERAL E_INVARG
@@ -859,26 +824,26 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(e_invarg),
+                ImmErr(E_INVARG),
                 MakeSingletonList,
                 PushLabel(0.into()),
-                Imm(e_propnf),
+                ImmErr(E_PROPNF),
                 MakeSingletonList,
                 PushLabel(1.into()),
                 TryExcept { num_excepts: 2 },
-                Imm(one),
+                ImmInt(1),
                 Put(a),
                 Pop,
                 EndExcept(2.into()),
                 Put(a),
                 Pop,
-                Imm(two),
+                ImmInt(2),
                 Put(a),
                 Pop,
                 Jump { label: 2.into() },
                 Put(b),
                 Pop,
-                Imm(three),
+                ImmInt(3),
                 Put(a),
                 Pop,
                 Done
@@ -908,26 +873,22 @@ mod tests {
 
          */
         let x = binary.find_var("x");
-        let e_propnf = binary.find_literal(E_PROPNF.into());
-        let e_perm = binary.find_literal(E_PERM.into());
-        let one = binary.find_literal(1.into());
-        let svntn = binary.find_literal(17.into());
 
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(e_propnf),
+                ImmErr(E_PROPNF),
                 MakeSingletonList,
-                Imm(e_perm),
+                ImmErr(E_PERM),
                 ListAddTail,
                 PushLabel(0.into()),
                 Catch(0.into()),
                 Push(x),
-                Imm(one),
+                ImmInt(1),
                 Add,
                 EndCatch(1.into()),
                 Pop,
-                Imm(svntn),
+                ImmInt(17),
                 Put(x),
                 Pop,
                 Done
@@ -956,14 +917,13 @@ mod tests {
             .iter()
             .position(|b| b.name == "raise")
             .unwrap();
-        let e_invarg = binary.find_literal(E_INVARG.into());
         assert_eq!(
             binary.main_vector,
             vec![
                 Val(0.into()),
                 PushLabel(0.into()),
                 Catch(0.into()),
-                Imm(e_invarg),
+                ImmErr(E_INVARG),
                 MakeSingletonList,
                 FuncCall {
                     id: Name(raise_num as u32)
@@ -985,7 +945,6 @@ mod tests {
         let string_utils = binary.find_literal("string_utils".into());
         let from_list = binary.find_literal("from_list".into());
         let test_string = binary.find_var("test_string");
-        let sysobj = binary.find_literal(Objid(0).into());
         /*
          0: 100 000               PUSH_LITERAL #0
          2: 100 001               PUSH_LITERAL "string_utils"
@@ -998,7 +957,7 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(sysobj),
+                ImmObjid(SYSTEM_OBJECT),
                 Imm(string_utils),
                 GetProp,
                 Imm(from_list),
@@ -1016,17 +975,14 @@ mod tests {
         let program = "$verb_metadata(#1, 1);";
         let binary = compile(program).unwrap();
         let verb_metadata = binary.find_literal("verb_metadata".into());
-        let objone = binary.find_literal(Objid(1).into());
-        let one = binary.find_literal(1.into());
-        let sysobj = binary.find_literal(Objid(0).into());
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(sysobj),
+                ImmObjid(SYSTEM_OBJECT),
                 Imm(verb_metadata),
-                Imm(objone),
+                ImmObjid(Objid(1)),
                 MakeSingletonList,
-                Imm(one),
+                ImmInt(1),
                 ListAddTail,
                 CallVerb,
                 Pop,
@@ -1104,7 +1060,7 @@ mod tests {
                     ],
                     done: 1.into(),
                 },
-                Imm(binary.find_literal(0.into())),
+                ImmInt(0),
                 Put(binary.find_var("third")),
                 Pop,
                 Pop,
@@ -1150,7 +1106,7 @@ mod tests {
                     ],
                     done: 1.into(),
                 },
-                Imm(binary.find_literal(8.into())),
+                ImmInt(8),
                 Put(binary.find_var("c")),
                 Pop,
                 Pop,
@@ -1203,10 +1159,10 @@ mod tests {
                     ],
                     done: 2.into(),
                 },
-                Imm(binary.find_literal(8.into())),
+                ImmInt(8),
                 Put(binary.find_var("c")),
                 Pop,
-                Imm(binary.find_literal(9.into())),
+                ImmInt(9),
                 Put(binary.find_var("e")),
                 Pop,
                 Pop,
@@ -1255,9 +1211,9 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0.into()),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(1.into()),
+                ImmInt(2),
                 ListAddTail,
                 Push(binary.find_var("player")),
                 Imm(binary.find_literal("kill".into())),
@@ -1266,7 +1222,7 @@ mod tests {
                 CallVerb,
                 ListAddTail,
                 MakeSingletonList,
-                Imm(0.into()),
+                ImmInt(1),
                 Ref,
                 Scatter {
                     nargs: 4,
@@ -1316,8 +1272,8 @@ mod tests {
                 Push(binary.find_var("this")),
                 Imm(binary.find_literal("stack".into())),
                 PushGetProp,
-                Imm(binary.find_literal(5.into())),
-                Imm(binary.find_literal(5.into())),
+                ImmInt(5),
+                ImmInt(5),
                 PutTemp,
                 IndexSet,
                 PutProp,
@@ -1362,20 +1318,20 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(0.into()),
+                ImmInt(1),
                 Put(x),
                 Pop,
-                Imm(0.into()),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(1.into()),
+                ImmInt(2),
                 ListAddTail,
-                Imm(2.into()),
+                ImmInt(3),
                 ListAddTail,
                 Put(y),
                 Pop,
                 Push(x),
                 Push(y),
-                Imm(1.into()),
+                ImmInt(2),
                 Ref,
                 Add,
                 Put(x),
@@ -1409,9 +1365,9 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(binary.find_literal(v_obj(0))),
+                ImmObjid(Objid(0)),
                 Imm(binary.find_literal("test_verb".into())),
-                MkEmptyList,
+                ImmEmptyList,
                 CallVerb,
                 Pop,
                 Done
@@ -1448,17 +1404,17 @@ mod tests {
                 Pass,
                 Put(result),
                 Pop,
-                MkEmptyList,
+                ImmEmptyList,
                 Pass,
                 Put(result),
                 Pop,
-                Imm(0.into()),
+                ImmInt(1),
                 MakeSingletonList,
-                Imm(1.into()),
+                ImmInt(2),
                 ListAddTail,
-                Imm(2.into()),
+                ImmInt(3),
                 ListAddTail,
-                Imm(3.into()),
+                ImmInt(4),
                 ListAddTail,
                 Pass,
                 Put(result),
@@ -1502,12 +1458,12 @@ mod tests {
         assert_eq!(
             program.main_vector,
             vec![
-                Imm(0.into()),
+                ImmErr(E_RANGE),
                 MakeSingletonList,
                 PushLabel(Label(0)),
                 TryExcept { num_excepts: 1 },
-                Imm(1.into()),
-                Imm(2.into()),
+                Imm(Label(0)),
+                ImmInt(2),
                 // Our offset is different because we don't count PushLabel in the stack.
                 Length(Offset(1)),
                 RangeRef,
@@ -1524,7 +1480,6 @@ mod tests {
         let prg = "`this ! E_INVIND';";
         let binary = compile(prg).unwrap();
         let this = binary.find_var("this");
-        let e_invind = binary.find_literal(E_INVIND.into());
 
         /*
          0: 100 000               PUSH_LITERAL E_INVIND
@@ -1542,7 +1497,7 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Imm(e_invind),
+                ImmErr(E_INVIND),
                 MakeSingletonList,
                 PushLabel(0.into()),
                 Catch(0.into()),
