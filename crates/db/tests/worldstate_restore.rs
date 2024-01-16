@@ -18,12 +18,12 @@ mod test {
     use moor_db::odb::RelBoxTransaction;
     use moor_db::odb::{WorldStateRelation, WorldStateSequences};
     use moor_db::rdb::{RelBox, RelationInfo};
-    use moor_values::model::defset::HasUuid;
-    use moor_values::model::objects::ObjAttrs;
-    use moor_values::model::r#match::VerbArgsSpec;
-    use moor_values::model::verbs::BinaryType;
+    use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
-    use moor_values::util::bitenum::BitEnum;
+    use moor_values::model::HasUuid;
+    use moor_values::model::ObjAttrs;
+    use moor_values::model::VerbArgsSpec;
+    use moor_values::util::BitEnum;
     use moor_values::NOTHING;
     use std::path::PathBuf;
     use std::sync::Arc;

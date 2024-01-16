@@ -18,9 +18,9 @@ use async_trait::async_trait;
 use decorum::R64;
 use rand::Rng;
 
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_float, v_int, v_str};
 
 use crate::bf_declare;

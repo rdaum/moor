@@ -24,11 +24,11 @@ use metrics_macros::increment_counter;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
-use moor_values::model::objects::ObjFlag;
+use moor_values::model::ObjFlag;
 use moor_values::model::{world_state_err, NarrativeEvent, WorldStateError};
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_PERM, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_PERM, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;

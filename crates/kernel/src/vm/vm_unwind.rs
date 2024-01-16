@@ -15,17 +15,17 @@
 use bincode::{Decode, Encode};
 use tracing::trace;
 
-use moor_values::model::verbs::VerbFlag;
-use moor_values::var::error::{Error, ErrorPack};
-use moor_values::var::variant::Variant;
+use moor_values::model::VerbFlag;
+use moor_values::var::Variant;
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
+use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
 
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::{ExecutionResult, VMExecState, VM};
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_compiler::{Label, Offset};
-use moor_values::model::defset::Named;
+use moor_values::model::Named;
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct UncaughtException {

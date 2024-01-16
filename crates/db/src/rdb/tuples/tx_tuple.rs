@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 
 use crate::rdb::tuples::TupleId;
 use crate::rdb::tuples::TupleRef;

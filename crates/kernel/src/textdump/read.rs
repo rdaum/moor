@@ -20,8 +20,8 @@ use text_io::scan;
 use tracing::info;
 
 use moor_compiler::CompileError;
-use moor_values::var::error::Error;
-use moor_values::var::objid::Objid;
+use moor_values::var::Error;
+use moor_values::var::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_list, v_none, v_objid, v_str, Var, VarType};
 
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
@@ -128,7 +128,7 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_FLOAT => v_float(self.read_float()?),
             VarType::TYPE_LABEL => {
                 let l_num = self.read_num()?;
-                let l = Label(l_num as u32);
+                let l = Label(l_num as u16);
                 v_int(l.0 as i64)
             }
         };

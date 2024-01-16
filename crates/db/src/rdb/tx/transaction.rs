@@ -19,7 +19,7 @@ use moor_values::util::{BitArray, Bitset64};
 use thiserror::Error;
 use tokio::sync::RwLock;
 
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
@@ -264,7 +264,7 @@ mod tests {
     use rand::Rng;
     use std::sync::Arc;
 
-    use moor_values::util::slice_ref::SliceRef;
+    use moor_values::util::SliceRef;
 
     use crate::rdb::relbox::{RelBox, RelationInfo};
     use crate::rdb::tuples::{TupleError, TupleRef};

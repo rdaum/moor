@@ -17,13 +17,13 @@ mod tests {
 
     use std::sync::Arc;
 
-    use moor_values::model::props::PropFlag;
-    use moor_values::model::r#match::VerbArgsSpec;
-    use moor_values::model::verbs::{BinaryType, VerbFlag};
-    use moor_values::model::world_state::{WorldState, WorldStateSource};
-    use moor_values::util::bitenum::BitEnum;
-    use moor_values::var::error::Error::E_DIV;
-    use moor_values::var::objid::Objid;
+    use moor_values::model::PropFlag;
+    use moor_values::model::VerbArgsSpec;
+    use moor_values::model::{BinaryType, VerbFlag};
+    use moor_values::model::{WorldState, WorldStateSource};
+    use moor_values::util::BitEnum;
+    use moor_values::var::Error::E_DIV;
+    use moor_values::var::Objid;
     use moor_values::var::{
         v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, v_str, Var,
     };

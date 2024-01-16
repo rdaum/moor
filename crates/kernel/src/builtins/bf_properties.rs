@@ -16,12 +16,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use moor_values::model::props::{PropAttrs, PropFlag};
 use moor_values::model::world_state_err;
-use moor_values::util::bitenum::BitEnum;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::model::{PropAttrs, PropFlag};
+use moor_values::util::BitEnum;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string, Var};
 
 use crate::bf_declare;
@@ -67,7 +67,7 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 bf_declare!(property_info, bf_property_info);
 
 enum InfoParseResult {
-    Fail(moor_values::var::error::Error),
+    Fail(moor_values::var::Error),
     Success(PropAttrs),
 }
 

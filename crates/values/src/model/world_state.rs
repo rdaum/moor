@@ -25,8 +25,8 @@ use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::CommitResult;
 use crate::model::WorldStateError;
-use crate::util::bitenum::BitEnum;
-use crate::var::objid::Objid;
+use crate::util::BitEnum;
+use crate::var::Objid;
 use crate::var::Var;
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's

@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::util::bitenum::BitEnum;
-use crate::var::objid::Objid;
+use crate::util::BitEnum;
+use crate::var::Objid;
 use crate::var::Var;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;

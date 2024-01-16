@@ -17,7 +17,7 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::SessionError;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use rpc_common::RpcRequestError;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);

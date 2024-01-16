@@ -16,7 +16,7 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use moor_values::model::CommandError;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use rpc_common::pubsub_client::broadcast_recv;
 use rpc_common::pubsub_client::narrative_recv;
 use rpc_common::rpc_client::RpcSendClient;

@@ -16,15 +16,15 @@ use moor_values::NOTHING;
 use uuid::Uuid;
 
 use moor_compiler::GlobalName;
-use moor_values::model::r#match::VerbArgsSpec;
-use moor_values::model::verb_info::VerbInfo;
-use moor_values::model::verbdef::VerbDef;
-use moor_values::model::verbs::{BinaryType, VerbFlag};
-use moor_values::util::bitenum::BitEnum;
-use moor_values::util::slice_ref::SliceRef;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::E_VARNF;
-use moor_values::var::objid::Objid;
+use moor_values::model::VerbArgsSpec;
+use moor_values::model::VerbDef;
+use moor_values::model::VerbInfo;
+use moor_values::model::{BinaryType, VerbFlag};
+use moor_values::util::BitEnum;
+use moor_values::util::SliceRef;
+use moor_values::var::Error;
+use moor_values::var::Error::E_VARNF;
+use moor_values::var::Objid;
 use moor_values::var::{
     v_empty_list, v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType,
 };
@@ -381,7 +381,7 @@ impl Activation {
     #[inline]
     pub fn jump(&mut self, label_id: &Label) {
         let label = &self.program.jump_labels[label_id.0 as usize];
-        self.pc = label.position.0;
+        self.pc = label.position.0 as usize;
     }
 
     pub fn push_handler_label(&mut self, handler_type: HandlerType) {

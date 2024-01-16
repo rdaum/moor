@@ -23,11 +23,11 @@ use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 use tracing::instrument;
 
-use moor_values::var::error::Error::{
+use moor_values::var::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_objid, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
@@ -66,24 +66,24 @@ fn parse_atom(
             let ostr = &pairs.as_str()[1..];
             let oid = i64::from_str(ostr).unwrap();
             let objid = Objid(oid);
-            Ok(Expr::VarExpr(v_objid(objid)))
+            Ok(Expr::Value(v_objid(objid)))
         }
         Rule::integer => {
             let int = pairs.as_str().parse::<i64>().unwrap();
-            Ok(Expr::VarExpr(v_int(int)))
+            Ok(Expr::Value(v_int(int)))
         }
         Rule::float => {
             let float = pairs.as_str().parse::<f64>().unwrap();
-            Ok(Expr::VarExpr(v_float(float)))
+            Ok(Expr::Value(v_float(float)))
         }
         Rule::string => {
             let string = pairs.as_str();
             let parsed = unquote_str(string)?;
-            Ok(Expr::VarExpr(v_str(&parsed)))
+            Ok(Expr::Value(v_str(&parsed)))
         }
         Rule::err => {
             let e = pairs.as_str();
-            Ok(Expr::VarExpr(match e.to_lowercase().as_str() {
+            Ok(Expr::Value(match e.to_lowercase().as_str() {
                 "e_type" => v_err(E_TYPE),
                 "e_div" => v_err(E_DIV),
                 "e_perm" => v_err(E_PERM),
@@ -228,8 +228,8 @@ fn parse_expr(
                 let mut inner = primary.into_inner();
                 let property = inner.next().unwrap().as_str();
                 Ok(Expr::Prop {
-                    location: Box::new(Expr::VarExpr(v_objid(SYSTEM_OBJECT))),
-                    property: Box::new(Expr::VarExpr(v_str(property))),
+                    location: Box::new(Expr::Value(v_objid(SYSTEM_OBJECT))),
+                    property: Box::new(Expr::Value(v_str(property))),
                 })
             }
             Rule::sysprop_call => {
@@ -237,8 +237,8 @@ fn parse_expr(
                 let verb = inner.next().unwrap().as_str()[1..].to_string();
                 let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(Expr::Verb {
-                    location: Box::new(Expr::VarExpr(v_objid(SYSTEM_OBJECT))),
-                    verb: Box::new(Expr::VarExpr(v_string(verb))),
+                    location: Box::new(Expr::Value(v_objid(SYSTEM_OBJECT))),
+                    verb: Box::new(Expr::Value(v_string(verb))),
                     args,
                 })
             }
@@ -422,7 +422,7 @@ fn parse_expr(
                 let args = parse_arglist(names.clone(), args_expr.into_inner())?;
                 Ok(Expr::Verb {
                     location: Box::new(lhs?),
-                    verb: Box::new(Expr::VarExpr(v_str(ident))),
+                    verb: Box::new(Expr::Value(v_str(ident))),
                     args,
                 })
             }
@@ -442,7 +442,7 @@ fn parse_expr(
                 let ident = parts.next().unwrap().as_str();
                 Ok(Expr::Prop {
                     location: Box::new(lhs?),
-                    property: Box::new(Expr::VarExpr(v_str(ident))),
+                    property: Box::new(Expr::Value(v_str(ident))),
                 })
             }
             Rule::prop_expr => {
@@ -820,11 +820,11 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 
 #[cfg(test)]
 mod tests {
-    use moor_values::var::error::Error::{E_INVARG, E_PROPNF, E_VARNF};
+    use moor_values::var::Error::{E_INVARG, E_PROPNF, E_VARNF};
     use moor_values::var::{v_err, v_float, v_int, v_obj, v_str};
 
     use crate::ast::Arg::{Normal, Splice};
-    use crate::ast::Expr::{Call, Id, Prop, VarExpr, Verb};
+    use crate::ast::Expr::{Call, Id, Prop, Value, Verb};
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
@@ -853,7 +853,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Return {
-                expr: Some(VarExpr(v_float(1e-9))),
+                expr: Some(Value(v_float(1e-9))),
             }]
         );
     }
@@ -867,13 +867,13 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parsed.stmts),
             vec![StmtNode::Expr(Verb {
-                location: Box::new(VarExpr(v_obj(0))),
-                verb: Box::new(VarExpr(v_str("test_verb"))),
+                location: Box::new(Value(v_obj(0))),
+                verb: Box::new(Value(v_str("test_verb"))),
                 args: vec![
-                    Normal(VarExpr(v_int(1))),
-                    Normal(VarExpr(v_int(2))),
-                    Normal(VarExpr(v_int(3))),
-                    Normal(VarExpr(v_str("test")))
+                    Normal(Value(v_int(1))),
+                    Normal(Value(v_int(2))),
+                    Normal(Value(v_int(3))),
+                    Normal(Value(v_str("test")))
                 ]
             })]
         );
@@ -892,8 +892,8 @@ mod tests {
                 left: Box::new(Id(a)),
                 right: Box::new(Expr::Binary(
                     BinaryOp::Add,
-                    Box::new(VarExpr(v_int(1))),
-                    Box::new(VarExpr(v_int(2))),
+                    Box::new(Value(v_int(1))),
+                    Box::new(Value(v_int(2))),
                 )),
             })
         );
@@ -909,7 +909,7 @@ mod tests {
             stripped_stmts(&parse.stmts)[0],
             StmtNode::Expr(Call {
                 function: "notify".to_string(),
-                args: vec![Normal(VarExpr(v_str("test")))],
+                args: vec![Normal(Value(v_str("test")))],
             })
         );
     }
@@ -926,12 +926,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(1))),
-                            Box::new(VarExpr(v_int(2))),
+                            Box::new(Value(v_int(1))),
+                            Box::new(Value(v_int(2))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(5))),
+                                expr: Some(Value(v_int(5))),
                             },
                             parser_line_no: 1,
                             tree_line_no: 2,
@@ -940,12 +940,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(2))),
-                            Box::new(VarExpr(v_int(3))),
+                            Box::new(Value(v_int(2))),
+                            Box::new(Value(v_int(3))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(3))),
+                                expr: Some(Value(v_int(3))),
                             },
                             parser_line_no: 1,
                             tree_line_no: 4,
@@ -955,7 +955,7 @@ mod tests {
 
                 otherwise: vec![Stmt {
                     node: StmtNode::Return {
-                        expr: Some(VarExpr(v_int(6))),
+                        expr: Some(Value(v_int(6))),
                     },
                     parser_line_no: 1,
                     tree_line_no: 6,
@@ -986,12 +986,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(1))),
-                            Box::new(VarExpr(v_int(2))),
+                            Box::new(Value(v_int(1))),
+                            Box::new(Value(v_int(2))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(5))),
+                                expr: Some(Value(v_int(5))),
                             },
                             parser_line_no: 3,
                             tree_line_no: 2,
@@ -1000,12 +1000,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(2))),
-                            Box::new(VarExpr(v_int(3))),
+                            Box::new(Value(v_int(2))),
+                            Box::new(Value(v_int(3))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(3))),
+                                expr: Some(Value(v_int(3))),
                             },
                             parser_line_no: 5,
                             tree_line_no: 4,
@@ -1014,12 +1014,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(3))),
-                            Box::new(VarExpr(v_int(4))),
+                            Box::new(Value(v_int(3))),
+                            Box::new(Value(v_int(4))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(4))),
+                                expr: Some(Value(v_int(4))),
                             },
                             parser_line_no: 7,
                             tree_line_no: 6,
@@ -1029,7 +1029,7 @@ mod tests {
 
                 otherwise: vec![Stmt {
                     node: StmtNode::Return {
-                        expr: Some(VarExpr(v_int(6))),
+                        expr: Some(Value(v_int(6))),
                     },
                     parser_line_no: 9,
                     tree_line_no: 8,
@@ -1049,9 +1049,9 @@ mod tests {
                 expr: Some(Expr::Unary(
                     UnaryOp::Not,
                     Box::new(Verb {
-                        location: Box::new(VarExpr(v_obj(2))),
-                        verb: Box::new(VarExpr(v_str("move"))),
-                        args: vec![Normal(VarExpr(v_int(5)))],
+                        location: Box::new(Value(v_obj(2))),
+                        verb: Box::new(Value(v_str("move"))),
+                        args: vec![Normal(Value(v_int(5)))],
                     })
                 )),
             }
@@ -1076,10 +1076,10 @@ mod tests {
                         UnaryOp::Not,
                         Box::new(Verb {
                             location: Box::new(Prop {
-                                location: Box::new(VarExpr(v_obj(0))),
-                                property: Box::new(VarExpr(v_str("network"))),
+                                location: Box::new(Value(v_obj(0))),
+                                property: Box::new(Value(v_str("network"))),
                             }),
-                            verb: Box::new(VarExpr(v_str("is_connected"))),
+                            verb: Box::new(Value(v_str("is_connected"))),
                             args: vec![Normal(Id(parse.names.find_name("this").unwrap())),],
                         })
                     ),
@@ -1106,9 +1106,9 @@ mod tests {
             StmtNode::ForList {
                 id: x,
                 expr: Expr::List(vec![
-                    Normal(VarExpr(v_int(1))),
-                    Normal(VarExpr(v_int(2))),
-                    Normal(VarExpr(v_int(3))),
+                    Normal(Value(v_int(1))),
+                    Normal(Value(v_int(2))),
+                    Normal(Value(v_int(3))),
                 ]),
                 body: vec![Stmt {
                     node: StmtNode::Expr(Expr::Assign {
@@ -1116,7 +1116,7 @@ mod tests {
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
                             Box::new(Id(x)),
-                            Box::new(VarExpr(v_int(5))),
+                            Box::new(Value(v_int(5))),
                         )),
                     }),
                     parser_line_no: 1,
@@ -1137,15 +1137,15 @@ mod tests {
             stripped_stmts(&parse.stmts)[0],
             StmtNode::ForRange {
                 id: x,
-                from: VarExpr(v_int(1)),
-                to: VarExpr(v_int(5)),
+                from: Value(v_int(1)),
+                to: Value(v_int(5)),
                 body: vec![Stmt {
                     node: StmtNode::Expr(Expr::Assign {
                         left: Box::new(Id(b)),
                         right: Box::new(Expr::Binary(
                             BinaryOp::Add,
                             Box::new(Id(x)),
-                            Box::new(VarExpr(v_int(5))),
+                            Box::new(Value(v_int(5))),
                         )),
                     }),
                     parser_line_no: 1,
@@ -1169,16 +1169,16 @@ mod tests {
                 StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(a)),
                     right: Box::new(Expr::List(vec![
-                        Normal(VarExpr(v_int(1))),
-                        Normal(VarExpr(v_int(2))),
-                        Normal(VarExpr(v_int(3))),
+                        Normal(Value(v_int(1))),
+                        Normal(Value(v_int(2))),
+                        Normal(Value(v_int(3))),
                     ])),
                 }),
                 StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(b)),
                     right: Box::new(Expr::Range {
                         base: Box::new(Id(a)),
-                        from: Box::new(VarExpr(v_int(2))),
+                        from: Box::new(Value(v_int(2))),
                         to: Box::new(Expr::Length),
                     }),
                 }),
@@ -1196,7 +1196,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::While {
                 id: None,
-                condition: VarExpr(v_int(1)),
+                condition: Value(v_int(1)),
                 body: vec![
                     Stmt {
                         node: StmtNode::Expr(Expr::Assign {
@@ -1204,7 +1204,7 @@ mod tests {
                             right: Box::new(Expr::Binary(
                                 BinaryOp::Add,
                                 Box::new(Id(x)),
-                                Box::new(VarExpr(v_int(1))),
+                                Box::new(Value(v_int(1))),
                             )),
                         }),
                         parser_line_no: 1,
@@ -1216,7 +1216,7 @@ mod tests {
                                 condition: Expr::Binary(
                                     BinaryOp::Gt,
                                     Box::new(Id(x)),
-                                    Box::new(VarExpr(v_int(5))),
+                                    Box::new(Value(v_int(5))),
                                 ),
                                 statements: vec![Stmt {
                                     node: StmtNode::Break { exit: None },
@@ -1245,7 +1245,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::While {
                 id: Some(chuckles),
-                condition: VarExpr(v_int(1)),
+                condition: Value(v_int(1)),
                 body: vec![
                     Stmt {
                         node: StmtNode::Expr(Expr::Assign {
@@ -1253,7 +1253,7 @@ mod tests {
                             right: Box::new(Expr::Binary(
                                 BinaryOp::Add,
                                 Box::new(Id(x)),
-                                Box::new(VarExpr(v_int(1))),
+                                Box::new(Value(v_int(1))),
                             )),
                         }),
                         parser_line_no: 1,
@@ -1265,7 +1265,7 @@ mod tests {
                                 condition: Expr::Binary(
                                     BinaryOp::Gt,
                                     Box::new(Id(x)),
-                                    Box::new(VarExpr(v_int(5))),
+                                    Box::new(Value(v_int(5))),
                                 ),
                                 statements: vec![Stmt {
                                     node: StmtNode::Break {
@@ -1294,10 +1294,10 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
                 location: Box::new(Prop {
-                    location: Box::new(VarExpr(v_obj(0))),
-                    property: Box::new(VarExpr(v_str("string_utils"))),
+                    location: Box::new(Value(v_obj(0))),
+                    property: Box::new(Value(v_str("string_utils"))),
                 }),
-                verb: Box::new(VarExpr(v_str("from_list"))),
+                verb: Box::new(Value(v_str("from_list"))),
                 args: vec![Normal(Id(test_string))],
             })]
         );
@@ -1340,7 +1340,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Scatter(
                 scatter_items,
-                Box::new(Expr::Index(Box::new(Id(args)), Box::new(VarExpr(v_int(1))),))
+                Box::new(Expr::Index(Box::new(Id(args)), Box::new(Value(v_int(1))),))
             ))]
         );
     }
@@ -1360,7 +1360,7 @@ mod tests {
                     Normal(Id(b)),
                     Normal(Id(c)),
                 ])),
-                Box::new(VarExpr(v_int(1))),
+                Box::new(Value(v_int(1))),
             ))]
         );
     }
@@ -1382,7 +1382,7 @@ mod tests {
                         Normal(Id(b)),
                         Normal(Id(c)),
                     ])),
-                    Box::new(VarExpr(v_int(1))),
+                    Box::new(Value(v_int(1))),
                 )),
             },)]
         );
@@ -1399,11 +1399,11 @@ mod tests {
                 left: Box::new(Expr::Index(
                     Box::new(Prop {
                         location: Box::new(Id(this)),
-                        property: Box::new(VarExpr(v_str("stack"))),
+                        property: Box::new(Value(v_str("stack"))),
                     }),
-                    Box::new(VarExpr(v_int(5))),
+                    Box::new(Value(v_int(5))),
                 )),
-                right: Box::new(VarExpr(v_int(5))),
+                right: Box::new(Value(v_int(5))),
             })]
         );
     }
@@ -1420,9 +1420,9 @@ mod tests {
                 StmtNode::ForList {
                     id: i,
                     expr: Expr::List(vec![
-                        Normal(VarExpr(v_int(1))),
-                        Normal(VarExpr(v_int(2))),
-                        Normal(VarExpr(v_int(3))),
+                        Normal(Value(v_int(1))),
+                        Normal(Value(v_int(2))),
+                        Normal(Value(v_int(3))),
                     ]),
                     body: vec![],
                 },
@@ -1506,7 +1506,7 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Expr(VarExpr(v_str(r#"n t r " \"#)))]
+            vec![StmtNode::Expr(Value(v_str(r#"n t r " \"#)))]
         );
     }
 
@@ -1540,19 +1540,19 @@ mod tests {
                 StmtNode::ForList {
                     id: a,
                     expr: Expr::List(vec![
-                        Normal(VarExpr(v_int(1))),
-                        Normal(VarExpr(v_int(2))),
-                        Normal(VarExpr(v_int(3))),
+                        Normal(Value(v_int(1))),
+                        Normal(Value(v_int(2))),
+                        Normal(Value(v_int(3))),
                     ]),
                     body: vec![],
                 },
                 StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(info)),
-                    right: Box::new(VarExpr(v_int(5))),
+                    right: Box::new(Value(v_int(5))),
                 }),
                 StmtNode::Expr(Expr::Assign {
                     left: Box::new(Id(forgotten)),
-                    right: Box::new(VarExpr(v_int(3))),
+                    right: Box::new(Value(v_int(3))),
                 }),
             ]
         );
@@ -1573,12 +1573,12 @@ mod tests {
                     arms: vec![CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(5))),
-                            Box::new(VarExpr(v_int(5))),
+                            Box::new(Value(v_int(5))),
+                            Box::new(Value(v_int(5))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(5)))
+                                expr: Some(Value(v_int(5)))
                             },
                             parser_line_no: 2,
                             tree_line_no: 2,
@@ -1586,7 +1586,7 @@ mod tests {
                     }],
                     otherwise: vec![Stmt {
                         node: StmtNode::Return {
-                            expr: Some(VarExpr(v_int(3)))
+                            expr: Some(Value(v_int(3)))
                         },
                         parser_line_no: 4,
                         tree_line_no: 4,
@@ -1615,12 +1615,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(5))),
-                            Box::new(VarExpr(v_int(5))),
+                            Box::new(Value(v_int(5))),
+                            Box::new(Value(v_int(5))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(5)))
+                                expr: Some(Value(v_int(5)))
                             },
                             parser_line_no: 2,
                             tree_line_no: 2,
@@ -1629,12 +1629,12 @@ mod tests {
                     CondArm {
                         condition: Expr::Binary(
                             BinaryOp::Eq,
-                            Box::new(VarExpr(v_int(2))),
-                            Box::new(VarExpr(v_int(2))),
+                            Box::new(Value(v_int(2))),
+                            Box::new(Value(v_int(2))),
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::Return {
-                                expr: Some(VarExpr(v_int(2)))
+                                expr: Some(Value(v_int(2)))
                             },
                             parser_line_no: 4,
                             tree_line_no: 4,
@@ -1643,7 +1643,7 @@ mod tests {
                 ],
                 otherwise: vec![Stmt {
                     node: StmtNode::Return {
-                        expr: Some(VarExpr(v_int(3)))
+                        expr: Some(Value(v_int(3)))
                     },
                     parser_line_no: 6,
                     tree_line_no: 6,
@@ -1663,11 +1663,11 @@ mod tests {
                 arms: vec![CondArm {
                     condition: Expr::Binary(
                         BinaryOp::In,
-                        Box::new(VarExpr(v_int(5))),
+                        Box::new(Value(v_int(5))),
                         Box::new(Expr::List(vec![
-                            Normal(VarExpr(v_int(1))),
-                            Normal(VarExpr(v_int(2))),
-                            Normal(VarExpr(v_int(3))),
+                            Normal(Value(v_int(1))),
+                            Normal(Value(v_int(2))),
+                            Normal(Value(v_int(3))),
                         ])),
                     ),
                     statements: vec![],
@@ -1690,13 +1690,13 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::TryExcept {
                 body: vec![Stmt {
-                    node: StmtNode::Expr(VarExpr(v_int(5))),
+                    node: StmtNode::Expr(Value(v_int(5))),
                     parser_line_no: 2,
                     tree_line_no: 2,
                 }],
                 excepts: vec![ExceptArm {
                     id: None,
-                    codes: CatchCodes::Codes(vec![Normal(VarExpr(v_err(E_PROPNF)))]),
+                    codes: CatchCodes::Codes(vec![Normal(Value(v_err(E_PROPNF)))]),
                     statements: vec![Stmt {
                         node: StmtNode::Return { expr: None },
                         parser_line_no: 4,
@@ -1713,7 +1713,7 @@ mod tests {
         let parse = parse_program(program).unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Expr(VarExpr(v_float(10000.0)))]
+            vec![StmtNode::Expr(Value(v_float(10000.0)))]
         );
     }
 
@@ -1728,9 +1728,9 @@ mod tests {
                 BinaryOp::In,
                 Box::new(Id(a)),
                 Box::new(Expr::List(vec![
-                    Normal(VarExpr(v_int(1))),
-                    Normal(VarExpr(v_int(2))),
-                    Normal(VarExpr(v_int(3))),
+                    Normal(Value(v_int(1))),
+                    Normal(Value(v_int(2))),
+                    Normal(Value(v_int(3))),
                 ])),
             ))]
         );
@@ -1754,11 +1754,11 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
-                verb: Box::new(VarExpr(v_str("verb"))),
+                verb: Box::new(Value(v_str("verb"))),
                 args: vec![
-                    Normal(VarExpr(v_int(1))),
-                    Normal(VarExpr(v_int(2))),
-                    Normal(VarExpr(v_int(3))),
+                    Normal(Value(v_int(1))),
+                    Normal(Value(v_int(2))),
+                    Normal(Value(v_int(3))),
                 ],
             })]
         );
@@ -1772,7 +1772,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Prop {
                 location: Box::new(Id(parse.names.find_name("this").unwrap())),
-                property: Box::new(VarExpr(v_str("prop"))),
+                property: Box::new(Value(v_str("prop"))),
             })]
         );
     }
@@ -1785,7 +1785,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Unary(
                 UnaryOp::Not,
-                Box::new(VarExpr(v_int(2))),
+                Box::new(Value(v_int(2))),
             ))]
         );
     }
@@ -1800,7 +1800,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::LtE,
-                Box::new(VarExpr(v_int(2))),
+                Box::new(Value(v_int(2))),
                 Box::new(Expr::Assign {
                     left: Box::new(Id(len)),
                     right: Box::new(Call {
@@ -1823,11 +1823,11 @@ mod tests {
                 right: Box::new(Expr::Cond {
                     condition: Box::new(Expr::Binary(
                         BinaryOp::Eq,
-                        Box::new(VarExpr(v_int(1))),
-                        Box::new(VarExpr(v_int(2))),
+                        Box::new(Value(v_int(1))),
+                        Box::new(Value(v_int(2))),
                     )),
-                    consequence: Box::new(VarExpr(v_int(3))),
-                    alternative: Box::new(VarExpr(v_int(4))),
+                    consequence: Box::new(Value(v_int(3))),
+                    alternative: Box::new(Value(v_int(4))),
                 }),
             })]
         );
@@ -1878,13 +1878,13 @@ mod tests {
                 StmtNode::ForList {
                     id: parse.names.find_name("line").unwrap(),
                     expr: Expr::List(vec![
-                        Normal(VarExpr(v_int(1))),
-                        Normal(VarExpr(v_int(2))),
-                        Normal(VarExpr(v_int(3))),
+                        Normal(Value(v_int(1))),
+                        Normal(Value(v_int(2))),
+                        Normal(Value(v_int(3))),
                     ]),
                     body: vec![],
                 },
-                StmtNode::Expr(VarExpr(v_int(52))),
+                StmtNode::Expr(Value(v_int(52))),
             ]
         );
     }
@@ -1894,14 +1894,14 @@ mod tests {
         let program = "return {`x ! e_varnf => 666'};";
         let parse = parse_program(program).unwrap();
 
-        let varnf = Normal(VarExpr(v_err(E_VARNF)));
+        let varnf = Normal(Value(v_err(E_VARNF)));
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Return {
                 expr: Some(Expr::List(vec![Normal(Expr::Catch {
                     trye: Box::new(Id(parse.names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
-                    except: Some(Box::new(VarExpr(v_int(666)))),
+                    except: Some(Box::new(Value(v_int(666)))),
                 })],))
             }]
         )
@@ -1911,7 +1911,7 @@ mod tests {
     fn try_catch_any_expr() {
         let program = "`raise(E_INVARG) ! ANY';";
         let parse = parse_program(program).unwrap();
-        let invarg = Normal(VarExpr(v_err(E_INVARG)));
+        let invarg = Normal(Value(v_err(E_INVARG)));
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1936,13 +1936,13 @@ mod tests {
             vec![StmtNode::Expr(Expr::Catch {
                 trye: Box::new(Verb {
                     location: Box::new(Prop {
-                        location: Box::new(VarExpr(v_obj(0))),
-                        property: Box::new(VarExpr(v_str("ftp_client"))),
+                        location: Box::new(Value(v_obj(0))),
+                        property: Box::new(Value(v_str("ftp_client"))),
                     }),
-                    verb: Box::new(VarExpr(v_str("finish_get"))),
+                    verb: Box::new(Value(v_str("finish_get"))),
                     args: vec![Normal(Prop {
                         location: Box::new(Id(parse.names.find_name("this").unwrap())),
-                        property: Box::new(VarExpr(v_str("connection"))),
+                        property: Box::new(Value(v_str("connection"))),
                     })],
                 }),
                 codes: CatchCodes::Any,
@@ -1959,10 +1959,10 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::And(
-                Box::new(VarExpr(v_int(1))),
+                Box::new(Value(v_int(1))),
                 Box::new(Expr::Or(
-                    Box::new(VarExpr(v_int(2))),
-                    Box::new(VarExpr(v_int(3))),
+                    Box::new(Value(v_int(2))),
+                    Box::new(Value(v_int(3))),
                 )),
             ))]
         );
@@ -1972,10 +1972,10 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Or(
                 Box::new(Expr::And(
-                    Box::new(VarExpr(v_int(1))),
-                    Box::new(VarExpr(v_int(2))),
+                    Box::new(Value(v_int(1))),
+                    Box::new(Value(v_int(2))),
                 )),
-                Box::new(VarExpr(v_int(3))),
+                Box::new(Value(v_int(3))),
             ))]
         );
     }
@@ -2007,10 +2007,10 @@ mod tests {
                     left: Box::new(Id(parse.names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
                         args: vec![
-                            Normal(VarExpr(v_int(1))),
-                            Normal(VarExpr(v_int(2))),
-                            Normal(VarExpr(v_int(3))),
-                            Normal(VarExpr(v_int(4))),
+                            Normal(Value(v_int(1))),
+                            Normal(Value(v_int(2))),
+                            Normal(Value(v_int(3))),
+                            Normal(Value(v_int(4))),
                         ],
                     }),
                 }),

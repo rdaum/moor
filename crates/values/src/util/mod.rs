@@ -13,12 +13,14 @@
 //
 
 mod bitarray;
-pub mod bitenum;
+mod bitenum;
 mod bitset;
-pub mod slice_ref;
+mod slice_ref;
 
-pub use bitarray::*;
-pub use bitset::*;
+pub use bitarray::BitArray;
+pub use bitenum::BitEnum;
+pub use bitset::{Bitset, Bitset16, Bitset32, Bitset64, Bitset8, BitsetTrait};
+pub use slice_ref::{ByteSource, SliceRef};
 
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'

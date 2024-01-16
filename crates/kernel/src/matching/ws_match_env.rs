@@ -13,11 +13,11 @@
 //
 
 use async_trait::async_trait;
-use moor_values::model::objset::ObjSet;
+use moor_values::model::ObjSet;
 
-use moor_values::model::world_state::WorldState;
+use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 
 use crate::matching::match_env::MatchEnvironment;
 

@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::util::slice_ref::SliceRef;
+use crate::util::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
 use itertools::Itertools;

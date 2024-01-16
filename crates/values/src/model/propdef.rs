@@ -14,9 +14,9 @@
 
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::props::PropFlag;
-use crate::util::bitenum::BitEnum;
-use crate::util::slice_ref::SliceRef;
-use crate::var::objid::Objid;
+use crate::util::BitEnum;
+use crate::util::SliceRef;
+use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{define_layout, Field};
 use bytes::{Buf, BufMut};
@@ -148,9 +148,9 @@ pub type PropDefs = Defs<PropDef>;
 mod tests {
     use crate::model::defset::HasUuid;
     use crate::model::propdef::{PropDef, PropDefs};
-    use crate::util::bitenum::BitEnum;
-    use crate::util::slice_ref::SliceRef;
-    use crate::var::objid::Objid;
+    use crate::util::BitEnum;
+    use crate::util::SliceRef;
+    use crate::var::Objid;
     use crate::AsByteBuffer;
     use uuid::Uuid;
 

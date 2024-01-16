@@ -17,7 +17,7 @@ pub mod rpc_client;
 
 use bincode::{Decode, Encode};
 use moor_values::model::{CommandError, NarrativeEvent, WorldStateError};
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
 use thiserror::Error;

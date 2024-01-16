@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use moor_values::var::variant::Variant;
+use moor_values::var::Variant;
 use moor_values::var::{v_err, v_int, v_none, v_objid, Var};
 
 use crate::ast::{
@@ -128,7 +128,7 @@ impl Decompile {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.statements.len();
 
-        while self.position + offset < jump_label.position.0 {
+        while self.position + offset < jump_label.position.0 as usize {
             self.decompile()?;
         }
         if self.statements.len() > old_len {
@@ -155,7 +155,7 @@ impl Decompile {
         let jump_label = self.find_jump(label)?; // check that the label exists
         let old_len = self.statements.len();
 
-        while self.position + 1 < jump_label.position.0 {
+        while self.position + 1 < jump_label.position.0 as usize {
             self.decompile()?;
         }
         // Next opcode must be the jump to the end of the whole branch
@@ -249,7 +249,7 @@ impl Decompile {
                 end_label: label,
             } => {
                 let one = self.pop_expr()?;
-                let Expr::VarExpr(v) = one else {
+                let Expr::Value(v) = one else {
                     return Err(MalformedProgram(
                         "expected literal '0' in for loop".to_string(),
                     ));
@@ -320,7 +320,7 @@ impl Decompile {
             }
             Op::Exit { stack: _, label } => {
                 let position = self.find_jump(&label)?.position;
-                if position.0 < self.position {
+                if position.0 < self.position as u16 {
                     self.statements
                         .push(Stmt::new(StmtNode::Continue { exit: None }, line_num));
                 } else {
@@ -332,7 +332,7 @@ impl Decompile {
                 let jump_label = self.find_jump(&label)?;
                 // Whether it's a break or a continue depends on whether the jump is forward or
                 // backward from the current position.
-                let s = if jump_label.position.0 < self.position {
+                let s = if jump_label.position.0 < self.position as u16 {
                     StmtNode::Continue {
                         exit: Some(jump_label.name.expect("jump label must have name")),
                     }
@@ -352,13 +352,13 @@ impl Decompile {
                 // a brand new decompiler
                 let mut fork_decompile = Decompile {
                     program: self.program.clone(),
-                    fork_vector: Some(fv_offset.0),
+                    fork_vector: Some(fv_offset.0 as _),
                     position: 0,
                     expr_stack: self.expr_stack.clone(),
                     builtins: self.builtins.clone(),
                     statements: vec![],
                 };
-                let fv_len = self.program.fork_vectors[fv_offset.0].len();
+                let fv_len = self.program.fork_vectors[fv_offset.0 as usize].len();
                 while fork_decompile.position < fv_len {
                     fork_decompile.decompile()?;
                 }
@@ -392,13 +392,10 @@ impl Decompile {
                 }
             }
             Op::Imm(literal_label) => {
-                self.push_expr(Expr::VarExpr(self.find_literal(&literal_label)?));
+                self.push_expr(Expr::Value(self.find_literal(&literal_label)?));
             }
             Op::Push(varname) => {
                 self.push_expr(Expr::Id(varname));
-            }
-            Op::Val(value) => {
-                self.push_expr(Expr::VarExpr(value));
             }
             Op::Put(varname) => {
                 let expr = self.pop_expr()?;
@@ -566,27 +563,21 @@ impl Decompile {
                 };
                 self.push_expr(Expr::Pass { args });
             }
-            Op::Scatter {
-                nargs: _,
-                nreq: _,
-                labels,
-                rest: _,
-                done,
-            } => {
+            Op::Scatter(sa) => {
                 let mut scatter_items = vec![];
                 // We need to go through and collect the jump labels for the expressions in
                 // optional scatters. We will use this later to compute the end of optional
                 // assignment expressions in the scatter.
                 let mut opt_jump_labels = vec![];
-                for scatter_label in labels.iter() {
+                for scatter_label in sa.labels.iter() {
                     if let ScatterLabel::Optional(_, Some(label)) = scatter_label {
                         opt_jump_labels.push(label);
                     }
                 }
-                opt_jump_labels.push(&done);
+                opt_jump_labels.push(&sa.done);
 
                 let mut label_pos = 0;
-                for scatter_label in labels.iter() {
+                for scatter_label in sa.labels.iter() {
                     let scatter_item = match scatter_label {
                         ScatterLabel::Required(id) => ScatterItem {
                             kind: ScatterKind::Required,
@@ -647,7 +638,7 @@ impl Decompile {
                 for _ in 0..num_excepts {
                     let codes_expr = self.pop_expr()?;
                     let catch_codes = match codes_expr {
-                        Expr::VarExpr(_) => CatchCodes::Any,
+                        Expr::Value(_) => CatchCodes::Any,
                         Expr::List(codes) => CatchCodes::Codes(codes),
                         _ => {
                             return Err(MalformedProgram("invalid try/except codes".to_string()));
@@ -692,7 +683,7 @@ impl Decompile {
                     let end_label_position = self.find_jump(&end_label)?.position.0;
                     let (statements, _) =
                         self.decompile_statements_until_match(|position, o| {
-                            if position == end_label_position {
+                            if position == end_label_position as _ {
                                 return true;
                             }
                             if let Op::Jump { label } = o {
@@ -727,7 +718,7 @@ impl Decompile {
             Op::Catch(label) => {
                 let codes_expr = self.pop_expr()?;
                 let catch_codes = match codes_expr {
-                    Expr::VarExpr(_) => CatchCodes::Any,
+                    Expr::Value(_) => CatchCodes::Any,
                     Expr::List(codes) => CatchCodes::Codes(codes),
                     _ => {
                         return Err(MalformedProgram("invalid try/except codes".to_string()));
@@ -747,9 +738,9 @@ impl Decompile {
                         self.decompile_statements_until(&end_label)?;
                         Some(Box::new(self.pop_expr()?))
                     }
-                    Op::Val(v) => {
+                    Op::ImmInt(v) => {
                         // V must be '1' and next opcode must be ref
-                        let Variant::Int(1) = v.variant() else {
+                        if v != 1 {
                             return Err(MalformedProgram(
                                 "expected literal '1' in catch".to_string(),
                             ));
@@ -836,19 +827,19 @@ impl Decompile {
                 unreachable!("should have been handled other decompilation branches")
             }
             Op::ImmNone => {
-                self.push_expr(Expr::VarExpr(v_none()));
+                self.push_expr(Expr::Value(v_none()));
             }
             Op::ImmInt(i) => {
-                self.push_expr(Expr::VarExpr(v_int(i as i64)));
+                self.push_expr(Expr::Value(v_int(i as i64)));
             }
             Op::ImmBigInt(i) => {
-                self.push_expr(Expr::VarExpr(v_int(i)));
+                self.push_expr(Expr::Value(v_int(i)));
             }
             Op::ImmErr(e) => {
-                self.push_expr(Expr::VarExpr(v_err(e)));
+                self.push_expr(Expr::Value(v_err(e)));
             }
             Op::ImmObjid(oid) => {
-                self.push_expr(Expr::VarExpr(v_objid(oid)));
+                self.push_expr(Expr::Value(v_objid(oid)));
             }
         }
         Ok(())

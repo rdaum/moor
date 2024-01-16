@@ -27,11 +27,11 @@ use tokio::sync::{oneshot, Mutex, RwLock};
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use moor_values::model::permissions::Perms;
-use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::CommandError;
-use moor_values::var::error::Error::{E_INVARG, E_PERM};
-use moor_values::var::objid::Objid;
+use moor_values::model::Perms;
+use moor_values::model::WorldStateSource;
+use moor_values::var::Error::{E_INVARG, E_PERM};
+use moor_values::var::Objid;
 use moor_values::var::{v_err, v_int, v_none, v_string, Var};
 use moor_values::SYSTEM_OBJECT;
 use SchedulerError::{

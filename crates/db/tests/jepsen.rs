@@ -43,7 +43,7 @@ mod tests {
     use moor_db::rdb::{RelationId, Transaction};
     use moor_db::testing::jepsen::{History, Type, Value};
 
-    use moor_values::util::slice_ref::SliceRef;
+    use moor_values::util::SliceRef;
 
     use super::*;
 

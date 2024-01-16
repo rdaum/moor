@@ -21,13 +21,13 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tracing::{debug, error, trace, warn};
 
-use moor_values::model::verb_info::VerbInfo;
-use moor_values::model::world_state::{WorldState, WorldStateSource};
 use moor_values::model::CommandError::PermissionDenied;
+use moor_values::model::VerbInfo;
 use moor_values::model::{CommandError, CommitResult, WorldStateError};
+use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::parse_into_words;
-use moor_values::var::objid::Objid;
-use moor_values::var::variant::Variant;
+use moor_values::var::Objid;
+use moor_values::var::Variant;
 use moor_values::var::{v_int, v_string};
 use moor_values::NOTHING;
 

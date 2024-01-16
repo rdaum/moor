@@ -65,7 +65,7 @@ impl Program {
             self.literals
                 .iter()
                 .position(|x| *x == l)
-                .expect("literal not found") as u32,
+                .expect("literal not found") as u16,
         )
     }
 }

@@ -28,18 +28,19 @@ use lazy_static::lazy_static;
 use strum::FromRepr;
 
 use crate::util::quote_str;
-use crate::var::error::Error;
-use crate::var::list::List;
-use crate::var::objid::Objid;
-use crate::var::string::Str;
-use crate::var::variant::Variant;
 
-pub mod error;
-pub mod list;
-pub mod objid;
-pub mod string;
-pub mod variant;
-pub mod varops;
+pub use crate::var::error::{Error, ErrorPack};
+pub use crate::var::list::List;
+pub use crate::var::objid::Objid;
+pub use crate::var::string::Str;
+pub use crate::var::variant::Variant;
+
+mod error;
+mod list;
+mod objid;
+mod string;
+mod variant;
+mod varops;
 
 lazy_static! {
     static ref VAR_NONE: Var = Variant::None.into();

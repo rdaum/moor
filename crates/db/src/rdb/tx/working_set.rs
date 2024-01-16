@@ -16,7 +16,7 @@ use moor_values::util::{BitArray, Bitset64};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::{RelBox, RelationInfo};

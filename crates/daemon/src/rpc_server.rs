@@ -35,12 +35,12 @@ use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult}
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::TaskId;
-use moor_values::model::world_state::WorldStateSource;
 use moor_values::model::NarrativeEvent;
+use moor_values::model::WorldStateSource;
 use moor_values::util::parse_into_words;
-use moor_values::var::objid::Objid;
-use moor_values::var::variant::Variant;
+use moor_values::var::Objid;
 use moor_values::var::Var;
+use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_objid, v_str, v_string};
 use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};

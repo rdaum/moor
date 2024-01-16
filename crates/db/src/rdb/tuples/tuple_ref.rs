@@ -17,7 +17,7 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 
 use crate::rdb::paging::TuplePtr;
 use crate::rdb::paging::{TupleBox, TupleBoxError};

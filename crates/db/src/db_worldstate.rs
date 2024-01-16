@@ -15,23 +15,23 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use moor_values::model::defset::HasUuid;
-use moor_values::model::objects::{ObjAttrs, ObjFlag};
-use moor_values::model::objset::ObjSet;
-use moor_values::model::permissions::Perms;
-use moor_values::model::propdef::{PropDef, PropDefs};
-use moor_values::model::props::{PropAttrs, PropFlag};
-use moor_values::model::r#match::{ArgSpec, PrepSpec, VerbArgsSpec};
-use moor_values::model::verb_info::VerbInfo;
-use moor_values::model::verbdef::{VerbDef, VerbDefs};
-use moor_values::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
-use moor_values::model::world_state::WorldState;
 use moor_values::model::CommitResult;
+use moor_values::model::HasUuid;
+use moor_values::model::ObjSet;
+use moor_values::model::Perms;
+use moor_values::model::VerbInfo;
+use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::util::bitenum::BitEnum;
-use moor_values::util::slice_ref::SliceRef;
-use moor_values::var::objid::Objid;
-use moor_values::var::variant::Variant;
+use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
+use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
+use moor_values::model::{ObjAttrs, ObjFlag};
+use moor_values::model::{PropAttrs, PropFlag};
+use moor_values::model::{PropDef, PropDefs};
+use moor_values::model::{VerbDef, VerbDefs};
+use moor_values::util::BitEnum;
+use moor_values::util::SliceRef;
+use moor_values::var::Objid;
+use moor_values::var::Variant;
 use moor_values::var::{v_int, v_list, v_objid, Var};
 use moor_values::NOTHING;
 

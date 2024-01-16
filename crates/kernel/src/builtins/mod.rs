@@ -27,11 +27,11 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedSender;
 
-use moor_values::model::permissions::Perms;
-use moor_values::model::world_state::WorldState;
+use moor_values::model::Perms;
+use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::error::Error;
-use moor_values::var::objid::Objid;
+use moor_values::var::Error;
+use moor_values::var::Objid;
 use moor_values::var::Var;
 
 use crate::tasks::sessions::Session;

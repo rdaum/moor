@@ -18,7 +18,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use moor_db::rdb::{RelBox, RelationInfo};
 use moor_db::testing::jepsen::{History, Type, Value};
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 

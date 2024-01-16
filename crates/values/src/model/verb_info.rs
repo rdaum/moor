@@ -13,7 +13,7 @@
 //
 
 use crate::model::verbdef::VerbDef;
-use crate::util::slice_ref::SliceRef;
+use crate::util::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
 use std::convert::TryInto;

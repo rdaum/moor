@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 
 use crate::rdb::tuples::{TupleId, TupleRef};
 use crate::rdb::RelationId;

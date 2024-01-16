@@ -18,9 +18,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_float, v_int, v_obj, v_str};
 use moor_values::AsByteBuffer;
 

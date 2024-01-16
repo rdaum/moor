@@ -24,12 +24,12 @@ use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::{TaskId, VerbCall};
 use moor_compiler::Program;
 use moor_compiler::{Op, ScatterLabel};
-use moor_values::model::verb_info::VerbInfo;
-use moor_values::model::world_state::WorldState;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
-use moor_values::var::objid::Objid;
-use moor_values::var::variant::Variant;
+use moor_values::model::VerbInfo;
+use moor_values::model::WorldState;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
+use moor_values::var::Objid;
+use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
 
 use crate::vm::activation::{Activation, HandlerType};
@@ -322,18 +322,6 @@ impl VM {
                 Op::ImmErr(val) => {
                     state.push(v_err(val));
                 }
-                Op::Val(val) => {
-                    match state.top().lookahead() {
-                        Some(Op::Pop) => {
-                            // skip
-                            state.top_mut().skip();
-                            continue;
-                        }
-                        _ => {
-                            state.push(val);
-                        }
-                    }
-                }
                 Op::Imm(slot) => {
                     match state.top().lookahead() {
                         Some(Op::Pop) => {
@@ -428,7 +416,7 @@ impl VM {
                 }
                 Op::In => {
                     let (lhs, rhs) = (state.pop(), state.peek_top());
-                    let r = lhs.index_in(&rhs);
+                    let r = lhs.index_in(rhs);
                     if let Variant::Err(e) = r.variant() {
                         state.pop();
                         return self.push_error(state, *e);
@@ -571,7 +559,7 @@ impl VM {
                     state.push(v.clone());
                 }
                 Op::Length(offset) => {
-                    let v = state.peek_abs(offset.0);
+                    let v = state.peek_abs(offset.0 as usize);
                     match v.len() {
                         Ok(l) => state.push(l),
                         Err(e) => return self.push_error(state, e),
@@ -767,15 +755,8 @@ impl VM {
                 Op::Exit { stack, label } => {
                     return self.unwind_stack(state, FinallyReason::Exit { stack, label });
                 }
-                Op::Scatter {
-                    nargs,
-                    nreq,
-                    rest,
-                    labels,
-                    done,
-                    ..
-                } => {
-                    let have_rest = rest <= nargs;
+                Op::Scatter(sa) => {
+                    let have_rest = sa.rest <= sa.nargs;
                     let rhs_values = {
                         let rhs = state.peek_top();
                         let Variant::List(rhs_values) = rhs.variant() else {
@@ -786,22 +767,22 @@ impl VM {
                     };
 
                     let len = rhs_values.len();
-                    if len < nreq || !have_rest && len > nargs {
+                    if len < sa.nreq || !have_rest && len > sa.nargs {
                         state.pop();
                         return self.push_error(state, E_ARGS);
                     }
 
-                    assert_eq!(nargs, labels.len());
-                    let mut nopt_avail = len - nreq;
-                    let nrest = if have_rest && len >= nargs {
-                        len - nargs + 1
+                    assert_eq!(sa.nargs, sa.labels.len());
+                    let mut nopt_avail = len - sa.nreq;
+                    let nrest = if have_rest && len >= sa.nargs {
+                        len - sa.nargs + 1
                     } else {
                         0
                     };
                     let mut jump_where = None;
                     let mut args_iter = rhs_values.iter();
 
-                    for label in labels.iter() {
+                    for label in sa.labels.iter() {
                         match label {
                             ScatterLabel::Rest(id) => {
                                 let mut v = vec![];
@@ -835,7 +816,7 @@ impl VM {
                         }
                     }
                     match &jump_where {
-                        None => state.jump(&done),
+                        None => state.jump(&sa.done),
                         Some(jump_where) => state.jump(jump_where),
                     }
                 }

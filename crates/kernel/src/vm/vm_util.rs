@@ -14,11 +14,11 @@
 
 use tracing::debug;
 
-use moor_values::model::world_state::WorldState;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVIND, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::model::WorldState;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVIND, E_TYPE};
 use moor_values::var::Var;
+use moor_values::var::Variant;
 
 use crate::vm::{VMExecState, VM};
 

@@ -19,7 +19,7 @@ use std::time::SystemTime;
 
 use clap::Parser;
 use clap_derive::Parser;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use tmq::request;

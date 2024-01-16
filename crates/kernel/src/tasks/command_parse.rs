@@ -18,10 +18,10 @@ use async_trait::async_trait;
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 
-use moor_values::model::r#match::{PrepSpec, Preposition, PREP_LIST};
 use moor_values::model::WorldStateError;
+use moor_values::model::{PrepSpec, Preposition, PREP_LIST};
 use moor_values::util;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use moor_values::var::{v_str, Var};
 
 lazy_static! {
@@ -232,7 +232,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_values::model::r#match::Preposition;
+    use moor_values::model::Preposition;
     use moor_values::util::parse_into_words;
     use moor_values::var::v_str;
     use moor_values::{FAILED_MATCH, NOTHING};

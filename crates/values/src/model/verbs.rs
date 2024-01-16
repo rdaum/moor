@@ -13,8 +13,8 @@
 //
 
 use crate::model::r#match::VerbArgsSpec;
-use crate::util::bitenum::BitEnum;
-use crate::var::objid::Objid;
+use crate::util::BitEnum;
+use crate::var::Objid;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;

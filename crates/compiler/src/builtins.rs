@@ -953,7 +953,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
 pub fn make_builtin_labels() -> HashMap<String, Name> {
     let mut b = HashMap::new();
     for (i, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
-        b.insert(builtin.name.clone(), Name(i as u32));
+        b.insert(builtin.name.clone(), Name(i as u16));
     }
 
     b
@@ -961,7 +961,7 @@ pub fn make_builtin_labels() -> HashMap<String, Name> {
 pub fn make_labels_builtins() -> HashMap<Name, String> {
     let mut b = HashMap::new();
     for (i, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
-        b.insert(Name(i as u32), builtin.name.clone());
+        b.insert(Name(i as u16), builtin.name.clone());
     }
 
     b

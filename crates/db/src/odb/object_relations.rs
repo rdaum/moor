@@ -15,10 +15,10 @@
 use strum::{Display, EnumCount, EnumIter};
 use uuid::Uuid;
 
-use moor_values::model::objset::ObjSet;
+use moor_values::model::ObjSet;
 use moor_values::model::WorldStateError;
-use moor_values::util::slice_ref::SliceRef;
-use moor_values::var::objid::Objid;
+use moor_values::util::SliceRef;
+use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
 
 use crate::rdb::TupleError;
@@ -282,8 +282,8 @@ mod tests {
 
     use strum::{EnumCount, IntoEnumIterator};
 
-    use moor_values::model::objset::ObjSet;
-    use moor_values::var::objid::Objid;
+    use moor_values::model::ObjSet;
+    use moor_values::var::Objid;
 
     use crate::odb::object_relations::WorldStateRelation::ObjectParent;
     use crate::odb::object_relations::{

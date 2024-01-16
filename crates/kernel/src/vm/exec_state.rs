@@ -15,7 +15,7 @@
 use crate::vm::activation::{Activation, Caller};
 use moor_compiler::Op;
 use moor_compiler::{Label, Name};
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use moor_values::var::Var;
 use moor_values::NOTHING;
 use std::time::SystemTime;

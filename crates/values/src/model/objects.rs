@@ -17,8 +17,8 @@ use std::fmt::{Display, Formatter};
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
-use crate::util::bitenum::BitEnum;
-use crate::var::objid::Objid;
+use crate::util::BitEnum;
+use crate::var::Objid;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum ObjFlag {

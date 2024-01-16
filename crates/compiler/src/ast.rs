@@ -128,7 +128,7 @@ pub enum Expr {
     Pass {
         args: Vec<Arg>,
     },
-    VarExpr(Var),
+    Value(Var),
     Id(Name),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),

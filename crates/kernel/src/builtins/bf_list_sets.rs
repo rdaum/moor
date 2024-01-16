@@ -19,9 +19,9 @@ use async_trait::async_trait;
 use onig::{Region, SearchOptions, SyntaxOperator};
 
 use moor_compiler::offset_for_builtin;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_int, v_list, v_string};
 
 use crate::bf_declare;

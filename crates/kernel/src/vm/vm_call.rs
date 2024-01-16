@@ -15,10 +15,10 @@
 use std::sync::Arc;
 use tracing::{debug, trace};
 
-use moor_values::model::world_state::WorldState;
+use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::error::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
-use moor_values::var::objid::Objid;
+use moor_values::var::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
+use moor_values::var::Objid;
 use moor_values::var::{v_int, Var};
 
 use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
@@ -32,7 +32,7 @@ use crate::vm::{ExecutionResult, Fork, VM};
 use crate::vm::{VMExecState, VmExecParams};
 use moor_compiler::Program;
 use moor_compiler::BUILTIN_DESCRIPTORS;
-use moor_values::model::verb_info::VerbInfo;
+use moor_values::model::VerbInfo;
 
 pub(crate) fn args_literal(args: &[Var]) -> String {
     args.iter()
@@ -220,7 +220,8 @@ impl VM {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
         a.task_id = task_id;
-        a.program.main_vector = a.program.fork_vectors[fork_request.fork_vector_offset.0].clone();
+        a.program.main_vector =
+            a.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone();
         a.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             a.set_var_offset(task_id_name, v_int(task_id as i64))

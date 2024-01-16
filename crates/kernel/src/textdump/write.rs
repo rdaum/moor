@@ -15,9 +15,8 @@
 use std::collections::BTreeMap;
 use std::io;
 
-use moor_values::var::objid::Objid;
-use moor_values::var::{variant, Var, VarType};
-use variant::Variant;
+use moor_values::var::Objid;
+use moor_values::var::{Var, VarType, Variant};
 
 use crate::textdump::read::TYPE_CLEAR;
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};

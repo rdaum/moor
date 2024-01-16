@@ -15,22 +15,22 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use moor_values::model::defset::{HasUuid, Named};
-use moor_values::model::objects::ObjFlag;
+use moor_values::model::ObjFlag;
+use moor_values::model::{HasUuid, Named};
 use moor_values::AsByteBuffer;
 use strum::EnumCount;
 use tracing::{error, warn};
 
-use moor_values::model::r#match::{ArgSpec, VerbArgsSpec};
-use moor_values::model::verbdef::VerbDef;
-use moor_values::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
+use moor_values::model::VerbDef;
 use moor_values::model::{world_state_err, WorldStateError};
-use moor_values::util::bitenum::BitEnum;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_values::var::list::List;
-use moor_values::var::objid::Objid;
-use moor_values::var::variant::Variant;
+use moor_values::model::{ArgSpec, VerbArgsSpec};
+use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
+use moor_values::util::BitEnum;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_values::var::List;
+use moor_values::var::Objid;
+use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
 
 use crate::bf_declare;
@@ -115,7 +115,7 @@ async fn get_verbdef(
     obj: Objid,
     verbspec: Var,
     bf_args: &BfCallState<'_>,
-) -> Result<VerbDef, moor_values::var::error::Error> {
+) -> Result<VerbDef, moor_values::var::Error> {
     let verbspec_result = match verbspec.variant() {
         Variant::Str(verb_desc) => {
             let verb_desc = verb_desc.as_str();

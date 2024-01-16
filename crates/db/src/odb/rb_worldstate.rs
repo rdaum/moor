@@ -23,18 +23,18 @@ use uuid::Uuid;
 
 use crate::rdb::TupleError;
 use crate::Database;
-use moor_values::model::defset::{HasUuid, Named};
-use moor_values::model::objects::{ObjAttrs, ObjFlag};
-use moor_values::model::objset::ObjSet;
-use moor_values::model::propdef::{PropDef, PropDefs};
-use moor_values::model::props::PropFlag;
-use moor_values::model::r#match::VerbArgsSpec;
-use moor_values::model::verbdef::{VerbDef, VerbDefs};
-use moor_values::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
-use moor_values::model::world_state::{WorldState, WorldStateSource};
+use moor_values::model::ObjSet;
+use moor_values::model::PropFlag;
+use moor_values::model::VerbArgsSpec;
+use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::util::bitenum::BitEnum;
-use moor_values::var::objid::Objid;
+use moor_values::model::{HasUuid, Named};
+use moor_values::model::{ObjAttrs, ObjFlag};
+use moor_values::model::{PropDef, PropDefs};
+use moor_values::model::{VerbDef, VerbDefs};
+use moor_values::model::{WorldState, WorldStateSource};
+use moor_values::util::BitEnum;
+use moor_values::var::Objid;
 use moor_values::var::{v_none, Var};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
@@ -1241,15 +1241,15 @@ mod tests {
 
     use strum::{EnumCount, IntoEnumIterator};
 
-    use moor_values::model::defset::{HasUuid, Named};
-    use moor_values::model::objects::ObjAttrs;
-    use moor_values::model::objset::ObjSet;
-    use moor_values::model::r#match::VerbArgsSpec;
-    use moor_values::model::verbs::{BinaryType, VerbAttrs};
+    use moor_values::model::ObjAttrs;
+    use moor_values::model::ObjSet;
+    use moor_values::model::VerbArgsSpec;
+    use moor_values::model::{BinaryType, VerbAttrs};
     use moor_values::model::{CommitResult, WorldStateError};
-    use moor_values::util::bitenum::BitEnum;
-    use moor_values::var::objid::Objid;
+    use moor_values::model::{HasUuid, Named};
+    use moor_values::util::BitEnum;
     use moor_values::var::v_str;
+    use moor_values::var::Objid;
     use moor_values::NOTHING;
 
     use crate::db_tx::DbTransaction;

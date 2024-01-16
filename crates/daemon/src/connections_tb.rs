@@ -27,8 +27,8 @@ use uuid::Uuid;
 
 use moor_db::rdb::{RelBox, RelationId, RelationInfo, Transaction};
 use moor_kernel::tasks::sessions::SessionError;
-use moor_values::util::slice_ref::SliceRef;
-use moor_values::var::objid::Objid;
+use moor_values::util::SliceRef;
+use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
 use rpc_common::RpcRequestError;
 
@@ -460,7 +460,7 @@ impl ConnectionsDB for ConnectionsTb {
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::var::objid::Objid;
+    use moor_values::var::Objid;
 
     use crate::connections::ConnectionsDB;
     use crate::connections_tb::ConnectionsTb;

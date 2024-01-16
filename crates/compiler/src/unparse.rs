@@ -13,7 +13,7 @@
 //
 
 use moor_values::util::quote_str;
-use moor_values::var::variant::Variant;
+use moor_values::var::Variant;
 
 use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
@@ -67,7 +67,7 @@ impl Expr {
             Expr::Range { .. } => 1,
             Expr::Index(_, _) => 2,
 
-            Expr::VarExpr(_) => 1,
+            Expr::Value(_) => 1,
             Expr::Id(_) => 1,
             Expr::List(_) => 1,
             Expr::Pass { .. } => 1,
@@ -163,7 +163,7 @@ impl Unparse {
                 }
                 Ok(buffer)
             }
-            Expr::VarExpr(var) => Ok(self.unparse_var(var, false)),
+            Expr::Value(var) => Ok(self.unparse_var(var, false)),
             Expr::Id(id) => Ok(self.names.name_of(id).unwrap().to_string()),
             Expr::Binary(op, left_expr, right_expr) => Ok(format!(
                 "{} {} {}",
@@ -184,11 +184,11 @@ impl Unparse {
             Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_lower(expr))),
             Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
-                    (Expr::VarExpr(var), Expr::VarExpr(_)) if var.is_root() => String::from("$"),
+                    (Expr::Value(var), Expr::Value(_)) if var.is_root() => String::from("$"),
                     _ => format!("{}.", brace_if_lower(location)),
                 };
                 let prop = match &**property {
-                    Expr::VarExpr(var) => self.unparse_var(var, true).to_string(),
+                    Expr::Value(var) => self.unparse_var(var, true).to_string(),
                     _ => format!("({})", brace_if_lower(property)),
                 };
                 Ok(format!("{location}{prop}"))
@@ -199,11 +199,11 @@ impl Unparse {
                 args,
             } => {
                 let location = match (&**location, &**verb) {
-                    (Expr::VarExpr(var), Expr::VarExpr(_)) if var.is_root() => String::from("$"),
+                    (Expr::Value(var), Expr::Value(_)) if var.is_root() => String::from("$"),
                     _ => format!("{}:", brace_if_lower(location)),
                 };
                 let verb = match &**verb {
-                    Expr::VarExpr(var) => self.unparse_var(var, true),
+                    Expr::Value(var) => self.unparse_var(var, true),
                     _ => format!("({})", brace_if_lower(verb)),
                 };
                 let mut buffer = String::new();

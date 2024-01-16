@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::util::slice_ref::SliceRef;
+use moor_values::util::SliceRef;
 use std::collections::HashSet;
 
 use crate::rdb::tuples::{TupleError, TupleRef};

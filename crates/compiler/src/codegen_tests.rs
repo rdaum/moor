@@ -18,13 +18,12 @@ mod tests {
     use crate::codegen::compile;
     use crate::labels::{Label, Name, Offset};
     use crate::CompileError;
-    use moor_values::var::error::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
-    use moor_values::var::objid::Objid;
-    use moor_values::var::v_int;
+    use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
+    use moor_values::var::Objid;
     use moor_values::SYSTEM_OBJECT;
 
     use crate::opcode::Op::*;
-    use crate::opcode::ScatterLabel;
+    use crate::opcode::{ScatterArgs, ScatterLabel};
 
     #[test]
     fn test_simple_add_expr() {
@@ -300,7 +299,7 @@ mod tests {
                 ListAddTail,
                 ImmInt(3),
                 ListAddTail,
-                Val(v_int(0)), // Differs from LambdaMOO, which uses 1-indexed lists internally, too.
+                ImmInt(0),
                 ForList {
                     id: x,
                     end_label: 1.into()
@@ -920,16 +919,16 @@ mod tests {
         assert_eq!(
             binary.main_vector,
             vec![
-                Val(0.into()),
+                ImmInt(0),
                 PushLabel(0.into()),
                 Catch(0.into()),
                 ImmErr(E_INVARG),
                 MakeSingletonList,
                 FuncCall {
-                    id: Name(raise_num as u32)
+                    id: Name(raise_num as u16)
                 },
                 EndCatch(1.into()),
-                Val(1.into()),
+                ImmInt(1),
                 Ref,
                 Return,
                 Done
@@ -1010,7 +1009,7 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(binary.find_var("args")),
-                Scatter {
+                Scatter(Box::new(ScatterArgs {
                     nargs: 3,
                     nreq: 3,
                     rest: 4,
@@ -1020,7 +1019,7 @@ mod tests {
                         ScatterLabel::Required(c),
                     ],
                     done: 0.into(),
-                },
+                })),
                 Pop,
                 Done
             ]
@@ -1049,7 +1048,7 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(binary.find_var("args")),
-                Scatter {
+                Scatter(Box::new(ScatterArgs {
                     nargs: 3,
                     nreq: 2,
                     rest: 4,
@@ -1059,7 +1058,7 @@ mod tests {
                         ScatterLabel::Optional(third, Some(0.into())),
                     ],
                     done: 1.into(),
-                },
+                })),
                 ImmInt(0),
                 Put(binary.find_var("third")),
                 Pop,
@@ -1094,7 +1093,7 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(binary.find_var("args")),
-                Scatter {
+                Scatter(Box::new(ScatterArgs {
                     nargs: 4,
                     nreq: 2,
                     rest: 4,
@@ -1105,7 +1104,7 @@ mod tests {
                         ScatterLabel::Rest(d),
                     ],
                     done: 1.into(),
-                },
+                })),
                 ImmInt(8),
                 Put(binary.find_var("c")),
                 Pop,
@@ -1145,7 +1144,7 @@ mod tests {
             binary.main_vector,
             vec![
                 Push(binary.find_var("args")),
-                Scatter {
+                Scatter(Box::new(ScatterArgs {
                     nargs: 6,
                     nreq: 2,
                     rest: 4,
@@ -1158,7 +1157,7 @@ mod tests {
                         ScatterLabel::Required(f),
                     ],
                     done: 2.into(),
-                },
+                })),
                 ImmInt(8),
                 Put(binary.find_var("c")),
                 Pop,
@@ -1224,7 +1223,7 @@ mod tests {
                 MakeSingletonList,
                 ImmInt(1),
                 Ref,
-                Scatter {
+                Scatter(Box::new(ScatterArgs {
                     nargs: 4,
                     nreq: 2,
                     rest: 4,
@@ -1235,7 +1234,7 @@ mod tests {
                         ScatterLabel::Rest(d),
                     ],
                     done: 0.into(),
-                },
+                })),
                 Pop,
                 Push(a),
                 MakeSingletonList,
@@ -1503,7 +1502,7 @@ mod tests {
                 Catch(0.into()),
                 Push(this),
                 EndCatch(1.into()),
-                Val(1.into()),
+                ImmInt(1),
                 Ref,
                 Pop,
                 Done

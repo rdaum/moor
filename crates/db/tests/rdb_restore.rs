@@ -21,7 +21,7 @@ mod test {
     use moor_db::rdb::{RelBox, RelationInfo};
     use moor_db::rdb::{RelationId, Transaction};
     use moor_db::testing::jepsen::{History, Type, Value};
-    use moor_values::util::slice_ref::SliceRef;
+    use moor_values::util::SliceRef;
 
     fn from_val(value: i64) -> SliceRef {
         SliceRef::from_bytes(&value.to_le_bytes()[..])

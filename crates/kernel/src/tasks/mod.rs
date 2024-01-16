@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
 
@@ -55,7 +55,7 @@ pub mod vm_test_utils {
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
     use crate::vm::VmExecParams;
-    use moor_values::model::world_state::WorldState;
+    use moor_values::model::WorldState;
     use moor_values::var::Var;
     use moor_values::SYSTEM_OBJECT;
     use std::sync::Arc;

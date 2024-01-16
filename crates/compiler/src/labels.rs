@@ -33,23 +33,23 @@ pub struct JumpLabel {
 /// A committed, compiled, Label can be resolved to a program offset by looking it up in program's
 /// jump vector at runtime.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
-pub struct Label(pub u32);
+pub struct Label(pub u16);
 
 impl From<usize> for Label {
     fn from(value: usize) -> Self {
-        Label(value as u32)
+        Label(value as u16)
     }
 }
 
 impl From<i32> for Label {
     fn from(value: i32) -> Self {
-        Label(value as u32)
+        Label(value as u16)
     }
 }
 
 /// A Name is a unique identifier for a variable in the program's environment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
-pub struct Name(pub u32);
+pub struct Name(pub u16);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Names {
@@ -65,11 +65,11 @@ impl Default for Names {
 /// An offset is a program offset; a bit like a jump label, but represents a *relative* program
 /// position
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
-pub struct Offset(pub usize);
+pub struct Offset(pub u16);
 
 impl From<usize> for Offset {
     fn from(value: usize) -> Self {
-        Offset(value)
+        Offset(value as u16)
     }
 }
 
@@ -91,14 +91,14 @@ impl Names {
             None => {
                 let pos = self.names.len();
                 self.names.push(String::from(name));
-                Name(pos as u32)
+                Name(pos as u16)
             }
-            Some(n) => Name(n as u32),
+            Some(n) => Name(n as u16),
         }
     }
 
     pub fn find_name(&self, name: &str) -> Option<Name> {
-        self.find_name_offset(name).map(|x| Name(x as u32))
+        self.find_name_offset(name).map(|x| Name(x as u16))
     }
 
     pub fn find_name_offset(&self, name: &str) -> Option<usize> {

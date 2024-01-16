@@ -15,12 +15,12 @@
 use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
-use moor_values::model::objset::ObjSet;
+use moor_values::model::ObjSet;
 use moor_values::model::WorldStateError;
 use moor_values::NOTHING;
 
 use crate::matching::match_env::MatchEnvironment;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 
 pub const MOCK_PLAYER: Objid = Objid(3);
 pub const MOCK_ROOM1: Objid = Objid(1);

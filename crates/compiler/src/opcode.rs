@@ -13,19 +13,10 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_values::var::error::Error;
-use moor_values::var::objid::Objid;
-
-use moor_values::var::Var;
+use moor_values::var::Error;
+use moor_values::var::Objid;
 
 use crate::labels::{Label, Name, Offset};
-
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
-pub enum ScatterLabel {
-    Required(Name),
-    Rest(Name),
-    Optional(Name, Option<Label>),
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum Op {
@@ -33,19 +24,10 @@ pub enum Op {
     Eif(Label),
     IfQues(Label),
     While(Label),
-    Jump {
-        label: Label,
-    },
-    ForList {
-        id: Name,
-        end_label: Label,
-    },
-    ForRange {
-        id: Name,
-        end_label: Label,
-    },
+    Jump { label: Label },
+    ForList { id: Name, end_label: Label },
+    ForRange { id: Name, end_label: Label },
     Pop,
-    Val(Var),
     ImmNone,
     ImmBigInt(i64),
     ImmInt(i32),
@@ -81,54 +63,64 @@ pub enum Op {
     PushRef,
     Put(Name),
     RangeRef,
-    GPut {
-        id: Name,
-    },
-    GPush {
-        id: Name,
-    },
+    GPut { id: Name },
+    GPush { id: Name },
     GetProp,
     PushGetProp,
     PutProp,
-    Fork {
-        fv_offset: Offset,
-        id: Option<Name>,
-    },
+    Fork { fv_offset: Offset, id: Option<Name> },
     CallVerb,
     Return,
     Return0,
     Done,
-    FuncCall {
-        id: Name,
-    },
+    FuncCall { id: Name },
     Pass,
     RangeSet,
     Length(Offset),
     Exp,
-    Scatter {
-        nargs: usize,
-        nreq: usize,
-        rest: usize,
-        labels: Vec<ScatterLabel>,
-        done: Label,
-    },
+    Scatter(Box<ScatterArgs>),
     PushLabel(Label),
     TryFinally(Label),
     Catch(Label),
-    TryExcept {
-        num_excepts: usize,
-    },
+    TryExcept { num_excepts: usize },
     EndCatch(Label),
     EndExcept(Label),
     EndFinally,
-    WhileId {
-        id: Name,
-        end_label: Label,
-    },
+    WhileId { id: Name, end_label: Label },
     Continue,
     ExitId(Label),
-    Exit {
-        stack: Offset,
-        label: Label,
-    },
+    Exit { stack: Offset, label: Label },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub enum ScatterLabel {
+    Required(Name),
+    Rest(Name),
+    Optional(Name, Option<Label>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub struct ScatterArgs {
+    pub nargs: usize,
+    pub nreq: usize,
+    pub rest: usize,
+    pub labels: Vec<ScatterLabel>,
+    pub done: Label,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Label, Name, Offset};
+
+    /// Verify we don't go over our 16 byte budget for opcodes.
+    // TODO: This is still rather bloated.
+    #[test]
+    fn size_opcode() {
+        use crate::opcode::Op;
+        use std::mem::size_of;
+        assert_eq!(size_of::<Op>(), 16);
+        assert_eq!(size_of::<Name>(), 2);
+        assert_eq!(size_of::<Offset>(), 2);
+        assert_eq!(size_of::<Label>(), 2);
+    }
 }

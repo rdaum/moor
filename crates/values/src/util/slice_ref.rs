@@ -155,7 +155,7 @@ impl SliceRef {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::slice_ref::SliceRef;
+    use crate::util::SliceRef;
 
     #[test]
     fn test_buffer_ref_split() {

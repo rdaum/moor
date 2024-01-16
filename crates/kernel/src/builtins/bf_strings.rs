@@ -18,9 +18,9 @@ use async_trait::async_trait;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_int, v_str, v_string};
 
 use crate::bf_declare;

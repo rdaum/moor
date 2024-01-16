@@ -18,8 +18,8 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use tracing::error;
 
-use moor_values::var::variant::Variant;
-use moor_values::var::{v_int, Var};
+use moor_values::var::Var;
+use moor_values::var::Variant;
 
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
@@ -27,7 +27,7 @@ use crate::ast::{
 use crate::builtins::make_builtin_labels;
 use crate::labels::{JumpLabel, Label, Name, Names, Offset};
 use crate::opcode::Op::Jump;
-use crate::opcode::{Op, ScatterLabel};
+use crate::opcode::{Op, ScatterArgs, ScatterLabel};
 use crate::parse::parse_program;
 use crate::program::Program;
 use crate::CompileError;
@@ -74,7 +74,7 @@ impl CodegenState {
 
     // Create an anonymous jump label at the current position and return its unique ID.
     fn make_jump_label(&mut self, name: Option<Name>) -> Label {
-        let id = Label(self.jumps.len() as u32);
+        let id = Label(self.jumps.len() as u16);
         let position = (self.ops.len()).into();
         self.jumps.push(JumpLabel { id, name, position });
         id
@@ -99,7 +99,7 @@ impl CodegenState {
             self.literals.push(v.clone());
             idx
         });
-        Label(pos as u32)
+        Label(pos as u16)
     }
 
     fn emit(&mut self, op: Op) {
@@ -148,7 +148,7 @@ impl CodegenState {
     fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> Offset {
         let fv = self.fork_vectors.len();
         self.fork_vectors.push(opcodes);
-        Offset(fv)
+        Offset(fv as u16)
     }
 
     fn generate_assign(&mut self, left: &Expr, right: &Expr) -> Result<(), CompileError> {
@@ -246,13 +246,13 @@ impl CodegenState {
             })
             .collect();
         let done = self.make_jump_label(None);
-        self.emit(Op::Scatter {
+        self.emit(Op::Scatter(Box::new(ScatterArgs {
             nargs,
             nreq,
             rest: nrest,
             labels: labels.iter().map(|(_, l)| l.clone()).collect(),
             done,
-        });
+        })));
         for (s, label) in labels {
             if let ScatterLabel::Optional(_, Some(label)) = label {
                 if s.expr.is_none() {
@@ -315,7 +315,7 @@ impl CodegenState {
                 self.generate_arg_list(codes)?;
             }
             CatchCodes::Any => {
-                self.emit(Op::Val(v_int(0)));
+                self.emit(Op::ImmInt(0));
                 self.push_stack(1);
             }
         }
@@ -324,7 +324,7 @@ impl CodegenState {
 
     fn generate_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
         match expr {
-            Expr::VarExpr(v) => {
+            Expr::Value(v) => {
                 match v.variant() {
                     Variant::None => {
                         self.emit(Op::ImmNone);
@@ -488,7 +488,7 @@ impl CodegenState {
                  */
                 match except {
                     None => {
-                        self.emit(Op::Val(v_int(1)));
+                        self.emit(Op::ImmInt(1));
                         self.emit(Op::Ref);
                     }
                     Some(except) => {
@@ -551,7 +551,7 @@ impl CodegenState {
 
                 // Note that MOO is 1-indexed, so this is counter value is 1 in LambdaMOO;
                 // we use 0 here to make it easier to implement the ForList instruction.
-                self.emit(Op::Val(v_int(0))); /* loop list index... */
+                self.emit(Op::ImmInt(0)); /* loop list index... */
                 self.push_stack(1);
                 let loop_top = self.make_jump_label(Some(*id));
                 self.commit_jump_label(loop_top);

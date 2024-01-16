@@ -15,16 +15,16 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use moor_values::model::objects::ObjAttrs;
-use moor_values::model::objset::ObjSet;
-use moor_values::model::propdef::{PropDef, PropDefs};
-use moor_values::model::props::PropFlag;
-use moor_values::model::r#match::VerbArgsSpec;
-use moor_values::model::verbdef::VerbDefs;
-use moor_values::model::verbs::VerbFlag;
+use moor_values::model::ObjAttrs;
+use moor_values::model::ObjSet;
+use moor_values::model::PropFlag;
+use moor_values::model::VerbArgsSpec;
+use moor_values::model::VerbDefs;
+use moor_values::model::VerbFlag;
 use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::util::bitenum::BitEnum;
-use moor_values::var::objid::Objid;
+use moor_values::model::{PropDef, PropDefs};
+use moor_values::util::BitEnum;
+use moor_values::var::Objid;
 use moor_values::var::Var;
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what

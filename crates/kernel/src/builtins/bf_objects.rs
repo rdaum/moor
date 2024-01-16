@@ -17,12 +17,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::{debug, error, trace};
 
-use moor_values::model::objects::ObjFlag;
+use moor_values::model::ObjFlag;
 use moor_values::model::{world_state_err, WorldStateError};
-use moor_values::util::bitenum::BitEnum;
-use moor_values::var::error::Error;
-use moor_values::var::error::Error::{E_INVARG, E_NACC, E_TYPE};
-use moor_values::var::variant::Variant;
+use moor_values::util::BitEnum;
+use moor_values::var::Error;
+use moor_values::var::Error::{E_INVARG, E_NACC, E_TYPE};
+use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
 use moor_values::NOTHING;
 
@@ -33,7 +33,7 @@ use crate::tasks::VerbCall;
 use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
 use moor_compiler::offset_for_builtin;
-use moor_values::model::defset::Named;
+use moor_values::model::Named;
 
 /*
 Function: int valid (obj object)

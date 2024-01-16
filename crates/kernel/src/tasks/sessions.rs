@@ -14,7 +14,7 @@
 
 use async_trait::async_trait;
 use moor_values::model::NarrativeEvent;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use uuid::Uuid;

@@ -13,11 +13,11 @@
 //
 
 use async_trait::async_trait;
-use moor_values::model::objset::ObjSet;
+use moor_values::model::ObjSet;
 use moor_values::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 use moor_values::model::WorldStateError;
-use moor_values::var::objid::Objid;
+use moor_values::var::Objid;
 
 use crate::tasks::command_parse::ParseMatcher;
 
@@ -152,7 +152,7 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
 
 #[cfg(test)]
 mod tests {
-    use moor_values::var::objid::Objid;
+    use moor_values::var::Objid;
     use moor_values::{FAILED_MATCH, NOTHING};
 
     use crate::matching::match_env::{

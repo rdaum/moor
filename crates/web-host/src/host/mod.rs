@@ -15,8 +15,8 @@
 pub mod web_host;
 mod ws_connection;
 
-use moor_values::var::variant::Variant;
 use moor_values::var::Var;
+use moor_values::var::Variant;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Number};
 

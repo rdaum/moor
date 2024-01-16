@@ -15,10 +15,10 @@
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
-use crate::util::bitenum::BitEnum;
-use crate::util::slice_ref::SliceRef;
 use crate::util::verbname_cmp;
-use crate::var::objid::Objid;
+use crate::util::BitEnum;
+use crate::util::SliceRef;
+use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{define_layout, Field};
 use bytes::BufMut;
@@ -182,9 +182,9 @@ mod tests {
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::verbdef::{VerbDef, VerbDefs};
     use crate::model::verbs::VerbFlag;
-    use crate::util::bitenum::BitEnum;
-    use crate::util::slice_ref::SliceRef;
-    use crate::var::objid::Objid;
+    use crate::util::BitEnum;
+    use crate::util::SliceRef;
+    use crate::var::Objid;
     use crate::AsByteBuffer;
 
     #[test]

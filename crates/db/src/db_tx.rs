@@ -15,16 +15,16 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use moor_values::model::objects::{ObjAttrs, ObjFlag};
-use moor_values::model::objset::ObjSet;
-use moor_values::model::propdef::{PropDef, PropDefs};
-use moor_values::model::props::PropFlag;
-use moor_values::model::r#match::VerbArgsSpec;
-use moor_values::model::verbdef::{VerbDef, VerbDefs};
-use moor_values::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
+use moor_values::model::ObjSet;
+use moor_values::model::PropFlag;
+use moor_values::model::VerbArgsSpec;
+use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::util::bitenum::BitEnum;
-use moor_values::var::objid::Objid;
+use moor_values::model::{ObjAttrs, ObjFlag};
+use moor_values::model::{PropDef, PropDefs};
+use moor_values::model::{VerbDef, VerbDefs};
+use moor_values::util::BitEnum;
+use moor_values::var::Objid;
 use moor_values::var::Var;
 
 /// A trait defining a generic interface to a database for storing the the per-attribute values

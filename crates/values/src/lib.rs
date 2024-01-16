@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::util::slice_ref::SliceRef;
-use crate::var::objid::Objid;
+use crate::util::SliceRef;
+use crate::var::Objid;
 use bincode::enc::write::Writer;
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};

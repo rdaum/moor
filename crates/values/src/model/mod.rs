@@ -17,22 +17,32 @@ use std::time::SystemTime;
 
 use thiserror::Error;
 
-use crate::model::objects::ObjAttr;
-use crate::model::verbs::Vid;
-use crate::var::error::Error;
-use crate::var::objid::Objid;
+pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
+pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
+pub use crate::model::objset::{ObjSet, ObjSetIter};
+pub use crate::model::permissions::Perms;
+pub use crate::model::propdef::{PropDef, PropDefs};
+pub use crate::model::props::{PropAttr, PropAttrs, PropFlag};
+pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec, PREP_LIST};
+pub use crate::model::verb_info::VerbInfo;
+pub use crate::model::verbdef::{VerbDef, VerbDefs};
+pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};
+pub use crate::model::world_state::{WorldState, WorldStateSource};
 
-pub mod defset;
-pub mod r#match;
-pub mod objects;
-pub mod objset;
-pub mod permissions;
-pub mod propdef;
-pub mod props;
-pub mod verb_info;
-pub mod verbdef;
-pub mod verbs;
-pub mod world_state;
+use crate::var::Error;
+use crate::var::Objid;
+
+mod defset;
+mod r#match;
+mod objects;
+mod objset;
+mod permissions;
+mod propdef;
+mod props;
+mod verb_info;
+mod verbdef;
+mod verbs;
+mod world_state;
 
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
