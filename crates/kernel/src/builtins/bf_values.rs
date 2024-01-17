@@ -38,7 +38,7 @@ bf_declare!(typeof, bf_typeof);
 
 async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let mut result = String::new();
-    for arg in &bf_args.args {
+    for arg in bf_args.args.iter() {
         match arg.variant() {
             Variant::None => result.push_str("None"),
             Variant::Int(i) => result.push_str(&i.to_string()),

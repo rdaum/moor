@@ -123,7 +123,8 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
         return Err(E_TYPE);
     };
 
-    let attrs = match info_to_prop_attrs(&info[..]) {
+    let info: Vec<_> = info.iter().cloned().collect();
+    let attrs = match info_to_prop_attrs(&info) {
         InfoParseResult::Fail(e) => {
             return Err(e);
         }
@@ -192,6 +193,7 @@ async fn bf_add_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
         return Err(E_INVARG);
     };
 
+    let info: Vec<_> = info.iter().cloned().collect();
     let attrs = match info_to_prop_attrs(&info[..]) {
         InfoParseResult::Fail(e) => {
             return Err(e);

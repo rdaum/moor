@@ -636,7 +636,7 @@ impl VM {
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_TYPE);
                     };
-                    return self.prepare_pass_verb(state, world_state, &args[..]).await;
+                    return self.prepare_pass_verb(state, world_state, &args).await;
                 }
                 Op::CallVerb => {
                     let (args, verb, obj) = (state.pop(), state.pop(), state.pop());
@@ -647,7 +647,7 @@ impl VM {
                         }
                     };
                     return self
-                        .prepare_call_verb(state, world_state, *obj, verb.as_str(), &args[..])
+                        .prepare_call_verb(state, world_state, *obj, verb.as_str(), &args)
                         .await;
                 }
                 Op::Return => {
@@ -670,7 +670,7 @@ impl VM {
                         .call_builtin_function(
                             state,
                             id.0 as usize,
-                            &args[..],
+                            args.clone(),
                             exec_params,
                             world_state,
                             session,

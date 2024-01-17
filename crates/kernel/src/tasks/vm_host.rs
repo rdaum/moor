@@ -27,8 +27,8 @@ use moor_values::model::BinaryType;
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::util::SliceRef;
-use moor_values::var::Objid;
 use moor_values::var::Var;
+use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -287,6 +287,7 @@ impl VmHost {
                         ticks_left: self.max_ticks - self.vm_exec_state.tick_count,
                         time_left,
                     };
+                    let args = List::from_slice(&args);
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.
                     // After this we will loop around and check the result.
@@ -295,7 +296,7 @@ impl VmHost {
                         .call_builtin_function(
                             &mut self.vm_exec_state,
                             bf_offset,
-                            &args,
+                            args,
                             &exec_params,
                             world_state,
                             self.sessions.clone(),
@@ -394,6 +395,6 @@ impl VmHost {
         self.vm_exec_state.start_time = Some(SystemTime::now());
     }
     pub fn args(&self) -> Vec<Var> {
-        self.vm_exec_state.top().args.clone()
+        self.vm_exec_state.top().args.to_vec()
     }
 }

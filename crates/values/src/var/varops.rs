@@ -15,7 +15,7 @@
 use crate::var::error::Error;
 use crate::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::variant::Variant;
-use crate::var::{v_empty_list, v_empty_str, v_list, Var};
+use crate::var::{v_empty_list, v_empty_str, v_list, List, Var};
 use crate::var::{v_err, v_float, v_int};
 use num_traits::Zero;
 use std::ops::{Div, Mul, Neg, Sub};
@@ -191,13 +191,9 @@ impl Var {
     // TODO: 1-indexing is assumed here, and this will bite us if we ever call into it from another
     //  language runtime.
     pub fn rangeset(&self, value: Self, from: i64, to: i64) -> Result<Self, Error> {
-        let (base_len, val_len) = match (self.variant(), value.variant()) {
-            (Variant::Str(base_str), Variant::Str(val_str)) => {
-                (base_str.len() as i64, val_str.len() as i64)
-            }
-            (Variant::List(base_list), Variant::List(val_list)) => {
-                (base_list.len() as i64, val_list.len() as i64)
-            }
+        let base_len = match self.variant() {
+            Variant::Str(s) => s.len() as i64,
+            Variant::List(l) => l.len() as i64,
             _ => return Ok(v_err(E_TYPE)),
         };
 
@@ -210,10 +206,9 @@ impl Var {
             return Ok(v_err(E_RANGE));
         }
 
-        let lenleft = if from > 1 { from - 1 } else { 0 };
-        let lenmiddle = val_len;
-        let lenright = if base_len > to { base_len - to } else { 0 };
-        let newsize = lenleft + lenmiddle + lenright;
+        // let lenleft = if from > 1 { from - 1 } else { 0 };
+        // let lenmiddle = val_len;
+        // let lenright = if base_len > to { base_len - to } else { 0 };
 
         let (from, to) = (from as usize, to as usize);
         let ans = match (self.variant(), value.variant()) {
@@ -228,11 +223,12 @@ impl Var {
                 )?
             }
             (Variant::List(base_list), Variant::List(value_list)) => {
-                let mut ans: Vec<Self> = Vec::with_capacity(newsize as usize);
-                ans.extend_from_slice(&base_list[..from - 1]);
-                ans.extend(value_list.iter().cloned());
-                ans.extend_from_slice(&base_list[to..]);
-                v_list(&ans)
+                let mut ans = base_list.inner.clone();
+                let mut ans2 = base_list.inner.clone();
+                let mut ans = ans.slice(0..from - 1).clone();
+                ans.append(value_list.inner.clone());
+                ans.append(ans2.slice(to..base_list.len()).clone());
+                Variant::List(List::from_imvec(ans)).into()
             }
             _ => unreachable!(),
         };

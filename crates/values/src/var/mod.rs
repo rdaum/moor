@@ -157,7 +157,7 @@ pub fn v_err(e: Error) -> Var {
 
 #[must_use]
 pub fn v_list(l: &[Var]) -> Var {
-    Var::new(Variant::List(List::from_vec(l.to_vec())))
+    Var::new(Variant::List(List::from_slice(l)))
 }
 
 #[must_use]

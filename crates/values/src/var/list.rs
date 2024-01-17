@@ -14,39 +14,77 @@
 
 use std::cmp::min;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
-use std::sync::Arc;
+use std::ops::Index;
 
-use bincode::{Decode, Encode};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
+use im::Vector;
 
 use crate::var::variant::Variant;
 use crate::var::{v_empty_list, Var};
 
-#[derive(Clone, Debug, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct List {
-    inner: Arc<Vec<Var>>,
+    pub(crate) inner: Vector<Var>,
 }
 
+impl Encode for List {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // Encode length
+        let len = self.inner.len();
+        len.encode(encoder)?;
+        for item in self.inner.iter() {
+            item.encode(encoder)?;
+        }
+        Ok(())
+    }
+}
+
+impl Decode for List {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = usize::decode(decoder)?;
+        let mut items = Vector::new();
+        for _ in 0..len {
+            items.push_back(Var::decode(decoder)?);
+        }
+        Ok(Self::from_imvec(items))
+    }
+}
+
+impl<'a> BorrowDecode<'a> for List {
+    fn borrow_decode<D: BorrowDecoder<'a>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = usize::decode(decoder)?;
+        let mut items = Vector::new();
+        for _ in 0..len {
+            items.push_back(Var::borrow_decode(decoder)?);
+        }
+        Ok(Self::from_imvec(items))
+    }
+}
 impl List {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Vec::new()),
+            inner: Vector::new(),
         }
     }
 
     #[must_use]
-    pub fn from_vec(vec: Vec<Var>) -> Self {
-        Self {
-            inner: Arc::new(vec),
-        }
+    pub fn from_slice(vec: &[Var]) -> Self {
+        Self { inner: vec.into() }
+    }
+
+    pub fn from_imvec(vec: im::vector::Vector<Var>) -> Self {
+        Self { inner: vec }
     }
 
     #[must_use]
     pub fn push(&self, v: &Var) -> Var {
-        let mut new_list = (*self.inner).clone();
-        new_list.push(v.clone());
-        Variant::List(Self::from_vec(new_list)).into()
+        let mut new_list = self.inner.clone();
+        new_list.push_back(v.clone());
+        Variant::List(Self::from_imvec(new_list)).into()
     }
 
     /// Take the first item from the front, and return (item, `new_list`)
@@ -55,23 +93,26 @@ impl List {
         if self.inner.is_empty() {
             return (v_empty_list(), v_empty_list());
         }
-        let mut new_list = (*self.inner).clone();
+        let mut new_list = self.inner.clone();
         let item = new_list.remove(0);
-        (item.clone(), Variant::List(Self::from_vec(new_list)).into())
+        (
+            item.clone(),
+            Variant::List(Self::from_imvec(new_list)).into(),
+        )
     }
 
     #[must_use]
     pub fn append(&self, other: &Self) -> Var {
-        let mut new_list = (*self.inner).clone();
-        new_list.extend_from_slice(&other.inner);
-        Variant::List(Self::from_vec(new_list)).into()
+        let mut new_list = self.inner.clone();
+        new_list.append(other.inner.clone());
+        Variant::List(Self::from_imvec(new_list)).into()
     }
 
     #[must_use]
     pub fn remove_at(&self, index: usize) -> Var {
-        let mut new_list = (*self.inner).clone();
+        let mut new_list = self.inner.clone();
         new_list.remove(index);
-        Variant::List(Self::from_vec(new_list)).into()
+        Variant::List(Self::from_imvec(new_list)).into()
     }
 
     /// Remove the first found instance of the given value from the list.
@@ -80,30 +121,30 @@ impl List {
         if self.inner.is_empty() {
             return v_empty_list();
         }
-        let mut new_list = Vec::with_capacity(self.inner.len() - 1);
+        let mut new_list = Vector::new();
         let mut found = false;
         for v in self.inner.iter() {
             if !found && v == value {
                 found = true;
                 continue;
             }
-            new_list.push(v.clone());
+            new_list.push_back(v.clone());
         }
-        Variant::List(Self::from_vec(new_list)).into()
+        Variant::List(Self::from_imvec(new_list)).into()
     }
 
     #[must_use]
     pub fn insert(&self, index: isize, v: &Var) -> Var {
-        let mut new_list = Vec::with_capacity(self.inner.len() + 1);
         let index = if index < 0 {
             0
         } else {
             min(index as usize, self.inner.len())
         };
-        new_list.extend_from_slice(&self.inner[..index]);
-        new_list.push(v.clone());
-        new_list.extend_from_slice(&self.inner[index..]);
-        Variant::List(Self::from_vec(new_list)).into()
+        let mut new_list = self.inner.clone();
+        let mut new_list = new_list.slice(..index).clone();
+        new_list.push_back(v.clone());
+        new_list.append(self.inner.clone().slice(index..));
+        Variant::List(Self::from_imvec(new_list)).into()
     }
 
     #[must_use]
@@ -145,19 +186,17 @@ impl List {
 
     #[must_use]
     pub fn set(&self, index: usize, value: &Var) -> Var {
-        let mut new_vec = (*self.inner).clone();
+        let mut new_vec = self.inner.clone();
         new_vec[index] = value.clone();
-        Variant::List(Self::from_vec(new_vec)).into()
+        Variant::List(Self::from_imvec(new_vec)).into()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Var> {
         self.inner.iter()
     }
-}
 
-impl From<List> for Vec<Var> {
-    fn from(val: List) -> Self {
-        val.inner[..].to_vec()
+    pub fn to_vec(&self) -> Vec<Var> {
+        self.inner.clone().into_iter().collect()
     }
 }
 
@@ -171,38 +210,6 @@ impl Index<usize> for List {
     type Output = Var;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.inner[index]
-    }
-}
-
-impl Index<Range<usize>> for List {
-    type Output = [Var];
-
-    fn index(&self, index: Range<usize>) -> &Self::Output {
-        &self.inner[index]
-    }
-}
-
-impl Index<RangeFrom<usize>> for List {
-    type Output = [Var];
-
-    fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
-        &self.inner[index]
-    }
-}
-
-impl Index<RangeTo<usize>> for List {
-    type Output = [Var];
-
-    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
-        &self.inner[index]
-    }
-}
-
-impl Index<RangeFull> for List {
-    type Output = [Var];
-
-    fn index(&self, index: RangeFull) -> &Self::Output {
         &self.inner[index]
     }
 }
@@ -230,14 +237,14 @@ mod tests {
     #[test]
     pub fn weird_moo_insert_scenarios() {
         // MOO supports negative indexes, which just floor to 0...
-        let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
+        let list = List::from_slice(&[v_int(1), v_int(2), v_int(3)]);
         assert_eq!(
             list.insert(-1, &v_int(0)),
             v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)])
         );
 
         // MOO supports indexes beyond length of the list, which just append to the end...
-        let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
+        let list = List::from_slice(&[v_int(1), v_int(2), v_int(3)]);
         assert_eq!(
             list.insert(100, &v_int(0)),
             v_list(&[v_int(1), v_int(2), v_int(3), v_int(0)])
@@ -246,7 +253,7 @@ mod tests {
 
     #[test]
     pub fn list_display() {
-        let list = List::from_vec(vec![v_int(1), v_string("foo".into()), v_int(3)]);
+        let list = List::from_slice(&[v_int(1), v_string("foo".into()), v_int(3)]);
         assert_eq!(format!("{list}"), "{1, \"foo\", 3}");
     }
 }

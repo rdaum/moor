@@ -30,9 +30,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::Error;
 use moor_values::var::Objid;
 use moor_values::var::Var;
+use moor_values::var::{Error, List};
 
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
@@ -44,7 +44,7 @@ pub struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: String,
     /// Arguments passed to the function.
-    pub(crate) args: Vec<Var>,
+    pub(crate) args: List,
     /// The current execution state of this task in this VM, including the stack
     /// so that BFs can inspect and manipulate it.
     pub(crate) exec_state: &'a mut VMExecState,

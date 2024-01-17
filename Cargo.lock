@@ -2041,6 +2041,7 @@ dependencies = [
  "bytes",
  "decorum",
  "enum-primitive-derive",
+ "im",
  "itertools 0.12.0",
  "lazy_static",
  "num-traits",

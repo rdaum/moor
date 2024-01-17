@@ -411,7 +411,7 @@ async fn bf_substitute<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 
     // Turn psubs into a Vec<(isize, isize)>. Raising errors on the way if they're not
     let mut mysubs = Vec::new();
-    for sub in &subs[..] {
+    for sub in subs.iter() {
         let Variant::List(sub) = sub.variant() else {
             return Err(E_INVARG);
         };

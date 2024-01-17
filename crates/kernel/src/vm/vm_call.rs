@@ -13,13 +13,13 @@
 //
 
 use std::sync::Arc;
-use tracing::{debug, trace};
+use tracing::trace;
 
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
+use moor_values::var::v_int;
 use moor_values::var::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
-use moor_values::var::Objid;
-use moor_values::var::{v_int, Var};
+use moor_values::var::{List, Objid};
 
 use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
 use crate::builtins::{BfCallState, BfRet};
@@ -33,13 +33,6 @@ use crate::vm::{VMExecState, VmExecParams};
 use moor_compiler::Program;
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_values::model::VerbInfo;
-
-pub(crate) fn args_literal(args: &[Var]) -> String {
-    args.iter()
-        .map(|v| v.to_literal())
-        .collect::<Vec<String>>()
-        .join(", ")
-}
 
 /// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -68,7 +61,7 @@ impl VM {
         world_state: &mut dyn WorldState,
         this: Objid,
         verb_name: &str,
-        args: &[Var],
+        args: &List,
     ) -> ExecutionResult {
         let call = VerbCall {
             verb_name: verb_name.to_string(),
@@ -133,7 +126,7 @@ impl VM {
         &self,
         vm_state: &mut VMExecState,
         world_state: &mut dyn WorldState,
-        args: &[Var],
+        args: &List,
     ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = vm_state.top().verb_definer();
@@ -238,7 +231,7 @@ impl VM {
         &self,
         vm_state: &mut VMExecState,
         bf_func_num: usize,
-        args: &[Var],
+        args: List,
         exec_args: &VmExecParams,
         world_state: &'a mut dyn WorldState,
         session: Arc<dyn Session>,
@@ -247,14 +240,6 @@ impl VM {
             return self.raise_error(vm_state, E_VARNF);
         }
         let bf = self.builtins[bf_func_num].clone();
-
-        debug!(
-            "Calling builtin: {}({}) caller_perms: {}",
-            BUILTIN_DESCRIPTORS[bf_func_num].name,
-            args_literal(args),
-            vm_state.top().permissions
-        );
-        let args = args.to_vec();
 
         // Push an activation frame for the builtin function.
         let flags = vm_state.top().verb_info.verbdef().flags();

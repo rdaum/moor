@@ -618,7 +618,7 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     };
 
     // Arguments are everything left, if any.
-    let args = &bf_args.args[1..];
+    let args = &bf_args.args.to_vec()[1..];
 
     // Find the function id for the given function name.
     let func_name: &str = func_name.as_str();
@@ -632,7 +632,7 @@ async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::ContinueBuiltin {
         bf_func_num: func_offset,
-        arguments: args[..].to_vec(),
+        arguments: args.to_vec(),
     }))
 }
 bf_declare!(call_function, bf_call_function);
