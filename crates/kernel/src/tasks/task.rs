@@ -351,7 +351,7 @@ impl Task {
                 let task_id = reply.await.expect("Could not get fork reply");
                 if let Some(task_id_var) = task_id_var {
                     self.vm_host
-                        .set_variable(task_id_var, v_int(task_id as i64));
+                        .set_variable(&task_id_var, v_int(task_id as i64));
                 }
                 (VmContinue::Continue, None)
             }

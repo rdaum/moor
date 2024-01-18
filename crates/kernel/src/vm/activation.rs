@@ -20,14 +20,11 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::util::BitEnum;
-use moor_values::util::SliceRef;
-use moor_values::var::Error;
+use moor_values::util::{BitArray, BitEnum, Bitset16, SliceRef};
 use moor_values::var::Error::E_VARNF;
 use moor_values::var::Objid;
-use moor_values::var::{
-    v_empty_list, v_int, v_list, v_none, v_objid, v_str, v_string, Var, VarType,
-};
+use moor_values::var::{v_empty_list, v_int, v_none, v_objid, v_str, v_string, Var, VarType};
+use moor_values::var::{v_listv, Error};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::TaskId;
@@ -35,7 +32,6 @@ use crate::vm::VerbExecutionRequest;
 use moor_compiler::Program;
 use moor_compiler::{Label, Name};
 use moor_compiler::{Op, EMPTY_PROGRAM};
-use moor_values::util::{BitArray, Bitset32};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -70,6 +66,9 @@ pub(crate) struct HandlerLabel {
 //   catch handlers
 //   opcode stream
 //   trampoline args?
+// TODO: how can we optimize this for L1 cache locality?
+//   1. do microbenchmarks with LinuxPerf
+//   2. try to break this apart so that the 'hot' pieces are together in their own struct
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Activation {
     /// The task ID of the task that owns this VM and this stack of activations.
@@ -92,7 +91,7 @@ pub(crate) struct Activation {
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Objid,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: BitArray<Var, 256, Bitset32<8>>,
+    pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active error handlers, each relative to a position in the valstack.
@@ -158,7 +157,7 @@ impl Activation {
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
         );
-        a.set_gvar(GlobalName::args, v_list(&verb_call_request.call.args));
+        a.set_gvar(GlobalName::args, v_listv(verb_call_request.call.args));
 
         // From the command, if any...
         if let Some(command) = verb_call_request.command {
@@ -311,22 +310,23 @@ impl Activation {
     }
 
     #[inline]
-    pub fn set_var_offset(&mut self, offset: Name, value: Var) -> Result<(), Error> {
+    pub fn set_env(&mut self, id: &Name, v: Var) {
+        self.environment.set(id.0 as usize, v);
+    }
+
+    /// Return the value of a local variable.
+    #[inline]
+    pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
+        self.environment.get(id.0 as usize)
+    }
+
+    #[inline]
+    pub fn set_var_offset(&mut self, offset: &Name, value: Var) -> Result<(), Error> {
         if offset.0 as usize >= self.environment.len() {
             return Err(E_VARNF);
         }
         self.environment.set(offset.0 as usize, value);
         Ok(())
-    }
-
-    #[inline]
-    pub fn next_op(&mut self) -> Op {
-        assert!(self.pc < self.program.main_vector.len(), "pc out of bounds");
-        let op = &self.program.main_vector[self.pc];
-        self.pc += 1;
-        // TODO: It would be nice to avoid the clone here, and hold a reference in the execution loop, but
-        //   that leads to borrow issues.
-        op.clone()
     }
 
     #[inline]
@@ -340,8 +340,10 @@ impl Activation {
     }
 
     #[inline]
-    pub fn pop(&mut self) -> Option<Var> {
-        self.valstack.pop()
+    pub fn pop(&mut self) -> Var {
+        self.valstack
+            .pop()
+            .unwrap_or_else(|| panic!("stack underflow @ PC: {}", self.pc))
     }
 
     #[inline]
@@ -350,8 +352,13 @@ impl Activation {
     }
 
     #[inline]
-    pub fn peek_top(&self) -> Option<&Var> {
-        self.valstack.last()
+    pub fn peek_top(&self) -> &Var {
+        self.valstack.last().expect("stack underflow")
+    }
+
+    #[inline]
+    pub fn peek_top_mut(&mut self) -> &mut Var {
+        self.valstack.last_mut().expect("stack underflow")
     }
 
     #[inline]

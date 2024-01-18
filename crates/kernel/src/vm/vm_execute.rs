@@ -26,11 +26,11 @@ use moor_compiler::Program;
 use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
-use moor_values::var::Error;
 use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Objid;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
+use moor_values::var::{v_listv, Error};
 
 use crate::vm::activation::{Activation, HandlerType};
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
@@ -122,23 +122,23 @@ pub enum ExecutionResult {
 }
 
 macro_rules! binary_bool_op {
-    ( $state:ident, $op:tt ) => {
-        let rhs = $state.pop();
-        let lhs = $state.peek_top();
+    ( $a:ident, $op:tt ) => {
+        let rhs = $a.pop();
+        let lhs = $a.peek_top();
         let result = if lhs $op &rhs { 1 } else { 0 };
-        $state.update(0, v_int(result))
+        $a.update(0, v_int(result))
     };
 }
 
 macro_rules! binary_var_op {
-    ( $vm:ident, $state:ident, $op:tt ) => {
-        let rhs = $state.pop();
-        let lhs = $state.peek_top();
+    ( $vm:ident, $a:ident, $state:ident, $op:tt ) => {
+        let rhs = $a.pop();
+        let lhs = $a.peek_top();
         let result = lhs.$op(&rhs);
         match result {
-            Ok(result) => $state.update(0, result),
+            Ok(result) => $a.update(0, result),
             Err(err_code) => {
-                $state.pop();
+                $a.pop();
                 return $vm.push_error($state, err_code);
             }
         }
@@ -186,32 +186,38 @@ impl VM {
 
         // Try to consume & execute as many opcodes as we can without returning back to the task
         // scheduler, for efficiency reasons...
+
+        let opcodes = state.top_mut().program.main_vector.clone();
         while state.tick_count < tick_slice {
+            state.tick_count += 1;
+
+            // Borrow the top of the activation stack for the lifetime of this execution.
+            let a = state.top_mut();
+
             // Otherwise, start poppin' opcodes.
             // We panic here if we run out of opcodes, as that means there's a bug in either the
             // compiler or in opcode execution.
-            let op = state.next_op();
-
-            state.tick_count += 1;
+            let op = &opcodes[a.pc];
+            a.pc += 1;
 
             match op {
                 Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
-                    let cond = state.pop();
+                    let cond = a.pop();
                     if !cond.is_true() {
-                        state.jump(&label);
+                        a.jump(label);
                     }
                 }
                 Op::Jump { label } => {
-                    state.jump(&label);
+                    a.jump(label);
                 }
                 Op::WhileId {
                     id,
                     end_label: label,
                 } => {
-                    state.set_env(&id, state.peek_top().clone());
-                    let cond = state.pop();
+                    a.set_env(id, a.peek_top().clone());
+                    let cond = a.pop();
                     if !cond.is_true() {
-                        state.jump(&label);
+                        a.jump(label);
                     }
                 }
                 Op::ForList {
@@ -220,40 +226,40 @@ impl VM {
                 } => {
                     // Pop the count and list off the stack. We push back later when we re-enter.
 
-                    let (count, list) = state.peek2();
+                    let (count, list) = a.peek2();
                     let Variant::Int(count) = count.variant() else {
-                        state.pop();
-                        state.pop();
+                        a.pop();
+                        a.pop();
 
                         // If the result of raising error was just to push the value -- that is, we
                         // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                         // So we preemptively jump (here and below for List) and then raise the error.
-                        state.jump(&label);
+                        a.jump(label);
                         return self.raise_error(state, E_TYPE);
                     };
                     let count = *count as usize;
                     let Variant::List(l) = list.variant() else {
-                        state.pop();
-                        state.pop();
+                        a.pop();
+                        a.pop();
 
-                        state.jump(&label);
+                        a.jump(label);
                         return self.raise_error(state, E_TYPE);
                     };
 
                     // If we've exhausted the list, pop the count and list and jump out.
                     if count >= l.len() {
-                        state.pop();
-                        state.pop();
+                        a.pop();
+                        a.pop();
 
-                        state.jump(&label);
+                        a.jump(label);
                         continue;
                     }
 
                     // Track iteration count for range; set id to current list element for the count,
                     // then increment the count, rewind the program counter to the top of the loop, and
                     // continue.
-                    state.set_env(&id, l[count].clone());
-                    state.update(0, v_int((count + 1) as i64));
+                    a.set_env(id, l[count].clone());
+                    a.update(0, v_int((count + 1) as i64));
                 }
                 Op::ForRange {
                     end_label: label,
@@ -261,7 +267,7 @@ impl VM {
                 } => {
                     // Pull the range ends off the stack.
                     let (from, next_val) = {
-                        let (to, from) = state.peek2();
+                        let (to, from) = a.peek2();
 
                         // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
                         //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
@@ -270,9 +276,9 @@ impl VM {
                         let next_val = match (to.variant(), from.variant()) {
                             (Variant::Int(to_i), Variant::Int(from_i)) => {
                                 if from_i > to_i {
-                                    state.pop();
-                                    state.pop();
-                                    state.jump(&label);
+                                    a.pop();
+                                    a.pop();
+                                    a.jump(label);
 
                                     continue;
                                 }
@@ -280,320 +286,326 @@ impl VM {
                             }
                             (Variant::Obj(to_o), Variant::Obj(from_o)) => {
                                 if from_o.0 > to_o.0 {
-                                    state.pop();
-                                    state.pop();
-                                    state.jump(&label);
+                                    a.pop();
+                                    a.pop();
+                                    a.jump(label);
 
                                     continue;
                                 }
                                 v_obj(from_o.0 + 1)
                             }
                             (_, _) => {
-                                state.pop();
-                                state.pop();
+                                a.pop();
+                                a.pop();
                                 // Make sure we've jumped out of the loop before raising the error,
                                 // because in verbs that aren't `d' we could end up continuing on in
                                 // the loop (with a messed up stack) otherwise.
-                                state.jump(&label);
+                                a.jump(label);
 
                                 return self.raise_error(state, E_TYPE);
                             }
                         };
                         (from.clone(), next_val)
                     };
-                    state.update(1, next_val);
-                    state.set_env(&id, from);
+                    a.update(1, next_val);
+                    a.set_env(id, from);
                 }
                 Op::Pop => {
-                    state.pop();
+                    a.pop();
                 }
                 Op::ImmNone => {
-                    state.push(v_none());
+                    a.push(v_none());
                 }
                 Op::ImmBigInt(val) => {
-                    state.push(v_int(val));
+                    a.push(v_int(*val));
                 }
                 Op::ImmInt(val) => {
-                    state.push(v_int(val as i64));
+                    a.push(v_int(*val as i64));
                 }
                 Op::ImmObjid(val) => {
-                    state.push(v_objid(val));
+                    a.push(v_objid(*val));
                 }
                 Op::ImmErr(val) => {
-                    state.push(v_err(val));
+                    a.push(v_err(*val));
                 }
                 Op::Imm(slot) => {
-                    match state.top().lookahead() {
+                    // TODO: it's questionable whether this optimization actually will be of much use
+                    //   on a modern CPU as it could cause branch prediction misses. We should
+                    //   benchmark this. its purpose is to avoid pointless stack ops for literals
+                    //   that are never used (e.g. comments).
+                    //   what might be better is an "optimization pass" that removes these prior to
+                    //   execution, but then we'd have to cache them, etc. etc.
+                    match a.lookahead() {
                         Some(Op::Pop) => {
                             // skip
-                            state.top_mut().skip();
+                            a.skip();
                             continue;
                         }
                         _ => {
-                            let value = &state.top().program.literals[slot.0 as usize];
-                            state.push(value.clone());
+                            let value = &a.program.literals[slot.0 as usize];
+                            a.push(value.clone());
                         }
                     }
                 }
-                Op::ImmEmptyList => state.push(v_empty_list()),
+                Op::ImmEmptyList => a.push(v_empty_list()),
                 Op::ListAddTail => {
-                    let (tail, list) = (state.pop(), state.peek_top());
-                    let Variant::List(list) = list.variant() else {
-                        state.pop();
+                    let (tail, list) = (a.pop(), a.peek_top_mut());
+                    let Variant::List(ref mut list) = list.variant_mut() else {
+                        a.pop();
                         return self.push_error(state, E_TYPE);
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
-                    state.update(0, list.push(&tail));
+                    let result = list.push(tail);
+                    a.update(0, result);
                 }
                 Op::ListAppend => {
-                    let (tail, list) = (state.pop(), state.peek_top());
+                    let (tail, list) = (a.pop(), a.peek_top_mut());
 
-                    let Variant::List(list) = list.variant() else {
-                        state.pop();
+                    let Variant::List(list) = list.variant_mut() else {
+                        a.pop();
 
                         return self.push_error(state, E_TYPE);
                     };
 
-                    let Variant::List(tail) = tail.variant() else {
-                        state.pop();
+                    let Variant::List(tail) = tail.take_variant() else {
+                        a.pop();
 
                         return self.push_error(state, E_TYPE);
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
                     let new_list = list.append(tail);
-                    state.update(0, new_list);
+                    a.update(0, new_list);
                 }
                 Op::IndexSet => {
-                    let (rhs, index, lhs) = (state.pop(), state.pop(), state.peek_top());
+                    let (rhs, index, lhs) = (a.pop(), a.pop(), a.peek_top_mut());
                     let i = match one_to_zero_index(&index) {
                         Ok(i) => i,
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
                     };
-                    match lhs.index_set(i, &rhs) {
+                    match lhs.index_set(i, rhs) {
                         Ok(v) => {
-                            state.update(0, v);
+                            a.update(0, v);
                         }
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
                     }
                 }
                 Op::MakeSingletonList => {
-                    let v = state.peek_top();
-                    state.update(0, v_list(&[v.clone()]));
+                    let v = a.peek_top();
+                    a.update(0, v_list(&[v.clone()]));
                 }
                 Op::PutTemp => {
-                    state.top_mut().temp = state.peek_top().clone();
+                    a.temp = a.peek_top().clone();
                 }
                 Op::PushTemp => {
-                    let tmp = state.top().temp.clone();
-                    state.push(tmp);
-                    state.top_mut().temp = v_none();
+                    let tmp = a.temp.clone();
+                    a.push(tmp);
+                    a.temp = v_none();
                 }
                 Op::Eq => {
-                    binary_bool_op!(state, ==);
+                    binary_bool_op!(a, ==);
                 }
                 Op::Ne => {
-                    binary_bool_op!(state, !=);
+                    binary_bool_op!(a, !=);
                 }
                 Op::Gt => {
-                    binary_bool_op!(state, >);
+                    binary_bool_op!(a, >);
                 }
                 Op::Lt => {
-                    binary_bool_op!(state, <);
+                    binary_bool_op!(a, <);
                 }
                 Op::Ge => {
-                    binary_bool_op!(state, >=);
+                    binary_bool_op!(a, >=);
                 }
                 Op::Le => {
-                    binary_bool_op!(state, <=);
+                    binary_bool_op!(a, <=);
                 }
                 Op::In => {
-                    let (lhs, rhs) = (state.pop(), state.peek_top());
+                    let (lhs, rhs) = (a.pop(), a.peek_top());
                     let r = lhs.index_in(rhs);
                     if let Variant::Err(e) = r.variant() {
-                        state.pop();
+                        a.pop();
                         return self.push_error(state, *e);
                     }
-                    state.update(0, r);
+                    a.update(0, r);
                 }
                 Op::Mul => {
-                    binary_var_op!(self, state, mul);
+                    binary_var_op!(self, a, state, mul);
                 }
                 Op::Sub => {
-                    binary_var_op!(self, state, sub);
+                    binary_var_op!(self, a, state, sub);
                 }
                 Op::Div => {
                     // Explicit division by zero check to raise E_DIV.
                     // Note that LambdaMOO consider 1/0.0 to be E_DIV, but Rust permits it, creating
                     // `inf`. I'll follow Rust's lead here, unless it leads to problems.
-                    let divargs = state.peek_range(2);
+                    let divargs = a.peek_range(2);
                     if let Variant::Int(0) = divargs[1].variant() {
                         return self.push_error(state, E_DIV);
                     };
-                    binary_var_op!(self, state, div);
+                    binary_var_op!(self, a, state, div);
                 }
                 Op::Add => {
-                    binary_var_op!(self, state, add);
+                    binary_var_op!(self, a, state, add);
                 }
                 Op::Exp => {
-                    binary_var_op!(self, state, pow);
+                    binary_var_op!(self, a, state, pow);
                 }
                 Op::Mod => {
-                    binary_var_op!(self, state, modulus);
+                    binary_var_op!(self, a, state, modulus);
                 }
                 Op::And(label) => {
-                    let v = state.peek_top().is_true();
+                    let v = a.peek_top().is_true();
                     if !v {
-                        state.jump(&label)
+                        a.jump(label)
                     } else {
-                        state.pop();
+                        a.pop();
                     }
                 }
                 Op::Or(label) => {
-                    let v = state.peek_top().is_true();
+                    let v = a.peek_top().is_true();
                     if v {
-                        state.jump(&label);
+                        a.jump(label);
                     } else {
-                        state.pop();
+                        a.pop();
                     }
                 }
                 Op::Not => {
-                    let v = !state.peek_top().is_true();
-                    state.update(0, v_bool(v));
+                    let v = !a.peek_top().is_true();
+                    a.update(0, v_bool(v));
                 }
                 Op::UnaryMinus => {
-                    let v = state.peek_top();
+                    let v = a.peek_top();
                     match v.negative() {
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
-                        Ok(v) => state.update(0, v),
+                        Ok(v) => a.update(0, v),
                     }
                 }
                 Op::Push(ident) => {
-                    let Some(v) = state.get_env(&ident) else {
+                    let Some(v) = a.get_env(ident) else {
                         return self.push_error(state, E_VARNF);
                     };
-                    state.push(v.clone());
+                    a.push(v.clone());
                 }
                 Op::Put(ident) => {
-                    let v = state.peek_top();
-                    state.set_env(&ident, v.clone());
+                    let v = a.peek_top();
+                    a.set_env(ident, v.clone());
                 }
                 Op::PushRef => {
-                    let (index, list) = state.peek2();
+                    let (index, list) = a.peek2();
                     let index = match one_to_zero_index(index) {
                         Ok(i) => i,
                         Err(e) => return self.push_error(state, e),
                     };
                     match list.index(index) {
                         Err(e) => return self.push_error(state, e),
-                        Ok(v) => state.push(v),
+                        Ok(v) => a.push(v),
                     }
                 }
                 Op::Ref => {
-                    let (index, l) = (state.pop(), state.peek_top());
+                    let (index, l) = (a.pop(), a.peek_top());
                     let index = match one_to_zero_index(&index) {
                         Ok(i) => i,
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
                     };
 
                     match l.index(index) {
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
-                        Ok(v) => state.update(0, v),
+                        Ok(v) => a.update(0, v),
                     }
                 }
                 Op::RangeRef => {
-                    let (to, from, base) = (state.pop(), state.pop(), state.peek_top());
+                    let (to, from, base) = (a.pop(), a.pop(), a.peek_top());
                     match (to.variant(), from.variant()) {
                         (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
                             Err(e) => {
-                                state.pop();
+                                a.pop();
                                 return self.push_error(state, e);
                             }
-                            Ok(v) => state.update(0, v),
+                            Ok(v) => a.update(0, v),
                         },
                         (_, _) => return self.push_error(state, E_TYPE),
                     };
                 }
                 Op::RangeSet => {
-                    let (value, to, from, base) =
-                        (state.pop(), state.pop(), state.pop(), state.peek_top());
+                    let (value, to, from, base) = (a.pop(), a.pop(), a.pop(), a.peek_top());
                     match (to.variant(), from.variant()) {
                         (Variant::Int(to), Variant::Int(from)) => {
                             match base.rangeset(value, *from, *to) {
                                 Err(e) => {
-                                    state.pop();
+                                    a.pop();
                                     return self.push_error(state, e);
                                 }
-                                Ok(v) => state.update(0, v),
+                                Ok(v) => a.update(0, v),
                             }
                         }
                         _ => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, E_TYPE);
                         }
                     }
                 }
                 Op::GPut { id } => {
-                    state.set_env(&id, state.peek_top().clone());
+                    a.set_env(id, a.peek_top().clone());
                 }
                 Op::GPush { id } => {
-                    let Some(v) = state.get_env(&id) else {
+                    let Some(v) = a.get_env(id) else {
                         return self.push_error(state, E_VARNF);
                     };
-                    state.push(v.clone());
+                    a.push(v.clone());
                 }
                 Op::Length(offset) => {
-                    let v = state.peek_abs(offset.0 as usize);
+                    let v = a.peek_abs(offset.0 as usize);
                     match v.len() {
-                        Ok(l) => state.push(l),
+                        Ok(l) => a.push(l),
                         Err(e) => return self.push_error(state, e),
                     }
                 }
                 Op::GetProp => {
-                    let (propname, obj) = (state.pop(), state.peek_top());
+                    let (propname, obj) = (a.pop(), a.peek_top());
 
                     match self
-                        .resolve_property(state, world_state, propname.clone(), obj.clone())
+                        .resolve_property(a.permissions, world_state, propname.clone(), obj.clone())
                         .await
                     {
-                        Ok(v) => state.update(0, v),
+                        Ok(v) => a.update(0, v),
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
                     }
                 }
                 Op::PushGetProp => {
-                    let (propname, obj) = state.peek2();
+                    let (propname, obj) = a.peek2();
                     match self
-                        .resolve_property(state, world_state, propname.clone(), obj.clone())
+                        .resolve_property(a.permissions, world_state, propname.clone(), obj.clone())
                         .await
                     {
-                        Ok(v) => state.push(v),
+                        Ok(v) => a.push(v),
                         Err(e) => return self.push_error(state, e),
                     }
                 }
                 Op::PutProp => {
-                    let (rhs, propname, obj) = (state.pop(), state.pop(), state.peek_top());
+                    let (rhs, propname, obj) = (a.pop(), a.pop(), a.peek_top());
                     match self
                         .set_property(
-                            state,
+                            a.permissions,
                             world_state,
                             propname.clone(),
                             obj.clone(),
@@ -601,16 +613,16 @@ impl VM {
                         )
                         .await
                     {
-                        Ok(v) => state.update(0, v),
+                        Ok(v) => a.update(0, v),
                         Err(e) => {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, e);
                         }
                     }
                 }
                 Op::Fork { id, fv_offset } => {
                     // Delay time should be on stack
-                    let time = state.pop();
+                    let time = a.pop();
                     let Variant::Int(time) = time.variant() else {
                         return self.push_error(state, E_TYPE);
                     };
@@ -619,27 +631,27 @@ impl VM {
                         return self.push_error(state, E_INVARG);
                     }
                     let delay = (*time != 0).then(|| Duration::from_secs(*time as u64));
-                    let new_activation = state.top().clone();
+                    let new_activation = a.clone();
                     let fork = Fork {
-                        player: state.top().player,
-                        progr: state.top().permissions,
-                        parent_task_id: state.top().task_id,
+                        player: a.player,
+                        progr: a.permissions,
+                        parent_task_id: a.task_id,
                         delay,
                         activation: new_activation,
-                        fork_vector_offset: fv_offset,
-                        task_id: id,
+                        fork_vector_offset: *fv_offset,
+                        task_id: *id,
                     };
                     return ExecutionResult::DispatchFork(fork);
                 }
                 Op::Pass => {
-                    let args = state.pop();
+                    let args = a.pop();
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_TYPE);
                     };
                     return self.prepare_pass_verb(state, world_state, &args[..]).await;
                 }
                 Op::CallVerb => {
-                    let (args, verb, obj) = (state.pop(), state.pop(), state.pop());
+                    let (args, verb, obj) = (a.pop(), a.pop(), a.pop());
                     let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
                         (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l, s, o),
                         _ => {
@@ -651,7 +663,7 @@ impl VM {
                         .await;
                 }
                 Op::Return => {
-                    let ret_val = state.pop();
+                    let ret_val = a.pop();
                     return self.unwind_stack(state, FinallyReason::Return(ret_val));
                 }
                 Op::Return0 => {
@@ -662,7 +674,7 @@ impl VM {
                 }
                 Op::FuncCall { id } => {
                     // Pop arguments, should be a list.
-                    let args = state.pop();
+                    let args = a.pop();
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_ARGS);
                     };
@@ -678,29 +690,22 @@ impl VM {
                         .await;
                 }
                 Op::PushLabel(label) => {
-                    state
-                        .top_mut()
-                        .push_handler_label(HandlerType::CatchLabel(label));
+                    a.push_handler_label(HandlerType::CatchLabel(*label));
                 }
                 Op::TryFinally(label) => {
-                    state
-                        .top_mut()
-                        .push_handler_label(HandlerType::Finally(label));
+                    a.push_handler_label(HandlerType::Finally(*label));
                 }
                 Op::Catch(_) => {
-                    state.top_mut().push_handler_label(HandlerType::Catch(1));
+                    a.push_handler_label(HandlerType::Catch(1));
                 }
                 Op::TryExcept { num_excepts } => {
-                    state
-                        .top_mut()
-                        .push_handler_label(HandlerType::Catch(num_excepts));
+                    a.push_handler_label(HandlerType::Catch(*num_excepts));
                 }
                 Op::EndCatch(label) | Op::EndExcept(label) => {
                     let is_catch = matches!(op, Op::EndCatch(_));
-                    let v = if is_catch { state.pop() } else { v_none() };
+                    let v = if is_catch { a.pop() } else { v_none() };
 
-                    let handler = state
-                        .top_mut()
+                    let handler = a
                         .pop_applicable_handler()
                         .expect("Missing handler for try/catch/except");
                     let HandlerType::Catch(num_excepts) = handler.handler_type else {
@@ -708,26 +713,26 @@ impl VM {
                     };
 
                     for _i in 0..num_excepts {
-                        state.pop(); /* code list */
-                        state.top_mut().handler_stack.pop();
+                        a.pop(); /* code list */
+                        a.handler_stack.pop();
                     }
                     if is_catch {
-                        state.push(v);
+                        a.push(v);
                     }
-                    state.jump(&label);
+                    a.jump(label);
                 }
                 Op::EndFinally => {
-                    let Some(finally_handler) = state.top_mut().pop_applicable_handler() else {
+                    let Some(finally_handler) = a.pop_applicable_handler() else {
                         panic!("Missing handler for try/finally")
                     };
                     let HandlerType::Finally(_) = finally_handler.handler_type else {
                         panic!("Handler is not a finally handler")
                     };
-                    state.push(v_int(0) /* fallthrough */);
-                    state.push(v_int(0));
+                    a.push(v_int(0) /* fallthrough */);
+                    a.push(v_int(0));
                 }
                 Op::Continue => {
-                    let why = state.pop();
+                    let why = a.pop();
                     let Variant::Int(why) = why.variant() else {
                         panic!("'why' is not an integer representing a FinallyReason");
                     };
@@ -749,18 +754,24 @@ impl VM {
                     }
                 }
                 Op::ExitId(label) => {
-                    state.jump(&label);
+                    a.jump(label);
                     continue;
                 }
                 Op::Exit { stack, label } => {
-                    return self.unwind_stack(state, FinallyReason::Exit { stack, label });
+                    return self.unwind_stack(
+                        state,
+                        FinallyReason::Exit {
+                            stack: *stack,
+                            label: *label,
+                        },
+                    );
                 }
                 Op::Scatter(sa) => {
                     let have_rest = sa.rest <= sa.nargs;
                     let rhs_values = {
-                        let rhs = state.peek_top();
+                        let rhs = a.peek_top();
                         let Variant::List(rhs_values) = rhs.variant() else {
-                            state.pop();
+                            a.pop();
                             return self.push_error(state, E_TYPE);
                         };
                         rhs_values.clone()
@@ -768,7 +779,7 @@ impl VM {
 
                     let len = rhs_values.len();
                     if len < sa.nreq || !have_rest && len > sa.nargs {
-                        state.pop();
+                        a.pop();
                         return self.push_error(state, E_ARGS);
                     }
 
@@ -792,15 +803,15 @@ impl VM {
                                     };
                                     v.push(rest.clone());
                                 }
-                                let rest = v_list(&v);
-                                state.set_env(id, rest);
+                                let rest = v_listv(v);
+                                a.set_env(id, rest);
                             }
                             ScatterLabel::Required(id) => {
                                 let Some(arg) = args_iter.next() else {
                                     return self.push_error(state, E_ARGS);
                                 };
 
-                                state.set_env(id, arg.clone());
+                                a.set_env(id, arg.clone());
                             }
                             ScatterLabel::Optional(id, jump_to) => {
                                 if nopt_avail > 0 {
@@ -808,7 +819,7 @@ impl VM {
                                     let Some(arg) = args_iter.next() else {
                                         return self.push_error(state, E_ARGS);
                                     };
-                                    state.set_env(id, arg.clone());
+                                    a.set_env(id, arg.clone());
                                 } else if jump_where.is_none() && jump_to.is_some() {
                                     jump_where = *jump_to;
                                 }
@@ -816,13 +827,13 @@ impl VM {
                         }
                     }
                     match &jump_where {
-                        None => state.jump(&sa.done),
-                        Some(jump_where) => state.jump(jump_where),
+                        None => a.jump(&sa.done),
+                        Some(jump_where) => a.jump(jump_where),
                     }
                 }
                 Op::CheckListForSplice => {
-                    let Variant::List(_) = state.peek_top().variant() else {
-                        state.pop();
+                    let Variant::List(_) = a.peek_top().variant() else {
+                        a.pop();
                         return self.push_error(state, E_TYPE);
                     };
                 }

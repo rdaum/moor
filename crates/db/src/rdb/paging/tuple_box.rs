@@ -187,7 +187,7 @@ struct Inner {
     //   so we can maybe get rid of the locks in the buffer pool...
     pool: BufferPool,
     /// The set of used pages, indexed by relation, in sorted order of the free space available in them.
-    available_page_space: BitArray<PageSpace, 64, Bitset64<1>>,
+    available_page_space: Box<BitArray<PageSpace, 64, Bitset64<1>>>,
     /// The "swizzelable" references to tuples, indexed by tuple id.
     /// There has to be a stable-memory address for each of these, as they are referenced by
     /// pointers in the TupleRefs themselves.
@@ -199,7 +199,7 @@ struct Inner {
 impl Inner {
     fn new(pool: BufferPool) -> Self {
         Self {
-            available_page_space: BitArray::new(),
+            available_page_space: Box::new(BitArray::new()),
             pool,
             tuple_ptrs: HashMap::new(),
         }

@@ -19,10 +19,10 @@ use async_trait::async_trait;
 use moor_values::model::world_state_err;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Error;
 use moor_values::var::Error::{E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string, Var};
+use moor_values::var::{v_empty_list, Error};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -135,7 +135,7 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
         .set_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str(), attrs)
         .await
         .map_err(world_state_err)?;
-    Ok(Ret(v_list(&[])))
+    Ok(Ret(v_empty_list()))
 }
 bf_declare!(set_property_info, bf_set_property_info);
 
@@ -173,7 +173,7 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
         .clear_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await
         .map_err(world_state_err)?;
-    Ok(Ret(v_list(&[])))
+    Ok(Ret(v_empty_list()))
 }
 bf_declare!(set_clear_property, bf_clear_property);
 
@@ -231,7 +231,7 @@ async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         .delete_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .await
         .map_err(world_state_err)?;
-    Ok(Ret(v_list(&[])))
+    Ok(Ret(v_empty_list()))
 }
 bf_declare!(delete_property, bf_delete_property);
 impl VM {

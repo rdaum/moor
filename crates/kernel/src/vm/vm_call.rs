@@ -221,10 +221,10 @@ impl VM {
         let mut a = fork_request.activation;
         a.task_id = task_id;
         a.program.main_vector =
-            a.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone();
+            Arc::new(a.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone());
         a.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
-            a.set_var_offset(task_id_name, v_int(task_id as i64))
+            a.set_var_offset(&task_id_name, v_int(task_id as i64))
                 .expect("Unable to set task_id in activation frame");
         }
 
@@ -307,7 +307,7 @@ impl VM {
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
         let Some(_) = vm_state.top_mut().bf_trampoline else {
-            let return_value = vm_state.top_mut().pop().unwrap();
+            let return_value = vm_state.top_mut().pop();
 
             return self.unwind_stack(vm_state, FinallyReason::Return(return_value));
         };

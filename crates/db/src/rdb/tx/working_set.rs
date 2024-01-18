@@ -32,12 +32,12 @@ pub struct WorkingSet {
     pub(crate) ts: u64,
     pub(crate) schema: Vec<RelationInfo>,
     pub(crate) slotbox: Arc<TupleBox>,
-    pub(crate) relations: BitArray<TxBaseRelation, 64, Bitset64<1>>,
+    pub(crate) relations: Box<BitArray<TxBaseRelation, 64, Bitset64<1>>>,
 }
 
 impl WorkingSet {
     pub(crate) fn new(slotbox: Arc<TupleBox>, schema: &[RelationInfo], ts: u64) -> Self {
-        let relations = BitArray::new();
+        let relations = Box::new(BitArray::new());
         Self {
             ts,
             slotbox,
@@ -83,7 +83,7 @@ impl WorkingSet {
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<TupleRef, TupleError> {
-        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
+        let relation = Self::get_relation_mut(relation_id, &self.schema, self.relations.as_mut());
 
         // Check local first.
         if let Some(tuple_idx) = relation.domain_index.get(&domain) {

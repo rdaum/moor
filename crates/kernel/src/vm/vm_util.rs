@@ -15,18 +15,18 @@
 use tracing::debug;
 
 use moor_values::model::WorldState;
-use moor_values::var::Error;
 use moor_values::var::Error::{E_INVIND, E_TYPE};
 use moor_values::var::Var;
 use moor_values::var::Variant;
+use moor_values::var::{Error, Objid};
 
-use crate::vm::{VMExecState, VM};
+use crate::vm::VM;
 
 impl VM {
     /// VM-level property resolution.
     pub(crate) async fn resolve_property(
         &self,
-        state: &mut VMExecState,
+        perms: Objid,
         world_state: &mut dyn WorldState,
         propname: Var,
         obj: Var,
@@ -40,7 +40,7 @@ impl VM {
         };
 
         let result = world_state
-            .retrieve_property(state.top().permissions, *obj, propname.as_str())
+            .retrieve_property(perms, *obj, propname.as_str())
             .await;
         let v = match result {
             Ok(v) => v,
@@ -55,7 +55,7 @@ impl VM {
     /// VM-level property assignment
     pub(crate) async fn set_property(
         &self,
-        state: &mut VMExecState,
+        perms: Objid,
         world_state: &mut dyn WorldState,
         propname: Var,
         obj: Var,
@@ -69,7 +69,7 @@ impl VM {
         };
 
         let update_result = world_state
-            .update_property(state.top().permissions, *obj, propname.as_str(), &value)
+            .update_property(perms, *obj, propname.as_str(), &value)
             .await;
 
         match update_result {

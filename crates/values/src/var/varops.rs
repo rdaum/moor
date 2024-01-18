@@ -15,7 +15,7 @@
 use crate::var::error::Error;
 use crate::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::variant::Variant;
-use crate::var::{v_empty_list, v_empty_str, v_list, Var};
+use crate::var::{v_empty_list, v_empty_str, v_listv, Var};
 use crate::var::{v_err, v_float, v_int};
 use num_traits::Zero;
 use std::ops::{Div, Mul, Neg, Sub};
@@ -46,8 +46,8 @@ impl Var {
         }
     }
 
-    pub fn index_set(&self, i: usize, value: &Self) -> Result<Self, Error> {
-        match self.variant() {
+    pub fn index_set(&mut self, i: usize, value: Self) -> Result<Self, Error> {
+        match self.variant_mut() {
             Variant::List(l) => {
                 if !i < l.len() {
                     return Err(E_RANGE);
@@ -182,7 +182,7 @@ impl Var {
                 for i in from..=to {
                     res.push(l[(i - 1) as usize].clone());
                 }
-                Ok(v_list(&res))
+                Ok(v_listv(res))
             }
             _ => Ok(v_err(E_TYPE)),
         }
@@ -232,7 +232,7 @@ impl Var {
                 ans.extend_from_slice(&base_list[..from - 1]);
                 ans.extend(value_list.iter().cloned());
                 ans.extend_from_slice(&base_list[to..]);
-                v_list(&ans)
+                v_listv(ans)
             }
             _ => unreachable!(),
         };

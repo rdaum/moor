@@ -16,8 +16,8 @@ use bincode::{Decode, Encode};
 use tracing::trace;
 
 use moor_values::model::VerbFlag;
-use moor_values::var::Variant;
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
+use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
 
@@ -157,7 +157,7 @@ impl VM {
                 }
             };
 
-            stack_list.push(v_list(&traceback_entry));
+            stack_list.push(v_listv(traceback_entry));
         }
         stack_list
     }
@@ -358,7 +358,7 @@ impl VM {
                         };
 
                         // The value at the top of the stack could be the error codes list.
-                        let v = a.pop().expect("Stack underflow");
+                        let v = a.pop();
                         if let Variant::List(error_codes) = v.variant() {
                             if error_codes.contains(&v_err(*code)) {
                                 trace!(jump = ?pushed_label, ?code, "matched handler");

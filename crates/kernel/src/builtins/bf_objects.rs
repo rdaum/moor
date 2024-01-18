@@ -20,10 +20,10 @@ use tracing::{debug, error, trace};
 use moor_values::model::ObjFlag;
 use moor_values::model::{world_state_err, WorldStateError};
 use moor_values::util::BitEnum;
-use moor_values::var::Error;
 use moor_values::var::Error::{E_INVARG, E_NACC, E_TYPE};
 use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str};
+use moor_values::var::{v_bool, v_int, v_none, v_objid, v_str};
+use moor_values::var::{v_listv, Error};
 use moor_values::NOTHING;
 
 use crate::bf_declare;
@@ -106,10 +106,8 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> 
         .await
         .map_err(world_state_err)?;
 
-    debug!("Children: {:?} {:?}", obj, children);
     let children = children.iter().map(v_objid).collect::<Vec<_>>();
-    debug!("Children: {:?} {:?}", obj, children);
-    Ok(Ret(v_list(&children)))
+    Ok(Ret(v_listv(children)))
 }
 bf_declare!(children, bf_children);
 
@@ -242,7 +240,7 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                         }
                     }
                 }
-                let contents = v_list(&contents);
+                let contents = v_listv(contents);
                 match bf_args
                     .world_state
                     .find_method_verb_on(bf_args.task_perms_who(), *obj, "recycle")
@@ -452,7 +450,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 // Accept verb has been called, and returned. Check the result. Should be on stack,
                 // unless short-circuited, in which case we assume *false*
                 let result = if !shortcircuit {
-                    bf_args.exec_state.top().peek_top().unwrap().clone()
+                    bf_args.exec_state.top().peek_top().clone()
                 } else {
                     v_int(0)
                 };
@@ -593,7 +591,7 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .iter()
         .map(|v| v_str(v.names().first().unwrap()))
         .collect();
-    Ok(Ret(v_list(&verbs)))
+    Ok(Ret(v_listv(verbs)))
 }
 bf_declare!(verbs, bf_verbs);
 
@@ -614,7 +612,7 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
         .await
         .map_err(world_state_err)?;
     let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
-    Ok(Ret(v_list(&props)))
+    Ok(Ret(v_listv(props)))
 }
 bf_declare!(properties, bf_properties);
 
@@ -677,8 +675,8 @@ async fn bf_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .await
         .map_err(world_state_err)?;
 
-    Ok(Ret(v_list(
-        players.iter().map(v_objid).collect::<Vec<_>>().as_slice(),
+    Ok(Ret(v_listv(
+        players.iter().map(v_objid).collect::<Vec<_>>(),
     )))
 }
 bf_declare!(players, bf_players);

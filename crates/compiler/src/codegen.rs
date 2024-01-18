@@ -14,6 +14,7 @@
 
 /// Takes the AST and turns it into a list of opcodes.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use tracing::error;
@@ -794,7 +795,7 @@ pub fn compile(program: &str) -> Result<Program, CompileError> {
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
         var_names: cg_state.var_names,
-        main_vector: cg_state.ops,
+        main_vector: Arc::new(cg_state.ops),
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
     };

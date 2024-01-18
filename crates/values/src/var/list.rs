@@ -43,10 +43,22 @@ impl List {
     }
 
     #[must_use]
-    pub fn push(&self, v: &Var) -> Var {
-        let mut new_list = (*self.inner).clone();
-        new_list.push(v.clone());
-        Variant::List(Self::from_vec(new_list)).into()
+    pub fn push(&mut self, v: Var) -> Var {
+        // If there's only one copy of us, mutate that directly.
+        match Arc::get_mut(&mut self.inner) {
+            Some(vec) => {
+                vec.push(v);
+                // TODO: this is unfortunate, but our return type is Var, not List.
+                //   and so we end up doing an unnecessary clone here.
+                // To fix this, we'd need to run everything direct through Var.
+                Variant::List(self.clone()).into()
+            }
+            None => {
+                let mut new_vec = (*self.inner).clone();
+                new_vec.push(v);
+                Variant::List(Self::from_vec(new_vec)).into()
+            }
+        }
     }
 
     /// Take the first item from the front, and return (item, `new_list`)
@@ -61,49 +73,91 @@ impl List {
     }
 
     #[must_use]
-    pub fn append(&self, other: &Self) -> Var {
-        let mut new_list = (*self.inner).clone();
-        new_list.extend_from_slice(&other.inner);
-        Variant::List(Self::from_vec(new_list)).into()
+    pub fn append(&mut self, other: Self) -> Var {
+        match Arc::get_mut(&mut self.inner) {
+            Some(vec) => {
+                vec.extend_from_slice(&other.inner);
+                Variant::List(self.clone()).into()
+            }
+            None => {
+                let mut new_list = (*self.inner).clone();
+                new_list.extend_from_slice(&other.inner);
+                Variant::List(Self::from_vec(new_list)).into()
+            }
+        }
     }
 
     #[must_use]
-    pub fn remove_at(&self, index: usize) -> Var {
-        let mut new_list = (*self.inner).clone();
-        new_list.remove(index);
-        Variant::List(Self::from_vec(new_list)).into()
+    pub fn remove_at(&mut self, index: usize) -> Var {
+        match Arc::get_mut(&mut self.inner) {
+            Some(vec) => {
+                vec.remove(index);
+                Variant::List(self.clone()).into()
+            }
+            None => {
+                let mut new_list = (*self.inner).clone();
+                new_list.remove(index);
+                Variant::List(Self::from_vec(new_list)).into()
+            }
+        }
     }
 
     /// Remove the first found instance of the given value from the list.
     #[must_use]
-    pub fn setremove(&self, value: &Var) -> Var {
+    pub fn setremove(&mut self, value: &Var) -> Var {
         if self.inner.is_empty() {
             return v_empty_list();
         }
-        let mut new_list = Vec::with_capacity(self.inner.len() - 1);
-        let mut found = false;
-        for v in self.inner.iter() {
-            if !found && v == value {
-                found = true;
-                continue;
+        match Arc::get_mut(&mut self.inner) {
+            Some(vec) => {
+                for i in 0..vec.len() {
+                    if !vec[i].eq(value) {
+                        vec.remove(i);
+                        break;
+                    }
+                }
+                Variant::List(self.clone()).into()
             }
-            new_list.push(v.clone());
+            None => {
+                let mut new_list = Vec::with_capacity(self.inner.len() - 1);
+                let mut found = false;
+                for v in self.inner.iter() {
+                    if !found && v.eq(value) {
+                        found = true;
+                        continue;
+                    }
+                    new_list.push(v.clone());
+                }
+                Variant::List(Self::from_vec(new_list)).into()
+            }
         }
-        Variant::List(Self::from_vec(new_list)).into()
     }
 
     #[must_use]
-    pub fn insert(&self, index: isize, v: &Var) -> Var {
-        let mut new_list = Vec::with_capacity(self.inner.len() + 1);
-        let index = if index < 0 {
-            0
-        } else {
-            min(index as usize, self.inner.len())
-        };
-        new_list.extend_from_slice(&self.inner[..index]);
-        new_list.push(v.clone());
-        new_list.extend_from_slice(&self.inner[index..]);
-        Variant::List(Self::from_vec(new_list)).into()
+    pub fn insert(&mut self, index: isize, v: Var) -> Var {
+        match Arc::get_mut(&mut self.inner) {
+            Some(vec) => {
+                let index = if index < 0 {
+                    0
+                } else {
+                    min(index as usize, vec.len())
+                };
+                vec.insert(index, v);
+                Variant::List(self.clone()).into()
+            }
+            None => {
+                let mut new_list = Vec::with_capacity(self.inner.len() + 1);
+                let index = if index < 0 {
+                    0
+                } else {
+                    min(index as usize, self.inner.len())
+                };
+                new_list.extend_from_slice(&self.inner[..index]);
+                new_list.push(v);
+                new_list.extend_from_slice(&self.inner[index..]);
+                Variant::List(Self::from_vec(new_list)).into()
+            }
+        }
     }
 
     #[must_use]
@@ -144,10 +198,18 @@ impl List {
     }
 
     #[must_use]
-    pub fn set(&self, index: usize, value: &Var) -> Var {
-        let mut new_vec = (*self.inner).clone();
-        new_vec[index] = value.clone();
-        Variant::List(Self::from_vec(new_vec)).into()
+    pub fn set(&mut self, index: usize, value: Var) -> Var {
+        match Arc::get_mut(&mut self.inner) {
+            Some(vec) => {
+                vec[index] = value;
+                Variant::List(self.clone()).into()
+            }
+            None => {
+                let mut new_vec = (*self.inner).clone();
+                new_vec[index] = value;
+                Variant::List(Self::from_vec(new_vec)).into()
+            }
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Var> {
@@ -230,16 +292,16 @@ mod tests {
     #[test]
     pub fn weird_moo_insert_scenarios() {
         // MOO supports negative indexes, which just floor to 0...
-        let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
+        let mut list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
         assert_eq!(
-            list.insert(-1, &v_int(0)),
+            list.insert(-1, v_int(0)),
             v_list(&[v_int(0), v_int(1), v_int(2), v_int(3)])
         );
 
         // MOO supports indexes beyond length of the list, which just append to the end...
-        let list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
+        let mut list = List::from_vec(vec![v_int(1), v_int(2), v_int(3)]);
         assert_eq!(
-            list.insert(100, &v_int(0)),
+            list.insert(100, v_int(0)),
             v_list(&[v_int(1), v_int(2), v_int(3), v_int(0)])
         );
     }

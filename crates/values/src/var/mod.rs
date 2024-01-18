@@ -161,6 +161,11 @@ pub fn v_list(l: &[Var]) -> Var {
 }
 
 #[must_use]
+pub fn v_listv(l: Vec<Var>) -> Var {
+    Var::new(Variant::List(List::from_vec(l)))
+}
+
+#[must_use]
 pub fn v_empty_list() -> Var {
     VAR_EMPTY_LIST.clone()
 }
@@ -176,9 +181,24 @@ pub fn v_none() -> Var {
 }
 
 impl Var {
+    /// Return a reference to the inner variant that this Var is wrapping.
     #[must_use]
+    #[inline]
     pub fn variant(&self) -> &Variant {
         &self.value
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn variant_mut(&mut self) -> &mut Variant {
+        &mut self.value
+    }
+
+    /// Destroy the Var and return the inner variant that it was wrapping.
+    #[must_use]
+    #[inline]
+    pub fn take_variant(self) -> Variant {
+        self.value
     }
 
     #[must_use]
@@ -337,7 +357,7 @@ impl From<Objid> for Var {
 
 impl From<Vec<Self>> for Var {
     fn from(l: Vec<Self>) -> Self {
-        v_list(&l)
+        v_listv(l)
     }
 }
 

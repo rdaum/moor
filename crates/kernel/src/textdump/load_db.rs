@@ -256,7 +256,7 @@ pub async fn read_textdump<T: io::Read>(
                     literals: vec![],
                     jump_labels: vec![],
                     var_names: Default::default(),
-                    main_vector: vec![],
+                    main_vector: Arc::new(vec![]),
                     fork_vectors: vec![],
                     line_number_spans: vec![],
                 },

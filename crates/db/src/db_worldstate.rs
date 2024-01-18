@@ -30,9 +30,9 @@ use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
 use moor_values::util::SliceRef;
-use moor_values::var::Objid;
 use moor_values::var::Variant;
-use moor_values::var::{v_int, v_list, v_objid, Var};
+use moor_values::var::{v_int, v_objid, Var};
+use moor_values::var::{v_listv, Objid};
 use moor_values::NOTHING;
 
 use crate::db_tx::DbTransaction;
@@ -209,7 +209,7 @@ impl WorldState for DbTxWorldState {
                 .iter()
                 .map(v_objid)
                 .collect();
-            return Ok(v_list(&contents));
+            return Ok(v_listv(contents));
         } else if pname == "owner" {
             return self.owner_of(obj).await.map(Var::from);
         } else if pname == "programmer" {

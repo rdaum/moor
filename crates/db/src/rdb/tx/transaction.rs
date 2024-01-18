@@ -223,14 +223,14 @@ impl Transaction {
 /// working set.
 pub struct CommitSet {
     pub(crate) ts: u64,
-    relations: BitArray<BaseRelation, 64, Bitset64<1>>,
+    relations: Box<BitArray<BaseRelation, 64, Bitset64<1>>>,
 }
 
 impl CommitSet {
     pub(crate) fn new(ts: u64) -> Self {
         Self {
             ts,
-            relations: BitArray::new(),
+            relations: Box::new(BitArray::new()),
         }
     }
 

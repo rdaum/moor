@@ -362,7 +362,7 @@ impl VmHost {
             _ => panic!("Unsupported binary type {:?}", binary_type),
         }
     }
-    pub fn set_variable(&mut self, task_id_var: Name, value: Var) {
+    pub fn set_variable(&mut self, task_id_var: &Name, value: Var) {
         self.vm_exec_state
             .top_mut()
             .set_var_offset(task_id_var, value)

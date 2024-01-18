@@ -172,10 +172,10 @@ fn opcode_throughput(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
     let mut group = c.benchmark_group("opcode_throughput");
-    group.sample_size(1000);
+    group.sample_size(300);
     group.measurement_time(Duration::from_secs(10));
 
-    let num_ticks = 30000;
+    let num_ticks = 300000;
     group.throughput(criterion::Throughput::Elements(num_ticks as u64));
     group.bench_function("while_loop", |b| {
         b.to_async(&rt)

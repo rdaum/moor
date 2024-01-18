@@ -26,12 +26,12 @@ use moor_values::model::{world_state_err, WorldStateError};
 use moor_values::model::{ArgSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Error;
 use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_values::var::List;
 use moor_values::var::Objid;
 use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
+use moor_values::var::{v_listv, Error};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -436,8 +436,8 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             return Err(E_INVARG);
         }
     };
-    Ok(Ret(v_list(
-        &unparsed.iter().map(|s| v_str(s)).collect::<Vec<_>>(),
+    Ok(Ret(v_listv(
+        unparsed.iter().map(|s| v_str(s)).collect::<Vec<_>>(),
     )))
 }
 bf_declare!(verb_code, bf_verb_code);
@@ -714,7 +714,7 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         disassembly.push(v_string(format!("{: >3}: {:?}{}", i, op, line_no_string)));
     }
 
-    Ok(Ret(v_list(&disassembly)))
+    Ok(Ret(v_listv(disassembly)))
 }
 bf_declare!(disassemble, bf_disassemble);
 

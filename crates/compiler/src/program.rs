@@ -18,6 +18,7 @@ use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_values::var::Var;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 lazy_static! {
     pub static ref EMPTY_PROGRAM: Program = Program::new();
@@ -33,7 +34,7 @@ pub struct Program {
     /// All the variable names used in this program.
     pub var_names: Names,
     /// The actual program code.
-    pub main_vector: Vec<Op>,
+    pub main_vector: Arc<Vec<Op>>,
     /// The program code for each fork.
     pub fork_vectors: Vec<Vec<Op>>,
     /// As each statement is pushed, the line number is recorded, along with its offset in the main
@@ -48,7 +49,7 @@ impl Program {
             literals: Vec::new(),
             jump_labels: Vec::new(),
             var_names: Default::default(),
-            main_vector: Vec::new(),
+            main_vector: Arc::new(Vec::new()),
             fork_vectors: Vec::new(),
             line_number_spans: Vec::new(),
         }

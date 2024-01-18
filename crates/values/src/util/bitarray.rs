@@ -25,7 +25,7 @@ where
     BitsetType: BitsetTrait + Default,
 {
     pub(crate) bitset: BitsetType,
-    storage: Box<[MaybeUninit<X>; RANGE_WIDTH]>,
+    storage: [MaybeUninit<X>; RANGE_WIDTH],
 }
 
 impl<X, const RANGE_WIDTH: usize, BitsetType> BitArray<X, RANGE_WIDTH, BitsetType>
@@ -35,7 +35,7 @@ where
     pub fn new() -> Self {
         Self {
             bitset: Default::default(),
-            storage: Box::new(unsafe { MaybeUninit::uninit().assume_init() }),
+            storage: unsafe { MaybeUninit::uninit().assume_init() },
         }
     }
 

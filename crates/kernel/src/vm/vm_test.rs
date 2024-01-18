@@ -47,7 +47,7 @@ mod tests {
             literals,
             jump_labels: vec![],
             var_names,
-            main_vector,
+            main_vector: Arc::new(main_vector),
             fork_vectors: vec![],
             line_number_spans: vec![],
         }
