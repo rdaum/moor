@@ -68,14 +68,19 @@ pub mod vm_test_utils {
         args: Vec<Var>,
     ) -> Var {
         let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut vm_host = VmHost::new(20, 90_000, Duration::from_secs(5), session.clone(), scs_tx);
+        let mut vm_host = VmHost::new(
+            0,
+            20,
+            90_000,
+            Duration::from_secs(5),
+            session.clone(),
+            scs_tx,
+        );
 
         let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
         let _vm_exec_params = VmExecParams {
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
-            ticks_left: 90_000,
-            time_left: None,
         };
 
         let vi = world_state

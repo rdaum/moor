@@ -78,6 +78,7 @@ pub struct VmHost {
 
 impl VmHost {
     pub fn new(
+        task_id: TaskId,
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
@@ -85,12 +86,12 @@ impl VmHost {
         scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     ) -> Self {
         let vm = VM::new();
-        let exec_state = VMExecState::new();
+        let vm_exec_state = VMExecState::new(task_id);
         let (run_watch_send, run_watch_recv) = tokio::sync::watch::channel(false);
         // Created in an initial suspended state.
         Self {
             vm,
-            vm_exec_state: exec_state,
+            vm_exec_state,
             max_stack_depth,
             max_ticks,
             max_time,
@@ -150,9 +151,12 @@ impl VmHost {
 
     /// Start execution of a fork request in the hosted VM.
     pub async fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
+        self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
+        self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_fork_vector(&mut self.vm_exec_state, fork_request, task_id)
+            .exec_fork_vector(&mut self.vm_exec_state, fork_request)
             .await;
         self.run_watch_send.send(!suspended).unwrap();
     }
@@ -164,9 +168,11 @@ impl VmHost {
         verb_execution_request: VerbExecutionRequest,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
+        self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_call_request(&mut self.vm_exec_state, task_id, verb_execution_request)
+            .exec_call_request(&mut self.vm_exec_state, verb_execution_request)
             .await;
         self.run_watch_send.send(true).unwrap();
     }
@@ -174,9 +180,11 @@ impl VmHost {
     /// Start execution of an eval request.
     pub async fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
+        self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
+        self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_eval_request(&mut self.vm_exec_state, task_id, player, player, program)
+            .exec_eval_request(&mut self.vm_exec_state, player, player, program)
             .await;
         self.run_watch_send.send(true).unwrap();
     }
@@ -187,31 +195,31 @@ impl VmHost {
         task_id: TaskId,
         world_state: &mut dyn WorldState,
     ) -> VMHostResponse {
+        self.vm_exec_state.task_id = task_id;
+
+        let exec_params = VmExecParams {
+            scheduler_sender: self.scheduler_control_sender.clone(),
+            max_stack_depth: self.max_stack_depth,
+        };
         self.run_watch_recv
             .wait_for(|running| *running)
             .await
             .unwrap();
 
-        // Check ticks and seconds, and abort the task if we've exceeded the limits.
-        let time_left = match self.vm_exec_state.start_time {
-            Some(start_time) => {
-                let elapsed = start_time.elapsed().expect("Could not get elapsed time");
-                if elapsed > self.max_time {
-                    return AbortLimit(AbortLimitReason::Time(elapsed));
-                }
-                Some(self.max_time - elapsed)
-            }
-            None => None,
-        };
+        // Check existing ticks and seconds, and abort the task if we've exceeded the limits.
         if self.vm_exec_state.tick_count >= self.max_ticks {
             return AbortLimit(AbortLimitReason::Ticks(self.vm_exec_state.tick_count));
         }
-        let exec_params = VmExecParams {
-            scheduler_sender: self.scheduler_control_sender.clone(),
-            max_stack_depth: self.max_stack_depth,
-            ticks_left: self.max_ticks - self.vm_exec_state.tick_count,
-            time_left,
+        if let Some(start_time) = self.vm_exec_state.start_time {
+            let elapsed = start_time.elapsed().expect("Could not get elapsed time");
+            if elapsed > self.max_time {
+                return AbortLimit(AbortLimitReason::Time(elapsed));
+            }
         };
+
+        // Grant the loop its next tick slice.
+        self.vm_exec_state.tick_slice = self.max_ticks - self.vm_exec_state.tick_count;
+
         let pre_exec_tick_count = self.vm_exec_state.tick_count;
 
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
@@ -222,7 +230,6 @@ impl VmHost {
                 &mut self.vm_exec_state,
                 world_state,
                 self.sessions.clone(),
-                self.max_ticks,
             )
             .await;
 
@@ -263,7 +270,7 @@ impl VmHost {
                     };
 
                     self.vm
-                        .exec_call_request(&mut self.vm_exec_state, task_id, call_request)
+                        .exec_call_request(&mut self.vm_exec_state, call_request)
                         .await;
                     return ContinueOk;
                 }
@@ -273,7 +280,7 @@ impl VmHost {
                     program,
                 } => {
                     self.vm
-                        .exec_eval_request(&mut self.vm_exec_state, 0, permissions, player, program)
+                        .exec_eval_request(&mut self.vm_exec_state, permissions, player, program)
                         .await;
                     return ContinueOk;
                 }
@@ -284,8 +291,6 @@ impl VmHost {
                     let exec_params = VmExecParams {
                         max_stack_depth: self.max_stack_depth,
                         scheduler_sender: self.scheduler_control_sender.clone(),
-                        ticks_left: self.max_ticks - self.vm_exec_state.tick_count,
-                        time_left,
                     };
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.

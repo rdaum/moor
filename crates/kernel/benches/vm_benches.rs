@@ -56,6 +56,7 @@ pub async fn prepare_call_verb(
 ) -> VmHost {
     let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
     let mut vm_host = VmHost::new(
+        0,
         20,
         max_ticks,
         Duration::from_secs(15),

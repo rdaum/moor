@@ -183,7 +183,7 @@ async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    Ok(Ret(v_int(bf_args.exec_state.top().task_id as i64)))
+    Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
 }
 bf_declare!(task_id, bf_task_id);
 
@@ -418,7 +418,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
     bf_args
         .scheduler_sender
         .send((
-            bf_args.exec_state.top().task_id,
+            bf_args.exec_state.task_id,
             SchedulerControlMsg::DescribeOtherTasks(send),
         ))
         .expect("scheduler is not listening");
@@ -472,7 +472,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     // Not sure this is *exactly* what MOO does, but it's close enough for now.
     let victim_task_id = *victim_task_id as TaskId;
 
-    if victim_task_id == bf_args.exec_state.top().task_id {
+    if victim_task_id == bf_args.exec_state.task_id {
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
     }
 
@@ -480,7 +480,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     bf_args
         .scheduler_sender
         .send((
-            bf_args.exec_state.top().task_id,
+            bf_args.exec_state.task_id,
             SchedulerControlMsg::KillTask {
                 victim_task_id,
                 sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
@@ -516,7 +516,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let task_id = *resume_task_id as TaskId;
 
     // Resuming ourselves makes no sense, it's not suspended. E_INVARG.
-    if task_id == bf_args.exec_state.top().task_id {
+    if task_id == bf_args.exec_state.task_id {
         return Err(E_INVARG);
     }
 
@@ -524,7 +524,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     bf_args
         .scheduler_sender
         .send((
-            bf_args.exec_state.top().task_id,
+            bf_args.exec_state.task_id,
             SchedulerControlMsg::ResumeTask {
                 queued_task_id: task_id,
                 sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
@@ -550,7 +550,7 @@ async fn bf_ticks_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
         return Err(E_INVARG);
     }
 
-    let ticks_left = bf_args.ticks_left;
+    let ticks_left = bf_args.exec_state.tick_slice - bf_args.exec_state.tick_count;
 
     Ok(Ret(v_int(ticks_left as i64)))
 }
@@ -564,7 +564,7 @@ async fn bf_seconds_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
         return Err(E_INVARG);
     }
 
-    let seconds_left = match bf_args.time_left {
+    let seconds_left = match bf_args.exec_state.time_left() {
         None => v_none(),
         Some(d) => v_int(d.as_secs() as i64),
     };
@@ -593,7 +593,7 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
     bf_args
         .scheduler_sender
         .send((
-            bf_args.exec_state.top().task_id,
+            bf_args.exec_state.task_id,
             SchedulerControlMsg::BootPlayer {
                 player: *player,
                 sender_permissions: task_perms,
@@ -813,10 +813,7 @@ async fn bf_dump_database<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 
     bf_args
         .scheduler_sender
-        .send((
-            bf_args.exec_state.top().task_id,
-            SchedulerControlMsg::Checkpoint,
-        ))
+        .send((bf_args.exec_state.task_id, SchedulerControlMsg::Checkpoint))
         .map_err(|_| Error::E_QUOTA)?;
 
     Ok(Ret(v_bool(true)))

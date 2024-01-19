@@ -27,7 +27,6 @@ use moor_values::var::{v_empty_list, v_int, v_none, v_objid, v_str, v_string, Va
 use moor_values::var::{v_listv, Error};
 
 use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::TaskId;
 use crate::vm::VerbExecutionRequest;
 use moor_compiler::Program;
 use moor_compiler::{Label, Name};
@@ -71,8 +70,6 @@ pub(crate) struct HandlerLabel {
 //   2. try to break this apart so that the 'hot' pieces are together in their own struct
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Activation {
-    /// The task ID of the task that owns this VM and this stack of activations.
-    pub(crate) task_id: TaskId,
     /// The program of the verb that is currently being executed.
     pub(crate) program: Program,
     /// The object that is the receiver of the current verb call.
@@ -123,13 +120,12 @@ fn set_constants(a: &mut Activation) {
 }
 
 impl Activation {
-    pub fn for_call(task_id: TaskId, verb_call_request: VerbExecutionRequest) -> Self {
+    pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
         let environment = BitArray::new();
 
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
         let mut a = Self {
-            task_id,
             program,
             environment,
             valstack: vec![],
@@ -181,7 +177,7 @@ impl Activation {
         a
     }
 
-    pub fn for_eval(task_id: TaskId, permissions: Objid, player: Objid, program: Program) -> Self {
+    pub fn for_eval(permissions: Objid, player: Objid, program: Program) -> Self {
         let environment = BitArray::new();
 
         let verb_info = VerbInfo::new(
@@ -200,7 +196,6 @@ impl Activation {
         );
 
         let mut a = Self {
-            task_id,
             program,
             environment,
             valstack: vec![],
@@ -234,7 +229,6 @@ impl Activation {
         a
     }
     pub fn for_bf_call(
-        task_id: TaskId,
         bf_index: usize,
         bf_name: &str,
         args: Vec<Var>,
@@ -256,7 +250,6 @@ impl Activation {
         );
 
         Self {
-            task_id,
             program: EMPTY_PROGRAM.clone(),
             environment: BitArray::new(),
             valstack: vec![],

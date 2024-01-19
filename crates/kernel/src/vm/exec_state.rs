@@ -12,39 +12,43 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::tasks::TaskId;
 use crate::vm::activation::{Activation, Caller};
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use moor_values::NOTHING;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 /// Represents the state of VM execution.
 /// The actual "VM" remains stateless and could be potentially re-used for multiple tasks,
 /// and swapped out at each level of the activation stack for different runtimes.
 /// e.g. a MOO VM, a WASM VM, a JS VM, etc. but all having access to the same shared state.
 pub struct VMExecState {
+    /// The task ID of the task that for current stack of activations.
+    pub(crate) task_id: TaskId,
     /// The stack of activation records / stack frames.
     /// (For language runtimes that keep their own stack, this is simply the "entry" point
     ///  for the function invocation.)
     pub(crate) stack: Vec<Activation>,
+    /// The tick slice for the current execution.
+    pub(crate) tick_slice: usize,
     /// The number of ticks that have been executed so far.
     pub(crate) tick_count: usize,
     /// The time at which the task was started.
     pub(crate) start_time: Option<SystemTime>,
-}
-
-impl Default for VMExecState {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// The amount of time the task is allowed to run.
+    pub(crate) maximum_time: Option<Duration>,
 }
 
 impl VMExecState {
-    pub fn new() -> Self {
+    pub fn new(task_id: TaskId) -> Self {
         Self {
+            task_id,
             stack: vec![],
             tick_count: 0,
             start_time: None,
+            tick_slice: 0,
+            maximum_time: None,
         }
     }
 
@@ -141,5 +145,18 @@ impl VMExecState {
     #[inline]
     pub(crate) fn push(&mut self, v: Var) {
         self.top_mut().push(v)
+    }
+
+    pub(crate) fn time_left(&self) -> Option<Duration> {
+        let Some(max_time) = self.maximum_time else {
+            return None;
+        };
+
+        let now = SystemTime::now();
+        let elapsed = now
+            .duration_since(self.start_time.expect("No start time for task?"))
+            .unwrap();
+        let remaining = max_time.checked_sub(elapsed);
+        remaining
     }
 }

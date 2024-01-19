@@ -63,8 +63,6 @@ pub struct Fork {
 pub struct VmExecParams {
     pub scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
     pub max_stack_depth: usize,
-    pub ticks_left: usize,
-    pub time_left: Option<Duration>,
 }
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ExecutionResult {
@@ -165,7 +163,6 @@ impl VM {
         state: &mut VMExecState,
         world_state: &'a mut dyn WorldState,
         session: Arc<dyn Session>,
-        tick_slice: usize,
     ) -> ExecutionResult {
         // Before executing, check stack depth...
         if state.stack.len() >= exec_params.max_stack_depth {
@@ -188,7 +185,7 @@ impl VM {
         // scheduler, for efficiency reasons...
 
         let opcodes = state.top_mut().program.main_vector.clone();
-        while state.tick_count < tick_slice {
+        while state.tick_count < state.tick_slice {
             state.tick_count += 1;
 
             // Borrow the top of the activation stack for the lifetime of this execution.
@@ -635,7 +632,7 @@ impl VM {
                     let fork = Fork {
                         player: a.player,
                         progr: a.permissions,
-                        parent_task_id: a.task_id,
+                        parent_task_id: state.task_id,
                         delay,
                         activation: new_activation,
                         fork_vector_offset: *fv_offset,

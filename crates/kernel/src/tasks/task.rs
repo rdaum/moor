@@ -185,6 +185,7 @@ impl Task {
         // TODO: here is where we'd make a choice about alternative VM/VM Host implementations.
         let scheduler_control_sender = control_sender.clone();
         let vm_host = VmHost::new(
+            task_id,
             max_stack_depth,
             max_ticks,
             Duration::from_secs(max_seconds),

@@ -25,7 +25,7 @@ use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
 use crate::builtins::{BfCallState, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
-use crate::tasks::{TaskId, VerbCall};
+use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VM};
@@ -145,7 +145,7 @@ impl VM {
         let verb = vm_state.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
-        trace!(task_id = vm_state.top().task_id, verb, ?definer, ?parent);
+        trace!(task_id = vm_state.task_id, verb, ?definer, ?parent);
 
         let Ok(vi) = world_state
             .find_method_verb_on(permissions, parent, verb.as_str())
@@ -181,17 +181,15 @@ impl VM {
     pub async fn exec_call_request(
         &self,
         vm_state: &mut VMExecState,
-        task_id: TaskId,
         call_request: VerbExecutionRequest,
     ) {
-        let a = Activation::for_call(task_id, call_request);
+        let a = Activation::for_call(call_request);
         vm_state.stack.push(a);
     }
 
     pub async fn exec_eval_request(
         &self,
         vm_state: &mut VMExecState,
-        task_id: TaskId,
         permissions: Objid,
         player: Objid,
         program: Program,
@@ -202,7 +200,7 @@ impl VM {
             vm_state.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
         }
 
-        let a = Activation::for_eval(task_id, permissions, player, program);
+        let a = Activation::for_eval(permissions, player, program);
 
         vm_state.stack.push(a);
     }
@@ -211,20 +209,14 @@ impl VM {
     /// Called (ultimately) from the scheduler as the result of a fork() call.
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
-    pub(crate) async fn exec_fork_vector(
-        &self,
-        vm_state: &mut VMExecState,
-        fork_request: Fork,
-        task_id: usize,
-    ) {
+    pub(crate) async fn exec_fork_vector(&self, vm_state: &mut VMExecState, fork_request: Fork) {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
-        a.task_id = task_id;
         a.program.main_vector =
             Arc::new(a.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone());
         a.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
-            a.set_var_offset(&task_id_name, v_int(task_id as i64))
+            a.set_var_offset(&task_id_name, v_int(vm_state.task_id as i64))
                 .expect("Unable to set task_id in activation frame");
         }
 
@@ -259,7 +251,6 @@ impl VM {
         // Push an activation frame for the builtin function.
         let flags = vm_state.top().verb_info.verbdef().flags();
         vm_state.stack.push(Activation::for_bf_call(
-            vm_state.top().task_id,
             bf_func_num,
             BUILTIN_DESCRIPTORS[bf_func_num].name.as_str(),
             args.clone(),
@@ -275,8 +266,6 @@ impl VM {
             session: session.clone(),
             args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
-            ticks_left: exec_args.ticks_left,
-            time_left: exec_args.time_left,
         };
 
         let call_results = match bf.call(&mut bf_args).await {
@@ -323,8 +312,6 @@ impl VM {
             session: sessions,
             args,
             scheduler_sender: exec_args.scheduler_sender.clone(),
-            ticks_left: exec_args.ticks_left,
-            time_left: exec_args.time_left,
         };
 
         match bf.call(&mut bf_args).await {

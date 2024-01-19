@@ -22,7 +22,6 @@ mod bf_values;
 mod bf_verbs;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedSender;
@@ -54,10 +53,6 @@ pub struct BfCallState<'a> {
     pub(crate) session: Arc<dyn Session>,
     /// For sending messages up to the scheduler
     pub(crate) scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
-    /// How many ticks are left in the current task.
-    pub(crate) ticks_left: usize,
-    /// How much time is left in the current task.
-    pub(crate) time_left: Option<Duration>,
 }
 
 impl BfCallState<'_> {
