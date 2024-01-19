@@ -25,6 +25,8 @@ networks:
 services:
   moor-daemon:
     build: ./
+    security_opt:
+      - seccomp:unconfined
     container_name: "moor-daemon"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
