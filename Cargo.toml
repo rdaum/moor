@@ -20,21 +20,21 @@ license = "GPL-3"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
-clap = "4.4.12"
+clap = "4.4.18"
 clap_derive = "4.4.7"
 
 ## HTTP/websockets front-end
-axum = { version = "0.7.3", features = ["ws"] }
-axum-extra = "0.9.1"
-serde_json = "1.0.108"
-serde = { version = "1.0.193", features = ["derive"] }
-serde_derive = "1.0.193"
-tower-http = { version = "0.5.0", features = ["add-extension", "auth", "compression-full", "trace"] }
+axum = { version = "0.7.4", features = ["ws"] }
+axum-extra = "0.9.2"
+serde_json = "1.0.111"
+serde = { version = "1.0.195", features = ["derive"] }
+serde_derive = "1.0.195"
+tower-http = { version = "0.5.1", features = ["add-extension", "auth", "compression-full", "trace"] }
 
 ## Asynchronous transaction processing & networking
 futures = "0.3.30"
 futures-util = { version = "0.3.30", features = ["sink", "std"] }
-async-trait = "0.1.76"
+async-trait = "0.1.77"
 tokio = { version = "1.35.1", features = ["full"] }
 tokio-test = "0.4.3"
 tokio-util = { version = "0.7.10",  features = ["full"] }
@@ -70,7 +70,7 @@ num-traits = "0.2.17"
 rustyline = "13.0.0"
 strum = { version = "0.25.0", features = ["derive"] }
 text-diff = "0.4.0"
-uuid = { version = "1.6.1", features = ["v4"] }
+uuid = { version = "1.7.0", features = ["v4"] }
 yoke = "0.7.3"
 yoke-derive = "0.7.3"
 
@@ -83,12 +83,12 @@ chrono-tz = "0.8.5"
 iana-time-zone = "0.1.59"
 
 ## Compiler grammar/parser
-pest = "2.7.5"
-pest_derive = "2.7.5"
+pest = "2.7.6"
+pest_derive = "2.7.6"
 
 ## Error declaration/ handling
-anyhow = { version = "1.0.78", features = ["backtrace"] }
-thiserror = "1.0.53"
+anyhow = { version = "1.0.79", features = ["backtrace"] }
+thiserror = "1.0.56"
 
 ## For macro-ing
 paste = "1.0.14"
@@ -97,7 +97,7 @@ paste = "1.0.14"
 bincode = "2.0.0-rc.3" # For serializing/deserializing values
 im = "15.1.0" # Immutable data structures
 text_io = "0.1.12" # Used for reading text dumps.
-libc = "0.2.151"
+libc = "0.2.152"
 okaywal = "0.3.1"
 io-uring = "0.6.2"
 hi_sparse_bitset = "0.4.0"
@@ -111,6 +111,6 @@ test-case = "3.3.1"
 unindent = "0.2.3"
 
 # Auth/Auth
-rusty_paseto = { version = "0.6.0" }
+rusty_paseto = { version = "0.6.1" }
 ed25519-dalek = { version = "2.1.0", features = ["zeroize", "pkcs8", "rand_core"] }
 pem = "3.0.3"
