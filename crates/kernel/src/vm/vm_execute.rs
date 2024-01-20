@@ -207,20 +207,15 @@ impl VM {
                 Op::Jump { label } => {
                     a.jump(label);
                 }
-                Op::WhileId {
-                    id,
-                    end_label: label,
-                } => {
-                    a.set_env(id, a.peek_top().clone());
-                    let cond = a.pop();
-                    if !cond.is_true() {
-                        a.jump(label);
+                Op::WhileId { id, end_label } => {
+                    let v = a.pop();
+                    let is_true = v.is_true();
+                    a.set_env(id, v);
+                    if !is_true {
+                        a.jump(end_label);
                     }
                 }
-                Op::ForList {
-                    end_label: label,
-                    id,
-                } => {
+                Op::ForList { end_label, id } => {
                     // Pop the count and list off the stack. We push back later when we re-enter.
 
                     let (count, list) = a.peek2();
@@ -231,7 +226,7 @@ impl VM {
                         // If the result of raising error was just to push the value -- that is, we
                         // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                         // So we preemptively jump (here and below for List) and then raise the error.
-                        a.jump(label);
+                        a.jump(end_label);
                         return self.raise_error(state, E_TYPE);
                     };
                     let count = *count as usize;
@@ -239,7 +234,7 @@ impl VM {
                         a.pop();
                         a.pop();
 
-                        a.jump(label);
+                        a.jump(end_label);
                         return self.raise_error(state, E_TYPE);
                     };
 
@@ -248,7 +243,7 @@ impl VM {
                         a.pop();
                         a.pop();
 
-                        a.jump(label);
+                        a.jump(end_label);
                         continue;
                     }
 
@@ -258,10 +253,7 @@ impl VM {
                     a.set_env(id, l[count].clone());
                     a.update(0, v_int((count + 1) as i64));
                 }
-                Op::ForRange {
-                    end_label: label,
-                    id,
-                } => {
+                Op::ForRange { end_label, id } => {
                     // Pull the range ends off the stack.
                     let (from, next_val) = {
                         let (to, from) = a.peek2();
@@ -275,7 +267,7 @@ impl VM {
                                 if from_i > to_i {
                                     a.pop();
                                     a.pop();
-                                    a.jump(label);
+                                    a.jump(end_label);
 
                                     continue;
                                 }
@@ -285,7 +277,7 @@ impl VM {
                                 if from_o.0 > to_o.0 {
                                     a.pop();
                                     a.pop();
-                                    a.jump(label);
+                                    a.jump(end_label);
 
                                     continue;
                                 }
@@ -297,7 +289,7 @@ impl VM {
                                 // Make sure we've jumped out of the loop before raising the error,
                                 // because in verbs that aren't `d' we could end up continuing on in
                                 // the loop (with a messed up stack) otherwise.
-                                a.jump(label);
+                                a.jump(end_label);
 
                                 return self.raise_error(state, E_TYPE);
                             }

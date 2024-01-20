@@ -136,6 +136,7 @@ struct TaskControl {
     resume_time: Option<SystemTime>,
     // One-shot subscribers for when the task is aborted, succeeded, etc.
     subscribers: Vec<oneshot::Sender<TaskWaiterResult>>,
+    _join_handle: tokio::task::JoinHandle<()>,
 }
 
 /// The set of actions that the scheduler needs to take in response to a task control message.
@@ -513,17 +514,21 @@ impl Scheduler {
                 //  those using some futures_util magic.
                 _ = task_poller_interval.tick() => {
                     let mut inner = self.inner.write().await;
-                    let mut to_wake = Vec::new();
-                    for (task_id, task) in &inner.tasks {
-                        if task.suspended {
-                            if let Some(delay) = task.resume_time {
-                                if delay <= SystemTime::now() {
-                                    to_wake.push(*task_id);
-                                }
+
+                    let to_wake = inner.tasks.iter()
+                        .filter_map(|(task_id, task)| {
+                            if task.suspended {
+                                return None;
                             }
-                        }
-                    }
-                    inner.process_wake_ups(to_wake).await;
+                            let delay = task.resume_time?;
+                            if delay <= SystemTime::now() {
+                                Some(*task_id)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    inner.process_wake_ups(&to_wake).await;
                 }
                 // Receive messages from any tasks that have sent us messages.
                 msg = receiver.recv() => {
@@ -868,7 +873,7 @@ impl Inner {
                 }
             }
         }
-        self.process_task_removals(to_remove);
+        self.process_task_removals(&to_remove);
     }
 
     async fn process_notification(
@@ -892,7 +897,7 @@ impl Inner {
         to_remove
     }
 
-    async fn process_wake_ups(&mut self, to_wake: Vec<TaskId>) -> Vec<TaskId> {
+    async fn process_wake_ups(&mut self, to_wake: &[TaskId]) -> Vec<TaskId> {
         let mut to_remove = vec![];
 
         for task_id in to_wake {
@@ -1071,9 +1076,7 @@ impl Inner {
             return_value,
             result_sender,
         }: ResumeRequest,
-    ) -> Vec<TaskId> {
-        let mut to_remove = vec![];
-
+    ) -> Option<TaskId> {
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
         // request.
         if requesting_task_id == queued_task_id {
@@ -1081,7 +1084,7 @@ impl Inner {
                 task = requesting_task_id,
                 "Task requested to resume itself. Ignoring"
             );
-            return vec![];
+            return None;
         }
 
         // Task does not exist.
@@ -1091,7 +1094,7 @@ impl Inner {
                 result_sender
                     .send(v_err(E_INVARG))
                     .expect("Could not send resume result");
-                return vec![];
+                return None;
             }
         };
 
@@ -1104,14 +1107,14 @@ impl Inner {
             result_sender
                 .send(v_err(E_PERM))
                 .expect("Could not send resume result");
-            return vec![];
+            return None;
         }
         // Task is not suspended.
         if !queued_task.suspended {
             result_sender
                 .send(v_err(E_INVARG))
                 .expect("Could not send resume result");
-            return vec![];
+            return None;
         }
 
         // Follow the usual task resume logic.
@@ -1131,23 +1134,22 @@ impl Inner {
         {
             error!(task = queued_task_id, error = ?e,
                     "Could not send resume request to task. Task being removed.");
-            to_remove.push(queued_task_id);
+            return Some(queued_task_id);
         }
 
         if let Err(e) = result_sender.send(v_none()) {
             error!(task = requesting_task_id, error = ?e,
                     "Could not send resume result to requesting task. Requesting task being removed.");
-            to_remove.push(requesting_task_id);
+            return Some(requesting_task_id);
         }
 
-        to_remove
+        None
     }
 
-    async fn process_retry_request(&mut self, task_id: TaskId) -> Vec<TaskId> {
-        let mut to_remove = vec![];
+    async fn process_retry_request(&mut self, task_id: TaskId) -> Option<TaskId> {
         let Some(task) = self.tasks.get_mut(&task_id) else {
             warn!(task = task_id, "Retrying task not found");
-            return to_remove;
+            return None;
         };
 
         // Create a new transaction.
@@ -1167,9 +1169,9 @@ impl Inner {
         {
             error!(task = task_id, error = ?e,
                     "Could not send resume request to task. Task being removed.");
-            to_remove.push(task_id);
+            return Some(task_id);
         }
-        to_remove
+        None
     }
 
     async fn process_disconnect(&mut self, disconnect_task_id: TaskId, player: Objid) {
@@ -1216,10 +1218,10 @@ impl Inner {
         }
     }
 
-    fn process_task_removals(&mut self, to_remove: Vec<TaskId>) {
+    fn process_task_removals(&mut self, to_remove: &[TaskId]) {
         for task_id in to_remove {
             trace!(task = task_id, "Task removed");
-            self.tasks.remove(&task_id);
+            self.tasks.remove(task_id);
         }
     }
 
@@ -1246,23 +1248,13 @@ impl Inner {
             .clone()
             .world_state_source()
             .expect("Unable to instantiate database");
-        let task_control = TaskControl {
-            task_id,
-            player,
-            task_control_sender,
-            state_source: state_source.clone(),
-            session: session.clone(),
-            suspended: false,
-            waiting_input: None,
-            resume_time: None,
-            subscribers: vec![],
-        };
-        self.tasks.insert(task_id, task_control);
 
         // TODO: support a queue-size on concurrent executing tasks and allow them to sit in an
         //   initially suspended state without spawning a worker thread, until the queue has space.
         // Spawn the task's thread.
-        tokio::spawn(async move {
+        let task_state_source = state_source.clone();
+        let task_session = session.clone();
+        let join_handle = tokio::spawn(async move {
             debug!(?task_id, ?task_start, "Starting up task");
             Task::run(
                 task_id,
@@ -1270,15 +1262,29 @@ impl Inner {
                 player,
                 perms,
                 delay_start,
-                state_source,
+                task_state_source,
                 is_background,
-                session.clone(),
+                task_session,
                 task_control_receiver,
                 control_sender,
             )
             .await;
             debug!(?task_id, "Completed task");
         });
+
+        let task_control = TaskControl {
+            task_id,
+            player,
+            task_control_sender,
+            state_source,
+            session,
+            suspended: false,
+            waiting_input: None,
+            resume_time: None,
+            subscribers: vec![],
+            _join_handle: join_handle,
+        };
+        self.tasks.insert(task_id, task_control);
 
         increment_counter!("scheduler.created_tasks");
         gauge!("scheduler.active_tasks", self.tasks.len() as f64);

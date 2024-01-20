@@ -100,12 +100,11 @@ impl VM {
                     let i = handler.valstack_pos;
                     for j in (i - cnt)..i {
                         if let Variant::List(codes) = &activation.valstack[j].variant() {
-                            if codes.contains(&v_err(raise_code)) {
-                                return Some(frame);
+                            if !codes.contains(&v_err(raise_code)) {
+                                continue;
                             }
-                        } else {
-                            return Some(frame);
                         }
+                        return Some(frame);
                     }
                 }
             }
@@ -332,14 +331,14 @@ impl VM {
 
                 match handler.handler_type {
                     HandlerType::Finally(label) => {
-                        let why_num = why.code();
-                        if why_num == FinallyReason::Abort.code() {
+                        let why_code = why.code();
+                        if why_code == FinallyReason::Abort.code() {
                             continue;
                         }
                         // Jump to the label pointed to by the finally label and then continue on
                         // executing.
                         a.jump(&label);
-                        a.push(v_int(why_num as i64));
+                        a.push(v_int(why_code as i64));
                         trace!(jump = ?label, ?why, "matched finally handler");
                         return ExecutionResult::More;
                     }
@@ -347,8 +346,6 @@ impl VM {
                         let FinallyReason::Raise { code, .. } = &why else {
                             continue;
                         };
-
-                        let mut found = false;
 
                         let Some(handler) = a.pop_applicable_handler() else {
                             continue;
@@ -359,32 +356,24 @@ impl VM {
 
                         // The value at the top of the stack could be the error codes list.
                         let v = a.pop();
-                        if let Variant::List(error_codes) = v.variant() {
-                            if error_codes.contains(&v_err(*code)) {
-                                trace!(jump = ?pushed_label, ?code, "matched handler");
-                                a.jump(pushed_label);
-                                found = true;
-                            }
-                        } else {
-                            trace!(jump = ?pushed_label, ?code, "matched catch-all handler");
-                            a.jump(pushed_label);
-                            found = true;
-                        }
-
+                        let found = match v.variant() {
+                            Variant::List(error_codes) => error_codes.contains(&v_err(*code)),
+                            _ => true,
+                        };
                         if found {
+                            a.jump(&pushed_label);
                             a.push(v_list(&[v_err(*code)]));
                             return ExecutionResult::More;
                         }
                     }
                     HandlerType::CatchLabel(_) => {
-                        panic!("TODO: CatchLabel where we didn't expect it...")
+                        unreachable!("CatchLabel where we didn't expect it...")
                     }
                 }
             }
 
             // Exit with a jump.. let's go...
             if let FinallyReason::Exit { label, .. } = why {
-                trace!("Exit with a jump");
                 a.jump(&label);
                 return ExecutionResult::More;
             }
@@ -398,14 +387,7 @@ impl VM {
                 }
             }
 
-            if let FinallyReason::Uncaught(UncaughtException {
-                code: _,
-                msg: _,
-                value: _,
-                stack: _,
-                backtrace: _,
-            }) = &why
-            {
+            if let FinallyReason::Uncaught(UncaughtException { .. }) = &why {
                 return ExecutionResult::Exception(why);
             }
 

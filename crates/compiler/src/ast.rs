@@ -246,9 +246,7 @@ pub enum StmtNode {
     Continue {
         exit: Option<Name>,
     },
-    Return {
-        expr: Option<Expr>,
-    },
+    Return(Option<Expr>),
     Expr(Expr),
 }
 
@@ -261,7 +259,7 @@ pub fn assert_trees_match_recursive(a: &Vec<Stmt>, b: &Vec<Stmt>) {
         assert_eq!(left.tree_line_no, right.tree_line_no);
 
         match (&left.node, &right.node) {
-            (StmtNode::Return { .. }, StmtNode::Return { .. }) => {}
+            (StmtNode::Return(_), StmtNode::Return(_)) => {}
             (StmtNode::Expr { .. }, StmtNode::Expr { .. }) => {}
             (StmtNode::Break { .. }, StmtNode::Break { .. }) => {}
             (StmtNode::Continue { .. }, StmtNode::Continue { .. }) => {}

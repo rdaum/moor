@@ -469,7 +469,7 @@ impl Unparse {
                 base_str.push(';');
                 Ok(vec![base_str])
             }
-            StmtNode::Return { expr } => Ok(match expr {
+            StmtNode::Return(expr) => Ok(match expr {
                 None => {
                     vec![format!("{}return;", indent_frag)]
                 }
@@ -545,7 +545,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
             StmtNode::Expr(_)
             | StmtNode::Break { .. }
             | StmtNode::Continue { .. }
-            | StmtNode::Return { .. } => {
+            | StmtNode::Return(_) => {
                 // All single-line statements.
                 line_no += 1;
             }

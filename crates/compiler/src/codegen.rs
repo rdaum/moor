@@ -717,16 +717,12 @@ impl CodegenState {
                 let l = self.find_loop(l).expect("invalid loop for break/continue");
                 self.emit(Op::ExitId(l.top_label));
             }
-            StmtNode::Return { expr } => match expr {
-                Some(expr) => {
-                    self.generate_expr(expr)?;
-                    self.emit(Op::Return);
-                    self.pop_stack(1);
-                }
-                None => {
-                    self.emit(Op::Return0);
-                }
-            },
+            StmtNode::Return(Some(expr)) => {
+                self.generate_expr(expr)?;
+                self.emit(Op::Return);
+                self.pop_stack(1);
+            }
+            StmtNode::Return(None) => self.emit(Op::Return0),
             StmtNode::Expr(e) => {
                 self.generate_expr(e)?;
                 self.emit(Op::Pop);
