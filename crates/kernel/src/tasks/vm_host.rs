@@ -310,7 +310,7 @@ impl VmHost {
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
-                    info!(task_id, "Task completed");
+                    trace!(task_id, "Task completed");
                     return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
@@ -353,7 +353,7 @@ impl VmHost {
     }
 
     pub fn stop(&mut self) {
-        info!(task_id = self.vm_exec_state.task_id, "Stopping VMHost");
+        trace!(task_id = self.vm_exec_state.task_id, "Stopping VMHost");
         self.running = false;
     }
 

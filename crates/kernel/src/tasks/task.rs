@@ -238,7 +238,7 @@ impl Task {
                         None
                     }
                     Err(e) => {
-                        warn!(task_id = ?task.task_id, "Channel closed: {:?}", e);
+                        trace!(task_id = ?task.task_id, "Channel closed: {:?}", e);
                         task.done = true;
 
                         break;
