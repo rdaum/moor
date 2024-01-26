@@ -12,10 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub use buffer_pool::BufferPool;
+
 mod buffer_pool;
 mod size_class;
-
-pub use buffer_pool::BufferPool;
 
 /// The unique identifier for currently extant buffers. Buffer ids can be ephemeral.
 /// It is up to the pager to map these to non-ephemeral, long lived, page identifiers (Bid) through

@@ -12,14 +12,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 
-use moor_values::util::{BitArray, Bitset64};
 use thiserror::Error;
-use tokio::sync::RwLock;
 
 use moor_values::util::SliceRef;
+use moor_values::util::{BitArray, Bitset64};
 
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
@@ -36,7 +37,7 @@ pub struct Transaction {
     /// The "working set" is the set of retrieved and/or modified tuples from base relations, known
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
-    pub(crate) working_set: RwLock<Option<WorkingSet>>,
+    pub(crate) working_set: RefCell<Option<WorkingSet>>,
 }
 
 /// Errors which can occur during a commit.
@@ -57,44 +58,42 @@ impl Transaction {
 
         Self {
             db,
-            working_set: RwLock::new(Some(ws)),
+            working_set: RefCell::new(Some(ws)),
         }
     }
 
-    pub async fn increment_sequence(&self, sequence_number: usize) -> u64 {
-        self.db.clone().increment_sequence(sequence_number).await
+    pub fn increment_sequence(&self, sequence_number: usize) -> u64 {
+        self.db.clone().increment_sequence(sequence_number)
     }
 
-    pub async fn sequence_current(&self, sequence_number: usize) -> u64 {
-        self.db.clone().sequence_current(sequence_number).await
+    pub fn sequence_current(&self, sequence_number: usize) -> u64 {
+        self.db.clone().sequence_current(sequence_number)
     }
-    pub async fn update_sequence_max(&self, sequence_number: usize, value: u64) {
-        self.db
-            .clone()
-            .update_sequence_max(sequence_number, value)
-            .await
+    pub fn update_sequence_max(&self, sequence_number: usize, value: u64) {
+        self.db.clone().update_sequence_max(sequence_number, value)
     }
-    pub async fn commit(&self) -> Result<(), CommitError> {
+    pub fn commit(&self) -> Result<(), CommitError> {
         let mut tries = 0;
         'retry: loop {
+            tries += 1;
             let commit_ts = self.db.clone().next_ts();
-            let mut working_set = self.working_set.write().await;
+            let mut working_set = self.working_set.borrow_mut();
             let commit_set = self
                 .db
-                .prepare_commit_set(commit_ts, working_set.as_mut().unwrap())
-                .await?;
-            match self.db.try_commit(commit_set).await {
+                .prepare_commit_set(commit_ts, working_set.as_mut().unwrap())?;
+            match self.db.try_commit(commit_set) {
                 Ok(_) => {
-                    let commit_ws = working_set.take().unwrap();
-                    self.db.sync(commit_ts, commit_ws).await;
+                    let working_set = working_set.take().unwrap();
+                    self.db.sync(commit_ts, working_set);
                     return Ok(());
                 }
                 Err(CommitError::RelationContentionConflict) => {
-                    tries += 1;
-                    if tries > 3 {
+                    if tries > 50 {
                         return Err(CommitError::RelationContentionConflict);
                     } else {
-                        // Release the lock and retry the commit set.
+                        // Release the lock, pause a bit, and retry the commit set.
+                        drop(working_set);
+                        std::thread::sleep(Duration::from_millis(5));
                         continue 'retry;
                     }
                 }
@@ -103,18 +102,18 @@ impl Transaction {
         }
     }
 
-    pub async fn db_usage_bytes(&self) -> usize {
-        self.db.db_usage_bytes().await
+    pub fn db_usage_bytes(&self) -> usize {
+        self.db.db_usage_bytes()
     }
 
-    pub async fn rollback(&self) -> Result<(), CommitError> {
-        self.working_set.write().await.as_mut().unwrap().clear();
+    pub fn rollback(&self) -> Result<(), CommitError> {
+        self.working_set.borrow_mut().as_mut().unwrap().clear();
         Ok(())
     }
 
     /// Grab a handle to a relation, which can be used to perform operations on it in the context
     /// of this transaction.
-    pub async fn relation(&self, relation_id: RelationId) -> RelVar {
+    pub fn relation(&self, relation_id: RelationId) -> RelVar {
         RelVar {
             tx: self,
             id: relation_id,
@@ -123,99 +122,92 @@ impl Transaction {
 
     /// Attempt to retrieve a tuple from the transaction's working set by its domain, or from the
     /// canonical base relations if it's not found in the working set.
-    pub(crate) async fn seek_by_domain(
+    pub(crate) fn seek_by_domain(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<TupleRef, TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .seek_by_domain(&self.db, relation_id, domain)
-            .await
     }
 
-    pub(crate) async fn seek_by_codomain(
+    pub(crate) fn seek_by_codomain(
         &self,
         relation_id: RelationId,
         codomain: SliceRef,
     ) -> Result<HashSet<TupleRef>, TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .seek_by_codomain(&self.db, relation_id, codomain)
-            .await
     }
 
     /// Attempt to insert a tuple into the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) async fn insert_tuple(
+    pub(crate) fn insert_tuple(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .insert_tuple(&self.db, relation_id, domain, codomain)
-            .await
     }
 
-    pub(crate) async fn predicate_scan<F: Fn(&TupleRef) -> bool>(
+    pub(crate) fn predicate_scan<F: Fn(&TupleRef) -> bool>(
         &self,
         relation_id: RelationId,
         f: &F,
     ) -> Result<Vec<TupleRef>, TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .predicate_scan(&self.db, relation_id, f)
-            .await
     }
 
     /// Attempt to update a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) async fn update_tuple(
+    pub(crate) fn update_tuple(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .update_tuple(&self.db, relation_id, domain, codomain)
-            .await
     }
 
     /// Attempt to upsert a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) async fn upsert_tuple(
+    pub(crate) fn upsert_tuple(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
     ) -> Result<(), TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .upsert_tuple(&self.db, relation_id, domain, codomain)
-            .await
     }
 
     /// Attempt to delete a tuple in the transaction's working set, with the intent of eventually
     /// committing the delete to the canonical base relations.
-    pub(crate) async fn remove_by_domain(
+    pub(crate) fn remove_by_domain(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
     ) -> Result<(), TupleError> {
-        let mut ws = self.working_set.write().await;
+        let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .remove_by_domain(&self.db, relation_id, domain)
-            .await
     }
 }
 
@@ -261,8 +253,9 @@ impl CommitSet {
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
     use std::sync::Arc;
+
+    use rand::Rng;
 
     use moor_values::util::SliceRef;
 
@@ -275,7 +268,7 @@ mod tests {
         SliceRef::from_bytes(slice)
     }
 
-    async fn test_db() -> Arc<RelBox> {
+    fn test_db() -> Arc<RelBox> {
         RelBox::new(
             1 << 24,
             None,
@@ -287,34 +280,25 @@ mod tests {
             }],
             0,
         )
-        .await
     }
 
     /// Verifies that base relations ("canonical") get updated when successful commits happen.
-    #[tokio::test]
-    async fn basic_commit() {
-        let db = test_db().await;
+    #[test]
+    fn basic_commit() {
+        let db = test_db();
         let tx = db.clone().start_tx();
         let rid = RelationId(0);
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
-            .unwrap();
-        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
             .expect_err("Expected insert to fail");
         tx.update_tuple(rid, attr(b"abc"), attr(b"123"))
-            .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
-                .await
-                .unwrap()
-                .codomain(),
+            tx.seek_by_domain(rid, attr(b"abc")).unwrap().codomain(),
             attr(b"123")
         );
         let t = tx
             .seek_by_codomain(rid, attr(b"123"))
-            .await
             .expect("Expected secondary seek to succeed");
         let compare_t = t
             .iter()
@@ -322,11 +306,11 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(compare_t, vec![(attr(b"abc"), attr(b"123"))]);
 
-        tx.commit().await.expect("Expected commit to succeed");
+        tx.commit().expect("Expected commit to succeed");
 
         // Verify canonical state.
         {
-            let relation = &db.canonical.read().await[0];
+            let relation = &db.canonical.read().unwrap()[0];
             let tuple = relation
                 .seek_by_domain(attr(b"abc"))
                 .expect("Expected tuple to exist");
@@ -342,81 +326,68 @@ mod tests {
 
     /// Tests basic serial/sequential logic, where transactions mutate the same tuple but do so
     /// sequentially without potential for conflict.
-    #[tokio::test]
-    async fn serial_insert_update_tx() {
-        let db = test_db().await;
+    #[test]
+    fn serial_insert_update_tx() {
+        let db = test_db();
         let tx = db.clone().start_tx();
         let rid = RelationId(0);
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
-            .unwrap();
-        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
             .expect_err("Expected insert to fail");
         tx.update_tuple(rid, attr(b"abc"), attr(b"123"))
-            .await
             .expect("Expected update to succeed");
         assert_eq!(
             tx.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"123"
         );
-        tx.commit().await.expect("Expected commit to succeed");
+        tx.commit().expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
             tx.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"123"
         );
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
             .expect_err("Expected insert to fail");
         tx.upsert_tuple(rid, attr(b"abc"), attr(b"321"))
-            .await
             .expect("Expected update to succeed");
         assert_eq!(
             tx.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"321"
         );
-        tx.commit().await.expect("Expected commit to succeed");
+        tx.commit().expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
             tx.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"321"
         );
         tx.upsert_tuple(rid, attr(b"abc"), attr(b"666"))
-            .await
             .expect("Expected update to succeed");
         assert_eq!(
             tx.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"666"
         );
-        tx.commit().await.expect("Expected commit to succeed");
+        tx.commit().expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
             tx.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -426,7 +397,6 @@ mod tests {
         // And verify secondary index...
         let t = tx
             .seek_by_codomain(rid, attr(b"666"))
-            .await
             .expect("Expected secondary seek to succeed");
         let compare_t = t
             .iter()
@@ -436,54 +406,43 @@ mod tests {
     }
 
     /// Much the same as above, but test for deletion logic instead of update.
-    #[tokio::test]
-    async fn serial_insert_delete_tx() {
-        let db = test_db().await;
+    #[test]
+    fn serial_insert_delete_tx() {
+        let db = test_db();
         let tx = db.clone().start_tx();
         let rid = RelationId(0);
-        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
-            .unwrap();
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
         tx.remove_by_domain(rid, attr(b"abc"))
-            .await
             .expect("Expected delete to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap_err(),
+            tx.seek_by_domain(rid, attr(b"abc")).unwrap_err(),
             TupleError::NotFound
         );
-        tx.commit().await.expect("Expected commit to succeed");
+        tx.commit().expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).await.unwrap_err(),
+            tx.seek_by_domain(rid, attr(b"abc")).unwrap_err(),
             TupleError::NotFound
         );
-        tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
-            .unwrap();
+        tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
         tx.update_tuple(rid, attr(b"abc"), attr(b"321"))
-            .await
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
-                .await
-                .unwrap()
-                .codomain(),
+            tx.seek_by_domain(rid, attr(b"abc")).unwrap().codomain(),
             attr(b"321")
         );
-        tx.commit().await.expect("Expected commit to succeed");
+        tx.commit().expect("Expected commit to succeed");
 
         // And verify primary & secondary index after the commit.
         let tx = db.start_tx();
         let tuple = tx
             .seek_by_domain(rid, attr(b"abc"))
-            .await
             .expect("Expected tuple to exist");
         assert_eq!(tuple.codomain().as_slice(), b"321");
 
         let t = tx
             .seek_by_codomain(rid, attr(b"321"))
-            .await
             .expect("Expected secondary seek to succeed");
         let compare_t = t
             .iter()
@@ -497,61 +456,50 @@ mod tests {
     /// got there first, creating a tuple where we thought none would be.
     /// The insert is not expected to fail until commit time, as we are fully isolated, but when
     /// commit happens, we should detect the conflict and fail.
-    #[tokio::test]
-    async fn parallel_insert_new_conflict() {
-        let db = test_db().await;
+    #[test]
+    fn parallel_insert_new_conflict() {
+        let db = test_db();
         let tx1 = db.clone().start_tx();
         let rid = RelationId(0);
-        tx1.insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
-            .unwrap();
+        tx1.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
 
         let tx2 = db.clone().start_tx();
-        tx2.insert_tuple(rid, attr(b"abc"), attr(b"zzz"))
-            .await
-            .unwrap();
+        tx2.insert_tuple(rid, attr(b"abc"), attr(b"zzz")).unwrap();
 
-        assert!(tx1.commit().await.is_ok());
+        assert!(tx1.commit().is_ok());
         assert_eq!(
-            tx2.commit().await.expect_err("Expected conflict"),
+            tx2.commit().expect_err("Expected conflict"),
             CommitError::TupleVersionConflict
         );
     }
 
-    #[tokio::test]
-    async fn parallel_get_update_conflict() {
-        let db = test_db().await;
+    #[test]
+    fn parallel_get_update_conflict() {
+        let db = test_db();
         let rid = RelationId(0);
 
         // 1. Initial transaction creates value, commits.
         let init_tx = db.clone().start_tx();
         init_tx
             .insert_tuple(rid, attr(b"abc"), attr(b"def"))
-            .await
             .unwrap();
-        init_tx.commit().await.unwrap();
+        init_tx.commit().unwrap();
 
         // 2. Two transactions get the value, and then update it, in "parallel".
         let tx1 = db.clone().start_tx();
         let tx2 = db.clone().start_tx();
-        tx1.update_tuple(rid, attr(b"abc"), attr(b"123"))
-            .await
-            .unwrap();
+        tx1.update_tuple(rid, attr(b"abc"), attr(b"123")).unwrap();
         assert_eq!(
             tx1.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"123"
         );
 
-        tx2.update_tuple(rid, attr(b"abc"), attr(b"321"))
-            .await
-            .unwrap();
+        tx2.update_tuple(rid, attr(b"abc"), attr(b"321")).unwrap();
         assert_eq!(
             tx2.seek_by_domain(rid, attr(b"abc"))
-                .await
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -561,9 +509,9 @@ mod tests {
         // 3. First transaction commits with success but second transaction fails with Conflict,
         // because it is younger than the first transaction, and the first transaction committed
         // a change to the tuple before we could get to it.
-        assert!(tx1.commit().await.is_ok());
+        assert!(tx1.commit().is_ok());
         assert_eq!(
-            tx2.commit().await.expect_err("Expected conflict"),
+            tx2.commit().expect_err("Expected conflict"),
             CommitError::TupleVersionConflict
         );
     }
@@ -589,20 +537,17 @@ mod tests {
 
     /// Test some few secondary index scenarios:
     ///     a->b, b->b, c->b = b->{a,b,c} -- before and after commit
-    #[tokio::test]
-    async fn secondary_indices() {
-        let db = test_db().await;
+    #[test]
+    fn secondary_indices() {
+        let db = test_db();
         let rid = RelationId(0);
         let tx = db.clone().start_tx();
-        tx.insert_tuple(rid, attr(b"a"), attr(b"b")).await.unwrap();
-        tx.insert_tuple(rid, attr(b"b"), attr(b"b")).await.unwrap();
-        tx.insert_tuple(rid, attr(b"c"), attr(b"b")).await.unwrap();
+        tx.insert_tuple(rid, attr(b"a"), attr(b"b")).unwrap();
+        tx.insert_tuple(rid, attr(b"b"), attr(b"b")).unwrap();
+        tx.insert_tuple(rid, attr(b"c"), attr(b"b")).unwrap();
 
-        async fn verify(tx: &Transaction, expected: Vec<&[u8]>) {
-            let b_results = tx
-                .seek_by_codomain(RelationId(0), attr(b"b"))
-                .await
-                .unwrap();
+        fn verify(tx: &Transaction, expected: Vec<&[u8]>) {
+            let b_results = tx.seek_by_codomain(RelationId(0), attr(b"b")).unwrap();
 
             let mut domains = b_results
                 .iter()
@@ -611,36 +556,36 @@ mod tests {
             domains.sort();
             assert_eq!(domains, expected);
         }
-        verify(&tx, vec![b"a", b"b", b"c"]).await;
+        verify(&tx, vec![b"a", b"b", b"c"]);
 
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
 
         let tx = db.clone().start_tx();
-        verify(&tx, vec![b"a", b"b", b"c"]).await;
+        verify(&tx, vec![b"a", b"b", b"c"]);
 
         // Add another one, in our new transaction
-        tx.insert_tuple(rid, attr(b"d"), attr(b"b")).await.unwrap();
-        verify(&tx, vec![b"a", b"b", b"c", b"d"]).await;
+        tx.insert_tuple(rid, attr(b"d"), attr(b"b")).unwrap();
+        verify(&tx, vec![b"a", b"b", b"c", b"d"]);
 
         // And remove one
-        tx.remove_by_domain(rid, attr(b"c")).await.unwrap();
-        verify(&tx, vec![b"a", b"b", b"d"]).await;
+        tx.remove_by_domain(rid, attr(b"c")).unwrap();
+        verify(&tx, vec![b"a", b"b", b"d"]);
     }
 
-    #[tokio::test]
-    async fn predicate_scan_with_predicate() {
-        let db = test_db().await;
+    #[test]
+    fn predicate_scan_with_predicate() {
+        let db = test_db();
         let rid = RelationId(0);
 
         // Scan an empty relation in a transaction
         let tx = db.clone().start_tx();
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_eq!(tuples.len(), 0);
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
 
         // Scan the same empty relation in a brand new transaction.
         let tx = db.clone().start_tx();
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_eq!(tuples.len(), 0);
 
         // Then insert a pile of of random tuples into the relation, and scan it again.
@@ -650,18 +595,17 @@ mod tests {
             let (domain, codomain) = random_tuple();
             items.push((domain.clone(), codomain.clone()));
             tx.insert_tuple(rid, attr(&domain), attr(&codomain))
-                .await
                 .unwrap();
         }
         // Scan the local relation, and verify that we get back the same number of tuples.
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
 
         // Scan the same relation in a brand new transaction, and verify that we get back the same
         // number of tuples.
         let tx = db.clone().start_tx();
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_eq!(tuples.len(), 1000);
 
         // Randomly delete tuples from the relation, and verify that the scan returns the correct
@@ -669,16 +613,16 @@ mod tests {
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
             let (domain, _) = items.remove(rng.gen_range(0..items.len()));
-            tx.remove_by_domain(rid, attr(&domain)).await.unwrap();
+            tx.remove_by_domain(rid, attr(&domain)).unwrap();
         }
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
 
         // Scan the same relation in a brand new transaction, and verify that we get back the same
         // tuples.
         let tx = db.clone().start_tx();
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
 
         // Randomly update tuples in the relation, and verify that the scan returns the correct
@@ -688,20 +632,19 @@ mod tests {
             let (domain, _) = items[rng.gen_range(0..items.len())].clone();
             let new_codomain = (0..16).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
             tx.update_tuple(rid, attr(&domain), attr(&new_codomain))
-                .await
                 .unwrap();
             // Update in `items`
             let idx = items.iter().position(|(d, _)| d == &domain).unwrap();
             items[idx] = (domain, new_codomain);
         }
         // Verify ...
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
 
         // And commit and verify in a new tx.
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
         let tx = db.clone().start_tx();
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
 
         // Now insert some new random values.
@@ -713,17 +656,16 @@ mod tests {
             }
             items.push((domain.clone(), codomain.clone()));
             tx.insert_tuple(rid, attr(&domain), attr(&codomain))
-                .await
                 .unwrap();
         }
         // And verify that the scan returns the correct number of tuples and values.
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
 
         // Commit and verify in a new tx.
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
         let tx = db.clone().start_tx();
-        let tuples = tx.predicate_scan(rid, &|_| true).await.unwrap();
+        let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);
     }
 

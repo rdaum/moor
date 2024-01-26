@@ -21,6 +21,7 @@ use crate::tasks::{TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
+use kanal::Sender;
 use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_values::model::BinaryType;
@@ -32,8 +33,7 @@ use moor_values::var::Var;
 use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::sync::mpsc::UnboundedSender;
-use tracing::{trace, warn};
+use tracing::{info, trace, warn};
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
@@ -71,9 +71,8 @@ pub struct VmHost {
     /// The maximum amount of time allotted to this task
     max_time: Duration,
     sessions: Arc<dyn Session>,
-    scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
-    run_watch_send: tokio::sync::watch::Sender<bool>,
-    run_watch_recv: tokio::sync::watch::Receiver<bool>,
+    scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
+    running: bool,
 }
 
 impl VmHost {
@@ -83,11 +82,11 @@ impl VmHost {
         max_ticks: usize,
         max_time: Duration,
         sessions: Arc<dyn Session>,
-        scheduler_control_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
+        scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
     ) -> Self {
         let vm = VM::new();
         let vm_exec_state = VMExecState::new(task_id);
-        let (run_watch_send, run_watch_recv) = tokio::sync::watch::channel(false);
+
         // Created in an initial suspended state.
         Self {
             vm,
@@ -97,15 +96,14 @@ impl VmHost {
             max_time,
             sessions,
             scheduler_control_sender,
-            run_watch_send,
-            run_watch_recv,
+            running: false,
         }
     }
 }
 
 impl VmHost {
     /// Setup for executing a method initiated from a command.
-    pub async fn start_call_command_verb(
+    pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
         vi: VerbInfo,
@@ -122,11 +120,11 @@ impl VmHost {
             program: binary,
         };
 
-        self.start_execution(task_id, call_request).await
+        self.start_execution(task_id, call_request)
     }
 
     /// Setup for executing a method call in this VM.
-    pub async fn start_call_method_verb(
+    pub fn start_call_method_verb(
         &mut self,
         task_id: TaskId,
         perms: Objid,
@@ -146,23 +144,22 @@ impl VmHost {
             program: binary,
         };
 
-        self.start_execution(task_id, call_request).await
+        self.start_execution(task_id, call_request)
     }
 
     /// Start execution of a fork request in the hosted VM.
-    pub async fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
+    pub fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_fork_vector(&mut self.vm_exec_state, fork_request)
-            .await;
-        self.run_watch_send.send(!suspended).unwrap();
+            .exec_fork_vector(&mut self.vm_exec_state, fork_request);
+        self.running = !suspended;
     }
 
     /// Start execution of a verb request.
-    pub async fn start_execution(
+    pub fn start_execution(
         &mut self,
         task_id: TaskId,
         verb_execution_request: VerbExecutionRequest,
@@ -172,25 +169,23 @@ impl VmHost {
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_call_request(&mut self.vm_exec_state, verb_execution_request)
-            .await;
-        self.run_watch_send.send(true).unwrap();
+            .exec_call_request(&mut self.vm_exec_state, verb_execution_request);
+        self.running = true;
     }
 
     /// Start execution of an eval request.
-    pub async fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
+    pub fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_eval_request(&mut self.vm_exec_state, player, player, program)
-            .await;
-        self.run_watch_send.send(true).unwrap();
+            .exec_eval_request(&mut self.vm_exec_state, player, player, program);
+        self.running = true;
     }
 
     /// Run the hosted VM.
-    pub async fn exec_interpreter(
+    pub fn exec_interpreter(
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
@@ -201,10 +196,6 @@ impl VmHost {
             scheduler_sender: self.scheduler_control_sender.clone(),
             max_stack_depth: self.max_stack_depth,
         };
-        self.run_watch_recv
-            .wait_for(|running| *running)
-            .await
-            .unwrap();
 
         // Check existing ticks and seconds, and abort the task if we've exceeded the limits.
         if self.vm_exec_state.tick_count >= self.max_ticks {
@@ -223,15 +214,12 @@ impl VmHost {
         let pre_exec_tick_count = self.vm_exec_state.tick_count;
 
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
-        let mut result = self
-            .vm
-            .exec(
-                &exec_params,
-                &mut self.vm_exec_state,
-                world_state,
-                self.sessions.clone(),
-            )
-            .await;
+        let mut result = self.vm.exec(
+            &exec_params,
+            &mut self.vm_exec_state,
+            world_state,
+            self.sessions.clone(),
+        );
 
         let post_exec_tick_count = self.vm_exec_state.tick_count;
         trace!(
@@ -270,8 +258,7 @@ impl VmHost {
                     };
 
                     self.vm
-                        .exec_call_request(&mut self.vm_exec_state, call_request)
-                        .await;
+                        .exec_call_request(&mut self.vm_exec_state, call_request);
                     return ContinueOk;
                 }
                 ExecutionResult::PerformEval {
@@ -279,9 +266,12 @@ impl VmHost {
                     player,
                     program,
                 } => {
-                    self.vm
-                        .exec_eval_request(&mut self.vm_exec_state, permissions, player, program)
-                        .await;
+                    self.vm.exec_eval_request(
+                        &mut self.vm_exec_state,
+                        permissions,
+                        player,
+                        program,
+                    );
                     return ContinueOk;
                 }
                 ExecutionResult::ContinueBuiltin {
@@ -295,31 +285,27 @@ impl VmHost {
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.
                     // After this we will loop around and check the result.
-                    result = self
-                        .vm
-                        .call_builtin_function(
-                            &mut self.vm_exec_state,
-                            bf_offset,
-                            &args,
-                            &exec_params,
-                            world_state,
-                            self.sessions.clone(),
-                        )
-                        .await;
+                    result = self.vm.call_builtin_function(
+                        &mut self.vm_exec_state,
+                        bf_offset,
+                        &args,
+                        &exec_params,
+                        world_state,
+                        self.sessions.clone(),
+                    );
                     continue;
                 }
                 ExecutionResult::DispatchFork(fork_request) => {
                     return DispatchFork(fork_request);
                 }
                 ExecutionResult::Suspend(delay) => {
-                    self.run_watch_send.send(false).unwrap();
                     return Suspend(delay);
                 }
                 ExecutionResult::NeedInput => {
-                    self.run_watch_send.send(false).unwrap();
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
+                    info!(task_id, "Task completed");
                     return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
@@ -341,26 +327,31 @@ impl VmHost {
             }
         }
 
-        // We're not running and we didn't get a completion signal from the VM - we must have been
+        // We're not running and we didn't get a completion response from the VM - we must have been
         // asked to stop by the scheduler.
         warn!(task_id, "VM host stopped by task");
         VMHostResponse::CompleteAbort
     }
 
     /// Resume what you were doing after suspension.
-    pub async fn resume_execution(&mut self, value: Var) {
+    pub fn resume_execution(&mut self, value: Var) {
         // coming back from suspend, we need a return value to feed back to `bf_suspend`
         self.vm_exec_state.top_mut().push(value);
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
-        self.run_watch_send.send(true).unwrap();
+        self.running = true;
+        info!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
     }
+
     pub fn is_running(&self) -> bool {
-        *self.run_watch_recv.borrow()
+        self.running
     }
-    pub async fn stop(&mut self) {
-        self.run_watch_send.send(false).unwrap();
+
+    pub fn stop(&mut self) {
+        info!(task_id = self.vm_exec_state.task_id, "Stopping VMHost");
+        self.running = false;
     }
+
     pub fn decode_program(binary_type: BinaryType, binary_bytes: &[u8]) -> Program {
         match binary_type {
             BinaryType::LambdaMoo18X => Program::from_sliceref(SliceRef::from_bytes(binary_bytes)),

@@ -39,23 +39,19 @@ use moor_values::model::Named;
 Function: int valid (obj object)
 Returns a non-zero integer (i.e., a true value) if object is a valid object (one that has been created and not yet recycled) and zero (i.e., a false value) otherwise.
 */
-async fn bf_valid<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    let is_valid = bf_args
-        .world_state
-        .valid(*obj)
-        .await
-        .map_err(world_state_err)?;
+    let is_valid = bf_args.world_state.valid(*obj).map_err(world_state_err)?;
     Ok(Ret(v_bool(is_valid)))
 }
 bf_declare!(valid, bf_valid);
 
-async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -68,13 +64,12 @@ async fn bf_parent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let parent = bf_args
         .world_state
         .parent_of(bf_args.task_perms_who(), *obj)
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_objid(parent)))
 }
 bf_declare!(parent, bf_parent);
 
-async fn bf_chparent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -87,13 +82,12 @@ async fn bf_chparent<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> 
     bf_args
         .world_state
         .change_parent(bf_args.task_perms_who(), *obj, *new_parent)
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_none()))
 }
 bf_declare!(chparent, bf_chparent);
 
-async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -103,7 +97,6 @@ async fn bf_children<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> 
     let children = bf_args
         .world_state
         .children_of(bf_args.task_perms_who(), *obj)
-        .await
         .map_err(world_state_err)?;
 
     let children = children.iter().map(v_objid).collect::<Vec<_>>();
@@ -117,7 +110,7 @@ Syntax:  create (obj <parent> [, obj <owner>])   => obj
 const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
-async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(E_INVARG);
     }
@@ -144,17 +137,16 @@ async fn bf_create<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
             let new_obj = bf_args
                 .world_state
                 .create_object(bf_args.task_perms_who(), *parent, owner, BitEnum::new())
-                .await
                 .map_err(world_state_err)?;
 
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
-            let Ok(initialize) = bf_args
-                .world_state
-                .find_method_verb_on(bf_args.task_perms_who(), new_obj, "initialize")
-                .await
-            else {
+            let Ok(initialize) = bf_args.world_state.find_method_verb_on(
+                bf_args.task_perms_who(),
+                new_obj,
+                "initialize",
+            ) else {
                 return Ok(Ret(v_objid(new_obj)));
             };
 
@@ -197,7 +189,7 @@ The given object is destroyed, irrevocably. The programmer must either own objec
 const BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC: usize = 0;
 // Do the recycle.
 const BF_RECYCLE_TRAMPOLINE_DONE_MOVE: usize = 1;
-async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -220,16 +212,15 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 let object_contents = bf_args
                     .world_state
                     .contents_of(bf_args.task_perms_who(), *obj)
-                    .await
                     .map_err(world_state_err)?;
                 // Filter contents for objects that have an :exitfunc verb.
                 let mut contents = vec![];
                 for o in object_contents.iter() {
-                    match bf_args
-                        .world_state
-                        .find_method_verb_on(bf_args.task_perms_who(), o, "exitfunc")
-                        .await
-                    {
+                    match bf_args.world_state.find_method_verb_on(
+                        bf_args.task_perms_who(),
+                        o,
+                        "exitfunc",
+                    ) {
                         Ok(_) => {
                             contents.push(v_objid(o));
                         }
@@ -241,11 +232,11 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                     }
                 }
                 let contents = v_listv(contents);
-                match bf_args
-                    .world_state
-                    .find_method_verb_on(bf_args.task_perms_who(), *obj, "recycle")
-                    .await
-                {
+                match bf_args.world_state.find_method_verb_on(
+                    bf_args.task_perms_who(),
+                    *obj,
+                    "recycle",
+                ) {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
@@ -300,11 +291,11 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                     // :exitfunc *should* exist because we looked for it earlier, and we're supposed to
                     // be transactionally isolated. But we need to do resolution anyways, so we will
                     // look again anyways.
-                    let Ok(exitfunc) = bf_args
-                        .world_state
-                        .find_method_verb_on(bf_args.task_perms_who(), *head_obj, "exitfunc")
-                        .await
-                    else {
+                    let Ok(exitfunc) = bf_args.world_state.find_method_verb_on(
+                        bf_args.task_perms_who(),
+                        *head_obj,
+                        "exitfunc",
+                    ) else {
                         // If there's no :exitfunc, we can just move on to the next object.
                         bf_args.exec_state.top_mut().bf_trampoline_arg = Some(contents);
                         continue 'inner;
@@ -333,7 +324,6 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 bf_args
                     .world_state
                     .recycle_object(bf_args.task_perms_who(), *obj)
-                    .await
                     .map_err(world_state_err)?;
                 return Ok(Ret(v_none()));
             }
@@ -345,14 +335,13 @@ async fn bf_recycle<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(recycle, bf_recycle);
 
-async fn bf_max_object<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
     let max_obj = bf_args
         .world_state
         .max_object(bf_args.task_perms_who())
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_objid(max_obj)))
 }
@@ -363,7 +352,7 @@ const BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC: usize = 1;
 const BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC: usize = 2;
 const BF_MOVE_TRAMPOLINE_DONE: usize = 3;
 
-async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -396,7 +385,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         .unwrap_or(BF_MOVE_TRAMPOLINE_START_ACCEPT);
     trace!(what = ?what, where_to = ?*whereto, tramp, "move: looking up :accept verb");
 
-    let perms = bf_args.task_perms().await.map_err(world_state_err)?;
+    let perms = bf_args.task_perms().map_err(world_state_err)?;
     let mut shortcircuit = false;
     loop {
         match tramp {
@@ -406,11 +395,11 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                     tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
                     continue;
                 }
-                match bf_args
-                    .world_state
-                    .find_method_verb_on(bf_args.task_perms_who(), *whereto, "accept")
-                    .await
-                {
+                match bf_args.world_state.find_method_verb_on(
+                    bf_args.task_perms_who(),
+                    *whereto,
+                    "accept",
+                ) {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
@@ -465,14 +454,12 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 let original_location = bf_args
                     .world_state
                     .location_of(bf_args.task_perms_who(), *what)
-                    .await
                     .map_err(world_state_err)?;
 
                 // Failure here is likely due to permissions, so we'll just propagate that error.
                 bf_args
                     .world_state
                     .move_object(bf_args.task_perms_who(), *what, *whereto)
-                    .await
                     .map_err(world_state_err)?;
 
                 // If the object has no location, then we can move on to the enterfunc.
@@ -482,11 +469,11 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
                 }
 
                 // Call exitfunc...
-                match bf_args
-                    .world_state
-                    .find_method_verb_on(bf_args.task_perms_who(), original_location, "exitfunc")
-                    .await
-                {
+                match bf_args.world_state.find_method_verb_on(
+                    bf_args.task_perms_who(),
+                    original_location,
+                    "exitfunc",
+                ) {
                     Ok(dispatch) => {
                         let continuation = ContinueVerb {
                             permissions: bf_args.task_perms_who(),
@@ -526,11 +513,11 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 
                 // Exitfunc has been called, and returned. Result is irrelevant. Prepare to call
                 // :enterfunc on the destination.
-                match bf_args
-                    .world_state
-                    .find_method_verb_on(bf_args.task_perms_who(), *whereto, "enterfunc")
-                    .await
-                {
+                match bf_args.world_state.find_method_verb_on(
+                    bf_args.task_perms_who(),
+                    *whereto,
+                    "enterfunc",
+                ) {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
@@ -575,7 +562,7 @@ async fn bf_move<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(move, bf_move);
 
-async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -585,7 +572,6 @@ async fn bf_verbs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     let verbs = bf_args
         .world_state
         .verbs(bf_args.task_perms_who(), *obj)
-        .await
         .map_err(world_state_err)?;
     let verbs: Vec<_> = verbs
         .iter()
@@ -599,7 +585,7 @@ bf_declare!(verbs, bf_verbs);
 Function: list properties (obj object)
 Returns a list of the names of the properties defined directly on the given object, not inherited from its parent. If object is not valid, then E_INVARG is raised. If the programmer does not have read permission on object, then E_PERM is raised.
  */
-async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -609,14 +595,13 @@ async fn bf_properties<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
     let props = bf_args
         .world_state
         .properties(bf_args.task_perms_who(), *obj)
-        .await
         .map_err(world_state_err)?;
     let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
     Ok(Ret(v_listv(props)))
 }
 bf_declare!(properties, bf_properties);
 
-async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -632,7 +617,6 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     // User must be a wizard.
     bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_wizard()
         .map_err(world_state_err)?;
@@ -641,7 +625,6 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     let mut flags = bf_args
         .world_state
         .flags_of(*obj)
-        .await
         .map_err(world_state_err)?;
 
     if f {
@@ -653,11 +636,10 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     bf_args
         .world_state
         .set_flags_of(bf_args.task_perms_who(), *obj, flags)
-        .await
         .map_err(world_state_err)?;
 
     // If the object was player, update the VM's copy of the perms.
-    if *obj == bf_args.task_perms().await.map_err(world_state_err)?.who {
+    if *obj == bf_args.task_perms().map_err(world_state_err)?.who {
         bf_args.exec_state.set_task_perms(*obj);
     }
 
@@ -665,15 +647,11 @@ async fn bf_set_player_flag<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
 }
 bf_declare!(set_player_flag, bf_set_player_flag);
 
-async fn bf_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
-    let players = bf_args
-        .world_state
-        .players()
-        .await
-        .map_err(world_state_err)?;
+    let players = bf_args.world_state.players().map_err(world_state_err)?;
 
     Ok(Ret(v_listv(
         players.iter().map(v_objid).collect::<Vec<_>>(),

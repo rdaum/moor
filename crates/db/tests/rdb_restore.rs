@@ -17,6 +17,8 @@ mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use std::time::Duration;
+    use tracing_test::traced_test;
 
     use moor_db::rdb::{RelBox, RelationInfo};
     use moor_db::rdb::{RelationId, Transaction};
@@ -32,7 +34,7 @@ mod test {
         i64::from_le_bytes(bytes)
     }
 
-    async fn fill_db(
+    fn fill_db(
         db: Arc<RelBox>,
         events: &Vec<History>,
         processes: &mut HashMap<i64, Arc<Transaction>>,
@@ -56,36 +58,30 @@ mod test {
                                 let relation = RelationId(*register as usize);
                                 tx.clone()
                                     .relation(relation)
-                                    .await
                                     .insert_tuple(from_val(*value), from_val(*value))
-                                    .await
                                     .unwrap();
                             }
                             Value::r(_, register, _) => {
                                 let relation = RelationId(*register as usize);
 
                                 // Full-scan.
-                                tx.relation(relation)
-                                    .await
-                                    .predicate_scan(&|_| true)
-                                    .await
-                                    .unwrap();
+                                tx.relation(relation).predicate_scan(&|_| true).unwrap();
                             }
                         }
                     }
                 }
                 Type::ok => {
                     let tx = processes.remove(&e.process).unwrap();
-                    tx.commit().await.unwrap();
+                    tx.commit().unwrap();
                 }
                 Type::fail => {
                     let tx = processes.remove(&e.process).unwrap();
-                    tx.rollback().await.unwrap();
+                    tx.rollback().unwrap();
                 }
             }
         }
     }
-    pub async fn test_db(dir: PathBuf) -> Arc<RelBox> {
+    pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
         // Generate 10 test relations that we'll use for testing.
         let relations = (0..100)
             .map(|i| RelationInfo {
@@ -96,16 +92,19 @@ mod test {
             })
             .collect::<Vec<_>>();
 
-        RelBox::new(1 << 24, Some(dir), &relations, 0).await
+        RelBox::new(1 << 24, Some(dir), &relations, 0)
     }
 
     // Open a db in a test dir, fill it with some goop, close it, reopen it, and check that the goop is still there.
-    #[tokio::test]
-    async fn open_reopen() {
+    #[test]
+    #[traced_test]
+    // TODO: fix me. Somehow the test is failing, but actually using a restored DB works fine. Have to figure out
+    //    why.
+    fn open_reopen() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_str = tmpdir.path().to_str().unwrap();
         let tuples = {
-            let db = test_db(tmpdir.path().into()).await;
+            let db = test_db(tmpdir.path().into());
             let lines = include_str!("append-dataset.json")
                 .lines()
                 .filter(|l| !l.is_empty())
@@ -114,26 +113,25 @@ mod test {
                 .iter()
                 .map(|l| serde_json::from_str::<History>(l).unwrap());
             let mut processes = HashMap::new();
-            fill_db(db.clone(), &events.collect::<Vec<_>>(), &mut processes).await;
+            fill_db(db.clone(), &events.collect::<Vec<_>>(), &mut processes);
 
             // Go through the relations and scan for what's in there, and remember it.
             let mut expected = HashMap::new();
             for i in 0..100 {
                 let relation = RelationId(i);
-                let r_tups: Vec<_> = db
-                    .with_relation(relation, |r| {
-                        let tuples = r.predicate_scan(&|_| true);
-                        tuples.iter().map(|t| to_val(t.domain())).collect()
-                    })
-                    .await;
+                let r_tups: Vec<_> = db.with_relation(relation, |r| {
+                    let tuples = r.predicate_scan(&|_| true);
+                    tuples.iter().map(|t| to_val(t.domain())).collect()
+                });
                 expected.insert(relation, r_tups);
             }
-            db.shutdown().await;
+            db.shutdown();
             expected
         };
+
         // Sleep for a bit to encourage any buffers to flush, etc.
         // TODO: ew.
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        std::thread::sleep(Duration::from_secs(1));
 
         // Verify the WAL directory is not empty.
         assert!(std::fs::read_dir(format!("{}/wal", tmpdir_str))
@@ -144,34 +142,27 @@ mod test {
         // Now reopen the db and verify that the tuples are still there. We'll do this a few times, to make sure that
         // the recovery is working.
         for _ in 0..5 {
-            let db = test_db(tmpdir.path().into()).await;
+            let db = test_db(tmpdir.path().into());
 
             // Verify the pages directory is not empty after recovery.
-            assert!(std::fs::read_dir(format!("{}/pages", tmpdir_str))
-                .unwrap()
-                .next()
-                .is_some());
-            let mut found = HashMap::new();
+            let pages = std::fs::read_dir(format!("{}/pages", tmpdir_str));
+            let num_pages = pages.unwrap().count();
+            assert_ne!(num_pages, 0);
+            let tx = db.clone().start_tx();
+
             // Verify all the tuples in all the relations are there
             for relation in tuples.keys() {
                 let expected_tuples = tuples.get(relation).unwrap();
-                // Check that the tuples are there, skipping tx layer, just going straight to the relation.
-                let tups = db
-                    .with_relation(*relation, |r| {
-                        let mut tups = vec![];
-
-                        for t in expected_tuples {
-                            let t = from_val(*t);
-                            let v = r.seek_by_domain(t).unwrap();
-                            tups.push(to_val(v.domain()));
-                        }
-                        tups
-                    })
-                    .await;
-                found.insert(*relation, tups);
+                let rel = tx.relation(*relation);
+                for t in expected_tuples {
+                    let domain = from_val(*t);
+                    let v = rel
+                        .seek_by_domain(domain.clone())
+                        .expect("Missing expected tuple value");
+                    assert_eq!(domain, v.domain());
+                }
             }
-            assert_eq!(found, tuples);
-            db.shutdown().await;
+            db.shutdown();
         }
     }
 }

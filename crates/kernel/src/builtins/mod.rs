@@ -24,7 +24,7 @@ mod bf_verbs;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::mpsc::UnboundedSender;
+use kanal::Sender;
 
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
@@ -52,7 +52,7 @@ pub struct BfCallState<'a> {
     /// For connection / message management.
     pub(crate) session: Arc<dyn Session>,
     /// For sending messages up to the scheduler
-    pub(crate) scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
+    pub(crate) scheduler_sender: Sender<(TaskId, SchedulerControlMsg)>,
 }
 
 impl BfCallState<'_> {
@@ -63,9 +63,9 @@ impl BfCallState<'_> {
     pub fn task_perms_who(&self) -> Objid {
         self.exec_state.task_perms()
     }
-    pub async fn task_perms(&self) -> Result<Perms, WorldStateError> {
+    pub fn task_perms(&self) -> Result<Perms, WorldStateError> {
         let who = self.task_perms_who();
-        let flags = self.world_state.flags_of(who).await?;
+        let flags = self.world_state.flags_of(who)?;
         Ok(Perms { who, flags })
     }
 }
@@ -73,7 +73,7 @@ impl BfCallState<'_> {
 #[async_trait]
 pub trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
-    async fn call<'a>(&self, bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>;
+    fn call(&self, bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>;
 }
 
 /// Return possibilities from a built-in function.
@@ -97,11 +97,11 @@ macro_rules! bf_declare {
                 }
                 // TODO use the descriptor in BUILTIN_DESCRIPTORS to check the arguments
                 // instead of doing it manually in each BF?
-                async fn call<'a>(
+                fn call(
                     &self,
-                    bf_args: &mut BfCallState<'a>
+                    bf_args: &mut BfCallState<'_>
                 ) -> Result<BfRet, Error> {
-                    $action(bf_args).await
+                    $action(bf_args)
                 }
             }
         }

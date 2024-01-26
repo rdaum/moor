@@ -361,7 +361,7 @@ impl VM {
                             _ => true,
                         };
                         if found {
-                            a.jump(&pushed_label);
+                            a.jump(pushed_label);
                             a.push(v_list(&[v_err(*code)]));
                             return ExecutionResult::More;
                         }

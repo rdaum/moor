@@ -29,7 +29,7 @@ use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 use moor_compiler::offset_for_builtin;
 
-async fn bf_abs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -42,7 +42,7 @@ async fn bf_abs<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(abs, bf_abs);
 
-async fn bf_min<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -58,7 +58,7 @@ async fn bf_min<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(min, bf_min);
 
-async fn bf_max<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -74,7 +74,7 @@ async fn bf_max<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(max, bf_max);
 
-async fn bf_random<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
         return Err(E_INVARG);
     }
@@ -88,7 +88,7 @@ async fn bf_random<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(random, bf_random);
 
-async fn bf_floatstr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(E_INVARG);
     }
@@ -117,7 +117,7 @@ async fn bf_floatstr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> 
 }
 bf_declare!(floatstr, bf_floatstr);
 
-async fn bf_sin<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -131,7 +131,7 @@ async fn bf_sin<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(sin, bf_sin);
 
-async fn bf_cos<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -145,7 +145,7 @@ async fn bf_cos<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(cos, bf_cos);
 
-async fn bf_tan<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -159,7 +159,7 @@ async fn bf_tan<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(tan, bf_tan);
 
-async fn bf_sqrt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -177,7 +177,7 @@ async fn bf_sqrt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(sqrt, bf_sqrt);
 
-async fn bf_asin<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -195,7 +195,7 @@ async fn bf_asin<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(asin, bf_asin);
 
-async fn bf_acos<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -213,7 +213,7 @@ async fn bf_acos<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(acos, bf_acos);
 
-async fn bf_atan<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(E_INVARG);
     }
@@ -232,7 +232,7 @@ async fn bf_atan<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(atan, bf_atan);
 
-async fn bf_sinh<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -246,7 +246,7 @@ async fn bf_sinh<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(sinh, bf_sinh);
 
-async fn bf_cosh<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -260,7 +260,7 @@ async fn bf_cosh<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(cosh, bf_cosh);
 
-async fn bf_tanh<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -274,7 +274,7 @@ async fn bf_tanh<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(tanh, bf_tanh);
 
-async fn bf_exp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -288,7 +288,7 @@ async fn bf_exp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(exp, bf_exp);
 
-async fn bf_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -306,7 +306,7 @@ async fn bf_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(log, bf_log);
 
-async fn bf_log10<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -324,7 +324,7 @@ async fn bf_log10<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(log10, bf_log10);
 
-async fn bf_ceil<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -338,7 +338,7 @@ async fn bf_ceil<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(ceil, bf_ceil);
 
-async fn bf_floor<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -352,7 +352,7 @@ async fn bf_floor<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(floor, bf_floor);
 
-async fn bf_trunc<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }

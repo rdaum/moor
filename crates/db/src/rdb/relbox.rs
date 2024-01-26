@@ -18,8 +18,8 @@
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::sync::RwLock;
 
-use tokio::sync::RwLock;
 use tracing::info;
 
 use crate::rdb::backing::BackingStoreClient;
@@ -66,7 +66,7 @@ pub struct RelBox {
 }
 
 impl RelBox {
-    pub async fn new(
+    pub fn new(
         memory_size: usize,
         path: Option<PathBuf>,
         relations: &[RelationInfo],
@@ -84,14 +84,13 @@ impl RelBox {
         let backing_store = match path {
             None => None,
             Some(path) => {
-                let bs = crate::rdb::coldstorage::ColdStorage::start(
+                let bs = crate::rdb::cold_storage::ColdStorage::start(
                     path,
                     relations,
                     &mut base_relations,
                     &mut sequences,
                     slotbox.clone(),
-                )
-                .await;
+                );
                 info!("Backing store loaded, and write-ahead thread started...");
                 Some(bs)
             }
@@ -130,18 +129,18 @@ impl RelBox {
     }
 
     /// Increment this sequence and return its previous value.
-    pub async fn increment_sequence(self: Arc<Self>, sequence_number: usize) -> u64 {
+    pub fn increment_sequence(self: Arc<Self>, sequence_number: usize) -> u64 {
         let sequence = &self.sequences[sequence_number];
         sequence.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Get the current value for the given sequence.
-    pub async fn sequence_current(self: Arc<Self>, sequence_number: usize) -> u64 {
+    pub fn sequence_current(self: Arc<Self>, sequence_number: usize) -> u64 {
         self.sequences[sequence_number].load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Update the given sequence to `value` iff `value` is greater than the current value.
-    pub async fn update_sequence_max(self: Arc<Self>, sequence_number: usize, value: u64) {
+    pub fn update_sequence_max(self: Arc<Self>, sequence_number: usize, value: u64) {
         let sequence = &self.sequences[sequence_number];
         loop {
             let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
@@ -159,15 +158,11 @@ impl RelBox {
         }
     }
 
-    pub async fn with_relation<R, F: Fn(&BaseRelation) -> R>(
-        &self,
-        relation_id: RelationId,
-        f: F,
-    ) -> R {
+    pub fn with_relation<R, F: Fn(&BaseRelation) -> R>(&self, relation_id: RelationId, f: F) -> R {
         f(self
             .canonical
             .read()
-            .await
+            .unwrap()
             .get(relation_id.0)
             .expect("No such relation"))
     }
@@ -175,7 +170,7 @@ impl RelBox {
     /// Prepare a commit set for the given transaction. This will scan through the transaction's
     /// working set, and for each tuple, check to see if it's safe to commit. If it is, then we'll
     /// add it to the commit set.
-    pub(crate) async fn prepare_commit_set<'a>(
+    pub(crate) fn prepare_commit_set(
         &self,
         commit_ts: u64,
         tx_working_set: &mut WorkingSet,
@@ -187,7 +182,7 @@ impl RelBox {
             // scan through the local working set, and for each tuple, check to see if it's safe to
             // commit. If it is, then we'll add it to the commit set.
             // note we're not actually committing yet, just producing a candidate commit set
-            let canonical = &self.canonical.read().await[relation_id.0];
+            let canonical = &self.canonical.read().unwrap()[relation_id.0];
             for mut tuple in local_relation.tuples_mut() {
                 // Look for the most recent version for this domain in the canonical relation.
                 let canon_tuple = canonical.seek_by_domain(tuple.domain().clone());
@@ -257,13 +252,13 @@ impl RelBox {
     /// Actually commit a transaction's (approved) CommitSet. If the underlying base relations have
     /// changed since the transaction started, this will return `Err(RelationContentionConflict)`
     /// and the transaction can choose to try to produce a new CommitSet, or just abort.
-    pub(crate) async fn try_commit(&self, commit_set: CommitSet) -> Result<(), CommitError> {
+    pub(crate) fn try_commit(&self, commit_set: CommitSet) -> Result<(), CommitError> {
         // swap the active canonical state with the new one. but only if the timestamps have not
         // changed in the interim; we have to hold a lock while this is done. If any relations have
         // had their ts change, we need to retry.
         // We have to hold a lock during the duration of this. If we fail, we will loop back
         // and retry.
-        let mut canonical = self.canonical.write().await;
+        let mut canonical = self.canonical.write().unwrap();
         for (_, relation) in commit_set.iter() {
             // Did the relation get committed to by someone else in the interim? If so, return
             // back to the transaction letting it know that, and it can decide if it wants to
@@ -286,24 +281,24 @@ impl RelBox {
         Ok(())
     }
 
-    pub async fn sync(&self, ts: u64, world_state: WorkingSet) {
+    pub fn sync(&self, ts: u64, world_state: WorkingSet) {
         if let Some(bs) = &self.backing_store {
             let seqs = self
                 .sequences
                 .iter()
                 .map(|s| s.load(std::sync::atomic::Ordering::SeqCst))
                 .collect();
-            bs.sync(ts, world_state, seqs).await;
+            bs.sync(ts, world_state, seqs);
         }
     }
 
-    pub async fn db_usage_bytes(&self) -> usize {
+    pub fn db_usage_bytes(&self) -> usize {
         self.slotbox.used_bytes()
     }
 
-    pub async fn shutdown(&self) {
+    pub fn shutdown(&self) {
         if let Some(bs) = &self.backing_store {
-            bs.shutdown().await;
+            bs.shutdown();
         }
     }
 }

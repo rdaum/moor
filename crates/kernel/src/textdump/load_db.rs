@@ -89,7 +89,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 #[tracing::instrument(skip(ldr))]
-pub async fn textdump_load(
+pub fn textdump_load(
     ldr: Arc<dyn LoaderInterface>,
     path: PathBuf,
 ) -> Result<(), TextdumpReaderError> {
@@ -101,10 +101,10 @@ pub async fn textdump_load(
 
     let br = BufReader::new(corefile);
 
-    read_textdump(ldr, br).await?
+    read_textdump(ldr, br)?
 }
 
-pub async fn read_textdump<T: io::Read>(
+pub fn read_textdump<T: io::Read>(
     loader: Arc<dyn LoaderInterface>,
     reader: BufReader<T>,
 ) -> Result<Result<(), TextdumpReaderError>, TextdumpReaderError> {
@@ -128,7 +128,6 @@ pub async fn read_textdump<T: io::Read>(
                     // .parent(o.parent)
                     .flags(flags),
             )
-            .await
             .map_err(|e| {
                 TextdumpReaderError::LoadError(format!("creating object {}", objid), e.clone())
             })?;
@@ -139,21 +138,14 @@ pub async fn read_textdump<T: io::Read>(
     info!("Setting object attributes (parent/location/owner)");
     for (objid, o) in &td.objects {
         trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
-        loader
-            .set_object_owner(*objid, o.owner)
-            .await
-            .map_err(|e| {
-                TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
-            })?;
-        loader
-            .set_object_parent(*objid, o.parent)
-            .await
-            .map_err(|e| {
-                TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
-            })?;
+        loader.set_object_owner(*objid, o.owner).map_err(|e| {
+            TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
+        })?;
+        loader.set_object_parent(*objid, o.parent).map_err(|e| {
+            TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
+        })?;
         loader
             .set_object_location(*objid, o.location)
-            .await
             .map_err(|e| {
                 TextdumpReaderError::LoadError(format!("setting location of {}", objid), e.clone())
             })?;
@@ -180,7 +172,6 @@ pub async fn read_textdump<T: io::Read>(
                         flags,
                         value,
                     )
-                    .await
                     .map_err(|e| {
                         TextdumpReaderError::LoadError(
                             format!("defining property on {}", objid),
@@ -202,7 +193,6 @@ pub async fn read_textdump<T: io::Read>(
 
             loader
                 .set_property(*objid, resolved.name.as_str(), p.owner, flags, value)
-                .await
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
                         format!("setting property on {}", objid),
@@ -268,7 +258,6 @@ pub async fn read_textdump<T: io::Read>(
 
             loader
                 .add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
-                .await
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
                         format!("adding verb #{}/{} ({:?})", objid.0, vn, names),

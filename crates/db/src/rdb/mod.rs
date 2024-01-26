@@ -22,10 +22,14 @@
 //!
 //! TLDR Transactions continue to see a fully snapshot isolated view of the world.
 
+pub use relbox::{RelBox, RelationInfo};
+pub use tuples::TupleError;
+pub use tx::{CommitError, Transaction};
+
 mod backing;
 mod base_relation;
 
-mod coldstorage;
+mod cold_storage;
 mod page_storage;
 mod pool;
 
@@ -33,10 +37,6 @@ mod paging;
 mod relbox;
 mod tuples;
 mod tx;
-
-pub use relbox::{RelBox, RelationInfo};
-pub use tuples::TupleError;
-pub use tx::{CommitError, Transaction};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RelationId(pub usize);

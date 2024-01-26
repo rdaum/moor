@@ -110,23 +110,23 @@ impl Session for RpcSession {
         todo!()
     }
 
-    async fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
-        self.rpc_server.connection_name_for(player).await
+    fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
+        self.rpc_server.connection_name_for(player)
     }
 
     async fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
         self.rpc_server.disconnect(player).await
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
-        self.rpc_server.connected_players().await
+    fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+        self.rpc_server.connected_players()
     }
 
-    async fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError> {
-        self.rpc_server.connected_seconds_for(player).await
+    fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError> {
+        self.rpc_server.connected_seconds_for(player)
     }
 
-    async fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError> {
-        self.rpc_server.idle_seconds_for(player).await
+    fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError> {
+        self.rpc_server.idle_seconds_for(player)
     }
 }

@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod object_relations;
-mod rb_worldstate;
-
 pub use object_relations::{WorldStateRelation, WorldStateSequences};
 pub use rb_worldstate::{RelBoxTransaction, RelBoxWorldState};
+
+mod object_relations;
+mod rb_worldstate;

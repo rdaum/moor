@@ -156,7 +156,7 @@ impl VMExecState {
         let elapsed = now
             .duration_since(self.start_time.expect("No start time for task?"))
             .unwrap();
-        let remaining = max_time.checked_sub(elapsed);
-        remaining
+        
+        max_time.checked_sub(elapsed)
     }
 }

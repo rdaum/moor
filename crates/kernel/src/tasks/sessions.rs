@@ -91,19 +91,19 @@ pub trait Session: Send + Sync {
     /// The 'name' of the *most recent* connection associated with the player.
     /// In a networked environment this is the hostname.
     /// LambdaMOO cores tend to expect this to be a resolved DNS hostname.
-    async fn connection_name(&self, player: Objid) -> Result<String, SessionError>;
+    fn connection_name(&self, player: Objid) -> Result<String, SessionError>;
 
     /// Disconnect the given player's connection.
     async fn disconnect(&self, player: Objid) -> Result<(), SessionError>;
 
     /// Return the list of other currently-connected players.
-    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError>;
+    fn connected_players(&self) -> Result<Vec<Objid>, SessionError>;
 
     /// Return how many seconds the given player has been connected.
-    async fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError>;
+    fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError>;
 
     /// Return how many seconds the given player has been idle (no tasks submitted).
-    async fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError>;
+    fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError>;
 }
 
 #[derive(Debug, Error)]
@@ -168,21 +168,21 @@ impl Session for NoopClientSession {
     async fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
         Ok(())
     }
-    async fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
+    fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         Ok(format!("player-{}", player.0))
     }
     async fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
         Ok(())
     }
-    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+    fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
         Ok(vec![])
     }
 
-    async fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 
-    async fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 }
@@ -285,7 +285,7 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    async fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
+    fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         Ok(format!("player-{}", player))
     }
 
@@ -295,15 +295,15 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+    fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
         Ok(vec![])
     }
 
-    async fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 
-    async fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 }

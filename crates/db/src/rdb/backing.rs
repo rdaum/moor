@@ -16,12 +16,12 @@
 //! Used for write-ahead type storage at commit-time, and backed by whatever preferred physical
 //! storage mechanism is desired.
 
-use tokio::sync::mpsc::UnboundedSender;
+use kanal::Sender;
 
 use crate::rdb::tx::WorkingSet;
 
 pub struct BackingStoreClient {
-    sender: UnboundedSender<WriterMessage>,
+    sender: Sender<WriterMessage>,
 }
 
 pub enum WriterMessage {
@@ -30,21 +30,21 @@ pub enum WriterMessage {
 }
 
 impl BackingStoreClient {
-    pub fn new(sender: UnboundedSender<WriterMessage>) -> Self {
+    pub fn new(sender: Sender<WriterMessage>) -> Self {
         Self { sender }
     }
 
     /// Sync out the working set from a committed transaction for the given transaction timestamp.
     /// Used to support persistent storage of committed transactions, effectively as a write-ahead
     /// log.
-    pub async fn sync(&self, ts: u64, ws: WorkingSet, sequences: Vec<u64>) {
+    pub fn sync(&self, ts: u64, ws: WorkingSet, sequences: Vec<u64>) {
         self.sender
             .send(WriterMessage::Commit(ts, ws, sequences))
             .expect("Unable to send write-ahead sync message");
     }
 
     /// Shutdown the backing store writer thread.
-    pub async fn shutdown(&self) {
+    pub fn shutdown(&self) {
         self.sender
             .send(WriterMessage::Shutdown)
             .expect("Unable to send shutdown message");

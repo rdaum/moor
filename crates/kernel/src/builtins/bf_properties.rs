@@ -32,7 +32,7 @@ use moor_compiler::offset_for_builtin;
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }
-async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -45,7 +45,6 @@ async fn bf_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     let property_info = bf_args
         .world_state
         .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .await
         .map_err(world_state_err)?;
     let owner = property_info.owner();
     let flags = property_info.flags();
@@ -109,7 +108,7 @@ fn info_to_prop_attrs(info: &[Var]) -> InfoParseResult {
     })
 }
 
-async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
         return Err(E_INVARG);
     }
@@ -133,13 +132,12 @@ async fn bf_set_property_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
     bf_args
         .world_state
         .set_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str(), attrs)
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_empty_list()))
 }
 bf_declare!(set_property_info, bf_set_property_info);
 
-async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -152,13 +150,12 @@ async fn bf_is_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
     let is_clear = bf_args
         .world_state
         .is_property_clear(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_bool(is_clear)))
 }
 bf_declare!(is_clear_property, bf_is_clear_property);
 
-async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -171,14 +168,13 @@ async fn bf_clear_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
     bf_args
         .world_state
         .clear_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_empty_list()))
 }
 bf_declare!(set_clear_property, bf_clear_property);
 
 // add_property (obj <object>, str <prop-name>, <value>, list <info>) => none
-async fn bf_add_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 4 {
         return Err(E_INVARG);
     }
@@ -210,13 +206,12 @@ async fn bf_add_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
             attrs.flags.unwrap(),
             Some(value),
         )
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_none()))
 }
 bf_declare!(add_property, bf_add_property);
 
-async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -229,7 +224,6 @@ async fn bf_delete_property<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     bf_args
         .world_state
         .delete_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .await
         .map_err(world_state_err)?;
     Ok(Ret(v_empty_list()))
 }

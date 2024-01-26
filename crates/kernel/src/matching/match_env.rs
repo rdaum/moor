@@ -26,16 +26,16 @@ use crate::tasks::command_parse::ParseMatcher;
 #[async_trait]
 pub trait MatchEnvironment {
     // Test whether a given object is valid in this environment.
-    async fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError>;
+    fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError>;
 
     // Return all match names & aliases for an object.
-    async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError>;
+    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError>;
 
     // Returns location, contents, and player, all the things we'd search for matches on.
-    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError>;
+    fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError>;
 
     // Return the location of a given object.
-    async fn location_of(&mut self, player: Objid) -> Result<Objid, WorldStateError>;
+    fn location_of(&mut self, player: Objid) -> Result<Objid, WorldStateError>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -80,7 +80,7 @@ fn do_match_object_names(
     }
 }
 
-pub async fn match_contents<M: MatchEnvironment + Send + Sync>(
+pub fn match_contents<M: MatchEnvironment>(
     env: &mut M,
     player: Objid,
     object_name: &str,
@@ -90,13 +90,13 @@ pub async fn match_contents<M: MatchEnvironment + Send + Sync>(
         partial: FAILED_MATCH,
     };
 
-    let search = env.get_surroundings(player).await?; // location, contents, player
+    let search = env.get_surroundings(player)?; // location, contents, player
     for oid in search.iter() {
-        if !env.obj_valid(oid).await? {
+        if !env.obj_valid(oid)? {
             continue;
         }
 
-        let object_names = env.get_names(oid).await?;
+        let object_names = env.get_names(oid)?;
         let result = do_match_object_names(oid, &mut match_data, object_names, object_name)?;
         if result == AMBIGUOUS {
             return Ok(Some(AMBIGUOUS));
@@ -109,14 +109,14 @@ pub async fn match_contents<M: MatchEnvironment + Send + Sync>(
     }
 }
 
-pub struct MatchEnvironmentParseMatcher<M: MatchEnvironment + Send + Sync> {
+pub struct MatchEnvironmentParseMatcher<M: MatchEnvironment> {
     pub env: M,
     pub player: Objid,
 }
 
 #[async_trait]
-impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMatcher<M> {
-    async fn match_object(&mut self, object_name: &str) -> Result<Option<Objid>, WorldStateError> {
+impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
+    fn match_object(&mut self, object_name: &str) -> Result<Option<Objid>, WorldStateError> {
         if object_name.is_empty() {
             return Ok(None);
         }
@@ -131,7 +131,7 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
         }
 
         // Check if the player is valid.
-        if !self.env.obj_valid(self.player).await? {
+        if !self.env.obj_valid(self.player)? {
             return Err(WorldStateError::FailedMatch(
                 "Invalid current player when performing object match".to_string(),
             ));
@@ -143,10 +143,10 @@ impl<M: MatchEnvironment + Send + Sync> ParseMatcher for MatchEnvironmentParseMa
         }
 
         if object_name == "here" {
-            return Ok(Some(self.env.location_of(self.player).await?));
+            return Ok(Some(self.env.location_of(self.player)?));
         }
 
-        match_contents(&mut self.env, self.player, object_name).await
+        match_contents(&mut self.env, self.player, object_name)
     }
 }
 
@@ -275,113 +275,113 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_match_object_empty() {
+    #[test]
+    fn test_match_object_empty() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("").await;
+        let result = menv.match_object("");
         assert_eq!(result.unwrap(), None);
     }
 
-    #[tokio::test]
-    async fn test_match_object_object_number() {
+    #[test]
+    fn test_match_object_object_number() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("#4").await;
+        let result = menv.match_object("#4");
         assert_eq!(result.unwrap(), Some(MOCK_THING1));
     }
 
-    #[tokio::test]
-    async fn test_match_object_me() {
+    #[test]
+    fn test_match_object_me() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("me").await;
+        let result = menv.match_object("me");
         assert_eq!(result.unwrap(), Some(MOCK_PLAYER));
     }
 
-    #[tokio::test]
-    async fn test_match_object_here() {
+    #[test]
+    fn test_match_object_here() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("here").await;
+        let result = menv.match_object("here");
         assert_eq!(result.unwrap(), Some(MOCK_ROOM1));
     }
 
-    #[tokio::test]
-    async fn test_match_object_room_name() {
+    #[test]
+    fn test_match_object_room_name() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("room1").await;
+        let result = menv.match_object("room1");
         assert_eq!(result.unwrap(), Some(MOCK_ROOM1));
     }
 
-    #[tokio::test]
-    async fn test_match_object_room_alias() {
+    #[test]
+    fn test_match_object_room_alias() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("r1").await;
+        let result = menv.match_object("r1");
         assert_eq!(result.unwrap(), Some(MOCK_ROOM1));
     }
 
-    #[tokio::test]
-    async fn test_match_object_player_name() {
+    #[test]
+    fn test_match_object_player_name() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("porcupine").await;
+        let result = menv.match_object("porcupine");
         assert_eq!(result.unwrap(), Some(MOCK_PLAYER));
     }
 
-    #[tokio::test]
-    async fn test_match_object_thing_name() {
+    #[test]
+    fn test_match_object_thing_name() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("thing1").await;
+        let result = menv.match_object("thing1");
         assert_eq!(result.unwrap(), Some(MOCK_THING1));
     }
 
-    #[tokio::test]
-    async fn test_match_object_thing_alias() {
+    #[test]
+    fn test_match_object_thing_alias() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = menv.match_object("t2").await;
+        let result = menv.match_object("t2");
         assert_eq!(result.unwrap(), Some(MOCK_THING2));
     }
 
-    #[tokio::test]
-    async fn test_match_object_invalid_player() {
+    #[test]
+    fn test_match_object_invalid_player() {
         let env = setup_mock_environment();
         let mut menv = MatchEnvironmentParseMatcher {
             env,
             player: NOTHING,
         };
-        let result = menv.match_object("thing1").await;
+        let result = menv.match_object("thing1");
         assert!(result.is_err());
     }
 }

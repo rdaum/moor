@@ -40,7 +40,7 @@ pub struct ConnectionsTb {
 }
 
 impl ConnectionsTb {
-    pub async fn new(path: Option<PathBuf>) -> Self {
+    pub fn new(path: Option<PathBuf>) -> Self {
         let mut relations: Vec<RelationInfo> = ConnectionRelation::iter()
             .map(|r| {
                 RelationInfo {
@@ -53,7 +53,7 @@ impl ConnectionsTb {
             .collect();
         relations[ConnectionRelation::ClientConnection as usize].secondary_indexed = true;
 
-        let tb = RelBox::new(CONNECTIONS_DB_MEM_SIZE, path, &relations, 1).await;
+        let tb = RelBox::new(CONNECTIONS_DB_MEM_SIZE, path, &relations, 1);
         Self { tb }
     }
 }
@@ -76,15 +76,13 @@ enum ConnectionRelation {
 }
 
 impl ConnectionsTb {
-    async fn most_recent_client_connection(
+    fn most_recent_client_connection(
         tx: &Transaction,
         connection_obj: Objid,
     ) -> Result<Vec<(SliceRef, SystemTime)>, SessionError> {
         let clients = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .seek_by_codomain(connection_obj.as_sliceref())
-            .await
             .expect("Unable to seek client connection");
 
         // Seek the most recent activity for the connection, so pull in the activity relation for
@@ -93,9 +91,7 @@ impl ConnectionsTb {
         for client in clients {
             if let Ok(last_activity) = tx
                 .relation(RelationId(ConnectionRelation::ClientActivity as usize))
-                .await
                 .seek_by_domain(client.domain())
-                .await
             {
                 let epoch_time_millis: u128 =
                     u128::from_le_bytes(last_activity.codomain().as_slice().try_into().unwrap());
@@ -131,7 +127,7 @@ fn now_as_sliceref() -> SliceRef {
 
 #[async_trait]
 impl ConnectionsDB for ConnectionsTb {
-    async fn update_client_connection(
+    fn update_client_connection(
         &self,
         from_connection: Objid,
         to_player: Objid,
@@ -139,9 +135,7 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let client_ids = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .seek_by_codomain(from_connection.as_sliceref())
-            .await
             .expect("Unable to seek client connection");
         if client_ids.is_empty() {
             error!(?from_connection, ?to_player, "No client ids for connection");
@@ -150,15 +144,13 @@ impl ConnectionsDB for ConnectionsTb {
         for client_id in client_ids {
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-                .await
-                .update_tuple(client_id.domain().clone(), to_player.as_sliceref())
-                .await;
+                .update_tuple(client_id.domain().clone(), to_player.as_sliceref());
         }
-        tx.commit().await?;
+        tx.commit()?;
         Ok(())
     }
 
-    async fn new_connection(
+    fn new_connection(
         &self,
         client_id: Uuid,
         hostname: String,
@@ -168,7 +160,7 @@ impl ConnectionsDB for ConnectionsTb {
             None => {
                 // The connection object is pulled from the sequence, then we invert it and subtract from
                 // -4 to get the connection object, since they always grow downwards from there.
-                let connection_id = self.tb.clone().increment_sequence(0).await;
+                let connection_id = self.tb.clone().increment_sequence(0);
                 let connection_id: i64 = -4 - (connection_id as i64);
                 Objid(connection_id)
             }
@@ -179,65 +171,51 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let client_id = SliceRef::from_bytes(client_id.as_bytes());
         tx.relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .insert_tuple(client_id.clone(), connection_oid.as_sliceref())
-            .await
             .expect("Unable to insert client connection");
         tx.relation(RelationId(ConnectionRelation::ClientActivity as usize))
-            .await
             .insert_tuple(client_id.clone(), now_as_sliceref())
-            .await
             .expect("Unable to insert client activity");
         tx.relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-            .await
             .insert_tuple(client_id.clone(), now_as_sliceref())
-            .await
             .expect("Unable to insert client connect time");
         tx.relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .await
             .insert_tuple(client_id.clone(), now_as_sliceref())
-            .await
             .expect("Unable to insert client ping time");
         tx.relation(RelationId(ConnectionRelation::ClientName as usize))
-            .await
             .insert_tuple(client_id.clone(), SliceRef::from_bytes(hostname.as_bytes()))
-            .await
             .expect("Unable to insert client name");
 
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
 
         Ok(connection_oid)
     }
 
-    async fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {
+    fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         tx.relation(RelationId(ConnectionRelation::ClientActivity as usize))
-            .await
             .upsert_tuple(
                 SliceRef::from_bytes(client_id.as_bytes()),
                 now_as_sliceref(),
             )
-            .await
             .expect("Unable to update client activity");
-        tx.commit().await?;
+        tx.commit()?;
         Ok(())
     }
 
-    async fn notify_is_alive(&self, client_id: Uuid, _connection: Objid) -> Result<(), Error> {
+    fn notify_is_alive(&self, client_id: Uuid, _connection: Objid) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         tx.relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .await
             .upsert_tuple(
                 SliceRef::from_bytes(client_id.as_bytes()),
                 now_as_sliceref(),
             )
-            .await
             .expect("Unable to update client ping time");
-        tx.commit().await?;
+        tx.commit()?;
         Ok(())
     }
 
-    async fn ping_check(&self) {
+    fn ping_check(&self) {
         let now = SystemTime::now();
         let timeout_threshold = now - CONNECTION_TIMEOUT_DURATION;
 
@@ -246,63 +224,51 @@ impl ConnectionsDB for ConnectionsTb {
         // connection from all the relations.
         let tx = self.tb.clone().start_tx();
 
-        let last_ping_relation = tx
-            .relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .await;
+        let last_ping_relation =
+            tx.relation(RelationId(ConnectionRelation::ClientPingTime as usize));
         let expired = last_ping_relation
             .predicate_scan(&|ping| {
                 let last_ping_time = sliceref_as_time(ping.codomain());
                 last_ping_time < timeout_threshold
             })
-            .await
             .expect("Unable to scan last ping relation");
 
         for expired_ping in expired {
             let client_id = expired_ping.domain().clone();
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-                .await
-                .remove_by_domain(client_id.clone())
-                .await;
+                .remove_by_domain(client_id.clone());
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientActivity as usize))
-                .await
-                .remove_by_domain(client_id.clone())
-                .await;
+                .remove_by_domain(client_id.clone());
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-                .await
-                .remove_by_domain(client_id.clone())
-                .await;
+                .remove_by_domain(client_id.clone());
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-                .await
-                .remove_by_domain(client_id.clone())
-                .await;
+                .remove_by_domain(client_id.clone());
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientName as usize))
-                .await
-                .remove_by_domain(client_id.clone())
-                .await;
+                .remove_by_domain(client_id.clone());
         }
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
     }
 
-    async fn last_activity_for(&self, connection_obj: Objid) -> Result<SystemTime, SessionError> {
+    fn last_activity_for(&self, connection_obj: Objid) -> Result<SystemTime, SessionError> {
         let tx = self.tb.clone().start_tx();
-        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj).await?;
+        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj)?;
 
         // Most recent time is the last one.
         let Some(time) = client_times.pop() else {
             return Err(SessionError::NoConnectionForPlayer(connection_obj));
         };
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         Ok(time.1)
     }
 
-    async fn connection_name_for(&self, connection_obj: Objid) -> Result<String, SessionError> {
+    fn connection_name_for(&self, connection_obj: Objid) -> Result<String, SessionError> {
         let tx = self.tb.clone().start_tx();
-        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj).await?;
+        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj)?;
 
         let Some(most_recent) = client_times.pop() else {
             return Err(SessionError::NoConnectionForPlayer(connection_obj));
@@ -311,24 +277,20 @@ impl ConnectionsDB for ConnectionsTb {
         let client_id = most_recent.0;
         let name = tx
             .relation(RelationId(ConnectionRelation::ClientName as usize))
-            .await
             .seek_by_domain(client_id.clone())
-            .await
             .expect("Unable to seek client name");
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         Ok(String::from_utf8(name.codomain().as_slice().to_vec())
             .expect("Invalid UTF-8 in client name"))
     }
 
-    async fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
         let tx = self.tb.clone().start_tx();
         // In this case we need to find the earliest connection time for the player, and then
         // subtract that from the current time.
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .seek_by_codomain(player.as_sliceref())
-            .await
         else {
             return Err(SessionError::NoConnectionForPlayer(player));
         };
@@ -337,9 +299,7 @@ impl ConnectionsDB for ConnectionsTb {
         for client in clients {
             if let Ok(connect_time) = tx
                 .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-                .await
                 .seek_by_domain(client.domain())
-                .await
             {
                 let time = sliceref_as_time(connect_time.codomain());
                 times.push((client.domain(), time));
@@ -351,17 +311,15 @@ impl ConnectionsDB for ConnectionsTb {
         let now = SystemTime::now();
         let duration = now.duration_since(earliest).expect("Invalid duration");
         let seconds = duration.as_secs_f64();
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         Ok(seconds)
     }
 
-    async fn client_ids_for(&self, player: Objid) -> Result<Vec<Uuid>, SessionError> {
+    fn client_ids_for(&self, player: Objid) -> Result<Vec<Uuid>, SessionError> {
         let tx = self.tb.clone().start_tx();
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .seek_by_codomain(player.as_sliceref())
-            .await
         else {
             return Ok(vec![]);
         };
@@ -371,20 +329,18 @@ impl ConnectionsDB for ConnectionsTb {
             let client_id = Uuid::from_slice(client.domain().as_slice()).expect("Invalid UUID");
             client_ids.push(client_id);
         }
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         Ok(client_ids)
     }
 
-    async fn connections(&self) -> Vec<Objid> {
+    fn connections(&self) -> Vec<Objid> {
         // Full scan from ClientConnection relation to get all connections, and dump them into a
         // hashset (to remove dupes) and return as a vector.
         let tx = self.tb.clone().start_tx();
         let mut connections = HashSet::new();
         let clients = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .predicate_scan(&|_| true)
-            .await
             .expect("Unable to scan client connection relation");
 
         for client in clients {
@@ -392,66 +348,52 @@ impl ConnectionsDB for ConnectionsTb {
             connections.insert(connection);
         }
 
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         connections.into_iter().collect()
     }
 
-    async fn is_valid_client(&self, client_id: Uuid) -> bool {
+    fn is_valid_client(&self, client_id: Uuid) -> bool {
         let tx = self.tb.clone().start_tx();
         let is_valid = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .seek_by_domain(client_id.as_bytes().as_sliceref())
-            .await
             .is_ok();
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         is_valid
     }
 
-    async fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid> {
+    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid> {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
             .seek_by_domain(client_id.as_bytes().as_sliceref())
-            .await
         {
             Ok(connection) => Some(Objid::from_sliceref(connection.codomain())),
             Err(_) => None,
         };
-        tx.commit().await.expect("Unable to commit transaction");
+        tx.commit().expect("Unable to commit transaction");
         connection
     }
 
-    async fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
+    fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .await
-            .remove_by_domain(client_id.as_bytes().as_sliceref())
-            .await;
+            .remove_by_domain(client_id.as_bytes().as_sliceref());
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientActivity as usize))
-            .await
-            .remove_by_domain(client_id.as_bytes().as_sliceref())
-            .await;
+            .remove_by_domain(client_id.as_bytes().as_sliceref());
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-            .await
-            .remove_by_domain(client_id.as_bytes().as_sliceref())
-            .await;
+            .remove_by_domain(client_id.as_bytes().as_sliceref());
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .await
-            .remove_by_domain(client_id.as_bytes().as_sliceref())
-            .await;
+            .remove_by_domain(client_id.as_bytes().as_sliceref());
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientName as usize))
-            .await
-            .remove_by_domain(client_id.as_bytes().as_sliceref())
-            .await;
+            .remove_by_domain(client_id.as_bytes().as_sliceref());
 
-        tx.commit().await?;
+        tx.commit()?;
         Ok(())
     }
 }
@@ -473,117 +415,106 @@ mod tests {
     ///     * Verify the new connection has the client
     ///     * Remove the connection<->client
     ///     * Verify the connection has no clients
-    #[tokio::test]
-    async fn test_single_connection() {
-        let db = Arc::new(ConnectionsTb::new(None).await);
+    #[test]
+    fn test_single_connection() {
+        let db = Arc::new(ConnectionsTb::new(None));
         let mut jh = vec![];
 
         for x in 1..100 {
             let db = db.clone();
-            jh.push(tokio::spawn(async move {
+            jh.push(std::thread::spawn(move || {
                 let client_id = uuid::Uuid::new_v4();
                 let oid = db
                     .new_connection(client_id, "localhost".to_string(), None)
-                    .await
                     .unwrap();
-                let client_ids = db.client_ids_for(oid).await.unwrap();
+                let client_ids = db.client_ids_for(oid).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
-                db.record_client_activity(client_id, oid).await.unwrap();
-                db.notify_is_alive(client_id, oid).await.unwrap();
+                db.record_client_activity(client_id, oid).unwrap();
+                db.notify_is_alive(client_id, oid).unwrap();
                 let last_activity = db
                     .last_activity_for(oid)
-                    .await
                     .unwrap()
                     .elapsed()
                     .unwrap()
                     .as_secs_f64();
                 assert!(last_activity < 1.0);
-                assert!(db.is_valid_client(client_id).await);
+                assert!(db.is_valid_client(client_id));
                 db.update_client_connection(oid, Objid(x))
-                    .await
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid(x)).await.unwrap();
+                let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
-                db.remove_client_connection(client_id).await.unwrap();
-                assert!(!db.is_valid_client(client_id).await);
-                let client_ids = db.client_ids_for(Objid(x)).await.unwrap();
+                db.remove_client_connection(client_id).unwrap();
+                assert!(!db.is_valid_client(client_id));
+                let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert!(client_ids.is_empty());
             }));
         }
         for j in jh {
-            j.await.unwrap();
+            j.join().unwrap();
         }
     }
 
     /// Test that a given player can have multiple clients connected to it.
-    #[tokio::test]
-    async fn test_multiple_connections() {
-        let db = Arc::new(ConnectionsTb::new(None).await);
+    #[test]
+    fn test_multiple_connections() {
+        let db = Arc::new(ConnectionsTb::new(None));
         let mut jh = vec![];
         for x in 1..100 {
             let db = db.clone();
-            jh.push(tokio::spawn(async move {
+            jh.push(std::thread::spawn(move || {
                 let client_id1 = uuid::Uuid::new_v4();
                 let client_id2 = uuid::Uuid::new_v4();
                 let con_oid1 = db
                     .new_connection(client_id1, "localhost".to_string(), None)
-                    .await
                     .unwrap();
                 let con_oid2 = db
                     .new_connection(client_id2, "localhost".to_string(), None)
-                    .await
                     .unwrap();
                 db.update_client_connection(con_oid1, Objid(x))
-                    .await
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid(x)).await.unwrap();
+                let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id1));
 
                 db.update_client_connection(con_oid2, Objid(x))
-                    .await
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid(x)).await.unwrap();
+                let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert_eq!(client_ids.len(), 2);
                 assert!(client_ids.contains(&client_id2));
 
-                db.record_client_activity(client_id1, Objid(x))
-                    .await
-                    .unwrap();
+                db.record_client_activity(client_id1, Objid(x)).unwrap();
                 let last_activity = db
                     .last_activity_for(Objid(x))
-                    .await
                     .unwrap()
                     .elapsed()
                     .unwrap()
                     .as_secs_f64();
                 assert!(last_activity < 1.0);
-                db.remove_client_connection(client_id1).await.unwrap();
-                let client_ids = db.client_ids_for(Objid(x)).await.unwrap();
+                db.remove_client_connection(client_id1).unwrap();
+                let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id2));
             }));
         }
         for j in jh {
-            j.await.unwrap();
+            j.join().unwrap();
         }
     }
 
     // Validate that ping check works.
-    #[tokio::test]
-    async fn ping_test() {
-        let db = Arc::new(ConnectionsTb::new(None).await);
+    #[test]
+    fn ping_test() {
+        let db = Arc::new(ConnectionsTb::new(None));
         let client_id1 = uuid::Uuid::new_v4();
         let ob = db
             .new_connection(client_id1, "localhost".to_string(), None)
-            .await
             .unwrap();
-        db.ping_check().await;
-        let client_ids = db.connections().await;
+        db.ping_check();
+        let client_ids = db.connections();
         assert_eq!(client_ids.len(), 1);
-        assert!(db.is_valid_client(client_id1).await);
-        assert_eq!(db.connection_object_for_client(client_id1).await, Some(ob));
+        assert!(db.is_valid_client(client_id1));
+        assert_eq!(db.connection_object_for_client(client_id1), Some(ob));
     }
 }

@@ -30,13 +30,13 @@ use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::VM;
 use moor_compiler::offset_for_builtin;
 
-async fn bf_typeof<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let arg = &bf_args.args[0];
     Ok(Ret(v_int(arg.type_id() as i64)))
 }
 bf_declare!(typeof, bf_typeof);
 
-async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let mut result = String::new();
     for arg in &bf_args.args {
         match arg.variant() {
@@ -53,7 +53,7 @@ async fn bf_tostr<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(tostr, bf_tostr);
 
-async fn bf_toliteral<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -62,7 +62,7 @@ async fn bf_toliteral<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
 }
 bf_declare!(toliteral, bf_toliteral);
 
-async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -83,7 +83,7 @@ async fn bf_toint<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(toint, bf_toint);
 
-async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -109,7 +109,7 @@ async fn bf_toobj<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(toobj, bf_toobj);
 
-async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -129,7 +129,7 @@ async fn bf_tofloat<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(tofloat, bf_tofloat);
 
-async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -141,7 +141,7 @@ async fn bf_equal<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(equal, bf_equal);
 
-async fn bf_value_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -150,7 +150,7 @@ async fn bf_value_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
 }
 bf_declare!(value_bytes, bf_value_bytes);
 
-async fn bf_value_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -160,7 +160,7 @@ async fn bf_value_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 }
 bf_declare!(value_hash, bf_value_hash);
 
-async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -173,20 +173,19 @@ async fn bf_length<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(length, bf_length);
 
-async fn bf_object_bytes<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
     let Variant::Obj(o) = bf_args.args[0].variant() else {
         return Err(E_INVARG);
     };
-    if !bf_args.world_state.valid(*o).await? {
+    if !bf_args.world_state.valid(*o)? {
         return Err(E_INVARG);
     };
     let size = bf_args
         .world_state
-        .object_bytes(bf_args.caller_perms(), *o)
-        .await?;
+        .object_bytes(bf_args.caller_perms(), *o)?;
     Ok(Ret(v_int(size as i64)))
 }
 bf_declare!(object_bytes, bf_object_bytes);

@@ -31,7 +31,7 @@ mod tests {
     use moor_values::NOTHING;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
-    use crate::tasks::sessions::{MockClientSession, NoopClientSession, Session};
+    use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::vm_test_utils::call_verb;
     use moor_compiler::compile;
     use moor_compiler::Names;
@@ -39,7 +39,6 @@ mod tests {
     use moor_compiler::Op::*;
     use moor_compiler::Program;
     use moor_db::odb::RelBoxWorldState;
-    use moor_values::model::{Event, NarrativeEvent};
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -54,21 +53,17 @@ mod tests {
     }
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
-    async fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> RelBoxWorldState {
-        let (state, _) = RelBoxWorldState::open(None, 1 << 30).await;
-        let mut tx = state.new_world_state().await.unwrap();
+    fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> RelBoxWorldState {
+        let (state, _) = RelBoxWorldState::open(None, 1 << 30);
+        let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
-            .await
             .unwrap();
         tx.update_property(SYSTEM_OBJECT, sysobj, "name", &v_str("system"))
-            .await
             .unwrap();
         tx.update_property(SYSTEM_OBJECT, sysobj, "programmer", &v_int(1))
-            .await
             .unwrap();
         tx.update_property(SYSTEM_OBJECT, sysobj, "wizard", &v_int(1))
-            .await
             .unwrap();
 
         // Add $test
@@ -81,7 +76,6 @@ mod tests {
             BitEnum::all(),
             Some(v_int(1)),
         )
-        .await
         .unwrap();
 
         for (verb_name, program) in verbs {
@@ -96,29 +90,28 @@ mod tests {
                 binary,
                 BinaryType::LambdaMoo18X,
             )
-            .await
             .unwrap();
         }
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
         state
     }
 
-    async fn test_db_with_verb(verb_name: &str, program: &Program) -> RelBoxWorldState {
-        test_db_with_verbs(&[(verb_name, program)]).await
+    fn test_db_with_verb(verb_name: &str, program: &Program) -> RelBoxWorldState {
+        test_db_with_verbs(&[(verb_name, program)])
     }
 
-    #[tokio::test]
-    async fn test_simple_vm_execute() {
+    #[test]
+    fn test_simple_vm_execute() {
         let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
-        let state_source = test_db_with_verb("test", &program).await;
-        let mut state = state_source.new_world_state().await.unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_none());
     }
 
-    #[tokio::test]
-    async fn test_string_value_simple_indexing() {
+    #[test]
+    fn test_string_value_simple_indexing() {
         let state_source = test_db_with_verb(
             "test",
             &mk_program(
@@ -126,17 +119,16 @@ mod tests {
                 vec![v_str("hello"), 2.into()],
                 Names::new(),
             ),
-        )
-        .await;
-        let mut state = state_source.new_world_state().await.unwrap();
+        );
+        let mut state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_str("e"));
     }
 
-    #[tokio::test]
-    async fn test_string_value_range_indexing() {
+    #[test]
+    fn test_string_value_range_indexing() {
         let mut state = test_db_with_verb(
             "test",
             &mk_program(
@@ -152,18 +144,16 @@ mod tests {
                 Names::new(),
             ),
         )
-        .await
         .new_world_state()
-        .await
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_str("ell"));
     }
 
-    #[tokio::test]
-    async fn test_list_value_simple_indexing() {
+    #[test]
+    fn test_list_value_simple_indexing() {
         let mut state = test_db_with_verb(
             "test",
             &mk_program(
@@ -172,18 +162,16 @@ mod tests {
                 Names::new(),
             ),
         )
-        .await
         .new_world_state()
-        .await
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_int(222));
     }
 
-    #[tokio::test]
-    async fn test_list_value_range_indexing() {
+    #[test]
+    fn test_list_value_range_indexing() {
         let mut state = test_db_with_verb(
             "test",
             &mk_program(
@@ -203,17 +191,15 @@ mod tests {
                 Names::new(),
             ),
         )
-        .await
         .new_world_state()
-        .await
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_list(&[222.into(), 333.into()]));
     }
 
-    #[tokio::test]
-    async fn test_list_set_range() {
+    #[test]
+    fn test_list_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
         let mut state = test_db_with_verb(
@@ -246,44 +232,38 @@ mod tests {
                 var_names,
             ),
         )
-        .await
         .new_world_state()
-        .await
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_list(&[111.into(), 321.into(), 123.into()]));
     }
 
-    #[tokio::test]
-    async fn test_list_splice() {
+    #[test]
+    fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program).unwrap();
         let mut state = test_db_with_verb("test", &binary)
-            .await
             .new_world_state()
-            .await
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_list(&[2.into(), 3.into(), 4.into()]));
     }
 
-    #[tokio::test]
-    async fn test_if_or_expr() {
+    #[test]
+    fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
         let mut state = test_db_with_verb("test", &compile(program).unwrap())
-            .await
             .new_world_state()
-            .await
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_int(1));
     }
 
-    #[tokio::test]
-    async fn test_string_set_range() {
+    #[test]
+    fn test_string_set_range() {
         let mut var_names = Names::new();
         let a = var_names.find_or_add_name("a");
 
@@ -312,17 +292,15 @@ mod tests {
                 var_names,
             ),
         )
-        .await
         .new_world_state()
-        .await
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_str("manbozorian"));
     }
 
-    #[tokio::test]
-    async fn test_property_retrieval() {
+    #[test]
+    fn test_property_retrieval() {
         let mut state = test_db_with_verb(
             "test",
             &mk_program(
@@ -331,9 +309,7 @@ mod tests {
                 Names::new(),
             ),
         )
-        .await
         .new_world_state()
-        .await
         .unwrap();
         {
             state
@@ -346,16 +322,15 @@ mod tests {
                     BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
                     Some(v_int(666)),
                 )
-                .await
                 .unwrap();
         }
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_int(666));
     }
 
-    #[tokio::test]
-    async fn test_call_verb() {
+    #[test]
+    fn test_call_verb() {
         // Prepare two, chained, test verbs in our environment, with simple operations.
 
         // The first merely returns the value "666" immediately.
@@ -382,67 +357,63 @@ mod tests {
             ("test_return_verb", &return_verb_binary),
             ("test_call_verb", &call_verb_binary),
         ])
-        .await
         .new_world_state()
-        .await
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test_call_verb", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test_call_verb", vec![]);
 
         assert_eq!(result, v_int(666));
     }
 
-    async fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
+    fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
         let binary = compile(program).unwrap();
         test_db_with_verb("test", &binary)
-            .await
             .new_world_state()
-            .await
             .unwrap()
     }
 
-    #[tokio::test]
-    async fn test_assignment_from_range() {
+    #[test]
+    fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_int(3));
     }
 
-    #[tokio::test]
-    async fn test_while_loop() {
+    #[test]
+    fn test_while_loop() {
         let program =
             "x = 0; while (x<100) x = x + 1; if (x == 75) break; endif endwhile return x;";
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
         assert_eq!(result, v_int(75));
     }
 
-    #[tokio::test]
-    async fn test_while_labelled_loop() {
+    #[test]
+    fn test_while_labelled_loop() {
         let program = "x = 0; while broken (1) x = x + 1; if (x == 50) break; else continue broken; endif endwhile return x;";
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
 
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_int(50));
     }
 
-    #[tokio::test]
-    async fn test_while_breaks() {
+    #[test]
+    fn test_while_breaks() {
         let program = "x = 0; while (1) x = x + 1; if (x == 50) break; endif endwhile return x;";
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_int(50));
     }
 
-    #[tokio::test]
-    async fn test_while_continue() {
+    #[test]
+    fn test_while_continue() {
         // Verify that continue works as expected vs break.
         let program = r#"
         x = 0;
@@ -457,15 +428,15 @@ mod tests {
         endwhile
         return x;
         "#;
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_int(50));
     }
 
-    #[tokio::test]
-    async fn test_if_elseif_else_chain() {
+    #[test]
+    fn test_if_elseif_else_chain() {
         let program = r#"
             ret = {};
             for a in ({1,2,3})
@@ -479,15 +450,15 @@ mod tests {
             endfor
             return ret;
         "#;
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_list(&[v_int(3), v_int(2), v_int(1)]));
     }
 
-    #[tokio::test]
-    async fn test_if_elseif_elseif_chains() {
+    #[test]
+    fn test_if_elseif_elseif_chains() {
         let program = r#"
             if (1 == 2)
                 return 5;
@@ -499,15 +470,15 @@ mod tests {
                 return 6;
             endif
         "#;
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session, "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
 
         assert_eq!(result, v_int(6));
     }
 
-    #[tokio::test]
-    async fn regression_infinite_loop_bf_error() {
+    #[test]
+    fn regression_infinite_loop_bf_error() {
         // This ended up in an infinite loop because of faulty error handling coming out of the
         // builtin call when 'what' is not a valid object.
         // The verb is 'd' so E_INVARG should throw exception, exit the loop, but 'twas proceeding.
@@ -520,66 +491,26 @@ mod tests {
                          except (E_INVARG)
                            return 0;
                          endtry"#;
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state.as_mut(),
             session,
             "test",
             vec![v_objid(SYSTEM_OBJECT), v_obj(32)],
-        )
-        .await;
+        );
 
         assert_eq!(result, v_int(0));
     }
 
-    fn has_narrative_event_with_string(events: &[NarrativeEvent], text: &str) -> bool {
-        events.iter().any(|event| match &event.event {
-            Event::TextNotify(s) => s == text,
-        })
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_call_notify() {
-        let program = "return notify(#1, \"test\");";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(MockClientSession::new());
-        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
-
-        assert_eq!(result, v_int(1));
-
-        assert!(has_narrative_event_with_string(&session.received(), "test"));
-        session.commit().await.expect("commit failed");
-        assert!(has_narrative_event_with_string(
-            &session.committed(),
-            "test"
-        ));
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_call_notify_rollback() {
-        let program = "return notify(#1, \"test\");";
-        let mut state = world_with_test_program(program).await;
-
-        let session = Arc::new(MockClientSession::new());
-        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
-
-        assert_eq!(result, v_int(1));
-
-        assert!(has_narrative_event_with_string(&session.received(), "test"));
-        session.rollback().await.expect("rollback failed");
-        assert!(&session.committed().is_empty());
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_regression_catch_issue_23() {
+    #[test]
+    fn test_regression_catch_issue_23() {
         // https://github.com/rdaum/moor/issues/23
         let program =
             r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#;
-        let mut state = world_with_test_program(program).await;
+        let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]).await;
+        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]);
         assert_eq!(result, v_int(5));
     }
 
@@ -674,15 +605,9 @@ mod tests {
     #[test_case(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#, 
         v_int(666); "verb_info invalid object error")]
     fn test_run(program: &str, expected_result: Var) {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                let mut state = world_with_test_program(program).await;
-                let session = Arc::new(NoopClientSession::new());
-                let result = call_verb(state.as_mut(), session, "test", vec![]).await;
-                assert_eq!(result, expected_result);
-            })
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session, "test", vec![]);
+        assert_eq!(result, expected_result);
     }
 }

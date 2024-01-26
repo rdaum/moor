@@ -60,9 +60,9 @@ impl DatabaseBuilder {
 
     /// Returns a new database instance. The second value in the result tuple is true if the
     /// database was newly created, and false if it was already present.
-    pub async fn open_db(&self) -> Result<(Arc<dyn Database + Send + Sync>, bool), String> {
+    pub fn open_db(&self) -> Result<(Arc<dyn Database + Send + Sync>, bool), String> {
         let (db, fresh) =
-            RelBoxWorldState::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40)).await;
+            RelBoxWorldState::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40));
         Ok((Arc::new(db), fresh))
     }
 }

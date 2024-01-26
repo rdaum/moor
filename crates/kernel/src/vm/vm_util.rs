@@ -24,7 +24,7 @@ use crate::vm::VM;
 
 impl VM {
     /// VM-level property resolution.
-    pub(crate) async fn resolve_property(
+    pub(crate) fn resolve_property(
         &self,
         perms: Objid,
         world_state: &mut dyn WorldState,
@@ -39,9 +39,7 @@ impl VM {
             return Err(E_INVIND);
         };
 
-        let result = world_state
-            .retrieve_property(perms, *obj, propname.as_str())
-            .await;
+        let result = world_state.retrieve_property(perms, *obj, propname.as_str());
         let v = match result {
             Ok(v) => v,
             Err(e) => {
@@ -53,7 +51,7 @@ impl VM {
     }
 
     /// VM-level property assignment
-    pub(crate) async fn set_property(
+    pub(crate) fn set_property(
         &self,
         perms: Objid,
         world_state: &mut dyn WorldState,
@@ -68,9 +66,7 @@ impl VM {
             }
         };
 
-        let update_result = world_state
-            .update_property(perms, *obj, propname.as_str(), &value)
-            .await;
+        let update_result = world_state.update_property(perms, *obj, propname.as_str(), &value);
 
         match update_result {
             Ok(()) => Ok(value),

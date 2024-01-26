@@ -36,16 +36,14 @@ fn testsuite_dir() -> PathBuf {
 }
 
 /// Create a minimal Db to support the test harness.
-async fn load_textdump(db: Arc<dyn Database>) {
+fn load_textdump(db: Arc<dyn Database>) {
     let tx = db.loader_client().unwrap();
-    textdump_load(tx.clone(), testsuite_dir().join("Minimal.db"))
-        .await
-        .expect("Could not load textdump");
-    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+    textdump_load(tx.clone(), testsuite_dir().join("Minimal.db")).expect("Could not load textdump");
+    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-async fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
-    let mut tx = db.new_world_state().await.unwrap();
+fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
+    let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec();
         tx.add_verb(
@@ -58,46 +56,38 @@ async fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]
             binary,
             BinaryType::LambdaMoo18X,
         )
-        .await
         .unwrap();
 
         // Verify it was added.
-        let verb = tx
-            .get_verb(Objid(3), SYSTEM_OBJECT, verb_name)
-            .await
-            .unwrap();
+        let verb = tx.get_verb(Objid(3), SYSTEM_OBJECT, verb_name).unwrap();
         assert!(verb.matches_name(verb_name));
     }
-    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
     // And then verify that again in a new transaction.
-    let mut tx = db.new_world_state().await.unwrap();
+    let mut tx = db.new_world_state().unwrap();
     for (verb_name, _) in verbs {
-        let verb = tx
-            .get_verb(Objid(3), SYSTEM_OBJECT, verb_name)
-            .await
-            .unwrap();
+        let verb = tx.get_verb(Objid(3), SYSTEM_OBJECT, verb_name).unwrap();
         assert!(verb.matches_name(verb_name));
     }
-    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-async fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> Var {
+fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> Var {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
-    compile_verbs(db.clone(), &[("test", &binary)]).await;
-    let mut state = db.new_world_state().await.unwrap();
+    compile_verbs(db.clone(), &[("test", &binary)]);
+    let mut state = db.new_world_state().unwrap();
     let result = call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
         "test",
         vec![],
-    )
-    .await;
-    state.commit().await.unwrap();
+    );
+    state.commit().unwrap();
     result
 }
 
-async fn run_basic_test(test_dir: &str) {
+fn run_basic_test(test_dir: &str) {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let basic_arith_dir = Path::new(manifest_dir)
         .join("testsuite")
@@ -120,43 +110,43 @@ async fn run_basic_test(test_dir: &str) {
 
     // Frustratingly the individual test lines are not independent, so we need to run them in a
     // single database.
-    let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
+    let (db, _) = RelBoxWorldState::open(None, 1 << 30);
     let db = Arc::new(db);
-    load_textdump(db.clone()).await;
+    load_textdump(db.clone());
     for (line_num, (input, expected_output)) in zipped.enumerate() {
-        let evaluated = eval(db.clone(), input).await;
-        let output = eval(db.clone(), expected_output).await;
+        let evaluated = eval(db.clone(), input);
+        let output = eval(db.clone(), expected_output);
         assert_eq!(evaluated, output, "{test_dir}: line {line_num}: {input}")
     }
 }
 
 fn main() {}
-#[tokio::test]
-async fn basic_arithmetic() {
-    run_basic_test("arithmetic").await;
+#[test]
+fn basic_arithmetic() {
+    run_basic_test("arithmetic");
 }
 
-#[tokio::test]
-async fn basic_value() {
-    run_basic_test("value").await;
+#[test]
+fn basic_value() {
+    run_basic_test("value");
 }
 
-#[tokio::test]
-async fn basic_string() {
-    run_basic_test("string").await;
+#[test]
+fn basic_string() {
+    run_basic_test("string");
 }
 
-#[tokio::test]
-async fn basic_list() {
-    run_basic_test("list").await;
+#[test]
+fn basic_list() {
+    run_basic_test("list");
 }
 
-#[tokio::test]
-async fn basic_property() {
-    run_basic_test("property").await;
+#[test]
+fn basic_property() {
+    run_basic_test("property");
 }
 
-#[tokio::test]
-async fn basic_object() {
-    run_basic_test("object").await;
+#[test]
+fn basic_object() {
+    run_basic_test("object");
 }

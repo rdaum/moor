@@ -13,6 +13,7 @@
 //
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::builder::ValueHint;
 use clap::Parser;
@@ -196,7 +197,7 @@ async fn main() {
 
     info!("Daemon starting...");
     let db_source_builder = DatabaseBuilder::new().with_path(args.db.clone());
-    let (db_source, freshly_made) = db_source_builder.open_db().await.unwrap();
+    let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
     info!(path = ?args.db, "Opened database");
 
     // If the database already existed, do not try to import the textdump...
@@ -210,14 +211,11 @@ async fn main() {
                 .clone()
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(loader_interface.clone(), textdump)
-                .await
-                .unwrap();
+            textdump_load(loader_interface.clone(), textdump).unwrap();
             let duration = start.elapsed();
             info!("Loaded textdump in {:?}", duration);
             loader_interface
                 .commit()
-                .await
                 .expect("Failure to commit loaded database...");
         }
     }
@@ -239,7 +237,7 @@ async fn main() {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(db_source, config);
+    let scheduler = Arc::new(Scheduler::new(db_source, config));
 
     // The scheduler thread:
     let loop_scheduler = scheduler.clone();

@@ -15,9 +15,10 @@
 use std::hash::Hash;
 use std::sync::Arc;
 
+use moor_values::util::ByteSource;
+
 use crate::rdb::paging::TupleBox;
 use crate::rdb::tuples::TupleId;
-use moor_values::util::ByteSource;
 
 /// A reference to a tuple in a TupleBox, managed by the TupleBox itself. TupleRefs are given a pointer to these,
 /// which allows the TupleBox to manage the lifetime of the tuple, swizzling it in and out of memory as needed.

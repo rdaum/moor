@@ -20,7 +20,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use tokio::runtime::Runtime;
 
 use moor_compiler::compile;
 use moor_db::odb::RelBoxWorldState;
@@ -36,25 +35,24 @@ use moor_values::util::BitEnum;
 use moor_values::var::Var;
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
-async fn create_worldstate() -> RelBoxWorldState {
-    let (ws_source, _) = RelBoxWorldState::open(None, 1 << 24).await;
-    let mut tx = ws_source.new_world_state().await.unwrap();
+fn create_worldstate() -> RelBoxWorldState {
+    let (ws_source, _) = RelBoxWorldState::open(None, 1 << 24);
+    let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
         .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
-        .await
         .unwrap();
-    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     ws_source
 }
 
-pub async fn prepare_call_verb(
+pub fn prepare_call_verb(
     world_state: &mut dyn WorldState,
     session: Arc<dyn Session>,
     verb_name: &str,
     args: Vec<Var>,
     max_ticks: usize,
 ) -> VmHost {
-    let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (scs_tx, _scs_rx) = kanal::unbounded();
     let mut vm_host = VmHost::new(
         0,
         20,
@@ -66,34 +64,31 @@ pub async fn prepare_call_verb(
 
     let vi = world_state
         .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
-        .await
         .unwrap();
-    vm_host
-        .start_call_method_verb(
-            0,
-            SYSTEM_OBJECT,
-            vi,
-            VerbCall {
-                verb_name: verb_name.to_string(),
-                location: SYSTEM_OBJECT,
-                this: SYSTEM_OBJECT,
-                player: SYSTEM_OBJECT,
-                args,
-                argstr: "".to_string(),
-                caller: SYSTEM_OBJECT,
-            },
-        )
-        .await;
+    vm_host.start_call_method_verb(
+        0,
+        SYSTEM_OBJECT,
+        vi,
+        VerbCall {
+            verb_name: verb_name.to_string(),
+            location: SYSTEM_OBJECT,
+            this: SYSTEM_OBJECT,
+            player: SYSTEM_OBJECT,
+            args,
+            argstr: "".to_string(),
+            caller: SYSTEM_OBJECT,
+        },
+    );
     vm_host
 }
 
-async fn prepare_vm_execution(
+fn prepare_vm_execution(
     ws_source: &mut RelBoxWorldState,
     program: &str,
     max_ticks: usize,
 ) -> VmHost {
     let binary = compile(program).unwrap();
-    let mut tx = ws_source.new_world_state().await.unwrap();
+    let mut tx = ws_source.new_world_state().unwrap();
     tx.add_verb(
         SYSTEM_OBJECT,
         SYSTEM_OBJECT,
@@ -104,22 +99,21 @@ async fn prepare_vm_execution(
         binary.make_copy_as_vec(),
         BinaryType::LambdaMoo18X,
     )
-    .await
     .unwrap();
     let session = Arc::new(NoopClientSession::new());
-    let vm_host = prepare_call_verb(tx.as_mut(), session, "test", vec![], max_ticks).await;
-    assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+    let vm_host = prepare_call_verb(tx.as_mut(), session, "test", vec![], max_ticks);
+    assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     vm_host
 }
 
 /// Run the vm host until it runs out of ticks
-async fn execute(world_state: &mut dyn WorldState, vm_host: &mut VmHost) -> bool {
+fn execute(world_state: &mut dyn WorldState, vm_host: &mut VmHost) -> bool {
     vm_host.reset_ticks();
     vm_host.reset_time();
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        match vm_host.exec_interpreter(0, world_state).await {
+        match vm_host.exec_interpreter(0, world_state) {
             VMHostResponse::ContinueOk => {
                 continue;
             }
@@ -151,27 +145,25 @@ async fn execute(world_state: &mut dyn WorldState, vm_host: &mut VmHost) -> bool
     }
 }
 
-async fn do_program(program: &str, max_ticks: usize, iters: u64) -> Duration {
+fn do_program(program: &str, max_ticks: usize, iters: u64) -> Duration {
     let mut cumulative = Duration::new(0, 0);
 
-    let mut state_source = create_worldstate().await;
-    let mut vm_host = prepare_vm_execution(&mut state_source, program, max_ticks).await;
-    let mut tx = state_source.new_world_state().await.unwrap();
+    let mut state_source = create_worldstate();
+    let mut vm_host = prepare_vm_execution(&mut state_source, program, max_ticks);
+    let mut tx = state_source.new_world_state().unwrap();
     for _ in 0..iters {
         let start = std::time::Instant::now();
-        let _ = execute(tx.as_mut(), &mut vm_host).await;
+        let _ = execute(tx.as_mut(), &mut vm_host);
         let end = std::time::Instant::now();
         cumulative += end - start;
     }
-    tx.rollback().await.unwrap();
+    tx.rollback().unwrap();
 
     drop(state_source);
     cumulative
 }
 
 fn opcode_throughput(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-
     let mut group = c.benchmark_group("opcode_throughput");
     group.sample_size(300);
     group.measurement_time(Duration::from_secs(10));
@@ -179,15 +171,13 @@ fn opcode_throughput(c: &mut Criterion) {
     let num_ticks = 300000;
     group.throughput(criterion::Throughput::Elements(num_ticks as u64));
     group.bench_function("while_loop", |b| {
-        b.to_async(&rt)
-            .iter_custom(|iters| do_program("while (1) endwhile", num_ticks, iters));
+        b.iter_custom(|iters| do_program("while (1) endwhile", num_ticks, iters));
     });
     group.bench_function("while_increment_var_loop", |b| {
-        b.to_async(&rt)
-            .iter_custom(|iters| do_program("i = 0; while(1) i=i+1; endwhile", num_ticks, iters));
+        b.iter_custom(|iters| do_program("i = 0; while(1) i=i+1; endwhile", num_ticks, iters));
     });
     group.bench_function("for_in_range_loop", |b| {
-        b.to_async(&rt).iter_custom(|iters| {
+        b.iter_custom(|iters| {
             do_program(
                 "while(1) for i in [1..1000000] endfor endwhile",
                 num_ticks,
@@ -197,7 +187,7 @@ fn opcode_throughput(c: &mut Criterion) {
     });
     // Measure range iteration over a static list
     group.bench_function("for_in_static_list_loop", |b| {
-        b.to_async(&rt).iter_custom(|iters| {
+        b.iter_custom(|iters| {
             do_program(
                 r#"while(1)
                             for i in ({1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10})
@@ -210,7 +200,7 @@ fn opcode_throughput(c: &mut Criterion) {
     });
     // Measure how costly it is to append to a list
     group.bench_function("list_append_loop", |b| {
-        b.to_async(&rt).iter_custom(|iters| {
+        b.iter_custom(|iters| {
             do_program(
                 r#"while(1)
                             base_list = {};
@@ -225,7 +215,7 @@ fn opcode_throughput(c: &mut Criterion) {
     });
     // Measure how costly it is to append to a list
     group.bench_function("list_set", |b| {
-        b.to_async(&rt).iter_custom(|iters| {
+        b.iter_custom(|iters| {
             do_program(
                 r#"while(1) 
                             list = {1};

@@ -59,18 +59,18 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
 
 /// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
 /// exists in the transaction.
-pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) -> Textdump {
+pub fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) -> Textdump {
     // To create the objects list, we need to scan all objects.
     // For now, the expectation would be we can simply iterate from 0 to max object, checking validity of each
     // object, and then adding it to the list.
 
     // Find all the ids
-    let object_ids = tx.get_objects().await.expect("Failed to get objects");
+    let object_ids = tx.get_objects().expect("Failed to get objects");
 
     // Retrieve all the objects
     let mut db_objects = BTreeMap::new();
     for id in object_ids.iter() {
-        db_objects.insert(id, tx.get_object(id).await.expect("Failed to get object"));
+        db_objects.insert(id, tx.get_object(id).expect("Failed to get object"));
     }
 
     // Build a map of parent -> children
@@ -154,10 +154,7 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
         };
 
         // Find the verbdefs and transform them into textdump verbdefs
-        let db_verbdefs = tx
-            .get_object_verbs(*db_objid)
-            .await
-            .expect("Failed to get verbs");
+        let db_verbdefs = tx.get_object_verbs(*db_objid).expect("Failed to get verbs");
         let verbdefs = db_verbdefs
             .iter()
             .map(|db_verbdef| {
@@ -181,7 +178,6 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
 
             let binary = tx
                 .get_verb_binary(*db_objid, verb.uuid())
-                .await
                 .expect("Failed to get verb binary");
 
             let program = Program::from_sliceref(SliceRef::from_vec(binary));
@@ -205,7 +201,7 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
             );
         }
 
-        // let db_propdefs = tx.get_object_properties(*db_objid).await.unwrap();
+        // let db_propdefs = tx.get_object_properties(*db_objid).unwrap();
         // let propdefs: Vec<_> = db_propdefs
         //     .iter()
         //     .filter(|p| p.definer() == *db_objid && p.location() == *db_objid)
@@ -215,7 +211,7 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
         // propvals have wonky logic which resolve relative to position in the inheritance hierarchy of
         // propdefs up to the root. So we grab that all from the loader_client, and then we can just
         // iterate through them all.
-        let properties = tx.get_all_property_values(*db_objid).await.unwrap();
+        let properties = tx.get_all_property_values(*db_objid).unwrap();
 
         let mut propdefs = vec![];
         for (p, _) in &properties {
@@ -260,7 +256,6 @@ pub async fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) 
 
     let users = tx
         .get_players()
-        .await
         .expect("Failed to get players list")
         .iter()
         .collect();

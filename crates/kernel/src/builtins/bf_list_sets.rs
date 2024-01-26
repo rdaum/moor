@@ -30,7 +30,7 @@ use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
 use crate::vm::vm_execute::one_to_zero_index;
 use crate::vm::VM;
 
-async fn bf_is_member<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -46,7 +46,7 @@ async fn bf_is_member<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
 }
 bf_declare!(is_member, bf_is_member);
 
-async fn bf_listinsert<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(E_INVARG);
     }
@@ -73,7 +73,7 @@ async fn bf_listinsert<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 }
 bf_declare!(listinsert, bf_listinsert);
 
-async fn bf_listappend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(E_INVARG);
     }
@@ -95,7 +95,7 @@ async fn bf_listappend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 }
 bf_declare!(listappend, bf_listappend);
 
-async fn bf_listdelete<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -112,7 +112,7 @@ async fn bf_listdelete<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 }
 bf_declare!(listdelete, bf_listdelete);
 
-async fn bf_listset<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
         return Err(E_INVARG);
     }
@@ -130,7 +130,7 @@ async fn bf_listset<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(listset, bf_listset);
 
-async fn bf_setadd<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -146,7 +146,7 @@ async fn bf_setadd<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(setadd, bf_setadd);
 
-async fn bf_setremove<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -328,12 +328,12 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Er
         bf_args.args[0].clone(),
     ])))
 }
-async fn bf_match<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     do_re_match(bf_args, false)
 }
 bf_declare!(match, bf_match);
 
-async fn bf_rmatch<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     do_re_match(bf_args, true)
 }
 bf_declare!(rmatch, bf_rmatch);
@@ -402,7 +402,7 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
     Ok(result)
 }
 
-async fn bf_substitute<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }

@@ -21,7 +21,6 @@ use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
 use metrics_macros::increment_counter;
-use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
 use moor_values::model::ObjFlag;
@@ -40,7 +39,7 @@ use crate::vm::{ExecutionResult, VM};
 use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 
-async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     increment_counter!("vm.bf_noop.calls");
     // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
     // instead. right now it just panics so we can find all the places that need to be updated.
@@ -48,7 +47,7 @@ async fn bf_noop<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(noop, bf_noop);
 
-async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -64,25 +63,29 @@ async fn bf_notify<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_obj_owner_perms(*player)
         .map_err(world_state_err)?;
 
     let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
-    if let Err(send_error) = bf_args.session.send_event(*player, event).await {
-        warn!(
-            "Unable to send message to player: #{}: {}",
-            player.0, send_error
-        );
-    }
+
+    bf_args
+        .scheduler_sender
+        .send((
+            bf_args.exec_state.task_id,
+            SchedulerControlMsg::Notify {
+                player: *player,
+                event,
+            },
+        ))
+        .expect("scheduler is not listening");
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
 }
 bf_declare!(notify, bf_notify);
 
-async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -91,7 +94,6 @@ async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
         bf_args
             .session
             .connected_players()
-            .await
             .unwrap()
             .iter()
             .map(|p| v_objid(*p))
@@ -100,7 +102,7 @@ async fn bf_connected_players<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet
 }
 bf_declare!(connected_players, bf_connected_players);
 
-async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -109,7 +111,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
         return Err(E_TYPE);
     };
 
-    let is_player = match bf_args.world_state.flags_of(*player).await {
+    let is_player = match bf_args.world_state.flags_of(*player) {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(WorldStateError::ObjectNotFound(_)) => return Err(E_INVARG),
         Err(e) => return Err(e.into()),
@@ -118,7 +120,7 @@ async fn bf_is_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
 }
 bf_declare!(is_player, bf_is_player);
 
-async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -127,7 +129,7 @@ async fn bf_caller_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
-async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -136,7 +138,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
     };
 
     // If the caller is not a wizard, perms_for must be the caller
-    let perms = bf_args.task_perms().await.map_err(world_state_err)?;
+    let perms = bf_args.task_perms().map_err(world_state_err)?;
     if !perms.check_is_wizard().map_err(world_state_err)? && perms_for != perms.who {
         return Err(E_PERM);
     }
@@ -146,7 +148,7 @@ async fn bf_set_task_perms<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
 }
 bf_declare!(set_task_perms, bf_set_task_perms);
 
-async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -178,7 +180,7 @@ async fn bf_callers<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(callers, bf_callers);
 
-async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -187,14 +189,14 @@ async fn bf_task_id<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(task_id, bf_task_id);
 
-async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    let Ok(idle_seconds) = bf_args.session.idle_seconds(*who).await else {
+    let Ok(idle_seconds) = bf_args.session.idle_seconds(*who) else {
         return Err(E_INVARG);
     };
 
@@ -202,14 +204,14 @@ async fn bf_idle_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
 }
 bf_declare!(idle_seconds, bf_idle_seconds);
 
-async fn bf_connected_seconds<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
     };
-    let Ok(connected_seconds) = bf_args.session.connected_seconds(*who).await else {
+    let Ok(connected_seconds) = bf_args.session.connected_seconds(*who) else {
         return Err(E_INVARG);
     };
 
@@ -224,7 +226,7 @@ Returns a network-specific string identifying the connection being used by the g
 <player>, then `E_PERM' is raised.  If <player> is not currently connected, then `E_INVARG' is raised.
 
  */
-async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -236,7 +238,6 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
     let caller = bf_args.caller_perms();
     if !bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_is_wizard()
         .map_err(world_state_err)?
@@ -245,7 +246,7 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
         return Err(E_PERM);
     }
 
-    let Ok(connection_name) = bf_args.session.connection_name(*player).await else {
+    let Ok(connection_name) = bf_args.session.connection_name(*player) else {
         return Err(E_INVARG);
     };
 
@@ -253,7 +254,7 @@ async fn bf_connection_name<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, 
 }
 bf_declare!(connection_name, bf_connection_name);
 
-async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
         return Err(E_INVARG);
     }
@@ -268,21 +269,22 @@ async fn bf_shutdown<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> 
 
     bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_wizard()
         .map_err(world_state_err)?;
     bf_args
-        .session
-        .shutdown(msg)
-        .await
-        .expect("session shutdown failed");
+        .scheduler_sender
+        .send((
+            bf_args.exec_state.task_id,
+            SchedulerControlMsg::Shutdown(msg),
+        ))
+        .expect("scheduler is not listening");
 
     Ok(Ret(v_none()))
 }
 bf_declare!(shutdown, bf_shutdown);
 
-async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -295,7 +297,7 @@ async fn bf_time<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(time, bf_time);
 
-async fn bf_ctime<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
         return Err(E_INVARG);
     }
@@ -326,7 +328,7 @@ async fn bf_ctime<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
     Ok(Ret(v_string(datetime_str.to_string())))
 }
 bf_declare!(ctime, bf_ctime);
-async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
     //
     // Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.  <Message>, which defaults to the value of `tostr(<code>)',
@@ -346,7 +348,7 @@ async fn bf_raise<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(raise, bf_raise);
 
-async fn bf_server_version<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -357,7 +359,7 @@ async fn bf_server_version<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, E
 }
 bf_declare!(server_version, bf_server_version);
 
-async fn bf_suspend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  suspend(<seconds>)   => none
     //
     // Suspends the current task for <seconds> seconds.  If <seconds> is not specified, the task is suspended indefinitely.  The task may be resumed early by
@@ -379,7 +381,7 @@ async fn bf_suspend<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(suspend, bf_suspend);
 
-async fn bf_read<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
         return Err(E_INVARG);
     }
@@ -407,13 +409,13 @@ async fn bf_read<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(read, bf_read);
 
-async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
-    let (send, receive) = oneshot::channel();
+    let (send, receive) = kanal::oneshot();
     debug!("sending DescribeOtherTasks to scheduler");
     bf_args
         .scheduler_sender
@@ -422,7 +424,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
             SchedulerControlMsg::DescribeOtherTasks(send),
         ))
         .expect("scheduler is not listening");
-    let tasks = receive.await.expect("scheduler is not listening");
+    let tasks = receive.recv().expect("scheduler is not listening");
 
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
@@ -455,7 +457,7 @@ async fn bf_queued_tasks<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
 
-async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  kill_task(<task-id>)   => none
     //
     // Kills the task with the given <task-id>.  The task must be queued or suspended, and the current task must be the owner of the task being killed.
@@ -476,20 +478,20 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
     }
 
-    let (send, receive) = oneshot::channel();
+    let (send, receive) = kanal::oneshot();
     bf_args
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
             SchedulerControlMsg::KillTask {
                 victim_task_id,
-                sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
+                sender_permissions: bf_args.task_perms().map_err(world_state_err)?,
                 result_sender: send,
             },
         ))
         .expect("scheduler is not listening");
 
-    let result = receive.await.expect("scheduler is not listening");
+    let result = receive.recv().expect("scheduler is not listening");
     if let Variant::Err(err) = result.variant() {
         return Err(*err);
     }
@@ -497,7 +499,7 @@ async fn bf_kill_task<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
 }
 bf_declare!(kill_task, bf_kill_task);
 
-async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 {
         return Err(E_INVARG);
     }
@@ -520,21 +522,21 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    let (send, receive) = oneshot::channel();
+    let (send, receive) = kanal::oneshot();
     bf_args
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
             SchedulerControlMsg::ResumeTask {
                 queued_task_id: task_id,
-                sender_permissions: bf_args.task_perms().await.map_err(world_state_err)?,
+                sender_permissions: bf_args.task_perms().map_err(world_state_err)?,
                 return_value,
                 result_sender: send,
             },
         ))
         .expect("scheduler is not listening");
 
-    let result = receive.await.expect("scheduler is not listening");
+    let result = receive.recv().expect("scheduler is not listening");
     if let Variant::Err(err) = result.variant() {
         return Err(*err);
     }
@@ -542,7 +544,7 @@ async fn bf_resume<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(resume, bf_resume);
 
-async fn bf_ticks_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  ticks_left()   => int
     //
     // Returns the number of ticks left in the current time slice.
@@ -556,7 +558,7 @@ async fn bf_ticks_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 }
 bf_declare!(ticks_left, bf_ticks_left);
 
-async fn bf_seconds_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  seconds_left()   => int
     //
     // Returns the number of seconds left in the current time slice.
@@ -573,7 +575,7 @@ async fn bf_seconds_left<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
 }
 bf_declare!(seconds_left, bf_seconds_left);
 
-async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  boot_player(<player>)   => none
     //
     // Disconnects the player with the given object number.
@@ -585,7 +587,7 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
         return Err(E_TYPE);
     };
 
-    let task_perms = bf_args.task_perms().await.map_err(world_state_err)?;
+    let task_perms = bf_args.task_perms().map_err(world_state_err)?;
     if task_perms.who != *player && !task_perms.check_is_wizard().map_err(world_state_err)? {
         return Err(E_PERM);
     }
@@ -605,7 +607,7 @@ async fn bf_boot_player<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
 }
 bf_declare!(boot_player, bf_boot_player);
 
-async fn bf_call_function<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  call_function(<func>, <arg1>, <arg2>, ...)   => value
     //
     // Calls the given function with the given arguments and returns the result.
@@ -643,7 +645,7 @@ The text in <message> is sent to the server log with a distinctive prefix (so th
 is not a wizard, then `E_PERM' is raised.  If <is-error> is provided and true, then <message> is marked in the server log as an error.
 
 */
-async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(E_INVARG);
     }
@@ -663,7 +665,6 @@ async fn bf_server_log<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error
 
     if !bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_is_wizard()
         .map_err(world_state_err)?
@@ -716,7 +717,7 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
     ])
 }
 
-async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
         return Err(E_INVARG);
     }
@@ -744,7 +745,7 @@ async fn bf_function_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 }
 bf_declare!(function_info, bf_function_info);
 
-async fn bf_listeners<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -761,7 +762,7 @@ bf_declare!(listeners, bf_listeners);
 pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
-async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -803,10 +804,9 @@ async fn bf_eval<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(eval, bf_eval);
 
-async fn bf_dump_database<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_wizard()
         .map_err(world_state_err)?;
@@ -820,7 +820,7 @@ async fn bf_dump_database<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 }
 bf_declare!(dump_database, bf_dump_database);
 
-async fn bf_memory_usage<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
@@ -828,7 +828,6 @@ async fn bf_memory_usage<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
     // Must be wizard.
     bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_wizard()
         .map_err(world_state_err)?;
@@ -875,7 +874,7 @@ async fn bf_memory_usage<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Err
 }
 bf_declare!(memory_usage, bf_memory_usage);
 
-async fn db_disk_size<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Syntax:  db_disk_size()   => int
     //
     // Returns the number of bytes currently occupied by the database on disk.
@@ -886,16 +885,11 @@ async fn db_disk_size<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     // Must be wizard.
     bf_args
         .task_perms()
-        .await
         .map_err(world_state_err)?
         .check_wizard()
         .map_err(world_state_err)?;
 
-    let disk_size = bf_args
-        .world_state
-        .db_usage()
-        .await
-        .map_err(world_state_err)?;
+    let disk_size = bf_args.world_state.db_usage().map_err(world_state_err)?;
 
     Ok(Ret(v_int(disk_size as i64)))
 }

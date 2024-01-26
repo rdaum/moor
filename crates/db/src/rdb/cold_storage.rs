@@ -17,16 +17,13 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use binary_layout::{define_layout, Field, LayoutAs};
 use human_bytes::human_bytes;
+use kanal::Receiver;
 use okaywal::{Entry, EntryId, LogManager, SegmentReader, WriteAheadLog};
 use strum::FromRepr;
-use tokio::io::AsyncReadExt;
-use tokio::select;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio_eventfd::EventFd;
 use tracing::{debug, error, info, warn};
 
 use crate::rdb::backing::{BackingStoreClient, WriterMessage};
@@ -59,16 +56,14 @@ define_layout!(sequence, LittleEndian, {
 const SEQUENCE_PAGE_ID: PageId = 0xfafe_babf;
 
 impl ColdStorage {
-    pub async fn start(
+    pub fn start(
         path: PathBuf,
         _schema: &[RelationInfo],
         relations: &mut [BaseRelation],
         sequences: &mut Vec<u64>,
         tuple_box: Arc<TupleBox>,
     ) -> BackingStoreClient {
-        let eventfd = EventFd::new(0, false).unwrap();
-
-        let page_storage = Arc::new(Mutex::new(PageStore::new(path.join("pages"), &eventfd)));
+        let page_storage = PageStore::new(path.join("pages"));
         let wal_manager = WalManager {
             page_storage: page_storage.clone(),
         };
@@ -83,11 +78,10 @@ impl ColdStorage {
         };
 
         // Grab page storage and wait for all the writes to complete.
-        let mut ps = page_storage.lock().unwrap();
-        ps.wait_complete();
+        page_storage.wait_complete();
 
         // Get the sequence page, and load the sequences from it, if any.
-        if let Ok(Some(sequence_page)) = ps.read_sequence_page() {
+        if let Ok(Some(sequence_page)) = page_storage.read_sequence_page() {
             let sequence_page = sequence_page::View::new(&sequence_page[..]);
             let num_sequences = sequence_page.num_sequences().read();
             assert_eq!(num_sequences, sequences.len() as u64,
@@ -104,14 +98,15 @@ impl ColdStorage {
         }
 
         // Recover all the pages from cold storage and re-index all the tuples in them.
-        let ids = ps.list_pages();
+        let ids = page_storage.list_pages();
         let mut restored_slots = HashMap::new();
         let mut restored_bytes = 0;
         for (page_size, page_num, relation_id) in ids {
             let tuple_ids = tuple_box
                 .clone()
                 .load_page(relation_id, page_num, |buf| {
-                    ps.read_page_buf(page_num, relation_id, buf)
+                    page_storage
+                        .read_page_buf(page_num, relation_id, buf)
                         .expect("Unable to read page")
                 })
                 .expect("Unable to get page");
@@ -142,59 +137,50 @@ impl ColdStorage {
         );
 
         // Start the listen loop
-        let (writer_send, writer_receive) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(Self::listen_loop(
-            writer_receive,
-            wal,
-            tuple_box.clone(),
-            page_storage.clone(),
-            eventfd,
-        ));
+        let (writer_send, writer_receive) = kanal::unbounded();
+        let ps = page_storage.clone();
+        std::thread::Builder::new()
+            .name("moor-coldstorage-listen".to_string())
+            .spawn(move || Self::listen_loop(writer_receive, wal, tuple_box.clone(), ps))
+            .expect("Unable to spawn coldstorage listen thread");
 
         // And return the client to it.
         BackingStoreClient::new(writer_send)
     }
 
-    async fn listen_loop(
-        mut writer_receive: UnboundedReceiver<WriterMessage>,
+    fn listen_loop(
+        writer_receive: Receiver<WriterMessage>,
         wal: WriteAheadLog,
         tuple_box: Arc<TupleBox>,
-        ps: Arc<Mutex<PageStore>>,
-        mut event_fd: EventFd,
+        ps: Arc<PageStore>,
     ) {
-        let mut buf = [0; 8];
+        ps.clone().start();
         loop {
-            select! {
-                writer_message = writer_receive.recv() => {
-                    match writer_message {
-                        Some(WriterMessage::Commit(ts, ws, sequences)) => {
-                            Self::perform_writes(wal.clone(), tuple_box.clone(), ts, ws, sequences).await;
-                        }
-                        Some(WriterMessage::Shutdown) => {
-                            // Flush the WAL
-                            wal.shutdown().expect("Unable to flush WAL");
+            match writer_receive.recv() {
+                Ok(WriterMessage::Commit(ts, ws, sequences)) => {
+                    Self::perform_writes(wal.clone(), tuple_box.clone(), ts, ws, sequences);
+                }
+                Ok(WriterMessage::Shutdown) => {
+                    // Flush the WAL
+                    wal.shutdown().expect("Unable to flush WAL");
 
-                            info!("Shutting down WAL writer thread");
-                            return;
-                        }
-                        None => {
-                            error!("Writer thread channel closed, shutting down");
-                            return;
-                        }
-                    }
-                },
-                // When the eventfd is triggered by the page store, we need to ask it to process
-                // completions.
-                _ = event_fd.read(&mut buf) => {
-                    let _ = ps.lock().unwrap().process_completions();
+                    info!("Shutting down WAL writer thread");
+                    break;
+                }
+                Err(e) => {
+                    error!(?e, "Error receiving message from writer thread");
+                    break;
                 }
             }
         }
+
+        // Shut down the eventfd thread.
+        ps.stop();
     }
 
     /// Receive an (already committed) working set and write the modified pages out to the write-ahead-log to make
     /// the changes durable.
-    async fn perform_writes(
+    fn perform_writes(
         wal: WriteAheadLog,
         tuple_box: Arc<TupleBox>,
         ts: u64,
@@ -295,9 +281,7 @@ impl ColdStorage {
 }
 
 struct WalManager {
-    // TODO: having a lock on the cold storage should not be necessary, but it is not !Sync, despite
-    //  it supposedly being thread safe.
-    page_storage: Arc<Mutex<PageStore>>,
+    page_storage: Arc<PageStore>,
 }
 
 impl Debug for WalManager {
@@ -317,7 +301,7 @@ impl LogManager for WalManager {
         for chunk in chunks {
             Self::chunk_to_mutations(&chunk, &mut write_batch, &mut evicted);
         }
-        let mut ps = self.page_storage.lock().unwrap();
+        let ps = self.page_storage.clone();
         ps.enqueue_page_mutations(write_batch)
             .expect("Unable to write batch");
 
@@ -350,11 +334,7 @@ impl LogManager for WalManager {
             }
         }
 
-        let Ok(mut ps) = self.page_storage.lock() else {
-            error!("Unable to lock cold storage");
-            return Ok(());
-        };
-        if let Err(e) = ps.enqueue_page_mutations(write_batch) {
+        if let Err(e) = self.page_storage.enqueue_page_mutations(write_batch) {
             error!("Unable to write batch: {:?}", e);
             return Ok(());
         };

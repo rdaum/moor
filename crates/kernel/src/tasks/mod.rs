@@ -61,13 +61,13 @@ pub mod vm_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    pub async fn call_verb(
+    pub fn call_verb(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
         verb_name: &str,
         args: Vec<Var>,
     ) -> Var {
-        let (scs_tx, _scs_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (scs_tx, _scs_rx) = kanal::unbounded();
         let mut vm_host = VmHost::new(
             0,
             20,
@@ -77,7 +77,7 @@ pub mod vm_test_utils {
             scs_tx,
         );
 
-        let (sched_send, _) = tokio::sync::mpsc::unbounded_channel();
+        let (sched_send, _) = kanal::unbounded();
         let _vm_exec_params = VmExecParams {
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
@@ -85,28 +85,25 @@ pub mod vm_test_utils {
 
         let vi = world_state
             .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
-            .await
             .unwrap();
-        vm_host
-            .start_call_method_verb(
-                0,
-                SYSTEM_OBJECT,
-                vi,
-                VerbCall {
-                    verb_name: verb_name.to_string(),
-                    location: SYSTEM_OBJECT,
-                    this: SYSTEM_OBJECT,
-                    player: SYSTEM_OBJECT,
-                    args,
-                    argstr: "".to_string(),
-                    caller: SYSTEM_OBJECT,
-                },
-            )
-            .await;
+        vm_host.start_call_method_verb(
+            0,
+            SYSTEM_OBJECT,
+            vi,
+            VerbCall {
+                verb_name: verb_name.to_string(),
+                location: SYSTEM_OBJECT,
+                this: SYSTEM_OBJECT,
+                player: SYSTEM_OBJECT,
+                args,
+                argstr: "".to_string(),
+                caller: SYSTEM_OBJECT,
+            },
+        );
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
-            match vm_host.exec_interpreter(0, world_state).await {
+            match vm_host.exec_interpreter(0, world_state) {
                 VMHostResponse::ContinueOk => {
                     continue;
                 }

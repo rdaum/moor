@@ -14,9 +14,10 @@
 
 use thiserror::Error;
 
-use crate::rdb::paging::{PageId, SlotId};
 pub use tuple_ref::TupleRef;
 pub use tx_tuple::TxTuple;
+
+use crate::rdb::paging::{PageId, SlotId};
 
 mod tuple_ref;
 mod tx_tuple;

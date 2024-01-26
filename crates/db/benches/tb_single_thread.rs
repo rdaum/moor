@@ -25,10 +25,9 @@ use std::time::{Duration, Instant};
 // This is a struct that tells Criterion.rs to use the "futures" crate's current-thread executor
 use moor_db::rdb::RelationId;
 use moor_values::util::{BitArray, Bitset64};
-use tokio::runtime::Runtime;
 
 /// Build a test database with a bunch of relations
-async fn test_db() -> Arc<RelBox> {
+fn test_db() -> Arc<RelBox> {
     // Generate 10 test relations that we'll use for testing.
     let relations = (0..63)
         .map(|i| RelationInfo {
@@ -39,7 +38,7 @@ async fn test_db() -> Arc<RelBox> {
         })
         .collect::<Vec<_>>();
 
-    RelBox::new(1 << 24, None, &relations, 0).await
+    RelBox::new(1 << 24, None, &relations, 0)
 }
 
 fn from_val(value: i64) -> SliceRef {
@@ -57,11 +56,11 @@ fn load_history() -> Vec<History> {
     events.collect::<Vec<_>>()
 }
 
-async fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duration {
+fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duration {
     let mut cumulative = Duration::new(0, 0);
     for _ in 0..iters {
         // We create a brand new db for each iteration, so we have a clean slate.
-        let db = test_db().await;
+        let db = test_db();
 
         // Where to track the transactions running.
         let mut processes: BitArray<_, 256, Bitset64<8>> = BitArray::new();
@@ -87,31 +86,25 @@ async fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duratio
                                 let relation = RelationId(*register as usize);
                                 tx.clone()
                                     .relation(relation)
-                                    .await
                                     .insert_tuple(from_val(*value), from_val(*value))
-                                    .await
                                     .unwrap();
                             }
                             Value::r(_, register, _) => {
                                 let relation = RelationId(*register as usize);
 
                                 // Full-scan.
-                                tx.relation(relation)
-                                    .await
-                                    .predicate_scan(&|_| true)
-                                    .await
-                                    .unwrap();
+                                tx.relation(relation).predicate_scan(&|_| true).unwrap();
                             }
                         }
                     }
                 }
                 Type::ok => {
                     let tx = processes.erase(e.process as usize).unwrap();
-                    tx.commit().await.unwrap();
+                    tx.commit().unwrap();
                 }
                 Type::fail => {
                     let tx = processes.erase(e.process as usize).unwrap();
-                    tx.rollback().await.unwrap();
+                    tx.rollback().unwrap();
                 }
             }
         }
@@ -122,11 +115,11 @@ async fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duratio
 }
 
 /// Same as above, but instead of predicate scan, does an individual tuple lookup, to measure that.
-async fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duration {
+fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duration {
     let mut cumulative = Duration::new(0, 0);
     for _ in 0..iters {
         // We create a brand new db for each iteration, so we have a clean slate.
-        let db = test_db().await;
+        let db = test_db();
 
         // Where to track the transactions running.
         let mut processes: BitArray<_, 256, Bitset64<8>> = BitArray::new();
@@ -151,20 +144,14 @@ async fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duratio
                                 let relation = RelationId(*register as usize);
                                 tx.clone()
                                     .relation(relation)
-                                    .await
                                     .insert_tuple(from_val(*value), from_val(*value))
-                                    .await
                                     .unwrap();
                             }
                             Value::r(_, register, Some(tuples)) => {
                                 let relation = RelationId(*register as usize);
 
                                 for t in tuples {
-                                    tx.relation(relation)
-                                        .await
-                                        .seek_by_domain(from_val(*t))
-                                        .await
-                                        .unwrap();
+                                    tx.relation(relation).seek_by_domain(from_val(*t)).unwrap();
                                 }
                             }
                             Value::r(_, _, None) => {
@@ -175,11 +162,11 @@ async fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duratio
                 }
                 Type::ok => {
                     let tx = processes.erase(e.process as usize).unwrap();
-                    tx.commit().await.unwrap();
+                    tx.commit().unwrap();
                 }
                 Type::fail => {
                     let tx = processes.erase(e.process as usize).unwrap();
-                    tx.rollback().await.unwrap();
+                    tx.rollback().unwrap();
                 }
             }
         }
@@ -195,19 +182,16 @@ pub fn throughput_bench(c: &mut Criterion) {
 
     // Count the # of commit/rollback (unique transactions) in the workload.
     let tx_count = events.iter().filter(|e| e.r#type == Type::invoke).count();
-    let rt = Runtime::new().unwrap();
 
     let mut group = c.benchmark_group("throughput");
     group.sample_size(1000);
     group.measurement_time(Duration::from_secs(10));
     group.throughput(criterion::Throughput::Elements(tx_count as u64));
     group.bench_function("list_append_scan", |b| {
-        b.to_async(&rt)
-            .iter_custom(|iters| list_append_scan_workload(iters, &events));
+        b.iter_custom(|iters| list_append_scan_workload(iters, &events));
     });
     group.bench_function("list_append_seek", |b| {
-        b.to_async(&rt)
-            .iter_custom(|iters| list_append_seek_workload(iters, &events));
+        b.iter_custom(|iters| list_append_seek_workload(iters, &events));
     });
     group.finish();
 }

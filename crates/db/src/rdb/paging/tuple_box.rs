@@ -33,8 +33,9 @@ use std::pin::Pin;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::{Arc, Mutex};
 
-use moor_values::util::{BitArray, Bitset64};
 use tracing::warn;
+
+use moor_values::util::{BitArray, Bitset64};
 
 use crate::rdb::paging::slotted_page::{slot_index_overhead, slot_page_empty_size, SlottedPage};
 use crate::rdb::paging::tuple_ptr::TuplePtr;

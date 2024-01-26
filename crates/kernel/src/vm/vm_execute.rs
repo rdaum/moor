@@ -12,9 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use kanal::Sender;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::UnboundedSender;
 
 use moor_compiler::{Name, Offset};
 
@@ -61,7 +61,7 @@ pub struct Fork {
 
 /// Represents the set of parameters passed to the VM for execution.
 pub struct VmExecParams {
-    pub scheduler_sender: UnboundedSender<(TaskId, SchedulerControlMsg)>,
+    pub scheduler_sender: Sender<(TaskId, SchedulerControlMsg)>,
     pub max_stack_depth: usize,
 }
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -157,11 +157,11 @@ pub(crate) fn one_to_zero_index(v: &Var) -> Result<usize, Error> {
 
 impl VM {
     /// Main VM opcode execution. The actual meat of the machine.
-    pub async fn exec<'a>(
+    pub fn exec(
         &self,
         exec_params: &VmExecParams,
         state: &mut VMExecState,
-        world_state: &'a mut dyn WorldState,
+        world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
         // Before executing, check stack depth...
@@ -176,9 +176,7 @@ impl VM {
         // executing elsewhere. It will be up to the function to interpret the counter.
         // Functions that did not set a trampoline are assumed to be complete.
         if !state.stack.is_empty() && state.top().bf_index.is_some() {
-            return self
-                .reenter_builtin_function(state, exec_params, world_state, session)
-                .await;
+            return self.reenter_builtin_function(state, exec_params, world_state, session);
         }
 
         // Try to consume & execute as many opcodes as we can without returning back to the task
@@ -569,10 +567,12 @@ impl VM {
                 Op::GetProp => {
                     let (propname, obj) = (a.pop(), a.peek_top());
 
-                    match self
-                        .resolve_property(a.permissions, world_state, propname.clone(), obj.clone())
-                        .await
-                    {
+                    match self.resolve_property(
+                        a.permissions,
+                        world_state,
+                        propname.clone(),
+                        obj.clone(),
+                    ) {
                         Ok(v) => a.update(0, v),
                         Err(e) => {
                             a.pop();
@@ -582,26 +582,25 @@ impl VM {
                 }
                 Op::PushGetProp => {
                     let (propname, obj) = a.peek2();
-                    match self
-                        .resolve_property(a.permissions, world_state, propname.clone(), obj.clone())
-                        .await
-                    {
+                    match self.resolve_property(
+                        a.permissions,
+                        world_state,
+                        propname.clone(),
+                        obj.clone(),
+                    ) {
                         Ok(v) => a.push(v),
                         Err(e) => return self.push_error(state, e),
                     }
                 }
                 Op::PutProp => {
                     let (rhs, propname, obj) = (a.pop(), a.pop(), a.peek_top());
-                    match self
-                        .set_property(
-                            a.permissions,
-                            world_state,
-                            propname.clone(),
-                            obj.clone(),
-                            rhs.clone(),
-                        )
-                        .await
-                    {
+                    match self.set_property(
+                        a.permissions,
+                        world_state,
+                        propname.clone(),
+                        obj.clone(),
+                        rhs.clone(),
+                    ) {
                         Ok(v) => a.update(0, v),
                         Err(e) => {
                             a.pop();
@@ -637,7 +636,7 @@ impl VM {
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_TYPE);
                     };
-                    return self.prepare_pass_verb(state, world_state, &args[..]).await;
+                    return self.prepare_pass_verb(state, world_state, &args[..]);
                 }
                 Op::CallVerb => {
                     let (args, verb, obj) = (a.pop(), a.pop(), a.pop());
@@ -647,9 +646,13 @@ impl VM {
                             return self.push_error(state, E_TYPE);
                         }
                     };
-                    return self
-                        .prepare_call_verb(state, world_state, *obj, verb.as_str(), &args[..])
-                        .await;
+                    return self.prepare_call_verb(
+                        state,
+                        world_state,
+                        *obj,
+                        verb.as_str(),
+                        &args[..],
+                    );
                 }
                 Op::Return => {
                     let ret_val = a.pop();
@@ -667,16 +670,14 @@ impl VM {
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_ARGS);
                     };
-                    return self
-                        .call_builtin_function(
-                            state,
-                            id.0 as usize,
-                            &args[..],
-                            exec_params,
-                            world_state,
-                            session,
-                        )
-                        .await;
+                    return self.call_builtin_function(
+                        state,
+                        id.0 as usize,
+                        &args[..],
+                        exec_params,
+                        world_state,
+                        session,
+                    );
                 }
                 Op::PushLabel(label) => {
                     a.push_handler_label(HandlerType::CatchLabel(*label));

@@ -106,7 +106,7 @@ fn match_preposition(prep: &str) -> Option<Prep> {
 
 #[async_trait]
 pub trait ParseMatcher {
-    async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError>;
+    fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError>;
 }
 
 #[derive(thiserror::Error, Debug, Clone, Decode, Encode)]
@@ -122,7 +122,7 @@ pub enum ParseCommandError {
 }
 
 #[tracing::instrument(skip(command_environment))]
-pub async fn parse_command<M>(
+pub fn parse_command<M>(
     input: &str,
     mut command_environment: M,
 ) -> Result<ParsedCommand, ParseCommandError>
@@ -202,7 +202,6 @@ where
     if prep != PrepSpec::None && !iobjstr.is_empty() {
         iobj = command_environment
             .match_object(&iobjstr)
-            .await
             .map_err(ParseCommandError::ErrorDuringMatch)?;
     }
 
@@ -210,7 +209,6 @@ where
     if !dobjstr.is_empty() {
         dobj = command_environment
             .match_object(&dobjstr)
-            .await
             .map_err(ParseCommandError::ErrorDuringMatch)?;
     }
 
@@ -275,7 +273,7 @@ mod tests {
     struct SimpleParseMatcher {}
     #[async_trait]
     impl ParseMatcher for SimpleParseMatcher {
-        async fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError> {
+        fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError> {
             Ok(match name {
                 "obj" => Some(Objid(1)),
                 "player" => Some(Objid(2)),
@@ -284,11 +282,11 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_parse_single_arg_command() {
+    #[test]
+    fn test_parse_single_arg_command() {
         // Test normal MOO command
         let command = "look obj";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "look");
         assert_eq!(parsed.dobjstr, "obj");
         assert_eq!(parsed.dobj, Objid(1));
@@ -299,11 +297,11 @@ mod tests {
         assert_eq!(parsed.argstr, "obj");
     }
 
-    #[tokio::test]
-    async fn test_parse_multi_arg_command() {
+    #[test]
+    fn test_parse_multi_arg_command() {
         // Test normal MOO command with multiple args
         let command = "test arg1 arg2 arg3";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "test");
         assert_eq!(parsed.dobjstr, "arg1 arg2 arg3");
         assert_eq!(parsed.prepstr, "");
@@ -317,11 +315,11 @@ mod tests {
         assert_eq!(parsed.argstr, "arg1 arg2 arg3");
     }
 
-    #[tokio::test]
-    async fn test_parse_dobj_prep_iobj_command() {
+    #[test]
+    fn test_parse_dobj_prep_iobj_command() {
         // Test command with prep
         let command = "give obj to player";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "give");
         assert_eq!(parsed.dobjstr, "obj");
         assert_eq!(parsed.dobj, Objid(1));
@@ -336,11 +334,11 @@ mod tests {
         assert_eq!(parsed.argstr, "obj to player");
     }
 
-    #[tokio::test]
-    async fn test_parse_say_abbrev_command() {
+    #[test]
+    fn test_parse_say_abbrev_command() {
         // Test say abbrev command
         let command = "\"hello, world!";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "say");
         assert_eq!(parsed.dobjstr, "hello, world!");
         assert_eq!(parsed.prepstr, "");
@@ -351,11 +349,11 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
     }
 
-    #[tokio::test]
-    async fn test_parse_emote_command() {
+    #[test]
+    fn test_parse_emote_command() {
         // Test emote command
         let command = ":waves happily.";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "emote");
         assert_eq!(parsed.dobjstr, "waves happily.");
         assert_eq!(parsed.prepstr, "");
@@ -366,11 +364,11 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
     }
 
-    #[tokio::test]
-    async fn test_parse_emote_explicit_command() {
+    #[test]
+    fn test_parse_emote_explicit_command() {
         // Test emote command
         let command = "emote waves happily.";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "emote");
         assert_eq!(parsed.dobjstr, "waves happily.");
         assert_eq!(parsed.prepstr, "");
@@ -381,11 +379,11 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
     }
 
-    #[tokio::test]
-    async fn test_parse_eval_command() {
+    #[test]
+    fn test_parse_eval_command() {
         // Test eval command
         let command = ";1 + 1";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "eval");
         assert_eq!(parsed.dobjstr, "1 + 1");
         assert_eq!(parsed.prepstr, "");
@@ -396,11 +394,11 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
     }
 
-    #[tokio::test]
-    async fn test_parse_quoted_arg_command() {
+    #[test]
+    fn test_parse_quoted_arg_command() {
         // Test command with single escaped argument
         let command = "blork \"hello, world!\"";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "blork");
         assert_eq!(parsed.dobjstr, "hello, world!");
         assert_eq!(parsed.prepstr, "");
@@ -411,11 +409,11 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
     }
 
-    #[tokio::test]
-    async fn test_parse_say_abbrev_quoted_command() {
+    #[test]
+    fn test_parse_say_abbrev_quoted_command() {
         // Test say abbrev command
         let command = "\"\"hello, world!\"";
-        let parsed = parse_command(command, SimpleParseMatcher {}).await.unwrap();
+        let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "say");
         assert_eq!(parsed.dobjstr, "hello, world!");
         assert_eq!(parsed.prepstr, "");
@@ -426,14 +424,14 @@ mod tests {
         assert_eq!(parsed.iobj, Objid(-1));
     }
 
-    #[tokio::test]
-    async fn test_command_parser_get_thing1() {
+    #[test]
+    fn test_command_parser_get_thing1() {
         let env = setup_mock_environment();
         let match_object_fn = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
-        let result = parse_command("get thing1", match_object_fn).await.unwrap();
+        let result = parse_command("get thing1", match_object_fn).unwrap();
         assert_eq!(result.verb, "get".to_string());
         assert_eq!(result.argstr, "thing1".to_string());
         assert_eq!(result.args, vec![v_str("thing1")]);
@@ -445,17 +443,15 @@ mod tests {
         assert_eq!(result.iobj, NOTHING);
     }
 
-    #[tokio::test]
-    async fn test_command_parser_put_thing1_in_thing2() {
+    #[test]
+    fn test_command_parser_put_thing1_in_thing2() {
         let env = setup_mock_environment();
         let match_object_fn = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
 
-        let result = parse_command("put thing1 in t2", match_object_fn)
-            .await
-            .unwrap();
+        let result = parse_command("put thing1 in t2", match_object_fn).unwrap();
         assert_eq!(result.verb, "put".to_string());
         assert_eq!(result.argstr, "thing1 in t2".to_string());
         assert_eq!(result.args, vec![v_str("thing1"), v_str("in"), v_str("t2")]);
@@ -467,17 +463,15 @@ mod tests {
         assert_eq!(result.iobj, MOCK_THING2);
     }
 
-    #[tokio::test]
-    async fn test_command_parser_look_at_here() {
+    #[test]
+    fn test_command_parser_look_at_here() {
         let env = setup_mock_environment();
         let match_object_fn = MatchEnvironmentParseMatcher {
             env,
             player: MOCK_PLAYER,
         };
 
-        let result = parse_command("look at here", match_object_fn)
-            .await
-            .unwrap();
+        let result = parse_command("look at here", match_object_fn).unwrap();
         assert_eq!(result.verb, "look".to_string());
         assert_eq!(result.argstr, "at here".to_string());
         assert_eq!(result.args, vec![v_str("at"), v_str("here"),]);
@@ -489,8 +483,8 @@ mod tests {
         assert_eq!(result.iobj, MOCK_ROOM1);
     }
 
-    #[tokio::test]
-    async fn test_prep_confused_with_numeric_arg() {
+    #[test]
+    fn test_prep_confused_with_numeric_arg() {
         let env = setup_mock_environment();
         let match_object_fn = MatchEnvironmentParseMatcher {
             env,
@@ -499,7 +493,7 @@ mod tests {
 
         // We had a regression where the first numeric argument was being confused with a
         // preposition after I added numeric preposition support.
-        let result = parse_command("ins 1", match_object_fn).await.unwrap();
+        let result = parse_command("ins 1", match_object_fn).unwrap();
 
         assert_eq!(result.verb, "ins".to_string());
         assert_eq!(result.prep, PrepSpec::None);

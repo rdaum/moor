@@ -54,7 +54,7 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
 }
 
 //Function: str strsub (str subject, str what, str with [, case-matters])
-async fn bf_strsub<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
@@ -103,7 +103,7 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
-async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
@@ -127,7 +127,7 @@ async fn bf_index<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(index, bf_index);
 
-async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
@@ -151,7 +151,7 @@ async fn bf_rindex<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(rindex, bf_rindex);
 
-async fn bf_strcmp<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -174,7 +174,7 @@ encryption "salt" in the algorithm. If salt is not provided, a random pair of ch
  In any case, the salt used is also returned as the first two characters of the resulting encrypted
  string.
 */
-async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(E_INVARG);
     }
@@ -202,7 +202,7 @@ async fn bf_crypt<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
 }
 bf_declare!(crypt, bf_crypt);
 
-async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
         return Err(E_INVARG);
     }
@@ -216,7 +216,7 @@ async fn bf_string_hash<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Erro
 }
 bf_declare!(string_hash, bf_string_hash);
 
-async fn bf_binary_hash<'a>(_bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     unimplemented!("binary_hash")
 }
 bf_declare!(binary_hash, bf_binary_hash);

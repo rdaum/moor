@@ -46,7 +46,7 @@ use moor_compiler::GlobalName;
 use moor_compiler::Program;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
-async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -57,7 +57,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -67,7 +67,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
         Variant::Str(verb_desc) => bf_args
             .world_state
             .get_verb(bf_args.task_perms_who(), *obj, verb_desc.as_str())
-            .await
+
             .map_err(world_state_err)?,
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -78,7 +78,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
             bf_args
                 .world_state
                 .get_verb_at_index(bf_args.task_perms_who(), *obj, verb_index)
-                .await
+
                 .map_err(world_state_err)?
         }
         _ => {
@@ -111,7 +111,7 @@ async fn bf_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
 }
 bf_declare!(verb_info, bf_verb_info);
 
-async fn get_verbdef(
+fn get_verbdef(
     obj: Objid,
     verbspec: Var,
     bf_args: &BfCallState<'_>,
@@ -122,7 +122,7 @@ async fn get_verbdef(
             bf_args
                 .world_state
                 .get_verb(bf_args.task_perms_who(), obj, verb_desc)
-                .await
+
         }
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -133,7 +133,7 @@ async fn get_verbdef(
             bf_args
                 .world_state
                 .get_verb_at_index(bf_args.task_perms_who(), obj, verb_index)
-                .await
+
         }
         _ => return Err(E_TYPE),
     };
@@ -186,7 +186,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
 }
 
 // set_verb_info (obj <object>, str <verb-desc>, list <info>) => none
-async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
         return Err(E_INVARG);
     }
@@ -204,7 +204,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -220,7 +220,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
                     verb_name.as_str(),
                     update_attrs,
                 )
-                .await
+
                 .map_err(world_state_err)?;
         }
         Variant::Int(verb_index) => {
@@ -232,7 +232,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
             bf_args
                 .world_state
                 .update_verb_at_index(bf_args.task_perms_who(), *obj, verb_index, update_attrs)
-                .await
+
                 .map_err(world_state_err)?;
         }
         _ => return Err(E_TYPE),
@@ -242,7 +242,7 @@ async fn bf_set_verb_info<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 }
 bf_declare!(set_verb_info, bf_set_verb_info);
 
-async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -252,13 +252,13 @@ async fn bf_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error>
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
     }
 
-    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
@@ -298,7 +298,7 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
 }
 
 // set_verb_args (obj <object>, str <verb-desc>, list <args>) => none
-async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Error> {
+fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
         return Err(E_INVARG);
     }
@@ -314,7 +314,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -341,7 +341,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
                     verb_name.as_str(),
                     update_attrs,
                 )
-                .await
+
                 .map_err(world_state_err)?;
         }
         Variant::Int(verb_index) => {
@@ -353,7 +353,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
             bf_args
                 .world_state
                 .update_verb_at_index(bf_args.task_perms_who(), *obj, verb_index, update_attrs)
-                .await
+
                 .map_err(world_state_err)?;
         }
         _ => return Err(E_TYPE),
@@ -362,7 +362,7 @@ async fn bf_set_verb_args<'a>(bf_args: &mut BfCallState<'a>) -> Result<BfRet, Er
 }
 bf_declare!(set_verb_args, bf_set_verb_args);
 
-async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //verb_code (obj object, str verb-desc [, fully-paren [, indent]]) => list
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(E_INVARG);
@@ -373,7 +373,7 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -382,14 +382,14 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Verify caller is a programmer.
     if !bf_args
         .task_perms()
-        .await
+
         .map_err(world_state_err)?
         .flags
         .contains(ObjFlag::Programmer)
     {
         return Err(E_PERM);
     }
-    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
@@ -408,7 +408,7 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let verb_info = bf_args
         .world_state
         .retrieve_verb(bf_args.task_perms_who(), *obj, verbdef.uuid())
-        .await
+
         .map_err(world_state_err)?;
 
     // If the binary is empty, just return empty rather than try to decode it.
@@ -443,7 +443,7 @@ async fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 bf_declare!(verb_code, bf_verb_code);
 
 // Function: list set_verb_code (obj object, str verb-desc, list code)
-async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //set_verb_code (obj object, str verb-desc, list code) => none
     if bf_args.args.len() != 3 {
         return Err(E_INVARG);
@@ -454,7 +454,7 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -463,7 +463,7 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
     // Verify caller is a programmer.
     if !bf_args
         .task_perms()
-        .await
+
         .map_err(world_state_err)?
         .flags
         .contains(ObjFlag::Programmer)
@@ -471,7 +471,7 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
         return Err(E_PERM);
     }
 
-    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
@@ -519,14 +519,14 @@ async fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>
     bf_args
         .world_state
         .update_verb_with_id(bf_args.task_perms_who(), *obj, verbdef.uuid(), update_attrs)
-        .await
+
         .map_err(world_state_err)?;
     Ok(Ret(v_none()))
 }
 bf_declare!(set_verb_code, bf_set_verb_code);
 
 // Function: none add_verb (obj object, list info, list args)
-async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
         return Err(E_INVARG);
     }
@@ -542,7 +542,7 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -551,7 +551,7 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Verify caller is a programmer.
     if !bf_args
         .task_perms()
-        .await
+
         .map_err(world_state_err)?
         .flags
         .contains(ObjFlag::Programmer)
@@ -573,7 +573,7 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             Vec::new(),
             BinaryType::LambdaMoo18X,
         )
-        .await
+
         .map_err(world_state_err)?;
 
     Ok(Ret(v_none()))
@@ -581,7 +581,7 @@ async fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 bf_declare!(add_verb, bf_add_verb);
 
 //Function: none delete_verb (obj object, str verb-desc)
-async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -591,7 +591,7 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
@@ -600,7 +600,7 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Verify caller is a programmer.
     if !bf_args
         .task_perms()
-        .await
+
         .map_err(world_state_err)?
         .flags
         .contains(ObjFlag::Programmer)
@@ -608,7 +608,7 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_PERM);
     }
 
-    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
@@ -616,7 +616,7 @@ async fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     bf_args
         .world_state
         .remove_verb(bf_args.task_perms_who(), *obj, verbdef.uuid())
-        .await
+
         .map_err(world_state_err)?;
 
     Ok(Ret(v_none()))
@@ -628,7 +628,7 @@ bf_declare!(delete_verb, bf_delete_verb);
 // Returns a (longish) list of strings giving a listing of the server's internal ``compiled'' form of the verb as specified by <verb-desc>
 // on <object>.  This format is not documented and may indeed change from release to release, but some programmers may nonetheless find
 // the output of `disassemble()' interesting to peruse as a way to gain a deeper appreciation of how the server works.
-async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
         return Err(E_INVARG);
     }
@@ -638,13 +638,13 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args
         .world_state
         .valid(*obj)
-        .await
+
         .map_err(world_state_err)?
     {
         return Err(E_INVARG);
     }
 
-    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args).await {
+    let verbdef = match get_verbdef(*obj, bf_args.args[1].clone(), bf_args) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
@@ -658,7 +658,7 @@ async fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let verb_info = bf_args
         .world_state
         .retrieve_verb(bf_args.task_perms_who(), *obj, verbdef.uuid())
-        .await
+
         .map_err(world_state_err)?;
 
     if verb_info.binary().is_empty() {

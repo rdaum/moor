@@ -18,7 +18,7 @@ pub mod support {
     use std::sync::Arc;
 
     /// Build a test database with a bunch of relations
-    pub async fn test_db(dir: PathBuf) -> Arc<RelBox> {
+    pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
         // Generate 10 test relations that we'll use for testing.
         let relations = (0..100)
             .map(|i| RelationInfo {
@@ -29,7 +29,7 @@ pub mod support {
             })
             .collect::<Vec<_>>();
 
-        RelBox::new(1 << 24, Some(dir), &relations, 0).await
+        RelBox::new(1 << 24, Some(dir), &relations, 0)
     }
 }
 
@@ -56,7 +56,7 @@ mod tests {
         i64::from_le_bytes(bytes)
     }
 
-    async fn check_expected(
+    fn check_expected(
         process: i64,
         _db: Arc<RelBox>,
         tx: &Transaction,
@@ -65,12 +65,7 @@ mod tests {
         action_type: Type,
     ) {
         // Expect to read these values from the relation in a scan.
-        let tuples = tx
-            .relation(relation)
-            .await
-            .predicate_scan(&|_| true)
-            .await
-            .unwrap();
+        let tuples = tx.relation(relation).predicate_scan(&|_| true).unwrap();
 
         let got = tuples
             .iter()
@@ -92,7 +87,7 @@ mod tests {
         }
     }
 
-    async fn check_completion(
+    fn check_completion(
         process: i64,
         db: Arc<RelBox>,
         tx: &Transaction,
@@ -108,9 +103,7 @@ mod tests {
                     // (at invoke)
                     let t = tx
                         .relation(relation)
-                        .await
                         .seek_by_domain(from_val(expect_val))
-                        .await
                         .unwrap();
                     let val = to_val(t.domain());
                     assert_eq!(
@@ -134,19 +127,18 @@ mod tests {
                         relation,
                         &expected_values,
                         action_type,
-                    )
-                    .await;
+                    );
                 }
             }
         }
     }
 
     #[traced_test]
-    #[tokio::test]
-    async fn test_generate() {
+    #[test]
+    fn test_generate() {
         let tmpdir = tempfile::tempdir().unwrap();
 
-        let db = support::test_db(tmpdir.path().into()).await;
+        let db = support::test_db(tmpdir.path().into());
 
         let lines = include_str!("append-dataset.json")
             .lines()
@@ -175,9 +167,7 @@ mod tests {
                                 let relation = RelationId(*register as usize);
                                 tx.clone()
                                     .relation(relation)
-                                    .await
                                     .insert_tuple(from_val(*value), from_val(*value))
-                                    .await
                                     .unwrap();
                             }
                             Value::r(_, register, values) => {
@@ -190,8 +180,7 @@ mod tests {
                                     relation,
                                     values,
                                     e.r#type,
-                                )
-                                .await;
+                                );
                             }
                         }
                     }
@@ -199,14 +188,14 @@ mod tests {
                 Type::ok => {
                     // Commit the transaction, expecting the values to be in the relation.
                     let tx = processes.remove(&e.process).unwrap();
-                    check_completion(e.process, db.clone(), &tx, e.value, e.r#type).await;
-                    tx.commit().await.unwrap();
+                    check_completion(e.process, db.clone(), &tx, e.value, e.r#type);
+                    tx.commit().unwrap();
                 }
                 Type::fail => {
                     // Rollback the transaction.
                     let tx = processes.remove(&e.process).unwrap();
-                    check_completion(e.process, db.clone(), &tx, e.value, e.r#type).await;
-                    tx.rollback().await.unwrap();
+                    check_completion(e.process, db.clone(), &tx, e.value, e.r#type);
+                    tx.rollback().unwrap();
                 }
             }
         }

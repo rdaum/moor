@@ -29,29 +29,28 @@ pub struct WsMatchEnv<'a> {
 
 #[async_trait]
 impl<'a> MatchEnvironment for WsMatchEnv<'a> {
-    async fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
-        self.ws.valid(oid).await
+    fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
+        self.ws.valid(oid)
     }
 
-    async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
-        let mut names = self.ws.names_of(self.perms, oid).await?;
+    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
+        let mut names = self.ws.names_of(self.perms, oid)?;
         let mut object_names = vec![names.0];
         object_names.append(&mut names.1);
         Ok(object_names)
     }
 
-    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError> {
-        let location = self.ws.location_of(self.perms, player).await?;
+    fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError> {
+        let location = self.ws.location_of(self.perms, player)?;
         let surroundings = self
             .ws
-            .contents_of(self.perms, location)
-            .await?
+            .contents_of(self.perms, location)?
             .with_appended(&[location, player]);
 
         Ok(surroundings)
     }
 
-    async fn location_of(&mut self, player: Objid) -> Result<Objid, WorldStateError> {
-        self.ws.location_of(self.perms, player).await
+    fn location_of(&mut self, player: Objid) -> Result<Objid, WorldStateError> {
+        self.ws.location_of(self.perms, player)
     }
 }

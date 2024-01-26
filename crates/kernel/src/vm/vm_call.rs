@@ -62,7 +62,7 @@ impl VM {
     /// All parameters for player, caller, etc. are pulled off the stack.
     /// The call params will be returned back to the task in the scheduler, which will then dispatch
     /// back through to `do_method_call`
-    pub(crate) async fn prepare_call_verb(
+    pub(crate) fn prepare_call_verb(
         &self,
         vm_state: &mut VMExecState,
         world_state: &mut dyn WorldState,
@@ -84,34 +84,31 @@ impl VM {
 
         let self_valid = world_state
             .valid(this)
-            .await
             .expect("Error checking object validity");
         if !self_valid {
             return self.push_error(vm_state, E_INVIND);
         }
         // Find the callable verb ...
-        let verb_info = match world_state
-            .find_method_verb_on(vm_state.top().permissions, this, verb_name)
-            .await
-        {
-            Ok(vi) => vi,
-            Err(WorldStateError::ObjectPermissionDenied) => {
-                return self.push_error(vm_state, E_PERM);
-            }
-            Err(WorldStateError::VerbPermissionDenied) => {
-                return self.push_error(vm_state, E_PERM);
-            }
-            Err(WorldStateError::VerbNotFound(_, _)) => {
-                return self.push_error_msg(
-                    vm_state,
-                    E_VERBNF,
-                    format!("Verb \"{}\" not found", verb_name),
-                );
-            }
-            Err(e) => {
-                panic!("Unexpected error from find_method_verb_on: {:?}", e)
-            }
-        };
+        let verb_info =
+            match world_state.find_method_verb_on(vm_state.top().permissions, this, verb_name) {
+                Ok(vi) => vi,
+                Err(WorldStateError::ObjectPermissionDenied) => {
+                    return self.push_error(vm_state, E_PERM);
+                }
+                Err(WorldStateError::VerbPermissionDenied) => {
+                    return self.push_error(vm_state, E_PERM);
+                }
+                Err(WorldStateError::VerbNotFound(_, _)) => {
+                    return self.push_error_msg(
+                        vm_state,
+                        E_VERBNF,
+                        format!("Verb \"{}\" not found", verb_name),
+                    );
+                }
+                Err(e) => {
+                    panic!("Unexpected error from find_method_verb_on: {:?}", e)
+                }
+            };
 
         // Permissions for the activation are the verb's owner.
         let permissions = verb_info.verbdef().owner();
@@ -129,7 +126,7 @@ impl VM {
     /// Setup the VM to execute the verb of the same current name, but using the parent's
     /// version.
     /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
-    pub(crate) async fn prepare_pass_verb(
+    pub(crate) fn prepare_pass_verb(
         &self,
         vm_state: &mut VMExecState,
         world_state: &mut dyn WorldState,
@@ -140,17 +137,13 @@ impl VM {
         let permissions = vm_state.top().permissions;
         let parent = world_state
             .parent_of(permissions, definer)
-            .await
             .expect("unable to lookup parent");
         let verb = vm_state.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
         trace!(task_id = vm_state.task_id, verb, ?definer, ?parent);
 
-        let Ok(vi) = world_state
-            .find_method_verb_on(permissions, parent, verb.as_str())
-            .await
-        else {
+        let Ok(vi) = world_state.find_method_verb_on(permissions, parent, verb.as_str()) else {
             return self.raise_error(vm_state, E_VERBNF);
         };
 
@@ -178,7 +171,7 @@ impl VM {
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
-    pub async fn exec_call_request(
+    pub fn exec_call_request(
         &self,
         vm_state: &mut VMExecState,
         call_request: VerbExecutionRequest,
@@ -187,7 +180,7 @@ impl VM {
         vm_state.stack.push(a);
     }
 
-    pub async fn exec_eval_request(
+    pub fn exec_eval_request(
         &self,
         vm_state: &mut VMExecState,
         permissions: Objid,
@@ -209,7 +202,7 @@ impl VM {
     /// Called (ultimately) from the scheduler as the result of a fork() call.
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
-    pub(crate) async fn exec_fork_vector(&self, vm_state: &mut VMExecState, fork_request: Fork) {
+    pub(crate) fn exec_fork_vector(&self, vm_state: &mut VMExecState, fork_request: Fork) {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
         a.program.main_vector =
@@ -226,13 +219,13 @@ impl VM {
     }
 
     /// Call into a builtin function.
-    pub(crate) async fn call_builtin_function<'a>(
+    pub(crate) fn call_builtin_function(
         &self,
         vm_state: &mut VMExecState,
         bf_func_num: usize,
         args: &[Var],
         exec_args: &VmExecParams,
-        world_state: &'a mut dyn WorldState,
+        world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
         if bf_func_num >= self.builtins.len() {
@@ -268,7 +261,7 @@ impl VM {
             scheduler_sender: exec_args.scheduler_sender.clone(),
         };
 
-        let call_results = match bf.call(&mut bf_args).await {
+        let call_results = match bf.call(&mut bf_args) {
             Ok(BfRet::Ret(result)) => {
                 self.unwind_stack(vm_state, FinallyReason::Return(result.clone()))
             }
@@ -281,11 +274,11 @@ impl VM {
     }
 
     /// We're returning into a builtin function, which is all set up at the top of the stack.
-    pub(crate) async fn reenter_builtin_function<'a>(
+    pub(crate) fn reenter_builtin_function(
         &self,
         vm_state: &mut VMExecState,
         exec_args: &VmExecParams,
-        world_state: &'a mut dyn WorldState,
+        world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
         trace!(
@@ -314,7 +307,7 @@ impl VM {
             scheduler_sender: exec_args.scheduler_sender.clone(),
         };
 
-        match bf.call(&mut bf_args).await {
+        match bf.call(&mut bf_args) {
             Ok(BfRet::Ret(result)) => {
                 self.unwind_stack(vm_state, FinallyReason::Return(result.clone()))
             }

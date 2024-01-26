@@ -16,13 +16,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use strum::{EnumCount, IntoEnumIterator};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::rdb::TupleError;
-use crate::Database;
 use moor_values::model::ObjSet;
 use moor_values::model::PropFlag;
 use moor_values::model::VerbArgsSpec;
@@ -45,8 +42,10 @@ use crate::odb::object_relations;
 use crate::odb::object_relations::{
     get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
+use crate::rdb::TupleError;
 use crate::rdb::{CommitError, Transaction};
 use crate::rdb::{RelBox, RelationInfo};
+use crate::Database;
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the rdb as its backing
 pub struct RelBoxWorldState {
@@ -54,7 +53,7 @@ pub struct RelBoxWorldState {
 }
 
 impl RelBoxWorldState {
-    pub async fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
+    pub fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -70,11 +69,11 @@ impl RelBoxWorldState {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         // Same with "contents".
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
-        let db = RelBox::new(memory_size, path, &relations, WorldStateSequences::COUNT).await;
+        let db = RelBox::new(memory_size, path, &relations, WorldStateSequences::COUNT);
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
-            let rels = db.canonical.read().await;
+            let rels = db.canonical.read().unwrap();
             rels[WorldStateRelation::ObjectParent as usize]
                 .seek_by_domain(SYSTEM_OBJECT.0.as_sliceref())
                 .is_none()
@@ -83,11 +82,10 @@ impl RelBoxWorldState {
     }
 }
 
-#[async_trait]
 impl WorldStateSource for RelBoxWorldState {
-    async fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
+    fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = RelBoxTransaction::new(self.db.clone());
-        return Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }));
+        Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 }
 
@@ -95,18 +93,16 @@ pub struct RelBoxTransaction {
     tx: Transaction,
 }
 
-#[async_trait]
 impl DbTransaction for RelBoxTransaction {
-    async fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
+    fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
         get_all_object_keys_matching(
             &self.tx,
             WorldStateRelation::ObjectFlags,
             |_, _: BitEnum<ObjFlag>| true,
         )
-        .await
     }
 
-    async fn get_players(&self) -> Result<ObjSet, WorldStateError> {
+    fn get_players(&self) -> Result<ObjSet, WorldStateError> {
         // TODO: this is going to be not-at-all performant in the long run, and we'll need a way to
         //   cache this or index it better
         get_all_object_keys_matching(
@@ -114,77 +110,58 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectFlags,
             |_, flags: BitEnum<ObjFlag>| flags.contains(ObjFlag::User),
         )
-        .await
     }
 
-    async fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
+    fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj)
-            .await
             .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
-    async fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
+    fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj, owner)
-            .await
     }
 
-    async fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+    fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj)
-            .await
             .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
-    async fn set_object_flags(
-        &self,
-        obj: Objid,
-        flags: BitEnum<ObjFlag>,
-    ) -> Result<(), WorldStateError> {
+    fn set_object_flags(&self, obj: Objid, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError> {
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj, flags)
-            .await
     }
 
-    async fn get_object_name(&self, obj: Objid) -> Result<String, WorldStateError> {
+    fn get_object_name(&self, obj: Objid) -> Result<String, WorldStateError> {
         object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
-            .await
             .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
-    async fn create_object(
-        &self,
-        id: Option<Objid>,
-        attrs: ObjAttrs,
-    ) -> Result<Objid, WorldStateError> {
+    fn create_object(&self, id: Option<Objid>, attrs: ObjAttrs) -> Result<Objid, WorldStateError> {
         let id = match id {
             Some(id) => id,
             None => {
                 let max = self
                     .tx
-                    .increment_sequence(WorldStateSequences::MaximumObject as usize)
-                    .await;
+                    .increment_sequence(WorldStateSequences::MaximumObject as usize);
                 Objid(max as i64)
             }
         };
 
         let owner = attrs.owner.unwrap_or(id);
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectOwner, id, owner)
-            .await
             .expect("Unable to insert initial owner");
 
         // Set initial name
         let name = attrs.name.unwrap_or_else(|| format!("Object {}", id));
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, id, name)
-            .await
             .expect("Unable to insert initial name");
 
         // We use our own setters for these, since there's biz-logic attached here...
         if let Some(parent) = attrs.parent {
             self.set_object_parent(id, parent)
-                .await
                 .expect("Unable to set parent");
         }
         if let Some(location) = attrs.location {
             self.set_object_location(id, location)
-                .await
                 .expect("Unable to set location");
         }
 
@@ -195,37 +172,34 @@ impl DbTransaction for RelBoxTransaction {
             id,
             attrs.flags.unwrap_or(default_object_flags),
         )
-        .await
         .expect("Unable to insert initial flags");
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
-        self.tx
-            .update_sequence_max(
-                WorldStateSequences::MaximumObject as usize,
-                (id.0 + 1) as u64,
-            )
-            .await;
+        self.tx.update_sequence_max(
+            WorldStateSequences::MaximumObject as usize,
+            (id.0 + 1) as u64,
+        );
 
         Ok(id)
     }
 
-    async fn recycle_object(&self, obj: Objid) -> Result<(), WorldStateError> {
+    fn recycle_object(&self, obj: Objid) -> Result<(), WorldStateError> {
         // First go through and move all objects that are in this object's contents to the
         // to #-1.  It's up to the caller here to execute :exitfunc on all of them before invoking
         // this method.
 
-        let contents = self.get_object_contents(obj).await?;
+        let contents = self.get_object_contents(obj)?;
         for c in contents.iter() {
-            self.set_object_location(c, NOTHING).await?;
+            self.set_object_location(c, NOTHING)?;
         }
 
         // Now reparent all our immediate children to our parent.
         // This should properly move all properties all the way down the chain.
-        let parent = self.get_object_parent(obj).await?;
-        let children = self.get_object_children(obj).await?;
+        let parent = self.get_object_parent(obj)?;
+        let children = self.get_object_children(obj)?;
         for c in children.iter() {
-            self.set_object_parent(c, parent).await?;
+            self.set_object_parent(c, parent)?;
         }
 
         // Now we can remove this object from all relevant column relations
@@ -239,49 +213,41 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectVerbs,
         ];
         for rel in oid_relations.iter() {
-            let relation = self.tx.relation((*rel).into()).await;
+            let relation = self.tx.relation((*rel).into());
             relation
                 .remove_by_domain(obj.0.as_sliceref())
-                .await
                 .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
         }
 
-        let propdefs = self.get_properties(obj).await?;
+        let propdefs = self.get_properties(obj)?;
         for p in propdefs.iter() {
             let key = object_relations::composite_key_for(obj, &p.uuid());
             let relation = self
                 .tx
-                .relation(WorldStateRelation::ObjectPropertyValue.into())
-                .await;
-            relation.remove_by_domain(key).await.unwrap_or(());
+                .relation(WorldStateRelation::ObjectPropertyValue.into());
+            relation.remove_by_domain(key).unwrap_or(());
         }
 
-        let obj_propdefs_rel = self
-            .tx
-            .relation(WorldStateRelation::ObjectPropDefs.into())
-            .await;
+        let obj_propdefs_rel = self.tx.relation(WorldStateRelation::ObjectPropDefs.into());
         obj_propdefs_rel
             .remove_by_domain(obj.0.as_sliceref())
-            .await
             .expect("Unable to delete propdefs");
 
         Ok(())
     }
 
-    async fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
+    fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, obj, name)
-            .await
     }
 
-    async fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
+    fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         Ok(
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectParent, obj)
-                .await
                 .unwrap_or(NOTHING),
         )
     }
 
-    async fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), WorldStateError> {
+    fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), WorldStateError> {
         // Steps for object re-parenting:
 
         // Get o's old-parents's children
@@ -298,18 +264,15 @@ impl DbTransaction for RelBoxTransaction {
         // TODO: the argument order seems backward here. I was able to make it work by flipping
         //   new_parent and o, but I need to get to the bottom of this and fix it properly.
 
-        let (_shared_ancestor, new_ancestors, old_ancestors) = self
-            .closest_common_ancestor_with_ancestors(new_parent, o)
-            .await;
+        let (_shared_ancestor, new_ancestors, old_ancestors) =
+            self.closest_common_ancestor_with_ancestors(new_parent, o);
 
         // Remove from _me_ any of the properties defined by any of my ancestors
         if let Some(old_props) = object_relations::get_object_value::<PropDefs>(
             &self.tx,
             WorldStateRelation::ObjectPropDefs,
             o,
-        )
-        .await
-        {
+        ) {
             let mut delort_props = vec![];
             for p in old_props.iter() {
                 if old_ancestors.contains(&p.definer()) {
@@ -320,7 +283,6 @@ impl DbTransaction for RelBoxTransaction {
                         o,
                         p.uuid(),
                     )
-                    .await
                     .expect("Unable to delete property");
                 }
             }
@@ -331,13 +293,12 @@ impl DbTransaction for RelBoxTransaction {
                 o,
                 new_props,
             )
-            .await
             .expect("Unable to update propdefs");
         }
 
         // Now walk all-my-children and destroy all the properties whose definer is me or any
         // of my ancestors not shared by the new parent.
-        let descendants = self.descendants(o).await?;
+        let descendants = self.descendants(o)?;
 
         let mut descendant_props = HashMap::new();
         for c in descendants.iter() {
@@ -347,9 +308,7 @@ impl DbTransaction for RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectPropDefs,
                 o,
-            )
-            .await
-            {
+            ) {
                 for p in old_props.iter() {
                     if old_ancestors.contains(&p.definer()) {
                         inherited_props.push(p.uuid());
@@ -359,7 +318,6 @@ impl DbTransaction for RelBoxTransaction {
                             c,
                             p.uuid(),
                         )
-                        .await
                         .expect("Unable to delete property");
                     }
                 }
@@ -377,9 +335,7 @@ impl DbTransaction for RelBoxTransaction {
             &self.tx,
             WorldStateRelation::ObjectParent,
             o,
-        )
-        .await
-        {
+        ) {
             if old_parent == new_parent {
                 return Ok(());
             }
@@ -390,7 +346,6 @@ impl DbTransaction for RelBoxTransaction {
             o,
             new_parent,
         )
-        .await
         .expect("Unable to update parent");
 
         if new_parent == NOTHING {
@@ -407,9 +362,7 @@ impl DbTransaction for RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectPropDefs,
                 a,
-            )
-            .await
-            {
+            ) {
                 for p in props.iter() {
                     if p.definer() == a {
                         new_props.push(p.clone())
@@ -419,10 +372,7 @@ impl DbTransaction for RelBoxTransaction {
         }
         // Then put clear copies on each of the descendants ... and me.
         // This really just means defining the property with no value, which is what we do.
-        let descendants = self
-            .descendants(o)
-            .await
-            .expect("Unable to get descendants");
+        let descendants = self.descendants(o).expect("Unable to get descendants");
         for c in descendants.iter().chain(std::iter::once(o)) {
             // Check if we have a cached/modified copy from above in descendant_props
             let c_props = match descendant_props.remove(&c) {
@@ -431,7 +381,6 @@ impl DbTransaction for RelBoxTransaction {
                     WorldStateRelation::ObjectPropDefs,
                     c,
                 )
-                .await
                 .unwrap_or_else(PropDefs::empty),
                 Some(props) => props,
             };
@@ -442,34 +391,27 @@ impl DbTransaction for RelBoxTransaction {
                 c,
                 c_props,
             )
-            .await
             .expect("Unable to update propdefs");
         }
         Ok(())
     }
 
-    async fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         Ok(object_relations::get_object_by_codomain(
             &self.tx,
             WorldStateRelation::ObjectParent,
             obj,
-        )
-        .await)
+        ))
     }
 
-    async fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError> {
+    fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         Ok(
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectLocation, obj)
-                .await
                 .unwrap_or(NOTHING),
         )
     }
 
-    async fn set_object_location(
-        &self,
-        what: Objid,
-        new_location: Objid,
-    ) -> Result<(), WorldStateError> {
+    fn set_object_location(&self, what: Objid, new_location: Objid) -> Result<(), WorldStateError> {
         // Detect recursive move
         let mut oid = new_location;
         loop {
@@ -483,9 +425,7 @@ impl DbTransaction for RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectLocation,
                 oid,
-            )
-            .await
-            else {
+            ) else {
                 break;
             };
             oid = location
@@ -499,9 +439,7 @@ impl DbTransaction for RelBoxTransaction {
             &self.tx,
             WorldStateRelation::ObjectLocation,
             what,
-        )
-        .await
-        {
+        ) {
             if old_location == new_location {
                 return Ok(());
             }
@@ -514,7 +452,6 @@ impl DbTransaction for RelBoxTransaction {
             what,
             new_location,
         )
-        .await
         .expect("Unable to update location");
 
         if new_location == NOTHING {
@@ -524,42 +461,37 @@ impl DbTransaction for RelBoxTransaction {
         Ok(())
     }
 
-    async fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         Ok(object_relations::get_object_by_codomain(
             &self.tx,
             WorldStateRelation::ObjectLocation,
             obj,
-        )
-        .await)
+        ))
     }
 
-    async fn get_max_object(&self) -> Result<Objid, WorldStateError> {
+    fn get_max_object(&self) -> Result<Objid, WorldStateError> {
         Ok(Objid(
             self.tx
-                .sequence_current(WorldStateSequences::MaximumObject as usize)
-                .await as i64
+                .sequence_current(WorldStateSequences::MaximumObject as usize) as i64
                 - 1,
         ))
     }
 
-    async fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError> {
+    fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError> {
         Ok(
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
-                .await
                 .unwrap_or(VerbDefs::empty()),
         )
     }
 
-    async fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError> {
+    fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError> {
         object_relations::get_composite_value(&self.tx, WorldStateRelation::VerbProgram, obj, uuid)
-            .await
             .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", uuid)))
     }
 
-    async fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError> {
+    fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError> {
         let verbdefs: VerbDefs =
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
-                .await
                 .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.clone()))?;
         Ok(verbdefs
             .find_named(name.as_str())
@@ -568,12 +500,8 @@ impl DbTransaction for RelBoxTransaction {
             .clone())
     }
 
-    async fn get_verb_by_index(
-        &self,
-        obj: Objid,
-        index: usize,
-    ) -> Result<VerbDef, WorldStateError> {
-        let verbs = self.get_verbs(obj).await?;
+    fn get_verb_by_index(&self, obj: Objid, index: usize) -> Result<VerbDef, WorldStateError> {
+        let verbs = self.get_verbs(obj)?;
         if index >= verbs.len() {
             return Err(WorldStateError::VerbNotFound(obj, format!("{}", index)));
         }
@@ -583,7 +511,7 @@ impl DbTransaction for RelBoxTransaction {
             .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", index)))
     }
 
-    async fn resolve_verb(
+    fn resolve_verb(
         &self,
         obj: Objid,
         name: String,
@@ -595,9 +523,7 @@ impl DbTransaction for RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectVerbs,
                 search_o,
-            )
-            .await
-            {
+            ) {
                 // If we found the verb, return it.
                 let name_matches = verbdefs.find_named(name.as_str());
                 for verb in name_matches {
@@ -619,9 +545,7 @@ impl DbTransaction for RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 search_o,
-            )
-            .await
-            {
+            ) {
                 Some(NOTHING) | None => {
                     break;
                 }
@@ -631,7 +555,7 @@ impl DbTransaction for RelBoxTransaction {
         Err(WorldStateError::VerbNotFound(obj, name))
     }
 
-    async fn update_verb(
+    fn update_verb(
         &self,
         obj: Objid,
         uuid: Uuid,
@@ -639,7 +563,6 @@ impl DbTransaction for RelBoxTransaction {
     ) -> Result<(), WorldStateError> {
         let Some(verbdefs): Option<VerbDefs> =
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
-                .await
         else {
             return Err(WorldStateError::VerbNotFound(obj, format!("{}", uuid)));
         };
@@ -667,8 +590,7 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectVerbs,
             obj,
             verbdefs,
-        )
-        .await?;
+        )?;
 
         if verb_attrs.binary.is_some() {
             object_relations::upsert_obj_uuid_value(
@@ -677,13 +599,12 @@ impl DbTransaction for RelBoxTransaction {
                 obj,
                 uuid,
                 verb_attrs.binary.unwrap(),
-            )
-            .await?;
+            )?;
         }
         Ok(())
     }
 
-    async fn add_object_verb(
+    fn add_object_verb(
         &self,
         oid: Objid,
         owner: Objid,
@@ -695,7 +616,6 @@ impl DbTransaction for RelBoxTransaction {
     ) -> Result<(), WorldStateError> {
         let verbdefs =
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, oid)
-                .await
                 .unwrap_or(VerbDefs::empty());
 
         let uuid = Uuid::new_v4();
@@ -716,24 +636,21 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectVerbs,
             oid,
             verbdefs,
-        )
-        .await?;
+        )?;
         object_relations::upsert_obj_uuid_value(
             &self.tx,
             WorldStateRelation::VerbProgram,
             oid,
             uuid,
             binary,
-        )
-        .await?;
+        )?;
 
         Ok(())
     }
 
-    async fn delete_verb(&self, location: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
+    fn delete_verb(&self, location: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
         let verbdefs: VerbDefs =
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, location)
-                .await
                 .ok_or_else(|| WorldStateError::VerbNotFound(location, format!("{}", uuid)))?;
 
         let verbdefs = verbdefs
@@ -745,46 +662,34 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectVerbs,
             location,
             verbdefs,
-        )
-        .await?;
+        )?;
 
-        let rel = self
-            .tx
-            .relation(WorldStateRelation::VerbProgram.into())
-            .await;
+        let rel = self.tx.relation(WorldStateRelation::VerbProgram.into());
         rel.remove_by_domain(object_relations::composite_key_for(location, &uuid))
-            .await
             .expect("Unable to delete verb program");
 
         Ok(())
     }
 
-    async fn get_properties(&self, obj: Objid) -> Result<PropDefs, WorldStateError> {
+    fn get_properties(&self, obj: Objid) -> Result<PropDefs, WorldStateError> {
         Ok(
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectPropDefs, obj)
-                .await
                 .unwrap_or(PropDefs::empty()),
         )
     }
 
-    async fn set_property(
-        &self,
-        obj: Objid,
-        uuid: Uuid,
-        value: Var,
-    ) -> Result<(), WorldStateError> {
+    fn set_property(&self, obj: Objid, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
         object_relations::upsert_obj_uuid_value(
             &self.tx,
             WorldStateRelation::ObjectPropertyValue,
             obj,
             uuid,
             value,
-        )
-        .await?;
+        )?;
         Ok(())
     }
 
-    async fn define_property(
+    fn define_property(
         &self,
         definer: Objid,
         location: Objid,
@@ -793,7 +698,7 @@ impl DbTransaction for RelBoxTransaction {
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<Uuid, WorldStateError> {
-        let descendants = self.descendants(location).await?;
+        let descendants = self.descendants(location)?;
         let locations = ObjSet::from(&[location]).with_concatenated(descendants);
 
         // Generate a new property ID. This will get shared all the way down the pipe.
@@ -806,7 +711,6 @@ impl DbTransaction for RelBoxTransaction {
                 WorldStateRelation::ObjectPropDefs,
                 location,
             )
-            .await
             .unwrap_or(PropDefs::empty());
 
             // Verify we don't already have a property with this name. If we do, return an error.
@@ -821,7 +725,6 @@ impl DbTransaction for RelBoxTransaction {
                 location,
                 props.with_added(prop),
             )
-            .await
             .expect("Unable to set property definition")
         }
         // If we have an initial value, set it.
@@ -833,14 +736,13 @@ impl DbTransaction for RelBoxTransaction {
                 u,
                 value,
             )
-            .await
             .expect("Unable to set initial property value")
         }
 
         Ok(u)
     }
 
-    async fn update_property_definition(
+    fn update_property_definition(
         &self,
         obj: Objid,
         uuid: Uuid,
@@ -850,7 +752,6 @@ impl DbTransaction for RelBoxTransaction {
     ) -> Result<(), WorldStateError> {
         let props =
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectPropDefs, obj)
-                .await
                 .unwrap_or(PropDefs::empty());
 
         let Some(props) = props.with_updated(uuid, |p| {
@@ -876,30 +777,28 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectPropDefs,
             obj,
             props,
-        )
-        .await?;
+        )?;
 
         Ok(())
     }
 
-    async fn clear_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
+    fn clear_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
         let key = object_relations::composite_key_for(obj, &uuid);
         let rel = self
             .tx
-            .relation(WorldStateRelation::ObjectPropertyValue.into())
-            .await;
-        match rel.remove_by_domain(key).await {
-            Ok(_) => return Ok(()),
-            Err(TupleError::NotFound) => return Ok(()),
+            .relation(WorldStateRelation::ObjectPropertyValue.into());
+        match rel.remove_by_domain(key) {
+            Ok(_) => Ok(()),
+            Err(TupleError::NotFound) => Ok(()),
             Err(e) => {
                 panic!("Unexpected error: {:?}", e)
             }
         }
     }
 
-    async fn delete_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
+    fn delete_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
         // delete propdef from self and all descendants
-        let descendants = self.descendants(obj).await?;
+        let descendants = self.descendants(obj)?;
         let locations = ObjSet::from(&[obj]).with_concatenated(descendants);
         for location in locations.iter() {
             let props: PropDefs = object_relations::get_object_value(
@@ -907,7 +806,6 @@ impl DbTransaction for RelBoxTransaction {
                 WorldStateRelation::ObjectPropDefs,
                 location,
             )
-            .await
             .expect("Unable to get property definitions");
 
             let props = props
@@ -919,31 +817,28 @@ impl DbTransaction for RelBoxTransaction {
                 WorldStateRelation::ObjectPropDefs,
                 location,
                 props,
-            )
-            .await?;
+            )?;
         }
         Ok(())
     }
 
-    async fn retrieve_property(&self, obj: Objid, uuid: Uuid) -> Result<Var, WorldStateError> {
+    fn retrieve_property(&self, obj: Objid, uuid: Uuid) -> Result<Var, WorldStateError> {
         object_relations::get_composite_value(
             &self.tx,
             WorldStateRelation::ObjectPropertyValue,
             obj,
             uuid,
         )
-        .await
         .ok_or_else(|| WorldStateError::PropertyNotFound(obj, format!("{}", uuid)))
     }
 
-    async fn resolve_property(
+    fn resolve_property(
         &self,
         obj: Objid,
         name: String,
     ) -> Result<(PropDef, Var), WorldStateError> {
         let propdef = self
-            .get_properties(obj)
-            .await?
+            .get_properties(obj)?
             .find_first_named(name.as_str())
             .ok_or_else(|| WorldStateError::PropertyNotFound(obj, name.clone()))?;
 
@@ -957,9 +852,7 @@ impl DbTransaction for RelBoxTransaction {
                 WorldStateRelation::ObjectPropertyValue,
                 search_obj,
                 propdef.uuid(),
-            )
-            .await
-            {
+            ) {
                 return Ok((propdef, found));
             }
 
@@ -970,9 +863,7 @@ impl DbTransaction for RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 search_obj,
-            )
-            .await
-            else {
+            ) else {
                 // If we hit the end of the chain, we're done.
                 break;
             };
@@ -987,7 +878,7 @@ impl DbTransaction for RelBoxTransaction {
         Ok((propdef, v_none()))
     }
 
-    async fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+    fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let mut ancestors = vec![];
         let mut search = obj;
         loop {
@@ -1000,28 +891,25 @@ impl DbTransaction for RelBoxTransaction {
                 WorldStateRelation::ObjectParent,
                 search,
             )
-            .await
             .unwrap_or(NOTHING);
             search = parent;
         }
         Ok(ObjSet::from(&ancestors))
     }
 
-    async fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
+    fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
         let ov: Option<Objid> =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj)
-                .await;
+            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj);
         Ok(ov.is_some())
     }
 
-    async fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
+    fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
         let mut size = 0;
         size += object_relations::tuple_size_for_object_domain(
             &self.tx,
             WorldStateRelation::ObjectFlags,
             obj,
         )
-        .await
         .unwrap_or(0);
 
         size += object_relations::tuple_size_for_object_domain(
@@ -1029,7 +917,6 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectName,
             obj,
         )
-        .await
         .unwrap_or(0);
 
         size += object_relations::tuple_size_for_object_domain(
@@ -1037,7 +924,6 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectOwner,
             obj,
         )
-        .await
         .unwrap_or(0);
 
         size += object_relations::tuple_size_for_object_domain(
@@ -1045,7 +931,6 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectParent,
             obj,
         )
-        .await
         .unwrap_or(0);
 
         size += object_relations::tuple_size_for_object_domain(
@@ -1053,22 +938,18 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectLocation,
             obj,
         )
-        .await
         .unwrap_or(0);
 
         if let Some(verbs) = object_relations::get_object_value::<VerbDefs>(
             &self.tx,
             WorldStateRelation::ObjectVerbs,
             obj,
-        )
-        .await
-        {
+        ) {
             size += object_relations::tuple_size_for_object_domain(
                 &self.tx,
                 WorldStateRelation::ObjectVerbs,
                 obj,
             )
-            .await
             .unwrap_or(0);
 
             for v in verbs.iter() {
@@ -1078,7 +959,6 @@ impl DbTransaction for RelBoxTransaction {
                     obj,
                     v.uuid(),
                 )
-                .await
                 .unwrap_or(0)
             }
         };
@@ -1087,15 +967,12 @@ impl DbTransaction for RelBoxTransaction {
             &self.tx,
             WorldStateRelation::ObjectPropDefs,
             obj,
-        )
-        .await
-        {
+        ) {
             size += object_relations::tuple_size_for_object_domain(
                 &self.tx,
                 WorldStateRelation::ObjectPropDefs,
                 obj,
             )
-            .await
             .unwrap_or(0);
 
             for p in props.iter() {
@@ -1105,7 +982,6 @@ impl DbTransaction for RelBoxTransaction {
                     obj,
                     p.uuid(),
                 )
-                .await
                 .unwrap_or(0)
             }
         };
@@ -1115,14 +991,13 @@ impl DbTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectLocation,
             obj,
         )
-        .await
         .unwrap_or(0);
 
         Ok(size)
     }
 
-    async fn commit(&self) -> Result<CommitResult, WorldStateError> {
-        match self.tx.commit().await {
+    fn commit(&self) -> Result<CommitResult, WorldStateError> {
+        match self.tx.commit() {
             Ok(_) => Ok(CommitResult::Success),
             Err(CommitError::TupleVersionConflict) => Ok(CommitResult::ConflictRetry),
             Err(CommitError::RelationContentionConflict) => {
@@ -1132,15 +1007,15 @@ impl DbTransaction for RelBoxTransaction {
         }
     }
 
-    async fn rollback(&self) -> Result<(), WorldStateError> {
-        match self.tx.rollback().await {
+    fn rollback(&self) -> Result<(), WorldStateError> {
+        match self.tx.rollback() {
             Ok(_) => Ok(()),
             Err(e) => Err(WorldStateError::DatabaseError(e.to_string())),
         }
     }
 
-    async fn db_usage(&self) -> Result<usize, WorldStateError> {
-        Ok(self.tx.db_usage_bytes().await)
+    fn db_usage(&self) -> Result<usize, WorldStateError> {
+        Ok(self.tx.db_usage_bytes())
     }
 }
 
@@ -1150,13 +1025,12 @@ impl RelBoxTransaction {
         Self { tx }
     }
 
-    pub(crate) async fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+    pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let children = object_relations::get_object_by_codomain(
             &self.tx,
             WorldStateRelation::ObjectParent,
             obj,
-        )
-        .await;
+        );
 
         let mut descendants = vec![];
         let mut queue: VecDeque<_> = children.iter().collect();
@@ -1166,14 +1040,13 @@ impl RelBoxTransaction {
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 o,
-            )
-            .await;
+            );
             queue.extend(children.iter());
         }
 
         Ok(ObjSet::from(&descendants))
     }
-    async fn closest_common_ancestor_with_ancestors(
+    fn closest_common_ancestor_with_ancestors(
         &self,
         a: Objid,
         b: Objid,
@@ -1204,7 +1077,6 @@ impl RelBoxTransaction {
                     WorldStateRelation::ObjectParent,
                     search_a,
                 )
-                .await
                 .unwrap_or(NOTHING);
                 search_a = parent;
             }
@@ -1216,7 +1088,6 @@ impl RelBoxTransaction {
                     WorldStateRelation::ObjectParent,
                     search_b,
                 )
-                .await
                 .unwrap_or(NOTHING);
                 search_b = parent;
             }
@@ -1257,7 +1128,7 @@ mod tests {
     use crate::odb::rb_worldstate::RelBoxTransaction;
     use crate::rdb::{RelBox, RelationInfo};
 
-    async fn test_db() -> Arc<RelBox> {
+    fn test_db() -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -1271,12 +1142,12 @@ mod tests {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
+        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT)
     }
 
-    #[tokio::test]
-    async fn test_create_object() {
-        let db = test_db().await;
+    #[test]
+    fn test_create_object() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db.clone());
         let oid = tx
             .create_object(
@@ -1289,41 +1160,39 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
         assert_eq!(oid, Objid(0));
-        assert!(tx.object_valid(oid).await.unwrap());
-        assert_eq!(tx.get_object_owner(oid).await.unwrap(), NOTHING);
-        assert_eq!(tx.get_object_parent(oid).await.unwrap(), NOTHING);
-        assert_eq!(tx.get_object_location(oid).await.unwrap(), NOTHING);
-        assert_eq!(tx.get_object_name(oid).await.unwrap(), "test");
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert!(tx.object_valid(oid).unwrap());
+        assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_parent(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_location(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_name(oid).unwrap(), "test");
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         // Verify existence in a new transaction.
         let tx = RelBoxTransaction::new(db);
-        assert!(tx.object_valid(oid).await.unwrap());
-        assert_eq!(tx.get_object_owner(oid).await.unwrap(), NOTHING);
+        assert!(tx.object_valid(oid).unwrap());
+        assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
     }
 
-    #[tokio::test]
-    async fn test_create_object_fixed_id() {
-        let db = test_db().await;
+    #[test]
+    fn test_create_object_fixed_id() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
         // Force at 1.
         let oid = tx
             .create_object(Some(Objid(1)), ObjAttrs::default())
-            .await
             .unwrap();
         assert_eq!(oid, Objid(1));
         // Now verify the next will be 2.
-        let oid2 = tx.create_object(None, ObjAttrs::default()).await.unwrap();
+        let oid2 = tx.create_object(None, ObjAttrs::default()).unwrap();
         assert_eq!(oid2, Objid(2));
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_parent_children() {
-        let db = test_db().await;
+    #[test]
+    fn test_parent_children() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
 
         // Single parent/child relationship.
@@ -1338,7 +1207,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let b = tx
@@ -1352,18 +1220,16 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        assert_eq!(tx.get_object_parent(b).await.unwrap(), a);
+        assert_eq!(tx.get_object_parent(b).unwrap(), a);
         assert!(tx
             .get_object_children(a)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b])));
 
-        assert_eq!(tx.get_object_parent(a).await.unwrap(), NOTHING);
-        assert_eq!(tx.get_object_children(b).await.unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
 
         // Add a second child
         let c = tx
@@ -1377,18 +1243,16 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        assert_eq!(tx.get_object_parent(c).await.unwrap(), a);
+        assert_eq!(tx.get_object_parent(c).unwrap(), a);
         assert!(tx
             .get_object_children(a)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b, c])));
 
-        assert_eq!(tx.get_object_parent(a).await.unwrap(), NOTHING);
-        assert_eq!(tx.get_object_children(b).await.unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
 
         // Create new obj and reparent one child
         let d = tx
@@ -1402,27 +1266,24 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        tx.set_object_parent(b, d).await.unwrap();
-        assert_eq!(tx.get_object_parent(b).await.unwrap(), d);
+        tx.set_object_parent(b, d).unwrap();
+        assert_eq!(tx.get_object_parent(b).unwrap(), d);
         assert!(tx
             .get_object_children(a)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[c])));
         assert!(tx
             .get_object_children(d)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b])));
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_descendants() {
-        let db = test_db().await;
+    #[test]
+    fn test_descendants() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
 
         let a = tx
@@ -1436,7 +1297,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
         assert_eq!(a, Objid(0));
 
@@ -1451,7 +1311,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
         assert_eq!(b, Objid(1));
 
@@ -1466,7 +1325,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
         assert_eq!(c, Objid(2));
 
@@ -1481,40 +1339,30 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
         assert_eq!(d, Objid(3));
 
-        assert!(tx
-            .descendants(a)
-            .await
-            .unwrap()
-            .is_same(ObjSet::from(&[b, c, d])));
-        assert_eq!(tx.descendants(b).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.descendants(c).await.unwrap(), ObjSet::from(&[d]));
+        assert!(tx.descendants(a).unwrap().is_same(ObjSet::from(&[b, c, d])));
+        assert_eq!(tx.descendants(b).unwrap(), ObjSet::empty());
+        assert_eq!(tx.descendants(c).unwrap(), ObjSet::from(&[d]));
 
         // Now reparent d to b
-        tx.set_object_parent(d, b).await.unwrap();
+        tx.set_object_parent(d, b).unwrap();
         assert!(tx
             .get_object_children(a)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b, c])));
-        assert_eq!(tx.get_object_children(b).await.unwrap(), ObjSet::from(&[d]));
-        assert_eq!(tx.get_object_children(c).await.unwrap(), ObjSet::empty());
-        assert!(tx
-            .descendants(a)
-            .await
-            .unwrap()
-            .is_same(ObjSet::from(&[b, c, d])));
-        assert_eq!(tx.descendants(b).await.unwrap(), ObjSet::from(&[d]));
-        assert_eq!(tx.descendants(c).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from(&[d]));
+        assert_eq!(tx.get_object_children(c).unwrap(), ObjSet::empty());
+        assert!(tx.descendants(a).unwrap().is_same(ObjSet::from(&[b, c, d])));
+        assert_eq!(tx.descendants(b).unwrap(), ObjSet::from(&[d]));
+        assert_eq!(tx.descendants(c).unwrap(), ObjSet::empty());
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_location_contents() {
-        let db = test_db().await;
+    #[test]
+    fn test_location_contents() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db.clone());
 
         let a = tx
@@ -1528,7 +1376,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let b = tx
@@ -1542,14 +1389,13 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        assert_eq!(tx.get_object_location(b).await.unwrap(), a);
-        assert_eq!(tx.get_object_contents(a).await.unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.get_object_location(b).unwrap(), a);
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[b]));
 
-        assert_eq!(tx.get_object_location(a).await.unwrap(), NOTHING);
-        assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_location(a).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
 
         let c = tx
             .create_object(
@@ -1562,13 +1408,12 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        tx.set_object_location(b, c).await.unwrap();
-        assert_eq!(tx.get_object_location(b).await.unwrap(), c);
-        assert_eq!(tx.get_object_contents(a).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::from(&[b]));
+        tx.set_object_location(b, c).unwrap();
+        assert_eq!(tx.get_object_location(b).unwrap(), c);
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
 
         let d = tx
             .create_object(
@@ -1581,26 +1426,23 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
-        tx.set_object_location(d, c).await.unwrap();
+        tx.set_object_location(d, c).unwrap();
         assert!(tx
             .get_object_contents(c)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b, d])));
-        assert_eq!(tx.get_object_location(d).await.unwrap(), c);
+        assert_eq!(tx.get_object_location(d).unwrap(), c);
 
-        tx.set_object_location(a, c).await.unwrap();
+        tx.set_object_location(a, c).unwrap();
         assert!(tx
             .get_object_contents(c)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b, d, a])));
-        assert_eq!(tx.get_object_location(a).await.unwrap(), c);
+        assert_eq!(tx.get_object_location(a).unwrap(), c);
 
         // Validate recursive move detection.
-        match tx.set_object_location(c, b).await.err() {
+        match tx.set_object_location(c, b).err() {
             Some(WorldStateError::RecursiveMove(_, _)) => {}
             _ => {
                 panic!("Expected recursive move error");
@@ -1608,8 +1450,8 @@ mod tests {
         }
 
         // Move b one level deeper, and then check recursive move detection again.
-        tx.set_object_location(b, d).await.unwrap();
-        match tx.set_object_location(c, b).await.err() {
+        tx.set_object_location(b, d).unwrap();
+        match tx.set_object_location(c, b).err() {
             Some(WorldStateError::RecursiveMove(_, _)) => {}
             _ => {
                 panic!("Expected recursive move error");
@@ -1617,14 +1459,14 @@ mod tests {
         }
 
         // The other way around, d to c should be fine.
-        tx.set_object_location(d, c).await.unwrap();
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        tx.set_object_location(d, c).unwrap();
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
     /// Test data integrity of object moves between commits.
-    #[tokio::test]
-    async fn test_object_move_commits() {
-        let db = test_db().await;
+    #[test]
+    fn test_object_move_commits() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db.clone());
 
         let a = tx
@@ -1638,7 +1480,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let b = tx
@@ -1652,7 +1493,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let c = tx
@@ -1666,58 +1506,53 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        tx.set_object_location(b, a).await.unwrap();
-        tx.set_object_location(c, a).await.unwrap();
-        assert_eq!(tx.get_object_location(b).await.unwrap(), a);
-        assert_eq!(tx.get_object_location(c).await.unwrap(), a);
+        tx.set_object_location(b, a).unwrap();
+        tx.set_object_location(c, a).unwrap();
+        assert_eq!(tx.get_object_location(b).unwrap(), a);
+        assert_eq!(tx.get_object_location(c).unwrap(), a);
         assert!(tx
             .get_object_contents(a)
-            .await
             .unwrap()
             .is_same(ObjSet::from(&[b, c])));
-        assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::empty());
 
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         let tx = RelBoxTransaction::new(db.clone());
-        assert_eq!(tx.get_object_location(b).await.unwrap(), a);
-        assert_eq!(tx.get_object_location(c).await.unwrap(), a);
-        let contents = tx
-            .get_object_contents(a)
-            .await
-            .expect("Unable to get contents");
+        assert_eq!(tx.get_object_location(b).unwrap(), a);
+        assert_eq!(tx.get_object_location(c).unwrap(), a);
+        let contents = tx.get_object_contents(a).expect("Unable to get contents");
         assert!(
             contents.is_same(ObjSet::from(&[b, c])),
             "Contents of a are not as expected: {:?} vs {:?}",
             contents,
             ObjSet::from(&[b, c])
         );
-        assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::empty());
 
-        tx.set_object_location(b, c).await.unwrap();
-        assert_eq!(tx.get_object_location(b).await.unwrap(), c);
-        assert_eq!(tx.get_object_location(c).await.unwrap(), a);
-        assert_eq!(tx.get_object_contents(a).await.unwrap(), ObjSet::from(&[c]));
-        assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::from(&[b]));
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        tx.set_object_location(b, c).unwrap();
+        assert_eq!(tx.get_object_location(b).unwrap(), c);
+        assert_eq!(tx.get_object_location(c).unwrap(), a);
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[c]));
+        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         let tx = RelBoxTransaction::new(db.clone());
-        assert_eq!(tx.get_object_location(b).await.unwrap(), c);
-        assert_eq!(tx.get_object_location(c).await.unwrap(), a);
-        assert_eq!(tx.get_object_contents(a).await.unwrap(), ObjSet::from(&[c]));
-        assert_eq!(tx.get_object_contents(b).await.unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).await.unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.get_object_location(b).unwrap(), c);
+        assert_eq!(tx.get_object_location(c).unwrap(), a);
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[c]));
+        assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
     }
 
-    #[tokio::test]
-    async fn test_simple_property() {
-        let db = test_db().await;
+    #[test]
+    fn test_simple_property() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
 
         let oid = tx
@@ -1731,7 +1566,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         tx.define_property(
@@ -1742,18 +1576,17 @@ mod tests {
             BitEnum::new(),
             Some(v_str("test")),
         )
-        .await
         .unwrap();
-        let (prop, v) = tx.resolve_property(oid, "test".into()).await.unwrap();
+        let (prop, v) = tx.resolve_property(oid, "test".into()).unwrap();
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test"));
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
     /// Regression test for updating-verbs failing.
-    #[tokio::test]
-    async fn test_verb_add_update() {
-        let db = test_db().await;
+    #[test]
+    fn test_verb_add_update() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db.clone());
         let oid = tx
             .create_object(
@@ -1766,7 +1599,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
         tx.add_object_verb(
             oid,
@@ -1777,13 +1609,12 @@ mod tests {
             BitEnum::new(),
             VerbArgsSpec::this_none_this(),
         )
-        .await
         .unwrap();
         // resolve the verb to its vh.
-        let vh = tx.resolve_verb(oid, "test".into(), None).await.unwrap();
+        let vh = tx.resolve_verb(oid, "test".into(), None).unwrap();
         assert_eq!(vh.names(), vec!["test"]);
         // Verify it's actually on the object when we get verbs.
-        let verbs = tx.get_verbs(oid).await.unwrap();
+        let verbs = tx.get_verbs(oid).unwrap();
         assert_eq!(verbs.len(), 1);
         assert!(verbs.contains(vh.uuid()));
         // update the verb using its uuid, renaming it.
@@ -1800,23 +1631,22 @@ mod tests {
                 binary: None,
             },
         )
-        .await
         .unwrap();
         // resolve with the new name.
-        let vh = tx.resolve_verb(oid, "test2".into(), None).await.unwrap();
+        let vh = tx.resolve_verb(oid, "test2".into(), None).unwrap();
         assert_eq!(vh.names(), vec!["test2"]);
 
         // Now commit, and try to resolve again.
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
         let tx = RelBoxTransaction::new(db);
-        let vh = tx.resolve_verb(oid, "test2".into(), None).await.unwrap();
+        let vh = tx.resolve_verb(oid, "test2".into(), None).unwrap();
         assert_eq!(vh.names(), vec!["test2"]);
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_transitive_property_resolution() {
-        let db = test_db().await;
+    #[test]
+    fn test_transitive_property_resolution() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
 
         let a = tx
@@ -1830,7 +1660,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let b = tx
@@ -1844,7 +1673,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         tx.define_property(
@@ -1855,9 +1683,8 @@ mod tests {
             BitEnum::new(),
             Some(v_str("test_value")),
         )
-        .await
         .unwrap();
-        let (prop, v) = tx.resolve_property(b, "test".into()).await.unwrap();
+        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test_value"));
 
@@ -1874,22 +1701,21 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
-        tx.set_object_parent(b, c).await.unwrap();
+        tx.set_object_parent(b, c).unwrap();
 
-        let result = tx.resolve_property(b, "test".into()).await;
+        let result = tx.resolve_property(b, "test".into());
         assert_eq!(
             result.err().unwrap(),
             WorldStateError::PropertyNotFound(b, "test".into())
         );
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_transitive_property_resolution_clear_property() {
-        let db = test_db().await;
+    #[test]
+    fn test_transitive_property_resolution_clear_property() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
 
         let a = tx
@@ -1903,7 +1729,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let b = tx
@@ -1917,7 +1742,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         tx.define_property(
@@ -1928,9 +1752,8 @@ mod tests {
             BitEnum::new(),
             Some(v_str("test_value")),
         )
-        .await
         .unwrap();
-        let (prop, v) = tx.resolve_property(b, "test".into()).await.unwrap();
+        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test_value"));
 
@@ -1938,19 +1761,17 @@ mod tests {
         // This should raise an error because the child already *has* this property.
         // MOO will not let this happen. The right way to handle overloading is to set the value
         // on the child.
-        let result = tx
-            .define_property(a, b, "test".into(), NOTHING, BitEnum::new(), None)
-            .await;
+        let result = tx.define_property(a, b, "test".into(), NOTHING, BitEnum::new(), None);
         assert!(matches!(
             result,
             Err(WorldStateError::DuplicatePropertyDefinition(_, _))
         ));
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_verb_resolve() {
-        let db = test_db().await;
+    #[test]
+    fn test_verb_resolve() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db.clone());
 
         let a = tx
@@ -1964,7 +1785,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         tx.add_object_verb(
@@ -1976,31 +1796,22 @@ mod tests {
             BitEnum::new(),
             VerbArgsSpec::this_none_this(),
         )
-        .await
         .unwrap();
 
         assert_eq!(
-            tx.resolve_verb(a, "test".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "test".into(), None).unwrap().names(),
             vec!["test"]
         );
 
         assert_eq!(
             tx.resolve_verb(a, "test".into(), Some(VerbArgsSpec::this_none_this()))
-                .await
                 .unwrap()
                 .names(),
             vec!["test"]
         );
 
-        let v_uuid = tx
-            .resolve_verb(a, "test".into(), None)
-            .await
-            .unwrap()
-            .uuid();
-        assert_eq!(tx.get_verb_binary(a, v_uuid).await.unwrap(), vec![]);
+        let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
+        assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
 
         // Add a second verb with a different name
         tx.add_object_verb(
@@ -2012,41 +1823,31 @@ mod tests {
             BitEnum::new(),
             VerbArgsSpec::this_none_this(),
         )
-        .await
         .unwrap();
 
         // Verify we can get it
         assert_eq!(
-            tx.resolve_verb(a, "test2".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "test2".into(), None).unwrap().names(),
             vec!["test2"]
         );
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         // Verify existence in a new transaction.
         let tx = RelBoxTransaction::new(db);
         assert_eq!(
-            tx.resolve_verb(a, "test".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "test".into(), None).unwrap().names(),
             vec!["test"]
         );
         assert_eq!(
-            tx.resolve_verb(a, "test2".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "test2".into(), None).unwrap().names(),
             vec!["test2"]
         );
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_verb_resolve_inherited() {
-        let db = test_db().await;
+    #[test]
+    fn test_verb_resolve_inherited() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
 
         let a = tx
@@ -2060,7 +1861,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let b = tx
@@ -2074,7 +1874,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         tx.add_object_verb(
@@ -2086,37 +1885,28 @@ mod tests {
             BitEnum::new(),
             VerbArgsSpec::this_none_this(),
         )
-        .await
         .unwrap();
 
         assert_eq!(
-            tx.resolve_verb(b, "test".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(b, "test".into(), None).unwrap().names(),
             vec!["test"]
         );
 
         assert_eq!(
             tx.resolve_verb(b, "test".into(), Some(VerbArgsSpec::this_none_this()))
-                .await
                 .unwrap()
                 .names(),
             vec!["test"]
         );
 
-        let v_uuid = tx
-            .resolve_verb(b, "test".into(), None)
-            .await
-            .unwrap()
-            .uuid();
-        assert_eq!(tx.get_verb_binary(a, v_uuid).await.unwrap(), vec![]);
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        let v_uuid = tx.resolve_verb(b, "test".into(), None).unwrap().uuid();
+        assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
-    #[tokio::test]
-    async fn test_verb_resolve_wildcard() {
-        let db = test_db().await;
+    #[test]
+    fn test_verb_resolve_wildcard() {
+        let db = test_db();
         let tx = RelBoxTransaction::new(db);
         let a = tx
             .create_object(
@@ -2129,7 +1919,6 @@ mod tests {
                     flags: Some(BitEnum::new()),
                 },
             )
-            .await
             .unwrap();
 
         let verb_names = vec!["dname*c", "iname*c"];
@@ -2142,40 +1931,27 @@ mod tests {
             BitEnum::new(),
             VerbArgsSpec::this_none_this(),
         )
-        .await
         .unwrap();
 
         assert_eq!(
-            tx.resolve_verb(a, "dname".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "dname".into(), None).unwrap().names(),
             verb_names
         );
 
         assert_eq!(
-            tx.resolve_verb(a, "dnamec".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "dnamec".into(), None).unwrap().names(),
             verb_names
         );
 
         assert_eq!(
-            tx.resolve_verb(a, "iname".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "iname".into(), None).unwrap().names(),
             verb_names
         );
 
         assert_eq!(
-            tx.resolve_verb(a, "inamec".into(), None)
-                .await
-                .unwrap()
-                .names(),
+            tx.resolve_verb(a, "inamec".into(), None).unwrap().names(),
             verb_names
         );
-        assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 }

@@ -40,6 +40,8 @@ strum.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 libc.workspace = true
+kanal.workspace = true
+dashmap.workspace = true
 
 ## Required for MOO builtins.
 pwhash.workspace = true

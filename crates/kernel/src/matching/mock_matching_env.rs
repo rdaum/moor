@@ -48,18 +48,18 @@ impl MockMatchEnv {
 
 #[async_trait]
 impl MatchEnvironment for MockMatchEnv {
-    async fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
+    fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
         Ok(self.objects.contains_key(&oid))
     }
 
-    async fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
+    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
         Ok(self
             .objects
             .get(&oid)
             .map_or_else(Vec::new, |o| o.names.clone()))
     }
 
-    async fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError> {
         let mut result = Vec::new();
         if let Some(player_obj) = self.objects.get(&player) {
             result.push(MOCK_PLAYER);
@@ -73,11 +73,11 @@ impl MatchEnvironment for MockMatchEnv {
         Ok(ObjSet::from(&result))
     }
 
-    async fn location_of(&mut self, oid: Objid) -> Result<Objid, WorldStateError> {
+    fn location_of(&mut self, oid: Objid) -> Result<Objid, WorldStateError> {
         self.objects
             .get(&oid)
             .map(|o| o.location)
-            .ok_or_else(|| WorldStateError::ObjectNotFound(oid))
+            .ok_or(WorldStateError::ObjectNotFound(oid))
     }
 }
 

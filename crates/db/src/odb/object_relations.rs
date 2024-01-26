@@ -68,34 +68,28 @@ pub enum WorldStateSequences {
     MaximumObject = 0,
 }
 
-pub async fn upsert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub fn upsert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
     value: Codomain,
 ) -> Result<(), WorldStateError> {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    if let Err(e) = relation
-        .upsert_tuple(oid.as_sliceref(), value.as_sliceref())
-        .await
-    {
+    let relation = tx.relation(RelationId(rel as usize));
+    if let Err(e) = relation.upsert_tuple(oid.as_sliceref(), value.as_sliceref()) {
         panic!("Unexpected error: {:?}", e)
     }
     Ok(())
 }
 
 #[allow(dead_code)]
-pub async fn insert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub fn insert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
     value: Codomain,
 ) -> Result<(), WorldStateError> {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation
-        .insert_tuple(oid.as_sliceref(), value.as_sliceref())
-        .await
-    {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.insert_tuple(oid.as_sliceref(), value.as_sliceref()) {
         Ok(_) => Ok(()),
         Err(TupleError::Duplicate) => {
             Err(WorldStateError::DatabaseError("Duplicate key".to_string()))
@@ -106,7 +100,7 @@ pub async fn insert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer
 
 /// Full scan an entire relation where the Domain is an Objid, and return the ones matching the
 /// predicate.
-pub async fn get_all_object_keys_matching<P, Codomain>(
+pub fn get_all_object_keys_matching<P, Codomain>(
     tx: &Transaction,
     rel: WorldStateRelation,
     pred: P,
@@ -115,14 +109,11 @@ where
     P: Fn(Objid, Codomain) -> bool,
     Codomain: Clone + Eq + PartialEq + AsByteBuffer,
 {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    let Ok(all_tuples) = relation
-        .predicate_scan(&|t| {
-            let oid = Objid::from_sliceref(t.domain());
-            pred(oid, Codomain::from_sliceref(t.codomain()))
-        })
-        .await
-    else {
+    let relation = tx.relation(RelationId(rel as usize));
+    let Ok(all_tuples) = relation.predicate_scan(&|t| {
+        let oid = Objid::from_sliceref(t.domain());
+        pred(oid, Codomain::from_sliceref(t.codomain()))
+    }) else {
         return Err(WorldStateError::DatabaseError(
             "Unable to scan relation".to_string(),
         ));
@@ -133,39 +124,39 @@ where
     Ok(ObjSet::from_oid_iter(objs))
 }
 
-pub async fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
 ) -> Option<Codomain> {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.seek_by_domain(oid.as_sliceref()).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.seek_by_domain(oid.as_sliceref()) {
         Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
 
-pub async fn tuple_size_for_object_domain(
+pub fn tuple_size_for_object_domain(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
 ) -> Option<usize> {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.seek_by_domain(oid.as_sliceref()).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.seek_by_domain(oid.as_sliceref()) {
         Ok(t) => Some(t.slot_buffer().len()),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
 
-pub async fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     codomain: Codomain,
 ) -> ObjSet {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    let result = relation.seek_by_codomain(codomain.as_sliceref()).await;
+    let relation = tx.relation(RelationId(rel as usize));
+    let result = relation.seek_by_codomain(codomain.as_sliceref());
     let objs = result
         .expect("Unable to seek by codomain")
         .into_iter()
@@ -173,42 +164,42 @@ pub async fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuf
     ObjSet::from_oid_iter(objs)
 }
 
-pub async fn tuple_size_for_object_codomain(
+pub fn tuple_size_for_object_codomain(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
 ) -> Option<usize> {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.seek_by_codomain(oid.as_sliceref()).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.seek_by_codomain(oid.as_sliceref()) {
         Ok(ts) => Some(ts.iter().map(|t| t.slot_buffer().len()).sum()),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
-pub async fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
     uuid: Uuid,
 ) -> Option<Codomain> {
     let key_bytes = composite_key_for(oid, &uuid);
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.seek_by_domain(key_bytes).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.seek_by_domain(key_bytes) {
         Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
 
-pub async fn tuple_size_composite(
+pub fn tuple_size_composite(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
     uuid: Uuid,
 ) -> Option<usize> {
     let key_bytes = composite_key_for(oid, &uuid);
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.seek_by_domain(key_bytes).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.seek_by_domain(key_bytes) {
         Ok(t) => Some(t.slot_buffer().len()),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -216,7 +207,7 @@ pub async fn tuple_size_composite(
 }
 
 #[allow(dead_code)]
-async fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
@@ -224,8 +215,8 @@ async fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>
     value: Codomain,
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.insert_tuple(key_bytes, value.as_sliceref()).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.insert_tuple(key_bytes, value.as_sliceref()) {
         Ok(_) => Ok(()),
         Err(TupleError::Duplicate) => Err(WorldStateError::ObjectNotFound(oid)),
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -233,35 +224,35 @@ async fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>
 }
 
 #[allow(dead_code)]
-async fn delete_if_exists(
+fn delete_if_exists(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
 ) -> Result<(), WorldStateError> {
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.remove_by_domain(oid.as_sliceref()).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.remove_by_domain(oid.as_sliceref()) {
         Ok(_) => Ok(()),
         Err(TupleError::NotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
 
-pub async fn delete_composite_if_exists(
+pub fn delete_composite_if_exists(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
     uuid: Uuid,
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    match relation.remove_by_domain(key_bytes).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    match relation.remove_by_domain(key_bytes) {
         Ok(_) => Ok(()),
         Err(TupleError::NotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
 
-pub async fn upsert_obj_uuid_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+pub fn upsert_obj_uuid_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     tx: &Transaction,
     rel: WorldStateRelation,
     oid: Objid,
@@ -269,8 +260,8 @@ pub async fn upsert_obj_uuid_value<Codomain: Clone + Eq + PartialEq + AsByteBuff
     value: Codomain,
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
-    let relation = tx.relation(RelationId(rel as usize)).await;
-    if let Err(e) = relation.upsert_tuple(key_bytes, value.as_sliceref()).await {
+    let relation = tx.relation(RelationId(rel as usize));
+    if let Err(e) = relation.upsert_tuple(key_bytes, value.as_sliceref()) {
         panic!("Unexpected error: {:?}", e)
     }
     Ok(())
@@ -292,7 +283,7 @@ mod tests {
     };
     use crate::rdb::{RelBox, RelationInfo};
 
-    async fn test_db() -> Arc<RelBox> {
+    fn test_db() -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -306,113 +297,91 @@ mod tests {
         relations[ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT).await
+        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT)
     }
 
     /// Test simple relations mapping oid->oid (with secondary index), independent of all other
     /// worldstate voodoo.
-    #[tokio::test]
-    async fn test_simple_object() {
-        let db = test_db().await;
+    #[test]
+    fn test_simple_object() {
+        let db = test_db();
         let tx = db.clone().start_tx();
-        insert_object_value(&tx, ObjectParent, Objid(3), Objid(2))
-            .await
-            .unwrap();
-        insert_object_value(&tx, ObjectParent, Objid(2), Objid(1))
-            .await
-            .unwrap();
-        insert_object_value(&tx, ObjectParent, Objid(1), Objid(0))
-            .await
-            .unwrap();
+        insert_object_value(&tx, ObjectParent, Objid(3), Objid(2)).unwrap();
+        insert_object_value(&tx, ObjectParent, Objid(2), Objid(1)).unwrap();
+        insert_object_value(&tx, ObjectParent, Objid(1), Objid(0)).unwrap();
 
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(3))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(3)).unwrap(),
             Objid(2)
         );
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(2))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(2)).unwrap(),
             Objid(1)
         );
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(1))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(1)).unwrap(),
             Objid(0)
         );
 
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(3)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(3)),
             ObjSet::from(&[])
         );
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(2)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(2)),
             ObjSet::from(&[Objid(3)])
         );
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(1)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(1)),
             ObjSet::from(&[Objid(2)])
         );
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(0)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(0)),
             ObjSet::from(&[Objid(1)])
         );
 
         // Now commit and re-verify.
-        tx.commit().await.unwrap();
+        tx.commit().unwrap();
         let tx = db.clone().start_tx();
 
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(3))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(3)).unwrap(),
             Objid(2)
         );
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(2))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(2)).unwrap(),
             Objid(1)
         );
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(1))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(1)).unwrap(),
             Objid(0)
         );
 
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(3)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(3)),
             ObjSet::from(&[])
         );
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(2)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(2)),
             ObjSet::from(&[Objid(3)])
         );
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(1)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(1)),
             ObjSet::from(&[Objid(2)])
         );
         assert_eq!(
-            get_object_by_codomain(&tx, ObjectParent, Objid(0)).await,
+            get_object_by_codomain(&tx, ObjectParent, Objid(0)),
             ObjSet::from(&[Objid(1)])
         );
 
         // And then update a value and verify.
-        upsert_object_value(&tx, ObjectParent, Objid(1), Objid(2))
-            .await
-            .unwrap();
+        upsert_object_value(&tx, ObjectParent, Objid(1), Objid(2)).unwrap();
         assert_eq!(
-            get_object_value::<Objid>(&tx, ObjectParent, Objid(1))
-                .await
-                .unwrap(),
+            get_object_value::<Objid>(&tx, ObjectParent, Objid(1)).unwrap(),
             Objid(2)
         );
         // Verify that the secondary index is updated... First check for new value.
-        let children = get_object_by_codomain(&tx, ObjectParent, Objid(2)).await;
+        let children = get_object_by_codomain(&tx, ObjectParent, Objid(2));
         assert_eq!(children.len(), 2);
         assert!(
             children.contains(Objid(1)),
@@ -423,7 +392,7 @@ mod tests {
             "Expected children of 2 to not contain 0"
         );
         // Now check the old value.
-        let children = get_object_by_codomain(&tx, ObjectParent, Objid(0)).await;
+        let children = get_object_by_codomain(&tx, ObjectParent, Objid(0));
         assert_eq!(children, ObjSet::from(&[]));
     }
 }

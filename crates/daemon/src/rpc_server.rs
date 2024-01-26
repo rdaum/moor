@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Error};
+
 use futures_util::SinkExt;
 use metrics_macros::increment_counter;
 use rusty_paseto::core::{
@@ -59,7 +60,7 @@ pub struct RpcServer {
     keypair: Key<64>,
     publish: Arc<Mutex<Publish>>,
     world_state_source: Arc<dyn WorldStateSource>,
-    scheduler: Scheduler,
+    scheduler: Arc<Scheduler>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
 }
 
@@ -79,7 +80,7 @@ impl RpcServer {
         zmq_context: tmq::Context,
         narrative_endpoint: &str,
         wss: Arc<dyn WorldStateSource>,
-        scheduler: Scheduler,
+        scheduler: Arc<Scheduler>,
     ) -> Self {
         info!(
             "Creating new RPC server; with {} ZMQ IO threads...",
@@ -89,10 +90,10 @@ impl RpcServer {
             .set_sndtimeo(1)
             .bind(narrative_endpoint)
             .unwrap();
-        let connections = Arc::new(ConnectionsTb::new(Some(connections_db_path)).await);
+        let connections = Arc::new(ConnectionsTb::new(Some(connections_db_path)));
         info!(
             "Created connections list, with {} initial known connections",
-            connections.connections().await.len()
+            connections.connections().len()
         );
         Self {
             keypair,
@@ -114,11 +115,7 @@ impl RpcServer {
             RpcRequest::ConnectionEstablish(hostname) => {
                 increment_counter!("rpc_server.connection_establish");
 
-                match self
-                    .connections
-                    .new_connection(client_id, hostname, None)
-                    .await
-                {
+                match self.connections.new_connection(client_id, hostname, None) {
                     Ok(oid) => {
                         let token = self.make_client_token(client_id);
                         make_response(Ok(NewConnection(token, oid)))
@@ -133,14 +130,14 @@ impl RpcServer {
                     warn!("Invalid auth token for attach request");
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
-                let client_token = match self
-                    .connections
-                    .new_connection(client_id, hostname, Some(player))
-                    .await
-                {
-                    Ok(_) => self.make_client_token(client_id),
-                    Err(e) => return make_response(Err(e)),
-                };
+                let client_token =
+                    match self
+                        .connections
+                        .new_connection(client_id, hostname, Some(player))
+                    {
+                        Ok(_) => self.make_client_token(client_id),
+                        Err(e) => return make_response(Err(e)),
+                    };
 
                 if let Some(connect_type) = connect_type {
                     trace!(?player, "Submitting user_connected task");
@@ -163,10 +160,7 @@ impl RpcServer {
                 // ping was sent out, or dangling in some other way.
                 let response = make_response(Ok(RpcResponse::ThanksPong(SystemTime::now())));
                 increment_counter!("rpc_server.pong");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     warn!("Received Pong from invalid client: {}", client_id);
                     return response;
@@ -181,11 +175,7 @@ impl RpcServer {
                 };
 
                 // Let 'connections' know that the connection is still alive.
-                let Ok(_) = self
-                    .connections
-                    .notify_is_alive(client_id, connection)
-                    .await
-                else {
+                let Ok(_) = self.connections.notify_is_alive(client_id, connection) else {
                     warn!("Unable to notify connection is alive: {}", client_id);
                     return response;
                 };
@@ -193,10 +183,7 @@ impl RpcServer {
             }
             RpcRequest::RequestSysProp(token, object, property) => {
                 increment_counter!("rpc_server.request_sys_prop");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
@@ -213,10 +200,7 @@ impl RpcServer {
             }
             RpcRequest::LoginCommand(token, args, attach) => {
                 increment_counter!("rpc_server.login_command");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
@@ -237,10 +221,7 @@ impl RpcServer {
             }
             RpcRequest::Command(token, auth_token, command) => {
                 increment_counter!("rpc_server.command");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
@@ -270,10 +251,7 @@ impl RpcServer {
             }
             RpcRequest::RequestedInput(token, auth_token, request_id, input) => {
                 increment_counter!("rpc_server.requested_input");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
@@ -304,10 +282,7 @@ impl RpcServer {
             }
             RpcRequest::OutOfBand(token, auth_token, command) => {
                 increment_counter!("rpc_server.out_of_band_received");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
@@ -338,10 +313,7 @@ impl RpcServer {
 
             RpcRequest::Eval(token, auth_token, evalstr) => {
                 increment_counter!("rpc_server.eval");
-                let Some(connection) = self
-                    .connections
-                    .connection_object_for_client(client_id)
-                    .await
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
                 };
@@ -376,7 +348,7 @@ impl RpcServer {
                 info!("Detaching client: {}", client_id);
 
                 // Detach this client id from the player/connection object.
-                let Ok(_) = self.connections.remove_client_connection(client_id).await else {
+                let Ok(_) = self.connections.remove_client_connection(client_id) else {
                     return make_response(Err(RpcRequestError::InternalError(
                         "Unable to remove client connection".to_string(),
                     )));
@@ -401,22 +373,22 @@ impl RpcServer {
         )))
     }
 
-    pub(crate) async fn connection_name_for(&self, player: Objid) -> Result<String, SessionError> {
-        self.connections.connection_name_for(player).await
+    pub(crate) fn connection_name_for(&self, player: Objid) -> Result<String, SessionError> {
+        self.connections.connection_name_for(player)
     }
 
     #[allow(dead_code)]
     async fn last_activity_for(&self, player: Objid) -> Result<SystemTime, SessionError> {
-        self.connections.last_activity_for(player).await
+        self.connections.last_activity_for(player)
     }
 
-    pub(crate) async fn idle_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
-        let last_activity = self.connections.last_activity_for(player).await?;
+    pub(crate) fn idle_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+        let last_activity = self.connections.last_activity_for(player)?;
         Ok(last_activity.elapsed().unwrap().as_secs_f64())
     }
 
-    pub(crate) async fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
-        self.connections.connected_seconds_for(player).await
+    pub(crate) fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+        self.connections.connected_seconds_for(player)
     }
 
     // TODO this will issue physical disconnects to *all* connections for this player.
@@ -426,7 +398,7 @@ impl RpcServer {
     //   should be modified to reflect that.
     pub(crate) async fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
         warn!("Disconnecting player: {}", player);
-        let all_client_ids = self.connections.client_ids_for(player).await?;
+        let all_client_ids = self.connections.client_ids_for(player)?;
 
         let mut publish = self.publish.lock().await;
         let event = ConnectionEvent::Disconnect();
@@ -446,8 +418,8 @@ impl RpcServer {
         Ok(())
     }
 
-    pub(crate) async fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
-        let connections = self.connections.connections().await;
+    pub(crate) fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+        let connections = self.connections.connections();
         Ok(connections.iter().filter(|o| o.0 > 0).cloned().collect())
     }
 
@@ -456,13 +428,12 @@ impl RpcServer {
         object: String,
         property: String,
     ) -> Result<RpcResponse, RpcRequestError> {
-        let Ok(world_state) = self.world_state_source.new_world_state().await else {
+        let Ok(world_state) = self.world_state_source.new_world_state() else {
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
-        let Ok(sysprop) = world_state
-            .retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object.as_str())
-            .await
+        let Ok(sysprop) =
+            world_state.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object.as_str())
         else {
             return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
                 "could not access system object".to_string(),
@@ -475,9 +446,8 @@ impl RpcServer {
             ));
         };
 
-        let Ok(property_value) = world_state
-            .retrieve_property(SYSTEM_OBJECT, *sysprop, property.as_str())
-            .await
+        let Ok(property_value) =
+            world_state.retrieve_property(SYSTEM_OBJECT, *sysprop, property.as_str())
         else {
             return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
                 "could not sysprop".to_string(),
@@ -541,7 +511,7 @@ impl RpcServer {
                 return Err(RpcRequestError::LoginTaskFailed);
             }
         };
-        let player = match receiver.await {
+        let player = match receiver.recv().await {
             Ok(TaskWaiterResult::Success(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
                 // client id to use the player objid and then return a result to the client.
@@ -575,7 +545,6 @@ impl RpcServer {
         let Ok(_) = self
             .connections
             .update_client_connection(connection, player)
-            .await
         else {
             increment_counter!("rpc_server.perform_login.update_client_connection_failed");
             return Err(RpcRequestError::InternalError(
@@ -651,7 +620,6 @@ impl RpcServer {
         if let Err(e) = self
             .connections
             .record_client_activity(client_id, connection)
-            .await
         {
             warn!("Unable to update client connection activity: {}", e);
         };
@@ -684,7 +652,7 @@ impl RpcServer {
 
         // That having failed, we do the classic internal parse command cycle instead...
         increment_counter!("rpc_server.submit_command_task");
-        debug!(
+        info!(
             command,
             ?client_id,
             ?connection,
@@ -721,7 +689,6 @@ impl RpcServer {
         if let Err(e) = self
             .connections
             .record_client_activity(client_id, connection)
-            .await
         {
             warn!("Unable to update client connection activity: {}", e);
         };
@@ -754,7 +721,7 @@ impl RpcServer {
             }
         };
 
-        match receiver.await {
+        match receiver.recv().await {
             Ok(TaskWaiterResult::Success(value)) => Ok(value),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
@@ -839,7 +806,7 @@ impl RpcServer {
             }
         };
 
-        match receiver.await {
+        match receiver.recv().await {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 increment_counter!("rpc_server.eval.database_error");
@@ -865,7 +832,7 @@ impl RpcServer {
         increment_counter!("rpc_server.publish_narrative_events");
         let mut publish = self.publish.lock().await;
         for (player, event) in events {
-            let client_ids = self.connections.client_ids_for(*player).await?;
+            let client_ids = self.connections.client_ids_for(*player)?;
             let event = ConnectionEvent::Narrative(*player, event.clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
             for client_id in &client_ids {
@@ -913,11 +880,7 @@ impl RpcServer {
         // line to the scheduler as a command, it should instead dispatch it as an input event.
 
         // Validate first.
-        let Some(connection) = self
-            .connections
-            .connection_object_for_client(client_id)
-            .await
-        else {
+        let Some(connection) = self.connections.connection_object_for_client(client_id) else {
             return Err(SessionError::NoConnectionForPlayer(player));
         };
         if connection != player {
@@ -951,7 +914,7 @@ impl RpcServer {
                 DeliveryError
             })?;
         }
-        self.connections.ping_check().await;
+        self.connections.ping_check();
         Ok(())
     }
 
@@ -1108,7 +1071,7 @@ pub(crate) async fn zmq_loop(
     keypair: Key<64>,
     connections_db_path: PathBuf,
     wss: Arc<dyn WorldStateSource>,
-    scheduler: Scheduler,
+    scheduler: Arc<Scheduler>,
     rpc_endpoint: &str,
     narrative_endpoint: &str,
 ) -> anyhow::Result<()> {

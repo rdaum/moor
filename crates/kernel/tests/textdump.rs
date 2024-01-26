@@ -40,24 +40,22 @@ mod test {
         File::open(minimal_db.clone()).unwrap()
     }
 
-    async fn load_textdump_file(tx: Arc<dyn LoaderInterface>, path: &str) {
-        textdump_load(tx.clone(), PathBuf::from(path))
-            .await
-            .expect("Could not load textdump");
-        assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+    fn load_textdump_file(tx: Arc<dyn LoaderInterface>, path: &str) {
+        textdump_load(tx.clone(), PathBuf::from(path)).expect("Could not load textdump");
+        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
 
-    async fn write_textdump(db: Arc<RelBoxWorldState>, version: &str) -> String {
+    fn write_textdump(db: Arc<RelBoxWorldState>, version: &str) -> String {
         let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
-        let textdump = make_textdump(tx.clone(), Some(version)).await;
+        let textdump = make_textdump(tx.clone(), Some(version));
 
         let mut writer = moor_kernel::textdump::TextdumpWriter::new(&mut output);
         writer
             .write_textdump(&textdump)
             .expect("Failed to write textdump");
 
-        assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
         String::from_utf8(output).expect("Failed to convert output to string")
     }
 
@@ -170,39 +168,38 @@ mod test {
     }
 
     /// Actually load a textdump into an actual *database* and confirm that it has the expected contents.
-    #[tokio::test]
-    async fn load_into_db() {
+    #[test]
+    fn load_into_db() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
+        let (db, _) = RelBoxWorldState::open(None, 1 << 30);
         let db = Arc::new(db);
         let tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.clone(), minimal_db).await.unwrap();
-        assert_eq!(tx.commit().await.unwrap(), CommitResult::Success);
+        textdump_load(tx.clone(), minimal_db).unwrap();
+        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
         // Check a few things in a new transaction.
-        let tx = db.new_world_state().await.unwrap();
+        let tx = db.new_world_state().unwrap();
         assert_eq!(
-            tx.names_of(Objid(3), Objid(1)).await.unwrap(),
+            tx.names_of(Objid(3), Objid(1)).unwrap(),
             ("Root Class".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(Objid(3), Objid(2)).await.unwrap(),
+            tx.names_of(Objid(3), Objid(2)).unwrap(),
             ("The First Room".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(Objid(3), Objid(3)).await.unwrap(),
+            tx.names_of(Objid(3), Objid(3)).unwrap(),
             ("Wizard".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(Objid(3), SYSTEM_OBJECT).await.unwrap(),
+            tx.names_of(Objid(3), SYSTEM_OBJECT).unwrap(),
             ("System Object".into(), vec![])
         );
 
         let dlc = tx
             .get_verb(Objid(3), SYSTEM_OBJECT, "do_login_command")
-            .await
             .unwrap();
         assert_eq!(dlc.owner(), Objid(3));
         assert_eq!(dlc.flags(), VerbFlag::rxd());
@@ -210,18 +207,17 @@ mod test {
     }
 
     /// Load minimal into a db, then write a new textdump, and they should be the same-ish.
-    #[tokio::test]
-    async fn load_minimal_into_db_then_compare() {
+    #[test]
+    fn load_minimal_into_db_then_compare() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = RelBoxWorldState::open(None, 1 << 30).await;
+        let (db, _) = RelBoxWorldState::open(None, 1 << 30);
         let db = Arc::new(db);
         load_textdump_file(
             db.clone().loader_client().unwrap(),
             minimal_db.to_str().unwrap(),
-        )
-        .await;
+        );
 
         // Read input as string, and compare.
         let corefile = File::open(minimal_db).unwrap();
@@ -229,55 +225,51 @@ mod test {
         let input = String::from_utf8(br.bytes().map(|b| b.unwrap()).collect())
             .expect("Failed to convert input to string");
 
-        let output = write_textdump(db, "** LambdaMOO Database, Format Version 1 **").await;
+        let output = write_textdump(db, "** LambdaMOO Database, Format Version 1 **");
 
         assert_diff(&input, &output, "", 0);
     }
 
     /// Load a big (JHCore-DEV-2.db) core into a db, then write a new textdump, and then reload
     /// the core to verify it can be loaded.
-    #[tokio::test]
+    #[test]
     // This is an expensive test, so it's not run by default.
     #[ignore]
-    async fn load_write_reload_big_core() {
+    fn load_write_reload_big_core() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
 
-        let (db1, _) = RelBoxWorldState::open(None, 1 << 34).await;
+        let (db1, _) = RelBoxWorldState::open(None, 1 << 34);
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap(),
             minimal_db.to_str().unwrap(),
-        )
-        .await;
+        );
 
-        let textdump =
-            write_textdump(db1.clone(), "** LambdaMOO Database, Format Version 4 **").await;
+        let textdump = write_textdump(db1.clone(), "** LambdaMOO Database, Format Version 4 **");
 
         // Now load that same core back in to a new DB, and hope we don't blow up anywhere.
-        let (db2, _) = RelBoxWorldState::open(None, 1 << 34).await;
+        let (db2, _) = RelBoxWorldState::open(None, 1 << 34);
         let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
         let lc = db2.clone().loader_client().unwrap();
-        let _ = read_textdump(lc.clone(), buffered_string_reader)
-            .await
-            .unwrap();
-        assert_eq!(lc.commit().await.unwrap(), CommitResult::Success);
+        let _ = read_textdump(lc.clone(), buffered_string_reader).unwrap();
+        assert_eq!(lc.commit().unwrap(), CommitResult::Success);
 
         // Now go through the properties and verbs of all the objects on db1, and verify that
         // they're the same on db2.
         let tx1 = db1.loader_client().unwrap();
         let tx2 = db2.loader_client().unwrap();
-        let objects1 = tx1.get_objects().await.unwrap();
-        let objects2 = tx2.get_objects().await.unwrap();
+        let objects1 = tx1.get_objects().unwrap();
+        let objects2 = tx2.get_objects().unwrap();
         let objects1 = objects1.iter().collect::<BTreeSet<_>>();
         let objects2 = objects2.iter().collect::<BTreeSet<_>>();
         assert_eq!(objects1, objects2);
 
         for o in objects1 {
             // set of properties should be the same
-            let o1_props = tx1.get_object_properties(o).await.unwrap();
-            let o2_props = tx2.get_object_properties(o).await.unwrap();
+            let o1_props = tx1.get_object_properties(o).unwrap();
+            let o2_props = tx2.get_object_properties(o).unwrap();
             let mut o1_props = o1_props.iter().collect::<Vec<_>>();
             let mut o2_props = o2_props.iter().collect::<Vec<_>>();
 
@@ -325,8 +317,8 @@ mod test {
                     p1.name(),
                 );
 
-                let value1 = tx1.get_property_value(o, p1.uuid()).await.unwrap();
-                let value2 = tx2.get_property_value(o, p2.uuid()).await.unwrap();
+                let value1 = tx1.get_property_value(o, p1.uuid()).unwrap();
+                let value2 = tx2.get_property_value(o, p2.uuid()).unwrap();
 
                 assert_eq!(
                     value1,
@@ -339,8 +331,8 @@ mod test {
             }
 
             // Now compare verbdefs
-            let o1_verbs = tx1.get_object_verbs(o).await.unwrap();
-            let o2_verbs = tx2.get_object_verbs(o).await.unwrap();
+            let o1_verbs = tx1.get_object_verbs(o).unwrap();
+            let o2_verbs = tx2.get_object_verbs(o).unwrap();
             let o1_verbs = o1_verbs.iter().collect::<Vec<_>>();
             let o2_verbs = o2_verbs.iter().collect::<Vec<_>>();
 
@@ -355,8 +347,8 @@ mod test {
 
                 // We want to actually decode and compare the opcode streams rather than
                 // the binary, so that we can make meaningful error reports.
-                let binary1 = tx1.get_verb_binary(o, v1.uuid()).await.unwrap();
-                let binary2 = tx2.get_verb_binary(o, v2.uuid()).await.unwrap();
+                let binary1 = tx1.get_verb_binary(o, v1.uuid()).unwrap();
+                let binary2 = tx2.get_verb_binary(o, v2.uuid()).unwrap();
 
                 let program1 = moor_compiler::program_to_tree(&Program::from_sliceref(
                     SliceRef::from_vec(binary1),

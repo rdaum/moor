@@ -65,6 +65,7 @@ fast-counter = "1.0.0"
 human_bytes = "0.4.3"
 inventory = "0.3.14"
 itertools = "0.12.0"
+kanal = "0.1.0-pre8"
 lazy_static = "1.4.0"
 num-traits = "0.2.17"
 rustyline = "13.0.0"
@@ -73,6 +74,7 @@ text-diff = "0.4.0"
 uuid = { version = "1.7.0", features = ["v4"] }
 yoke = "0.7.3"
 yoke-derive = "0.7.3"
+dashmap = "5.5.3"
 
 ## Required for MOO builtins.
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically

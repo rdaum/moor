@@ -27,9 +27,10 @@ mod test {
     use moor_values::NOTHING;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use std::time::Duration;
     use strum::{EnumCount, IntoEnumIterator};
 
-    pub async fn test_db(dir: PathBuf) -> Arc<RelBox> {
+    pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
@@ -43,16 +44,16 @@ mod test {
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
         relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
 
-        RelBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT).await
+        RelBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT)
     }
 
-    #[tokio::test]
-    async fn open_reopen() {
+    #[test]
+    fn open_reopen() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_str = tmpdir.path().to_str().unwrap();
 
         let a = {
-            let db = test_db(tmpdir.path().into()).await;
+            let db = test_db(tmpdir.path().into());
 
             let tx = RelBoxTransaction::new(db.clone());
 
@@ -67,7 +68,6 @@ mod test {
                         flags: Some(BitEnum::new()),
                     },
                 )
-                .await
                 .unwrap();
 
             tx.add_object_verb(
@@ -79,14 +79,13 @@ mod test {
                 BitEnum::new(),
                 VerbArgsSpec::this_none_this(),
             )
-            .await
             .unwrap();
 
-            tx.commit().await.unwrap();
-            db.shutdown().await;
+            tx.commit().unwrap();
+            db.shutdown();
 
             // TODO: this should not be necessary, but seems to be to pass the test (!?).
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            std::thread::sleep(Duration::from_millis(100));
             a
         };
         // Verify the WAL directory is not empty.
@@ -95,7 +94,7 @@ mod test {
             .next()
             .is_some());
         {
-            let db = test_db(tmpdir.path().into()).await;
+            let db = test_db(tmpdir.path().into());
 
             // Verify the pages directory is not empty after recovery.
             assert!(std::fs::read_dir(format!("{}/pages", tmpdir_str))
@@ -105,15 +104,11 @@ mod test {
 
             let tx = RelBoxTransaction::new(db.clone());
 
-            let v_uuid = tx
-                .resolve_verb(a, "test".into(), None)
-                .await
-                .unwrap()
-                .uuid();
-            assert_eq!(tx.get_verb_binary(a, v_uuid).await.unwrap(), vec![]);
-            assert_eq!(tx.commit().await, Ok(CommitResult::Success));
+            let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
+            assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
-            db.shutdown().await;
+            db.shutdown();
         }
     }
 }

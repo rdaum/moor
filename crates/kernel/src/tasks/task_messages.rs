@@ -16,15 +16,16 @@ use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::{TaskDescription, TaskId};
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
+use std::sync::Arc;
 
+use kanal::OneshotSender;
 use moor_compiler::Program;
-use moor_values::model::CommandError;
-use moor_values::model::Perms;
-use moor_values::model::WorldState;
+
+use moor_values::model::{CommandError, NarrativeEvent};
+use moor_values::model::{Perms, WorldStateSource};
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
-use tokio::sync::oneshot;
 
 #[derive(Debug, Clone)]
 pub enum TaskStart {
@@ -56,17 +57,17 @@ pub enum TaskStart {
 /// Messages sent to tasks from the scheduler to tell the task to do things.
 pub enum TaskControlMsg {
     /// The scheduler is telling the task to restart itself in a new transaction.
-    Restart(Box<dyn WorldState>),
+    Restart(Arc<dyn WorldStateSource>),
     /// The scheduler is telling the task to resume execution. Use the given world state
     /// (transaction) and permissions when doing so.
-    Resume(Box<dyn WorldState>, Var),
+    Resume(Arc<dyn WorldStateSource>, Var),
     /// The scheduler is giving the task the input it requested from the client, and is asking it
     /// to resume execution, using the given world state (transaction) to do so.
-    ResumeReceiveInput(Box<dyn WorldState>, String),
+    ResumeReceiveInput(Arc<dyn WorldStateSource>, String),
     /// The scheduler is asking the task to describe itself.
     /// TODO: This causes deadlock if the task _requesting_ the description is the task being
     ///   described, so I need to rethink this.
-    Describe(oneshot::Sender<TaskDescription>),
+    Describe(OneshotSender<TaskDescription>),
     /// The scheduler is telling the task to abort itself.
     Abort,
 }
@@ -86,7 +87,7 @@ pub enum SchedulerControlMsg {
     /// An execption was thrown while executing the verb.
     TaskException(UncaughtException),
     /// The task is requesting that it be forked.
-    TaskRequestFork(Fork, oneshot::Sender<TaskId>),
+    TaskRequestFork(Fork, OneshotSender<TaskId>),
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
     /// The task is letting us know that it has reached its abort limits.
@@ -96,19 +97,19 @@ pub enum SchedulerControlMsg {
     /// Tell the scheduler we're suspending until we get input from the client.
     TaskRequestInput,
     /// Task is requesting a list of all other tasks known to the scheduler.
-    DescribeOtherTasks(oneshot::Sender<Vec<TaskDescription>>),
+    DescribeOtherTasks(OneshotSender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,
         sender_permissions: Perms,
-        result_sender: oneshot::Sender<Var>,
+        result_sender: OneshotSender<Var>,
     },
     /// Task is requesting that the scheduler resume another task.
     ResumeTask {
         queued_task_id: TaskId,
         sender_permissions: Perms,
         return_value: Var,
-        result_sender: oneshot::Sender<Var>,
+        result_sender: OneshotSender<Var>,
     },
     /// Task is requesting that the scheduler boot a player.
     BootPlayer {
@@ -117,4 +118,10 @@ pub enum SchedulerControlMsg {
     },
     /// Task is requesting that a textdump checkpoint happen, to the configured file.
     Checkpoint,
+    Notify {
+        player: Objid,
+        event: NarrativeEvent,
+    },
+    /// Task requesting shutdown
+    Shutdown(Option<String>),
 }

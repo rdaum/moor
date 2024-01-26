@@ -12,11 +12,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::util::{BitArray, Bitset64};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use moor_values::util::SliceRef;
+use moor_values::util::{BitArray, Bitset64};
 
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::{RelBox, RelationInfo};
@@ -77,7 +77,7 @@ impl WorkingSet {
         relations.get_mut(relation_id.0).unwrap()
     }
 
-    pub(crate) async fn seek_by_domain(
+    pub(crate) fn seek_by_domain(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
@@ -94,15 +94,13 @@ impl WorkingSet {
             };
         }
 
-        let canon_t = db
-            .with_relation(relation_id, |relation| {
-                if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
-                    Ok(tuple.clone())
-                } else {
-                    Err(TupleError::NotFound)
-                }
-            })
-            .await?;
+        let canon_t = db.with_relation(relation_id, |relation| {
+            if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
+                Ok(tuple.clone())
+            } else {
+                Err(TupleError::NotFound)
+            }
+        })?;
         let tuple_idx = relation.tuples.len();
         relation
             .tuples
@@ -117,7 +115,7 @@ impl WorkingSet {
         Ok(canon_t)
     }
 
-    pub(crate) async fn seek_by_codomain(
+    pub(crate) fn seek_by_codomain(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
@@ -140,12 +138,11 @@ impl WorkingSet {
             db.with_relation(relation_id, |relation| {
                 relation.seek_by_codomain(codomain.clone())
             })
-            .await
         };
         // By performing the seek, we'll materialize the tuples into our local working set, which
         // will in turn update the codomain index for those tuples.
         for tuple in tuples_for_codomain {
-            let _ = self.seek_by_domain(db, relation_id, tuple.domain()).await;
+            let _ = self.seek_by_domain(db, relation_id, tuple.domain());
         }
 
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
@@ -167,7 +164,7 @@ impl WorkingSet {
         Ok(tuples.collect())
     }
 
-    pub(crate) async fn insert_tuple(
+    pub(crate) fn insert_tuple(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
@@ -187,8 +184,7 @@ impl WorkingSet {
                 return Err(TupleError::Duplicate);
             }
             Ok(())
-        })
-        .await?;
+        })?;
 
         let tuple_idx = relation.tuples.len();
         let new_t = TupleRef::allocate(
@@ -205,16 +201,14 @@ impl WorkingSet {
         Ok(())
     }
 
-    pub(crate) async fn predicate_scan<F: Fn(&TupleRef) -> bool>(
+    pub(crate) fn predicate_scan<F: Fn(&TupleRef) -> bool>(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
         f: F,
     ) -> Result<Vec<TupleRef>, TupleError> {
         // First collect all the tuples from the canonical relation, indexing them by domain.
-        let tuples = db
-            .with_relation(relation_id, |relation| relation.predicate_scan(&f))
-            .await;
+        let tuples = db.with_relation(relation_id, |relation| relation.predicate_scan(&f));
 
         let mut by_domain = HashMap::new();
         for t in tuples {
@@ -247,7 +241,7 @@ impl WorkingSet {
         Ok(by_domain.into_values().collect())
     }
 
-    pub(crate) async fn update_tuple(
+    pub(crate) fn update_tuple(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
@@ -295,15 +289,13 @@ impl WorkingSet {
         // Check canonical for an existing value.  And get its timestamp if it exists.
         // We will use the ts on that to determine the derivation timestamp for our own version.
         // If there's nothing there or its tombstoned, that's NotFound, and die.
-        let old_tuple = db
-            .with_relation(relation_id, |relation| {
-                if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
-                    Ok(tuple)
-                } else {
-                    Err(TupleError::NotFound)
-                }
-            })
-            .await?;
+        let old_tuple = db.with_relation(relation_id, |relation| {
+            if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
+                Ok(tuple)
+            } else {
+                Err(TupleError::NotFound)
+            }
+        })?;
 
         // Write into the local copy an update operation.
         let tuple_idx = relation.tuples.len();
@@ -327,7 +319,7 @@ impl WorkingSet {
 
     /// Attempt to upsert a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) async fn upsert_tuple(
+    pub(crate) fn upsert_tuple(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
@@ -390,32 +382,30 @@ impl WorkingSet {
         // We will use the ts on that to determine the derivation timestamp for our own version.
         // If there is no value there, we will use the current transaction timestamp, but it's
         // an insert rather than an update.
-        let (operation, old) = db
-            .with_relation(relation_id, |relation| {
-                if let Some(old_tuple) = relation.seek_by_domain(domain.clone()) {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        old_tuple.ts(),
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (
-                        TxTuple::Update(old_tuple.id(), new_t.unwrap()),
-                        Some(old_tuple),
-                    )
-                } else {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        self.ts,
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (TxTuple::Insert(new_t.unwrap()), None)
-                }
-            })
-            .await;
+        let (operation, old) = db.with_relation(relation_id, |relation| {
+            if let Some(old_tuple) = relation.seek_by_domain(domain.clone()) {
+                let new_t = TupleRef::allocate(
+                    relation_id,
+                    self.slotbox.clone(),
+                    old_tuple.ts(),
+                    domain.as_slice(),
+                    codomain.as_slice(),
+                );
+                (
+                    TxTuple::Update(old_tuple.id(), new_t.unwrap()),
+                    Some(old_tuple),
+                )
+            } else {
+                let new_t = TupleRef::allocate(
+                    relation_id,
+                    self.slotbox.clone(),
+                    self.ts,
+                    domain.as_slice(),
+                    codomain.as_slice(),
+                );
+                (TxTuple::Insert(new_t.unwrap()), None)
+            }
+        });
         let tuple_idx = relation.tuples.len();
         relation.tuples.push(operation);
         relation.domain_index.insert(domain, tuple_idx);
@@ -427,7 +417,7 @@ impl WorkingSet {
 
     /// Attempt to delete a tuple in the transaction's working set, with the intent of eventually
     /// committing the delete to the canonical base relations.
-    pub(crate) async fn remove_by_domain(
+    pub(crate) fn remove_by_domain(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
@@ -467,15 +457,13 @@ impl WorkingSet {
             return Ok(());
         }
 
-        let (ts, old_codomain, tuple) = db
-            .with_relation(relation_id, |relation| {
-                if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
-                    Ok((tuple.ts(), tuple.codomain().clone(), tuple))
-                } else {
-                    Err(TupleError::NotFound)
-                }
-            })
-            .await?;
+        let (ts, old_codomain, tuple) = db.with_relation(relation_id, |relation| {
+            if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
+                Ok((tuple.ts(), tuple.codomain().clone(), tuple))
+            } else {
+                Err(TupleError::NotFound)
+            }
+        })?;
 
         let local_tuple_idx = relation.tuples.len();
         relation.tuples.push(TxTuple::Tombstone {
