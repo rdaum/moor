@@ -14,13 +14,19 @@
 
 use thiserror::Error;
 
+pub use pager::Pager;
 pub use slotted_page::SlotId;
 pub use tuple_box::{PageId, TupleBox};
 pub use tuple_ptr::TuplePtr;
 
+mod backing;
+mod cold_storage;
+mod page_storage;
+mod pager;
 mod slotted_page;
 mod tuple_box;
 mod tuple_ptr;
+mod wal;
 
 #[derive(Debug, Clone, Error)]
 pub enum TupleBoxError {

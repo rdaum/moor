@@ -152,7 +152,7 @@ impl BufferPool {
 
         // Note that this is the actual address, that is, it does not have the size-class encoded
         // in it (aka PagePointer)
-        let addr = self.resolve_ptr::<u8>(bid).unwrap().0;
+        let addr = self.resolve_ptr(bid).unwrap().0;
 
         Ok((bid, addr, block_size))
     }
@@ -182,28 +182,8 @@ impl BufferPool {
         sc.is_allocated(offset / block_size)
     }
 
-    /// Mark a buffer as restored, by which we mean adding it to the index of used pages at this position.
-    /// This is used to restore a buffer from disk.
-    pub fn restore<T>(&mut self, page: Bid) -> Result<(AtomicPtr<T>, usize), PagerError> {
-        let sc_num = Self::size_class_of(page);
-        let sc = &mut self.size_classes[sc_num as usize];
-        let block_size = sc.block_size;
-        let offset = Self::offset_of(page);
-
-        sc.restore(offset / block_size)?;
-
-        // Bookkeeping
-        self.allocated_bytes.fetch_add(block_size, Ordering::SeqCst);
-        self.available_bytes.fetch_sub(block_size, Ordering::SeqCst);
-
-        let addr = sc.base_addr;
-        let addr = unsafe { addr.add(offset) }.cast::<T>();
-
-        Ok((AtomicPtr::new(addr), block_size))
-    }
-
     /// Returns the physical pointer and page size for a page.
-    pub fn resolve_ptr<T>(&self, bid: Bid) -> Result<(*mut u8, usize), PagerError> {
+    pub fn resolve_ptr(&self, bid: Bid) -> Result<(*mut u8, usize), PagerError> {
         if !Self::is_allocated(self, bid) {
             return Err(PagerError::CouldNotAccess);
         }
@@ -215,7 +195,7 @@ impl BufferPool {
         assert!(offset < sc.virt_size, "Offset out of bound for size class");
 
         let addr = sc.base_addr;
-        let addr = unsafe { addr.add(offset) }.cast::<T>();
+        let addr = unsafe { addr.add(offset) };
 
         Ok((addr as _, sc.block_size))
     }
@@ -254,6 +234,7 @@ impl BufferPool {
     }
 
     /// Get the total used space in the buffer pool.
+    #[allow(dead_code)] // Legitimate potential future use
     pub fn allocated_bytes(&self) -> usize {
         self.allocated_bytes.load(Ordering::Relaxed)
     }

@@ -34,12 +34,12 @@ pub enum PagerError {
     #[error("Unsupported size class (wanted {0:?})")]
     UnsupportedSize(usize),
 
-    #[error("Unable to allocate a buffer")]
-    CouldNotAllocate,
-
     #[error("Invalid page access")]
     CouldNotAccess,
 
     #[error("Invalid tuple pointer")]
     InvalidTuplePointer,
+
+    #[error("Invalid page")]
+    InvalidPage,
 }

@@ -104,17 +104,6 @@ impl SizeClass {
         Ok(blocknum)
     }
 
-    pub fn restore(&mut self, blocknum: usize) -> Result<(), PagerError> {
-        // Assert that the block is not already allocated.
-        if self.allocset.contains(blocknum) {
-            return Err(PagerError::CouldNotAllocate);
-        }
-
-        self.allocset.insert(blocknum);
-        self.num_blocks_used += 1;
-        Ok(())
-    }
-
     pub fn free(&mut self, blocknum: usize) -> Result<(), PagerError> {
         unsafe {
             let base_addr = self.base_addr;

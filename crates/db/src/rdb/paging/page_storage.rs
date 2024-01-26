@@ -33,15 +33,15 @@ use tracing::{debug, error, info};
 use crate::rdb::paging::PageId;
 use crate::rdb::RelationId;
 
-pub(crate) enum PageStoreMutation {
+pub enum PageStoreMutation {
     SyncRelation(RelationId, PageId, Box<[u8]>),
     SyncSequence(Box<[u8]>),
     DeleteRelation(PageId, RelationId),
 }
 
-/// Manages the directory of pages, one file per page.
+/// Manages the directory of page files, currently one file per page.
 /// Each page is a fixed size.
-/// will attempt to use io_uring to do the writes async. reads are synchronous
+/// Uses io_uring to do the writes async. Reads are synchronous
 ///
 /// TODO: deleted pages are not destroyed, they are just left on disk, which means if the same
 ///   page id is re-used, the old data could be read.
@@ -56,7 +56,7 @@ pub(crate) enum PageStoreMutation {
 ///   write-ahead-log, so abstract up the notion of an io_uring+eventfd "io q" and use that
 ///   for both.
 
-pub(crate) struct PageStore {
+pub struct PageStore {
     dir: PathBuf,
     next_request_id: AtomicU64,
     event_fd: Fd,

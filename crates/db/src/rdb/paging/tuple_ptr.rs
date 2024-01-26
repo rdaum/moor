@@ -13,6 +13,7 @@
 //
 
 use std::hash::Hash;
+use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 
 use moor_values::util::ByteSource;
@@ -27,16 +28,13 @@ use crate::rdb::tuples::TupleId;
 
 // TODO: rather than decoding a tuple out of a buffer in the slot, the slot should just hold the tuple structure
 pub struct TuplePtr {
-    sb: Arc<TupleBox>,
+    tb: Arc<TupleBox>,
     id: TupleId,
     buflen: u32,
-    bufaddr: *mut u8,
+    bufaddr: AtomicPtr<u8>,
 
     _pin: std::marker::PhantomPinned,
 }
-
-unsafe impl Send for TuplePtr {}
-unsafe impl Sync for TuplePtr {}
 
 impl TuplePtr {
     pub(crate) fn create(
@@ -46,9 +44,9 @@ impl TuplePtr {
         buflen: usize,
     ) -> Self {
         TuplePtr {
-            sb: sb.clone(),
+            tb: sb.clone(),
             id: tuple_id,
-            bufaddr,
+            bufaddr: AtomicPtr::new(bufaddr),
             buflen: buflen as u32,
             _pin: std::marker::PhantomPinned,
         }
@@ -75,14 +73,37 @@ impl TuplePtr {
         self.id
     }
 
+    /// Mark the tuple as paged out. Accesses to the tuple will fault, and we'll need to page it back in.
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn mark_paged_out(&mut self) {
+        self.bufaddr
+            .store(std::ptr::null_mut(), std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn mark_paged_in(&mut self, bufaddr: *mut u8) {
+        self.bufaddr
+            .store(bufaddr, std::sync::atomic::Ordering::SeqCst);
+    }
+
     #[inline]
     pub(crate) fn as_ptr<T>(&self) -> *const T {
-        self.bufaddr as *const T
+        if self
+            .bufaddr
+            .load(std::sync::atomic::Ordering::SeqCst)
+            .is_null()
+        {
+            self.tb.page_fault(self.id).unwrap();
+        }
+        self.bufaddr.load(std::sync::atomic::Ordering::SeqCst) as *const T
     }
 
     #[inline]
     pub(crate) fn as_mut_ptr<T>(&mut self) -> *mut T {
-        self.bufaddr as *mut T
+        // TODO: if the ptr is null, this is a page fault, and we'll
+        //   need to ask the tuplebox to ask the pager to page us in
+        self.bufaddr.load(std::sync::atomic::Ordering::SeqCst) as *mut T
     }
 
     #[inline]
@@ -98,19 +119,26 @@ impl TuplePtr {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn is_paged_out(&self) -> bool {
+        self.bufaddr
+            .load(std::sync::atomic::Ordering::SeqCst)
+            .is_null()
+    }
+
     #[inline]
     pub fn refcount(&self) -> u16 {
-        self.sb.refcount(self.id).unwrap()
+        self.tb.refcount(self.id).unwrap()
     }
 
     #[inline]
     pub fn upcount(&self) {
-        self.sb.upcount(self.id).unwrap();
+        self.tb.upcount(self.id).unwrap();
     }
 
     #[inline]
     pub fn dncount(&self) {
-        self.sb.dncount(self.id).unwrap();
+        self.tb.dncount(self.id).unwrap();
     }
 }
 

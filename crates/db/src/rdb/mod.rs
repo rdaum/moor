@@ -26,14 +26,9 @@ pub use relbox::{RelBox, RelationInfo};
 pub use tuples::TupleError;
 pub use tx::{CommitError, Transaction};
 
-mod backing;
 mod base_relation;
-
-mod cold_storage;
-mod page_storage;
-mod pool;
-
 mod paging;
+mod pool;
 mod relbox;
 mod tuples;
 mod tx;

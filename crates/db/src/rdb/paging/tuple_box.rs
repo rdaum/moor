@@ -40,9 +40,11 @@ use moor_values::util::{BitArray, Bitset64};
 use crate::rdb::paging::slotted_page::{slot_index_overhead, slot_page_empty_size, SlottedPage};
 use crate::rdb::paging::tuple_ptr::TuplePtr;
 use crate::rdb::paging::TupleBoxError;
-use crate::rdb::pool::{Bid, BufferPool, PagerError};
+use crate::rdb::pool::PagerError;
 use crate::rdb::tuples::{TupleId, TupleRef};
 use crate::rdb::RelationId;
+
+use super::pager::Pager;
 
 pub type PageId = usize;
 
@@ -53,9 +55,8 @@ pub struct TupleBox {
 }
 
 impl TupleBox {
-    pub fn new(virt_size: usize) -> Self {
-        let pool = BufferPool::new(virt_size).expect("Could not create buffer pool");
-        let inner = Mutex::new(Inner::new(pool));
+    pub fn new(pager: Arc<Pager>) -> Self {
+        let inner = Mutex::new(Inner::new(pager));
         Self { inner }
     }
 
@@ -85,12 +86,13 @@ impl TupleBox {
         self: Arc<Self>,
         relation_id: RelationId,
         id: PageId,
+        page_size: usize,
         mut lf: LF,
     ) -> Result<Vec<TupleRef>, TupleBoxError> {
         let mut inner = self.inner.lock().unwrap();
 
         // Re-allocate the page.
-        let page = inner.do_restore_page(id).unwrap();
+        let page = inner.do_restore_page(id, page_size).unwrap();
 
         // Find all the slots referenced in this page.
         let slot_ids = page.load(|buf| {
@@ -112,6 +114,15 @@ impl TupleBox {
         // The allocator needs to know that this page is used.
         inner.do_mark_page_used(relation_id, page.available_content_bytes(), id);
         Ok(refs)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn page_fault(&self, tuple_id: TupleId) -> Result<(), TupleBoxError> {
+        let mut inner = self.inner.lock().unwrap();
+        inner
+            .do_handle_page_fault(tuple_id)
+            .expect("Could not page in");
+        Ok(())
     }
 
     #[inline(always)]
@@ -160,7 +171,7 @@ impl TupleBox {
 
     pub fn used_bytes(&self) -> usize {
         let inner = self.inner.lock().unwrap();
-        inner.pool.allocated_bytes()
+        inner.used_bytes()
     }
 
     pub fn num_pages(&self) -> usize {
@@ -186,7 +197,7 @@ struct Inner {
     // TODO: buffer pool has its own locks per size class, so we might not need this inside another lock
     //   *but* the other two items here are not thread-safe, and we need to maintain consistency across the three.
     //   so we can maybe get rid of the locks in the buffer pool...
-    pool: BufferPool,
+    pager: Arc<Pager>,
     /// The set of used pages, indexed by relation, in sorted order of the free space available in them.
     available_page_space: Box<BitArray<PageSpace, 64, Bitset64<1>>>,
     /// The "swizzelable" references to tuples, indexed by tuple id.
@@ -198,10 +209,10 @@ struct Inner {
 }
 
 impl Inner {
-    fn new(pool: BufferPool) -> Self {
+    fn new(pager: Arc<Pager>) -> Self {
         Self {
             available_page_space: Box::new(BitArray::new()),
-            pool,
+            pager,
             tuple_ptrs: HashMap::new(),
         }
     }
@@ -269,8 +280,12 @@ impl Inner {
             .map_or_else(|| Err(TupleBoxError::TupleNotFound(id.slot as usize)), Ok)
     }
 
-    fn do_restore_page<'a>(&mut self, id: PageId) -> Result<SlottedPage<'a>, TupleBoxError> {
-        let (addr, page_size) = match self.pool.restore(Bid(id as u64)) {
+    fn do_restore_page<'a>(
+        &mut self,
+        id: PageId,
+        size: usize,
+    ) -> Result<SlottedPage<'a>, TupleBoxError> {
+        let (addr, page_size) = match self.pager.restore_page(id, size) {
             Ok(v) => v,
             Err(PagerError::CouldNotAccess) => {
                 return Err(TupleBoxError::TupleNotFound(id));
@@ -284,14 +299,13 @@ impl Inner {
     }
 
     fn do_mark_page_used(&mut self, relation_id: RelationId, free_space: usize, pid: PageId) {
-        let bid = Bid(pid as u64);
         let Some(available_page_space) = self.available_page_space.get_mut(relation_id.0) else {
             self.available_page_space
-                .set(relation_id.0, PageSpace::new(free_space, bid));
+                .set(relation_id.0, PageSpace::new(free_space, pid));
             return;
         };
 
-        available_page_space.insert(free_space, bid);
+        available_page_space.insert(free_space, pid);
     }
 
     fn do_remove(&mut self, id: TupleId) -> Result<(), TupleBoxError> {
@@ -309,14 +323,31 @@ impl Inner {
         Ok(())
     }
 
-    fn page_for<'a>(&self, page_num: usize) -> Result<SlottedPage<'a>, TupleBoxError> {
-        let (page_address, page_size) = match self.pool.resolve_ptr::<u8>(Bid(page_num as u64)) {
+    fn do_handle_page_fault(&mut self, _id: TupleId) -> Result<(), TupleBoxError> {
+        // Ask the pager to restore the page, and then we'll swizzle the pointer to it.
+
+        // 1. Ask the pager to restore the page, and get an address.
+
+        // 2. Find the tuple pointer for this tuple id.
+        // let tuple_ptr = self.tuple_ptrs.get_mut(&id).unwrap();
+
+        // 3. Mark the tuple as paged with the new address.
+        // tuple_ptr.mark_paged_in(self.pager.resolve_ptr(id.page)?.0);
+
+        todo!("page in");
+    }
+
+    fn page_for<'a>(&self, page_num: PageId) -> Result<SlottedPage<'a>, TupleBoxError> {
+        let (page_address, page_size) = match self.pager.resolve_ptr(page_num) {
             Ok(v) => v,
             Err(PagerError::CouldNotAccess) => {
                 return Err(TupleBoxError::TupleNotFound(page_num));
             }
-            Err(e) => {
-                panic!("Unexpected buffer pool error: {:?}", e);
+            Err(PagerError::InvalidPage) => {
+                return Err(TupleBoxError::TupleNotFound(page_num));
+            }
+            _ => {
+                panic!("Unexpected buffer pool error");
             }
         };
         let page_handle = SlottedPage::for_page(page_address, page_size);
@@ -329,7 +360,7 @@ impl Inner {
         page_size: usize,
     ) -> Result<(PageId, usize), TupleBoxError> {
         // Ask the buffer pool for a new page of the given size.
-        let (bid, _, actual_size) = match self.pool.alloc(page_size) {
+        let (pid, actual_size) = match self.pager.alloc(page_size, |_| {}) {
             Ok(v) => v,
             Err(PagerError::InsufficientRoom { desired, available }) => {
                 return Err(TupleBoxError::BoxFull(desired, available));
@@ -340,15 +371,15 @@ impl Inner {
         };
         match self.available_page_space.get_mut(relation_id.0) {
             Some(available_page_space) => {
-                available_page_space.insert(slot_page_empty_size(actual_size), bid);
-                Ok((bid.0 as PageId, available_page_space.len() - 1))
+                available_page_space.insert(slot_page_empty_size(actual_size), pid);
+                Ok((pid, available_page_space.len() - 1))
             }
             None => {
                 self.available_page_space.set(
                     relation_id.0,
-                    PageSpace::new(slot_page_empty_size(actual_size), bid),
+                    PageSpace::new(slot_page_empty_size(actual_size), pid),
                 );
-                Ok((bid.0 as PageId, 0))
+                Ok((pid, 0))
             }
         }
     }
@@ -394,9 +425,7 @@ impl Inner {
         for (_, available_page_space) in self.available_page_space.iter_mut() {
             if available_page_space.update_page(pid, new_size, is_empty) {
                 if is_empty {
-                    self.pool
-                        .free(Bid(pid as u64))
-                        .expect("Could not free page");
+                    self.pager.free(pid).expect("Could not free page");
                 }
                 return;
             }
@@ -408,6 +437,13 @@ impl Inner {
             "Page not found in used pages in allocator on free; pid {}; could be double-free, dangling weak reference?",
             pid
         );
+    }
+
+    fn used_bytes(&self) -> usize {
+        self.available_page_space
+            .iter()
+            .map(|(_, ps)| ps.entries.iter().map(|e| decode(*e).1).sum::<usize>())
+            .sum()
     }
 }
 
@@ -434,9 +470,9 @@ fn encode(pid: PageId, available: usize) -> u128 {
 }
 
 impl PageSpace {
-    fn new(available: usize, bid: Bid) -> Self {
+    fn new(available: usize, pid: PageId) -> Self {
         Self {
-            entries: vec![encode(bid.0 as PageId, available)],
+            entries: vec![encode(pid, available)],
         }
     }
 
@@ -446,8 +482,8 @@ impl PageSpace {
     }
 
     #[inline(always)]
-    fn insert(&mut self, available: usize, bid: Bid) {
-        self.entries.push(encode(bid.0 as PageId, available));
+    fn insert(&mut self, available: usize, pid: PageId) {
+        self.entries.push(encode(pid, available));
         self.sort();
     }
 
@@ -534,6 +570,7 @@ mod tests {
 
     use crate::rdb::paging::slotted_page::slot_page_empty_size;
     use crate::rdb::paging::tuple_box::{TupleBox, TupleBoxError};
+    use crate::rdb::paging::Pager;
     use crate::rdb::tuples::TupleRef;
     use crate::rdb::RelationId;
 
@@ -563,7 +600,8 @@ mod tests {
     // Just allocate a single tuple, and verify that we can retrieve it.
     #[test]
     fn test_one_page_one_slot() {
-        let sb = Arc::new(TupleBox::new(32768 * 64));
+        let pager = Arc::new(Pager::new(32768 * 64).unwrap());
+        let sb = Arc::new(TupleBox::new(pager));
         let expected_value = vec![1, 2, 3, 4, 5];
         let _retrieved = sb
             .clone()
@@ -574,7 +612,8 @@ mod tests {
     // Fill just one page and verify that we can retrieve them all.
     #[test]
     fn test_one_page_a_few_slots() {
-        let sb = Arc::new(TupleBox::new(32768 * 64));
+        let pager = Arc::new(Pager::new(32768 * 64).unwrap());
+        let sb = Arc::new(TupleBox::new(pager));
         let mut tuples = Vec::new();
         let mut last_page_id = None;
         loop {
@@ -606,7 +645,8 @@ mod tests {
     // Fill one page, then overflow into another, and verify we can get the tuple that's on the next page.
     #[test]
     fn test_page_overflow() {
-        let sb = Arc::new(TupleBox::new(32768 * 64));
+        let pager = Arc::new(Pager::new(32768 * 64).unwrap());
+        let sb = Arc::new(TupleBox::new(pager));
         let mut tuples = Vec::new();
         let mut first_page_id = None;
         let (next_page_tuple_id, next_page_value) = loop {
@@ -639,7 +679,8 @@ mod tests {
     // and then scan back and verify their presence/equality.
     #[test]
     fn test_basic_add_fill_etc() {
-        let sb = Arc::new(TupleBox::new(32768 * 32));
+        let pager = Arc::new(Pager::new(32768 * 64).unwrap());
+        let sb = Arc::new(TupleBox::new(pager));
         let mut tuples = fill_until_full(&sb);
         for (i, (tuple, expected_value)) in tuples.iter().enumerate() {
             let retrieved_domain = tuple.domain();
@@ -668,7 +709,9 @@ mod tests {
     // everything mmap DONTNEED'd, and we should be able to re-fill it again, too.
     #[test]
     fn test_full_fill_and_empty() {
-        let sb = Arc::new(TupleBox::new(32768 * 64));
+        let pager = Arc::new(Pager::new(32768 * 64).unwrap());
+        let sb = Arc::new(TupleBox::new(pager));
+
         let mut tuples = fill_until_full(&sb);
 
         // Collect the manual ids of the tuples we've allocated, so we can check them for refcount goodness.
@@ -685,7 +728,8 @@ mod tests {
     // fill back up again and verify the new presence.
     #[test]
     fn test_fill_and_free_and_refill_etc() {
-        let sb = Arc::new(TupleBox::new(32768 * 64));
+        let pager = Arc::new(Pager::new(32768 * 64).unwrap());
+        let sb = Arc::new(TupleBox::new(pager));
         let mut tuples = fill_until_full(&sb);
         let mut rng = thread_rng();
         let mut freed_tuples = Vec::new();

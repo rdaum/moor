@@ -25,7 +25,7 @@ pub enum TxTuple {
     /// Update an existing tuple in the relation whose domain matches.
     Update(TupleId, TupleRef),
     /// Clone/fork a tuple from the base relation into our local working set.
-    Value(TupleId, TupleRef),
+    Value(TupleRef),
     /// Delete the tuple.
     Tombstone {
         ts: u64,
@@ -37,7 +37,7 @@ pub enum TxTuple {
 impl TxTuple {
     pub fn domain(&self) -> SliceRef {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(_, tref) | TxTuple::Value(_, tref) => {
+            TxTuple::Insert(tref) | TxTuple::Update(_, tref) | TxTuple::Value(tref) => {
                 tref.domain()
             }
             TxTuple::Tombstone {
@@ -53,7 +53,8 @@ impl TxTuple {
     /// are not forked from any existing tuple.
     pub fn origin_tuple_id(&self) -> TupleId {
         match self {
-            TxTuple::Update(id, _) | TxTuple::Value(id, _) => *id,
+            TxTuple::Update(id, _) => *id,
+            TxTuple::Value(tref) => tref.id(),
             TxTuple::Tombstone {
                 ts: _,
                 tuple_id: id,
@@ -65,7 +66,7 @@ impl TxTuple {
 
     pub fn ts(&self) -> u64 {
         match self {
-            TxTuple::Insert(tref) | TxTuple::Update(_, tref) | TxTuple::Value(_, tref) => tref.ts(),
+            TxTuple::Insert(tref) | TxTuple::Update(_, tref) | TxTuple::Value(tref) => tref.ts(),
             TxTuple::Tombstone {
                 ts,
                 tuple_id: _,

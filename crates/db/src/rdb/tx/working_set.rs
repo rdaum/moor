@@ -97,7 +97,7 @@ impl WorkingSet {
         if let Some(tuple_idx) = relation.domain_index.get(&domain) {
             let local_version = relation.tuples.get(*tuple_idx).unwrap();
             return match &local_version {
-                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(_, t) => Ok(t.clone()),
+                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(t) => Ok(t.clone()),
                 TxTuple::Tombstone { .. } => Err(TupleError::NotFound),
             };
         }
@@ -110,9 +110,7 @@ impl WorkingSet {
             }
         })?;
         let tuple_idx = relation.tuples.len();
-        relation
-            .tuples
-            .push(TxTuple::Value(canon_t.id(), canon_t.clone()));
+        relation.tuples.push(TxTuple::Value(canon_t.clone()));
         relation.domain_index.insert(domain, tuple_idx);
         if let Some(ref mut codomain_index) = relation.codomain_index {
             codomain_index
@@ -130,8 +128,8 @@ impl WorkingSet {
         codomain: SliceRef,
     ) -> Result<HashSet<TupleRef>, TupleError> {
         // The codomain index is not guaranteed to be up to date with the working set, so we need
-        // to go back to the canonical relation, get the list of domains, then materialize them into
-        // our local working set -- which will update the codomain index -- and then actually
+        // to go back to the canonical relation, get the list of tuples for the codomain, then materialize
+        // them into our local working set -- which will update the codomain index -- and then actually
         // use the local index.  Complicated enough?
         // TODO: There is likely a way to optimize this so we're not doing this when not necessary.
         //   but we'll need a round of really good coherence tests before we can do that.
@@ -163,9 +161,7 @@ impl WorkingSet {
         let tuples = tuple_indexes.filter_map(|tid| {
             let t = relation.tuples.get(tid).expect("Tuple not found");
             match &t {
-                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(_, t) => {
-                    Some(t.clone())
-                }
+                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(t) => Some(t.clone()),
                 TxTuple::Tombstone { .. } => None,
             }
         });
@@ -232,7 +228,7 @@ impl WorkingSet {
                 continue;
             }
             match t {
-                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(_, t) => {
+                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(t) => {
                     if f(t) {
                         by_domain.insert(t.domain().as_slice().to_vec(), t.clone());
                     } else {
@@ -274,7 +270,7 @@ impl WorkingSet {
                     );
                     (TxTuple::Insert(new_t.unwrap()), (t.domain(), t.codomain()))
                 }
-                TxTuple::Update(_id, t) | TxTuple::Value(_id, t) => {
+                TxTuple::Update(_, t) | TxTuple::Value(t) => {
                     let new_t = TupleRef::allocate(
                         relation_id,
                         self.slotbox.clone(),
@@ -367,7 +363,7 @@ impl WorkingSet {
                     );
                     (TxTuple::Update(*tuple_id, new_t.unwrap()), None)
                 }
-                TxTuple::Update(id, tuple) | TxTuple::Value(id, tuple) => {
+                TxTuple::Update(id, tuple) => {
                     let new_t = TupleRef::allocate(
                         relation_id,
                         self.slotbox.clone(),
@@ -377,6 +373,19 @@ impl WorkingSet {
                     );
                     (
                         TxTuple::Update(*id, new_t.unwrap()),
+                        Some((tuple.domain(), tuple.codomain())),
+                    )
+                }
+                TxTuple::Value(tuple) => {
+                    let new_t = TupleRef::allocate(
+                        relation_id,
+                        self.slotbox.clone(),
+                        tuple.ts(),
+                        domain.as_slice(),
+                        codomain.as_slice(),
+                    );
+                    (
+                        TxTuple::Update(tuple.id(), new_t.unwrap()),
                         Some((tuple.domain(), tuple.codomain())),
                     )
                 }
@@ -451,7 +460,7 @@ impl WorkingSet {
                     relation.update_secondary(tuple_index, None, None);
                     return Ok(());
                 }
-                TxTuple::Update(_, t) | TxTuple::Value(_, t) => t.clone(),
+                TxTuple::Update(_, t) | TxTuple::Value(t) => t.clone(),
                 TxTuple::Tombstone { .. } => {
                     return Err(TupleError::NotFound);
                 }

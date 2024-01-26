@@ -21,15 +21,14 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use tracing::info;
-
-use crate::rdb::backing::BackingStoreClient;
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
 use crate::rdb::tuples::TxTuple;
 use crate::rdb::tx::WorkingSet;
 use crate::rdb::tx::{CommitError, CommitSet, Transaction};
 use crate::rdb::RelationId;
+
+use super::paging::Pager;
 
 /// Meta-data about a relation
 #[derive(Clone, Debug)]
@@ -44,30 +43,32 @@ pub struct RelationInfo {
     pub secondary_indexed: bool,
 }
 
-/// The rdb is the set of relations, referenced by their unique (usize) relation ID.
+/// The "RelBox" is the set of relations, referenced by their unique (usize) relation ID.
 /// It exposes interfaces for starting & managing transactions on those relations.
 /// It is, essentially, a micro database.
-// TODO: locking in general here is (probably) safe, but not optimal. optimistic locking would be
-//   better for various portions here.
 pub struct RelBox {
+    /// The description of the set of base relations in our schema
     relation_info: Vec<RelationInfo>,
+
     /// The monotonically increasing transaction ID "timestamp" counter.
-    // TODO: take a look at Adnan's thread-sharded approach described in section 3.1
-    //   (https://www.vldb.org/pvldb/vol16/p1426-alhomssi.pdf) -- "Ordered Snapshot Instant Commit"
     maximum_transaction: AtomicU64,
+
     /// Monotonically incrementing sequence counters.
     sequences: Vec<AtomicU64>,
+
     /// The copy-on-write set of current canonical base relations.
     /// Held in ArcSwap so that we can swap them out atomically for their modified versions, without holding
     /// a lock for reads.
     pub(crate) canonical: Vec<ArcSwap<BaseRelation>>,
 
-    /// Lock to hold while committing a transaction.
+    /// Lock to hold while committing a transaction, prevents other commits from proceeding until we're done.
     commit_lock: Mutex<()>,
 
-    slotbox: Arc<TupleBox>,
+    /// The pager (which contains the buffer pool)
+    pager: Arc<Pager>,
 
-    backing_store: Option<BackingStoreClient>,
+    /// Management of tuples happens through the tuple box (which uses said pager)
+    tuple_box: Arc<TupleBox>,
 }
 
 impl Debug for RelBox {
@@ -87,7 +88,8 @@ impl RelBox {
         relations: &[RelationInfo],
         num_sequences: usize,
     ) -> Arc<Self> {
-        let slotbox = Arc::new(TupleBox::new(memory_size));
+        let pager = Arc::new(Pager::new(memory_size).expect("Unable to create pager"));
+        let tuple_box = Arc::new(TupleBox::new(pager.clone()));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
             base_relations.push(BaseRelation::new(RelationId(rid), 0));
@@ -96,21 +98,14 @@ impl RelBox {
             }
         }
         let mut sequences = vec![0; num_sequences];
-        let backing_store = match path {
-            None => None,
-            Some(path) => {
-                let bs = crate::rdb::cold_storage::ColdStorage::start(
-                    path,
-                    relations,
-                    &mut base_relations,
-                    &mut sequences,
-                    slotbox.clone(),
-                );
-                info!("Backing store loaded, and write-ahead thread started...");
-                Some(bs)
-            }
-        };
 
+        // Open the pager to the provided path, and restore the relations and sequences from it.
+        // (If there's no path, this is a no-op and the database will be transient and empty).
+        if let Some(path) = path {
+            pager
+                .open(path, &mut base_relations, &mut sequences, tuple_box.clone())
+                .expect("Unable to open database at path");
+        }
         let sequences = sequences
             .into_iter()
             .map(AtomicU64::new)
@@ -124,8 +119,8 @@ impl RelBox {
                 .map(|b| ArcSwap::new(Arc::new(b)))
                 .collect(),
             sequences,
-            backing_store,
-            slotbox,
+            tuple_box,
+            pager,
             commit_lock: Mutex::new(()),
         })
     }
@@ -139,7 +134,7 @@ impl RelBox {
         let next_ts = self
             .maximum_transaction
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Transaction::new(next_ts, self.slotbox.clone(), self.clone())
+        Transaction::new(next_ts, self.tuple_box.clone(), self.clone())
     }
 
     pub fn next_ts(self: Arc<Self>) -> u64 {
@@ -305,24 +300,20 @@ impl RelBox {
         Ok(())
     }
 
-    pub fn sync(&self, ts: u64, world_state: WorkingSet) {
-        if let Some(bs) = &self.backing_store {
-            let seqs = self
-                .sequences
-                .iter()
-                .map(|s| s.load(std::sync::atomic::Ordering::SeqCst))
-                .collect();
-            bs.sync(ts, world_state, seqs);
-        }
+    pub fn sync(&self, ts: u64, working_set: WorkingSet) {
+        let seqs = self
+            .sequences
+            .iter()
+            .map(|s| s.load(std::sync::atomic::Ordering::SeqCst))
+            .collect();
+        self.pager.sync(ts, working_set, seqs);
     }
 
     pub fn db_usage_bytes(&self) -> usize {
-        self.slotbox.used_bytes()
+        self.tuple_box.used_bytes()
     }
 
     pub fn shutdown(&self) {
-        if let Some(bs) = &self.backing_store {
-            bs.shutdown();
-        }
+        self.pager.shutdown();
     }
 }

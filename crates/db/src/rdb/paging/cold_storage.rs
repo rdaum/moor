@@ -15,26 +15,26 @@
 //! TODO: replace OkayWAL with our own implementation, using io_uring.
 
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use binary_layout::{define_layout, Field, LayoutAs};
+use binary_layout::{define_layout, Field};
 use human_bytes::human_bytes;
 use kanal::Receiver;
-use okaywal::{Entry, EntryId, LogManager, SegmentReader, WriteAheadLog};
-use strum::FromRepr;
-use tracing::{debug, error, info, warn};
+use okaywal::WriteAheadLog;
+use tracing::{debug, error, info};
 
-use crate::rdb::backing::{BackingStoreClient, WriterMessage};
 use crate::rdb::base_relation::BaseRelation;
-use crate::rdb::page_storage::{PageStore, PageStoreMutation};
+use crate::rdb::paging::page_storage::PageStore;
+use crate::rdb::paging::wal::{make_wal_entry, WalEntryType, WalManager};
+use crate::rdb::paging::PageId;
 use crate::rdb::paging::TupleBox;
-use crate::rdb::paging::{PageId, SlotId};
-use crate::rdb::relbox::RelationInfo;
-use crate::rdb::tuples::{TupleId, TxTuple};
+use crate::rdb::tuples::TxTuple;
 use crate::rdb::tx::WorkingSet;
-use crate::rdb::RelationId;
+
+use super::backing::{BackingStoreClient, WriterMessage};
+
+// TODO: move this functionality under the pager rather than above it.
 
 /// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the rdb.
 pub struct ColdStorage {}
@@ -58,15 +58,13 @@ const SEQUENCE_PAGE_ID: PageId = 0xfafe_babf;
 impl ColdStorage {
     pub fn start(
         path: PathBuf,
-        _schema: &[RelationInfo],
         relations: &mut [BaseRelation],
-        sequences: &mut Vec<u64>,
+        sequences: &mut [u64],
         tuple_box: Arc<TupleBox>,
     ) -> BackingStoreClient {
         let page_storage = PageStore::new(path.join("pages"));
-        let wal_manager = WalManager {
-            page_storage: page_storage.clone(),
-        };
+        let wal_manager = WalManager::new(page_storage.clone());
+
         // Do initial recovery of anything left in the WAL before starting up, which should
         // flush everything to page storage, from which we can then go and load it.
         let wal = match WriteAheadLog::recover(path.join("wal"), wal_manager) {
@@ -104,7 +102,7 @@ impl ColdStorage {
         for (page_size, page_num, relation_id) in ids {
             let tuple_ids = tuple_box
                 .clone()
-                .load_page(relation_id, page_num, |buf| {
+                .load_page(relation_id, page_num, page_size, |buf| {
                     page_storage
                         .read_page_buf(page_num, relation_id, buf)
                         .expect("Unable to read page")
@@ -241,7 +239,7 @@ impl ColdStorage {
                     TxTuple::Tombstone { tuple_id, .. } => {
                         dirty_pages.insert((tuple_id.page, r.1.id));
                     }
-                    TxTuple::Value(_, _) => {
+                    TxTuple::Value(_) => {
                         // Untouched value (view), noop, should already exist in backing store.
                     }
                 }
@@ -277,207 +275,5 @@ impl ColdStorage {
             }
         }
         sync_wal.commit().expect("Failed to commit WAL entry");
-    }
-}
-
-struct WalManager {
-    page_storage: Arc<PageStore>,
-}
-
-impl Debug for WalManager {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WalManager").finish()
-    }
-}
-
-impl LogManager for WalManager {
-    fn recover(&mut self, entry: &mut Entry<'_>) -> std::io::Result<()> {
-        let Some(chunks) = entry.read_all_chunks()? else {
-            info!("No chunks found, nothing to recover");
-            return Ok(());
-        };
-        let mut write_batch = vec![];
-        let mut evicted = vec![];
-        for chunk in chunks {
-            Self::chunk_to_mutations(&chunk, &mut write_batch, &mut evicted);
-        }
-        let ps = self.page_storage.clone();
-        ps.enqueue_page_mutations(write_batch)
-            .expect("Unable to write batch");
-
-        Ok(())
-    }
-
-    fn checkpoint_to(
-        &mut self,
-        _last_checkpointed_id: EntryId,
-        checkpointed_entries: &mut SegmentReader,
-        _wal: &WriteAheadLog,
-    ) -> std::io::Result<()> {
-        // Replay the write-ahead log into cold storage, to make sure that it's consistent.
-        let mut write_batch = vec![];
-        let mut evicted = vec![];
-
-        while let Some(mut entry) = checkpointed_entries.read_entry()? {
-            let chunks = match entry.read_all_chunks() {
-                Ok(c) => c,
-                Err(e) => {
-                    error!(?e, "Failed to read chunks from entry");
-                    continue;
-                }
-            };
-            let Some(chunks) = chunks else {
-                continue;
-            };
-            for chunk in chunks {
-                Self::chunk_to_mutations(&chunk, &mut write_batch, &mut evicted);
-            }
-        }
-
-        if let Err(e) = self.page_storage.enqueue_page_mutations(write_batch) {
-            error!("Unable to write batch: {:?}", e);
-            return Ok(());
-        };
-
-        Ok(())
-    }
-}
-
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-pub enum WalEntryType {
-    // Sync, write the updated data in the page.
-    PageSync = 0,
-    // Delete the page.
-    Delete = 1,
-    // Write current state of sequences to the sequence page. Ignores page id, slot id. Data is
-    // the contents of the sequence page.
-    SequenceSync = 2,
-}
-
-impl LayoutAs<u8> for WalEntryType {
-    fn read(v: u8) -> Self {
-        Self::from_repr(v).unwrap()
-    }
-
-    fn write(v: Self) -> u8 {
-        v as u8
-    }
-}
-
-const WAL_MAGIC: u32 = 0xfeed_babe;
-
-define_layout!(wal_entry_header, LittleEndian, {
-    // Validity marker.
-    magic_marker: u32,
-    // The timestamp when the write-ahead-log entry was created.
-    timestamp: u64,
-    // The action being taken; see WalEntryType.
-    action: WalEntryType as u8,
-    // The page id of the page being written
-    pid: u64,
-    // The relation this page belongs to, if this is a pagesync type
-    // (Sequences don't have this, obv.)
-    relation_id: u8,
-    // The slot id of the slot within the page being written.
-    // Note we always sync full pages, but we may delete a single slot.
-    slot_id: u64,
-
-    // The size of the data being written.
-    size: u64,
-});
-
-fn make_wal_entry<BF: FnMut(&mut [u8])>(
-    typ: WalEntryType,
-    page_id: PageId,
-    relation_id: Option<RelationId>,
-    slot_id: SlotId,
-    ts: u64,
-    page_size: usize,
-    mut fill_func: BF,
-) -> Vec<u8> {
-    let mut wal_entry_buffer = vec![0; wal_entry::data::OFFSET + page_size];
-    let mut wal_entry = wal_entry::View::new(&mut wal_entry_buffer);
-    let mut wal_entry_header = wal_entry.header_mut();
-    wal_entry_header.magic_marker_mut().write(WAL_MAGIC);
-    wal_entry_header.timestamp_mut().write(ts);
-    wal_entry_header.action_mut().write(typ);
-    wal_entry_header.pid_mut().write(page_id as u64);
-    if let Some(relation_id) = relation_id {
-        wal_entry_header
-            .relation_id_mut()
-            .write(relation_id.0 as u8);
-    }
-    wal_entry_header.slot_id_mut().write(slot_id as u64);
-    wal_entry_header.size_mut().write(page_size as u64);
-    fill_func(wal_entry.data_mut());
-    wal_entry_buffer
-}
-
-define_layout!(wal_entry, LittleEndian, {
-    header: wal_entry_header::NestedView,
-    // The entire buffer frame for the page being written, except for delete.
-    data: [u8],
-});
-
-impl WalManager {
-    fn chunk_to_mutations(
-        chunk: &[u8],
-        write_mutations: &mut Vec<PageStoreMutation>,
-        to_evict: &mut Vec<TupleId>,
-    ) {
-        // The first N bytes have to be WAL_MAGIC or this is an invalid chunk.
-        if chunk.len() < wal_entry::data::OFFSET {
-            warn!("Chunk is too small to be valid");
-            return;
-        }
-        if chunk[0..4] != WAL_MAGIC.to_le_bytes() {
-            warn!("Chunk does not have valid magic marker");
-            return;
-        }
-        let wal_entry = wal_entry::View::new(&chunk);
-        if wal_entry.header().magic_marker().read() != WAL_MAGIC {
-            warn!("Chunk does not have valid magic marker");
-            return;
-        }
-        let pid = wal_entry.header().pid().read();
-
-        // Copied onto heap so we can pass it to the write batch without it getting moved around,
-        // because the kernel will need a stable pointer to it.
-        let data = wal_entry.data().to_vec().into_boxed_slice();
-
-        let action = wal_entry.header().action().read();
-        match action {
-            WalEntryType::PageSync => {
-                // Sync, write the updated data.
-                // The relation # is the first part of the id, its lower 8 bits. The remainder is the
-                // page number.
-                let relation_id = RelationId(wal_entry.header().relation_id().read() as usize);
-
-                write_mutations.push(PageStoreMutation::SyncRelation(
-                    relation_id,
-                    pid as PageId,
-                    data,
-                ));
-            }
-            WalEntryType::SequenceSync => {
-                // Write current state of sequences to the sequence page. Ignores page id, slot id.
-                // Data is the contents of the sequence page.
-                write_mutations.push(PageStoreMutation::SyncSequence(data));
-            }
-            WalEntryType::Delete => {
-                // Delete
-                let relation_id = RelationId(wal_entry.header().relation_id().read() as usize);
-                let slot_id = wal_entry.header().slot_id().read();
-                write_mutations.push(PageStoreMutation::DeleteRelation(
-                    pid as PageId,
-                    relation_id,
-                ));
-                to_evict.push(TupleId {
-                    page: pid as PageId,
-                    slot: slot_id as SlotId,
-                });
-            }
-        }
     }
 }
