@@ -30,6 +30,8 @@ pub mod odb;
 #[doc(hidden)]
 pub mod testing;
 
+pub mod util;
+
 pub struct DatabaseBuilder {
     path: Option<std::path::PathBuf>,
     memory_size: Option<usize>,

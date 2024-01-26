@@ -35,7 +35,7 @@ use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedComman
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
-use crate::tasks::{TaskDescription, TaskId, VerbCall};
+use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskDescription, TaskId, VerbCall};
 
 /// A task is a concurrent, transactionally isolated, thread of execution. It starts with the
 /// execution of a 'verb' (or 'command verb' or 'eval' etc) and runs through to completion or
@@ -69,6 +69,9 @@ pub(crate) struct Task {
     pub(crate) vm_host: VmHost,
     /// Should I die?
     pub(crate) done: bool,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 // TODO allow these to be set by command line arguments, as well.
@@ -187,6 +190,8 @@ impl Task {
             world_state,
             perms,
             done: false,
+            unsend: Default::default(),
+            unsync: Default::default(),
         };
 
         let start = task.task_start.clone();

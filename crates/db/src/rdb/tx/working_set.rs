@@ -22,6 +22,7 @@ use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::{RelBox, RelationInfo};
 use crate::rdb::tuples::{TupleRef, TxTuple};
 use crate::rdb::{RelationId, TupleError};
+use crate::util::{PhantomUnsend, PhantomUnsync};
 
 /// The local tx "working set" of mutations to base relations, and consists of the set of operations
 /// we will attempt to make permanent when the transaction commits.
@@ -33,6 +34,9 @@ pub struct WorkingSet {
     pub(crate) schema: Vec<RelationInfo>,
     pub(crate) slotbox: Arc<TupleBox>,
     pub(crate) relations: Box<BitArray<TxBaseRelation, 64, Bitset64<1>>>,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 impl WorkingSet {
@@ -43,6 +47,8 @@ impl WorkingSet {
             slotbox,
             schema: schema.to_vec(),
             relations,
+            unsend: Default::default(),
+            unsync: Default::default(),
         }
     }
 
@@ -71,6 +77,8 @@ impl WorkingSet {
             } else {
                 None
             },
+            unsend: Default::default(),
+            unsync: Default::default(),
         };
 
         relations.set(relation_id.0, new_relation);
@@ -483,6 +491,9 @@ pub(crate) struct TxBaseRelation {
     tuples: Vec<TxTuple>,
     domain_index: HashMap<SliceRef, usize>,
     codomain_index: Option<HashMap<SliceRef, HashSet<usize>>>,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 impl TxBaseRelation {

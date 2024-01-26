@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::TaskId;
+use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskId};
 use crate::vm::activation::{Activation, Caller};
 use moor_values::var::Objid;
 use moor_values::var::Var;
@@ -38,6 +38,9 @@ pub struct VMExecState {
     pub(crate) start_time: Option<SystemTime>,
     /// The amount of time the task is allowed to run.
     pub(crate) maximum_time: Option<Duration>,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 impl VMExecState {
@@ -49,6 +52,8 @@ impl VMExecState {
             start_time: None,
             tick_slice: 0,
             maximum_time: None,
+            unsend: Default::default(),
+            unsync: Default::default(),
         }
     }
 
@@ -156,7 +161,7 @@ impl VMExecState {
         let elapsed = now
             .duration_since(self.start_time.expect("No start time for task?"))
             .unwrap();
-        
+
         max_time.checked_sub(elapsed)
     }
 }

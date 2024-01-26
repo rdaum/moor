@@ -14,6 +14,9 @@
 
 use moor_values::var::Objid;
 use moor_values::var::Var;
+use std::cell::Cell;
+use std::marker::PhantomData;
+use std::sync::MutexGuard;
 use std::time::SystemTime;
 
 pub mod command_parse;
@@ -25,6 +28,9 @@ pub mod task_messages;
 pub mod vm_host;
 
 pub type TaskId = usize;
+
+pub(crate) type PhantomUnsync = PhantomData<Cell<()>>;
+pub(crate) type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
 
 /// The minimum set of information needed to make a *resolution* call for a verb.
 #[derive(Debug, Clone, Eq, PartialEq)]

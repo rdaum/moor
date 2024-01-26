@@ -12,10 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashSet;
-use std::marker::PhantomData;
-use std::sync::{Arc, MutexGuard};
+use std::sync::Arc;
 use std::thread::yield_now;
 
 use thiserror::Error;
@@ -30,9 +29,7 @@ use crate::rdb::tuples::{TupleError, TupleRef};
 use crate::rdb::tx::relvar::RelVar;
 use crate::rdb::tx::working_set::WorkingSet;
 use crate::rdb::RelationId;
-
-type PhantomUnsync = PhantomData<Cell<()>>;
-type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
+use crate::util::{PhantomUnsend, PhantomUnsync};
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
@@ -224,6 +221,9 @@ impl Transaction {
 pub struct CommitSet {
     pub(crate) ts: u64,
     relations: Box<BitArray<BaseRelation, 64, Bitset64<1>>>,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 impl CommitSet {
@@ -231,6 +231,8 @@ impl CommitSet {
         Self {
             ts,
             relations: Box::new(BitArray::new()),
+            unsend: Default::default(),
+            unsync: Default::default(),
         }
     }
 

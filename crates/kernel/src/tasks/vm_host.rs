@@ -17,7 +17,7 @@ use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
-use crate::tasks::{TaskId, VerbCall};
+use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
@@ -73,6 +73,9 @@ pub struct VmHost {
     sessions: Arc<dyn Session>,
     scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
     running: bool,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 impl VmHost {
@@ -97,6 +100,8 @@ impl VmHost {
             sessions,
             scheduler_control_sender,
             running: false,
+            unsend: Default::default(),
+            unsync: Default::default(),
         }
     }
 }
