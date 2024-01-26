@@ -75,6 +75,7 @@ uuid = { version = "1.7.0", features = ["v4"] }
 yoke = "0.7.3"
 yoke-derive = "0.7.3"
 dashmap = "5.5.3"
+arc-swap = "1.6.0"
 
 ## Required for MOO builtins.
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically

@@ -80,10 +80,12 @@ fn make_eventfd() -> Fd {
 fn event_fd_listen_thread(event_fd: &Fd, ps: Arc<PageStore>, running_flag: Arc<Mutex<bool>>) {
     info!("Listening for eventfd events for page storage");
     loop {
-        let rf = running_flag.clone();
-        let running = rf.lock().unwrap();
-        if !*running {
-            break;
+        {
+            let rf = running_flag.clone();
+            let running = rf.lock().unwrap();
+            if !*running {
+                break;
+            }
         }
         let mut eventfd_v: libc::eventfd_t = 0;
 
@@ -120,8 +122,6 @@ impl PageStore {
             uring,
             buffers: Default::default(),
         };
-
-        
 
         Arc::new(Self {
             dir,

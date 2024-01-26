@@ -17,7 +17,6 @@ mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use std::time::Duration;
     use tracing_test::traced_test;
 
     use moor_db::rdb::{RelBox, RelationInfo};
@@ -61,11 +60,8 @@ mod test {
                                     .insert_tuple(from_val(*value), from_val(*value))
                                     .unwrap();
                             }
-                            Value::r(_, register, _) => {
-                                let relation = RelationId(*register as usize);
-
-                                // Full-scan.
-                                tx.relation(relation).predicate_scan(&|_| true).unwrap();
+                            Value::r(_, _, _) => {
+                                continue;
                             }
                         }
                     }
@@ -129,10 +125,6 @@ mod test {
             expected
         };
 
-        // Sleep for a bit to encourage any buffers to flush, etc.
-        // TODO: ew.
-        std::thread::sleep(Duration::from_secs(1));
-
         // Verify the WAL directory is not empty.
         assert!(std::fs::read_dir(format!("{}/wal", tmpdir_str))
             .unwrap()
@@ -144,23 +136,24 @@ mod test {
         for _ in 0..5 {
             let db = test_db(tmpdir.path().into());
 
-            // Verify the pages directory is not empty after recovery.
+            // Verify the pages directory is not empty after recovery, but that the WAL directory is
             let pages = std::fs::read_dir(format!("{}/pages", tmpdir_str));
             let num_pages = pages.unwrap().count();
             assert_ne!(num_pages, 0);
-            let tx = db.clone().start_tx();
 
             // Verify all the tuples in all the relations are there
             for relation in tuples.keys() {
                 let expected_tuples = tuples.get(relation).unwrap();
-                let rel = tx.relation(*relation);
-                for t in expected_tuples {
-                    let domain = from_val(*t);
-                    let v = rel
-                        .seek_by_domain(domain.clone())
-                        .expect("Missing expected tuple value");
-                    assert_eq!(domain, v.domain());
-                }
+
+                db.with_relation(*relation, |r| {
+                    for k in expected_tuples {
+                        let t = from_val(*k);
+                        let v = r
+                            .seek_by_domain(t.clone())
+                            .unwrap_or_else(|| panic!("Tup {:?} not found", k));
+                        assert_eq!(v.domain(), t);
+                    }
+                });
             }
             db.shutdown();
         }

@@ -12,10 +12,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Duration;
+use std::marker::PhantomData;
+use std::sync::{Arc, MutexGuard};
+use std::thread::yield_now;
 
 use thiserror::Error;
 
@@ -30,6 +31,9 @@ use crate::rdb::tx::relvar::RelVar;
 use crate::rdb::tx::working_set::WorkingSet;
 use crate::rdb::RelationId;
 
+type PhantomUnsync = PhantomData<Cell<()>>;
+type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
+
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
     /// Where we came from, for referencing back to the base relations.
@@ -38,6 +42,9 @@ pub struct Transaction {
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
     pub(crate) working_set: RefCell<Option<WorkingSet>>,
+
+    unsend: PhantomUnsend,
+    unsync: PhantomUnsync,
 }
 
 /// Errors which can occur during a commit.
@@ -59,6 +66,8 @@ impl Transaction {
         Self {
             db,
             working_set: RefCell::new(Some(ws)),
+            unsend: Default::default(),
+            unsync: Default::default(),
         }
     }
 
@@ -78,11 +87,11 @@ impl Transaction {
             tries += 1;
             let commit_ts = self.db.clone().next_ts();
             let mut working_set = self.working_set.borrow_mut();
-            let commit_set = self
+            let (commit_set, commit_guard) = self
                 .db
                 .prepare_commit_set(commit_ts, working_set.as_mut().unwrap())?;
-            match self.db.try_commit(commit_set) {
-                Ok(_) => {
+            match self.db.try_commit(commit_set, commit_guard) {
+                Ok(()) => {
                     let working_set = working_set.take().unwrap();
                     self.db.sync(commit_ts, working_set);
                     return Ok(());
@@ -92,8 +101,7 @@ impl Transaction {
                         return Err(CommitError::RelationContentionConflict);
                     } else {
                         // Release the lock, pause a bit, and retry the commit set.
-                        drop(working_set);
-                        std::thread::sleep(Duration::from_millis(5));
+                        yield_now();
                         continue 'retry;
                     }
                 }
@@ -310,7 +318,7 @@ mod tests {
 
         // Verify canonical state.
         {
-            let relation = &db.canonical.read().unwrap()[0];
+            let relation = &db.canonical[0].load();
             let tuple = relation
                 .seek_by_domain(attr(b"abc"))
                 .expect("Expected tuple to exist");

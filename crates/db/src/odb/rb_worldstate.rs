@@ -73,8 +73,8 @@ impl RelBoxWorldState {
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
-            let rels = db.canonical.read().unwrap();
-            rels[WorldStateRelation::ObjectParent as usize]
+            db.canonical[WorldStateRelation::ObjectParent as usize]
+                .load()
                 .seek_by_domain(SYSTEM_OBJECT.0.as_sliceref())
                 .is_none()
         };

@@ -139,13 +139,13 @@ impl ColdStorage {
         // Start the listen loop
         let (writer_send, writer_receive) = kanal::unbounded();
         let ps = page_storage.clone();
-        std::thread::Builder::new()
+        let cs_join = std::thread::Builder::new()
             .name("moor-coldstorage-listen".to_string())
             .spawn(move || Self::listen_loop(writer_receive, wal, tuple_box.clone(), ps))
             .expect("Unable to spawn coldstorage listen thread");
 
         // And return the client to it.
-        BackingStoreClient::new(writer_send)
+        BackingStoreClient::new(writer_send, cs_join)
     }
 
     fn listen_loop(

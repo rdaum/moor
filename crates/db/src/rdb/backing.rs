@@ -17,11 +17,13 @@
 //! storage mechanism is desired.
 
 use kanal::Sender;
+use std::thread::yield_now;
 
 use crate::rdb::tx::WorkingSet;
 
 pub struct BackingStoreClient {
     sender: Sender<WriterMessage>,
+    join_handle: std::thread::JoinHandle<()>,
 }
 
 pub enum WriterMessage {
@@ -30,8 +32,11 @@ pub enum WriterMessage {
 }
 
 impl BackingStoreClient {
-    pub fn new(sender: Sender<WriterMessage>) -> Self {
-        Self { sender }
+    pub fn new(sender: Sender<WriterMessage>, join_handle: std::thread::JoinHandle<()>) -> Self {
+        Self {
+            sender,
+            join_handle,
+        }
     }
 
     /// Sync out the working set from a committed transaction for the given transaction timestamp.
@@ -48,5 +53,8 @@ impl BackingStoreClient {
         self.sender
             .send(WriterMessage::Shutdown)
             .expect("Unable to send shutdown message");
+        while !self.join_handle.is_finished() {
+            yield_now()
+        }
     }
 }

@@ -15,10 +15,11 @@
 // TODO: support sorted indices, too.
 // TODO: 'join' and transitive closure -> datalog-style variable unification
 
+use arc_swap::ArcSwap;
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use tracing::info;
 
@@ -57,12 +58,26 @@ pub struct RelBox {
     /// Monotonically incrementing sequence counters.
     sequences: Vec<AtomicU64>,
     /// The copy-on-write set of current canonical base relations.
-    // TODO: this is a candidate for an optimistic lock.
-    pub(crate) canonical: RwLock<Vec<BaseRelation>>,
+    /// Held in ArcSwap so that we can swap them out atomically for their modified versions, without holding
+    /// a lock for reads.
+    pub(crate) canonical: Vec<ArcSwap<BaseRelation>>,
+
+    /// Lock to hold while committing a transaction.
+    commit_lock: Mutex<()>,
 
     slotbox: Arc<TupleBox>,
 
     backing_store: Option<BackingStoreClient>,
+}
+
+impl Debug for RelBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RelBox")
+            .field("num_relations", &self.relation_info.len())
+            .field("maximum_transaction", &self.maximum_transaction)
+            .field("sequences", &self.sequences)
+            .finish()
+    }
 }
 
 impl RelBox {
@@ -104,10 +119,14 @@ impl RelBox {
         Arc::new(Self {
             relation_info: relations.to_vec(),
             maximum_transaction: AtomicU64::new(0),
-            canonical: RwLock::new(base_relations),
+            canonical: base_relations
+                .into_iter()
+                .map(|b| ArcSwap::new(Arc::new(b)))
+                .collect(),
             sequences,
             backing_store,
             slotbox,
+            commit_lock: Mutex::new(()),
         })
     }
 
@@ -161,10 +180,10 @@ impl RelBox {
     pub fn with_relation<R, F: Fn(&BaseRelation) -> R>(&self, relation_id: RelationId, f: F) -> R {
         f(self
             .canonical
-            .read()
-            .unwrap()
             .get(relation_id.0)
-            .expect("No such relation"))
+            .expect("No such relation")
+            .load()
+            .as_ref())
     }
 
     /// Prepare a commit set for the given transaction. This will scan through the transaction's
@@ -174,15 +193,16 @@ impl RelBox {
         &self,
         commit_ts: u64,
         tx_working_set: &mut WorkingSet,
-    ) -> Result<CommitSet, CommitError> {
+    ) -> Result<(CommitSet, MutexGuard<()>), CommitError> {
         let mut commitset = CommitSet::new(commit_ts);
+        let commit_guard = self.commit_lock.lock().unwrap();
 
         for (_, local_relation) in tx_working_set.relations.iter_mut() {
             let relation_id = local_relation.id;
             // scan through the local working set, and for each tuple, check to see if it's safe to
             // commit. If it is, then we'll add it to the commit set.
             // note we're not actually committing yet, just producing a candidate commit set
-            let canonical = &self.canonical.read().unwrap()[relation_id.0];
+            let canonical = &self.canonical[relation_id.0].load();
             for mut tuple in local_relation.tuples_mut() {
                 // Look for the most recent version for this domain in the canonical relation.
                 let canon_tuple = canonical.seek_by_domain(tuple.domain().clone());
@@ -246,24 +266,28 @@ impl RelBox {
                 }
             }
         }
-        Ok(commitset)
+        Ok((commitset, commit_guard))
     }
 
     /// Actually commit a transaction's (approved) CommitSet. If the underlying base relations have
-    /// changed since the transaction started, this will return `Err(RelationContentionConflict)`
+    /// changed since the commit set began, this will return `Err(RelationContentionConflict)`
     /// and the transaction can choose to try to produce a new CommitSet, or just abort.
-    pub(crate) fn try_commit(&self, commit_set: CommitSet) -> Result<(), CommitError> {
-        // swap the active canonical state with the new one. but only if the timestamps have not
-        // changed in the interim; we have to hold a lock while this is done. If any relations have
-        // had their ts change, we need to retry.
-        // We have to hold a lock during the duration of this. If we fail, we will loop back
-        // and retry.
-        let mut canonical = self.canonical.write().unwrap();
+    pub(crate) fn try_commit(
+        &self,
+        commit_set: CommitSet,
+        _commit_guard: MutexGuard<()>,
+    ) -> Result<(), CommitError> {
+        // swap the active canonical state with the new one
+        // but only if the timestamps have not changed in the interim;
+        // we have to hold a lock while this is checked. If any relations have
+        // had their ts change, we probably need to retry because someone else got there first
+        // This shouldn't happen if we have a commit guard.
         for (_, relation) in commit_set.iter() {
             // Did the relation get committed to by someone else in the interim? If so, return
             // back to the transaction letting it know that, and it can decide if it wants to
             // retry.
-            if relation.ts != canonical[relation.id.0].ts {
+            // This shouldn't happen if we have a commit guard.
+            if relation.ts != self.canonical[relation.id.0].load().ts {
                 return Err(CommitError::RelationContentionConflict);
             }
         }
@@ -271,11 +295,11 @@ impl RelBox {
         // Everything passed, so we can commit the changes by swapping in the new canonical
         // before releasing the lock.
         let commit_ts = commit_set.ts;
-        for (_, relation) in commit_set.into_iter() {
+        for (_, mut relation) in commit_set.into_iter() {
             let idx = relation.id.0;
-            canonical[idx] = relation;
-            // And update the timestamp on the canonical relation.
-            canonical[idx].ts = commit_ts;
+
+            relation.ts = commit_ts;
+            self.canonical[idx].store(Arc::new(relation));
         }
 
         Ok(())
