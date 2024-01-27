@@ -1,5 +1,5 @@
 # Using official rust base image
-FROM rust:1.71-bullseye
+FROM rust:1.75-bullseye
 WORKDIR /moor
 RUN apt update
 RUN apt -y install clang libclang-dev
