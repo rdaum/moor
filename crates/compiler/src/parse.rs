@@ -84,22 +84,22 @@ fn parse_atom(
         Rule::err => {
             let e = pairs.as_str();
             Ok(Expr::Value(match e.to_lowercase().as_str() {
-                "e_type" => v_err(E_TYPE),
+                "e_args" => v_err(E_ARGS),
                 "e_div" => v_err(E_DIV),
+                "e_float" => v_err(E_FLOAT),
+                "e_invarg" => v_err(E_INVARG),
+                "e_invind" => v_err(E_INVIND),
+                "e_maxrec" => v_err(E_MAXREC),
+                "e_nacc" => v_err(E_NACC),
+                "e_none" => v_err(E_NONE),
                 "e_perm" => v_err(E_PERM),
                 "e_propnf" => v_err(E_PROPNF),
-                "e_verbnf" => v_err(E_VERBNF),
-                "e_varnf" => v_err(E_VARNF),
-                "e_invind" => v_err(E_INVIND),
-                "e_recmove" => v_err(E_RECMOVE),
-                "e_maxrec" => v_err(E_MAXREC),
-                "e_range" => v_err(E_RANGE),
-                "e_args" => v_err(E_ARGS),
-                "e_nacc" => v_err(E_NACC),
-                "e_invarg" => v_err(E_INVARG),
                 "e_quota" => v_err(E_QUOTA),
-                "e_float" => v_err(E_FLOAT),
-                "e_none" => v_err(E_NONE),
+                "e_range" => v_err(E_RANGE),
+                "e_recmove" => v_err(E_RECMOVE),
+                "e_type" => v_err(E_TYPE),
+                "e_varnf" => v_err(E_VARNF),
+                "e_verbnf" => v_err(E_VERBNF),
                 &_ => {
                     panic!("unknown error")
                 }

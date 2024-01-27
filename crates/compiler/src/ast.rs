@@ -43,36 +43,36 @@ pub struct ScatterItem {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BinaryOp {
     Add,
-    Sub,
-    Mul,
     Div,
-    Mod,
     Eq,
-    NEq,
+    Exp,
     Gt,
     GtE,
+    In,
     Lt,
     LtE,
-    Exp,
-    In,
+    Mod,
+    Mul,
+    NEq,
+    Sub,
 }
 
 impl BinaryOp {
     pub fn from_binary_opcode(opcode: Op) -> Self {
         match opcode {
             Op::Add => Self::Add,
-            Op::Sub => Self::Sub,
-            Op::Mul => Self::Mul,
             Op::Div => Self::Div,
-            Op::Mod => Self::Mod,
             Op::Eq => Self::Eq,
-            Op::Ne => Self::NEq,
-            Op::Gt => Self::Gt,
-            Op::Ge => Self::GtE,
-            Op::Lt => Self::Lt,
-            Op::Le => Self::LtE,
             Op::Exp => Self::Exp,
+            Op::Ge => Self::GtE,
+            Op::Gt => Self::Gt,
             Op::In => Self::In,
+            Op::Le => Self::LtE,
+            Op::Lt => Self::Lt,
+            Op::Mod => Self::Mod,
+            Op::Mul => Self::Mul,
+            Op::Ne => Self::NEq,
+            Op::Sub => Self::Sub,
             _ => panic!("Invalid binary opcode: {:?}", opcode),
         }
     }
@@ -82,18 +82,18 @@ impl Display for BinaryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Add => write!(f, "+"),
-            Self::Sub => write!(f, "-"),
-            Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
-            Self::Mod => write!(f, "%"),
             Self::Eq => write!(f, "=="),
-            Self::NEq => write!(f, "!="),
+            Self::Exp => write!(f, "^"),
             Self::Gt => write!(f, ">"),
             Self::GtE => write!(f, ">="),
+            Self::In => write!(f, "in"),
             Self::Lt => write!(f, "<"),
             Self::LtE => write!(f, "<="),
-            Self::Exp => write!(f, "^"),
-            Self::In => write!(f, "in"),
+            Self::Mod => write!(f, "%"),
+            Self::Mul => write!(f, "*"),
+            Self::NEq => write!(f, "!="),
+            Self::Sub => write!(f, "-"),
         }
     }
 }
