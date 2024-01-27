@@ -4,10 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+authors.workspace = true
 
 [dependencies]
-moor-kernel = { path = "../kernel" }
 moor-db = { path = "../db" }
+moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
 
@@ -18,35 +19,35 @@ strum.workspace = true
 
 # General.
 anyhow.workspace = true
-futures.workspace = true
-futures-util.workspace = true
 async-trait.workspace = true
-tower-http.workspace = true
 bincode.workspace = true
+futures-util.workspace = true
+futures.workspace = true
+tower-http.workspace = true
 
 ## Asynchronous transaction processing & networking
-tokio.workspace = true
 tokio-util.workspace = true
+tokio.workspace = true
 
 ## Logging & tracing
-tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-chrome.workspace = true
 metrics-exporter-prometheus.workspace = true
-metrics.workspace = true
-metrics-util.workspace = true
 metrics-macros.workspace = true
+metrics-util.workspace = true
+metrics.workspace = true
+tracing-chrome.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
 
 ## RPC daemon support
+chrono.workspace = true
+itertools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tmq.workspace = true
 uuid.workspace = true
-itertools.workspace = true
-serde_json.workspace = true
-serde.workspace = true
-chrono.workspace = true
 
 # Auth/Auth
-rusty_paseto.workspace = true
 ed25519-dalek.workspace = true
-rand.workspace = true
 pem.workspace = true
+rand.workspace = true
+rusty_paseto.workspace = true

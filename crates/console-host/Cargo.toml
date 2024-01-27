@@ -4,6 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
+authors.workspace = true
 
 [dependencies]
 moor-values = { path = "../values" }
@@ -16,24 +17,24 @@ strum.workspace = true
 
 # General.
 anyhow.workspace = true
-futures.workspace = true
-futures-util.workspace = true
 async-trait.workspace = true
 bincode.workspace = true
+futures-util.workspace = true
+futures.workspace = true
 
 ## Asynchronous transaction processing & networking
-tokio.workspace = true
 tokio-util.workspace = true
+tokio.workspace = true
 
 ## Logging & tracing
-tracing.workspace = true
-tracing-subscriber.workspace = true
 tracing-chrome.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
 
 ## ZMQ / RPC
+itertools.workspace = true
 tmq.workspace = true
 uuid.workspace = true
-itertools.workspace = true
 
 ## For console
 rustyline.workspace = true

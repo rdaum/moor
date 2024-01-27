@@ -4,15 +4,16 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+authors.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
-inventory.workspace = true
-test-case.workspace = true
-unindent.workspace = true
-pretty_assertions.workspace = true
 criterion.workspace = true
+inventory.workspace = true
+pretty_assertions.workspace = true
+tempfile.workspace = true
+test-case.workspace = true
 text-diff.workspace = true
+unindent.workspace = true
 
 [[test]]
 name = "basic-testsuite"
@@ -25,31 +26,31 @@ harness = false
 [dependencies]
 
 ## Own
-moor-values = { path = "../values" }
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
+moor-values = { path = "../values" }
 
 ## General usefullness
-itertools.workspace = true
-lazy_static.workspace = true
 async-trait.workspace = true
-decorum.workspace = true
-text_io.workspace = true
 bytes.workspace = true
-strum.workspace = true
-uuid.workspace = true
 chrono.workspace = true
-libc.workspace = true
-kanal.workspace = true
 dashmap.workspace = true
+decorum.workspace = true
+itertools.workspace = true
+kanal.workspace = true
+lazy_static.workspace = true
+libc.workspace = true
+strum.workspace = true
+text_io.workspace = true
+uuid.workspace = true
 
 ## Required for MOO builtins.
-pwhash.workspace = true
-md5.workspace = true
-rand.workspace = true
-onig.workspace = true
 chrono-tz.workspace = true
 iana-time-zone.workspace = true
+md5.workspace = true
+onig.workspace = true
+pwhash.workspace = true
+rand.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true
@@ -58,15 +59,15 @@ thiserror.workspace = true
 paste.workspace = true
 
 ## Asynchrony and/or networking
-tokio.workspace = true
 tokio-test.workspace = true
+tokio.workspace = true
 
 ## Logging & tracing
-tracing.workspace = true
-tracing-test.workspace = true
-metrics.workspace = true
-metrics-util.workspace = true
 metrics-macros.workspace = true
+metrics-util.workspace = true
+metrics.workspace = true
+tracing-test.workspace = true
+tracing.workspace = true
 
 # For the DB layer.
 bincode.workspace = true

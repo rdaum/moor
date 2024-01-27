@@ -4,51 +4,52 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+authors.workspace = true
 
 [[bench]]
 name = "tb_single_thread"
 harness = false
 
 [dev-dependencies]
-tempfile.workspace = true
-rand.workspace = true
-serde_json.workspace = true
-serde.workspace = true
 criterion.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
 
 [dependencies]
 ## Own
 moor-values = { path = "../values" }
 
 ## General usefullness
+human_bytes.workspace = true
+lazy_static.workspace = true
 strum.workspace = true
 uuid.workspace = true
-lazy_static.workspace = true
-human_bytes.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true
 
 ## Logging & tracing
-tracing.workspace = true
-tracing-test.workspace = true
-metrics.workspace = true
 metrics-macros.workspace = true
+metrics.workspace = true
+tracing-test.workspace = true
+tracing.workspace = true
 
 # For the DB layer.
-bincode.workspace = true
-im.workspace = true
-binary-layout.workspace = true
-libc.workspace = true
-atomic-wait.workspace = true
-okaywal.workspace = true
-io-uring.workspace = true
-hi_sparse_bitset.workspace = true
-fast-counter.workspace = true
-num-traits.workspace = true
-kanal.workspace = true
 arc-swap.workspace = true
+atomic-wait.workspace = true
+binary-layout.workspace = true
+bincode.workspace = true
+fast-counter.workspace = true
+hi_sparse_bitset.workspace = true
+im.workspace = true
+io-uring.workspace = true
+kanal.workspace = true
+libc.workspace = true
+num-traits.workspace = true
+okaywal.workspace = true
 
 # For testing & benching common bits
-serde_json.workspace = true
 serde.workspace = true
+serde_json.workspace = true

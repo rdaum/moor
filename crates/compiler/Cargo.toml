@@ -4,6 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+authors.workspace = true
 
 [dev-dependencies]
 test-case.workspace = true
@@ -16,10 +17,10 @@ pretty_assertions.workspace = true
 moor-values = { path = "../values" }
 
 ## General usefullness
+bincode.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true
 strum.workspace = true
-bincode.workspace = true
 
 ## Compiler grammar/parser
 pest.workspace = true
@@ -29,8 +30,8 @@ pest_derive.workspace = true
 thiserror.workspace = true
 
 ## Logging & tracing
-tracing.workspace = true
-tracing-test.workspace = true
-metrics.workspace = true
 metrics-macros.workspace = true
+metrics.workspace = true
+tracing-test.workspace = true
+tracing.workspace = true
 
