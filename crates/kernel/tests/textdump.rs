@@ -31,6 +31,7 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
+    use std::rc::Rc;
     use std::sync::Arc;
     use text_diff::assert_diff;
 
@@ -40,7 +41,7 @@ mod test {
         File::open(minimal_db.clone()).unwrap()
     }
 
-    fn load_textdump_file(tx: Arc<dyn LoaderInterface>, path: &str) {
+    fn load_textdump_file(tx: Rc<dyn LoaderInterface>, path: &str) {
         textdump_load(tx.clone(), PathBuf::from(path)).expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
