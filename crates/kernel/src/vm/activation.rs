@@ -60,18 +60,29 @@ pub(crate) struct HandlerLabel {
     pub(crate) valstack_pos: usize,
 }
 
-/// Activation frame for the call stack.
-// TODO: move everything MOO-specific into a sub-struct as an attribute:
-//   catch handlers
-//   opcode stream
-//   trampoline args?
-// TODO: how can we optimize this for L1 cache locality?
-//   1. do microbenchmarks with LinuxPerf
-//   2. try to break this apart so that the 'hot' pieces are together in their own struct
+/// The MOO stack-frame specific portions of the activation:
+///   the value stack, local variables, program, program counter, handler stack, etc.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Activation {
+pub(crate) struct Frame {
     /// The program of the verb that is currently being executed.
     pub(crate) program: Program,
+    /// The program counter.
+    pub(crate) pc: usize,
+    /// The values of the variables currently in scope, by their offset.
+    pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
+    /// The value stack.
+    pub(crate) valstack: Vec<Var>,
+    /// A stack of active error handlers, each relative to a position in the valstack.
+    pub(crate) handler_stack: Vec<HandlerLabel>,
+    /// Scratch space for PushTemp and PutTemp opcodes.
+    pub(crate) temp: Var,
+}
+
+/// Activation frame for the call stack.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Activation {
+    /// Frame
+    pub(crate) frame: Frame,
     /// The object that is the receiver of the current verb call.
     pub(crate) this: Objid,
     /// The object that is the 'player' role; that is, the active user of this task.
@@ -87,16 +98,6 @@ pub(crate) struct Activation {
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Objid,
-    /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
-    /// The value stack.
-    pub(crate) valstack: Vec<Var>,
-    /// A stack of active error handlers, each relative to a position in the valstack.
-    pub(crate) handler_stack: Vec<HandlerLabel>,
-    /// The program counter.
-    pub(crate) pc: usize,
-    /// Scratch space for PushTemp and PutTemp opcodes.
-    pub(crate) temp: Var,
     /// The command that triggered this verb call, if any.
     pub(crate) command: Option<ParsedCommand>,
     /// If the activation is a call to a built-in function, the index of that function, in which
@@ -109,166 +110,7 @@ pub(crate) struct Activation {
     pub(crate) bf_trampoline_arg: Option<Var>,
 }
 
-fn set_constants(a: &mut Activation) {
-    a.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
-    a.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
-    a.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
-    a.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
-    a.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
-    a.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
-    a.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
-}
-
-impl Activation {
-    pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
-        let program = verb_call_request.program;
-        let environment = BitArray::new();
-
-        let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
-        let mut a = Self {
-            program,
-            environment,
-            valstack: vec![],
-            handler_stack: vec![],
-            pc: 0,
-            temp: v_none(),
-            this: verb_call_request.call.this,
-            player: verb_call_request.call.player,
-            verb_info: verb_call_request.resolved_verb,
-            verb_name: verb_call_request.call.verb_name.clone(),
-            command: verb_call_request.command.clone(),
-            bf_index: None,
-            bf_trampoline: None,
-            bf_trampoline_arg: None,
-            args: verb_call_request.call.args.clone(),
-            permissions: verb_owner,
-        };
-
-        set_constants(&mut a);
-
-        a.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
-        a.set_gvar(GlobalName::player, v_objid(verb_call_request.call.player));
-        a.set_gvar(GlobalName::caller, v_objid(verb_call_request.call.caller));
-        a.set_gvar(
-            GlobalName::verb,
-            v_str(verb_call_request.call.verb_name.as_str()),
-        );
-        a.set_gvar(GlobalName::args, v_listv(verb_call_request.call.args));
-
-        // From the command, if any...
-        if let Some(command) = verb_call_request.command {
-            a.set_gvar(GlobalName::argstr, v_string(command.argstr.clone()));
-            a.set_gvar(GlobalName::dobj, v_objid(command.dobj));
-            a.set_gvar(GlobalName::dobjstr, v_string(command.dobjstr.clone()));
-            a.set_gvar(GlobalName::prepstr, v_string(command.prepstr.clone()));
-            a.set_gvar(GlobalName::iobj, v_objid(command.iobj));
-            a.set_gvar(GlobalName::iobjstr, v_string(command.iobjstr.clone()));
-        } else {
-            a.set_gvar(
-                GlobalName::argstr,
-                v_string(verb_call_request.call.argstr.clone()),
-            );
-            a.set_gvar(GlobalName::dobj, v_objid(NOTHING));
-            a.set_gvar(GlobalName::dobjstr, v_str(""));
-            a.set_gvar(GlobalName::prepstr, v_str(""));
-            a.set_gvar(GlobalName::iobj, v_objid(NOTHING));
-            a.set_gvar(GlobalName::iobjstr, v_str(""));
-        }
-        a
-    }
-
-    pub fn for_eval(permissions: Objid, player: Objid, program: Program) -> Self {
-        let environment = BitArray::new();
-
-        let verb_info = VerbInfo::new(
-            // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
-            // Might need to clean up the requirement for a VerbInfo in Activation.
-            VerbDef::new(
-                Uuid::new_v4(),
-                NOTHING,
-                NOTHING,
-                &["eval"],
-                BitEnum::new_with(VerbFlag::Exec),
-                BinaryType::None,
-                VerbArgsSpec::this_none_this(),
-            ),
-            SliceRef::empty(),
-        );
-
-        let mut a = Self {
-            program,
-            environment,
-            valstack: vec![],
-            handler_stack: vec![],
-            pc: 0,
-            temp: v_none(),
-            this: player,
-            player,
-            verb_info,
-            verb_name: "eval".to_string(),
-            command: None,
-            bf_index: None,
-            bf_trampoline: None,
-            bf_trampoline_arg: None,
-            args: vec![],
-            permissions,
-        };
-
-        set_constants(&mut a);
-        a.set_gvar(GlobalName::this, v_objid(player));
-        a.set_gvar(GlobalName::player, v_objid(player));
-        a.set_gvar(GlobalName::caller, v_objid(player));
-        a.set_gvar(GlobalName::verb, v_str("eval"));
-        a.set_gvar(GlobalName::args, v_empty_list());
-        a.set_gvar(GlobalName::argstr, v_str(""));
-        a.set_gvar(GlobalName::dobj, v_objid(NOTHING));
-        a.set_gvar(GlobalName::dobjstr, v_str(""));
-        a.set_gvar(GlobalName::prepstr, v_str(""));
-        a.set_gvar(GlobalName::iobj, v_objid(NOTHING));
-        a.set_gvar(GlobalName::iobjstr, v_str(""));
-        a
-    }
-    pub fn for_bf_call(
-        bf_index: usize,
-        bf_name: &str,
-        args: Vec<Var>,
-        _verb_flags: BitEnum<VerbFlag>,
-        player: Objid,
-    ) -> Self {
-        let verb_info = VerbInfo::new(
-            // Fake verbdef. Not sure how I feel about this.
-            VerbDef::new(
-                Uuid::new_v4(),
-                NOTHING,
-                NOTHING,
-                &[bf_name],
-                BitEnum::new_with(VerbFlag::Exec),
-                BinaryType::None,
-                VerbArgsSpec::this_none_this(),
-            ),
-            SliceRef::empty(),
-        );
-
-        Self {
-            program: EMPTY_PROGRAM.clone(),
-            environment: BitArray::new(),
-            valstack: vec![],
-            handler_stack: vec![],
-            pc: 0,
-            temp: v_none(),
-            this: NOTHING,
-            player,
-            verb_info,
-            verb_name: bf_name.to_string(),
-            command: None,
-            bf_index: Some(bf_index),
-            bf_trampoline: None,
-            bf_trampoline_arg: None,
-            args,
-            permissions: NOTHING,
-        }
-    }
-
+impl Frame {
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
         if self.program.line_number_spans.is_empty() {
             return None;
@@ -283,18 +125,6 @@ impl Activation {
             last_line_num = *line_no
         }
         Some(last_line_num)
-    }
-
-    pub fn verb_definer(&self) -> Objid {
-        if self.bf_index.is_none() {
-            self.verb_info.verbdef().location()
-        } else {
-            NOTHING
-        }
-    }
-
-    pub fn verb_owner(&self) -> Objid {
-        self.verb_info.verbdef().owner()
     }
 
     #[inline]
@@ -373,7 +203,7 @@ impl Activation {
     }
 
     #[inline]
-    pub fn update(&mut self, amt: usize, v: Var) {
+    pub fn poke(&mut self, amt: usize, v: Var) {
         let l = self.valstack.len();
         self.valstack[l - amt - 1] = v;
     }
@@ -399,5 +229,193 @@ impl Activation {
             return None;
         }
         self.handler_stack.pop()
+    }
+}
+
+fn set_constants(f: &mut Frame) {
+    f.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
+    f.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
+    f.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
+    f.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
+    f.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
+    f.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
+    f.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
+}
+
+impl Activation {
+    pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
+        let program = verb_call_request.program;
+        let environment = BitArray::new();
+
+        let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
+        let mut frame = Frame {
+            program,
+            environment,
+            valstack: vec![],
+            handler_stack: vec![],
+            pc: 0,
+            temp: v_none(),
+        };
+
+        set_constants(&mut frame);
+        frame.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
+        frame.set_gvar(GlobalName::player, v_objid(verb_call_request.call.player));
+        frame.set_gvar(GlobalName::caller, v_objid(verb_call_request.call.caller));
+        frame.set_gvar(
+            GlobalName::verb,
+            v_str(verb_call_request.call.verb_name.as_str()),
+        );
+        frame.set_gvar(
+            GlobalName::args,
+            v_listv(verb_call_request.call.args.clone()),
+        );
+
+        // From the command, if any...
+        if let Some(ref command) = verb_call_request.command {
+            frame.set_gvar(GlobalName::argstr, v_string(command.argstr.clone()));
+            frame.set_gvar(GlobalName::dobj, v_objid(command.dobj));
+            frame.set_gvar(GlobalName::dobjstr, v_string(command.dobjstr.clone()));
+            frame.set_gvar(GlobalName::prepstr, v_string(command.prepstr.clone()));
+            frame.set_gvar(GlobalName::iobj, v_objid(command.iobj));
+            frame.set_gvar(GlobalName::iobjstr, v_string(command.iobjstr.clone()));
+        } else {
+            frame.set_gvar(
+                GlobalName::argstr,
+                v_string(verb_call_request.call.argstr.clone()),
+            );
+            frame.set_gvar(GlobalName::dobj, v_objid(NOTHING));
+            frame.set_gvar(GlobalName::dobjstr, v_str(""));
+            frame.set_gvar(GlobalName::prepstr, v_str(""));
+            frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
+            frame.set_gvar(GlobalName::iobjstr, v_str(""));
+        }
+
+        let a = Self {
+            frame,
+            this: verb_call_request.call.this,
+            player: verb_call_request.call.player,
+            verb_info: verb_call_request.resolved_verb,
+            verb_name: verb_call_request.call.verb_name.clone(),
+            command: verb_call_request.command.clone(),
+            bf_index: None,
+            bf_trampoline: None,
+            bf_trampoline_arg: None,
+            args: verb_call_request.call.args.clone(),
+            permissions: verb_owner,
+        };
+
+        a
+    }
+
+    pub fn for_eval(permissions: Objid, player: Objid, program: Program) -> Self {
+        let environment = BitArray::new();
+
+        let verb_info = VerbInfo::new(
+            // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
+            // Might need to clean up the requirement for a VerbInfo in Activation.
+            VerbDef::new(
+                Uuid::new_v4(),
+                NOTHING,
+                NOTHING,
+                &["eval"],
+                BitEnum::new_with(VerbFlag::Exec),
+                BinaryType::None,
+                VerbArgsSpec::this_none_this(),
+            ),
+            SliceRef::empty(),
+        );
+
+        let mut frame = Frame {
+            program,
+            environment,
+            valstack: vec![],
+            handler_stack: vec![],
+            pc: 0,
+            temp: v_none(),
+        };
+        set_constants(&mut frame);
+        frame.set_gvar(GlobalName::this, v_objid(player));
+        frame.set_gvar(GlobalName::player, v_objid(player));
+        frame.set_gvar(GlobalName::caller, v_objid(player));
+        frame.set_gvar(GlobalName::verb, v_str("eval"));
+        frame.set_gvar(GlobalName::args, v_empty_list());
+        frame.set_gvar(GlobalName::argstr, v_str(""));
+        frame.set_gvar(GlobalName::dobj, v_objid(NOTHING));
+        frame.set_gvar(GlobalName::dobjstr, v_str(""));
+        frame.set_gvar(GlobalName::prepstr, v_str(""));
+        frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
+        frame.set_gvar(GlobalName::iobjstr, v_str(""));
+
+        let a = Self {
+            frame,
+            this: player,
+            player,
+            verb_info,
+            verb_name: "eval".to_string(),
+            command: None,
+            bf_index: None,
+            bf_trampoline: None,
+            bf_trampoline_arg: None,
+            args: vec![],
+            permissions,
+        };
+
+        a
+    }
+    pub fn for_bf_call(
+        bf_index: usize,
+        bf_name: &str,
+        args: Vec<Var>,
+        _verb_flags: BitEnum<VerbFlag>,
+        player: Objid,
+    ) -> Self {
+        let verb_info = VerbInfo::new(
+            // Fake verbdef. Not sure how I feel about this.
+            VerbDef::new(
+                Uuid::new_v4(),
+                NOTHING,
+                NOTHING,
+                &[bf_name],
+                BitEnum::new_with(VerbFlag::Exec),
+                BinaryType::None,
+                VerbArgsSpec::this_none_this(),
+            ),
+            SliceRef::empty(),
+        );
+
+        // Frame doesn't really matter.
+        let frame = Frame {
+            program: EMPTY_PROGRAM.clone(),
+            environment: BitArray::new(),
+            valstack: vec![],
+            handler_stack: vec![],
+            pc: 0,
+            temp: v_none(),
+        };
+        Self {
+            frame,
+            this: NOTHING,
+            player,
+            verb_info,
+            verb_name: bf_name.to_string(),
+            command: None,
+            bf_index: Some(bf_index),
+            bf_trampoline: None,
+            bf_trampoline_arg: None,
+            args,
+            permissions: NOTHING,
+        }
+    }
+
+    pub fn verb_definer(&self) -> Objid {
+        if self.bf_index.is_none() {
+            self.verb_info.verbdef().location()
+        } else {
+            NOTHING
+        }
+    }
+
+    pub fn verb_owner(&self) -> Objid {
+        self.verb_info.verbdef().owner()
     }
 }

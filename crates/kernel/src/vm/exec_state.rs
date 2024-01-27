@@ -143,13 +143,13 @@ impl VMExecState {
     /// Pop a value off the value stack.
     #[inline]
     pub(crate) fn pop(&mut self) -> Var {
-        self.top_mut().pop()
+        self.top_mut().frame.pop()
     }
 
     /// Push a value onto the value stack
     #[inline]
     pub(crate) fn push(&mut self, v: Var) {
-        self.top_mut().push(v)
+        self.top_mut().frame.push(v)
     }
 
     pub(crate) fn time_left(&self) -> Option<Duration> {

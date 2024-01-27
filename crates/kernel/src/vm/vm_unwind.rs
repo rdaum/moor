@@ -91,7 +91,7 @@ impl VM {
         let mut frame = state.stack.len() - 1;
         loop {
             let activation = &state.stack.get(frame)?;
-            for handler in &activation.handler_stack {
+            for handler in &activation.frame.handler_stack {
                 if let HandlerType::Catch(cnt) = handler.handler_type {
                     // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
                     // non-list value, or a list containing the error code.
@@ -99,7 +99,7 @@ impl VM {
                     // TODO this actually i think is wrong, it needs to pull two values off the stack
                     let i = handler.valstack_pos;
                     for j in (i - cnt)..i {
-                        if let Variant::List(codes) = &activation.valstack[j].variant() {
+                        if let Variant::List(codes) = &activation.frame.valstack[j].variant() {
                             if !codes.contains(&v_err(raise_code)) {
                                 continue;
                             }
@@ -129,7 +129,7 @@ impl VM {
             // Produce traceback line for each activation frame and append to stack_list
             // Should include line numbers (if possible), the name of the currently running verb,
             // its definer, its location, and the current player, and 'this'.
-            let line_no = match a.find_line_no(a.pc) {
+            let line_no = match a.frame.find_line_no(a.frame.pc) {
                 None => v_none(),
                 Some(l) => v_int(l as i64),
             };
@@ -182,8 +182,8 @@ impl VM {
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));
             }
-            if a.find_line_no(a.pc).is_some() {
-                pieces.push(format!(" (line {})", a.find_line_no(a.pc).unwrap()));
+            if a.frame.find_line_no(a.frame.pc).is_some() {
+                pieces.push(format!(" (line {})", a.frame.find_line_no(a.frame.pc).unwrap()));
             }
             if i == 0 {
                 pieces.push(format!(": {}", raise_msg));
@@ -250,7 +250,7 @@ impl VM {
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
         // function. If we stack_unwind, it will propagate to parent. Otherwise, it will be popped
         // by the parent anyways.
-        state.parent_activation_mut().push(v_err(code));
+        state.parent_activation_mut().frame.push(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
@@ -322,10 +322,10 @@ impl VM {
     ) -> ExecutionResult {
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = state.stack.last_mut() {
-            while a.valstack.pop().is_some() {
+            while a.frame.valstack.pop().is_some() {
                 // Check the handler stack to see if we've hit a finally or catch handler that
                 // was registered for this position in the value stack.
-                let Some(handler) = a.pop_applicable_handler() else {
+                let Some(handler) = a.frame.pop_applicable_handler() else {
                     continue;
                 };
 
@@ -337,8 +337,8 @@ impl VM {
                         }
                         // Jump to the label pointed to by the finally label and then continue on
                         // executing.
-                        a.jump(&label);
-                        a.push(v_int(why_code as i64));
+                        a.frame.jump(&label);
+                        a.frame.push(v_int(why_code as i64));
                         trace!(jump = ?label, ?why, "matched finally handler");
                         return ExecutionResult::More;
                     }
@@ -347,7 +347,7 @@ impl VM {
                             continue;
                         };
 
-                        let Some(handler) = a.pop_applicable_handler() else {
+                        let Some(handler) = a.frame.pop_applicable_handler() else {
                             continue;
                         };
                         let HandlerType::CatchLabel(pushed_label) = &handler.handler_type else {
@@ -355,14 +355,14 @@ impl VM {
                         };
 
                         // The value at the top of the stack could be the error codes list.
-                        let v = a.pop();
+                        let v = a.frame.pop();
                         let found = match v.variant() {
                             Variant::List(error_codes) => error_codes.contains(&v_err(*code)),
                             _ => true,
                         };
                         if found {
-                            a.jump(pushed_label);
-                            a.push(v_list(&[v_err(*code)]));
+                            a.frame.jump(pushed_label);
+                            a.frame.push(v_list(&[v_err(*code)]));
                             return ExecutionResult::More;
                         }
                     }
@@ -374,7 +374,7 @@ impl VM {
 
             // Exit with a jump.. let's go...
             if let FinallyReason::Exit { label, .. } = why {
-                a.jump(&label);
+                a.frame.jump(&label);
                 return ExecutionResult::More;
             }
 

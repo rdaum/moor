@@ -341,7 +341,7 @@ impl VmHost {
     /// Resume what you were doing after suspension.
     pub fn resume_execution(&mut self, value: Var) {
         // coming back from suspend, we need a return value to feed back to `bf_suspend`
-        self.vm_exec_state.top_mut().push(value);
+        self.vm_exec_state.top_mut().frame.push(value);
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
         self.running = true;
@@ -366,6 +366,7 @@ impl VmHost {
     pub fn set_variable(&mut self, task_id_var: &Name, value: Var) {
         self.vm_exec_state
             .top_mut()
+            .frame
             .set_var_offset(task_id_var, value)
             .expect("Could not set forked task id");
     }
@@ -384,7 +385,8 @@ impl VmHost {
     pub fn line_number(&self) -> usize {
         self.vm_exec_state
             .top()
-            .find_line_no(self.vm_exec_state.top().pc)
+            .frame
+            .find_line_no(self.vm_exec_state.top().frame.pc)
             .unwrap_or(0)
     }
 

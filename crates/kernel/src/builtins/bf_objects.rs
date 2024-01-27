@@ -438,8 +438,10 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 
                 // Accept verb has been called, and returned. Check the result. Should be on stack,
                 // unless short-circuited, in which case we assume *false*
+                // TODO directly pushing into the stack like this is going to be a problem for
+                //  non-MOO interpreters. we need a more generic way of doing this
                 let result = if !shortcircuit {
-                    bf_args.exec_state.top().peek_top().clone()
+                    bf_args.exec_state.top().frame.peek_top().clone()
                 } else {
                     v_int(0)
                 };
