@@ -13,7 +13,7 @@
 //
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
@@ -59,7 +59,7 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
 
 /// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
 /// exists in the transaction.
-pub fn make_textdump(tx: Arc<dyn LoaderInterface>, version: Option<&str>) -> Textdump {
+pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Textdump {
     // To create the objects list, we need to scan all objects.
     // For now, the expectation would be we can simply iterate from 0 to max object, checking validity of each
     // object, and then adding it to the list.

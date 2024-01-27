@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use metrics_macros::increment_counter;
@@ -90,7 +91,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 
 #[tracing::instrument(skip(ldr))]
 pub fn textdump_load(
-    ldr: Arc<dyn LoaderInterface>,
+    ldr: Rc<dyn LoaderInterface>,
     path: PathBuf,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
@@ -105,7 +106,7 @@ pub fn textdump_load(
 }
 
 pub fn read_textdump<T: io::Read>(
-    loader: Arc<dyn LoaderInterface>,
+    loader: Rc<dyn LoaderInterface>,
     reader: BufReader<T>,
 ) -> Result<Result<(), TextdumpReaderError>, TextdumpReaderError> {
     let mut tdr = TextdumpReader::new(reader);

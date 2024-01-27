@@ -14,6 +14,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use strum::{EnumCount, IntoEnumIterator};
@@ -1096,9 +1097,9 @@ impl RelBoxTransaction {
 }
 
 impl Database for RelBoxWorldState {
-    fn loader_client(self: Arc<Self>) -> Result<Arc<dyn LoaderInterface>, WorldStateError> {
+    fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError> {
         let tx = RelBoxTransaction::new(self.db.clone());
-        Ok(Arc::new(DbTxWorldState { tx: Box::new(tx) }))
+        Ok(Rc::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 
     fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {

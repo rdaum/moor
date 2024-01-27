@@ -112,7 +112,7 @@ impl Pager {
         let bid = inner
             .page_table
             .get(&page_id)
-            .ok_or_else(|| PagerError::InvalidPage)?;
+            .ok_or(PagerError::InvalidPage)?;
         inner.pool.resolve_ptr(*bid)
     }
 

@@ -30,6 +30,7 @@ use moor_values::var::Var;
 use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
 
+/// A loader client which uses a database transaction to load the world state.
 impl LoaderInterface for DbTxWorldState {
     fn create_object(
         &self,
