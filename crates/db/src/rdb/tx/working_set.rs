@@ -15,14 +15,13 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use moor_values::util::SliceRef;
 use moor_values::util::{BitArray, Bitset64};
+use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
 
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::{RelBox, RelationInfo};
 use crate::rdb::tuples::{TupleRef, TxTuple};
 use crate::rdb::{RelationId, TupleError};
-use crate::util::{PhantomUnsend, PhantomUnsync};
 
 /// The local tx "working set" of mutations to base relations, and consists of the set of operations
 /// we will attempt to make permanent when the transaction commits.

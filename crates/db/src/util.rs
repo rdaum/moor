@@ -11,10 +11,3 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
-
-use std::cell::Cell;
-use std::marker::PhantomData;
-use std::sync::MutexGuard;
-
-pub(crate) type PhantomUnsync = PhantomData<Cell<()>>;
-pub(crate) type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;

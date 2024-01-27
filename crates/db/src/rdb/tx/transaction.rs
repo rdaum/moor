@@ -19,8 +19,8 @@ use std::thread::yield_now;
 
 use thiserror::Error;
 
-use moor_values::util::SliceRef;
 use moor_values::util::{BitArray, Bitset64};
+use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
 
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
@@ -29,7 +29,6 @@ use crate::rdb::tuples::{TupleError, TupleRef};
 use crate::rdb::tx::relvar::RelVar;
 use crate::rdb::tx::working_set::WorkingSet;
 use crate::rdb::RelationId;
-use crate::util::{PhantomUnsend, PhantomUnsync};
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {

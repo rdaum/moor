@@ -17,10 +17,17 @@ mod bitenum;
 mod bitset;
 mod slice_ref;
 
+use std::cell::Cell;
+use std::marker::PhantomData;
+use std::sync::MutexGuard;
+
 pub use bitarray::BitArray;
 pub use bitenum::BitEnum;
 pub use bitset::{Bitset, Bitset16, Bitset32, Bitset64, Bitset8, BitsetTrait};
 pub use slice_ref::{ByteSource, SliceRef};
+
+pub type PhantomUnsync = PhantomData<Cell<()>>;
+pub type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
 
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'
