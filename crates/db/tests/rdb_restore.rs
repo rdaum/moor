@@ -16,6 +16,7 @@
 mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::rc::Rc;
     use std::sync::Arc;
     use tracing_test::traced_test;
 
@@ -36,13 +37,13 @@ mod test {
     fn fill_db(
         db: Arc<RelBox>,
         events: &Vec<History>,
-        processes: &mut HashMap<i64, Arc<Transaction>>,
+        processes: &mut HashMap<i64, Rc<Transaction>>,
     ) {
         for e in events {
             match e.r#type {
                 Type::invoke => {
                     // Start a transaction.
-                    let tx = Arc::new(db.clone().start_tx());
+                    let tx = Rc::new(db.clone().start_tx());
                     let existing = processes.insert(e.process, tx.clone());
                     assert!(
                         existing.is_none(),

@@ -706,7 +706,7 @@ impl VM {
 
                     for _i in 0..num_excepts {
                         f.pop(); /* code list */
-                       f.handler_stack.pop();
+                        f.handler_stack.pop();
                     }
                     if is_catch {
                         f.push(v);

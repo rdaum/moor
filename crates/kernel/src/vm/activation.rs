@@ -290,7 +290,7 @@ impl Activation {
             frame.set_gvar(GlobalName::iobjstr, v_str(""));
         }
 
-        let a = Self {
+        Self {
             frame,
             this: verb_call_request.call.this,
             player: verb_call_request.call.player,
@@ -302,9 +302,7 @@ impl Activation {
             bf_trampoline_arg: None,
             args: verb_call_request.call.args.clone(),
             permissions: verb_owner,
-        };
-
-        a
+        }
     }
 
     pub fn for_eval(permissions: Objid, player: Objid, program: Program) -> Self {
@@ -346,7 +344,7 @@ impl Activation {
         frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
         frame.set_gvar(GlobalName::iobjstr, v_str(""));
 
-        let a = Self {
+        Self {
             frame,
             this: player,
             player,
@@ -358,9 +356,7 @@ impl Activation {
             bf_trampoline_arg: None,
             args: vec![],
             permissions,
-        };
-
-        a
+        }
     }
     pub fn for_bf_call(
         bf_index: usize,

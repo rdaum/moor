@@ -205,11 +205,13 @@ impl VM {
     pub(crate) fn exec_fork_vector(&self, vm_state: &mut VMExecState, fork_request: Fork) {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
-        a.frame.program.main_vector =
-            Arc::new(a.frame.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone());
+        a.frame.program.main_vector = Arc::new(
+            a.frame.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone(),
+        );
         a.frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
-            a.frame.set_var_offset(&task_id_name, v_int(vm_state.task_id as i64))
+            a.frame
+                .set_var_offset(&task_id_name, v_int(vm_state.task_id as i64))
                 .expect("Unable to set task_id in activation frame");
         }
 

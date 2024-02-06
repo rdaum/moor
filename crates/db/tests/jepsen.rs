@@ -36,6 +36,7 @@ pub mod support {
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeSet, HashMap};
+    use std::rc::Rc;
     use std::sync::Arc;
     use tracing_test::traced_test;
 
@@ -152,7 +153,7 @@ mod tests {
             match e.r#type {
                 Type::invoke => {
                     // Start a transaction.
-                    let tx = Arc::new(db.clone().start_tx());
+                    let tx = Rc::new(db.clone().start_tx());
                     let existing = processes.insert(e.process, tx.clone());
                     assert!(
                         existing.is_none(),

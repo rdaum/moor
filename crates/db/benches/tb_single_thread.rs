@@ -19,6 +19,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use moor_db::rdb::{RelBox, RelationInfo};
 use moor_db::testing::jepsen::{History, Type, Value};
 use moor_values::util::SliceRef;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -71,7 +72,7 @@ fn list_append_scan_workload(iters: u64, events: &Vec<History>) -> Duration {
             match e.r#type {
                 Type::invoke => {
                     // Start a transaction.
-                    let tx = Arc::new(db.clone().start_tx());
+                    let tx = Rc::new(db.clone().start_tx());
                     assert!(
                         !processes.check(e.process as usize),
                         "T{} already exists committed",
@@ -129,7 +130,7 @@ fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duration {
             match e.r#type {
                 Type::invoke => {
                     // Start a transaction.
-                    let tx = Arc::new(db.clone().start_tx());
+                    let tx = Rc::new(db.clone().start_tx());
                     assert!(
                         !processes.check(e.process as usize),
                         "T{} already exists committed",

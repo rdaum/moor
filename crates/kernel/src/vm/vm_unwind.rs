@@ -183,7 +183,10 @@ impl VM {
                 pieces.push(format!(" (this == #{})", a.this.0));
             }
             if a.frame.find_line_no(a.frame.pc).is_some() {
-                pieces.push(format!(" (line {})", a.frame.find_line_no(a.frame.pc).unwrap()));
+                pieces.push(format!(
+                    " (line {})",
+                    a.frame.find_line_no(a.frame.pc).unwrap()
+                ));
             }
             if i == 0 {
                 pieces.push(format!(": {}", raise_msg));
