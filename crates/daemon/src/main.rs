@@ -19,7 +19,7 @@ use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
 use ed25519_dalek::SigningKey;
-use metrics_exporter_prometheus::PrometheusBuilder;
+
 use pem::Pem;
 use rand::rngs::OsRng;
 use rusty_paseto::core::Key;
@@ -137,11 +137,6 @@ fn main() {
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
-
-    let builder = PrometheusBuilder::new();
-    builder
-        .install()
-        .expect("failed to install Prometheus recorder");
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...

@@ -19,7 +19,7 @@ use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
-use metrics_macros::increment_counter;
+
 use tracing::{debug, error, info, warn};
 
 use moor_values::model::ObjFlag;
@@ -39,7 +39,6 @@ use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
-    increment_counter!("vm.bf_noop.calls");
     // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
     // instead. right now it just panics so we can find all the places that need to be updated.
     unimplemented!("BF is not implemented: {}", bf_args.name);

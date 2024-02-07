@@ -19,7 +19,6 @@ use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Error};
 
-use metrics_macros::increment_counter;
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
 };
@@ -111,11 +110,8 @@ impl RpcServer {
 
     /// Process a request (originally ZMQ REQ) and produce a reply (becomes ZMQ REP)
     pub fn process_request(self: Arc<Self>, client_id: Uuid, request: RpcRequest) -> Vec<u8> {
-        increment_counter!("rpc_server.process_request");
         match request {
             RpcRequest::ConnectionEstablish(hostname) => {
-                increment_counter!("rpc_server.connection_establish");
-
                 match self.connections.new_connection(client_id, hostname, None) {
                     Ok(oid) => {
                         let token = self.make_client_token(client_id);
@@ -125,7 +121,6 @@ impl RpcServer {
                 }
             }
             RpcRequest::Attach(auth_token, connect_type, hostname) => {
-                increment_counter!("rpc_server.attach");
                 // Validate the auth token, and get the player.
                 let Ok(player) = self.validate_auth_token(auth_token, None) else {
                     warn!("Invalid auth token for attach request");
@@ -147,7 +142,7 @@ impl RpcServer {
                             .submit_connected_task(client_id, player, connect_type)
                     {
                         error!(error = ?e, "Error submitting user_connected task");
-                        increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
+
                         // Note we still continue to return a successful login result here, hoping for the best
                         // but we do log the error.
                     }
@@ -159,7 +154,7 @@ impl RpcServer {
                 // Can easily be a connection that was in the middle of negotiation at the time the
                 // ping was sent out, or dangling in some other way.
                 let response = make_response(Ok(RpcResponse::ThanksPong(SystemTime::now())));
-                increment_counter!("rpc_server.pong");
+
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     warn!("Received Pong from invalid client: {}", client_id);
@@ -182,7 +177,6 @@ impl RpcServer {
                 response
             }
             RpcRequest::RequestSysProp(token, object, property) => {
-                increment_counter!("rpc_server.request_sys_prop");
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
@@ -199,7 +193,6 @@ impl RpcServer {
                 make_response(self.clone().request_sys_prop(object, property))
             }
             RpcRequest::LoginCommand(token, args, attach) => {
-                increment_counter!("rpc_server.login_command");
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
@@ -219,7 +212,6 @@ impl RpcServer {
                 )
             }
             RpcRequest::Command(token, auth_token, command) => {
-                increment_counter!("rpc_server.command");
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
@@ -245,7 +237,6 @@ impl RpcServer {
                 make_response(self.clone().perform_command(client_id, connection, command))
             }
             RpcRequest::RequestedInput(token, auth_token, request_id, input) => {
-                increment_counter!("rpc_server.requested_input");
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
@@ -275,7 +266,6 @@ impl RpcServer {
                 )
             }
             RpcRequest::OutOfBand(token, auth_token, command) => {
-                increment_counter!("rpc_server.out_of_band_received");
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
@@ -305,7 +295,6 @@ impl RpcServer {
             }
 
             RpcRequest::Eval(token, auth_token, evalstr) => {
-                increment_counter!("rpc_server.eval");
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
                 else {
                     return make_response(Err(RpcRequestError::NoConnection));
@@ -331,8 +320,6 @@ impl RpcServer {
                 make_response(self.clone().eval(client_id, connection, evalstr))
             }
             RpcRequest::Detach(token) => {
-                increment_counter!("rpc_server.detach");
-
                 let Ok(_) = self.validate_client_token(token, client_id) else {
                     warn!(?client_id, "Client token validation failed for request");
                     return make_response(Err(RpcRequestError::PermissionDenied));
@@ -358,7 +345,7 @@ impl RpcServer {
         connection: Objid,
     ) -> Result<Arc<dyn Session>, SessionError> {
         debug!(?client_id, ?connection, "Started session",);
-        increment_counter!("rpc_server.new_session");
+
         Ok(Arc::new(RpcSession::new(
             client_id,
             self.clone(),
@@ -457,8 +444,6 @@ impl RpcServer {
         args: Vec<String>,
         attach: bool,
     ) -> Result<RpcResponse, RpcRequestError> {
-        increment_counter!("rpc_server.perform_login");
-
         // TODO: change result of login to return this information, rather than just Objid, so
         //   we're not dependent on this.
         let connect_type = if args.first() == Some(&"create".to_string()) {
@@ -472,7 +457,6 @@ impl RpcServer {
             connect_type, client_id
         );
         let Ok(session) = self.clone().new_session(client_id, connection) else {
-            increment_counter!("rpc_server.perform_login.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
         let task_id = match self.clone().scheduler.submit_verb_task(
@@ -487,7 +471,7 @@ impl RpcServer {
             Ok(t) => t,
             Err(e) => {
                 error!(error = ?e, "Error submitting login task");
-                increment_counter!("rpc_server.perform_login.submit_login_task_failed");
+
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
@@ -495,7 +479,7 @@ impl RpcServer {
             Ok(r) => r,
             Err(e) => {
                 error!(error = ?e, "Error subscribing to login task");
-                increment_counter!("rpc_server.perform_login.subscribe_login_task_failed");
+
                 return Err(RpcRequestError::LoginTaskFailed);
             }
         };
@@ -514,12 +498,12 @@ impl RpcServer {
             }
             Ok(TaskWaiterResult::Error(e)) => {
                 error!(error = ?e, "Error waiting for login results");
-                increment_counter!("rpc_server.perform_login.login_task_failed");
+
                 return Err(RpcRequestError::LoginTaskFailed);
             }
             Err(e) => {
                 error!(error = ?e, "Error waiting for login results");
-                increment_counter!("rpc_server.perform_login.login_task_failed");
+
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
@@ -534,7 +518,6 @@ impl RpcServer {
             .connections
             .update_client_connection(connection, player)
         else {
-            increment_counter!("rpc_server.perform_login.update_client_connection_failed");
             return Err(RpcRequestError::InternalError(
                 "Unable to update client connection".to_string(),
             ));
@@ -547,12 +530,11 @@ impl RpcServer {
                 .submit_connected_task(client_id, player, connect_type)
             {
                 error!(error = ?e, "Error submitting user_connected task");
-                increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
+
                 // Note we still continue to return a successful login result here, hoping for the best
                 // but we do log the error.
             }
         }
-        increment_counter!("rpc_server.perform_login.success");
 
         let auth_token = self.make_auth_token(player);
 
@@ -569,8 +551,6 @@ impl RpcServer {
             .clone()
             .new_session(client_id, player)
             .with_context(|| "could not create 'connected' task session for player")?;
-
-        increment_counter!("rpc_server.submit_connected_task");
 
         let connected_verb = match initiation_type {
             ConnectType::Connected => "user_connected".to_string(),
@@ -598,7 +578,6 @@ impl RpcServer {
         command: String,
     ) -> Result<RpcResponse, RpcRequestError> {
         let Ok(session) = self.clone().new_session(client_id, connection) else {
-            increment_counter!("rpc_server.perform_command.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
@@ -608,11 +587,10 @@ impl RpcServer {
         {
             warn!("Unable to update client connection activity: {}", e);
         };
-        increment_counter!("rpc_server.perform_command");
 
         // Try to submit to do_command as a verb call first and only parse_command after that fails.
         // TODO: fold this functionality into Task.
-        increment_counter!("rpc_server.submit_sys_do_command_task");
+
         let arguments = parse_into_words(command.as_str());
         if let Ok(task_id) = self.clone().scheduler.submit_verb_task(
             connection,
@@ -631,7 +609,7 @@ impl RpcServer {
         }
 
         // That having failed, we do the classic internal parse command cycle instead...
-        increment_counter!("rpc_server.submit_command_task");
+
         debug!(
             command,
             ?client_id,
@@ -646,11 +624,9 @@ impl RpcServer {
             {
                 Ok(t) => t,
                 Err(SchedulerError::CommandExecutionError(e)) => {
-                    increment_counter!("rpc_server.perform_command.could_not_parse_command");
                     return Err(RpcRequestError::CommandError(e));
                 }
                 Err(e) => {
-                    increment_counter!("rpc_server.perform_command.submit_command_task_failed");
                     error!(error = ?e, "Error submitting command task");
                     return Err(RpcRequestError::InternalError(e.to_string()));
                 }
@@ -672,7 +648,6 @@ impl RpcServer {
         {
             warn!("Unable to update client connection activity: {}", e);
         };
-        increment_counter!("rpc_server.respond_input");
 
         // Pass this back over to the scheduler to handle.
         if let Err(e) =
@@ -680,7 +655,6 @@ impl RpcServer {
                 .scheduler
                 .submit_requested_input(connection, input_request_id, input)
         {
-            increment_counter!("rpc_server.respond_input.submit_requested_input_failed");
             error!(error = ?e, "Error submitting requested input");
             return Err(RpcRequestError::InternalError(e.to_string()));
         }
@@ -694,7 +668,6 @@ impl RpcServer {
         let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
             Ok(r) => r,
             Err(e) => {
-                increment_counter!("rpc_server.perform_command.subscribe_command_task_failed");
                 error!(error = ?e, "Error subscribing to command task");
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
@@ -706,10 +679,7 @@ impl RpcServer {
                 Err(RpcRequestError::CommandError(e))
             }
             Ok(TaskWaiterResult::Error(e)) => Err(RpcRequestError::InternalError(e.to_string())),
-            Err(e) => {
-                increment_counter!("rpc_server.perform_command.error");
-                Err(RpcRequestError::InternalError(e.to_string()))
-            }
+            Err(e) => Err(RpcRequestError::InternalError(e.to_string())),
         }
     }
 
@@ -721,10 +691,8 @@ impl RpcServer {
         command: String,
     ) -> Result<RpcResponse, RpcRequestError> {
         let Ok(session) = self.clone().new_session(client_id, connection) else {
-            increment_counter!("rpc_server.perform_command.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
-        increment_counter!("rpc_server.perform_out_of_band");
 
         let command_components = parse_into_words(command.as_str());
         let task_id = match self.clone().scheduler.submit_out_of_band_task(
@@ -735,13 +703,10 @@ impl RpcServer {
         ) {
             Ok(t) => t,
             Err(e) => {
-                increment_counter!("rpc_server.perform_out_of_band.do_out_of_band_failed");
                 error!(error = ?e, "Error submitting command task");
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-
-        increment_counter!("rpc_server.perform_out_of_band.submitted");
 
         // Just return immediately with success, we do not wait for the task to complete, we'll
         // let the session run to completion on its own and output back to the client.
@@ -757,11 +722,9 @@ impl RpcServer {
         expression: String,
     ) -> Result<RpcResponse, RpcRequestError> {
         let Ok(session) = self.clone().new_session(client_id, connection) else {
-            increment_counter!("rpc_server.eval.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
-        increment_counter!("rpc_server.eval");
         let task_id = match self
             .clone()
             .scheduler
@@ -769,7 +732,6 @@ impl RpcServer {
         {
             Ok(t) => t,
             Err(e) => {
-                increment_counter!("rpc_server.eval.submit_eval_task_failed");
                 error!(error = ?e, "Error submitting eval task");
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
@@ -778,7 +740,6 @@ impl RpcServer {
         let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
             Ok(r) => r,
             Err(e) => {
-                increment_counter!("rpc_server.eval.subscribe_eval_task_failed");
                 error!(error = ?e, "Error subscribing to command task");
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
@@ -787,17 +748,16 @@ impl RpcServer {
         match receiver.recv() {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
-                increment_counter!("rpc_server.eval.database_error");
                 Err(RpcRequestError::CommandError(e))
             }
             Ok(TaskWaiterResult::Error(e)) => {
                 error!(error = ?e, "Error processing increment");
-                increment_counter!("rpc_server.eval.task_error");
+
                 Err(RpcRequestError::InternalError(e.to_string()))
             }
             Err(e) => {
                 error!(error = ?e, "Error processing eval");
-                increment_counter!("rpc_server.eval.internal_error");
+
                 Err(RpcRequestError::InternalError(e.to_string()))
             }
         }
@@ -807,7 +767,6 @@ impl RpcServer {
         &self,
         events: &[(Objid, NarrativeEvent)],
     ) -> Result<(), Error> {
-        increment_counter!("rpc_server.publish_narrative_events");
         let publish = self.publish.lock().unwrap();
         for (player, event) in events {
             let client_ids = self.connections.client_ids_for(*player)?;
@@ -830,7 +789,6 @@ impl RpcServer {
         player: Objid,
         message: String,
     ) -> Result<(), SessionError> {
-        increment_counter!("rpc_server.send_system_message");
         let event = ConnectionEvent::SystemMessage(player, message);
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize system message");
@@ -1093,13 +1051,12 @@ pub(crate) fn zmq_loop(
                 return Ok(());
             }
             Ok(request) => {
-                increment_counter!("rpc_server.request");
                 trace!(num_parts = request.len(), "ZQM Request received");
 
                 // Components are:
                 if request.len() != 2 {
                     error!("Invalid request received, ignoring");
-                    increment_counter!("rpc_server.invalid_request");
+
                     rpc_socket.send_multipart(
                         vec![make_response(Err(RpcRequestError::InvalidRequest))],
                         0,
@@ -1108,7 +1065,6 @@ pub(crate) fn zmq_loop(
                 }
 
                 if request.len() != 2 {
-                    increment_counter!("rpc_server.invalid_request");
                     rpc_socket.send_multipart(
                         vec![make_response(Err(RpcRequestError::InvalidRequest))],
                         0,
@@ -1119,7 +1075,6 @@ pub(crate) fn zmq_loop(
                 let (client_id, request_body) = (&request[0], &request[1]);
 
                 let Ok(client_id) = Uuid::from_slice(client_id) else {
-                    increment_counter!("rpc_server.invalid_request");
                     rpc_socket.send_multipart(
                         vec![make_response(Err(RpcRequestError::InvalidRequest))],
                         0,
@@ -1145,7 +1100,6 @@ pub(crate) fn zmq_loop(
                 // on the type.
                 let response = rpc_server.clone().process_request(client_id, request);
                 rpc_socket.send_multipart(vec![response], 0)?;
-                increment_counter!("rpc_server.processed_requests");
             }
         }
     }

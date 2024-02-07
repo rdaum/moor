@@ -17,13 +17,13 @@ mod host;
 
 use crate::client::{editor_handler, js_handler, root_handler};
 use crate::host::WebHost;
-use anyhow::Context;
+
 use axum::routing::{get, post};
 use axum::Router;
 use clap::Parser;
 use clap_derive::Parser;
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use std::future::ready;
+
+
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -55,15 +55,7 @@ struct Args {
     narrative_server: String,
 }
 
-fn setup_metrics_recorder() -> anyhow::Result<PrometheusHandle> {
-    PrometheusBuilder::new()
-        .install_recorder()
-        .with_context(|| "Unable to install Prometheus recorder")
-}
-
 fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
-    let recorder_handle = setup_metrics_recorder()?;
-
     let webhost_router = Router::new()
         .route(
             "/ws/attach/connect/:token",
@@ -83,9 +75,7 @@ fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
         .route("/eval", post(host::eval_handler))
         .with_state(web_host);
 
-    Ok(Router::new()
-        .nest("/", webhost_router)
-        .route("/metrics", get(move || ready(recorder_handle.render()))))
+    Ok(Router::new().nest("/", webhost_router))
 }
 
 #[tokio::main(flavor = "multi_thread")]

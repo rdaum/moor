@@ -13,10 +13,10 @@
 //
 
 use kanal::{ReceiveErrorTimeout, Receiver, Sender};
+
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use metrics_macros::increment_counter;
 use tracing::{debug, error, trace, warn};
 
 use moor_values::model::CommandError::PermissionDenied;
@@ -261,8 +261,6 @@ impl Task {
             // We've been asked to start a command.
             // We need to set up the VM and then execute it.
             TaskStart::StartCommandVerb { player, command } => {
-                increment_counter!("task.start_command");
-
                 if let Some(msg) = self.start_command(player, command.as_str()) {
                     self.scheduler_control_sender
                         .send((self.task_id, msg))
@@ -276,7 +274,6 @@ impl Task {
                 args,
                 argstr,
             } => {
-                increment_counter!("task.start_verb");
                 // We should never be asked to start a command while we're already running one.
                 trace!(?verb, ?player, ?vloc, ?args, "Starting verb");
 
@@ -335,8 +332,6 @@ impl Task {
                     .start_fork(self.task_id, fork_request, suspended);
             }
             TaskStart::StartEval { player, program } => {
-                increment_counter!("task.start_eval");
-
                 self.scheduled_start_time = None;
                 self.vm_host.start_eval(self.task_id, player, program);
             }
@@ -489,8 +484,6 @@ impl Task {
     fn handle_control_message(&mut self, msg: TaskControlMsg) -> Option<SchedulerControlMsg> {
         match msg {
             TaskControlMsg::Resume(state_source, value) => {
-                increment_counter!("task.resume");
-
                 // We're back.
                 debug!(
                     task_id = self.task_id,
@@ -504,8 +497,6 @@ impl Task {
                 None
             }
             TaskControlMsg::Restart(state_source) => {
-                increment_counter!("task.restart");
-
                 // Try. Again.
                 debug!(
                     task_id = self.task_id,
@@ -519,8 +510,6 @@ impl Task {
                 None
             }
             TaskControlMsg::ResumeReceiveInput(state_source, input) => {
-                increment_counter!("task.resume_receive_input");
-
                 // We're back.
                 debug!(
                     task_id = self.task_id,
@@ -538,7 +527,7 @@ impl Task {
             TaskControlMsg::Abort => {
                 // We've been asked to die. Go tell the VM host to abort, and roll back the
                 // transaction.
-                increment_counter!("task.abort");
+
                 trace!(task_id = self.task_id, "Aborting task");
                 self.vm_host.stop();
                 self.done = true;
@@ -554,8 +543,6 @@ impl Task {
                 Some(SchedulerControlMsg::TaskAbortCancelled)
             }
             TaskControlMsg::Describe(reply_sender) => {
-                increment_counter!("task.describe");
-
                 let description = TaskDescription {
                     task_id: self.task_id,
                     start_time: self.scheduled_start_time,

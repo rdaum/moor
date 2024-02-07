@@ -20,7 +20,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use metrics_macros::increment_counter;
 use tracing::{info, span, trace};
 
 use moor_compiler::compile;
@@ -132,8 +131,6 @@ pub fn read_textdump<T: io::Read>(
             .map_err(|e| {
                 TextdumpReaderError::LoadError(format!("creating object {}", objid), e.clone())
             })?;
-
-        increment_counter!("textdump.created_objects");
     }
 
     info!("Setting object attributes (parent/location/owner)");
@@ -180,7 +177,6 @@ pub fn read_textdump<T: io::Read>(
                         )
                     })?;
             }
-            increment_counter!("textdump.defined_properties");
         }
     }
 
@@ -200,7 +196,6 @@ pub fn read_textdump<T: io::Read>(
                         e.clone(),
                     )
                 })?;
-            increment_counter!("textdump.set_properties");
         }
     }
 
@@ -266,7 +261,6 @@ pub fn read_textdump<T: io::Read>(
                     )
                 })?;
             trace!(objid = ?objid.0, name = ?vn, "Added verb");
-            increment_counter!("textdump.compiled_verbs");
         }
     }
     info!("Verbs defined.");

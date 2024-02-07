@@ -29,10 +29,6 @@ tokio-util.workspace = true
 tokio.workspace = true
 
 ## Logging & tracing
-metrics-exporter-prometheus.workspace = true
-metrics-macros.workspace = true
-metrics-util.workspace = true
-metrics.workspace = true
 tracing-chrome.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true

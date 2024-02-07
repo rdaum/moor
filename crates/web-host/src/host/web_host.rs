@@ -20,7 +20,7 @@ use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
-use metrics_macros::increment_counter;
+
 use moor_values::var::Objid;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
@@ -244,8 +244,6 @@ async fn auth_handler(
     player: String,
     password: String,
 ) -> impl IntoResponse {
-    increment_counter!("web_host.auth");
-
     let (client_id, mut rpc_client, client_token) =
         match host.establish_client_connection(addr).await {
             Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
@@ -315,8 +313,6 @@ pub async fn welcome_message_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Response {
-    increment_counter!("web_host.welcome_message");
-
     let (client_id, mut rpc_client, client_token) =
         match host.establish_client_connection(addr).await {
             Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
@@ -379,8 +375,6 @@ pub async fn eval_handler(
     header_map: HeaderMap,
     expression: Bytes,
 ) -> Response {
-    increment_counter!("web_host.eval");
-
     let auth_token = match header_map.get("X-Moor-Auth-Token") {
         Some(auth_token) => match auth_token.to_str() {
             Ok(auth_token) => AuthToken(auth_token.to_string()),
@@ -514,7 +508,6 @@ pub async fn ws_connect_attach_handler(
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
 ) -> impl IntoResponse {
-    increment_counter!("web_host.ws_connect_attach_handler");
     info!("Connection from {}", addr);
 
     attach(ws, addr, ConnectType::Connected, &ws_host, token).await
@@ -527,7 +520,6 @@ pub async fn ws_create_attach_handler(
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
 ) -> impl IntoResponse {
-    increment_counter!("web_host.ws_create_attach_handler");
     info!("Connection from {}", addr);
 
     attach(ws, addr, ConnectType::Created, &ws_host, token).await

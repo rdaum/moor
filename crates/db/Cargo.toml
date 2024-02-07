@@ -31,8 +31,6 @@ uuid.workspace = true
 thiserror.workspace = true
 
 ## Logging & tracing
-metrics-macros.workspace = true
-metrics.workspace = true
 tracing-test.workspace = true
 tracing.workspace = true
 

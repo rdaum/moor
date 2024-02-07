@@ -20,7 +20,7 @@ use std::time::{Duration, SystemTime};
 use bincode::{Decode, Encode};
 use dashmap::DashMap;
 use kanal::{OneshotReceiver, OneshotSender, Sender};
-use metrics_macros::{gauge, increment_counter};
+
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
@@ -209,8 +209,6 @@ impl Scheduler {
         command: &str,
         session: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
-        increment_counter!("scheduler.submit_command_task");
-
         trace!(?player, ?command, "Command submitting");
 
         let task_start = TaskStart::StartCommandVerb {
@@ -296,8 +294,6 @@ impl Scheduler {
         perms: Objid,
         session: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
-        increment_counter!("scheduler.submit_verb_task");
-
         let task_start = TaskStart::StartVerb {
             player,
             vloc,
@@ -327,8 +323,6 @@ impl Scheduler {
         argstr: String,
         session: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
-        increment_counter!("scheduler.submit_out_of_band_task");
-
         let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
         let task_start = TaskStart::StartVerb {
             player,
@@ -360,8 +354,6 @@ impl Scheduler {
         code: String,
         sessions: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
-        increment_counter!("scheduler.submit_eval_task");
-
         // Compile the text into a verb.
         let binary = match compile(code.as_str()) {
             Ok(b) => b,
@@ -502,9 +494,7 @@ impl Scheduler {
                 let subscribers = task.subscribers.lock().unwrap();
                 number_subscriptions += subscribers.len()
             }
-            gauge!("scheduler.tasks", number_tasks as f64);
-            gauge!("scheduler.suspended_tasks", number_suspended_tasks as f64);
-            gauge!("scheduler.subscriptions", number_subscriptions as f64);
+
             debug!(
                 number_readblocked_tasks,
                 number_tasks, number_subscriptions, number_zombies, number_suspended_tasks, "..."
@@ -598,7 +588,6 @@ impl Scheduler {
     ) -> Vec<TaskHandleResult> {
         match msg {
             SchedulerControlMsg::TaskSuccess(value) => {
-                increment_counter!("scheduler.task_succeeded");
                 // Commit the session.
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for success");
@@ -621,7 +610,6 @@ impl Scheduler {
                 ]
             }
             SchedulerControlMsg::TaskConflictRetry => {
-                increment_counter!("scheduler.task_conflict_retry");
                 trace!(?task_id, "Task retrying due to conflict");
 
                 // Ask the task to restart itself, using its stashed original start info, but with
@@ -629,8 +617,6 @@ impl Scheduler {
                 vec![TaskHandleResult::Retry(task_id)]
             }
             SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
-                increment_counter!("scheduler.verb_not_found");
-
                 // I'd make this 'warn' but `do_command` gets invoked for every command and
                 // many cores don't have it at all. So it would just be way too spammy.
                 trace!(this = ?this, verb, ?task_id, "Verb not found, task cancelled");
@@ -641,8 +627,6 @@ impl Scheduler {
                 ]
             }
             SchedulerControlMsg::TaskCommandError(parse_command_error) => {
-                increment_counter!("scheduler.command_error");
-
                 // This is a common occurrence, so we don't want to log it at warn level.
                 trace!(?task_id, error = ?parse_command_error, "command parse error");
 
@@ -655,8 +639,6 @@ impl Scheduler {
                 ]
             }
             SchedulerControlMsg::TaskAbortCancelled => {
-                increment_counter!("scheduler.aborted_cancelled");
-
                 warn!(?task_id, "Task cancelled");
 
                 // Rollback the session.
@@ -692,17 +674,14 @@ impl Scheduler {
             SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
                 let abort_reason_text = match limit_reason {
                     AbortLimitReason::Ticks(t) => {
-                        increment_counter!("scheduler.aborted_ticks");
                         warn!(?task_id, ticks = t, "Task aborted, ticks exceeded");
                         format!("Abort: Task exceeded ticks limit of {}", t)
                     }
                     AbortLimitReason::Time(t) => {
-                        increment_counter!("scheduler.aborted_time");
                         warn!(?task_id, time = ?t, "Task aborted, time exceeded");
                         format!("Abort: Task exceeded time limit of {:?}", t)
                     }
                 };
-                increment_counter!("scheduler.aborted_limits");
 
                 // Commit the session.
                 let Some(task) = self.tasks.get_mut(&task_id) else {
@@ -725,8 +704,6 @@ impl Scheduler {
                 ]
             }
             SchedulerControlMsg::TaskException(exception) => {
-                increment_counter!("scheduler.task_exception");
-
                 warn!(?task_id, finally_reason = ?exception, "Task threw exception");
 
                 let Some(task) = self.tasks.get_mut(&task_id) else {
@@ -761,7 +738,7 @@ impl Scheduler {
             }
             SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
                 trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
-                increment_counter!("scheduler.fork_task");
+
                 // Task has requested a fork. Dispatch it and reply with the new task id.
                 // Gotta dump this out til we exit the loop tho, since self.tasks is already
                 // borrowed here.
@@ -776,8 +753,6 @@ impl Scheduler {
                 })]
             }
             SchedulerControlMsg::TaskSuspend(resume_time) => {
-                increment_counter!("scheduler.suspend_task");
-
                 trace!(task_id, "Handling task suspension until {:?}", resume_time);
                 // Task is suspended. The resume time (if any) is the system time at which
                 // the scheduler should try to wake us up.
@@ -805,7 +780,6 @@ impl Scheduler {
                 vec![]
             }
             SchedulerControlMsg::TaskRequestInput => {
-                increment_counter!("scheduler.request_input");
                 // Task has gone into suspension waiting for input from the client.
                 // Create a unique ID for this request, and we'll wake the task when the
                 // session receives input.
@@ -833,7 +807,6 @@ impl Scheduler {
                 vec![]
             }
             SchedulerControlMsg::DescribeOtherTasks(reply) => {
-                increment_counter!("scheduler.describe_tasks");
                 // Task is asking for a description of all other tasks.
                 vec![TaskHandleResult::Describe(task_id, reply)]
             }
@@ -842,7 +815,6 @@ impl Scheduler {
                 sender_permissions,
                 result_sender,
             } => {
-                increment_counter!("scheduler.kill_task");
                 // Task is asking to kill another task.
                 vec![TaskHandleResult::Kill(KillRequest {
                     requesting_task_id: task_id,
@@ -857,7 +829,6 @@ impl Scheduler {
                 return_value,
                 result_sender,
             } => {
-                increment_counter!("scheduler.resume_task");
                 vec![TaskHandleResult::Resume(ResumeRequest {
                     requesting_task_id: task_id,
                     queued_task_id,
@@ -870,12 +841,10 @@ impl Scheduler {
                 player,
                 sender_permissions: _,
             } => {
-                increment_counter!("scheduler.boot_player");
                 // Task is asking to boot a player.
                 vec![TaskHandleResult::Disconnect(task_id, player)]
             }
             SchedulerControlMsg::Notify { player, event } => {
-                increment_counter!("scheduler.notify");
                 // Task is asking to notify a player.
 
                 let Some(task) = self.tasks.get_mut(&task_id) else {
@@ -895,8 +864,6 @@ impl Scheduler {
                 vec![]
             }
             SchedulerControlMsg::Shutdown(msg) => {
-                increment_counter!("scheduler.shutdown");
-
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
                     return vec![TaskHandleResult::Remove(task_id)];
@@ -914,7 +881,6 @@ impl Scheduler {
                 vec![]
             }
             SchedulerControlMsg::Checkpoint => {
-                increment_counter!("scheduler,checkpoint");
                 let Some(textdump_path) = self.config.textdump_output.clone() else {
                     error!("Cannot textdump as textdump_file not configured");
                     return vec![];
@@ -962,8 +928,6 @@ impl Scheduler {
         fork: Fork,
         session: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
-        increment_counter!("scheduler.forked_tasks");
-
         let suspended = fork.delay.is_some();
 
         let player = fork.player;
@@ -992,8 +956,6 @@ impl Scheduler {
             task_ref.suspended = true;
             task_ref.resume_time = Some(SystemTime::now() + delay);
         }
-
-        increment_counter!("scheduler.forked_tasks");
 
         Ok(task_id)
     }
@@ -1379,8 +1341,6 @@ impl Scheduler {
         perms: Objid,
         is_background: bool,
     ) -> Result<TaskId, SchedulerError> {
-        increment_counter!("scheduler.new_task");
-
         let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
         let (task_control_sender, task_control_receiver) = kanal::unbounded();
 
@@ -1429,9 +1389,6 @@ impl Scheduler {
             _join_handle: join_handle,
         };
         self.tasks.insert(task_id, task_control);
-
-        increment_counter!("scheduler.created_tasks");
-        gauge!("scheduler.active_tasks", self.tasks.len() as f64);
 
         Ok(task_id)
     }
