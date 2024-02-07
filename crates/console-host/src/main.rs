@@ -30,8 +30,8 @@ use tokio::task::block_in_place;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use rpc_common::pubsub_client::{broadcast_recv, narrative_recv};
-use rpc_common::rpc_client::RpcSendClient;
+use rpc_async_client::pubsub_client::{broadcast_recv, narrative_recv};
+use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectionEvent, RpcRequest, RpcResponse, RpcResult,
     BROADCAST_TOPIC,

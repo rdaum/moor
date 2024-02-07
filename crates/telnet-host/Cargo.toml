@@ -9,6 +9,7 @@ authors.workspace = true
 [dependencies]
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
+rpc-async-client = { path = "../rpc-async-client" }
 
 ## Command line arguments parsing.
 clap.workspace = true

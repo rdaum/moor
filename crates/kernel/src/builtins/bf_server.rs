@@ -16,7 +16,6 @@ use std::io::Read;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use async_trait::async_trait;
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;

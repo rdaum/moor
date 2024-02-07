@@ -196,7 +196,6 @@ impl Task {
 
         let start = task.task_start.clone();
         if !task.setup_task_start(start) {
-            warn!(task_id = ?task.task_id, "Could not setup task start");
             task.done = true;
             return;
         }
@@ -297,7 +296,7 @@ impl Task {
                     verb_call.verb_name.as_str(),
                 ) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
-                        warn!(task_id = ?self.task_id, this = ?verb_call.this,
+                        debug!(task_id = ?self.task_id, this = ?verb_call.this,
                               verb = verb_call.verb_name, "Verb not found");
                         self.scheduler_control_sender
                             .send((

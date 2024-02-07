@@ -14,7 +14,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use async_trait::async_trait;
 use moor_values::model::ObjSet;
 use moor_values::model::WorldStateError;
 use moor_values::NOTHING;
@@ -46,7 +45,6 @@ impl MockMatchEnv {
     }
 }
 
-#[async_trait]
 impl MatchEnvironment for MockMatchEnv {
     fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
         Ok(self.objects.contains_key(&oid))

@@ -14,8 +14,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use moor_values::model::world_state_err;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;

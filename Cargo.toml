@@ -7,6 +7,7 @@ members = [
   "crates/kernel",
   "crates/db",
   "crates/rpc-common",
+  "crates/rpc-async-client",
   "crates/daemon",
   "crates/telnet-host",
   "crates/web-host",
@@ -42,6 +43,7 @@ tokio-util = { version = "0.7.10",  features = ["full"] }
 
 # Used for RPC daemon/client
 tmq = "0.4.0"
+zmq = "0.10.0"
 
 ## Logging & tracing
 metrics = "0.21.1"

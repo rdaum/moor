@@ -18,7 +18,7 @@ use tmq::subscribe::Subscribe;
 use tracing::trace;
 use uuid::Uuid;
 
-use crate::{BroadcastEvent, ConnectionEvent, RpcError};
+use rpc_common::{BroadcastEvent, ConnectionEvent, RpcError};
 
 pub async fn narrative_recv(
     client_id: Uuid,

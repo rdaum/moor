@@ -23,7 +23,6 @@ mod bf_verbs;
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use kanal::Sender;
 
 use moor_values::model::Perms;
@@ -70,7 +69,6 @@ impl BfCallState<'_> {
     }
 }
 
-#[async_trait]
 pub trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
     fn call(&self, bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>;
@@ -90,7 +88,6 @@ macro_rules! bf_declare {
     ( $name:ident, $action:expr ) => {
         paste::item! {
             pub struct [<Bf $name:camel >] {}
-            #[async_trait]
             impl BuiltinFunction for [<Bf $name:camel >] {
                 fn name(&self) -> &str {
                     return stringify!($name)

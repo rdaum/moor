@@ -14,23 +14,20 @@
 
 use std::path::PathBuf;
 /// The core of the server logic for the RPC daemon
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Error};
 
-use futures_util::SinkExt;
 use metrics_macros::increment_counter;
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
 };
 use rusty_paseto::prelude::Key;
 use serde_json::json;
-use tmq::publish::Publish;
-use tmq::{publish, reply, Multipart};
-use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+use zmq::{Socket, SocketType};
 
 use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
@@ -47,18 +44,17 @@ use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequest,
-    RpcRequestError, RpcResponse, BROADCAST_TOPIC, MOOR_AUTH_TOKEN_FOOTER,
+    RpcRequestError, RpcResponse, RpcResult, BROADCAST_TOPIC, MOOR_AUTH_TOKEN_FOOTER,
     MOOR_SESSION_TOKEN_FOOTER,
 };
 
 use crate::connections::ConnectionsDB;
 use crate::connections_tb::ConnectionsTb;
-use crate::make_response;
 use crate::rpc_session::RpcSession;
 
 pub struct RpcServer {
     keypair: Key<64>,
-    publish: Arc<Mutex<Publish>>,
+    publish: Arc<Mutex<Socket>>,
     world_state_source: Arc<dyn WorldStateSource>,
     scheduler: Arc<Scheduler>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
@@ -73,11 +69,18 @@ struct ConnectionRecord {
     connect_time: Instant,
 }
 
+pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Vec<u8> {
+    let rpc_result = match result {
+        Ok(r) => RpcResult::Success(r),
+        Err(e) => RpcResult::Failure(e),
+    };
+    bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
+}
 impl RpcServer {
-    pub async fn new(
+    pub fn new(
         keypair: Key<64>,
         connections_db_path: PathBuf,
-        zmq_context: tmq::Context,
+        zmq_context: zmq::Context,
         narrative_endpoint: &str,
         wss: Arc<dyn WorldStateSource>,
         scheduler: Arc<Scheduler>,
@@ -86,10 +89,12 @@ impl RpcServer {
             "Creating new RPC server; with {} ZMQ IO threads...",
             zmq_context.get_io_threads().unwrap()
         );
-        let publish = publish(&zmq_context.clone())
-            .set_sndtimeo(1)
+        let publish = zmq_context
+            .socket(SocketType::PUB)
+            .expect("Unable to create ZMQ PUB socket");
+        publish
             .bind(narrative_endpoint)
-            .unwrap();
+            .expect("Unable to bind ZMQ PUB socket");
         let connections = Arc::new(ConnectionsTb::new(Some(connections_db_path)));
         info!(
             "Created connections list, with {} initial known connections",
@@ -105,11 +110,7 @@ impl RpcServer {
     }
 
     /// Process a request (originally ZMQ REQ) and produce a reply (becomes ZMQ REP)
-    pub async fn process_request(
-        self: Arc<Self>,
-        client_id: Uuid,
-        request: RpcRequest,
-    ) -> Multipart {
+    pub fn process_request(self: Arc<Self>, client_id: Uuid, request: RpcRequest) -> Vec<u8> {
         increment_counter!("rpc_server.process_request");
         match request {
             RpcRequest::ConnectionEstablish(hostname) => {
@@ -141,10 +142,9 @@ impl RpcServer {
 
                 if let Some(connect_type) = connect_type {
                     trace!(?player, "Submitting user_connected task");
-                    if let Err(e) = self
-                        .clone()
-                        .submit_connected_task(client_id, player, connect_type)
-                        .await
+                    if let Err(e) =
+                        self.clone()
+                            .submit_connected_task(client_id, player, connect_type)
                     {
                         error!(error = ?e, "Error submitting user_connected task");
                         increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
@@ -196,7 +196,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                make_response(self.clone().request_sys_prop(object, property).await)
+                make_response(self.clone().request_sys_prop(object, property))
             }
             RpcRequest::LoginCommand(token, args, attach) => {
                 increment_counter!("rpc_server.login_command");
@@ -215,8 +215,7 @@ impl RpcServer {
 
                 make_response(
                     self.clone()
-                        .perform_login(client_id, connection, args, attach)
-                        .await,
+                        .perform_login(client_id, connection, args, attach),
                 )
             }
             RpcRequest::Command(token, auth_token, command) => {
@@ -243,11 +242,7 @@ impl RpcServer {
                     );
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
-                make_response(
-                    self.clone()
-                        .perform_command(client_id, connection, command)
-                        .await,
-                )
+                make_response(self.clone().perform_command(client_id, connection, command))
             }
             RpcRequest::RequestedInput(token, auth_token, request_id, input) => {
                 increment_counter!("rpc_server.requested_input");
@@ -276,8 +271,7 @@ impl RpcServer {
                 let request_id = Uuid::from_u128(request_id);
                 make_response(
                     self.clone()
-                        .respond_input(client_id, connection, request_id, input)
-                        .await,
+                        .respond_input(client_id, connection, request_id, input),
                 )
             }
             RpcRequest::OutOfBand(token, auth_token, command) => {
@@ -306,8 +300,7 @@ impl RpcServer {
 
                 make_response(
                     self.clone()
-                        .perform_out_of_band(client_id, connection, command)
-                        .await,
+                        .perform_out_of_band(client_id, connection, command),
                 )
             }
 
@@ -335,7 +328,7 @@ impl RpcServer {
                     );
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
-                make_response(self.clone().eval(client_id, connection, evalstr).await)
+                make_response(self.clone().eval(client_id, connection, evalstr))
             }
             RpcRequest::Detach(token) => {
                 increment_counter!("rpc_server.detach");
@@ -359,7 +352,7 @@ impl RpcServer {
         }
     }
 
-    pub(crate) async fn new_session(
+    pub(crate) fn new_session(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
@@ -378,7 +371,7 @@ impl RpcServer {
     }
 
     #[allow(dead_code)]
-    async fn last_activity_for(&self, player: Objid) -> Result<SystemTime, SessionError> {
+    fn last_activity_for(&self, player: Objid) -> Result<SystemTime, SessionError> {
         self.connections.last_activity_for(player)
     }
 
@@ -396,17 +389,17 @@ impl RpcServer {
     //   of @quit and @boot-player working.
     //   in reality players using "@quit" will probably really want to just "sleep", and cores
     //   should be modified to reflect that.
-    pub(crate) async fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
+    pub(crate) fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
         warn!("Disconnecting player: {}", player);
         let all_client_ids = self.connections.client_ids_for(player)?;
 
-        let mut publish = self.publish.lock().await;
+        let publish = self.publish.lock().unwrap();
         let event = ConnectionEvent::Disconnect();
-        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize disconnection event");
         for client_id in all_client_ids {
             let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
-            publish.send(payload).await.map_err(|e| {
+            publish.send_multipart(payload, 0).map_err(|e| {
                 error!(
                     "Unable to send disconnection event to narrative channel: {}",
                     e
@@ -423,7 +416,7 @@ impl RpcServer {
         Ok(connections.iter().filter(|o| o.0 > 0).cloned().collect())
     }
 
-    async fn request_sys_prop(
+    fn request_sys_prop(
         self: Arc<Self>,
         object: String,
         property: String,
@@ -457,7 +450,7 @@ impl RpcServer {
         Ok(RpcResponse::SysPropValue(Some(property_value)))
     }
 
-    async fn perform_login(
+    fn perform_login(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
@@ -478,24 +471,19 @@ impl RpcServer {
             "Performing {:?} login for client: {}",
             connect_type, client_id
         );
-        let Ok(session) = self.clone().new_session(client_id, connection).await else {
+        let Ok(session) = self.clone().new_session(client_id, connection) else {
             increment_counter!("rpc_server.perform_login.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
-        let task_id = match self
-            .clone()
-            .scheduler
-            .submit_verb_task(
-                connection,
-                SYSTEM_OBJECT,
-                "do_login_command".to_string(),
-                args.iter().map(|s| v_string(s.clone())).collect(),
-                args.join(" "),
-                SYSTEM_OBJECT,
-                session,
-            )
-            .await
-        {
+        let task_id = match self.clone().scheduler.submit_verb_task(
+            connection,
+            SYSTEM_OBJECT,
+            "do_login_command".to_string(),
+            args.iter().map(|s| v_string(s.clone())).collect(),
+            args.join(" "),
+            SYSTEM_OBJECT,
+            session,
+        ) {
             Ok(t) => t,
             Err(e) => {
                 error!(error = ?e, "Error submitting login task");
@@ -503,7 +491,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-        let receiver = match self.clone().scheduler.subscribe_to_task(task_id).await {
+        let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
             Ok(r) => r,
             Err(e) => {
                 error!(error = ?e, "Error subscribing to login task");
@@ -511,7 +499,7 @@ impl RpcServer {
                 return Err(RpcRequestError::LoginTaskFailed);
             }
         };
-        let player = match receiver.recv().await {
+        let player = match receiver.recv() {
             Ok(TaskWaiterResult::Success(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
                 // client id to use the player objid and then return a result to the client.
@@ -557,7 +545,6 @@ impl RpcServer {
             if let Err(e) = self
                 .clone()
                 .submit_connected_task(client_id, player, connect_type)
-                .await
             {
                 error!(error = ?e, "Error submitting user_connected task");
                 increment_counter!("rpc_server.perform_login.submit_connected_task_failed");
@@ -572,7 +559,7 @@ impl RpcServer {
         Ok(LoginResult(Some((auth_token, connect_type, player))))
     }
 
-    async fn submit_connected_task(
+    fn submit_connected_task(
         self: Arc<Self>,
         client_id: Uuid,
         player: Objid,
@@ -581,7 +568,6 @@ impl RpcServer {
         let session = self
             .clone()
             .new_session(client_id, player)
-            .await
             .with_context(|| "could not create 'connected' task session for player")?;
 
         increment_counter!("rpc_server.submit_connected_task");
@@ -601,18 +587,17 @@ impl RpcServer {
                 SYSTEM_OBJECT,
                 session,
             )
-            .await
             .with_context(|| "could not submit 'connected' task")?;
         Ok(())
     }
 
-    async fn perform_command(
+    fn perform_command(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
         command: String,
     ) -> Result<RpcResponse, RpcRequestError> {
-        let Ok(session) = self.clone().new_session(client_id, connection).await else {
+        let Ok(session) = self.clone().new_session(client_id, connection) else {
             increment_counter!("rpc_server.perform_command.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
@@ -629,21 +614,16 @@ impl RpcServer {
         // TODO: fold this functionality into Task.
         increment_counter!("rpc_server.submit_sys_do_command_task");
         let arguments = parse_into_words(command.as_str());
-        if let Ok(task_id) = self
-            .clone()
-            .scheduler
-            .submit_verb_task(
-                connection,
-                SYSTEM_OBJECT,
-                "do_command".to_string(),
-                arguments.iter().map(|s| v_str(s)).collect(),
-                command.clone(),
-                SYSTEM_OBJECT,
-                session.clone(),
-            )
-            .await
-        {
-            if let Ok(value) = self.clone().watch_command_task(task_id).await {
+        if let Ok(task_id) = self.clone().scheduler.submit_verb_task(
+            connection,
+            SYSTEM_OBJECT,
+            "do_command".to_string(),
+            arguments.iter().map(|s| v_str(s)).collect(),
+            command.clone(),
+            SYSTEM_OBJECT,
+            session.clone(),
+        ) {
+            if let Ok(value) = self.clone().watch_command_task(task_id) {
                 if value != v_bool(false) {
                     return Ok(RpcResponse::CommandSubmitted(task_id));
                 }
@@ -652,34 +632,34 @@ impl RpcServer {
 
         // That having failed, we do the classic internal parse command cycle instead...
         increment_counter!("rpc_server.submit_command_task");
-        info!(
+        debug!(
             command,
             ?client_id,
             ?connection,
             "Invoking submit_command_task"
         );
-        let task_id = match self
-            .clone()
-            .scheduler
-            .submit_command_task(connection, command.as_str(), session)
-            .await
-        {
-            Ok(t) => t,
-            Err(SchedulerError::CommandExecutionError(e)) => {
-                increment_counter!("rpc_server.perform_command.could_not_parse_command");
-                return Err(RpcRequestError::CommandError(e));
-            }
-            Err(e) => {
-                increment_counter!("rpc_server.perform_command.submit_command_task_failed");
-                error!(error = ?e, "Error submitting command task");
-                return Err(RpcRequestError::InternalError(e.to_string()));
-            }
-        };
+        let task_id =
+            match self
+                .clone()
+                .scheduler
+                .submit_command_task(connection, command.as_str(), session)
+            {
+                Ok(t) => t,
+                Err(SchedulerError::CommandExecutionError(e)) => {
+                    increment_counter!("rpc_server.perform_command.could_not_parse_command");
+                    return Err(RpcRequestError::CommandError(e));
+                }
+                Err(e) => {
+                    increment_counter!("rpc_server.perform_command.submit_command_task_failed");
+                    error!(error = ?e, "Error submitting command task");
+                    return Err(RpcRequestError::InternalError(e.to_string()));
+                }
+            };
 
         Ok(RpcResponse::CommandSubmitted(task_id))
     }
 
-    async fn respond_input(
+    fn respond_input(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
@@ -695,11 +675,10 @@ impl RpcServer {
         increment_counter!("rpc_server.respond_input");
 
         // Pass this back over to the scheduler to handle.
-        if let Err(e) = self
-            .clone()
-            .scheduler
-            .submit_requested_input(connection, input_request_id, input)
-            .await
+        if let Err(e) =
+            self.clone()
+                .scheduler
+                .submit_requested_input(connection, input_request_id, input)
         {
             increment_counter!("rpc_server.respond_input.submit_requested_input_failed");
             error!(error = ?e, "Error submitting requested input");
@@ -710,9 +689,9 @@ impl RpcServer {
         Ok(RpcResponse::InputThanks)
     }
 
-    async fn watch_command_task(self: Arc<Self>, task_id: TaskId) -> Result<Var, RpcRequestError> {
+    fn watch_command_task(self: Arc<Self>, task_id: TaskId) -> Result<Var, RpcRequestError> {
         debug!(task_id, "Subscribed to command task results");
-        let receiver = match self.clone().scheduler.subscribe_to_task(task_id).await {
+        let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
             Ok(r) => r,
             Err(e) => {
                 increment_counter!("rpc_server.perform_command.subscribe_command_task_failed");
@@ -721,7 +700,7 @@ impl RpcServer {
             }
         };
 
-        match receiver.recv().await {
+        match receiver.recv() {
             Ok(TaskWaiterResult::Success(value)) => Ok(value),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
@@ -735,25 +714,25 @@ impl RpcServer {
     }
 
     /// Call $do_out_of_band(command)
-    async fn perform_out_of_band(
+    fn perform_out_of_band(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
         command: String,
     ) -> Result<RpcResponse, RpcRequestError> {
-        let Ok(session) = self.clone().new_session(client_id, connection).await else {
+        let Ok(session) = self.clone().new_session(client_id, connection) else {
             increment_counter!("rpc_server.perform_command.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
         increment_counter!("rpc_server.perform_out_of_band");
 
         let command_components = parse_into_words(command.as_str());
-        let task_id = match self
-            .clone()
-            .scheduler
-            .submit_out_of_band_task(connection, command_components, command, session)
-            .await
-        {
+        let task_id = match self.clone().scheduler.submit_out_of_band_task(
+            connection,
+            command_components,
+            command,
+            session,
+        ) {
             Ok(t) => t,
             Err(e) => {
                 increment_counter!("rpc_server.perform_out_of_band.do_out_of_band_failed");
@@ -771,13 +750,13 @@ impl RpcServer {
         Ok(RpcResponse::CommandSubmitted(task_id))
     }
 
-    async fn eval(
+    fn eval(
         self: Arc<Self>,
         client_id: Uuid,
         connection: Objid,
         expression: String,
     ) -> Result<RpcResponse, RpcRequestError> {
-        let Ok(session) = self.clone().new_session(client_id, connection).await else {
+        let Ok(session) = self.clone().new_session(client_id, connection) else {
             increment_counter!("rpc_server.eval.create_session_failed");
             return Err(RpcRequestError::CreateSessionFailed);
         };
@@ -787,7 +766,6 @@ impl RpcServer {
             .clone()
             .scheduler
             .submit_eval_task(connection, connection, expression, session)
-            .await
         {
             Ok(t) => t,
             Err(e) => {
@@ -797,7 +775,7 @@ impl RpcServer {
             }
         };
 
-        let receiver = match self.clone().scheduler.subscribe_to_task(task_id).await {
+        let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
             Ok(r) => r,
             Err(e) => {
                 increment_counter!("rpc_server.eval.subscribe_eval_task_failed");
@@ -806,14 +784,14 @@ impl RpcServer {
             }
         };
 
-        match receiver.recv().await {
+        match receiver.recv() {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 increment_counter!("rpc_server.eval.database_error");
                 Err(RpcRequestError::CommandError(e))
             }
             Ok(TaskWaiterResult::Error(e)) => {
-                error!(error = ?e, "Error processing eval");
+                error!(error = ?e, "Error processing increment");
                 increment_counter!("rpc_server.eval.task_error");
                 Err(RpcRequestError::InternalError(e.to_string()))
             }
@@ -825,19 +803,19 @@ impl RpcServer {
         }
     }
 
-    pub(crate) async fn publish_narrative_events(
+    pub(crate) fn publish_narrative_events(
         &self,
         events: &[(Objid, NarrativeEvent)],
     ) -> Result<(), Error> {
         increment_counter!("rpc_server.publish_narrative_events");
-        let mut publish = self.publish.lock().await;
+        let publish = self.publish.lock().unwrap();
         for (player, event) in events {
             let client_ids = self.connections.client_ids_for(*player)?;
             let event = ConnectionEvent::Narrative(*player, event.clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
-                publish.send(payload).await.map_err(|e| {
+                publish.send_multipart(payload, 0).map_err(|e| {
                     error!(error = ?e, "Unable to send narrative event");
                     DeliveryError
                 })?;
@@ -846,7 +824,7 @@ impl RpcServer {
         Ok(())
     }
 
-    pub(crate) async fn send_system_message(
+    pub(crate) fn send_system_message(
         &self,
         client_id: Uuid,
         player: Objid,
@@ -854,12 +832,12 @@ impl RpcServer {
     ) -> Result<(), SessionError> {
         increment_counter!("rpc_server.send_system_message");
         let event = ConnectionEvent::SystemMessage(player, message);
-        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize system message");
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
         {
-            let mut publish = self.publish.lock().await;
-            publish.send(payload).await.map_err(|e| {
+            let publish = self.publish.lock().unwrap();
+            publish.send_multipart(payload, 0).map_err(|e| {
                 error!(error = ?e, "Unable to send system message");
                 DeliveryError
             })?;
@@ -870,7 +848,7 @@ impl RpcServer {
     /// Request that the client dispatch its next input event through as an input event into the
     /// scheduler submit_input, instead, with the attached input_request_id. So send a narrative
     /// event to this *specific* client id letting it know that it should issue a prompt.
-    pub(crate) async fn request_client_input(
+    pub(crate) fn request_client_input(
         &self,
         client_id: Uuid,
         player: Objid,
@@ -888,12 +866,12 @@ impl RpcServer {
         }
 
         let event = ConnectionEvent::RequestInput(input_request_id.as_u128());
-        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize input request");
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
         {
-            let mut publish = self.publish.lock().await;
-            publish.send(payload).await.map_err(|e| {
+            let publish = self.publish.lock().unwrap();
+            publish.send_multipart(payload, 0).map_err(|e| {
                 error!(error = ?e, "Unable to send input request");
                 DeliveryError
             })?;
@@ -901,15 +879,15 @@ impl RpcServer {
         Ok(())
     }
 
-    async fn ping_pong(&self) -> Result<(), SessionError> {
+    fn ping_pong(&self) -> Result<(), SessionError> {
         let event = BroadcastEvent::PingPong(SystemTime::now());
-        let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard()).unwrap();
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
 
         // We want responses from all clients, so send on this broadcast "topic"
         let payload = vec![BROADCAST_TOPIC.to_vec(), event_bytes];
         {
-            let mut publish = self.publish.lock().await;
-            publish.send(payload).await.map_err(|e| {
+            let publish = self.publish.lock().unwrap();
+            publish.send_multipart(payload, 0).map_err(|e| {
                 error!(error = ?e, "Unable to send PingPong to client");
                 DeliveryError
             })?;
@@ -1067,56 +1045,54 @@ impl RpcServer {
     }
 }
 
-pub(crate) async fn zmq_loop(
+pub(crate) fn zmq_loop(
     keypair: Key<64>,
     connections_db_path: PathBuf,
     wss: Arc<dyn WorldStateSource>,
     scheduler: Arc<Scheduler>,
     rpc_endpoint: &str,
     narrative_endpoint: &str,
+    num_threads: Option<i32>,
 ) -> anyhow::Result<()> {
-    let zmq_ctx = tmq::Context::new();
-    zmq_ctx
-        .set_io_threads(8)
-        .expect("Unable to set ZMQ IO threads");
+    let zmq_ctx = zmq::Context::new();
+    if let Some(num_threads) = num_threads {
+        zmq_ctx.set_io_threads(num_threads)?;
+    }
 
-    let rpc_server = Arc::new(
-        RpcServer::new(
-            keypair,
-            connections_db_path,
-            zmq_ctx.clone(),
-            narrative_endpoint,
-            wss,
-            scheduler,
-        )
-        .await,
-    );
+    let rpc_server = Arc::new(RpcServer::new(
+        keypair,
+        connections_db_path,
+        zmq_ctx.clone(),
+        narrative_endpoint,
+        wss,
+        scheduler,
+    ));
 
     // Start up the ping-ponger timer in a background thread...
-    tokio::spawn({
-        let rpc_server = rpc_server.clone();
-        async move {
-            let mut ping_pong = tokio::time::interval(std::time::Duration::from_secs(5));
-            loop {
-                ping_pong.tick().await;
-                rpc_server
-                    .ping_pong()
-                    .await
-                    .expect("Unable to play ping-pong");
-            }
-        }
+    let t_rpc_server = rpc_server.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        t_rpc_server.ping_pong().expect("Unable to play ping-pong");
     });
 
     // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
     // are visible...
-    let mut rpc_socket = reply(&zmq_ctx).bind(rpc_endpoint)?;
+    let rpc_socket = zmq_ctx.socket(zmq::REP)?;
+    rpc_socket.bind(rpc_endpoint)?;
+
+    info!(
+        "0mq server listening on {} with {} IO threads",
+        rpc_endpoint,
+        zmq_ctx.get_io_threads().unwrap()
+    );
+
     loop {
-        match rpc_socket.recv().await {
+        match rpc_socket.recv_multipart(0) {
             Err(_) => {
                 info!("ZMQ socket closed, exiting");
                 return Ok(());
             }
-            Ok((mut request, reply)) => {
+            Ok(request) => {
                 increment_counter!("rpc_server.request");
                 trace!(num_parts = request.len(), "ZQM Request received");
 
@@ -1124,46 +1100,51 @@ pub(crate) async fn zmq_loop(
                 if request.len() != 2 {
                     error!("Invalid request received, ignoring");
                     increment_counter!("rpc_server.invalid_request");
-                    rpc_socket = reply
-                        .send(make_response(Err(RpcRequestError::InvalidRequest)))
-                        .await?;
+                    rpc_socket.send_multipart(
+                        vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                        0,
+                    )?;
                     continue;
                 }
 
-                let (Some(client_id), Some(request_body)) =
-                    (request.pop_front(), request.pop_front())
-                else {
+                if request.len() != 2 {
                     increment_counter!("rpc_server.invalid_request");
-                    rpc_socket = reply
-                        .send(make_response(Err(RpcRequestError::InvalidRequest)))
-                        .await?;
+                    rpc_socket.send_multipart(
+                        vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                        0,
+                    )?;
                     continue;
-                };
+                }
 
-                let Ok(client_id) = Uuid::from_slice(&client_id) else {
+                let (client_id, request_body) = (&request[0], &request[1]);
+
+                let Ok(client_id) = Uuid::from_slice(client_id) else {
                     increment_counter!("rpc_server.invalid_request");
-                    rpc_socket = reply
-                        .send(make_response(Err(RpcRequestError::InvalidRequest)))
-                        .await?;
+                    rpc_socket.send_multipart(
+                        vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                        0,
+                    )?;
                     continue;
                 };
 
                 // Decode 'request_body' as a bincode'd ClientEvent.
                 let request =
-                    match bincode::decode_from_slice(&request_body, bincode::config::standard()) {
+                    match bincode::decode_from_slice(request_body, bincode::config::standard()) {
                         Ok((request, _)) => request,
                         Err(_) => {
-                            rpc_socket = reply
-                                .send(make_response(Err(RpcRequestError::InvalidRequest)))
-                                .await?;
+                            rpc_socket.send_multipart(
+                                vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                                0,
+                            )?;
+
                             continue;
                         }
                     };
 
                 // The remainder of the payload are all the request arguments, which vary depending
                 // on the type.
-                let response = rpc_server.clone().process_request(client_id, request).await;
-                rpc_socket = reply.send(response).await?;
+                let response = rpc_server.clone().process_request(client_id, request);
+                rpc_socket.send_multipart(vec![response], 0)?;
                 increment_counter!("rpc_server.processed_requests");
             }
         }

@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{RpcError, RpcRequest, RpcResult};
+use rpc_common::{RpcError, RpcRequest, RpcResult};
 use tmq::request_reply::RequestSender;
 use tmq::Multipart;
 use tracing::error;

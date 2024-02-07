@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use async_trait::async_trait;
 use moor_values::model::ObjSet;
 use moor_values::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
@@ -23,7 +22,6 @@ use crate::tasks::command_parse::ParseMatcher;
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
-#[async_trait]
 pub trait MatchEnvironment {
     // Test whether a given object is valid in this environment.
     fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError>;
@@ -114,7 +112,6 @@ pub struct MatchEnvironmentParseMatcher<M: MatchEnvironment> {
     pub player: Objid,
 }
 
-#[async_trait]
 impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
     fn match_object(&mut self, object_name: &str) -> Result<Option<Objid>, WorldStateError> {
         if object_name.is_empty() {

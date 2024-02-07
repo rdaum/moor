@@ -17,9 +17,9 @@ use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use moor_values::model::CommandError;
 use moor_values::var::Objid;
-use rpc_common::pubsub_client::broadcast_recv;
-use rpc_common::pubsub_client::narrative_recv;
-use rpc_common::rpc_client::RpcSendClient;
+use rpc_async_client::pubsub_client::broadcast_recv;
+use rpc_async_client::pubsub_client::narrative_recv;
+use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::BroadcastEvent;
 use rpc_common::ConnectionEvent;
 use rpc_common::{

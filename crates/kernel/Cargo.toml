@@ -31,7 +31,6 @@ moor-db = { path = "../db" }
 moor-values = { path = "../values" }
 
 ## General usefullness
-async-trait.workspace = true
 bytes.workspace = true
 chrono.workspace = true
 dashmap.workspace = true
@@ -57,10 +56,6 @@ thiserror.workspace = true
 
 ## For macro-ing
 paste.workspace = true
-
-## Asynchrony and/or networking
-tokio-test.workspace = true
-tokio.workspace = true
 
 ## Logging & tracing
 metrics-macros.workspace = true

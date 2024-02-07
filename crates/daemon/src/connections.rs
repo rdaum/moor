@@ -22,7 +22,6 @@ use rpc_common::RpcRequestError;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
-#[async_trait::async_trait]
 pub trait ConnectionsDB {
     /// Update the connection record for the given connection object to point to the given player.
     /// This is used when a player logs in.

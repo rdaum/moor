@@ -33,7 +33,7 @@ use moor_values::var::Var;
 use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tracing::{info, trace, warn};
+use tracing::{trace, warn};
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
@@ -345,7 +345,7 @@ impl VmHost {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
         self.running = true;
-        info!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
+        trace!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
     }
 
     pub fn is_running(&self) -> bool {

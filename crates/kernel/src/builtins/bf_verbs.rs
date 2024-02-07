@@ -14,7 +14,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use moor_values::model::ObjFlag;
 use moor_values::model::{HasUuid, Named};
 use moor_values::AsByteBuffer;

@@ -31,8 +31,8 @@ use uuid::Uuid;
 use moor_values::model::CommandError;
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
-use rpc_common::pubsub_client::{broadcast_recv, narrative_recv};
-use rpc_common::rpc_client::RpcSendClient;
+use rpc_async_client::pubsub_client::{broadcast_recv, narrative_recv};
+use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequestError,

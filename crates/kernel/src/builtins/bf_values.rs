@@ -16,8 +16,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use moor_values::var::Error;
 use moor_values::var::Error::{E_INVARG, E_TYPE};
 use moor_values::var::Variant;

@@ -14,7 +14,6 @@
 
 use std::string::ToString;
 
-use async_trait::async_trait;
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 
@@ -104,7 +103,6 @@ fn match_preposition(prep: &str) -> Option<Prep> {
         .cloned()
 }
 
-#[async_trait]
 pub trait ParseMatcher {
     fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError>;
 }
@@ -271,7 +269,6 @@ mod tests {
     }
 
     struct SimpleParseMatcher {}
-    #[async_trait]
     impl ParseMatcher for SimpleParseMatcher {
         fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError> {
             Ok(match name {

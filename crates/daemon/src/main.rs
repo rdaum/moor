@@ -23,16 +23,12 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use pem::Pem;
 use rand::rngs::OsRng;
 use rusty_paseto::core::Key;
-use tmq::Multipart;
-use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 
 use moor_db::DatabaseBuilder;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::textdump_load;
-use rpc_common::{RpcRequestError, RpcResponse, RpcResult};
 
 use crate::rpc_server::zmq_loop;
 
@@ -118,24 +114,17 @@ struct Args {
         default_value = "false"
     )]
     generate_keypair: bool,
+
+    #[arg(
+        long,
+        value_name = "num-io-threads",
+        help = "Number of ZeroMQ IO threads to use",
+        default_value = "8"
+    )]
+    num_io_threads: i32,
 }
 
-pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Multipart {
-    let mut payload = Multipart::default();
-    let rpc_result = match result {
-        Ok(r) => RpcResult::Success(r),
-        Err(e) => RpcResult::Failure(e),
-    };
-    payload.push_back(
-        bincode::encode_to_vec(&rpc_result, bincode::config::standard())
-            .unwrap()
-            .into(),
-    );
-    payload
-}
-
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
+fn main() {
     let args: Args = Args::parse();
 
     let main_subscriber = tracing_subscriber::fmt()
@@ -220,12 +209,6 @@ async fn main() {
         }
     }
 
-    // Unix-signals for better exit behaviour.
-    let mut hup_signal =
-        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
-    let mut stop_signal =
-        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
-
     let config = Config {
         textdump_output: args.textdump_out,
     };
@@ -241,39 +224,24 @@ async fn main() {
 
     // The scheduler thread:
     let loop_scheduler = scheduler.clone();
-    let scheduler_loop = tokio::spawn(async move { loop_scheduler.run().await });
+    let scheduler_loop_jh = std::thread::spawn(move || loop_scheduler.run());
 
-    let zmq_server_loop = zmq_loop(
+    zmq_loop(
         keypair,
         args.connections_file,
         state_source,
         scheduler.clone(),
         args.rpc_listen.as_str(),
         args.narrative_listen.as_str(),
-    );
+        Some(args.num_io_threads),
+    )
+    .expect("RPC server loop failed");
 
     info!(
         rpc_endpoint = args.rpc_listen,
         narrative_endpoint = args.narrative_listen,
         "Daemon started. Listening for RPC events."
     );
-    select! {
-        _ = scheduler_loop => {
-            info!("Scheduler loop exited, stopping...");
-            scheduler.stop().await.unwrap();
-        },
-        _ = zmq_server_loop => {
-            info!("ZMQ server loop exited, stopping...");
-            scheduler.stop().await.unwrap();
-        }
-        _ = hup_signal.recv() => {
-            info!("HUP received, stopping...");
-            scheduler.stop().await.unwrap();
-        },
-        _ = stop_signal.recv() => {
-            info!("STOP received, stopping...");
-            scheduler.stop().await.unwrap();
-        }
-    }
+    scheduler_loop_jh.join().expect("Scheduler thread panicked");
     info!("Done.");
 }

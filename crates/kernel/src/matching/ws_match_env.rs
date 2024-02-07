@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use async_trait::async_trait;
 use moor_values::model::ObjSet;
 
 use moor_values::model::WorldState;
@@ -27,7 +26,6 @@ pub struct WsMatchEnv<'a> {
     pub(crate) perms: Objid,
 }
 
-#[async_trait]
 impl<'a> MatchEnvironment for WsMatchEnv<'a> {
     fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
         self.ws.valid(oid)

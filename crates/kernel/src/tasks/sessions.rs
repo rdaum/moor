@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use async_trait::async_trait;
 use moor_values::model::NarrativeEvent;
 use moor_values::var::Objid;
 use std::sync::{Arc, RwLock};
@@ -37,7 +36,6 @@ use uuid::Uuid;
 //  away, etc) but keep a persistent virtual history. Challenge would be around making this work
 //  nicely with existing MOO code.
 
-#[async_trait]
 pub trait Session: Send + Sync {
     /// Commit for current activity, called by the scheduler when a task commits and *after* the world
     /// state has successfully been committed. This is the point at which the session should send
@@ -49,44 +47,40 @@ pub trait Session: Send + Sync {
     ///  If this leads to weird symptoms, we can revisit this.
     // TODO: commit/rollback *could* consume `self` at this point, but this would make it difficult
     //   to manage e.g. mocking connections for unit tests etc. Can revisit.
-    async fn commit(&self) -> Result<(), SessionError>;
+    fn commit(&self) -> Result<(), SessionError>;
 
     /// Rollback for this session, called by the scheduler when a task rolls back and *after* the
     /// world state has successfully been rolled back.
     /// Should result in the session throwing away all buffered output.
     /// The session should not be usable after this point.
-    async fn rollback(&self) -> Result<(), SessionError>;
+    fn rollback(&self) -> Result<(), SessionError>;
 
     /// "Fork" this session; create a new session which attaches to the same connection, but
     /// maintains its own buffer and state and can be committed/rolled back independently.
     /// Is used for forked tasks which end up running in their own transaction.
     /// Note: `disconnect` on one must also disconnect on all the other forks of the same lineage.
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError>;
+    fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError>;
 
     /// Request that the client send input to the server.
     /// The task is committed and suspended until the client sends input to `submit_requested_input`
     /// with the given `input_request_id` argument, at which time the task is resumed in a new
     /// transaction.
-    async fn request_input(
-        &self,
-        player: Objid,
-        input_request_id: Uuid,
-    ) -> Result<(), SessionError>;
+    fn request_input(&self, player: Objid, input_request_id: Uuid) -> Result<(), SessionError>;
 
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
     /// rollback.
-    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError>;
+    fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError>;
 
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
     /// like login/logout messages, system error messages ("task aborted") or messages that are not
     /// generally co-incident with the mutable state of the world and that need not be logged
     /// across multiple connections, etc.
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError>;
+    fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError>;
 
     /// Process a (wizard) request for system shutdown, with an optional shutdown message.
-    async fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError>;
+    fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError>;
 
     /// The 'name' of the *most recent* connection associated with the player.
     /// In a networked environment this is the hostname.
@@ -94,7 +88,7 @@ pub trait Session: Send + Sync {
     fn connection_name(&self, player: Objid) -> Result<String, SessionError>;
 
     /// Disconnect the given player's connection.
-    async fn disconnect(&self, player: Objid) -> Result<(), SessionError>;
+    fn disconnect(&self, player: Objid) -> Result<(), SessionError>;
 
     /// Return the list of other currently-connected players.
     fn connected_players(&self) -> Result<Vec<Objid>, SessionError>;
@@ -133,45 +127,40 @@ impl Default for NoopClientSession {
     }
 }
 
-#[async_trait]
 impl Session for NoopClientSession {
-    async fn commit(&self) -> Result<(), SessionError> {
+    fn commit(&self) -> Result<(), SessionError> {
         Ok(())
     }
-    async fn rollback(&self) -> Result<(), SessionError> {
+    fn rollback(&self) -> Result<(), SessionError> {
         Ok(())
     }
 
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
+    fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         Ok(self.clone())
     }
 
-    async fn request_input(
-        &self,
-        player: Objid,
-        _input_request_id: Uuid,
-    ) -> Result<(), SessionError> {
+    fn request_input(&self, player: Objid, _input_request_id: Uuid) -> Result<(), SessionError> {
         panic!(
             "NoopClientSession::request_input called for player {}",
             player.0
         )
     }
 
-    async fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), SessionError> {
         Ok(())
     }
 
-    async fn send_system_msg(&self, _player: Objid, _msg: &str) -> Result<(), SessionError> {
+    fn send_system_msg(&self, _player: Objid, _msg: &str) -> Result<(), SessionError> {
         Ok(())
     }
 
-    async fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
+    fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
         Ok(())
     }
     fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         Ok(format!("player-{}", player.0))
     }
-    async fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
+    fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
         Ok(())
     }
     fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
@@ -228,20 +217,19 @@ impl Default for MockClientSession {
     }
 }
 
-#[async_trait]
 impl Session for MockClientSession {
-    async fn commit(&self) -> Result<(), SessionError> {
+    fn commit(&self) -> Result<(), SessionError> {
         let mut inner = self.inner.write().unwrap();
         inner.committed = inner.received.clone();
         Ok(())
     }
 
-    async fn rollback(&self) -> Result<(), SessionError> {
+    fn rollback(&self) -> Result<(), SessionError> {
         self.inner.write().unwrap().received.clear();
         Ok(())
     }
 
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
+    fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         Ok(Arc::new(MockClientSession {
             inner: RwLock::new(Inner {
                 received: vec![],
@@ -251,23 +239,19 @@ impl Session for MockClientSession {
         }))
     }
 
-    async fn request_input(
-        &self,
-        player: Objid,
-        _input_request_id: Uuid,
-    ) -> Result<(), SessionError> {
+    fn request_input(&self, player: Objid, _input_request_id: Uuid) -> Result<(), SessionError> {
         panic!(
             "MockClientSession::request_input called for player {}",
             player.0
         )
     }
 
-    async fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), SessionError> {
         self.inner.write().unwrap().received.push(msg);
         Ok(())
     }
 
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
+    fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
         self.system
             .write()
             .unwrap()
@@ -275,7 +259,7 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    async fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
+    fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         if let Some(msg) = msg {
             system.push(format!("shutdown: {}", msg));
@@ -289,7 +273,7 @@ impl Session for MockClientSession {
         Ok(format!("player-{}", player))
     }
 
-    async fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
+    fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         system.push(String::from("disconnect"));
         Ok(())

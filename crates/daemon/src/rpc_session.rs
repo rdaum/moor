@@ -14,8 +14,7 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 use tracing::trace;
 use uuid::Uuid;
 
@@ -48,65 +47,57 @@ impl RpcSession {
     }
 }
 
-#[async_trait]
 impl Session for RpcSession {
-    async fn commit(&self) -> Result<(), SessionError> {
+    fn commit(&self) -> Result<(), SessionError> {
         trace!(player = ?self.player, client_id = ?self.client_id, "Committing session");
         let events: Vec<_> = {
-            let mut session_buffer = self.session_buffer.lock().await;
+            let mut session_buffer = self.session_buffer.lock().unwrap();
             session_buffer.drain(..).collect()
         };
 
-        self.rpc_server
+        let rpc_server = self.rpc_server.clone();
+        rpc_server
             .publish_narrative_events(&events[..])
-            .await
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn rollback(&self) -> Result<(), SessionError> {
-        let mut session_buffer = self.session_buffer.lock().await;
+    fn rollback(&self) -> Result<(), SessionError> {
+        let mut session_buffer = self.session_buffer.lock().unwrap();
         session_buffer.clear();
         Ok(())
     }
 
-    async fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
+    fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         // We ask the rpc server to create a new session, otherwise we'd need to have a copy of all
         // the info to create a Publish. The rpc server has that, though.
         let new_session = self
             .rpc_server
             .clone()
-            .new_session(self.client_id, self.player)
-            .await?;
+            .new_session(self.client_id, self.player)?;
         Ok(new_session)
     }
 
-    async fn request_input(
-        &self,
-        player: Objid,
-        input_request_id: Uuid,
-    ) -> Result<(), SessionError> {
+    fn request_input(&self, player: Objid, input_request_id: Uuid) -> Result<(), SessionError> {
         self.rpc_server
             .clone()
-            .request_client_input(self.client_id, player, input_request_id)
-            .await?;
+            .request_client_input(self.client_id, player, input_request_id)?;
         Ok(())
     }
 
-    async fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError> {
-        self.session_buffer.lock().await.push((player, event));
+    fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError> {
+        self.session_buffer.lock().unwrap().push((player, event));
         Ok(())
     }
 
-    async fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
+    fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
         self.rpc_server
-            .send_system_message(self.client_id, player, msg.to_string())
-            .await?;
+            .send_system_message(self.client_id, player, msg.to_string())?;
         Ok(())
     }
 
-    async fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
+    fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
         todo!()
     }
 
@@ -114,8 +105,8 @@ impl Session for RpcSession {
         self.rpc_server.connection_name_for(player)
     }
 
-    async fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
-        self.rpc_server.disconnect(player).await
+    fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
+        self.rpc_server.disconnect(player)
     }
 
     fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {

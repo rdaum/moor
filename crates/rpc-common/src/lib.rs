@@ -12,9 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod pubsub_client;
-pub mod rpc_client;
-
 use bincode::{Decode, Encode};
 use moor_values::model::{CommandError, NarrativeEvent, WorldStateError};
 use moor_values::var::Objid;

@@ -20,7 +20,6 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use anyhow::Error;
-use async_trait::async_trait;
 use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -125,7 +124,6 @@ fn now_as_sliceref() -> SliceRef {
     )
 }
 
-#[async_trait]
 impl ConnectionsDB for ConnectionsTb {
     fn update_client_connection(
         &self,

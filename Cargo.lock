@@ -169,28 +169,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-stream"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd56dd203fef61ac097dd65721a419ddccb106b2d2b70ba60a6b529f03961a51"
-dependencies = [
- "async-stream-impl",
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
-name = "async-stream-impl"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.48",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1860,6 +1838,7 @@ dependencies = [
  "futures-util",
  "itertools 0.12.0",
  "moor-values",
+ "rpc-async-client",
  "rpc-common",
  "rustyline",
  "strum",
@@ -1877,7 +1856,6 @@ name = "moor-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "bincode",
  "chrono",
  "clap",
@@ -1900,14 +1878,12 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
- "tmq",
- "tokio",
- "tokio-util",
  "tower-http",
  "tracing",
  "tracing-chrome",
  "tracing-subscriber",
  "uuid",
+ "zmq",
 ]
 
 [[package]]
@@ -1947,7 +1923,6 @@ dependencies = [
 name = "moor-kernel"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bincode",
  "bytes",
  "chrono",
@@ -1979,8 +1954,6 @@ dependencies = [
  "text-diff",
  "text_io",
  "thiserror",
- "tokio",
- "tokio-test",
  "tracing",
  "tracing-test",
  "unindent",
@@ -2004,6 +1977,7 @@ dependencies = [
  "metrics-macros",
  "metrics-util",
  "moor-values",
+ "rpc-async-client",
  "rpc-common",
  "strum",
  "tmq",
@@ -2055,6 +2029,7 @@ dependencies = [
  "metrics-macros",
  "metrics-util",
  "moor-values",
+ "rpc-async-client",
  "rpc-common",
  "serde",
  "serde_derive",
@@ -2707,14 +2682,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpc-common"
+name = "rpc-async-client"
 version = "0.1.0"
 dependencies = [
  "bincode",
  "futures-util",
- "moor-values",
+ "rpc-common",
  "thiserror",
  "tmq",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "rpc-common"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "moor-values",
+ "thiserror",
  "tracing",
  "uuid",
 ]
@@ -3373,30 +3359,6 @@ checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
 dependencies = [
  "native-tls",
  "tokio",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
-name = "tokio-test"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e89b3cbabd3ae862100094ae433e1def582cf86451b4e9bf83aa7ac1d8a7d719"
-dependencies = [
- "async-stream",
- "bytes",
- "futures-core",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
