@@ -464,43 +464,50 @@ impl Scheduler {
         let this = self.clone();
 
         // Track active tasks in metrics.
-        std::thread::spawn(move || loop {
-            let this = this.clone();
-            let is_running = {
-                let running = this.running.lock().unwrap();
-                *running
-            };
-            if !is_running {
-                break;
-            }
-            let mut number_suspended_tasks = 0;
-            let mut number_readblocked_tasks = 0;
-            let mut number_subscriptions = 0;
-            let mut number_zombies = 0;
-            let number_tasks = this.clone().tasks.len();
+        std::thread::Builder::new()
+            .name("metrics-poller".to_string())
+            .spawn(move || loop {
+                let this = this.clone();
+                let is_running = {
+                    let running = this.running.lock().unwrap();
+                    *running
+                };
+                if !is_running {
+                    break;
+                }
+                let mut number_suspended_tasks = 0;
+                let mut number_readblocked_tasks = 0;
+                let mut number_subscriptions = 0;
+                let mut number_zombies = 0;
+                let number_tasks = this.clone().tasks.len();
 
-            for task in this.clone().tasks.iter() {
-                if task.suspended {
-                    number_suspended_tasks += 1;
+                for task in this.clone().tasks.iter() {
+                    if task.suspended {
+                        number_suspended_tasks += 1;
+                    }
+                    if task.waiting_input.is_some() {
+                        number_readblocked_tasks += 1;
+                    }
+                    if task.task_control_sender.is_closed()
+                        || task.task_control_sender.is_disconnected()
+                    {
+                        number_zombies += 1;
+                    }
+                    let subscribers = task.subscribers.lock().unwrap();
+                    number_subscriptions += subscribers.len()
                 }
-                if task.waiting_input.is_some() {
-                    number_readblocked_tasks += 1;
-                }
-                if task.task_control_sender.is_closed()
-                    || task.task_control_sender.is_disconnected()
-                {
-                    number_zombies += 1;
-                }
-                let subscribers = task.subscribers.lock().unwrap();
-                number_subscriptions += subscribers.len()
-            }
 
-            debug!(
-                number_readblocked_tasks,
-                number_tasks, number_subscriptions, number_zombies, number_suspended_tasks, "..."
-            );
-            std::thread::sleep(METRICS_POLLER_TICK_TIME);
-        });
+                debug!(
+                    number_readblocked_tasks,
+                    number_tasks,
+                    number_subscriptions,
+                    number_zombies,
+                    number_suspended_tasks,
+                    "..."
+                );
+                std::thread::sleep(METRICS_POLLER_TICK_TIME);
+            })
+            .expect("Could not start metrics poller");
 
         let this = self.clone();
 
@@ -508,48 +515,51 @@ impl Scheduler {
         // Or tasks that need pruning.
         // TODO: we might be able to use a vector of delay-futures for this instead, and just poll
         //  those using some futures_util magic.
-        std::thread::spawn(move || loop {
-            let this = this.clone();
-            let is_running = {
-                let running = this.running.lock().unwrap();
-                *running
-            };
-            if !is_running {
-                break;
-            }
-            let mut to_wake = Vec::new();
-            let mut to_prune = Vec::new();
-            for t in this.clone().tasks.iter() {
-                let (task_id, task) = (t.key(), t.value());
-                if task.task_control_sender.is_closed()
-                    || task.task_control_sender.is_disconnected()
-                {
-                    warn!(
-                        task_id,
-                        "Task is present but its channel is closed.  Pruning."
-                    );
-                    to_prune.push(*task_id);
-                    continue;
-                }
-
-                if !task.suspended {
-                    continue;
-                }
-                let Some(delay) = task.resume_time else {
-                    continue;
+        std::thread::Builder::new()
+            .name("scheduler-tick".to_string())
+            .spawn(move || loop {
+                let this = this.clone();
+                let is_running = {
+                    let running = this.running.lock().unwrap();
+                    *running
                 };
-                if delay <= SystemTime::now() {
-                    to_wake.push(*task_id);
+                if !is_running {
+                    break;
                 }
-            }
-            if !to_wake.is_empty() {
-                this.clone().process_wake_ups(&to_wake);
-            }
-            if !to_prune.is_empty() {
-                this.clone().process_task_removals(&to_prune);
-            }
-            std::thread::sleep(SCHEDULER_TICK_TIME);
-        });
+                let mut to_wake = Vec::new();
+                let mut to_prune = Vec::new();
+                for t in this.clone().tasks.iter() {
+                    let (task_id, task) = (t.key(), t.value());
+                    if task.task_control_sender.is_closed()
+                        || task.task_control_sender.is_disconnected()
+                    {
+                        warn!(
+                            task_id,
+                            "Task is present but its channel is closed.  Pruning."
+                        );
+                        to_prune.push(*task_id);
+                        continue;
+                    }
+
+                    if !task.suspended {
+                        continue;
+                    }
+                    let Some(delay) = task.resume_time else {
+                        continue;
+                    };
+                    if delay <= SystemTime::now() {
+                        to_wake.push(*task_id);
+                    }
+                }
+                if !to_wake.is_empty() {
+                    this.clone().process_wake_ups(&to_wake);
+                }
+                if !to_prune.is_empty() {
+                    this.clone().process_task_removals(&to_prune);
+                }
+                std::thread::sleep(SCHEDULER_TICK_TIME);
+            })
+            .expect("Could not start scheduler tick");
 
         let this = self.clone();
 
@@ -886,38 +896,43 @@ impl Scheduler {
                     return vec![];
                 };
 
-                std::thread::spawn(move || {
-                    let loader_client = {
-                        match self.database.clone().loader_client() {
-                            Ok(tx) => tx,
-                            Err(e) => {
-                                error!(?e, "Could not start transaction for checkpoint");
-                                return;
+                let tr = std::thread::Builder::new()
+                    .name("textdump-thread".to_string())
+                    .spawn(move || {
+                        let loader_client = {
+                            match self.database.clone().loader_client() {
+                                Ok(tx) => tx,
+                                Err(e) => {
+                                    error!(?e, "Could not start transaction for checkpoint");
+                                    return;
+                                }
                             }
+                        };
+
+                        let Ok(mut output) = File::create(&textdump_path) else {
+                            error!("Could not open textdump file for writing");
+                            return;
+                        };
+
+                        info!("Creating textdump...");
+                        let textdump = make_textdump(
+                            loader_client,
+                            // TODO: just to be compatible with LambdaMOO import for now, hopefully.
+                            Some("** LambdaMOO Database, Format Version 4 **"),
+                        );
+
+                        info!("Writing textdump to {}", textdump_path.display());
+
+                        let mut writer = TextdumpWriter::new(&mut output);
+                        if let Err(e) = writer.write_textdump(&textdump) {
+                            error!(?e, "Could not write textdump");
+                            return;
                         }
-                    };
-
-                    let Ok(mut output) = File::create(&textdump_path) else {
-                        error!("Could not open textdump file for writing");
-                        return;
-                    };
-
-                    info!("Creating textdump...");
-                    let textdump = make_textdump(
-                        loader_client,
-                        // TODO: just to be compatible with LambdaMOO import for now, hopefully.
-                        Some("** LambdaMOO Database, Format Version 4 **"),
-                    );
-
-                    info!("Writing textdump to {}", textdump_path.display());
-
-                    let mut writer = TextdumpWriter::new(&mut output);
-                    if let Err(e) = writer.write_textdump(&textdump) {
-                        error!(?e, "Could not write textdump");
-                        return;
-                    }
-                    info!("Textdump written to {}", textdump_path.display());
-                });
+                        info!("Textdump written to {}", textdump_path.display());
+                    });
+                if let Err(e) = tr {
+                    error!(?e, "Could not start textdump thread");
+                }
                 vec![]
             }
         }
