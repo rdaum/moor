@@ -211,7 +211,7 @@ impl CodegenState {
 
     fn generate_scatter_assign(
         &mut self,
-        scatter: &Vec<ScatterItem>,
+        scatter: &[ScatterItem],
         right: &Expr,
     ) -> Result<(), CompileError> {
         self.generate_expr(right)?;

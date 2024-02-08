@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 # Own

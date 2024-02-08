@@ -19,6 +19,7 @@ edition = "2021"
 authors = ["Ryan Daum <ryan.daum@gmail.com>", "Norman Nunley <nnunley@gmail.com>"]
 repository = "https://github.com/rdaum/moor.git"
 license = "GPL-3"
+rust-version = "1.75.0"
 
 [workspace.dependencies]
 ## Command line arguments parsing.

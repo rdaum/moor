@@ -253,7 +253,7 @@ pub enum StmtNode {
 // Recursive descent compare of two trees, ignoring the parser-provided line numbers, but
 // validating equality for everything else.
 #[cfg(test)]
-pub fn assert_trees_match_recursive(a: &Vec<Stmt>, b: &Vec<Stmt>) {
+pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
     assert_eq!(a.len(), b.len());
     for (left, right) in a.iter().zip(b.iter()) {
         assert_eq!(left.tree_line_no, right.tree_line_no);
