@@ -1691,17 +1691,15 @@ dependencies = [
  "futures-util",
  "itertools 0.12.1",
  "moor-values",
- "rpc-async-client",
  "rpc-common",
+ "rpc-sync-client",
  "rustyline",
  "strum",
- "tmq",
- "tokio",
- "tokio-util",
  "tracing",
  "tracing-chrome",
  "tracing-subscriber",
  "uuid",
+ "zmq",
 ]
 
 [[package]]
@@ -2456,6 +2454,19 @@ dependencies = [
  "thiserror",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "rpc-sync-client"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "futures-util",
+ "rpc-common",
+ "thiserror",
+ "tracing",
+ "uuid",
+ "zmq",
 ]
 
 [[package]]
