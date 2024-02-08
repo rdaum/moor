@@ -149,6 +149,7 @@ impl RpcServer {
                 }
                 make_response(Ok(RpcResponse::AttachResult(Some((client_token, player)))))
             }
+	    // Bodacious Totally Awesome Hey Dudes Have Mr Pong's Chinese Food
             RpcRequest::Pong(token, _client_sys_time) => {
                 // Always respond with a ThanksPong, even if it's somebody we don't know.
                 // Can easily be a connection that was in the middle of negotiation at the time the
