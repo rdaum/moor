@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
 
-use anyhow::{Context, Error};
+use eyre::{Context, Error};
 
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -149,7 +149,7 @@ impl RpcServer {
                 }
                 make_response(Ok(RpcResponse::AttachResult(Some((client_token, player)))))
             }
-	    // Bodacious Totally Awesome Hey Dudes Have Mr Pong's Chinese Food
+            // Bodacious Totally Awesome Hey Dudes Have Mr Pong's Chinese Food
             RpcRequest::Pong(token, _client_sys_time) => {
                 // Always respond with a ThanksPong, even if it's somebody we don't know.
                 // Can easily be a connection that was in the middle of negotiation at the time the
@@ -547,7 +547,7 @@ impl RpcServer {
         client_id: Uuid,
         player: Objid,
         initiation_type: ConnectType,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), eyre::Error> {
         let session = self
             .clone()
             .new_session(client_id, player)
@@ -1012,7 +1012,7 @@ pub(crate) fn zmq_loop(
     rpc_endpoint: &str,
     narrative_endpoint: &str,
     num_threads: Option<i32>,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     let zmq_ctx = zmq::Context::new();
     if let Some(num_threads) = num_threads {
         zmq_ctx.set_io_threads(num_threads)?;

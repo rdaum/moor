@@ -15,8 +15,8 @@
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
-use anyhow::bail;
-use anyhow::Context;
+use eyre::bail;
+use eyre::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use futures_util::StreamExt;
@@ -57,7 +57,7 @@ impl TelnetConnection {
         narrative_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), eyre::Error> {
         // Provoke welcome message, which is a login command with no arguments, and we
         // don't care about the reply at this point.
         rpc_client
@@ -107,7 +107,7 @@ impl TelnetConnection {
         narrative_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
-    ) -> Result<(AuthToken, Objid, ConnectType), anyhow::Error> {
+    ) -> Result<(AuthToken, Objid, ConnectType), eyre::Error> {
         debug!(client_id = ?self.client_id, "Entering auth loop");
         loop {
             select! {
@@ -164,7 +164,7 @@ impl TelnetConnection {
         narrative_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), eyre::Error> {
         let mut expecting_input_reply = None;
         loop {
             select! {
@@ -257,7 +257,7 @@ pub async fn telnet_listen_loop(
     telnet_sockaddr: SocketAddr,
     rpc_address: &str,
     narrative_address: &str,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), eyre::Error> {
     let listener = TcpListener::bind(telnet_sockaddr).await?;
     let zmq_ctx = tmq::Context::new();
     zmq_ctx

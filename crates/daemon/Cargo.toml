@@ -19,7 +19,8 @@ clap_derive.workspace = true
 strum.workspace = true
 
 # General.
-anyhow.workspace = true
+eyre.workspace = true
+color-eyre.workspace = true
 bincode.workspace = true
 futures-util.workspace = true
 futures.workspace = true

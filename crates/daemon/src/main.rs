@@ -19,6 +19,7 @@ use clap::builder::ValueHint;
 use clap::Parser;
 use clap_derive::Parser;
 use ed25519_dalek::SigningKey;
+use eyre::Report;
 
 use pem::Pem;
 use rand::rngs::OsRng;
@@ -124,7 +125,9 @@ struct Args {
     num_io_threads: i32,
 }
 
-fn main() {
+fn main() -> Result<(), Report> {
+    color_eyre::install()?;
+
     let args: Args = Args::parse();
 
     let main_subscriber = tracing_subscriber::fmt()
@@ -239,4 +242,6 @@ fn main() {
     );
     scheduler_loop_jh.join().expect("Scheduler thread panicked");
     info!("Done.");
+
+    Ok(())
 }

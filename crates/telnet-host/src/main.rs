@@ -50,7 +50,8 @@ struct Args {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() -> Result<(), eyre::Error> {
+    color_eyre::install()?;
     let args: Args = Args::parse();
 
     let main_subscriber = tracing_subscriber::fmt()

@@ -29,7 +29,7 @@ pub trait ConnectionsDB {
         &self,
         from_connection: Objid,
         to_player: Objid,
-    ) -> Result<(), anyhow::Error>;
+    ) -> Result<(), eyre::Error>;
 
     /// Create a new connection object for the given client.
     fn new_connection(
@@ -40,10 +40,10 @@ pub trait ConnectionsDB {
     ) -> Result<Objid, RpcRequestError>;
 
     /// Record activity for the given client.
-    fn record_client_activity(&self, client_id: Uuid, connobj: Objid) -> Result<(), anyhow::Error>;
+    fn record_client_activity(&self, client_id: Uuid, connobj: Objid) -> Result<(), eyre::Error>;
 
     /// Update the last ping time for a client / connection.
-    fn notify_is_alive(&self, client_id: Uuid, connection: Objid) -> Result<(), anyhow::Error>;
+    fn notify_is_alive(&self, client_id: Uuid, connection: Objid) -> Result<(), eyre::Error>;
 
     /// Prune any connections that have not been active for longer than the required duration.
     fn ping_check(&self);
@@ -66,5 +66,5 @@ pub trait ConnectionsDB {
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid>;
 
     /// Remove the given client from the connection database.
-    fn remove_client_connection(&self, client_id: Uuid) -> Result<(), anyhow::Error>;
+    fn remove_client_connection(&self, client_id: Uuid) -> Result<(), eyre::Error>;
 }

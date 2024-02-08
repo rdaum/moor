@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use anyhow::Error;
+use eyre::Error;
 use std::process::exit;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -75,7 +75,7 @@ struct Args {
 async fn establish_connection(
     client_id: Uuid,
     rpc_client: &mut RpcSendClient,
-) -> Result<(ClientToken, Objid), anyhow::Error> {
+) -> Result<(ClientToken, Objid), eyre::Error> {
     match rpc_client
         .make_rpc_call(
             client_id,
@@ -221,7 +221,7 @@ async fn console_loop(
     narrative_server: &str,
     username: &str,
     password: &str,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), eyre::Error> {
     let zmq_ctx = tmq::Context::new();
 
     // Establish a connection to the RPC server
@@ -387,7 +387,9 @@ async fn console_loop(
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() -> Result<(), eyre::Error> {
+    color_eyre::install()?;
+
     let args: Args = Args::parse();
 
     let main_subscriber = tracing_subscriber::fmt()

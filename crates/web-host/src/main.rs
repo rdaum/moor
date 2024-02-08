@@ -23,7 +23,6 @@ use axum::Router;
 use clap::Parser;
 use clap_derive::Parser;
 
-
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -55,7 +54,7 @@ struct Args {
     narrative_server: String,
 }
 
-fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
+fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
     let webhost_router = Router::new()
         .route(
             "/ws/attach/connect/:token",
@@ -79,7 +78,8 @@ fn mk_routes(web_host: WebHost) -> anyhow::Result<Router> {
 }
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() -> Result<(), eyre::Error> {
+    color_eyre::install()?;
     let args: Args = Args::parse();
 
     let main_subscriber = tracing_subscriber::fmt()

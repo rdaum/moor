@@ -14,12 +14,12 @@
 
 use crate::host::var_as_json;
 use crate::host::ws_connection::WebSocketConnection;
-use anyhow::anyhow;
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
+use eyre::eyre;
 
 use moor_values::var::Objid;
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -52,7 +52,7 @@ pub enum WsHostError {
     #[error("RPC request error: {0}")]
     RpcFailure(RpcRequestError),
     #[error("RPC system error: {0}")]
-    RpcError(anyhow::Error),
+    RpcError(eyre::Error),
     #[error("Authentication failed")]
     AuthenticationFailed,
 }
@@ -84,7 +84,7 @@ impl WebHost {
             .set_rcvtimeo(100)
             .set_sndtimeo(100)
             .connect(self.rpc_addr.as_str())
-            .map_err(|e| WsHostError::RpcError(anyhow!(e)))?;
+            .map_err(|e| WsHostError::RpcError(eyre!(e)))?;
 
         // Establish a connection to the RPC server
         debug!(
@@ -113,13 +113,13 @@ impl WebHost {
                 return Err(WsHostError::RpcFailure(f));
             }
             Ok(resp) => {
-                return Err(WsHostError::RpcError(anyhow::anyhow!(
+                return Err(WsHostError::RpcError(eyre::eyre!(
                     "Unexpected response from RPC server: {:?}",
                     resp
                 )));
             }
             Err(e) => {
-                return Err(WsHostError::RpcError(anyhow!(e)));
+                return Err(WsHostError::RpcError(eyre!(e)));
             }
         };
 
@@ -135,7 +135,7 @@ impl WebHost {
         auth_token: AuthToken,
         rpc_client: RpcSendClient,
         peer_addr: SocketAddr,
-    ) -> Result<WebSocketConnection, anyhow::Error> {
+    ) -> Result<WebSocketConnection, eyre::Error> {
         let zmq_ctx = self.zmq_context.clone();
 
         // We'll need to subscribe to the narrative & broadcast messages for this connection.
@@ -198,14 +198,14 @@ impl WebHost {
             }
             Ok(RpcResult::Success(r)) => {
                 error!("Unexpected response from RPC server");
-                return Err(WsHostError::RpcError(anyhow!(
+                return Err(WsHostError::RpcError(eyre!(
                     "Unexpected response from RPC server: {:?}",
                     r
                 )));
             }
             Err(e) => {
                 error!("Unable to establish connection: {}", e);
-                return Err(WsHostError::RpcError(anyhow!(e)));
+                return Err(WsHostError::RpcError(eyre!(e)));
             }
         };
 

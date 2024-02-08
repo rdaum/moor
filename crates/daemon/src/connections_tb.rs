@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::Error;
+use eyre::Error;
 use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
 use tracing::{error, warn};
 use uuid::Uuid;

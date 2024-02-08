@@ -89,7 +89,8 @@ pest = "2.7.7"
 pest_derive = "2.7.7"
 
 ## Error declaration/ handling
-anyhow = { version = "1.0.79", features = ["backtrace"] }
+eyre = "0.6.12"
+color-eyre = "0.6.2"
 thiserror = "1.0.56"
 
 ## For macro-ing
