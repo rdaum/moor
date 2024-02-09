@@ -1029,10 +1029,12 @@ pub(crate) fn zmq_loop(
 
     // Start up the ping-ponger timer in a background thread...
     let t_rpc_server = rpc_server.clone();
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        t_rpc_server.ping_pong().expect("Unable to play ping-pong");
-    });
+    std::thread::Builder::new()
+        .name("rpc-ping-pong".to_string())
+        .spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            t_rpc_server.ping_pong().expect("Unable to play ping-pong");
+        })?;
 
     // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
     // are visible...

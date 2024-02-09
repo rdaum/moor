@@ -222,7 +222,9 @@ fn main() -> Result<(), Report> {
 
     // The scheduler thread:
     let loop_scheduler = scheduler.clone();
-    let scheduler_loop_jh = std::thread::spawn(move || loop_scheduler.run());
+    let scheduler_loop_jh = std::thread::Builder::new()
+        .name("moor-scheduler".to_string())
+        .spawn(move || loop_scheduler.run())?;
 
     zmq_loop(
         keypair,
