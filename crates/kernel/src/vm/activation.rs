@@ -232,6 +232,7 @@ impl Frame {
     }
 }
 
+/// Set global constants into stack frame.
 fn set_constants(f: &mut Frame) {
     f.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
     f.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));

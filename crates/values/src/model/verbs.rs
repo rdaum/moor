@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::encode::{DecodingError, EncodingError};
 use crate::model::r#match::VerbArgsSpec;
 use crate::util::BitEnum;
 use crate::var::Objid;
@@ -29,12 +30,15 @@ pub enum VerbFlag {
 }
 
 impl LayoutAs<u8> for VerbFlag {
-    fn read(v: u8) -> Self {
-        Self::from_u8(v).unwrap()
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+        Self::from_u8(v).ok_or(DecodingError::InvalidVerbFlagValue(v))
     }
 
-    fn write(v: Self) -> u8 {
-        v as u8
+    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+        Ok(v as u8)
     }
 }
 
@@ -100,12 +104,15 @@ pub enum BinaryType {
 }
 
 impl LayoutAs<u8> for BinaryType {
-    fn read(v: u8) -> Self {
-        Self::from_u8(v).unwrap()
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+        Self::from_u8(v).ok_or(DecodingError::InvalidBinaryTypeValue(v))
     }
 
-    fn write(v: Self) -> u8 {
-        v as u8
+    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+        Ok(v as u8)
     }
 }
 

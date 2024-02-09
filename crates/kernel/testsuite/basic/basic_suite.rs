@@ -45,7 +45,7 @@ fn load_textdump(db: Arc<dyn Database>) {
 fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
-        let binary = program.make_copy_as_vec();
+        let binary = program.make_copy_as_vec().unwrap();
         tx.add_verb(
             Objid(3),
             SYSTEM_OBJECT,

@@ -49,9 +49,6 @@ pub enum PageStoreMutation {
 /// TODO: verify the fsync chained to writes via io_uring is actually working, and that
 ///   the durability guarantees are, at least approximately, correct.
 /// TODO: we'll need reads once eviction/paging is implemented.
-/// TODO: it's weird that the eventfd is handled outside of this struct, but the io_uring is
-///   handled inside. it got this way because of ownership and initialization patterns, but
-///   it's not ideal.
 /// TODO: probably end up needing similar functionality for the implementation of the
 ///   write-ahead-log, so abstract up the notion of an io_uring+eventfd "io q" and use that
 ///   for both.

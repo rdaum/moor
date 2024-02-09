@@ -12,11 +12,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::{define_layout, Field, LayoutAs};
+use binary_layout::{binary_layout, Field, LayoutAs};
 use okaywal::{Entry, EntryId, LogManager, SegmentReader, WriteAheadLog};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use strum::FromRepr;
+use thiserror::Error;
 use tracing::{error, info, warn};
 
 use crate::rdb::tuples::TupleId;
@@ -106,19 +107,28 @@ pub enum WalEntryType {
     SequenceSync = 2,
 }
 
+#[derive(Error, Debug)]
+pub enum WalEncodingError {
+    #[error("Invalid WAL entry type: {0}")]
+    InvalidType(u8),
+}
+
 impl LayoutAs<u8> for WalEntryType {
-    fn read(v: u8) -> Self {
-        Self::from_repr(v).unwrap()
+    type ReadError = WalEncodingError;
+    type WriteError = WalEncodingError;
+
+    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+        Self::from_repr(v).ok_or(WalEncodingError::InvalidType(v))
     }
 
-    fn write(v: Self) -> u8 {
-        v as u8
+    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+        Ok(v as u8)
     }
 }
 
 const WAL_MAGIC: u32 = 0xfeed_babe;
 
-define_layout!(wal_entry_header, LittleEndian, {
+binary_layout!(wal_entry_header, LittleEndian, {
     // Validity marker.
     magic_marker: u32,
     // The timestamp when the write-ahead-log entry was created.
@@ -146,14 +156,26 @@ pub fn make_wal_entry<BF: FnMut(&mut [u8])>(
     ts: u64,
     page_size: usize,
     mut fill_func: BF,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, WalEncodingError> {
     let mut wal_entry_buffer = vec![0; wal_entry::data::OFFSET + page_size];
     let mut wal_entry = wal_entry::View::new(&mut wal_entry_buffer);
     let mut wal_entry_header = wal_entry.header_mut();
-    wal_entry_header.magic_marker_mut().write(WAL_MAGIC);
-    wal_entry_header.timestamp_mut().write(ts);
-    wal_entry_header.action_mut().write(typ);
-    wal_entry_header.pid_mut().write(page_id as u64);
+    wal_entry_header
+        .magic_marker_mut()
+        .try_write(WAL_MAGIC)
+        .expect("Failed to write magic marker");
+    wal_entry_header
+        .timestamp_mut()
+        .try_write(ts)
+        .expect("Failed to write timestamp");
+    wal_entry_header
+        .action_mut()
+        .try_write(typ)
+        .expect("Failed to write action");
+    wal_entry_header
+        .pid_mut()
+        .try_write(page_id as u64)
+        .expect("Failed to write page id");
     if let Some(relation_id) = relation_id {
         wal_entry_header
             .relation_id_mut()
@@ -162,10 +184,10 @@ pub fn make_wal_entry<BF: FnMut(&mut [u8])>(
     wal_entry_header.slot_id_mut().write(slot_id as u64);
     wal_entry_header.size_mut().write(page_size as u64);
     fill_func(wal_entry.data_mut());
-    wal_entry_buffer
+    Ok(wal_entry_buffer)
 }
 
-define_layout!(wal_entry, LittleEndian, {
+binary_layout!(wal_entry, LittleEndian, {
     header: wal_entry_header::NestedView,
     // The entire buffer frame for the page being written, except for delete.
     data: [u8],
@@ -197,13 +219,23 @@ impl WalManager {
         // because the kernel will need a stable pointer to it.
         let data = wal_entry.data().to_vec().into_boxed_slice();
 
-        let action = wal_entry.header().action().read();
+        let action = wal_entry
+            .header()
+            .action()
+            .try_read()
+            .expect("Invalid WAL action");
         match action {
             WalEntryType::PageSync => {
                 // Sync, write the updated data.
                 // The relation # is the first part of the id, its lower 8 bits. The remainder is the
                 // page number.
-                let relation_id = RelationId(wal_entry.header().relation_id().read() as usize);
+                let relation_id = RelationId(
+                    wal_entry
+                        .header()
+                        .relation_id()
+                        .try_read()
+                        .expect("Invalid relation ID") as usize,
+                );
 
                 write_mutations.push(PageStoreMutation::SyncRelation(
                     relation_id,

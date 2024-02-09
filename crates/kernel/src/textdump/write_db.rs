@@ -180,7 +180,8 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
                 .get_verb_binary(*db_objid, verb.uuid())
                 .expect("Failed to get verb binary");
 
-            let program = Program::from_sliceref(SliceRef::from_vec(binary));
+            let program = Program::from_sliceref(SliceRef::from_vec(binary))
+                .expect("Failed to parse verb binary");
             let program = if !program.main_vector.is_empty() {
                 let ast = moor_compiler::program_to_tree(&program)
                     .expect("Failed to decompile verb binary");

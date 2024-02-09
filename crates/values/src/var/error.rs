@@ -15,6 +15,7 @@
 use binary_layout::LayoutAs;
 use std::fmt::{Display, Formatter};
 
+use crate::encode::{DecodingError, EncodingError};
 use bincode::{Decode, Encode};
 use strum::FromRepr;
 
@@ -43,12 +44,15 @@ pub enum Error {
 }
 
 impl LayoutAs<u8> for Error {
-    fn read(v: u8) -> Self {
-        Self::from_repr(v).unwrap()
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+        Self::from_repr(v).ok_or(DecodingError::InvalidErrorValue(v))
     }
 
-    fn write(v: Self) -> u8 {
-        v as u8
+    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+        Ok(v as u8)
     }
 }
 

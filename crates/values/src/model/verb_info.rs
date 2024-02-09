@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::encode::{DecodingError, EncodingError};
 use crate::model::verbdef::VerbDef;
 use crate::util::SliceRef;
 use crate::AsByteBuffer;
@@ -28,17 +29,20 @@ impl VerbInfo {
         let mut storage = Vec::new();
         // Both values we hold are variable sized, but the program is always at the end, so we can
         // just append it without a length prefix.
-        verbdef.with_byte_buffer(|buffer| {
-            storage.put_u32_le(buffer.len() as u32);
-            storage.put_slice(buffer);
-        });
+        verbdef
+            .with_byte_buffer(|buffer| {
+                storage.put_u32_le(buffer.len() as u32);
+                storage.put_slice(buffer);
+            })
+            .expect("Failed to encode verbdef");
         storage.put_slice(binary.as_slice());
         Self(SliceRef::from_bytes(&storage))
     }
+
     #[must_use]
     pub fn verbdef(&self) -> VerbDef {
         let vd_len = u32::from_le_bytes(self.0.as_slice()[0..4].try_into().unwrap()) as usize;
-        VerbDef::from_sliceref(self.0.slice(4..4 + vd_len))
+        VerbDef::from_sliceref(self.0.slice(4..4 + vd_len)).expect("Failed to decode verbdef")
     }
 
     #[must_use]
@@ -54,19 +58,20 @@ impl AsByteBuffer for VerbInfo {
         self.0.len()
     }
 
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> R {
-        f(self.0.as_slice())
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
     }
 
-    fn make_copy_as_vec(&self) -> Vec<u8> {
-        self.0.as_slice().to_vec()
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_slice().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Self {
-        Self(bytes)
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        // TODO validate
+        Ok(Self(bytes))
     }
 
-    fn as_sliceref(&self) -> SliceRef {
-        self.0.clone()
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.0.clone())
     }
 }

@@ -16,6 +16,8 @@ use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use strum::FromRepr;
 
+use crate::encode::{DecodingError, EncodingError};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd, Encode, Decode)]
 #[repr(u8)]
 pub enum ArgSpec {
@@ -25,12 +27,15 @@ pub enum ArgSpec {
 }
 
 impl LayoutAs<u8> for ArgSpec {
-    fn read(v: u8) -> Self {
-        Self::from_repr(v).expect("Invalid ArgSpec value")
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
+        Self::from_repr(v).ok_or(DecodingError::InvalidArgSpecValue(v))
     }
 
-    fn write(v: Self) -> u8 {
-        v as u8
+    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
+        Ok(v as u8)
     }
 }
 
@@ -105,20 +110,25 @@ pub enum PrepSpec {
 }
 
 impl LayoutAs<i16> for PrepSpec {
-    fn read(v: i16) -> Self {
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: i16) -> Result<Self, Self::ReadError> {
         match v {
-            -2 => Self::Any,
-            -1 => Self::None,
-            p => Self::Other(Preposition::from_repr(p as u16).expect("Invalid preposition")),
+            -2 => Ok(Self::Any),
+            -1 => Ok(Self::None),
+            p => Ok(Self::Other(
+                Preposition::from_repr(p as u16).ok_or(DecodingError::InvalidPrepValue(p))?,
+            )),
         }
     }
 
-    fn write(v: Self) -> i16 {
-        match v {
+    fn try_write(v: Self) -> Result<i16, Self::WriteError> {
+        Ok(match v {
             Self::Any => -2,
             Self::None => -1,
             Self::Other(p) => p as i16,
-        }
+        })
     }
 }
 
@@ -147,25 +157,28 @@ impl VerbArgsSpec {
 }
 
 impl LayoutAs<u32> for VerbArgsSpec {
-    fn read(v: u32) -> Self {
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: u32) -> Result<Self, Self::ReadError> {
         let dobj_value = v & 0x0000_00ff;
         let prep_value = ((v >> 8) & 0x0000_ffff) as i16;
         let iobj_value = (v >> 24) & 0x0000_00ff;
-        let dobj = ArgSpec::read(dobj_value as u8);
-        let prep = PrepSpec::read(prep_value);
-        let iobj = ArgSpec::read(iobj_value as u8);
-        Self { dobj, prep, iobj }
+        let dobj = ArgSpec::try_read(dobj_value as u8)?;
+        let prep = PrepSpec::try_read(prep_value)?;
+        let iobj = ArgSpec::try_read(iobj_value as u8)?;
+        Ok(Self { dobj, prep, iobj })
     }
 
-    fn write(v: Self) -> u32 {
+    fn try_write(v: Self) -> Result<u32, Self::WriteError> {
         let mut r: u32 = 0;
-        let dobj_value = ArgSpec::write(v.dobj);
+        let dobj_value = ArgSpec::try_write(v.dobj)?;
         r |= u32::from(dobj_value);
-        let prep_value = PrepSpec::write(v.prep);
+        let prep_value = PrepSpec::try_write(v.prep)?;
         r |= (prep_value as u32 & 0xffff) << 8;
-        let iobj_value = ArgSpec::write(v.iobj);
+        let iobj_value = ArgSpec::try_write(v.iobj)?;
         r |= u32::from(iobj_value) << 24;
-        r
+        Ok(r)
     }
 }
 
@@ -181,8 +194,8 @@ mod tests {
             prep: PrepSpec::None,
             iobj: ArgSpec::This,
         };
-        let v = VerbArgsSpec::write(spec);
-        let spec2 = VerbArgsSpec::read(v);
+        let v = VerbArgsSpec::try_write(spec).unwrap();
+        let spec2 = VerbArgsSpec::try_read(v).unwrap();
         assert_eq!(spec, spec2);
     }
 }

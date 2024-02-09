@@ -359,7 +359,8 @@ impl VmHost {
 
     pub fn decode_program(binary_type: BinaryType, binary_bytes: &[u8]) -> Program {
         match binary_type {
-            BinaryType::LambdaMoo18X => Program::from_sliceref(SliceRef::from_bytes(binary_bytes)),
+            BinaryType::LambdaMoo18X => Program::from_sliceref(SliceRef::from_bytes(binary_bytes))
+                .expect("Could not decode MOO program"),
             _ => panic!("Unsupported binary type {:?}", binary_type),
         }
     }

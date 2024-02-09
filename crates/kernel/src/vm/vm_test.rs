@@ -79,7 +79,7 @@ mod tests {
         .unwrap();
 
         for (verb_name, program) in verbs {
-            let binary = program.make_copy_as_vec();
+            let binary = program.make_copy_as_vec().unwrap();
             tx.add_verb(
                 SYSTEM_OBJECT,
                 sysobj,

@@ -351,13 +351,13 @@ mod test {
                 let binary1 = tx1.get_verb_binary(o, v1.uuid()).unwrap();
                 let binary2 = tx2.get_verb_binary(o, v2.uuid()).unwrap();
 
-                let program1 = moor_compiler::program_to_tree(&Program::from_sliceref(
-                    SliceRef::from_vec(binary1),
-                ))
+                let program1 = moor_compiler::program_to_tree(
+                    &Program::from_sliceref(SliceRef::from_vec(binary1)).unwrap(),
+                )
                 .unwrap();
-                let program2 = moor_compiler::program_to_tree(&Program::from_sliceref(
-                    SliceRef::from_vec(binary2),
-                ))
+                let program2 = moor_compiler::program_to_tree(
+                    &Program::from_sliceref(SliceRef::from_vec(binary2)).unwrap(),
+                )
                 .unwrap();
 
                 assert_eq!(

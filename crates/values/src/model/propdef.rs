@@ -12,20 +12,21 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::props::PropFlag;
 use crate::util::BitEnum;
 use crate::util::SliceRef;
 use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::{define_layout, Field};
+use binary_layout::{binary_layout, Field};
 use bytes::{Buf, BufMut};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PropDef(SliceRef);
 
-define_layout!(propdef, LittleEndian, {
+binary_layout!(propdef, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
     definer: Objid as i64,
@@ -54,10 +55,22 @@ impl PropDef {
         let mut propdef_view = propdef::View::new(&mut buf);
         propdef_view.data_version_mut().write(DATA_LAYOUT_VERSION);
         propdef_view.uuid_mut().copy_from_slice(uuid.as_bytes());
-        propdef_view.definer_mut().write(definer);
-        propdef_view.location_mut().write(location);
-        propdef_view.owner_mut().write(owner);
-        propdef_view.flags_mut().write(flags);
+        propdef_view
+            .definer_mut()
+            .try_write(definer)
+            .expect("Failed to encode definer");
+        propdef_view
+            .location_mut()
+            .try_write(location)
+            .expect("Failed to encode location");
+        propdef_view
+            .owner_mut()
+            .try_write(owner)
+            .expect("Failed to encode owner");
+        propdef_view
+            .flags_mut()
+            .try_write(flags)
+            .expect("Failed to encode flags");
 
         let mut name_buf = propdef_view.name_mut();
         name_buf.put_u8(name.len() as u8);
@@ -79,19 +92,31 @@ impl PropDef {
 
     #[must_use]
     pub fn definer(&self) -> Objid {
-        self.get_layout_view().definer().read()
+        self.get_layout_view()
+            .definer()
+            .try_read()
+            .expect("Failed to decode definer")
     }
     #[must_use]
     pub fn location(&self) -> Objid {
-        self.get_layout_view().location().read()
+        self.get_layout_view()
+            .location()
+            .try_read()
+            .expect("Failed to decode location")
     }
     #[must_use]
     pub fn owner(&self) -> Objid {
-        self.get_layout_view().owner().read()
+        self.get_layout_view()
+            .owner()
+            .try_read()
+            .expect("Failed to decode owner")
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        self.get_layout_view().flags().read()
+        self.get_layout_view()
+            .flags()
+            .try_read()
+            .expect("Failed to decode flags")
     }
     #[must_use]
     pub fn name(&self) -> &str {
@@ -108,20 +133,21 @@ impl AsByteBuffer for PropDef {
         self.0.len()
     }
 
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> R {
-        f(self.0.as_slice())
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
     }
 
-    fn make_copy_as_vec(&self) -> Vec<u8> {
-        self.0.as_slice().to_vec()
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_slice().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Self {
-        Self::from_bytes(bytes)
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        // TODO: validate
+        Ok(Self::from_bytes(bytes))
     }
 
-    fn as_sliceref(&self) -> SliceRef {
-        self.0.clone()
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.0.clone())
     }
 }
 
@@ -187,8 +213,8 @@ mod tests {
             Objid(3),
         );
 
-        let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec);
-        let re_pd = PropDef::from_sliceref(SliceRef::from_bytes(&bytes));
+        let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec).unwrap();
+        let re_pd = PropDef::from_sliceref(SliceRef::from_bytes(&bytes)).unwrap();
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
         assert_eq!(re_pd.location(), Objid(2));
@@ -221,7 +247,7 @@ mod tests {
         let pd1 = pds.find_first_named("test").unwrap();
         assert_eq!(pd1.uuid(), test_pd1.uuid());
 
-        let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec);
+        let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec).unwrap();
         let pds2 = PropDefs::from_sliceref(SliceRef::from_vec(byte_vec));
         let pd2 = pds2.find_first_named("test2").unwrap();
         assert_eq!(pd2.uuid(), test_pd2.uuid());

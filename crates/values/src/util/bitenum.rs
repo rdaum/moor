@@ -16,6 +16,7 @@ use binary_layout::LayoutAs;
 use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
 
+use crate::encode::{DecodingError, EncodingError};
 use bincode::{Decode, Encode};
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
@@ -27,15 +28,18 @@ pub struct BitEnum<T: ToPrimitive> {
 }
 
 impl<T: ToPrimitive> LayoutAs<u16> for BitEnum<T> {
-    fn read(v: u16) -> Self {
-        Self {
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: u16) -> Result<Self, Self::ReadError> {
+        Ok(Self {
             value: v,
             phantom: PhantomData,
-        }
+        })
     }
 
-    fn write(v: Self) -> u16 {
-        v.to_u16()
+    fn try_write(v: Self) -> Result<u16, Self::WriteError> {
+        Ok(v.to_u16())
     }
 }
 

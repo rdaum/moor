@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::encode::{DecodingError, EncodingError};
 use crate::util::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
@@ -77,7 +78,7 @@ impl<T: AsByteBuffer> Iterator for DefsIter<T> {
         let item_slice = self.buffer.slice(self.position..self.position + len);
         self.position += len;
         // Build the item from the bytes.
-        Some(T::from_sliceref(item_slice))
+        Some(T::from_sliceref(item_slice).expect("Failed to decode defs item"))
     }
 }
 
@@ -102,7 +103,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             item.with_byte_buffer(|item_bytes| {
                 bytes.put_u32_le(item_bytes.len() as u32);
                 bytes.put_slice(item_bytes);
-            });
+            })
+            .expect("Failed to encode item");
         }
         Self {
             bytes: SliceRef::from_bytes(&bytes),
@@ -159,7 +161,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
                 buf.put_u32_le(bytes.len() as u32);
                 // Write the bytes for the item.
                 buf.put_slice(bytes);
-            });
+            })
+            .expect("Failed to encode item");
         }
         Some(Self::from_sliceref(SliceRef::from_bytes(&buf)))
     }
@@ -173,7 +176,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
                 buf.put_u32_le(bytes.len() as u32);
                 // Write the bytes for the item.
                 buf.put_slice(bytes);
-            });
+            })
+            .expect("Failed to encode item");
         }
         Self::from_sliceref(SliceRef::from_bytes(&buf))
     }
@@ -186,7 +190,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             new_buf.put_u32_le(bytes.len() as u32);
             // Write the bytes for the item.
             new_buf.put_slice(bytes);
-        });
+        })
+        .expect("Failed to encode item");
         Self::from_sliceref(SliceRef::from_bytes(&new_buf))
     }
     pub fn with_all_added(&self, v: &[T]) -> Self {
@@ -197,7 +202,8 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
                 new_buf.put_u32_le(bytes.len() as u32);
                 // Write the bytes for the item.
                 new_buf.put_slice(bytes);
-            });
+            })
+            .expect("Failed to encode item");
         }
         Self::from_sliceref(SliceRef::from_bytes(&new_buf))
     }
@@ -209,19 +215,22 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         let mut new_buf = Vec::new();
         for v in self.iter() {
             if v.uuid() == uuid {
-                f(&v).with_byte_buffer(|bytes| {
-                    // Write the length prefix.
-                    new_buf.put_u32_le(bytes.len() as u32);
-                    // Write the bytes for the item.
-                    new_buf.put_slice(bytes);
-                });
+                f(&v)
+                    .with_byte_buffer(|bytes| {
+                        // Write the length prefix.
+                        new_buf.put_u32_le(bytes.len() as u32);
+                        // Write the bytes for the item.
+                        new_buf.put_slice(bytes);
+                    })
+                    .expect("Failed to encode item");
             } else {
                 v.with_byte_buffer(|bytes| {
                     // Write the length prefix.
                     new_buf.put_u32_le(bytes.len() as u32);
                     // Write the bytes for the item.
                     new_buf.put_slice(bytes);
-                });
+                })
+                .expect("Failed to encode item");
             };
         }
         Some(Self::from_sliceref(SliceRef::from_bytes(&new_buf)))
@@ -233,22 +242,22 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> AsByteBuffer for Defs<T> {
         self.bytes.len()
     }
 
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> R {
-        f(self.bytes.as_slice())
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.bytes.as_slice()))
     }
 
-    fn make_copy_as_vec(&self) -> Vec<u8> {
-        self.bytes.as_slice().to_vec()
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.bytes.as_slice().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Self {
-        Self {
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        Ok(Self {
             bytes,
             _phantom: Default::default(),
-        }
+        })
     }
 
-    fn as_sliceref(&self) -> SliceRef {
-        self.bytes.clone()
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.bytes.clone())
     }
 }

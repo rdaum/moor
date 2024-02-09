@@ -75,7 +75,10 @@ pub fn upsert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     value: Codomain,
 ) -> Result<(), WorldStateError> {
     let relation = tx.relation(RelationId(rel as usize));
-    if let Err(e) = relation.upsert_tuple(oid.as_sliceref(), value.as_sliceref()) {
+    if let Err(e) = relation.upsert_tuple(
+        oid.as_sliceref().expect("Could not decode OID"),
+        value.as_sliceref().expect("Could not decode value"),
+    ) {
         panic!("Unexpected error: {:?}", e)
     }
     Ok(())
@@ -89,7 +92,10 @@ pub fn insert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     value: Codomain,
 ) -> Result<(), WorldStateError> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.insert_tuple(oid.as_sliceref(), value.as_sliceref()) {
+    match relation.insert_tuple(
+        oid.as_sliceref().expect("Could not decode OID"),
+        value.as_sliceref().expect("Could not decode value"),
+    ) {
         Ok(_) => Ok(()),
         Err(TupleError::Duplicate) => {
             Err(WorldStateError::DatabaseError("Duplicate key".to_string()))
@@ -111,8 +117,11 @@ where
 {
     let relation = tx.relation(RelationId(rel as usize));
     let Ok(all_tuples) = relation.predicate_scan(&|t| {
-        let oid = Objid::from_sliceref(t.domain());
-        pred(oid, Codomain::from_sliceref(t.codomain()))
+        let oid = Objid::from_sliceref(t.domain()).expect("Could not decode OID");
+        pred(
+            oid,
+            Codomain::from_sliceref(t.codomain()).expect("Could not decode value"),
+        )
     }) else {
         return Err(WorldStateError::DatabaseError(
             "Unable to scan relation".to_string(),
@@ -120,7 +129,7 @@ where
     };
     let objs = all_tuples
         .into_iter()
-        .map(|v| Objid::from_sliceref(v.domain()));
+        .map(|v| Objid::from_sliceref(v.domain()).expect("Could not decode OID"));
     Ok(ObjSet::from_oid_iter(objs))
 }
 
@@ -130,8 +139,10 @@ pub fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     oid: Objid,
 ) -> Option<Codomain> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_domain(oid.as_sliceref()) {
-        Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
+    match relation.seek_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
+        Ok(v) => {
+            Some(Codomain::from_sliceref(v.codomain()).expect("Could not decode codomain value"))
+        }
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
@@ -143,7 +154,7 @@ pub fn tuple_size_for_object_domain(
     oid: Objid,
 ) -> Option<usize> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_domain(oid.as_sliceref()) {
+    match relation.seek_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
         Ok(t) => Some(t.slot_buffer().len()),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -156,11 +167,15 @@ pub fn get_object_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     codomain: Codomain,
 ) -> ObjSet {
     let relation = tx.relation(RelationId(rel as usize));
-    let result = relation.seek_by_codomain(codomain.as_sliceref());
+    let result = relation.seek_by_codomain(
+        codomain
+            .as_sliceref()
+            .expect("Could not encode codomain value"),
+    );
     let objs = result
         .expect("Unable to seek by codomain")
         .into_iter()
-        .map(|v| Objid::from_sliceref(v.domain()));
+        .map(|v| Objid::from_sliceref(v.domain()).expect("Could not decode OID"));
     ObjSet::from_oid_iter(objs)
 }
 
@@ -170,7 +185,7 @@ pub fn tuple_size_for_object_codomain(
     oid: Objid,
 ) -> Option<usize> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_codomain(oid.as_sliceref()) {
+    match relation.seek_by_codomain(oid.as_sliceref().expect("Could not encode codomain oid")) {
         Ok(ts) => Some(ts.iter().map(|t| t.slot_buffer().len()).sum()),
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -185,7 +200,9 @@ pub fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize));
     match relation.seek_by_domain(key_bytes) {
-        Ok(v) => Some(Codomain::from_sliceref(v.codomain())),
+        Ok(v) => {
+            Some(Codomain::from_sliceref(v.codomain()).expect("Could not decode codomain value"))
+        }
         Err(TupleError::NotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
@@ -216,7 +233,10 @@ fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.insert_tuple(key_bytes, value.as_sliceref()) {
+    match relation.insert_tuple(
+        key_bytes,
+        value.as_sliceref().expect("Could not encode value"),
+    ) {
         Ok(_) => Ok(()),
         Err(TupleError::Duplicate) => Err(WorldStateError::ObjectNotFound(oid)),
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -230,7 +250,7 @@ fn delete_if_exists(
     oid: Objid,
 ) -> Result<(), WorldStateError> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.remove_by_domain(oid.as_sliceref()) {
+    match relation.remove_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
         Ok(_) => Ok(()),
         Err(TupleError::NotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -261,7 +281,10 @@ pub fn upsert_obj_uuid_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize));
-    if let Err(e) = relation.upsert_tuple(key_bytes, value.as_sliceref()) {
+    if let Err(e) = relation.upsert_tuple(
+        key_bytes,
+        value.as_sliceref().expect("Could not encode value"),
+    ) {
         panic!("Unexpected error: {:?}", e)
     }
     Ok(())

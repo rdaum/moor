@@ -81,7 +81,11 @@ impl ConnectionsTb {
     ) -> Result<Vec<(SliceRef, SystemTime)>, SessionError> {
         let clients = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(connection_obj.as_sliceref())
+            .seek_by_codomain(
+                connection_obj
+                    .as_sliceref()
+                    .expect("Invalid connection object"),
+            )
             .expect("Unable to seek client connection");
 
         // Seek the most recent activity for the connection, so pull in the activity relation for
@@ -133,7 +137,11 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let client_ids = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(from_connection.as_sliceref())
+            .seek_by_codomain(
+                from_connection
+                    .as_sliceref()
+                    .expect("Invalid connection object"),
+            )
             .expect("Unable to seek client connection");
         if client_ids.is_empty() {
             error!(?from_connection, ?to_player, "No client ids for connection");
@@ -142,7 +150,10 @@ impl ConnectionsDB for ConnectionsTb {
         for client_id in client_ids {
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-                .update_tuple(client_id.domain().clone(), to_player.as_sliceref());
+                .update_tuple(
+                    client_id.domain().clone(),
+                    to_player.as_sliceref().expect("Invalid player object"),
+                );
         }
         tx.commit()?;
         Ok(())
@@ -169,7 +180,12 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let client_id = SliceRef::from_bytes(client_id.as_bytes());
         tx.relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .insert_tuple(client_id.clone(), connection_oid.as_sliceref())
+            .insert_tuple(
+                client_id.clone(),
+                connection_oid
+                    .as_sliceref()
+                    .expect("Invalid connection object"),
+            )
             .expect("Unable to insert client connection");
         tx.relation(RelationId(ConnectionRelation::ClientActivity as usize))
             .insert_tuple(client_id.clone(), now_as_sliceref())
@@ -288,7 +304,7 @@ impl ConnectionsDB for ConnectionsTb {
         // subtract that from the current time.
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(player.as_sliceref())
+            .seek_by_codomain(player.as_sliceref().expect("Invalid player object"))
         else {
             return Err(SessionError::NoConnectionForPlayer(player));
         };
@@ -317,7 +333,7 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(player.as_sliceref())
+            .seek_by_codomain(player.as_sliceref().expect("Invalid player object"))
         else {
             return Ok(vec![]);
         };
@@ -342,7 +358,7 @@ impl ConnectionsDB for ConnectionsTb {
             .expect("Unable to scan client connection relation");
 
         for client in clients {
-            let connection = Objid::from_sliceref(client.codomain());
+            let connection = Objid::from_sliceref(client.codomain()).expect("Invalid connection");
             connections.insert(connection);
         }
 
@@ -354,7 +370,12 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let is_valid = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_domain(client_id.as_bytes().as_sliceref())
+            .seek_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            )
             .is_ok();
         tx.commit().expect("Unable to commit transaction");
         is_valid
@@ -364,9 +385,15 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_domain(client_id.as_bytes().as_sliceref())
-        {
-            Ok(connection) => Some(Objid::from_sliceref(connection.codomain())),
+            .seek_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            ) {
+            Ok(connection) => {
+                Some(Objid::from_sliceref(connection.codomain()).expect("Invalid connection"))
+            }
             Err(_) => None,
         };
         tx.commit().expect("Unable to commit transaction");
@@ -377,19 +404,44 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .remove_by_domain(client_id.as_bytes().as_sliceref());
+            .remove_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            );
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientActivity as usize))
-            .remove_by_domain(client_id.as_bytes().as_sliceref());
+            .remove_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            );
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-            .remove_by_domain(client_id.as_bytes().as_sliceref());
+            .remove_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            );
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .remove_by_domain(client_id.as_bytes().as_sliceref());
+            .remove_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            );
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientName as usize))
-            .remove_by_domain(client_id.as_bytes().as_sliceref());
+            .remove_by_domain(
+                client_id
+                    .as_bytes()
+                    .as_sliceref()
+                    .expect("Invalid client id"),
+            );
 
         tx.commit()?;
         Ok(())

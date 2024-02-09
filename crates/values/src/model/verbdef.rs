@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
@@ -20,14 +21,14 @@ use crate::util::BitEnum;
 use crate::util::SliceRef;
 use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::{define_layout, Field};
+use binary_layout::{binary_layout, Field};
 use bytes::BufMut;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbDef(SliceRef);
 
-define_layout!(verbdef, LittleEndian, {
+binary_layout!(verbdef, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
     location: Objid as i64,
@@ -64,11 +65,26 @@ impl VerbDef {
         let mut verbdef_layout = verbdef::View::new(&mut buffer);
         verbdef_layout.data_version_mut().write(DATA_LAYOUT_VERSION);
         verbdef_layout.uuid_mut().copy_from_slice(uuid.as_bytes());
-        verbdef_layout.location_mut().write(location);
-        verbdef_layout.owner_mut().write(owner);
-        verbdef_layout.flags_mut().write(flags);
-        verbdef_layout.binary_type_mut().write(binary_type);
-        verbdef_layout.args_mut().write(args);
+        verbdef_layout
+            .location_mut()
+            .try_write(location)
+            .expect("Failed to encode location");
+        verbdef_layout
+            .owner_mut()
+            .try_write(owner)
+            .expect("Failed to encode owner");
+        verbdef_layout
+            .flags_mut()
+            .try_write(flags)
+            .expect("Failed to encode flags");
+        verbdef_layout
+            .binary_type_mut()
+            .try_write(binary_type)
+            .expect("Failed to encode binary_type");
+        verbdef_layout
+            .args_mut()
+            .try_write(args)
+            .expect("Failed to encode args");
         verbdef_layout.num_names_mut().write(names.len() as u8);
 
         // Now write the names, into the names region.
@@ -95,27 +111,33 @@ impl VerbDef {
     #[must_use]
     pub fn location(&self) -> Objid {
         let view = self.get_header_view();
-        view.location().read()
+        view.location()
+            .try_read()
+            .expect("Failed to decode location")
     }
     #[must_use]
     pub fn owner(&self) -> Objid {
         let view = self.get_header_view();
-        view.owner().read()
+        view.owner().try_read().expect("Failed to decode owner")
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<VerbFlag> {
         let view = self.get_header_view();
-        view.flags().read()
+        view.flags().try_read().expect("Failed to decode flags")
     }
     #[must_use]
     pub fn binary_type(&self) -> BinaryType {
         let view = self.get_header_view();
-        view.binary_type().read()
+        view.binary_type()
+            .try_read()
+            .expect("Failed to decode binary_type")
     }
     #[must_use]
     pub fn args(&self) -> VerbArgsSpec {
         let view = self.get_header_view();
-        view.args().read()
+        view.args()
+            .try_read()
+            .expect("Failed to decode verb args spec")
     }
 }
 
@@ -157,20 +179,21 @@ impl AsByteBuffer for VerbDef {
         self.0.len()
     }
 
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> R {
-        f(self.0.as_slice())
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
     }
 
-    fn make_copy_as_vec(&self) -> Vec<u8> {
-        self.0.as_slice().to_vec()
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_slice().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Self {
-        Self::from_bytes(bytes)
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        // TODO: validate
+        Ok(Self::from_bytes(bytes))
     }
 
-    fn as_sliceref(&self) -> SliceRef {
-        self.0.clone()
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.0.clone())
     }
 }
 
@@ -216,8 +239,8 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd.with_byte_buffer(<[u8]>::to_vec);
-        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes));
+        let bytes = vd.with_byte_buffer(<[u8]>::to_vec).unwrap();
+        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes)).unwrap();
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());
@@ -258,7 +281,7 @@ mod tests {
         let vd2_id = vd2.uuid();
 
         let vds = VerbDefs::from_items(&[vd1, vd2]);
-        let bytes = vds.with_byte_buffer(<[u8]>::to_vec);
+        let bytes = vds.with_byte_buffer(<[u8]>::to_vec).unwrap();
         let vds2 = VerbDefs::from_sliceref(SliceRef::from_vec(bytes));
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
@@ -301,8 +324,8 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd1.with_byte_buffer(<[u8]>::to_vec);
-        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes));
+        let bytes = vd1.with_byte_buffer(<[u8]>::to_vec).unwrap();
+        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes)).unwrap();
         assert_eq!(vd1, vd2);
         assert_eq!(vd1.names(), Vec::<String>::new());
     }

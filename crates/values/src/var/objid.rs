@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::encode::{DecodingError, EncodingError};
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use std::fmt::{Debug, Display, Formatter};
@@ -20,12 +21,15 @@ use std::fmt::{Debug, Display, Formatter};
 pub struct Objid(pub i64);
 
 impl LayoutAs<i64> for Objid {
-    fn read(v: i64) -> Self {
-        Self(v)
+    type ReadError = DecodingError;
+    type WriteError = EncodingError;
+
+    fn try_read(v: i64) -> Result<Self, Self::ReadError> {
+        Ok(Self(v))
     }
 
-    fn write(v: Self) -> i64 {
-        v.0
+    fn try_write(v: Self) -> Result<i64, Self::WriteError> {
+        Ok(v.0)
     }
 }
 

@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use binary_layout::{define_layout, Field};
+use binary_layout::{binary_layout, Field};
 use human_bytes::human_bytes;
 use kanal::Receiver;
 use okaywal::WriteAheadLog;
@@ -39,14 +39,14 @@ use super::backing::{BackingStoreClient, WriterMessage};
 /// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the rdb.
 pub struct ColdStorage {}
 
-define_layout!(sequence_page, LittleEndian, {
+binary_layout!(sequence_page, LittleEndian, {
     // The number of sequences stored in this page.
     num_sequences: u64,
     // The sequences are here..
     sequences: [u8],
 });
 
-define_layout!(sequence, LittleEndian, {
+binary_layout!(sequence, LittleEndian, {
     // The sequence id.
     id: u64,
     // The current value of the sequence.
@@ -218,7 +218,8 @@ impl ColdStorage {
                     sequence.value_mut().write(*sequence_value);
                 }
             },
-        );
+        )
+        .expect("Failed to encode sequence WAL entry");
         write_batch.push((SEQUENCE_PAGE_ID, Some(seq_wal_entry)));
 
         // Now iterate over all the tuples referred to in the working set.
@@ -262,7 +263,8 @@ impl ColdStorage {
                 ts,
                 page.page_size as usize,
                 |buf| page.save_into(buf),
-            );
+            )
+            .expect("Failed to encode page WAL entry");
             write_batch.push((*page_id, Some(wal_entry_buffer)));
         }
 

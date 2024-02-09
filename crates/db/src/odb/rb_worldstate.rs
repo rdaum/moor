@@ -76,7 +76,12 @@ impl RelBoxWorldState {
         let fresh_db = {
             db.canonical[WorldStateRelation::ObjectParent as usize]
                 .load()
-                .seek_by_domain(SYSTEM_OBJECT.0.as_sliceref())
+                .seek_by_domain(
+                    SYSTEM_OBJECT
+                        .0
+                        .as_sliceref()
+                        .expect("Could not encode sysobj id"),
+                )
                 .is_none()
         };
         (Self { db }, fresh_db)
@@ -216,7 +221,7 @@ impl DbTransaction for RelBoxTransaction {
         for rel in oid_relations.iter() {
             let relation = self.tx.relation((*rel).into());
             relation
-                .remove_by_domain(obj.0.as_sliceref())
+                .remove_by_domain(obj.0.as_sliceref().expect("Unable to encode object id"))
                 .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
         }
 
@@ -231,7 +236,7 @@ impl DbTransaction for RelBoxTransaction {
 
         let obj_propdefs_rel = self.tx.relation(WorldStateRelation::ObjectPropDefs.into());
         obj_propdefs_rel
-            .remove_by_domain(obj.0.as_sliceref())
+            .remove_by_domain(obj.0.as_sliceref().expect("Unable to encode object id"))
             .expect("Unable to delete propdefs");
 
         Ok(())

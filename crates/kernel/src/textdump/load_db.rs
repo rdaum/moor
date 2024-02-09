@@ -250,7 +250,7 @@ pub fn read_textdump<T: io::Read>(
 
             let binary =
                 // Encode the binary (for now using bincode)
-                program.with_byte_buffer(|d| Vec::from(d));
+                program.with_byte_buffer(|d| Vec::from(d)).expect("Failed to encode program");
 
             loader
                 .add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)

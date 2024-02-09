@@ -381,7 +381,10 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     }
 
     // Decode.
-    let program = Program::from_sliceref(verb_info.binary());
+    let program = Program::from_sliceref(verb_info.binary()).map_err(|_| {
+        error!(object=?bf_args.args[0], verb=?bf_args.args[1], "verb_code: verb program could not be decoded");
+        E_INVARG
+    })?;
     let decompiled = match program_to_tree(&program) {
         Ok(decompiled) => decompiled,
         Err(e) => {
@@ -463,7 +466,9 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         }
     };
     // Now we have a program, we need to encode it.
-    let binary = program.with_byte_buffer(|d| Vec::from(d));
+    let binary = program
+        .with_byte_buffer(|d| Vec::from(d))
+        .expect("Failed to encode program byte stream");
     // Now we can update the verb.
     let update_attrs = VerbAttrs {
         definer: None,
@@ -602,7 +607,10 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Ok(Ret(v_empty_list()));
     }
 
-    let program = Program::from_sliceref(verb_info.binary());
+    let program = Program::from_sliceref(verb_info.binary()).map_err(|_| {
+        error!(object=?bf_args.args[0], verb=?bf_args.args[1], "disassemble: verb program could not be decoded");
+        E_INVARG
+    })?;
 
     // The output of disassemble is a list of strings, one for each instruction in the verb's program.
     // But we also want some basic information on # of labels. Fork vectors. Jazz like that.
