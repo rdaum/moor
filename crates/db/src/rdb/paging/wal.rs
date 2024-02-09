@@ -98,13 +98,17 @@ impl LogManager for WalManager {
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 pub enum WalEntryType {
-    // Sync, write the updated data in the page.
-    PageSync = 0,
-    // Delete the page.
-    Delete = 1,
+    // Update the page header, which is always the last operation after a commit.
+    PageHeader = 0,
+    // Record addition of a tuple
+    Insert = 1,
+    // Update
+    Update = 2,
+    // Record deletion of a tuple
+    Delete = 3,
     // Write current state of sequences to the sequence page. Ignores page id, slot id. Data is
     // the contents of the sequence page.
-    SequenceSync = 2,
+    SequenceSync = 4,
 }
 
 #[derive(Error, Debug)]
@@ -137,27 +141,29 @@ binary_layout!(wal_entry_header, LittleEndian, {
     action: WalEntryType as u8,
     // The page id of the page being written
     pid: u64,
-    // The relation this page belongs to, if this is a pagesync type
-    // (Sequences don't have this, obv.)
-    relation_id: u8,
     // The slot id of the slot within the page being written.
-    // Note we always sync full pages, but we may delete a single slot.
     slot_id: u64,
-
+    // The offset within the page of the data being written.
+    offset: u64,
     // The size of the data being written.
     size: u64,
+    // The relation this page belongs to
+    // (Sequences don't have this, obv.)
+    relation_id: u8,
 });
 
+#[allow(clippy::too_many_arguments)] // TODO: I *suppose* we could use a builder pattern here
 pub fn make_wal_entry<BF: FnMut(&mut [u8])>(
     typ: WalEntryType,
     page_id: PageId,
     relation_id: Option<RelationId>,
     slot_id: SlotId,
     ts: u64,
-    page_size: usize,
+    page_offset: usize,
+    page_data_size: usize,
     mut fill_func: BF,
 ) -> Result<Vec<u8>, WalEncodingError> {
-    let mut wal_entry_buffer = vec![0; wal_entry::data::OFFSET + page_size];
+    let mut wal_entry_buffer = vec![0; wal_entry::data::OFFSET + page_data_size];
     let mut wal_entry = wal_entry::View::new(&mut wal_entry_buffer);
     let mut wal_entry_header = wal_entry.header_mut();
     wal_entry_header
@@ -176,14 +182,20 @@ pub fn make_wal_entry<BF: FnMut(&mut [u8])>(
         .pid_mut()
         .try_write(page_id as u64)
         .expect("Failed to write page id");
+    wal_entry_header
+        .offset_mut()
+        .try_write(page_offset as u64)
+        .expect("Failed to write page offset");
     if let Some(relation_id) = relation_id {
         wal_entry_header
             .relation_id_mut()
             .write(relation_id.0 as u8);
     }
     wal_entry_header.slot_id_mut().write(slot_id as u64);
-    wal_entry_header.size_mut().write(page_size as u64);
-    fill_func(wal_entry.data_mut());
+    wal_entry_header.size_mut().write(page_data_size as u64);
+
+    let buffer = wal_entry.data_mut();
+    fill_func(buffer);
     Ok(wal_entry_buffer)
 }
 
@@ -225,10 +237,7 @@ impl WalManager {
             .try_read()
             .expect("Invalid WAL action");
         match action {
-            WalEntryType::PageSync => {
-                // Sync, write the updated data.
-                // The relation # is the first part of the id, its lower 8 bits. The remainder is the
-                // page number.
+            WalEntryType::Insert | WalEntryType::Update => {
                 let relation_id = RelationId(
                     wal_entry
                         .header()
@@ -237,25 +246,53 @@ impl WalManager {
                         .expect("Invalid relation ID") as usize,
                 );
 
-                write_mutations.push(PageStoreMutation::SyncRelation(
+                let mutation = PageStoreMutation::PageTupleWrite {
                     relation_id,
-                    pid as PageId,
+                    page_id: pid as PageId,
+                    slot_id: wal_entry
+                        .header()
+                        .slot_id()
+                        .try_read()
+                        .expect("Could not read WAL slot id")
+                        as SlotId,
+                    page_offset: wal_entry
+                        .header()
+                        .offset()
+                        .try_read()
+                        .expect("Could not read WAL offset")
+                        as usize,
                     data,
-                ));
+                };
+
+                write_mutations.push(mutation);
             }
+            WalEntryType::PageHeader => {
+                let relation_id = RelationId(
+                    wal_entry
+                        .header()
+                        .relation_id()
+                        .try_read()
+                        .expect("Invalid relation ID") as usize,
+                );
+
+                let mutation = PageStoreMutation::PageHeaderWrite {
+                    relation_id,
+                    page_id: pid as PageId,
+                    data,
+                };
+                write_mutations.push(mutation);
+            }
+
             WalEntryType::SequenceSync => {
                 // Write current state of sequences to the sequence page. Ignores page id, slot id.
                 // Data is the contents of the sequence page.
-                write_mutations.push(PageStoreMutation::SyncSequence(data));
+                write_mutations.push(PageStoreMutation::WriteSequencePage(data));
             }
             WalEntryType::Delete => {
                 // Delete
                 let relation_id = RelationId(wal_entry.header().relation_id().read() as usize);
                 let slot_id = wal_entry.header().slot_id().read();
-                write_mutations.push(PageStoreMutation::DeleteRelation(
-                    pid as PageId,
-                    relation_id,
-                ));
+                write_mutations.push(PageStoreMutation::DeleteTuple(pid as PageId, relation_id));
                 to_evict.push(TupleId {
                     page: pid as PageId,
                     slot: slot_id as SlotId,

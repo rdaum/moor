@@ -204,6 +204,7 @@ impl ColdStorage {
             None,
             0,
             ts,
+            0,
             seq_page_size + (seq_size * sequences.len()),
             |buf| {
                 let mut sequence_page = sequence_page::View::new(buf);
@@ -222,22 +223,70 @@ impl ColdStorage {
         .expect("Failed to encode sequence WAL entry");
         write_batch.push((SEQUENCE_PAGE_ID, Some(seq_wal_entry)));
 
-        // Now iterate over all the tuples referred to in the working set.
-        // For syncing pages, we don't need to sync each individual tuple, we we just find the set of dirty pages
-        // and sync them.
-        // The pages that are modified will be need be read-locked while they are copied.
+        // Now iterate over all the tuples referred to in the working set and produce WAL entries for them.
         let mut dirty_pages = HashSet::new();
         for r in ws.relations.iter() {
             for t in r.1.tuples() {
                 match t {
                     TxTuple::Insert(new_tuple) => {
+                        let (tuple_offset, tuple_size) = tuple_box
+                            .page_for(new_tuple.id().page)
+                            .expect("Unable to get page for tuple")
+                            .offset_of(new_tuple.id().slot)
+                            .expect("Unable to get tuple offset");
+                        let slotbuf = new_tuple.slot_buffer();
+                        assert!(tuple_size >= slotbuf.len(), "Tuple size too small");
+                        let wal_entry_buffer = make_wal_entry(
+                            WalEntryType::Insert,
+                            new_tuple.id().page,
+                            Some(r.1.id),
+                            new_tuple.id().slot,
+                            ts,
+                            tuple_offset,
+                            slotbuf.len(),
+                            |buf| buf.copy_from_slice(slotbuf.as_slice()),
+                        )
+                        .expect("Failed to encode insert WAL entry");
+
+                        write_batch.push((new_tuple.id().page, Some(wal_entry_buffer)));
                         dirty_pages.insert((new_tuple.id().page, r.1.id));
                     }
                     TxTuple::Update(old_id, new_tuple) => {
-                        dirty_pages.insert((new_tuple.id().page, r.1.id));
+                        let (tuple_offset, tuple_size) = tuple_box
+                            .page_for(new_tuple.id().page)
+                            .expect("Unable to get page for tuple")
+                            .offset_of(new_tuple.id().slot)
+                            .expect("Unable to get tuple offset");
+                        let slotbuf = new_tuple.slot_buffer();
+                        assert!(tuple_size >= slotbuf.len(), "Tuple size too small");
+                        let wal_entry_buffer = make_wal_entry(
+                            WalEntryType::Update,
+                            new_tuple.id().page,
+                            Some(r.1.id),
+                            new_tuple.id().slot,
+                            ts,
+                            tuple_offset,
+                            slotbuf.len(),
+                            |buf| buf.copy_from_slice(slotbuf.as_slice()),
+                        )
+                        .expect("Failed to encode update WAL entry");
+
+                        write_batch.push((new_tuple.id().page, Some(wal_entry_buffer)));
                         dirty_pages.insert((old_id.page, r.1.id));
                     }
                     TxTuple::Tombstone { tuple_id, .. } => {
+                        let wal_entry_buffer = make_wal_entry(
+                            WalEntryType::Delete,
+                            tuple_id.page,
+                            Some(r.1.id),
+                            tuple_id.slot,
+                            ts,
+                            0,
+                            0,
+                            |_| (),
+                        )
+                        .expect("Failed to encode tombstone WAL entry");
+                        write_batch.push((tuple_id.page, Some(wal_entry_buffer)));
                         dirty_pages.insert((tuple_id.page, r.1.id));
                     }
                     TxTuple::Value(_) => {
@@ -247,6 +296,7 @@ impl ColdStorage {
             }
         }
 
+        // Now write out the updated page headers for the dirty pages
         for (page_id, r) in &dirty_pages {
             // Get the slotboxy page for this tuple.
             let Ok(page) = tuple_box.page_for(*page_id) else {
@@ -254,17 +304,20 @@ impl ColdStorage {
                 continue;
             };
 
+            let rl = page.read_lock();
+
             // Copy the page into the WAL entry directly.
             let wal_entry_buffer = make_wal_entry(
-                WalEntryType::PageSync,
+                WalEntryType::PageHeader,
                 *page_id,
                 Some(*r),
-                0,
+                0, /* not used */
                 ts,
-                page.page_size as usize,
-                |buf| page.save_into(buf),
+                0,
+                rl.header_size(),
+                |buf| rl.write_header(buf),
             )
-            .expect("Failed to encode page WAL entry");
+            .expect("Failed to encode page index WAL entry");
             write_batch.push((*page_id, Some(wal_entry_buffer)));
         }
 

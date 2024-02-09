@@ -96,7 +96,7 @@ fn prepare_vm_execution(
         SYSTEM_OBJECT,
         VerbFlag::rxd(),
         VerbArgsSpec::this_none_this(),
-        binary.make_copy_as_vec(),
+        binary.make_copy_as_vec().unwrap(),
         BinaryType::LambdaMoo18X,
     )
     .unwrap();

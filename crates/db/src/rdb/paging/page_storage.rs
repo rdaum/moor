@@ -17,26 +17,44 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
-use std::os::fd::{IntoRawFd, RawFd};
+use std::os::fd::{AsRawFd, RawFd};
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
-use std::thread::yield_now;
+use std::thread::{yield_now, JoinHandle};
 use std::time::Duration;
 
 use io_uring::squeue::Flags;
 use io_uring::types::Fd;
 use io_uring::{opcode, IoUring};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
-use crate::rdb::paging::PageId;
+use crate::rdb::paging::{PageId, SlotId};
 use crate::rdb::RelationId;
 
+/// The size of the submission queue for the io_uring, in requests.
+/// We currently do not have any way to handle backpressure, so we will not be able to handle WAL
+/// writes faster than this so this is set very large.
+// TODO: we should probably have a way to handle backpressure!! rather urgent.
+const IO_URING_SUBMISSION_Q_SIZE: u32 = 4096;
+
+#[derive(Debug)]
 pub enum PageStoreMutation {
-    SyncRelation(RelationId, PageId, Box<[u8]>),
-    SyncSequence(Box<[u8]>),
-    DeleteRelation(PageId, RelationId),
+    PageTupleWrite {
+        relation_id: RelationId,
+        page_id: PageId,
+        slot_id: SlotId,
+        page_offset: usize,
+        data: Box<[u8]>,
+    },
+    PageHeaderWrite {
+        relation_id: RelationId,
+        page_id: PageId,
+        data: Box<[u8]>,
+    },
+    WriteSequencePage(Box<[u8]>),
+    DeleteTuple(PageId, RelationId),
 }
 
 /// Manages the directory of page files, currently one file per page.
@@ -52,18 +70,20 @@ pub enum PageStoreMutation {
 /// TODO: probably end up needing similar functionality for the implementation of the
 ///   write-ahead-log, so abstract up the notion of an io_uring+eventfd "io q" and use that
 ///   for both.
+/// TODO: we should have CRCs on the pages, and verify them on reads.  could live in the page header maybe
 
 pub struct PageStore {
     dir: PathBuf,
     next_request_id: AtomicU64,
     event_fd: Fd,
     inner: Mutex<Inner>,
-    running: Arc<Mutex<bool>>,
+    running: Arc<AtomicBool>,
+    join_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 struct Inner {
     uring: IoUring,
-    buffers: HashMap<u64, (RawFd, Box<[u8]>)>,
+    buffers: HashMap<u64, (Arc<File>, Box<[u8]>)>,
 }
 // Use libc to set up eventfd.
 fn make_eventfd() -> Fd {
@@ -74,19 +94,22 @@ fn make_eventfd() -> Fd {
     Fd(raw_fd)
 }
 
-fn event_fd_listen_thread(event_fd: &Fd, ps: Arc<PageStore>, running_flag: Arc<Mutex<bool>>) {
+fn event_fd_listen_thread(event_fd: &Fd, ps: Arc<PageStore>, running_flag: Arc<AtomicBool>) {
     info!("Listening for eventfd events for page storage");
     loop {
         {
             let rf = running_flag.clone();
-            let running = rf.lock().unwrap();
-            if !*running {
+            let running = rf.load(std::sync::atomic::Ordering::SeqCst);
+            if !running {
                 break;
             }
         }
-        let mut eventfd_v: libc::eventfd_t = 0;
-
-        let ret = unsafe { libc::eventfd_read(event_fd.0, &mut eventfd_v) };
+        let mut pollfd = libc::pollfd {
+            fd: event_fd.0,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ret = unsafe { libc::poll(&mut pollfd, 1, 100) };
 
         if ret < 0 {
             panic!("Unable to read eventfd");
@@ -108,7 +131,7 @@ impl PageStore {
         if !dir.exists() {
             std::fs::create_dir_all(&dir).unwrap();
         }
-        let uring = IoUring::new(8).unwrap();
+        let uring = IoUring::new(IO_URING_SUBMISSION_Q_SIZE).unwrap();
 
         let event_fd = make_eventfd();
 
@@ -125,7 +148,8 @@ impl PageStore {
             next_request_id: AtomicU64::new(0),
             inner: Mutex::new(inner),
             event_fd,
-            running: Arc::new(Mutex::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
+            join_handle: Mutex::new(None),
         })
     }
 
@@ -133,24 +157,32 @@ impl PageStore {
         let running_flag = self.running.clone();
 
         {
-            let mut running = running_flag.lock().unwrap();
-            *running = true;
+            running_flag
+                .as_ref()
+                .store(true, std::sync::atomic::Ordering::SeqCst);
         }
 
         // Set up polling for the eventfd.
         let ps = self.clone();
         let rf = running_flag.clone();
-        std::thread::Builder::new()
+        let jh = std::thread::Builder::new()
             .name("moor-eventfd-listen".to_string())
             .spawn(move || {
-                event_fd_listen_thread(&self.event_fd, ps, rf);
+                event_fd_listen_thread(&ps.clone().event_fd, ps.clone(), rf);
             })
             .expect("Unable to spawn eventfd listener thread");
+        self.join_handle.lock().unwrap().replace(jh);
     }
 
     pub(crate) fn stop(self: Arc<Self>) {
-        let mut running = self.running.lock().unwrap();
-        *running = false;
+        self.running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        let jh = self.join_handle.lock().unwrap().take();
+        if let Some(jh) = jh {
+            jh.join().unwrap();
+            let inner = self.inner.lock().unwrap();
+            inner.uring.submitter().unregister_eventfd().unwrap();
+        }
     }
 
     /// Blocking call to wait for all outstanding requests to complete.
@@ -158,11 +190,11 @@ impl PageStore {
         let start_time = std::time::Instant::now();
         debug!("Waiting for page storage to sync to disk");
         let mut inner = self.inner.lock().unwrap();
+
         while !inner.buffers.is_empty() {
             // If we've taken too long, just give up and return.
             if start_time.elapsed() > Duration::from_secs(5) {
-                error!("Page storage sync timed out");
-                return;
+                panic!("Page storage sync timed out");
             }
             let mut completions = vec![];
             while let Some(completion) = inner.uring.completion().next() {
@@ -174,6 +206,7 @@ impl PageStore {
             }
             yield_now();
         }
+
         debug!("Page storage synced to disk");
     }
 
@@ -251,7 +284,7 @@ impl PageStore {
             }
         };
         let len = file.read(buf.as_mut().get_mut())?;
-        assert_eq!(len, buf.as_ref().len());
+        assert!(len <= buf.as_ref().len());
         Ok(())
     }
 
@@ -261,26 +294,56 @@ impl PageStore {
         &self,
         batch: Vec<PageStoreMutation>,
     ) -> std::io::Result<()> {
-        // TODO: We prolly shouldn't submit a new batch until all the previous requests have completed.
-        self.process_completions();
+        self.wait_complete();
+
+        // Open all the pages mentioned in the batch and index them by page id so we only have one file descriptor
+        // open per page file.
+        // TODO: it's possible to preregister file descriptors with io_uring to potentially speed things up, but
+        //   I had some trixky issues with that, so for now we'll just open a new file descriptor for each batch.
+        let mut pages = HashMap::new();
+        for mutation in &batch {
+            match mutation {
+                PageStoreMutation::PageHeaderWrite {
+                    relation_id,
+                    page_id,
+                    ..
+                }
+                | PageStoreMutation::PageTupleWrite {
+                    relation_id,
+                    page_id,
+                    ..
+                } => {
+                    if pages.contains_key(page_id) {
+                        continue;
+                    }
+                    let path = self.dir.join(format!("{}_{}.page", page_id, relation_id.0));
+                    let file = OpenOptions::new()
+                        .write(true)
+                        .append(false)
+                        .create(true)
+                        .open(path)?;
+                    pages.insert(*page_id, Arc::new(file));
+                }
+                _ => continue,
+            }
+        }
 
         for mutation in batch {
             let request_id = self
                 .next_request_id
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             match mutation {
-                PageStoreMutation::SyncRelation(relation_id, page_id, data) => {
-                    let path = self.dir.join(format!("{}_{}.page", page_id, relation_id.0));
+                PageStoreMutation::PageHeaderWrite { page_id, data, .. } => {
+                    let file = pages.get(&page_id).unwrap();
                     let len = data.len();
-                    let mut options = OpenOptions::new();
-                    let file = options.write(true).append(false).create(true).open(path)?;
-                    let fd = file.into_raw_fd();
+                    let raw_fd = file.as_raw_fd();
 
                     let mut inner = self.inner.lock().unwrap();
-                    inner.buffers.insert(request_id, (fd, data));
+                    inner.buffers.insert(request_id, (file.clone(), data));
                     let data_ptr = inner.buffers.get(&request_id).unwrap().1.as_ptr();
 
-                    let write_e = opcode::Write::new(Fd(fd), data_ptr as _, len as _)
+                    // Seek to the offset and write there
+                    let write_e = opcode::Write::new(Fd(raw_fd), data_ptr as _, len as _)
                         .build()
                         .user_data(request_id)
                         .flags(Flags::IO_LINK);
@@ -292,9 +355,9 @@ impl PageStore {
                             .expect("Unable to push write to submission queue");
                     }
 
-                    // Tell the kernel to flush the file to disk after writing it, and this should be
-                    // linked to the write above.
-                    let fsync_e = opcode::Fsync::new(Fd(fd)).build().user_data(request_id);
+                    // Tell the kernel to flush the file to disk after writing out the WAL, and this should be
+                    // linked to all the other writes above.
+                    let fsync_e = opcode::Fsync::new(Fd(raw_fd)).build().user_data(request_id);
                     unsafe {
                         inner
                             .uring
@@ -303,20 +366,48 @@ impl PageStore {
                             .expect("Unable to push fsync to submission queue");
                     }
                 }
-                PageStoreMutation::SyncSequence(data) => {
+                PageStoreMutation::PageTupleWrite {
+                    page_id,
+                    page_offset,
+                    data,
+                    ..
+                } => {
+                    let file = pages.get(&page_id).unwrap();
+                    let len = data.len();
+                    let raw_fd = file.as_raw_fd();
+
+                    let mut inner = self.inner.lock().unwrap();
+                    inner.buffers.insert(request_id, (file.clone(), data));
+                    let data_ptr = inner.buffers.get(&request_id).unwrap().1.as_ptr();
+
+                    // Seek to the offset and write there
+                    let write_e = opcode::Write::new(Fd(raw_fd), data_ptr as _, len as _)
+                        .offset(page_offset as _)
+                        .build()
+                        .user_data(request_id)
+                        .flags(Flags::IO_LINK);
+                    unsafe {
+                        inner
+                            .uring
+                            .submission()
+                            .push(&write_e)
+                            .expect("Unable to push write to submission queue");
+                    }
+                }
+                PageStoreMutation::WriteSequencePage(data) => {
                     let path = self.dir.join("sequences.page");
 
                     let len = data.len();
                     let mut options = OpenOptions::new();
                     let file = options.write(true).append(false).create(true).open(path)?;
-                    let fd = file.into_raw_fd();
+                    let raw_fd = file.as_raw_fd();
 
                     let mut inner = self.inner.lock().unwrap();
 
-                    inner.buffers.insert(request_id, (fd, data));
+                    inner.buffers.insert(request_id, (Arc::new(file), data));
                     let data_ptr = inner.buffers.get(&request_id).unwrap().1.as_ptr();
 
-                    let write_e = opcode::Write::new(Fd(fd), data_ptr as _, len as _)
+                    let write_e = opcode::Write::new(Fd(raw_fd), data_ptr as _, len as _)
                         .build()
                         .user_data(request_id)
                         .flags(Flags::IO_HARDLINK);
@@ -329,7 +420,7 @@ impl PageStore {
                             .expect("Unable to push write to submission queue");
                     }
 
-                    let fsync_e = opcode::Fsync::new(Fd(fd)).build().user_data(request_id);
+                    let fsync_e = opcode::Fsync::new(Fd(raw_fd)).build().user_data(request_id);
                     unsafe {
                         inner
                             .uring
@@ -338,8 +429,9 @@ impl PageStore {
                             .expect("Unable to push fsync to submission queue");
                     }
                 }
-                PageStoreMutation::DeleteRelation(_, _) => {
-                    // TODO
+                PageStoreMutation::DeleteTuple(_, _) => {
+                    // We could zero-out this data, but it's not really necessary, the header will
+                    // be updated to indicate the slot is free.
                 }
             }
             let inner = self.inner.lock().unwrap();

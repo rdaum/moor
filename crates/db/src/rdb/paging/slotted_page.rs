@@ -361,14 +361,6 @@ impl<'a> SlottedPage<'a> {
         slots
     }
 
-    /// Copy the contents of this page into a slice.
-    pub(crate) fn save_into(&self, buf: &mut [u8]) {
-        let _ = self.read_lock();
-        let memory_as_slice =
-            unsafe { std::slice::from_raw_parts_mut(self.base_address, self.page_size as usize) };
-        buf.copy_from_slice(memory_as_slice);
-    }
-
     fn remove_slot(&self, slot_id: SlotId) -> Result<(usize, usize, bool), TupleBoxError> {
         // TODO: slots at start of content-length can be removed by shrinking the content-length
         //   portion.
@@ -567,7 +559,7 @@ impl<'a> SlottedPage<'a> {
     }
 
     /// Return the offset, size of the slot at the given index.
-    fn offset_of(&self, tid: SlotId) -> Result<(usize, usize), TupleBoxError> {
+    pub(crate) fn offset_of(&self, tid: SlotId) -> Result<(usize, usize), TupleBoxError> {
         // Check that the index is in bounds
         let num_slots = self.header().num_slots as SlotId;
         if tid >= num_slots {
@@ -716,6 +708,22 @@ impl<'a> PageReadGuard<'a> {
         let header_ptr = self.base_address as *const PageHeader;
 
         unsafe { Pin::new_unchecked(&*header_ptr) }
+    }
+
+    /// Write the header + index portion of the page into the provided buffer
+    pub(crate) fn write_header(&self, buf: &mut [u8]) {
+        let header = self.header();
+        let total_header_index_length =
+            header.index_length as usize + std::mem::size_of::<PageHeader>();
+        let header_as_slice =
+            unsafe { std::slice::from_raw_parts(self.base_address, total_header_index_length) };
+        buf.copy_from_slice(header_as_slice);
+    }
+
+    pub(crate) fn header_size(&self) -> usize {
+        let header = self.header();
+        
+        header.index_length as usize + std::mem::size_of::<PageHeader>()
     }
 
     #[inline(always)]
