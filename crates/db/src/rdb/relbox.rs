@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO(): 'join' and transitive closure on db relations
+// TODO: 'join' and transitive closure on db relations
 //   -> datalog-style variable unification
 //   can be used for some of the inheritance graph / verb & property resolution activity done manually now
 

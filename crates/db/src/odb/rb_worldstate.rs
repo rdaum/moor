@@ -109,7 +109,7 @@ impl DbTransaction for RelBoxTransaction {
     }
 
     fn get_players(&self) -> Result<ObjSet, WorldStateError> {
-        // TODO(): Improve get_players retrieval in world state
+        // TODO: Improve get_players retrieval in world state
         //   this is going to be not-at-all performant in the long run, and we'll need a way to
         //   cache this or index it better
         get_all_object_keys_matching(

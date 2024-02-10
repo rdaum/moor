@@ -187,7 +187,7 @@ fn parse_expr(
         .op(Op::infix(Rule::lor, Assoc::Left))
         // 11. Logical and.
         .op(Op::infix(Rule::land, Assoc::Left))
-        // TODO(): bitwise operators here (| 10, ^ XOR 9, & 8) if we ever get them.
+        // TODO: bitwise operators here (| 10, ^ XOR 9, & 8) if we ever get them.
         // 7
         // Equality/inequality
         .op(Op::infix(Rule::eq, Assoc::Left) | Op::infix(Rule::neq, Assoc::Left))

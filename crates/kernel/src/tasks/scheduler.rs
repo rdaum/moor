@@ -508,7 +508,7 @@ impl Scheduler {
 
         // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
         // Or tasks that need pruning.
-        // TODO(): Improve scheduler "tick" and "prune" logic.  It's a bit of a mess.
+        // TODO: Improve scheduler "tick" and "prune" logic.  It's a bit of a mess.
         //  we might be able to use a vector of delay-futures for this instead, and just poll
         //  those using some futures_util magic.
         std::thread::Builder::new()
@@ -1171,7 +1171,7 @@ impl Scheduler {
         // We reject this outright if the sender permissions are not sufficient:
         //   The either have to be the owner of the task (task.programmer == sender_permissions.task_perms)
         //   Or they have to be a wizard.
-        // TODO(): Verify kill task permissions is right
+        // TODO: Verify kill task permissions is right
         //   Will have to verify that it's enough that .player on task control can
         //   be considered "owner" of the task, or there needs to be some more
         //   elaborate consideration here?
@@ -1362,7 +1362,7 @@ impl Scheduler {
             .world_state_source()
             .expect("Unable to instantiate database");
 
-        // TODO(): support a queue-size on concurrent executing tasks and allow them to sit in an
+        // TODO: support a queue-size on concurrent executing tasks and allow them to sit in an
         //   initially suspended state without spawning a worker thread, until the queue has space.
         // Spawn the task's thread.
         let task_state_source = state_source.clone();

@@ -39,7 +39,7 @@ use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
-    // TODO(): Remove bf_noop panic
+    // TODO: Remove bf_noop panic
     //   right now we panic on unimplemented builtins, but we should just return an error and log,
     //   this was done this way to support discovering which builtins are unimplemented, but
     //   that's not really necessary anymore.
@@ -353,7 +353,7 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
-    // TODO(): Support server version flag passed down the pipe, rather than hardcoded
+    // TODO: Support server version flag passed down the pipe, rather than hardcoded
     //   This is a placeholder for now, should be set by the server on startup. But right now
     //   there isn't a good place to stash this other than WorldState. I intend on refactoring the
     //   signature for BF invocations, and when I do this, I'll get additional metadata on there.
@@ -752,7 +752,7 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    // TODO(): Return something better from bf_listeners, rather than hardcoded value
+    // TODO: Return something better from bf_listeners, rather than hardcoded value
     //   this function is hardcoded to just return {{#0, 7777, 1}}
     //   this is on account that existing cores expect this to be the case
     //   but we have no intend of supporting other network listener magic at this point

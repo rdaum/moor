@@ -678,7 +678,7 @@ mod tests {
         assert_same(&tuples, &items);
     }
 
-    // TODO(): More tests for transaction.rs and transactions generally
+    // TODO: More tests for transaction.rs and transactions generally
     //    Loom tests? Stateright tests?
     //    Test sequences & their behaviour
     //    Consistency across multiple relations

@@ -367,7 +367,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_TYPE);
     }
 
-    // TODO(): bf_verbs: fully-paren and indent options. For now we ignore these.
+    // TODO: bf_verbs: fully-paren and indent options. For now we ignore these.
 
     // Retrieve the binary for the verb.
     let verb_info = bf_args
@@ -642,7 +642,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         disassembly.push(v_string(format!("{: >3}: {}", i, v)));
     }
 
-    // TODO(): dump fork vectors in program disassembly stream
+    // TODO: dump fork vectors in program disassembly stream
 
     // Display main vector (program); opcodes are indexed by their offset
     disassembly.push(v_str("OPCODES:"));

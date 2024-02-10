@@ -113,7 +113,7 @@ mod tests {
     use crate::{Label, Name, Offset};
 
     /// Verify we don't go over our 16 byte budget for opcodes.
-    // TODO(): This is still rather bloated.
+    // TODO: This is still rather bloated.
     #[test]
     fn size_opcode() {
         use crate::opcode::Op;

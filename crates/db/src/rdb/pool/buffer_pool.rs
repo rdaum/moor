@@ -33,7 +33,7 @@ use crate::rdb::pool::size_class::SizeClass;
 use crate::rdb::pool::{Bid, PagerError};
 
 // 32k -> 1MB page sizes supported.
-// TODO(): Handle storage of big-values / big-pages / blobs
+// TODO: Handle storage of big-values / big-pages / blobs
 //       If we end up with values bigger than 1MB, they should probably be handled by "external" pages,
 //       that is, pages that are not part of the buffer pool, but are instead read directly from file
 //       references as needed, because they are likely to just thrash the crap out of the buffer pool

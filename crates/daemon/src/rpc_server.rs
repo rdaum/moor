@@ -445,7 +445,7 @@ impl RpcServer {
         args: Vec<String>,
         attach: bool,
     ) -> Result<RpcResponse, RpcRequestError> {
-        // TODO(): change result of login to return this information, rather than just Objid, so
+        // TODO: change result of login to return this information, rather than just Objid, so
         //   we're not dependent on this.
         let connect_type = if args.first() == Some(&"create".to_string()) {
             ConnectType::Created
@@ -590,7 +590,7 @@ impl RpcServer {
         };
 
         // Try to submit to do_command as a verb call first and only parse_command after that fails.
-        // TODO(): fold this functionality into Task.
+        // TODO: fold this functionality into Task.
 
         let arguments = parse_into_words(command.as_str());
         if let Ok(task_id) = self.clone().scheduler.submit_verb_task(
@@ -660,7 +660,7 @@ impl RpcServer {
             return Err(RpcRequestError::InternalError(e.to_string()));
         }
 
-        // TODO(): do we need a new response for this? Maybe just a "Thanks"?
+        // TODO: do we need a new response for this? Maybe just a "Thanks"?
         Ok(RpcResponse::InputThanks)
     }
 
@@ -994,7 +994,7 @@ impl RpcServer {
             }
         }
 
-        // TODO(): we will need to verify that the player object id inside the token is valid inside
+        // TODO: we will need to verify that the player object id inside the token is valid inside
         //   moor itself. And really only something with a WorldState can do that. So it's not
         //   enough to have validated the auth token here, we will need to pepper the scheduler/task
         //   code with checks to make sure that the player objid is valid before letting it go

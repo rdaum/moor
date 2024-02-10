@@ -31,7 +31,7 @@ use uuid::Uuid;
 ///
 /// Implementations would live in the 'server' host (e.g. websocket connections or repl loop)
 ///
-// TODO(): Fix up connected/reconnected/discconnected handling.
+// TODO: Fix up connected/reconnected/discconnected handling.
 //  Will probably deprecate MOO's concept of 'disconnected' and 'connected' players in the long
 //  run and emulate slack, discord, skype, etc which have a concept of 'presence' (online, offline,
 //  away, etc) but keep a persistent virtual history. Challenge would be around making this work

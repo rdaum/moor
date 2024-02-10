@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! TODO(): replace OkayWAL with our own WAL implementation
+//! TODO: replace OkayWAL with our own WAL implementation
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -34,7 +34,7 @@ use crate::rdb::tx::WorkingSet;
 
 use super::backing::{BackingStoreClient, WriterMessage};
 
-// TODO(): move "cold storage" functionality under the pager rather than above it.
+// TODO: move "cold storage" functionality under the pager rather than above it.
 
 /// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the rdb.
 pub struct ColdStorage {}
@@ -190,7 +190,7 @@ impl ColdStorage {
         // Where we stick all the page mutations we're going to write out.
         let mut write_batch = vec![];
 
-        // TODO(): sequences shouldn't mutate if they haven't changed during the
+        // TODO: sequences shouldn't mutate if they haven't changed during the
         //   transaction, so we need some kind of signal from above that they have
         //   changed.
 

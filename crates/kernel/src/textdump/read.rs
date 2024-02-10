@@ -182,7 +182,7 @@ impl<R: Read> TextdumpReader<R> {
                 )))
             }
         }
-        // TODO(): handle "recycled" flag in textdump loading.
+        // TODO: handle "recycled" flag in textdump loading.
         let oid_str = &ospec[1..];
         let Ok(oid) = oid_str.trim().parse() else {
             return Err(TextdumpReaderError::ParseError(format!(

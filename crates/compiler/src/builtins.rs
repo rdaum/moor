@@ -45,7 +45,7 @@ pub struct Builtin {
 }
 
 // Originally generated using ./generate_bf_list.py
-// TODO(): this list is inconsistently used, and falls out of date. It's only used for generating
+// TODO: this list is inconsistently used, and falls out of date. It's only used for generating
 //  the list of functions for the `function_info` built-in right now. It could be used for
 //  validating arguments, and could be part of the registration process for the actual builtin
 //  implementations.

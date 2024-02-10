@@ -39,7 +39,7 @@ pub struct Program {
     pub fork_vectors: Vec<Vec<Op>>,
     /// As each statement is pushed, the line number is recorded, along with its offset in the main
     /// vector.
-    /// TODO(): fork vector offsets... Have to think about that one.
+    /// TODO: fork vector offsets... Have to think about that one.
     pub line_number_spans: Vec<(usize, usize)>,
 }
 
@@ -98,7 +98,7 @@ impl Display for Program {
             writeln!(f, "V{}: {}", i, v)?;
         }
 
-        // TODO(): print fork vectors
+        // TODO: print fork vectors
 
         // Display main vector (program); opcodes are indexed by their offset
         for (i, op) in self.main_vector.iter().enumerate() {

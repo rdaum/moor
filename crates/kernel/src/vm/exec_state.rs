@@ -67,7 +67,7 @@ impl VMExecState {
             let verb_name = activation.verb_name.clone();
             let definer = activation.verb_definer();
             let player = activation.player;
-            // TODO(): Line numbers in 'callers' stack is not implemented
+            // TODO: Line numbers in 'callers' stack is not implemented
             //   Should be possible now that we have decompilation
             let line_number = 0;
             let this = activation.this;

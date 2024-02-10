@@ -76,7 +76,7 @@ impl Var {
 
     /// 1-indexed position of the first occurrence of `v` in `self`, or `E_TYPE` if `self` is not a
     /// list.
-    // TODO(): Make Var consistent on 0-indexing vs 1-indexing
+    // TODO: Make Var consistent on 0-indexing vs 1-indexing
     //   Various places have 1-indexing polluting the Var API, but in others we
     //   assume 0-indexing and adjust in the opcodes.  0 indexing should be done in Var, and opcodes and builtins
     //   should be the ones to adjust 1-indexing.

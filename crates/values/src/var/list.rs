@@ -24,7 +24,7 @@ use crate::var::{v_empty_list, Var};
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct List {
-    // TODO(): Implement our own zero-copy list type and get rid of bincoding
+    // TODO: Implement our own zero-copy list type and get rid of bincoding
     //   To support nested content, would require an offsets table at the front, etc.
     //   Take a look at how flatbufers, capnproto, and other zero-copy serialization formats do this.
     inner: Arc<Vec<Var>>,
