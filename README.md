@@ -1,55 +1,104 @@
-# 'moor'; lambdaMOO all over again.
+```
+    Multiuser,
+  Online,
+ Objects &                               [future logo here] 
+Relations
+```
 
-"Moor" is a multi-user, programmable server, coded in Rust, designed to be able to run the original LambdaMOO core as a starting point, with various improvements at the server level to provide a more modern foundation for future development.
+## What is this?
 
-LambdaMOO is a MUD -- aka a shared, multi-user, text-based virtual world -- that first opened to the public in 1990 and is still in operation.  LambdaMOO was and remains unusual in that it is a highly programmable, persistent-world MUD.  In particular, LambdaMOO provides a dynamically programmable environment ("live coding" similar to Smalltalk) that supports programming by many users.
+"_Moor_" is:
 
-Unlike many MUDs, LambdaMOO is not solely focused on role playing games, although its programmability has enabled users to develop RPGs implemented inside LambdaMOO.)
+* A system for building shared, programmable, Internet-accessible virtual _social spaces_
+* A programming and authoring _tool_ for shared environments.
+* Fully compatible with [LambdaMOO](https://en.wikipedia.org/wiki/MOO) 1.8.x
 
-Chances are if you landed here you already know all this, but I have a blurb [here](doc/lambda-background.md) briefly summarizing more about LambdaMOO and why it's interesting.
+_Moor_ provides (from the bottom layer up...)
 
-(note: "moor" name is provisional and awful, alternative suggestions accepted)
+* A fast, durable, transactional database with object and relational characteristics
+* A runtime for securely live-authoring and hosting programs and content that run persistently on that database
+* An authentication and authorization system for controlling access to said programs ("verbs") and content.
+* A programming language for building objects and verbs, along with the ability to plug in other languages / runtimes.
+* Tools and user environments for interacting with the system and writing verbs and editing content.
 
-## Project goals / status
+And it is designed to be used for:
 
-The intent here is to start out at least fully compatible with LambdaMOO 1.8.x series and to be able to read and
-execute existing cores, and the 1.0 feature release is targeting this rather ambitious but also rather restricted goal.
-(Primarily to maintain focus so I don't get distracted by the shiny things I've wanted to do for the last 30 years.)
+* Collaborative virtual environments
+* Socializing
+* Multiuser games
+* Persistent agents
+* Interactive fiction
+* Your entertainment and delight
 
-### LambdaMOO is 30+ years old, why remain compatible?
+### Background
 
-* Because it's easy to go into the weeds creating new things, and never finishing. By having a concrete goal, and something
-  to compare and test against, I may actually get somewhere.
-* Because the *actual* useful and hard parts of those old MOO-type systems was the "user-space" type pieces ("cores" like
-  LambdaCore/JHCore etc) and by making a new system run those old cores, there's more win.
-* Because LambdaMOO itself is actually a very *complicated system with a lot of moving parts*. There's a compiler,  
-  an object database, a virtual machine, a decompiler, and a network runtime all rolled into one. This, is, in some
-  way... fun.
+Launching in the early 1990s [LambdaMOO](https://en.wikipedia.org/wiki/LambdaMOO) is an online social environment, as well
+as an open source software package for building such environments for yourself.
 
-### Current status / features
+LambdaMOO -- the place -- still exists today, with an unbroken 30+ year history, and a small but dedicated community of users and
+developers continue to use it -- both [LambdaMOO the place](https://lambda.moo.mud.org/), and 
+[MOO the server software](https://github.com/wrog/lambdamoo) for other communities.
 
-* Pretty much feature complete / compatible with LambdaMOO 1.8.1 with a few caveats (see below)
-* See the current set of tracked bugs & features in the [issue tracker](https://github.com/rdaum/moor/issues).
-* Can load and run LambdaMOO 1.8.x cores.
-* Have tested against JaysHouseCore, and most of the functionality is there. Bugs are becoming increasingly rare.
-* Hosts websocket, "telnet" (classic line oriented TCP connection), and console connections. MCP clients work, with
-  remote editing, etc. support.
-* Objects are stored in a concurrent transactional object database -- isolated, consistent and happy. The architecture
-  allows for cleanly adding different storage backends for new scenarios.
-* Monitoring/metrics support via Prometheus-compatible export.
-* Separate network-host vs daemon process architecture means that upgrades/restarts can happen in-place without
-  dropping live connections.
+MOO predates "social media", predates Facebook, Twitter, MySpace, Friendster, Tumblr, GeoCities, and... everything else.
 
-Proof: here's a screenshot of the `JaysHouseCore` world running in `moor`, connected to with the classic `rmoo` Emacs client,
-editing a MOO verb in an emacs buffer with syntax highlighting:
+In fact, it predates the world-wide web itself, and offers a very different kind of interaction with the Internet, one
+that is synchronous and live, text-based, not graphical, and is based around an evolving narrative that the users themselves create.
 
-<img src="doc/screenshot-rmoo.png" alt="drawing" width="400"/>
+It is a multiuser virtual world, a MUD, a narrative "game", a chat room, a virtual environment, a social network, a programming environment,
+and a platform for collaborative fiction -- all in one.
 
-## How do I use it?
+It is a place where people can meet, talk, and build things together. And it's kind of awesome.
+
+(for a longer description, see [doc/lambda-background.md](./doc/lambda-background.md))
+
+### Back to the Future
+
+But it some senses, the actual technology did not age well at all. It lacks multimedia of any kind, its interface is
+dated, it is not very accessible to new users, and the once active community of developers and participants has
+dwindled to a small but dedicated group of enthusiasts.
+
+And the server itself is aged; it is written in C -- is single threaded, with some known architectural limitations, and
+is not very easy to extend or modify. While there are newer versions and forks (such as Stunt, ToastStunt, etc.) that
+address many of these issues, they are still based on the same original codebase and architecture -- remaining bound by
+the single-threaded, single-core model of the original.
+
+_Moor_ is an attempt to reimagine LambdaMOO for the modern world, while retaining the core concepts and ideas that made
+it so compelling in the first place. It is a ground-up rewrite (in Rust). And while it maintains full compatibility with
+existing LambdaMOO "cores" (databases, worlds), it also offers a new, more flexible and extensible architecture, and
+extensions to the runtime to make it more adaptable to modern use cases:
+
+* A web-native architecture which allows for richer clients than a standard text-based terminal, including graphical
+  clients, web clients, and mobile clients. Images, videos, emojis, rich text are all feasible, while keeping the
+  narrative metaphor and creative aspects of the system intact.
+* A multi-core, multi-threaded, runtime, with a transactional, multiversion concurrency model instead of a global
+  lock on the database, as in MOO. This allows for theoretically greater scalability.
+* A flexible, pluggable virtual machine environment which allows "verbs" to be written in alternative languages,
+  such as JavaScript or WebAssembly modules (WIP).
+
+### Why?
+
+Socializing, authoring, and creating on the Internet is in many ways broken. We want to make it better, by giving people
+tools to create their _own_ spaces, and to create their own _tools_ within those spaces.
+
+It should be fun, it should be easy, it should be accessible, it should be open, it should be collaborative, it should
+be programmable, it should be extensible, it should be secure, it should be private, it should be free.
+
+### How do I use it?
+
+The primary audience *at this time* is developers and administrators of existing MOO environments, and people who are
+interested in building new MOO environments, or people who are interested in extending this system out along the
+vision described below (under _"What's next?"_).
+
+If you're an existing MOO administrator, you can run your existing MOO database on Moor, and it should work just fine,
+with the following caveats:
+
+* No external network connection support or builtins for that. (Web front ends and alternative protocols are done
+  in the Rust server layer, not in the MOO core.)
+* No support for the extensions present in ToastStunt, Stunt, etc. (e.g. `map` type, WAIFs etc.). (Some of these may
+  come in the future. Or not.)
 
 The easiest way to get started is to run the `docker compose` setup. This will bring up a complete server with `telnet`
-and `websocket` interfaces. The server will be setup with an initial `JaysHouseCore` core import, and will be set up with
-metrics monitoring via Grafana and VictoriaMetrics.
+and `websocket` interfaces. The server will be setup with an initial `JaysHouseCore` core import.
 
 To run, take a look at the local `docker-compose.yml` file, instructions are there, but it really just amounts to:
 
@@ -57,92 +106,99 @@ To run, take a look at the local `docker-compose.yml` file, instructions are the
     docker compose up
 ```
 
-Then connect (with your favourite MUD/MOO client) to `localhost:8888` and follow the login instauctions. Classic
-clients like `TinyFugue` will work fine, and there are some newer clients like [BlightMud](https://github.com/Blightmud/Blightmud)
-that should work fine. (A partial -- and probably outdated list of clients -- can be found here: https://lisdude.com/moo/#clients)
+This setup is intended for development and testing. In particular, all binaries are compiled in (slower, fatter)  debug
+mode, and any changes to the source code will cause a rebuild of the server, and a restart of the server. This is useful
+for development, but not for production.
 
-Once you're familiar with how the docker setup works, you can get more creative.
+However, the `docker-compose.yml` file is a good starting point for understanding how to run the server in a production
+environment. The server is composed of a number of services, including the `moor-daemon` binary, and various 
+"host" services which provide the actual interfaces to the server. 
 
-Note this configuration is set up for a development -- it compiles in debug mode, and is to watch the source directory for changes,
-recompile, and redeploy as needed.
+### How is this thing put together? What even is it?
 
-An actual production deployment can be fairly easily derived from the `docker-compose.yml` file, and the provided `Dockerfile` by
-removing the `cargo watch` pieces and adding `--release` etc.
+The server is written in Rust, and is composed of a number of crates and running services. These services communicate
+with the main server process over an RPC system and message bus implemented on top of ZeroMQ.
 
-### Why would I use this instead of the original LambdaMOO server?
+For a high level architecture description plus a more detailed breakdown on how the server is put together, see the
+[ARCHITECTURE.md](./doc/ARCHITECTURE.md) document.
 
-* Because it's new and shiny and fun.
-* Because its codebase is more modern and easier to add to and maintain.
-* Because it's getting ongoing development.
-* Because it has an exciting future.
+### License?
 
-### Missing / Next steps before 1.0
+_Moor_ is licensed under the GNU Affero General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
 
-* Bugs, bugs, bugs. Collect em' all.
-* Generally, open issues / missing features can be seen here: https://github.com/rdaum/moor/issues (but there are also
-  plenty of TODOs in the code not yet captured as issues.)
-* Major missing features:
-    * Quota support.
-    * Background tasks resumption after restart (from DB and from textdump load.)
-    * Dump to a backup `textdump` format (or some stable backup format for between-version migrations.)
-* Improvements needed:
-    * Performance improvements. Especially caching at the DB layer is missing and this thing will run dog-slow
-      without it
-    * Better auth (SSO, OAuth2, etc?). Better crypt/password support.
+Why the GPL?
 
-### Unsupported features that might not get supported
+_But "The GPL isn't very popular these days", "my employer forbids me to contribute to GPL projects" ..._ 
 
-* `encode_binary` & `decode_binary`:  These two functions allow for escaped binary
-  sequences along with a network option for sending them, etc.
-  But:
-    * `moor`'s strings are utf8 so arbitrary byte sequences aren't going to cut it and
-    * we're on a websocket, and have better ways of doing binary than encoding it into the
-      output.
-    * The alternative will be to provide a `binary` type that can be used for this purpose
-      and to have special `notify` calls for emitting them to the client.
-* MOO-programmable network connections, outbound and inbound (e.g. `open_network_connection`, `listen`,  
-  `unlisten` etc). My intent is for the network service layer to be implemented at the Rust level, in the
-  server daemon, not in MOO code.
+- LambdaMOO itself is licensed under the GPL (version 2). And while the question of whether Moor is a derived work of
+  it is a matter of debate (I did read its source code while developing), I see it as _ethical_ to keep the same license.
+- The GPL encourages sharing of upstream work and collaboration, and that's what we want to do.
+- I don't get paid to work on this, and while it's unlikely, I don't want to see it turned into a proprietary product
+  that I can't use or contribute to. I want to see it used and improved by as many people as possible.
 
-### But then...
+### Who made this?
 
-The following are targeted as eventual goals / additions once 1.0 (fall 2023) is out the door:
+Most of the work on this has been done by myself, Ryan Daum <ryan.daum@gmail.com>. Large chunks of the decompiler, and
+various other pieces of code including code cleanliness and testing contributions, were done  by Norman Nunley.
 
-* A richer front-end experience. Support for websockets as a connection method means that the server can provide
-  a richer narrative stream to browsers (with in-core support assistance.) A client which provides a full proper
-  UI experience with interactive UI components, graphical elements, and so on are the end-goal here.
-* Support for multiple programming language for programming MOO verbs/objects. The backend has been written such that
-  this is feasible. Authoring verbs in JavaScript/TypeScript will be the first target, and WebAssembly modules are
-  also a possibility. These verbs would still run within the same shared environment and use the same shared object
-  environment, but would allow for a more modern programming experience.
-* A more scalable server architecture; the system right now is divided into separate "host" frontends for network  
-  connections, and a common backend `daemon` which manages the database, virtual machine, and task scheduler. This
-  can be further split up to permit a distributed database backend or distributing other components, to meet higher
-  scalability goals if that is needed.
-* Enhancements to the MOO data model and language, to support a richer / smoother authoring experience. Some ideas
-  are:
-    * Datalog-style relations / predicates; for managing logical relationships between entities. This could allow
-      bidirectional (or more) relationships like already exist with e.g. `location`/`contents`, but more generalized,
-      and to allow for making complex worlds easier to maintain.
-    * Adding a map/dictionary type. MOO predates the existence of dictionary types as a standard type in most languages.  
-      MOO's type system only has lists and uses "associative lists" for maps, which are a bit awkward. Immutable/CoW
-      maps with an explicit syntax would be a nice addition. Other MOO offshoots (Stunt, etc.) do already provided this.
-    * Adding a `binary` type. MOO's type system is very string-oriented, and there's not an elegant way to represent
-      arbitrary binary data. (There's `encode_binary` and `decode_binary` builtins, but these are not the way I'd do it
-      today.)
-    * and so on
+And there's been plenty of inspiration and help from a community of fellow old-school MOO 
+(and [ColdMUD](https://muds.fandom.com/wiki/ColdMUD)!) folks that I've known since the 90s. 
 
-## License.
+Finally, LambdaMOO _itself_ was primarily authored by Pavel Curtis, with the original LambdaMOO server being written by 
+Stephen White. Successive versions and forks have been maintained by a number of people.
 
-Currently licensed under the GPL v3.0 license. See the `LICENSE` file for details.
+### What's done?
 
-## Contribute and help!
+At this point `Moor` is capable of executing the full LambdaMOO 1.8.x language, and is capable of running existing
+LambdaMOO databases. With some caveats:
 
-Contributions are welcome and encouraged.
+* Persistent tasks are not yet implemented.
+* Outbound network connections are not supported.
+* Extensions present in ToastStunt, Stunt, etc. including map types, WAIFs, etc. are not supported.
 
-Right now the best way to contribute is to run the system and report bugs, or to try to run your own LambdaMOO core
-and report bugs. (Or to fix bugs and submit PRs!)
+For a list of the status of the implementation of standard LambdaMOO builtin functions, see
+[builtin_functions_status.md](./doc/builtin_functions_status.md). 
 
-## Enjoy.
+### What's next?
 
-Ryan (ryan.daum @ gmail.com)
+There's a lot of work to do. We're looking for contributors, testers, and users. We're also looking for feedback, ideas, and use cases.
+
+We're also looking for funding, and for partners who want to build things on top of Moor.
+
+The immediate horizon is to get the initial release out, which will be a drop-in replacement for LambdaMOO, with
+some additional features. This will include a web-based client. To get there the following is still required
+
+* Robustness and stability work.
+* .... In particular around the custom in-memory database. This needs a lot of testing
+  both in correctness and performance
+* Correctness testing using tools like Jepsen and Stateright to prove out the transactional model & scheduler
+* Performance testing to ensure that the system can handle a large number of users and objects.
+* Support for persistent tasks
+* And maybe outbound network connections, but that's a _maybe_.
+
+The intent is to get to a 1.0 release after these are done. This 1.0 release will be fully compatible with existing
+LambdaMOO databases, and will be a drop-in replacement for LambdaMOO.
+
+The roadmap for **future** *features* after the initial 1.0 release include:
+
+* A more modern, web-based client. The start of this has been sketched out in the `web` host repository, but
+  it's still very early. The intent is to provide a more modern, graphical, and interactive experience, while
+  still retaining the narrative and creative aspects of a MOO. It will additionally provide modern authoring
+  tools like a syntax highlighting, auto-indenting editor, a Smalltalk-style object browser, and a debugger.
+  Some work on this has already been done.
+* Support for alternative languages and runtimes for verbs. The initial plan is to support JavaScript as a verb
+  authoring language in addition to MOO. Verbs written in other languages will have access to the same object
+  environment as MOO verbs, and will be able to call MOO verbs and be called by MOO verbs. Lua, and WebAssembly
+  are also potential candidates for the future.
+* Support for a richer data model which includes aspects of a logic programming language model. Programmers / authors
+  will be able to declare first class relations between objects, and query them. The idea here is to take the
+  grunt work out of building complex, multi-user, social systems, and to make it easier to build things that have
+  complicated interactive behaviors.
+* Support for multimedia content, including images, videos, and audio. This will be done in a way that is consistent
+  with the narrative metaphor of the system, and will be programmable and extensible.
+* A better permissions model, including support for more fine-grained access control, and a more modern, user-friendly
+  interface for managing permissions. MOO-style fixed, knowable object numbers (`#123` style) will be replaced or
+  subsumed by object-capability references. The challenge being to maintain backwards compatibility with existing
+  cores.
+
+  
