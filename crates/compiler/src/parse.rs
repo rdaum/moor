@@ -291,7 +291,7 @@ fn parse_expr(
                 let expr = parse_expr(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(expr)
             }
-            _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
+            _ => TODO!("Unimplemented primary: {:?}", primary.as_rule()),
         })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
             Rule::add => Ok(Expr::Binary(
@@ -362,7 +362,7 @@ fn parse_expr(
                 Box::new(lhs?),
                 Box::new(rhs.unwrap()),
             )),
-            _ => todo!("Unimplemented infix: {:?}", op.as_rule()),
+            _ => TODO!("Unimplemented infix: {:?}", op.as_rule()),
         })
         .map_prefix(|op, rhs| match op.as_rule() {
             Rule::scatter_assign => {
@@ -412,7 +412,7 @@ fn parse_expr(
             }
             Rule::not => Ok(Expr::Unary(UnaryOp::Not, Box::new(rhs?))),
             Rule::neg => Ok(Expr::Unary(UnaryOp::Neg, Box::new(rhs?))),
-            _ => todo!("Unimplemented prefix: {:?}", op.as_rule()),
+            _ => TODO!("Unimplemented prefix: {:?}", op.as_rule()),
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             Rule::verb_call => {
@@ -486,7 +486,7 @@ fn parse_expr(
                     alternative: Box::new(false_expr),
                 })
             }
-            _ => todo!("Unimplemented postfix: {:?}", op.as_rule()),
+            _ => TODO!("Unimplemented postfix: {:?}", op.as_rule()),
         })
         .parse(pairs);
 }
