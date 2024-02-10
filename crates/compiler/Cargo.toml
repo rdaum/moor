@@ -1,6 +1,7 @@
 [package]
 name = "moor-compiler"
 version = "0.1.0"
+description = "Functions and structures for compilation and decompilation of MOO source, including opcode declarations and builtin declarations"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

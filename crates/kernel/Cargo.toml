@@ -1,6 +1,7 @@
 [package]
 name = "moor-kernel"
 version = "0.1.0"
+description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

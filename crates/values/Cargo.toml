@@ -1,6 +1,7 @@
 [package]
 name = "moor-values"
 version = "0.1.0"
+description = "The set of values, and model/entities used across the system"
 edition.workspace = true
 repository.workspace = true
 license.workspace = true

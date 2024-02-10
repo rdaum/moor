@@ -1,6 +1,7 @@
 [package]
 name = "moor-telnet-host"
 version = "0.1.0"
+description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a moor daemon."
 edition.workspace = true
 repository.workspace = true
 license.workspace = true

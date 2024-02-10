@@ -1,6 +1,7 @@
 [package]
 name = "rpc-common"
 version = "0.1.0"
+description = "Common entities used for 0MQ based RPC communication with the daemon."
 edition.workspace = true
 repository.workspace = true
 license.workspace = true

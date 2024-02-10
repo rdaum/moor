@@ -1,6 +1,7 @@
 [package]
 name = "rpc-async-client"
 version = "0.1.0"
+description = "Utilities for connection to the 0MQ RPC server via tokio/async calls"
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true

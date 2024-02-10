@@ -1,6 +1,7 @@
 [package]
 name = "moor-console-host"
 version = "0.1.0"
+description = "A tool to connect to a local or remote moor daemon and interact with it via the TTY."
 edition.workspace = true
 repository.workspace = true
 license.workspace = true

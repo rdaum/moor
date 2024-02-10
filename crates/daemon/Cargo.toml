@@ -1,6 +1,7 @@
 [package]
 name = "moor-daemon"
 version = "0.1.0"
+description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
