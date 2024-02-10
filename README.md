@@ -1,13 +1,19 @@
-```
-    Multiuser,
-  Online,
- Objects &                               [future logo here] 
-Relations
-```
+<div style="display: flex; justify-content: flex-start;">
+  <div style="width: 200px; background-color: #f0f0f0; padding: 10px; margin: 10px; border-radius: 10px;">
+    <p style="font-size: 1.5em; margin: 0; padding: 0; font-family: 'Fantasque Sans Mono'">
+      <b>M</b>ultiuser<br/>
+      &nbsp;<b>O</b>nline<br/>
+      &nbsp;&nbsp;<b>O</b>bjects &<br/> 
+      &nbsp;&nbsp;&nbsp;<b>R</b>elations
+    </p> 
+  </div>
+  <img src="doc/logo.jpg" width="200px" />
+</div>
+
 
 ## What is this?
 
-"_Moor_" is:
+"**_Moor_**" is:
 
 * A system for building shared, programmable, Internet-accessible virtual _social spaces_
 * A programming and authoring _tool_ for shared environments.
@@ -49,6 +55,7 @@ and a platform for collaborative fiction -- all in one.
 
 It is a place where people can meet, talk, and build things together. And it's kind of awesome.
 
+![LambdaMOO screenshot](./doc/lambda-session.png)
 (for a longer description, see [doc/lambda-background.md](./doc/lambda-background.md))
 
 ### Back to the Future
@@ -159,6 +166,8 @@ LambdaMOO databases. With some caveats:
 For a list of the status of the implementation of standard LambdaMOO builtin functions, see
 [builtin_functions_status.md](./doc/builtin_functions_status.md). 
 
+![Moore screenshot](./doc/moor-session.png)
+
 ### What's next?
 
 There's a lot of work to do. We're looking for contributors, testers, and users. We're also looking for feedback, ideas, and use cases.
@@ -186,6 +195,7 @@ The roadmap for **future** *features* after the initial 1.0 release include:
   still retaining the narrative and creative aspects of a MOO. It will additionally provide modern authoring
   tools like a syntax highlighting, auto-indenting editor, a Smalltalk-style object browser, and a debugger.
   Some work on this has already been done.
+  ![Example browser screenshot](./doc/browser-screenshot.png)
 * Support for alternative languages and runtimes for verbs. The initial plan is to support JavaScript as a verb
   authoring language in addition to MOO. Verbs written in other languages will have access to the same object
   environment as MOO verbs, and will be able to call MOO verbs and be called by MOO verbs. Lua, and WebAssembly
