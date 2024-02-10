@@ -124,7 +124,7 @@ For a high level architecture description plus a more detailed breakdown on how 
 
 ### License?
 
-_Moor_ is licensed under the GNU Affero General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
+_Moor_ is licensed under the GNU General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
 
 Why the GPL?
 
