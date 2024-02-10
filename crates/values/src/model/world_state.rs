@@ -83,7 +83,6 @@ pub trait WorldState {
     fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError>;
 
     /// Return the highest used object # in the system.
-    // TODO(rdaum): long run want to get rid of this, and deprecate the built-in.
     fn max_object(&self, perms: Objid) -> Result<Objid, WorldStateError>;
 
     /// Move an object to a new location.

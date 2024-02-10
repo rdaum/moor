@@ -149,7 +149,8 @@ pub struct NarrativeEvent {
 pub enum Event {
     /// The typical "something happened" descriptive event.
     TextNotify(String),
-    // TODO(rdaum): other events that might happen here would be things like (local) "object moved" or "object
+    // TODO(rdaum): Other Event types on Session stream
+    //   other events that might happen here would be things like (local) "object moved" or "object
     //   created."
 }
 

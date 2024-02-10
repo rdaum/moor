@@ -318,12 +318,12 @@ impl VM {
                     f.push(v_err(*val));
                 }
                 Op::Imm(slot) => {
-                    // TODO(rdaum): it's questionable whether this optimization actually will be of much use
-                    //   on a modern CPU as it could cause branch prediction misses. We should
-                    //   benchmark this. its purpose is to avoid pointless stack ops for literals
-                    //   that are never used (e.g. comments).
-                    //   what might be better is an "optimization pass" that removes these prior to
-                    //   execution, but then we'd have to cache them, etc. etc.
+                    // it's questionable whether this optimization actually will be of much use
+                    // on a modern CPU as it could cause branch prediction misses. We should
+                    // benchmark this. its purpose is to avoid pointless stack ops for literals
+                    // that are never used (e.g. comments).
+                    // what might be better is an "optimization pass" that removes these prior to
+                    // execution, but then we'd have to cache them, etc. etc.
                     match f.lookahead() {
                         Some(Op::Pop) => {
                             // skip
@@ -344,7 +344,7 @@ impl VM {
                         return self.push_error(state, E_TYPE);
                     };
 
-                    // TODO(rdaum): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
+                    // TODO(rdaum): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
                     let result = list.push(tail);
                     f.poke(0, result);
                 }
@@ -363,7 +363,6 @@ impl VM {
                         return self.push_error(state, E_TYPE);
                     };
 
-                    // TODO(rdaum): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
                     let new_list = list.append(tail);
                     f.poke(0, new_list);
                 }
