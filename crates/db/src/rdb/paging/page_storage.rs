@@ -12,7 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO(rdaum): there's no way this is "robust" enough to be used in production
+// TODO(rdaum): Robustness testing and proofing for page storage and WAL.
+//   A battery of tests is going to be needed on this, to verify the ACIDity.
 
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};

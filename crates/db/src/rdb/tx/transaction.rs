@@ -678,8 +678,9 @@ mod tests {
         assert_same(&tuples, &items);
     }
 
-    // TODO(rdaum): Loom tests? Stateright tests?
-    // TODO(rdaum): Test sequences
-    // TODO(rdaum): Consistency across multiple relations
-    // TODO(rdaum): Index consistency, secondary index consistency
+    // TODO(rdaum): More tests for transaction.rs and transactions generally
+    //    Loom tests? Stateright tests?
+    //    Test sequences & their behaviour
+    //    Consistency across multiple relations
+    //    Index consistency, secondary index consistency
 }

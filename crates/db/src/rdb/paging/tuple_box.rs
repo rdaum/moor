@@ -196,7 +196,8 @@ impl TupleBox {
 }
 
 struct Inner {
-    // TODO(rdaum): buffer pool has its own locks per size class, so we might not need this inside another lock
+    // TODO(rdaum): Consolidate page allocation vs buffer locking
+    //   buffer pool has its own locks per size class, so we might not need this inside another lock
     //   *but* the other two items here are not thread-safe, and we need to maintain consistency across the three.
     //   so we can maybe get rid of the locks in the buffer pool...
     pager: Arc<Pager>,
@@ -205,8 +206,6 @@ struct Inner {
     /// The "swizzelable" references to tuples, indexed by tuple id.
     /// There has to be a stable-memory address for each of these, as they are referenced by
     /// pointers in the TupleRefs themselves.
-    // TODO(rdaum): This needs to be broken down by page id, too, so that we can manage swap-in/swap-out at
-    //   the page granularity.
     tuple_ptrs: HashMap<TupleId, Pin<Box<TuplePtr>>>,
 }
 

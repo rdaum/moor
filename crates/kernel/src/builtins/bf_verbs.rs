@@ -367,7 +367,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_TYPE);
     }
 
-    // TODO(rdaum): fully-paren and indent options. For now we ignore these.
+    // TODO(rdaum): bf_verbs: fully-paren and indent options. For now we ignore these.
 
     // Retrieve the binary for the verb.
     let verb_info = bf_args
