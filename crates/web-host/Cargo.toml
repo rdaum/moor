@@ -9,8 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 moor-values = { path = "../values" }
-rpc-common = { path = "../rpc-common" }
 rpc-async-client = { path = "../rpc-async-client" }
+rpc-common = { path = "../rpc-common" }
 
 ## Command line arguments parsing.
 clap.workspace = true
@@ -18,12 +18,10 @@ clap_derive.workspace = true
 strum.workspace = true
 
 # General.
-eyre.workspace = true
-color-eyre.workspace = true
-async-trait.workspace = true
 bincode.workspace = true
+color-eyre.workspace = true
+eyre.workspace = true
 futures-util.workspace = true
-futures.workspace = true
 thiserror.workspace = true
 
 ## Asynchronous transaction processing & networking
@@ -31,12 +29,10 @@ tokio-util.workspace = true
 tokio.workspace = true
 
 ## Logging & tracing
-tracing-chrome.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
 
 ## ZMQ / RPC
-itertools.workspace = true
 tmq.workspace = true
 uuid.workspace = true
 

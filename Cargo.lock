@@ -39,21 +39,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloc-no-stdlib"
-version = "2.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
-
-[[package]]
-name = "alloc-stdlib"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94fb8275041c72129eb51b7d0322c29b8387a0386127718b096429201a5d6ece"
-dependencies = [
- "alloc-no-stdlib",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -142,22 +127,6 @@ name = "arc-swap"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bddcadddf5e9015d310179a59bb28c4d4b9920ad0f11e8e14dbadf654890c9a6"
-
-[[package]]
-name = "async-compression"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a116f46a969224200a0a97f29cfd4c50e7534e4b4826bd23ea2c3c533039c82c"
-dependencies = [
- "brotli",
- "flate2",
- "futures-core",
- "memchr",
- "pin-project-lite",
- "tokio",
- "zstd",
- "zstd-safe",
-]
 
 [[package]]
 name = "async-trait"
@@ -387,27 +356,6 @@ dependencies = [
  "byteorder",
  "cipher 0.2.5",
  "opaque-debug",
-]
-
-[[package]]
-name = "brotli"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "516074a47ef4bce09577a3b379392300159ce5b1ba2e501ff1c819950066100f"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
- "brotli-decompressor",
-]
-
-[[package]]
-name = "brotli-decompressor"
-version = "2.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e2e4afe60d7dd600fdd3de8d0f08c2b7ec039712e3b6137ff98b7004e82de4f"
-dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
 ]
 
 [[package]]
@@ -667,15 +615,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8f48d60e5b4d2c53d5c2b1d8a58c849a70ae5e5509b08a48d047e3b65714a74"
 dependencies = [
  "rustc_version",
-]
-
-[[package]]
-name = "crc32fast"
-version = "1.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
-dependencies = [
- "cfg-if",
 ]
 
 [[package]]
@@ -1018,12 +957,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fast-counter"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bf000f5d36bbfe94dd055f7fc5ec15e67cc674fd867a109b1c56577c37d8234"
-
-[[package]]
 name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1045,16 +978,6 @@ name = "fiat-crypto"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27573eac26f4dd11e2b1916c3fe1baa56407c83c71a773a8ba17ec0bca03b6b7"
-
-[[package]]
-name = "flate2"
-version = "1.0.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46303f565772937ffe1d394a4fac6f411c6013172fadde9dcdb1e147a086940e"
-dependencies = [
- "crc32fast",
- "miniz_oxide",
-]
 
 [[package]]
 name = "flume"
@@ -1682,22 +1605,16 @@ dependencies = [
 name = "moor-console-host"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bincode",
  "clap",
  "clap_derive",
  "color-eyre",
  "eyre",
- "futures",
- "futures-util",
- "itertools 0.12.1",
  "moor-values",
  "rpc-common",
  "rpc-sync-client",
  "rustyline",
- "strum",
  "tracing",
- "tracing-chrome",
  "tracing-subscriber",
  "uuid",
  "zmq",
@@ -1708,15 +1625,11 @@ name = "moor-daemon"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "chrono",
  "clap",
  "clap_derive",
  "color-eyre",
  "ed25519-dalek",
  "eyre",
- "futures",
- "futures-util",
- "itertools 0.12.1",
  "moor-db",
  "moor-kernel",
  "moor-values",
@@ -1727,9 +1640,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
- "tower-http",
  "tracing",
- "tracing-chrome",
  "tracing-subscriber",
  "uuid",
  "zmq",
@@ -1744,16 +1655,13 @@ dependencies = [
  "binary-layout",
  "bincode",
  "criterion",
- "fast-counter",
  "hi_sparse_bitset",
  "human_bytes",
  "im",
  "io-uring",
  "kanal",
- "lazy_static",
  "libc",
  "moor-values",
- "num-traits",
  "okaywal",
  "rand",
  "serde",
@@ -1771,7 +1679,6 @@ name = "moor-kernel"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "bytes",
  "chrono",
  "chrono-tz",
  "criterion",
@@ -1779,7 +1686,6 @@ dependencies = [
  "decorum",
  "iana-time-zone",
  "inventory",
- "itertools 0.12.1",
  "kanal",
  "lazy_static",
  "libc",
@@ -1808,7 +1714,6 @@ dependencies = [
 name = "moor-telnet-host"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bincode",
  "clap",
  "clap_derive",
@@ -1816,7 +1721,6 @@ dependencies = [
  "eyre",
  "futures",
  "futures-util",
- "itertools 0.12.1",
  "moor-values",
  "rpc-async-client",
  "rpc-common",
@@ -1824,9 +1728,7 @@ dependencies = [
  "tmq",
  "tokio",
  "tokio-util",
- "tower-http",
  "tracing",
- "tracing-chrome",
  "tracing-subscriber",
  "uuid",
 ]
@@ -1835,7 +1737,6 @@ dependencies = [
 name = "moor-values"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "binary-layout",
  "bincode",
  "bytes",
@@ -1855,7 +1756,6 @@ dependencies = [
 name = "moor-web-host"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
  "axum-extra",
  "bincode",
@@ -1863,9 +1763,7 @@ dependencies = [
  "clap_derive",
  "color-eyre",
  "eyre",
- "futures",
  "futures-util",
- "itertools 0.12.1",
  "moor-values",
  "rpc-async-client",
  "rpc-common",
@@ -1878,7 +1776,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-chrome",
  "tracing-subscriber",
  "uuid",
 ]
@@ -2462,7 +2359,6 @@ name = "rpc-sync-client"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "futures-util",
  "rpc-common",
  "thiserror",
  "tracing",
@@ -3158,29 +3054,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tower-http"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0da193277a4e2c33e59e09b5861580c33dd0a637c3883d0fa74ba40c0374af2e"
-dependencies = [
- "async-compression",
- "base64 0.21.7",
- "bitflags 2.4.2",
- "bytes",
- "futures-core",
- "http",
- "http-body",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "tokio",
- "tokio-util",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
 name = "tower-layer"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3213,17 +3086,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
-]
-
-[[package]]
-name = "tracing-chrome"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "496b3cd5447f7ff527bbbf19b071ad542a000adf297d4127078b4dfdb931f41a"
-dependencies = [
- "serde_json",
- "tracing-core",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3881,32 +3743,4 @@ dependencies = [
  "libc",
  "system-deps",
  "zeromq-src",
-]
-
-[[package]]
-name = "zstd"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bffb3309596d527cfcba7dfc6ed6052f1d39dfbd7c867aa2e865e4a449c10110"
-dependencies = [
- "zstd-safe",
-]
-
-[[package]]
-name = "zstd-safe"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43747c7422e2924c11144d5229878b98180ef8b06cca4ab5af37afc8a8d8ea3e"
-dependencies = [
- "zstd-sys",
-]
-
-[[package]]
-name = "zstd-sys"
-version = "2.0.9+zstd.1.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e16efa8a874a0481a574084d34cc26fdb3b99627480f785888deb6386506656"
-dependencies = [
- "cc",
- "pkg-config",
 ]

@@ -19,21 +19,15 @@ clap_derive.workspace = true
 strum.workspace = true
 
 # General.
-eyre.workspace = true
-color-eyre.workspace = true
 bincode.workspace = true
-futures-util.workspace = true
-futures.workspace = true
-tower-http.workspace = true
+color-eyre.workspace = true
+eyre.workspace = true
 
 ## Logging & tracing
-tracing-chrome.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
 
 ## RPC daemon support
-chrono.workspace = true
-itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

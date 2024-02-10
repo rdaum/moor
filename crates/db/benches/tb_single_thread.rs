@@ -17,15 +17,18 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use moor_db::rdb::{RelBox, RelationInfo};
-use moor_db::testing::jepsen::{History, Type, Value};
 use moor_values::util::SliceRef;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // This is a struct that tells Criterion.rs to use the "futures" crate's current-thread executor
+use crate::support::{History, Type, Value};
 use moor_db::rdb::RelationId;
 use moor_values::util::{BitArray, Bitset64};
+
+#[path = "../tests/test-support.rs"]
+mod support;
 
 /// Build a test database with a bunch of relations
 fn test_db() -> Arc<RelBox> {

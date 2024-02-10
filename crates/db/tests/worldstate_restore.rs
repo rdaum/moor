@@ -12,11 +12,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#[path = "./test-support.rs"]
+mod support;
+
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use strum::{EnumCount, IntoEnumIterator};
+
     use moor_db::db_tx::DbTransaction;
-    use moor_db::odb::RelBoxTransaction;
-    use moor_db::odb::{WorldStateRelation, WorldStateSequences};
+    use moor_db::odb::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
     use moor_db::rdb::{RelBox, RelationInfo};
     use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
@@ -25,10 +32,6 @@ mod test {
     use moor_values::model::VerbArgsSpec;
     use moor_values::util::BitEnum;
     use moor_values::NOTHING;
-    use std::path::PathBuf;
-    use std::sync::Arc;
-    use std::time::Duration;
-    use strum::{EnumCount, IntoEnumIterator};
 
     pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()

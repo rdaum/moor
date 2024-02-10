@@ -14,6 +14,7 @@ pretty_assertions.workspace = true
 tempfile.workspace = true
 test-case.workspace = true
 text-diff.workspace = true
+tracing-test.workspace = true
 unindent.workspace = true
 
 [[test]]
@@ -32,11 +33,9 @@ moor-db = { path = "../db" }
 moor-values = { path = "../values" }
 
 ## General usefullness
-bytes.workspace = true
 chrono.workspace = true
 dashmap.workspace = true
 decorum.workspace = true
-itertools.workspace = true
 kanal.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
@@ -59,7 +58,6 @@ thiserror.workspace = true
 paste.workspace = true
 
 ## Logging & tracing
-tracing-test.workspace = true
 tracing.workspace = true
 
 # For the DB layer.

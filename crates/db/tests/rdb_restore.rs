@@ -11,6 +11,8 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
+#[path = "./test-support.rs"]
+mod support;
 
 #[cfg(test)]
 mod test {
@@ -20,9 +22,9 @@ mod test {
     use std::sync::Arc;
     use tracing_test::traced_test;
 
+    use crate::support::{History, Type, Value};
     use moor_db::rdb::{RelBox, RelationInfo};
     use moor_db::rdb::{RelationId, Transaction};
-    use moor_db::testing::jepsen::{History, Type, Value};
     use moor_values::util::SliceRef;
 
     fn from_val(value: i64) -> SliceRef {

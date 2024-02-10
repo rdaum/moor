@@ -15,25 +15,19 @@ rpc-sync-client = { path = "../rpc-sync-client" }
 ## Command line arguments parsing.
 clap.workspace = true
 clap_derive.workspace = true
-strum.workspace = true
 
 # General.
-eyre.workspace = true
-color-eyre.workspace = true
-async-trait.workspace = true
 bincode.workspace = true
-futures-util.workspace = true
-futures.workspace = true
+color-eyre.workspace = true
+eyre.workspace = true
 
 ## Logging & tracing
-tracing-chrome.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
 
 ## ZMQ / RPC
-itertools.workspace = true
-zmq.workspace = true
 uuid.workspace = true
+zmq.workspace = true
 
 ## For console
 rustyline.workspace = true

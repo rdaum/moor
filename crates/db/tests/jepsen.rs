@@ -11,27 +11,8 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
-
-pub mod support {
-    use moor_db::rdb::{RelBox, RelationInfo};
-    use std::path::PathBuf;
-    use std::sync::Arc;
-
-    /// Build a test database with a bunch of relations
-    pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
-        // Generate 10 test relations that we'll use for testing.
-        let relations = (0..100)
-            .map(|i| RelationInfo {
-                name: format!("relation_{}", i),
-                domain_type_id: 0,
-                codomain_type_id: 0,
-                secondary_indexed: false,
-            })
-            .collect::<Vec<_>>();
-
-        RelBox::new(1 << 24, Some(dir), &relations, 0)
-    }
-}
+#[path = "./test-support.rs"]
+mod support;
 
 #[cfg(test)]
 mod tests {
@@ -42,8 +23,8 @@ mod tests {
 
     use moor_db::rdb::RelBox;
     use moor_db::rdb::{RelationId, Transaction};
-    use moor_db::testing::jepsen::{History, Type, Value};
 
+    use crate::support::{History, Type, Value};
     use moor_values::util::SliceRef;
 
     use super::*;
@@ -80,7 +61,7 @@ mod tests {
                 expected.iter().all(|v| got.contains(v)),
                 "T{} at {}, r {} expected {:?} but got {:?}",
                 process,
-                action_type.to_keyword(),
+                action_type.as_keyword(),
                 relation.0,
                 values,
                 got
@@ -112,7 +93,7 @@ mod tests {
                         expect_val,
                         "T{} at {}, expected {} to be {} after its insert",
                         process,
-                        action_type.to_keyword(),
+                        action_type.as_keyword(),
                         register,
                         expect_val
                     );

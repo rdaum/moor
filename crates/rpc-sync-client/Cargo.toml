@@ -12,8 +12,7 @@ rust-version.workspace = true
 rpc-common = { path = "../rpc-common" }
 
 bincode.workspace = true
-futures-util.workspace = true
 thiserror.workspace = true
-zmq.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+zmq.workspace = true

@@ -28,9 +28,6 @@ pub mod loader;
 pub mod rdb;
 
 pub mod odb;
-#[doc(hidden)]
-pub mod testing;
-
 pub mod util;
 
 pub struct DatabaseBuilder {

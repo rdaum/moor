@@ -8,9 +8,10 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dev-dependencies]
-test-case.workspace = true
-unindent.workspace = true
 pretty_assertions.workspace = true
+test-case.workspace = true
+tracing-test.workspace = true
+unindent.workspace = true
 
 [dependencies]
 
@@ -31,6 +32,5 @@ pest_derive.workspace = true
 thiserror.workspace = true
 
 ## Logging & tracing
-tracing-test.workspace = true
 tracing.workspace = true
 
