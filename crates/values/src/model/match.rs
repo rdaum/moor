@@ -62,7 +62,7 @@ impl ArgSpec {
 /// The set of prepositions that are valid for verbs, corresponding to the set of string constants
 /// in `PREP_LIST`, and for now at least much 1:1 with `LambdaMOO`'s built-in prepositions, and
 /// are referred to in the database.
-/// TODO(rdaum): Refactor/rethink preposition list/enum.
+/// TODO(): Refactor/rethink preposition list/enum.
 ///   Long run a proper table with some sort of dynamic look up and a way to add new ones and
 ///   internationalize and so on.
 #[repr(u16)]

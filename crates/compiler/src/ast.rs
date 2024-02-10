@@ -188,7 +188,7 @@ pub struct Stmt {
     /// Note that this is not necessarily the same as the line number that will be reported into
     /// codegen, and may not correspond to what shows as a result of `unparse`; that line number
     /// is derived from the AST, not the parser.
-    /// TODO(rdaum): I may or may not keep this field around.
+    /// TODO(): I may or may not keep this field around.
     pub parser_line_no: usize,
     /// This line number is generated during a second pass over the tree, and is used to generate
     /// the line number spans in the bytecode.

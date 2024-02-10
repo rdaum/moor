@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO(rdaum): MOO syntax highlighting format validation
+// TODO(): MOO syntax highlighting format validation
 //   what exists in editor.js is just a first crack at this, it's by no means complete.
 const MooSyntax= {
     // Set defaultToken to invalid to see what you do not tokenize yet
@@ -131,7 +131,7 @@ const MooSyntax= {
 
 };
 
-// TODO(rdaum): editor.js: completion provider which works to lookup verbs / props for constant $references and #object_ids
+// TODO(): editor.js: completion provider which works to lookup verbs / props for constant $references and #object_ids
 
 function createEditor(editor_element) {
     editor_element.innerHTML = "";

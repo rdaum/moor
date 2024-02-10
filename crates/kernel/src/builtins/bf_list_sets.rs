@@ -301,7 +301,7 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Er
         false
     };
 
-    // TODO(rdaum): Regex pattern cache?
+    // TODO(): Regex pattern cache?
     let Some((overall, match_vec)) =
         perform_regex_match(pattern.as_str(), subject.as_str(), case_matters, reverse)?
     else {

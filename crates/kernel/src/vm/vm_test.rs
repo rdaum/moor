@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_regression_catch_issue_23() {
-        // https://github.com/rdaum/moor/issues/23
+        // https://github.com//moor/issues/23
         let program =
             r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#;
         let mut state = world_with_test_program(program);

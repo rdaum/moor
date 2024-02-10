@@ -149,7 +149,7 @@ impl Task {
         task_control_receiver: Receiver<TaskControlMsg>,
         control_sender: Sender<(TaskId, SchedulerControlMsg)>,
     ) {
-        // TODO(rdaum): Defer task delay to the scheduler, and let it handle the delay?
+        // TODO(): Defer task delay to the scheduler, and let it handle the delay?
         //   Instead of performing it in the task startup.
         if let Some(delay) = delay_start {
             std::thread::sleep(delay);
@@ -447,7 +447,7 @@ impl Task {
                 // conform with MOO's expectations.
                 // However a conflict-retry here is maybe not the best idea here, I think.
                 // So we'll just panic the task (abort) if we can't commit for now.
-                // TODO(rdaum): Should tasks that throw exception always commit?
+                // TODO(): Should tasks that throw exception always commit?
                 //   Right now to preserve MOO semantics, we do.
                 //   We may revisit this later and add a user-selectable mode for this, and
                 //   evaluate this behaviour generally.
@@ -718,4 +718,4 @@ fn find_verb_for_command(
     Ok(None)
 }
 
-// TODO(rdaum): Unit tests for scheduler and tasks.
+// TODO(): Unit tests for scheduler and tasks.

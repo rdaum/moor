@@ -35,7 +35,7 @@ impl Expr {
         // directly on http://en.cppreference.com/w/cpp/language/operator_precedence
         // Should be kept in sync with the pratt parser in `parse.rs`
         // Starting from lowest to highest precedence...
-        // TODO(rdaum): drive Pratt and this from one common precedence table.
+        // TODO(): drive Pratt and this from one common precedence table.
         let cpp_ref_prep = match self {
             Expr::Scatter(_, _) | Expr::Assign { .. } => 14,
             Expr::Cond { .. } => 13,

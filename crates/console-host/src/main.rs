@@ -291,7 +291,7 @@ fn console_loop(
 
     let mut rl = DefaultEditor::new().unwrap();
     loop {
-        // TODO(rdaum): unprovoked output from the narrative stream screws up the prompt midstream,
+        // TODO(): unprovoked output from the narrative stream screws up the prompt midstream,
         //   but we have no real way to signal to this loop that it should newline for
         //   cleanliness. Need to figure out something for this.
         let input_request_id = input_request_id.lock().unwrap().take();

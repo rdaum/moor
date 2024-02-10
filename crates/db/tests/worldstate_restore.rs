@@ -84,7 +84,7 @@ mod test {
             tx.commit().unwrap();
             db.shutdown();
 
-            // TODO(rdaum): Sleep in "worldstate_restore" test should not be necessary.
+            // TODO(): Sleep in "worldstate_restore" test should not be necessary.
             //   code smell.
             std::thread::sleep(Duration::from_millis(100));
             a

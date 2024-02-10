@@ -258,7 +258,7 @@ impl VM {
                     let (from, next_val) = {
                         let (to, from) = f.peek2();
 
-                        // TODO(rdaum): Handling for MAXINT/MAXOBJ in various opcodes
+                        // TODO(): Handling for MAXINT/MAXOBJ in various opcodes
                         //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
                         //   we also don't want to *crash* on obscene values, so impl that here.
 
@@ -344,7 +344,7 @@ impl VM {
                         return self.push_error(state, E_TYPE);
                     };
 
-                    // TODO(rdaum): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
+                    // TODO(): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
                     let result = list.push(tail);
                     f.poke(0, result);
                 }

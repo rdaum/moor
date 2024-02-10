@@ -152,7 +152,7 @@ binary_layout!(wal_entry_header, LittleEndian, {
     relation_id: u8,
 });
 
-// TODO(rdaum): use builder pattern for WAL entry construction
+// TODO(): use builder pattern for WAL entry construction
 #[allow(clippy::too_many_arguments)]
 pub fn make_wal_entry<BF: FnMut(&mut [u8])>(
     typ: WalEntryType,

@@ -148,7 +148,7 @@ impl<W: io::Write> TextdumpWriter<W> {
         }
         self.write_verbs(&textdump.verbs)?;
 
-        // TODO(rdaum): Suspended tasks, clocks, queued tasks in textdump write
+        // TODO(): Suspended tasks, clocks, queued tasks in textdump write
         //    actually write clocks/tasks/suspended tasks, but for now we just write 0 for each
         writeln!(self.writer, "0 clocks")?;
         writeln!(self.writer, "0 queued tasks")?;

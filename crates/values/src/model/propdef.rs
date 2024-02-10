@@ -142,7 +142,7 @@ impl AsByteBuffer for PropDef {
     }
 
     fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
-        // TODO(rdaum): Validate propdef on decode
+        // TODO(): Validate propdef on decode
         Ok(Self::from_bytes(bytes))
     }
 
