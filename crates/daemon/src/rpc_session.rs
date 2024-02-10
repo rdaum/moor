@@ -98,7 +98,7 @@ impl Session for RpcSession {
     }
 
     fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
-        TODO!()
+        todo!()
     }
 
     fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
