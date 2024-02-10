@@ -1574,6 +1574,7 @@ dependencies = [
  "color-eyre",
  "eyre",
  "moor-values",
+ "owo-colors",
  "rpc-common",
  "rpc-sync-client",
  "rustyline",

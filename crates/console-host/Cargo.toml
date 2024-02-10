@@ -17,7 +17,7 @@ rpc-sync-client = { path = "../rpc-sync-client" }
 clap.workspace = true
 clap_derive.workspace = true
 
-# General.
+## Error handling
 color-eyre.workspace = true
 eyre.workspace = true
 
@@ -30,4 +30,5 @@ uuid.workspace = true
 zmq.workspace = true
 
 ## For console
+owo-colors.workspace = true
 rustyline.workspace = true

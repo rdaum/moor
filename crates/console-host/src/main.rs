@@ -18,9 +18,11 @@ use std::time::SystemTime;
 
 use clap::Parser;
 use clap_derive::Parser;
+use color_eyre::owo_colors::OwoColorize;
 use moor_values::var::Objid;
+use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
+use rustyline::{ColorMode, DefaultEditor, ExternalPrinter};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -75,16 +77,16 @@ fn establish_connection(
         RpcRequest::ConnectionEstablish("console".to_string()),
     ) {
         Ok(RpcResult::Success(RpcResponse::NewConnection(token, conn_id))) => Ok((token, conn_id)),
-        Ok(RpcResult::Success(other)) => {
-            error!("Unexpected response: {:?}", other);
+        Ok(RpcResult::Success(response)) => {
+            error!(?response, "Unexpected response");
             Err(Error::msg("Unexpected response"))
         }
-        Ok(RpcResult::Failure(e)) => {
-            error!("Failure connecting: {:?}", e);
+        Ok(RpcResult::Failure(error)) => {
+            error!(?error, "Failure connecting");
             Err(Error::msg("Failure connecting"))
         }
-        Err(e) => {
-            error!("Error connecting: {:?}", e);
+        Err(error) => {
+            error!(?error, "Error connecting");
             Err(Error::msg("Error connecting"))
         }
     }
@@ -115,23 +117,23 @@ fn perform_auth(
             connect_type,
             player,
         ))))) => {
-            info!("Authenticated as {:?} with id {:?}", connect_type, player);
+            info!(?connect_type, ?player, "Authenticated");
             Ok((auth_token, player))
         }
         Ok(RpcResult::Success(RpcResponse::LoginResult(None))) => {
             error!("Authentication failed");
             Err(Error::msg("Authentication failed"))
         }
-        Ok(RpcResult::Success(other)) => {
-            error!("Unexpected response: {:?}", other);
+        Ok(RpcResult::Success(response)) => {
+            error!(?response, "Unexpected response");
             Err(Error::msg("Unexpected response"))
         }
-        Ok(RpcResult::Failure(e)) => {
-            error!("Failure authenticating: {:?}", e);
+        Ok(RpcResult::Failure(failure)) => {
+            error!(?failure, "Failure authenticating");
             Err(Error::msg("Failure authenticating"))
         }
-        Err(e) => {
-            error!("Error authenticating: {:?}", e);
+        Err(error) => {
+            error!(?error, "Error authenticating");
             Err(Error::msg("Error authenticating"))
         }
     }
@@ -159,14 +161,14 @@ fn handle_console_line(
             Ok(RpcResult::Success(RpcResponse::InputThanks)) => {
                 trace!("Input complete");
             }
-            Ok(RpcResult::Success(other)) => {
-                warn!("Unexpected input response: {:?}", other);
+            Ok(RpcResult::Success(response)) => {
+                warn!(?response, "Unexpected input response");
             }
-            Ok(RpcResult::Failure(e)) => {
-                error!("Failure executing input: {:?}", e);
+            Ok(RpcResult::Failure(error)) => {
+                error!(?error, "Failure executing input");
             }
-            Err(e) => {
-                error!("Error executing input: {:?}", e);
+            Err(error) => {
+                error!(?error, "Error executing input");
             }
         }
         return;
@@ -179,14 +181,14 @@ fn handle_console_line(
         Ok(RpcResult::Success(RpcResponse::CommandSubmitted(_))) => {
             trace!("Command complete");
         }
-        Ok(RpcResult::Success(other)) => {
-            warn!("Unexpected command response: {:?}", other);
+        Ok(RpcResult::Success(response)) => {
+            warn!(?response, "Unexpected command response");
         }
-        Ok(RpcResult::Failure(e)) => {
-            error!("Failure executing command: {:?}", e);
+        Ok(RpcResult::Failure(error)) => {
+            error!(?error, "Failure executing command");
         }
-        Err(e) => {
-            error!("Error executing command: {:?}", e);
+        Err(error) => {
+            error!(?error, "Error executing command");
         }
     }
 }
@@ -219,7 +221,11 @@ fn console_loop(
         password,
     )?;
 
-    info!("Authenticated as {:?} /  {}", username, player);
+    println!(
+        "Authenticated as {:?} ({})",
+        username.yellow(),
+        player.yellow()
+    );
 
     // Spawn a thread to listen for events on the narrative pubsub channel, and send them to the
     // console.
@@ -229,27 +235,41 @@ fn console_loop(
     let input_request_id = Arc::new(Mutex::new(None));
     let output_input_request_id = input_request_id.clone();
 
+    let mut rl = DefaultEditor::new().unwrap();
+    let mut printer = rl.create_external_printer().unwrap();
+
     std::thread::Builder::new()
         .name("output-loop".to_string())
         .spawn(move || loop {
             match narrative_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
-                    println!(
-                        "{}",
-                        match msg.event() {
-                            moor_values::model::Event::TextNotify(s) => s,
-                        }
-                    );
+                    printer
+                        .print(format!(
+                            "{}",
+                            match msg.event() {
+                                moor_values::model::Event::TextNotify(s) => s,
+                            }
+                        ))
+                        .unwrap();
                 }
                 Ok(ConnectionEvent::SystemMessage(o, msg)) => {
-                    eprintln!("SYSMSG: {}: {}", o, msg);
+                    printer
+                        .print(format!("System message from {}: {}", o.yellow(), msg.red()))
+                        .unwrap();
                 }
                 Ok(ConnectionEvent::Disconnect()) => {
-                    error!("Received disconnect event; Session ending.");
+                    printer
+                        .print(format!("Received disconnect event; Session ending."))
+                        .unwrap();
                     return;
                 }
-                Err(e) => {
-                    error!("Error receiving narrative event: {:?}; Session ending.", e);
+                Err(error) => {
+                    printer
+                        .print(format!(
+                            "Error receiving narrative event {:?}; Session ending.",
+                            error
+                        ))
+                        .unwrap();
                     return;
                 }
                 Ok(ConnectionEvent::RequestInput(requested_input_id)) => {
@@ -289,7 +309,8 @@ fn console_loop(
     let edit_client_token = client_token.clone();
     let edit_auth_token = auth_token.clone();
 
-    let mut rl = DefaultEditor::new().unwrap();
+    rl.set_color_mode(ColorMode::Enabled);
+
     loop {
         // TODO: unprovoked output from the narrative stream screws up the prompt midstream,
         //   but we have no real way to signal to this loop that it should newline for
@@ -315,15 +336,15 @@ fn console_loop(
                 );
             }
             Err(ReadlineError::Eof) => {
-                println!("<EOF>");
+                eprintln!("{}", "<EOF>".red());
                 break;
             }
             Err(ReadlineError::Interrupted) => {
-                println!("^C");
+                eprintln!("{}", "^C".red());
                 continue;
             }
             Err(e) => {
-                println!("Error: {e:?}");
+                eprintln!("{}: {}", "Error".red(), e.red());
                 break;
             }
         }
@@ -340,9 +361,11 @@ fn main() -> Result<(), Error> {
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
         .with_ansi(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_names(true)
+        .with_file(false)
+        .with_line_number(false)
+        .with_thread_names(false)
+        .without_time()
+        .with_target(false)
         .with_max_level(tracing::Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
