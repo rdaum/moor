@@ -13,7 +13,6 @@ rpc-common = { path = "../rpc-common" }
 
 bincode.workspace = true
 futures-util.workspace = true
-thiserror.workspace = true
 tmq.workspace = true
 tracing.workspace = true
 uuid.workspace = true

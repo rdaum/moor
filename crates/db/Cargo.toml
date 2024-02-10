@@ -38,7 +38,6 @@ tracing.workspace = true
 arc-swap.workspace = true
 atomic-wait.workspace = true
 binary-layout.workspace = true
-bincode.workspace = true
 hi_sparse_bitset.workspace = true
 im.workspace = true
 io-uring.workspace = true

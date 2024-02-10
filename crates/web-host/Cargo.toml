@@ -15,17 +15,14 @@ rpc-common = { path = "../rpc-common" }
 ## Command line arguments parsing.
 clap.workspace = true
 clap_derive.workspace = true
-strum.workspace = true
 
 # General.
-bincode.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
 futures-util.workspace = true
 thiserror.workspace = true
 
 ## Asynchronous transaction processing & networking
-tokio-util.workspace = true
 tokio.workspace = true
 
 ## Logging & tracing
@@ -37,7 +34,6 @@ tmq.workspace = true
 uuid.workspace = true
 
 # HTTP/websockets layer
-axum-extra.workspace = true
 axum.workspace = true
 serde.workspace = true
 serde_derive.workspace = true

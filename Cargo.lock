@@ -214,27 +214,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-extra"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "895ff42f72016617773af68fb90da2a9677d89c62338ec09162d4909d86fdd8f"
-dependencies = [
- "axum",
- "axum-core",
- "bytes",
- "futures-util",
- "http",
- "http-body",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "serde",
- "tower",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1014,7 +993,6 @@ checksum = "645c6916888f6cb6350d2550b80fb63e734897a8498abe35cfb732b6487804b0"
 dependencies = [
  "futures-channel",
  "futures-core",
- "futures-executor",
  "futures-io",
  "futures-sink",
  "futures-task",
@@ -1036,17 +1014,6 @@ name = "futures-core"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfc6580bb841c5a68e9ef15c77ccc837b40a7504914d52e47b8b0e9bbda25a1d"
-
-[[package]]
-name = "futures-executor"
-version = "0.3.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a576fc72ae164fca6b9db127eaa9a9dda0d61316034f33a0a0d4eda41f02b01d"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
 
 [[package]]
 name = "futures-io"
@@ -1083,13 +1050,10 @@ version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d6401deb83407ab3da39eba7e33987a73c3df0c82b4bb5813ee871c19c41d48"
 dependencies = [
- "futures-channel",
  "futures-core",
- "futures-io",
  "futures-macro",
  "futures-sink",
  "futures-task",
- "memchr",
  "pin-project-lite",
  "pin-utils",
  "slab",
@@ -1605,7 +1569,6 @@ dependencies = [
 name = "moor-console-host"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "clap",
  "clap_derive",
  "color-eyre",
@@ -1637,7 +1600,6 @@ dependencies = [
  "rand",
  "rpc-common",
  "rusty_paseto",
- "serde",
  "serde_json",
  "strum",
  "tracing",
@@ -1653,7 +1615,6 @@ dependencies = [
  "arc-swap",
  "atomic-wait",
  "binary-layout",
- "bincode",
  "criterion",
  "hi_sparse_bitset",
  "human_bytes",
@@ -1714,17 +1675,14 @@ dependencies = [
 name = "moor-telnet-host"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "clap",
  "clap_derive",
  "color-eyre",
  "eyre",
- "futures",
  "futures-util",
  "moor-values",
  "rpc-async-client",
  "rpc-common",
- "strum",
  "tmq",
  "tokio",
  "tokio-util",
@@ -1749,7 +1707,6 @@ dependencies = [
  "thiserror",
  "uuid",
  "yoke",
- "yoke-derive",
 ]
 
 [[package]]
@@ -1757,8 +1714,6 @@ name = "moor-web-host"
 version = "0.1.0"
 dependencies = [
  "axum",
- "axum-extra",
- "bincode",
  "clap",
  "clap_derive",
  "color-eyre",
@@ -1770,11 +1725,9 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "strum",
  "thiserror",
  "tmq",
  "tokio",
- "tokio-util",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -2337,7 +2290,6 @@ dependencies = [
  "bincode",
  "futures-util",
  "rpc-common",
- "thiserror",
  "tmq",
  "tracing",
  "uuid",
@@ -2350,8 +2302,6 @@ dependencies = [
  "bincode",
  "moor-values",
  "thiserror",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -2360,7 +2310,6 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "rpc-common",
- "thiserror",
  "tracing",
  "uuid",
  "zmq",
@@ -2743,18 +2692,6 @@ name = "sync_wrapper"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
-
-[[package]]
-name = "synstructure"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "285ba80e733fac80aa4270fbcdf83772a79b80aa35c97075320abfee4a915b06"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.48",
- "unicode-xid",
-]
 
 [[package]]
 name = "system-deps"
@@ -3225,12 +3162,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51733f11c9c4f72aa0c160008246859e340b00807569a0da0e7a1079b27ba85"
 
 [[package]]
-name = "unicode-xid"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
-
-[[package]]
 name = "unindent"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3653,18 +3584,6 @@ dependencies = [
  "serde",
  "stable_deref_trait",
  "zerofrom",
-]
-
-[[package]]
-name = "yoke-derive"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e6936f0cce458098a201c245a11bef556c6a0181129c7034d10d76d1ec3a2b8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.48",
- "synstructure",
 ]
 
 [[package]]

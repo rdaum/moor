@@ -17,7 +17,6 @@ clap.workspace = true
 clap_derive.workspace = true
 
 # General.
-bincode.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
 

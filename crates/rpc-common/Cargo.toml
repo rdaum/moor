@@ -13,5 +13,3 @@ moor-values = { path = "../values" }
 
 bincode.workspace = true
 thiserror.workspace = true
-tracing.workspace = true
-uuid.workspace = true

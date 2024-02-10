@@ -19,5 +19,4 @@ num-traits.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-yoke-derive.workspace = true
 yoke.workspace = true
