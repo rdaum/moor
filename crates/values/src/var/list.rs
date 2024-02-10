@@ -24,6 +24,9 @@ use crate::var::{v_empty_list, Var};
 
 #[derive(Clone, Debug, Encode, Decode, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct List {
+    // TODO(rdaum): Implement our own zero-copy list type and get rid of bincoding
+    //   To support nested content, would require an offsets table at the front, etc.
+    //   Take a look at how flatbufers, capnproto, and other zero-copy serialization formats do this.
     inner: Arc<Vec<Var>>,
 }
 
@@ -48,9 +51,6 @@ impl List {
         match Arc::get_mut(&mut self.inner) {
             Some(vec) => {
                 vec.push(v);
-                // TODO: this is unfortunate, but our return type is Var, not List.
-                //   and so we end up doing an unnecessary clone here.
-                // To fix this, we'd need to run everything direct through Var.
                 Variant::List(self.clone()).into()
             }
             None => {

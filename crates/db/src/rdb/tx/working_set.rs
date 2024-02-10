@@ -27,7 +27,6 @@ use crate::rdb::{RelationId, TupleError};
 /// we will attempt to make permanent when the transaction commits.
 /// The working set is also referred to for reads/updates during the lifetime of the transaction.  
 /// It effectively "is" the transaction in regards to *base relations*.
-// TODO: see comments on BaseRelation, changes there will reqiure changes here.
 pub struct WorkingSet {
     pub(crate) ts: u64,
     pub(crate) schema: Vec<RelationInfo>,
@@ -130,7 +129,7 @@ impl WorkingSet {
         // to go back to the canonical relation, get the list of tuples for the codomain, then materialize
         // them into our local working set -- which will update the codomain index -- and then actually
         // use the local index.  Complicated enough?
-        // TODO: There is likely a way to optimize this so we're not doing this when not necessary.
+        // TODO(rdaum): There is likely a way to optimize this so we're not doing this when not necessary.
         //   but we'll need a round of really good coherence tests before we can do that.
         let tuples_for_codomain = {
             let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);

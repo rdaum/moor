@@ -188,7 +188,7 @@ impl AsByteBuffer for VerbDef {
     }
 
     fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
-        // TODO: validate
+        // TODO(rdaum): Validate VerbDef on decode
         Ok(Self::from_bytes(bytes))
     }
 

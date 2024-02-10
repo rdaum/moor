@@ -76,8 +76,11 @@ impl Var {
 
     /// 1-indexed position of the first occurrence of `v` in `self`, or `E_TYPE` if `self` is not a
     /// list.
-    // TODO: this is a place where we've got 1-indexing polluting the Var API, but in others we
-    //   assume 0-indexing. It's a bit ugly to fix this though, so we'll leave it for now.
+    // TODO(rdaum): Make Var consistent on 0-indexing vs 1-indexing
+    //   Various places have 1-indexing polluting the Var API, but in others we
+    //   assume 0-indexing and adjust in the opcodes.  0 indexing should be done in Var, and opcodes and builtins
+    //   should be the ones to adjust 1-indexing.
+    //   Examples: index_in, range, rangeset
     #[must_use]
     pub fn index_in(&self, v: &Self) -> Self {
         let Variant::List(l) = self.variant() else {
@@ -155,8 +158,6 @@ impl Var {
         }
     }
 
-    // TODO: 1-indexing is assumed here, and this will bite us if we ever call into it from another
-    //  language runtime.
     pub fn range(&self, from: i64, to: i64) -> Result<Self, Error> {
         match self.variant() {
             Variant::Str(s) => {
@@ -188,8 +189,6 @@ impl Var {
         }
     }
 
-    // TODO: 1-indexing is assumed here, and this will bite us if we ever call into it from another
-    //  language runtime.
     pub fn rangeset(&self, value: Self, from: i64, to: i64) -> Result<Self, Error> {
         let (base_len, val_len) = match (self.variant(), value.variant()) {
             (Variant::Str(base_str), Variant::Str(val_str)) => {

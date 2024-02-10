@@ -96,9 +96,7 @@ pub trait DbTransaction {
     fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError>;
 
     /// Get the binary of the given verb.
-    // TODO: this could return SliceRef or an Arc<Vec<u8>>, to potentially avoid copying. Though
-    //   for RocksDB I don't think it matters, since I don't think it will let us avoid copying
-    //   anyway.
+    // TODO(rdaum): "binaries" returned from the db should be SliceRefs, not Vecs.
     fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError>;
 
     /// Find & get the verb with the given name on the given object.

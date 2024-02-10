@@ -158,12 +158,6 @@ fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(setremove, bf_setremove);
 
-#[no_mangle]
-#[used]
-// TODO: This is not thread safe. If we actually want to use this flag, we will want to put the
-// whole 'legacy' regex engine in a mutex.
-pub static mut task_timed_out: u64 = 0;
-
 /// Translate a MOO pattern into a more standard syntax.  Effectively, this
 /// just involves remove `%' escapes into `\' escapes.
 fn translate_pattern(pattern: &str) -> Option<String> {
@@ -307,7 +301,7 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Er
         false
     };
 
-    // TODO: pattern cache?
+    // TODO(rdaum): Regex pattern cache?
     let Some((overall, match_vec)) =
         perform_regex_match(pattern.as_str(), subject.as_str(), case_matters, reverse)?
     else {

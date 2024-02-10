@@ -39,8 +39,10 @@ use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
-    // TODO after some time, this should get flipped to a runtime error (E_INVIND or something)
-    // instead. right now it just panics so we can find all the places that need to be updated.
+    // TODO(rdaum): Remove bf_noop panic
+    //   right now we panic on unimplemented builtins, but we should just return an error and log,
+    //   this was done this way to support discovering which builtins are unimplemented, but
+    //   that's not really necessary anymore.
     unimplemented!("BF is not implemented: {}", bf_args.name);
 }
 bf_declare!(noop, bf_noop);
@@ -340,8 +342,9 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     };
 
-    // TODO implement message & value params, can't do that with the existing bf interface for
-    // returning errors right now :-(
+    // TODO implement message & value params for raised errors
+    //   can't do that with the existing bf interface for returning errors right now :-(
+    //   will require a refactor of Error results throughout
     Err(*err)
 }
 bf_declare!(raise, bf_raise);
@@ -350,9 +353,10 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
         return Err(E_INVARG);
     }
-    // TODO: This is a placeholder for now, should be set by the server on startup. But right now
-    // there isn't a good place to stash this other than WorldState. I intend on refactoring the
-    // signature for BF invocations, and when I do this, I'll get additional metadata on there.
+    // TODO(rdaum): Support server version flag passed down the pipe, rather than hardcoded
+    //   This is a placeholder for now, should be set by the server on startup. But right now
+    //   there isn't a good place to stash this other than WorldState. I intend on refactoring the
+    //   signature for BF invocations, and when I do this, I'll get additional metadata on there.
     Ok(Ret(v_string("0.0.1".to_string())))
 }
 bf_declare!(server_version, bf_server_version);
@@ -748,9 +752,10 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    // TODO this function is hardcoded to just return {{#0, 7777, 1}}
-    // this is on account that existing cores expect this to be the case
-    // but we have no intend of supporting other network listener magic at this point
+    // TODO(rdaum): Return something better from bf_listeners, rather than hardcoded value
+    //   this function is hardcoded to just return {{#0, 7777, 1}}
+    //   this is on account that existing cores expect this to be the case
+    //   but we have no intend of supporting other network listener magic at this point
     let listeners = v_list(&[v_list(&[v_int(0), v_int(7777), v_int(1)])]);
 
     Ok(Ret(listeners))

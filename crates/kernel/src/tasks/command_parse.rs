@@ -162,7 +162,7 @@ where
     ]
     .contains(&verb.as_str())
     {
-        // TODO: Handle built-in commands
+        // TODO(rdaum): Handle built-in commands like .program, .flush, etc.
         return Err(ParseCommandError::UnimplementedBuiltInCommand);
     }
     // Split into verb and argument string

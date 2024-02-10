@@ -678,8 +678,8 @@ mod tests {
         assert_same(&tuples, &items);
     }
 
-    // TODO: Loom tests? Stateright tests?
-    // TODO: Test sequences
-    // TODO: Consistency across multiple relations
-    // TODO: Index consistency, secondary index consistency
+    // TODO(rdaum): Loom tests? Stateright tests?
+    // TODO(rdaum): Test sequences
+    // TODO(rdaum): Consistency across multiple relations
+    // TODO(rdaum): Index consistency, secondary index consistency
 }

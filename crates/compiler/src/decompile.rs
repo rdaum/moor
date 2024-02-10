@@ -297,7 +297,7 @@ impl Decompile {
                 ));
             }
             // Same as above, but with id.
-            // TODO: we may want to consider collapsing these two VM opcodes
+            // TODO(rdaum): we may want to consider collapsing these two VM opcodes
             Op::WhileId {
                 id,
                 end_label: loop_end_label,
@@ -654,7 +654,7 @@ impl Decompile {
                 }
                 // Decompile the body.
                 // Means decompiling until we hit EndExcept, so scan forward for that.
-                // TODO: make sure that this doesn't fail with nested try/excepts?
+                // TODO(rdaum): make sure that this doesn't fail with nested try/excepts?
                 let (body, end_except) =
                     self.decompile_statements_until_match(|_, o| matches!(o, Op::EndExcept(_)))?;
                 let Op::EndExcept(end_label) = end_except else {
@@ -822,7 +822,7 @@ impl Decompile {
             }
             Op::EndCatch(_) | Op::Continue | Op::EndExcept(_) | Op::EndFinally => {
                 // Early exit; main logic is in TRY_FINALLY or CATCH etc case, above
-                // TODO: MOO has "return ptr - 2;"  -- doing something with the iteration, that
+                // TODO(rdaum): MOO has "return ptr - 2;"  -- doing something with the iteration, that
                 //   I may not be able to do with the current structure. See if I need to
                 unreachable!("should have been handled other decompilation branches")
             }

@@ -26,20 +26,20 @@ use crate::rdb::RelationId;
 /// stored and managed as raw byte-arrays and it is up to layers above to interpret the the values
 /// correctly.
 ///
-// TODO: Add some kind of 'type' flag to the relation & tuple values, so that we can do
-//   type-checking on the values, though for our purposes this may be overkill at this time.
-// TODO: all the 'seek' type operations should be returning a *set* of tuples that match, not
+// TODO(rdaum): Add some kind of 'type' flag to the relation & tuple values,
+//   so that we can do type-checking on the values, though for our purposes this may be overkill at this time.
+// TODO(rdaum): Base relations right now are not true binary relations, they are key-value pairs.
+//   all the 'seek' type operations should be returning a *set* of tuples that match, not
 //   a single one. right now this is behaving like a key-value pair, not a proper binary relation.
 //   means changing the indexes here to point to sets of tuples, not single tuples. right now
 //   for moor's purposes this is irrelevant, but it will be important for proper implementation of
 //   joins and other relational operations.
-// TODO: the indexes should be paged.
-// TODO: support ordered indexes, not just hash indexes.
+// TODO(rdaum): Indexes should be paged.
+// TODO(rdaum): support ordered indexes, not just hash indexes.
 //   if we're staying with in-memory, use an Adaptive Radix Tree; my implementation, but hopefully
 //   modified to support CoW/shared ownership of the tree nodes, like the im::HashMap does.
 //   if we're going to support on-disk indexes, use a CoW B+Tree, which I have implemented elsewhere,
 //   but will need to bring in here, optimize, and provide loving care to.
-// TODO: support bitmap indexes
 #[derive(Clone)]
 pub struct BaseRelation {
     pub(crate) id: RelationId,

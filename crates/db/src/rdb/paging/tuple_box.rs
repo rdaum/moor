@@ -12,15 +12,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO: add fixed-size slotted page impl for Sized items, should be way more efficient for the
-//       most common case of fixed-size tuples.
-// TODO: implement the ability to expire and page-out tuples based on LRU or random/second
+// TODO(rdaum): add fixed-size slotted page impl for Sized items,
+//  should be way more efficient for the most common case of fixed-size tuples.
+// TODO(rdaum): implement the ability to expire and page-out tuples
+//       based on LRU or random/second
 //       chance eviction (ala leanstore). will require separate PageIds from Bids, and will
 //       involve rewriting TuplePtr on the fly to point to a new page when restored.
 //       TuplePtr will also get a new field for last-access-time, so that we can do our eviction
-// TODO: store indexes in here, too (custom paged datastructure impl)
-// TODO: verify locking/concurrency safety of this thing -- loom test, stateright, or jepsen, etc.
-// TODO: there is still some really gross stuff in here about the management of free space in
+// TODO(rdaum): verify locking/concurrency safety of the pager & tuple storage
+//       loom test, stateright, or jepsen, etc.
+// TODO(rdaum): improve dynamic slot allocation packing in slotted page
+//       there is still some really gross stuff in here about the management of free space in
 //       pages in the allocator list. It's probably causing excessive fragmentation because we're
 //       considering only the reported available "content" area when fitting slots, and there seems
 //       to be a sporadic failure where we end up with a "Page not found" error in the allocator on
@@ -194,7 +196,7 @@ impl TupleBox {
 }
 
 struct Inner {
-    // TODO: buffer pool has its own locks per size class, so we might not need this inside another lock
+    // TODO(rdaum): buffer pool has its own locks per size class, so we might not need this inside another lock
     //   *but* the other two items here are not thread-safe, and we need to maintain consistency across the three.
     //   so we can maybe get rid of the locks in the buffer pool...
     pager: Arc<Pager>,
@@ -203,7 +205,7 @@ struct Inner {
     /// The "swizzelable" references to tuples, indexed by tuple id.
     /// There has to be a stable-memory address for each of these, as they are referenced by
     /// pointers in the TupleRefs themselves.
-    // TODO: This needs to be broken down by page id, too, so that we can manage swap-in/swap-out at
+    // TODO(rdaum): This needs to be broken down by page id, too, so that we can manage swap-in/swap-out at
     //   the page granularity.
     tuple_ptrs: HashMap<TupleId, Pin<Box<TuplePtr>>>,
 }
@@ -431,7 +433,7 @@ impl Inner {
             }
         }
 
-        // TODO: initial textdump load seems to have a problem with initial inserts having a too-low refcount?
+        // TODO(rdaum): initial textdump load seems to have a problem with initial inserts having a too-low refcount?
         //   but once the DB is established, it's fine. So maybe this is a problem with insert tuple allocation?
         warn!(
             "Page not found in used pages in allocator on free; pid {}; could be double-free, dangling weak reference?",

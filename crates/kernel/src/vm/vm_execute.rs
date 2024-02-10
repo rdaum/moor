@@ -258,7 +258,7 @@ impl VM {
                     let (from, next_val) = {
                         let (to, from) = f.peek2();
 
-                        // TODO: LambdaMOO has special handling for MAXINT/MAXOBJ
+                        // TODO(rdaum): Handling for MAXINT/MAXOBJ in various opcodes
                         //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
                         //   we also don't want to *crash* on obscene values, so impl that here.
 
@@ -318,7 +318,7 @@ impl VM {
                     f.push(v_err(*val));
                 }
                 Op::Imm(slot) => {
-                    // TODO: it's questionable whether this optimization actually will be of much use
+                    // TODO(rdaum): it's questionable whether this optimization actually will be of much use
                     //   on a modern CPU as it could cause branch prediction misses. We should
                     //   benchmark this. its purpose is to avoid pointless stack ops for literals
                     //   that are never used (e.g. comments).
@@ -344,7 +344,7 @@ impl VM {
                         return self.push_error(state, E_TYPE);
                     };
 
-                    // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
+                    // TODO(rdaum): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
                     let result = list.push(tail);
                     f.poke(0, result);
                 }
@@ -363,7 +363,7 @@ impl VM {
                         return self.push_error(state, E_TYPE);
                     };
 
-                    // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
+                    // TODO(rdaum): quota check SVO_MAX_LIST_CONCAT -> E_QUOTA
                     let new_list = list.append(tail);
                     f.poke(0, new_list);
                 }

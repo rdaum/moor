@@ -149,5 +149,5 @@ pub enum BroadcastEvent {
     /// current time. This could be used in the future to synchronize event times, but isn't currently
     /// used.)
     PingPong(SystemTime),
-    // TODO: Shutdown, Broadcast messages, etc.
+    // TODO(rdaum): Shutdown, Broadcast BroadcastEvent messages in RPC layer
 }

@@ -37,7 +37,7 @@ use crate::var::Var;
 /// commit any changes to the world at the end of the transaction, or be capable of rolling back
 /// on failure.
 pub trait WorldState {
-    // TODO: combine owner & flags into one call, to make perms check more efficient
+    // TODO(rdaum): Combine worlstate owner & flags check into one call, to make perms check more efficient
 
     /// Get the set of all objects which are 'players' in the world.
     fn players(&self) -> Result<ObjSet, WorldStateError>;
@@ -83,7 +83,7 @@ pub trait WorldState {
     fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError>;
 
     /// Return the highest used object # in the system.
-    // TODO: long run want to get rid of this, and deprecate the built-in.
+    // TODO(rdaum): long run want to get rid of this, and deprecate the built-in.
     fn max_object(&self, perms: Objid) -> Result<Objid, WorldStateError>;
 
     /// Move an object to a new location.

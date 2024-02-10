@@ -36,7 +36,6 @@ use super::{backing::BackingStoreClient, cold_storage::ColdStorage, PageId, Tupl
 pub struct Pager {
     inner: Mutex<Inner>,
     next_pid: AtomicUsize,
-    // TODO: I hate that this has to be in a lock just to get interior mutability inside the Arc.
     cold_storage: Mutex<Option<BackingStoreClient>>,
 }
 

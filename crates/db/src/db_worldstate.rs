@@ -96,8 +96,8 @@ impl WorldState for DbTxWorldState {
     ) -> Result<Objid, WorldStateError> {
         if parent != NOTHING {
             let (flags, parent_owner) = (self.flags_of(parent)?, self.owner_of(parent)?);
-            // TODO check_object_allows should take a BitEnum arg for `allows` and do both of these at
-            // once.
+            // TODO check_object_allows should take a BitEnum arg for `allows`
+            //   so we can check for multiple flags at once.
             self.perms(perms)?
                 .check_object_allows(parent_owner, flags, ObjFlag::Read)?;
             self.perms(perms)?
@@ -106,12 +106,10 @@ impl WorldState for DbTxWorldState {
 
         let owner = (owner != NOTHING).then_some(owner);
 
-        /*
-            TODO: quota:
-            If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
-            as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
-            object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
-        */
+        // TODO(rdaum): ownership_quota support
+        //    If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
+        //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
+        //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
         let attrs = ObjAttrs {
             owner,
             name: None,

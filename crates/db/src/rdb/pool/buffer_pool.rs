@@ -33,7 +33,8 @@ use crate::rdb::pool::size_class::SizeClass;
 use crate::rdb::pool::{Bid, PagerError};
 
 // 32k -> 1MB page sizes supported.
-// TODO: If we end up with values bigger than 1MB, they should probably be handled by "external" pages,
+// TODO(rdaum): handle storage of big-values / big-pages / blobs
+//       If we end up with values bigger than 1MB, they should probably be handled by "external" pages,
 //       that is, pages that are not part of the buffer pool, but are instead read directly from file
 //       references as needed, because they are likely to just thrash the crap out of the buffer pool
 //       and are probably just big binary blogs like images, etc.
@@ -48,8 +49,8 @@ pub struct BufferPool {
     pub size_classes: [SizeClass; HIGHEST_SIZE_CLASS_POWER_OF - LOWEST_SIZE_CLASS_POWER_OF + 1],
 }
 
-// TODO: shrink/grow
-// TODO: free list
+// TODO(rdaum): shrink/grow
+// TODO(rdaum): free list
 
 impl BufferPool {
     pub fn new(capacity: usize) -> Result<Self, PagerError> {

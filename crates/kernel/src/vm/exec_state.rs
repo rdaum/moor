@@ -67,7 +67,9 @@ impl VMExecState {
             let verb_name = activation.verb_name.clone();
             let definer = activation.verb_definer();
             let player = activation.player;
-            let line_number = 0; // TODO: fix after decompilation support
+            // TODO(rdaum): Line numbers in 'callers' stack is not implemented
+            //   Should be possible now that we have decompilation
+            let line_number = 0;
             let this = activation.this;
             let perms = activation.permissions;
             let programmer = if activation.bf_index.is_some() {

@@ -89,7 +89,7 @@ pub enum SchedulerError {
     #[error("Task not found: {0:?}")]
     TaskNotFound(TaskId),
     #[error("Input request not found: {0:?}")]
-    // TODO: using u128 here because Uuid is not bincode-able, but this is just a v4 uuid.
+    // Using u128 here because Uuid is not bincode-able, but this is just a v4 uuid.
     InputRequestNotFound(u128),
     #[error("Could not start task (internal error)")]
     CouldNotStartTask,
@@ -390,9 +390,6 @@ impl Scheduler {
             let task = self.tasks.get_mut(&task_id).expect("Corrupt task list");
             let tcs = task.task_control_sender.clone();
             if let Err(e) = tcs.send(TaskControlMsg::Abort) {
-                // TODO Unclear what to do here, because we really should be letting the main
-                //   scheduler loop know it has to murder this. Though it's likely to find that out
-                //   in the long run anyways...
                 warn!(task_id, error = ?e, "Could not send abort for task. Dead?");
                 continue;
             }
@@ -410,8 +407,6 @@ impl Scheduler {
             let (t_send, t_reply) = kanal::oneshot();
             let tcs = task.task_control_sender.clone();
             if let Err(e) = tcs.send(TaskControlMsg::Describe(t_send)) {
-                // TODO: again, we probably want to prune here, and signal back to the scheduler
-                //   to do so.  Or a generic liveness check collects these.
                 warn!(task_id, error = ?e, "Could not request task description for task. Dead?");
                 continue;
             }
@@ -513,7 +508,8 @@ impl Scheduler {
 
         // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
         // Or tasks that need pruning.
-        // TODO: we might be able to use a vector of delay-futures for this instead, and just poll
+        // TODO(rdaum): Improve scheduler "tick" and "prune" logic.  It's a bit of a mess.
+        //  we might be able to use a vector of delay-futures for this instead, and just poll
         //  those using some futures_util magic.
         std::thread::Builder::new()
             .name("scheduler-tick".to_string())
@@ -917,7 +913,7 @@ impl Scheduler {
                         info!("Creating textdump...");
                         let textdump = make_textdump(
                             loader_client,
-                            // TODO: just to be compatible with LambdaMOO import for now, hopefully.
+                            // just to be compatible with LambdaMOO import for now, hopefully.
                             Some("** LambdaMOO Database, Format Version 4 **"),
                         );
 
@@ -1175,7 +1171,8 @@ impl Scheduler {
         // We reject this outright if the sender permissions are not sufficient:
         //   The either have to be the owner of the task (task.programmer == sender_permissions.task_perms)
         //   Or they have to be a wizard.
-        // TODO: Will have to verify that it's enough that .player on task control can
+        // TODO(rdaum): Verify kill task permissions is right
+        //   Will have to verify that it's enough that .player on task control can
         //   be considered "owner" of the task, or there needs to be some more
         //   elaborate consideration here?
         if !sender_permissions
@@ -1365,7 +1362,7 @@ impl Scheduler {
             .world_state_source()
             .expect("Unable to instantiate database");
 
-        // TODO: support a queue-size on concurrent executing tasks and allow them to sit in an
+        // TODO(rdaum): support a queue-size on concurrent executing tasks and allow them to sit in an
         //   initially suspended state without spawning a worker thread, until the queue has space.
         // Spawn the task's thread.
         let task_state_source = state_source.clone();

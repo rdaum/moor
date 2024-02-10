@@ -74,15 +74,14 @@ pub(crate) struct Task {
     unsync: PhantomUnsync,
 }
 
-// TODO allow these to be set by command line arguments, as well.
-// Note these can be overriden in-core.
+// TODO Propagate default ticks, seconds values from global config / args properly.
+//   Note these can be overriden in-core as well, server_options, will need caching, etc.
 const DEFAULT_FG_TICKS: usize = 60_000;
 const DEFAULT_BG_TICKS: usize = 30_000;
 const DEFAULT_FG_SECONDS: u64 = 5;
 const DEFAULT_BG_SECONDS: u64 = 3;
 const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
-// TODO cache
 fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize, u64, usize) {
     let (max_ticks, max_seconds, max_stack_depth) = if is_background {
         (
@@ -97,11 +96,6 @@ fn max_vm_values(_ws: &mut dyn WorldState, is_background: bool) -> (usize, u64, 
             DEFAULT_MAX_STACK_DEPTH,
         )
     };
-
-    // TODO: revisit this -- we need a way to look up and cache these without having to fake wizard
-    //   permissions to get them, which probably means not going through worldstate. I don't want to
-    //   have to guess what $wizard is, and some cores may not have this even defined.
-    //   I think the scheduler will need a handle on some access to the DB that bypasses perms?
 
     //
     // // Look up fg_ticks, fg_seconds, and max_stack_depth on $server_options.
@@ -155,7 +149,8 @@ impl Task {
         task_control_receiver: Receiver<TaskControlMsg>,
         control_sender: Sender<(TaskId, SchedulerControlMsg)>,
     ) {
-        // TODO: defer a bunch of this stuff into Task::new and/or run.
+        // TODO(rdaum): Defer task delay to the scheduler, and let it handle the delay?
+        //   Instead of performing it in the task startup.
         if let Some(delay) = delay_start {
             std::thread::sleep(delay);
         }
@@ -170,8 +165,6 @@ impl Task {
         let (max_ticks, max_seconds, max_stack_depth) =
             max_vm_values(world_state.as_mut(), is_background);
 
-        // Spawn a new MOO VM host.
-        // TODO: here is where we'd make a choice about alternative VM/VM Host implementations.
         let scheduler_control_sender = control_sender.clone();
         let vm_host = VmHost::new(
             task_id,
@@ -425,7 +418,6 @@ impl Task {
             VMHostResponse::CompleteSuccess(result) => {
                 trace!(task_id = self.task_id, result = ?result, "Task complete, success");
 
-                // TODO: restart the whole task on conflict.
                 let CommitResult::Success =
                     self.world_state.commit().expect("Could not attempt commit")
                 else {
@@ -455,7 +447,9 @@ impl Task {
                 // conform with MOO's expectations.
                 // However a conflict-retry here is maybe not the best idea here, I think.
                 // So we'll just panic the task (abort) if we can't commit for now.
-                // TODO: We may revisit this later and add a user-selectable mode for this, and
+                // TODO(rdaum): Should tasks that throw exception always commit?
+                //   Right now to preserve MOO semantics, we do.
+                //   We may revisit this later and add a user-selectable mode for this, and
                 //   evaluate this behaviour generally.
 
                 warn!(task_id = self.task_id, "Task exception");
@@ -573,7 +567,9 @@ impl Task {
         //  forms a multi-part process with continuation back from the VM along the whole
         //  chain, which complicates things significantly.
 
-        // TODO First try to match $do_command. And execute that, scheduling a callback into
+        // TODO Move $do_command handling into task/scheduler
+        //   Right now this is done in the daemon, but it should be moved into the task/scheduler
+        //   First try to match $do_command. And execute that, scheduling a callback into
         //   this stage again, if that fails. For now though, we rely on the daemon having
         //   done this work for us.
 
@@ -722,4 +718,4 @@ fn find_verb_for_command(
     Ok(None)
 }
 
-// TODO: pile of unit tests here. esp of resume & retry.
+// TODO(rdaum): Unit tests for scheduler and tasks.

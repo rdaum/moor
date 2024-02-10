@@ -83,7 +83,8 @@
             if (result.ok) {
                 console.log("Connected!");
             } else {
-                // TODO: we will need to capture the rejection message from the server somehow, and display it.
+                // TODO(rdaum): Web ui login rejection / authentication rejection
+                //   we will need to capture the rejection message from the server somehow, and display it.
                 //   Right now this is not possible through the existing LoginRequest/LoginResponse mechanism.
                 //   Also this alert() thing is ugly, we'll want to replace it with something more UI consistent.
                 console.log("Failed to connect!");
@@ -122,7 +123,7 @@
             let narrative = document.getElementById("narrative");
             narrative.style.display = "inherit";
 
-            // Enable the browser launcher (TODO should only be for programmers)
+            // Enable the browser launcher (TODO(rdaum): Browser in web ui should only be for programmers)
             let browser_launcher = document.getElementById("launch_browser");
             browser_launcher.style.display = "";
             browser_launcher.addEventListener("click", function () {

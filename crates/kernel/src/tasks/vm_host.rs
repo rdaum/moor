@@ -58,9 +58,6 @@ pub enum VMHostResponse {
 /// A 'host' for running the MOO virtual machine inside a task.
 pub struct VmHost {
     /// The VM we're running for the current execution.
-    // TODO: The VM itself holds no mutable state, so having our own copy here is maybe pointless.
-    // TODO: we will hold a few of these, one for each runtime/language and flip between them
-    //   depending on the verbdef.binary_type() of the verb we're executing.
     vm: VM,
     /// Where we store current execution state for this host.
     vm_exec_state: VMExecState,

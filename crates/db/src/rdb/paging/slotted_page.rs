@@ -362,7 +362,7 @@ impl<'a> SlottedPage<'a> {
     }
 
     fn remove_slot(&self, slot_id: SlotId) -> Result<(usize, usize, bool), TupleBoxError> {
-        // TODO: slots at start of content-length can be removed by shrinking the content-length
+        // TODO(rdaum): slots at start of content-length can be removed by shrinking the content-length
         //   portion.
 
         let mut index_entry = self.get_index_entry_mut(slot_id);
@@ -376,7 +376,8 @@ impl<'a> SlottedPage<'a> {
         let mut header = self.header_mut();
         header.as_mut().sub_used(slot_size);
 
-        // TODO: join adjacent free slots. Likewise at insert, support splitting slots.
+        // TODO(rdaum): join adjacent free tuple slots.
+        //   Likewise at insert, support splitting slots.
         let is_empty = header.used_bytes == 0;
         if is_empty {
             header.clear();
@@ -722,7 +723,7 @@ impl<'a> PageReadGuard<'a> {
 
     pub(crate) fn header_size(&self) -> usize {
         let header = self.header();
-        
+
         header.index_length as usize + std::mem::size_of::<PageHeader>()
     }
 

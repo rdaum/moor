@@ -95,8 +95,6 @@ mod test {
     // Open a db in a test dir, fill it with some goop, close it, reopen it, and check that the goop is still there.
     #[test]
     #[traced_test]
-    // TODO: fix me. Somehow the test is failing, but actually using a restored DB works fine. Have to figure out
-    //    why.
     fn open_reopen() {
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_str = tmpdir.path().to_str().unwrap();

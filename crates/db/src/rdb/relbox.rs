@@ -12,8 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO: support sorted indices, too.
-// TODO: 'join' and transitive closure -> datalog-style variable unification
+// TODO(rdaum): 'join' and transitive closure on db relations
+//   -> datalog-style variable unification
+//   can be used for some of the inheritance graph / verb & property resolution activity done manually now
 
 use arc_swap::ArcSwap;
 use std::fmt::Debug;

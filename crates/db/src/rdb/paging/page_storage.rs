@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// TODO: there's no way this is "robust" enough to be used in production
+// TODO(rdaum): there's no way this is "robust" enough to be used in production
 
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
@@ -36,7 +36,7 @@ use crate::rdb::RelationId;
 /// The size of the submission queue for the io_uring, in requests.
 /// We currently do not have any way to handle backpressure, so we will not be able to handle WAL
 /// writes faster than this so this is set very large.
-// TODO: we should probably have a way to handle backpressure!! rather urgent.
+// TODO(rdaum): we should probably have a way to handle io_uring backpressure.
 const IO_URING_SUBMISSION_Q_SIZE: u32 = 4096;
 
 #[derive(Debug)]
@@ -61,16 +61,14 @@ pub enum PageStoreMutation {
 /// Each page is a fixed size.
 /// Uses io_uring to do the writes async. Reads are synchronous
 ///
-/// TODO: deleted pages are not destroyed, they are just left on disk, which means if the same
+/// TODO(rdaum): deleted pages are not destroyed, they are just left on disk, which means if the same
 ///   page id is re-used, the old data could be read.
-/// TODO: right now this is a page-per-file which is maybe not the most efficient.
-/// TODO: verify the fsync chained to writes via io_uring is actually working, and that
+/// TODO(rdaum): right now page storage is page-per-file which is maybe not the most efficient.
+/// TODO(rdaum): verify the fsync chained to writes via io_uring is actually working, and that
 ///   the durability guarantees are, at least approximately, correct.
-/// TODO: we'll need reads once eviction/paging is implemented.
-/// TODO: probably end up needing similar functionality for the implementation of the
-///   write-ahead-log, so abstract up the notion of an io_uring+eventfd "io q" and use that
-///   for both.
-/// TODO: we should have CRCs on the pages, and verify them on reads.  could live in the page header maybe
+/// TODO(rdaum): we'll need reads once eviction/paging is implemented.
+/// TODO(rdaum): we should have CRCs on disk-bound pages, and verify them on reads.  
+///   could live in the page header maybe
 
 pub struct PageStore {
     dir: PathBuf,
@@ -298,7 +296,7 @@ impl PageStore {
 
         // Open all the pages mentioned in the batch and index them by page id so we only have one file descriptor
         // open per page file.
-        // TODO: it's possible to preregister file descriptors with io_uring to potentially speed things up, but
+        // TODO(rdaum): it's possible to preregister file descriptors with io_uring to potentially speed things up, but
         //   I had some trixky issues with that, so for now we'll just open a new file descriptor for each batch.
         let mut pages = HashMap::new();
         for mutation in &batch {

@@ -109,7 +109,7 @@ impl DbTransaction for RelBoxTransaction {
     }
 
     fn get_players(&self) -> Result<ObjSet, WorldStateError> {
-        // TODO: this is going to be not-at-all performant in the long run, and we'll need a way to
+        // TODO(rdaum): this is going to be not-at-all performant in the long run, and we'll need a way to
         //   cache this or index it better
         get_all_object_keys_matching(
             &self.tx,
@@ -267,7 +267,7 @@ impl DbTransaction for RelBoxTransaction {
 
         // This will find a) our shared ancestor, b) all ancestors not shared with new ancestor,
         // c) all the new ancestors we'd have after the reparenting, all in one go. Hopefully.
-        // TODO: the argument order seems backward here. I was able to make it work by flipping
+        // TODO(rdaum): the argument order seems backward here. I was able to make it work by flipping
         //   new_parent and o, but I need to get to the bottom of this and fix it properly.
 
         let (_shared_ancestor, new_ancestors, old_ancestors) =

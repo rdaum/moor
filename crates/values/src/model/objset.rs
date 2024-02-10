@@ -46,7 +46,7 @@ impl AsByteBuffer for ObjSet {
     }
 
     fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
-        // TODO: validate
+        // TODO(rdaum): Validate object ids on decode of ObjSet
         Ok(Self(bytes))
     }
 

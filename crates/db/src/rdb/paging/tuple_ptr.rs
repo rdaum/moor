@@ -26,7 +26,7 @@ use crate::rdb::tuples::TupleId;
 /// Adds a layer of indirection to each tuple access, but is better than passing around tuple ids + TupleBox
 /// references.
 
-// TODO: rather than decoding a tuple out of a buffer in the slot, the slot should just hold the tuple structure
+// TODO(rdaum): rather than decoding a tuple out of a buffer in a slot, the slot should just hold the tuple structure
 pub struct TuplePtr {
     tb: Arc<TupleBox>,
     id: TupleId,
@@ -101,7 +101,7 @@ impl TuplePtr {
 
     #[inline]
     pub(crate) fn as_mut_ptr<T>(&mut self) -> *mut T {
-        // TODO: if the ptr is null, this is a page fault, and we'll
+        // TODO(rdaum): if the ptr is null, this is a page fault, and we'll
         //   need to ask the tuplebox to ask the pager to page us in
         self.bufaddr.load(std::sync::atomic::Ordering::SeqCst) as *mut T
     }

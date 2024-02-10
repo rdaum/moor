@@ -29,9 +29,9 @@ pub struct RpcSession {
     client_id: Uuid,
     rpc_server: Arc<RpcServer>,
     player: Objid,
-    // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
+    // TODO(rdaum): manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
     //  should be mmap'd to disk or something.
-    // TODO: We could also use Boxcar or other append-only lockless container for this, since we only
+    // TODO(rdaum): We could also use Boxcar or other append-only lockless container for this, since we only
     //  ever append.
     session_buffer: Mutex<Vec<(Objid, NarrativeEvent)>>,
 }

@@ -50,7 +50,6 @@ pub enum TaskStart {
         suspended: bool,
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
-    /// TODO: remove the MOO-specificity of this.
     StartEval { player: Objid, program: Program },
 }
 
@@ -65,8 +64,10 @@ pub enum TaskControlMsg {
     /// to resume execution, using the given world state (transaction) to do so.
     ResumeReceiveInput(Arc<dyn WorldStateSource>, String),
     /// The scheduler is asking the task to describe itself.
-    /// TODO: This causes deadlock if the task _requesting_ the description is the task being
-    ///   described, so I need to rethink this.
+    /// TODO(rdaum): Rethink task 'description' mechanism.
+    ///   Causes deadlock if the task _requesting_ the description is the task being
+    ///   described, so I need to rethink this. Right now this is prevented by the
+    ///   runtime, but it's not a good design.
     Describe(OneshotSender<TaskDescription>),
     /// The scheduler is telling the task to abort itself.
     Abort,

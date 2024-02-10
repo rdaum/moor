@@ -47,9 +47,8 @@ mod world_state;
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
 pub enum CommitResult {
-    Success, // Value was committed
+    Success,       // Value was committed
     ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx
-             // TODO: timeout/task-too-long/error?
 }
 
 /// Errors related to the world state and operations on it.
@@ -150,7 +149,7 @@ pub struct NarrativeEvent {
 pub enum Event {
     /// The typical "something happened" descriptive event.
     TextNotify(String),
-    // TODO: other events that might happen here would be things like (local) "object moved" or "object
+    // TODO(rdaum): other events that might happen here would be things like (local) "object moved" or "object
     //   created."
 }
 
