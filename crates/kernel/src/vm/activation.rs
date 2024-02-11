@@ -68,6 +68,18 @@ pub(crate) struct Frame {
     pub(crate) program: Program,
     /// The program counter.
     pub(crate) pc: usize,
+    // TODO: Language enhancement: Introduce lexical scopes to the MOO language:
+    //      add a 'with' keyword to the language which introduces a new scope, similar to ML's "let":
+    //              with x = 1 in
+    //                     ...
+    //              endlet
+    //      Multiple variables can be introduced at once:
+    //              with x = 1, y = 2 in ...
+    //      Variables not declared with 'with' are verb-scoped as they are now
+    //      'with' variables that shadow already-known verb-scoped variables override the verb-scope
+    //      Add LetBegin and LetEnd opcodes to the language.
+    //      Make the environment have a width, and expand and contract as scopes are entered and exited.
+    //      Likewise, Names in Program should be scope delimited somehow
     /// The values of the variables currently in scope, by their offset.
     pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
     /// The value stack.
