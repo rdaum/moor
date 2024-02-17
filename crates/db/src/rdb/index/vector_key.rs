@@ -43,6 +43,12 @@ impl VectorKey {
     }
 
     pub fn new_from_vec(data: Vec<u8>) -> Self {
+        Self {
+            data: data.into_boxed_slice(),
+        }
+    }
+
+    pub fn new_from_bytes(data: Vec<u8>) -> Self {
         let mut data = data;
         data.push(0);
         Self {

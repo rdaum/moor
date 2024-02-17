@@ -271,13 +271,13 @@ mod tests {
     /// Verify value is inserted and retrieved correctly, and that forked (cloned) copies behave correctly.
     #[test]
     fn simple_insert_get() {
-        let key = VectorKey::new_from_vec(vec![1, 2, 3]);
+        let key = VectorKey::new_from_bytes(vec![1, 2, 3]);
         let mut tree = super::AdaptiveRadixTree::new();
         assert!(tree.is_empty());
         tree.insert_k(&key, 1);
         assert!(!tree.is_empty());
         assert_eq!(tree.get_k(&key), Some(&1));
-        let second_key = VectorKey::new_from_vec(vec![1, 2, 4]);
+        let second_key = VectorKey::new_from_bytes(vec![1, 2, 4]);
         assert_eq!(tree.get_k(&second_key), None);
 
         let clone_before_mutate = tree.clone();
@@ -292,7 +292,7 @@ mod tests {
     /// not modified.
     #[test]
     fn insert_get_mut_modify() {
-        let key = VectorKey::new_from_vec(vec![1, 2, 3]);
+        let key = VectorKey::new_from_bytes(vec![1, 2, 3]);
         let mut tree = super::AdaptiveRadixTree::new();
         tree.insert_k(&key, 1);
         assert_eq!(tree.get_k(&key), Some(&1));
@@ -309,7 +309,7 @@ mod tests {
     /// affected.
     #[test]
     fn insert_get_remove() {
-        let key = VectorKey::new_from_vec(vec![1, 2, 3]);
+        let key = VectorKey::new_from_bytes(vec![1, 2, 3]);
         let mut tree = super::AdaptiveRadixTree::new();
         tree.insert_k(&key, 1);
         assert_eq!(tree.get_k(&key), Some(&1));
