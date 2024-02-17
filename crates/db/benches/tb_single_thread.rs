@@ -16,7 +16,7 @@
 //! Does not measure single-item reads, deletes, or updates, or concurrent access.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use moor_db::rdb::{RelBox, RelationInfo};
+use moor_db::rdb::{AttrType, RelBox, RelationInfo};
 use moor_values::util::SliceRef;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -36,8 +36,8 @@ fn test_db() -> Arc<RelBox> {
     let relations = (0..63)
         .map(|i| RelationInfo {
             name: format!("relation_{}", i),
-            domain_type_id: 0,
-            codomain_type_id: 0,
+            domain_type: AttrType::Integer,
+            codomain_type: AttrType::Integer,
             secondary_indexed: false,
             unique_domain: true,
         })

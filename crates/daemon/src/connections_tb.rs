@@ -20,11 +20,11 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use eyre::Error;
-use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
+use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty, IntoEnumIterator};
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use moor_db::rdb::{RelBox, RelationId, RelationInfo, Transaction};
+use moor_db::rdb::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::util::SliceRef;
 use moor_values::var::Objid;
@@ -33,6 +33,50 @@ use rpc_common::RpcRequestError;
 
 use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
 
+#[repr(usize)]
+// Don't warn about same-prefix, "I did that on purpose"
+#[allow(clippy::enum_variant_names)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display, EnumProperty, AsRefStr,
+)]
+enum ConnectionRelation {
+    // One to many, client id <-> connection/player object. Secondary index will seek on object id.
+    #[strum(props(
+        DomainType = "Integer",
+        CodomainType = "Bytes",
+        SecondaryIndexed = "true"
+    ))]
+    ClientConnection = 0,
+    // Client -> SystemTime of last activity
+    #[strum(props(
+        DomainType = "Bytes",
+        CodomainType = "Bytes",
+        SecondaryIndexed = "false"
+    ))]
+    ClientActivity = 1,
+    // Client connect time.
+    #[strum(props(
+        DomainType = "Bytes",
+        CodomainType = "Bytes",
+        SecondaryIndexed = "false"
+    ))]
+    ClientConnectTime = 2,
+    // Client last ping time.
+    #[strum(props(
+        DomainType = "Bytes",
+        CodomainType = "Bytes",
+        SecondaryIndexed = "false"
+    ))]
+    ClientPingTime = 3,
+    // Client hostname / connection "name"
+    #[strum(props(
+        DomainType = "Bytes",
+        CodomainType = "Bytes",
+        SecondaryIndexed = "false"
+    ))]
+    ClientName = 4,
+}
+
 const CONNECTIONS_DB_MEM_SIZE: usize = 1 << 26;
 pub struct ConnectionsTb {
     tb: Arc<RelBox>,
@@ -40,39 +84,13 @@ pub struct ConnectionsTb {
 
 impl ConnectionsTb {
     pub fn new(path: Option<PathBuf>) -> Self {
-        let mut relations: Vec<RelationInfo> = ConnectionRelation::iter()
-            .map(|r| {
-                RelationInfo {
-                    name: r.to_string(),
-                    domain_type_id: 0, /* tbd */
-                    codomain_type_id: 0,
-                    secondary_indexed: false,
-                    unique_domain: true,
-                }
-            })
-            .collect();
+        let mut relations: Vec<RelationInfo> =
+            ConnectionRelation::iter().map(relation_info_for).collect();
         relations[ConnectionRelation::ClientConnection as usize].secondary_indexed = true;
 
         let tb = RelBox::new(CONNECTIONS_DB_MEM_SIZE, path, &relations, 1);
         Self { tb }
     }
-}
-
-#[repr(usize)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display)]
-// Don't warn about same-prefix, "I did that on purpose"
-#[allow(clippy::enum_variant_names)]
-enum ConnectionRelation {
-    // One to many, client id <-> connection/player object. Secondary index will seek on object id.
-    ClientConnection = 0,
-    // Client -> SystemTime of last activity
-    ClientActivity = 1,
-    // Client connect time.
-    ClientConnectTime = 2,
-    // Client last ping time.
-    ClientPingTime = 3,
-    // Client hostname / connection "name"
-    ClientName = 4,
 }
 
 impl ConnectionsTb {

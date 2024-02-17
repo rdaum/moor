@@ -22,7 +22,10 @@
 //!
 //! TLDR Transactions continue to see a fully snapshot isolated view of the world.
 
-pub use relbox::{RelBox, RelationInfo};
+pub use relbox::{AttrType, RelBox, RelationInfo};
+use std::fmt::Display;
+use std::str::FromStr;
+use strum::EnumProperty;
 use thiserror::Error;
 pub use tx::{CommitError, Transaction};
 
@@ -58,4 +61,27 @@ pub enum RelationError {
     UniqueConstraintViolation,
     #[error("Ambiguous tuple found; more than one tuple found for presumed-unique domain value")]
     AmbiguousTuple,
+}
+
+/// Convert an enum schema description into RelationInfo (see WorldStateRelation for example)
+pub fn relation_info_for<E: EnumProperty + Display>(relation: E) -> RelationInfo {
+    let domain_type = relation.get_str("DomainType").unwrap_or_else(|| panic!("DomainType not found for declared relation {}",
+            relation));
+    let codomain_type = relation.get_str("CodomainType").unwrap_or_else(|| panic!("CodomainType not found for declared relation {}",
+            relation));
+
+    let domain_type = AttrType::from_str(domain_type).unwrap_or_else(|_| panic!("DomainType {} invalid for declared relation {}",
+            domain_type,
+            relation));
+    let codomain_type = AttrType::from_str(codomain_type).unwrap_or_else(|_| panic!("CodomainType {} invalid for declared relation {}",
+            codomain_type,
+            relation));
+    let secondary_indexed = relation.get_bool("SecondaryIndexed").unwrap_or(false);
+    RelationInfo {
+        name: relation.to_string(),
+        domain_type, /* tbd */
+        codomain_type,
+        secondary_indexed,
+        unique_domain: true,
+    }
 }

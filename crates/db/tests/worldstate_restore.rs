@@ -24,7 +24,7 @@ mod test {
 
     use moor_db::db_tx::DbTransaction;
     use moor_db::odb::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
-    use moor_db::rdb::{RelBox, RelationInfo};
+    use moor_db::rdb::{AttrType, RelBox, RelationInfo};
     use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
     use moor_values::model::HasUuid;
@@ -38,8 +38,8 @@ mod test {
             .map(|wsr| {
                 RelationInfo {
                     name: wsr.to_string(),
-                    domain_type_id: 0, /* tbd */
-                    codomain_type_id: 0,
+                    domain_type: AttrType::Integer, /* tbd */
+                    codomain_type: AttrType::Integer,
                     secondary_indexed: false,
                     unique_domain: true,
                 }

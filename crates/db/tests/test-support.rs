@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_db::rdb::{RelBox, RelationInfo};
+use moor_db::rdb::{AttrType, RelBox, RelationInfo};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -23,8 +23,8 @@ pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
     let relations = (0..100)
         .map(|i| RelationInfo {
             name: format!("relation_{}", i),
-            domain_type_id: 0,
-            codomain_type_id: 0,
+            domain_type: AttrType::Integer,
+            codomain_type: AttrType::Integer,
             secondary_indexed: false,
             unique_domain: true,
         })

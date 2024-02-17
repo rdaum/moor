@@ -43,7 +43,7 @@ use crate::odb::object_relations;
 use crate::odb::object_relations::{
     get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
-use crate::rdb::RelationError;
+use crate::rdb::{relation_info_for, RelationError};
 use crate::rdb::{CommitError, Transaction};
 use crate::rdb::{RelBox, RelationInfo};
 use crate::Database;
@@ -55,17 +55,8 @@ pub struct RelBoxWorldState {
 
 impl RelBoxWorldState {
     pub fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
-        let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
-            .map(|wsr| {
-                RelationInfo {
-                    name: wsr.to_string(),
-                    domain_type_id: 0, /* tbd */
-                    codomain_type_id: 0,
-                    secondary_indexed: false,
-                    unique_domain: true,
-                }
-            })
-            .collect();
+        let mut relations: Vec<RelationInfo> =
+            WorldStateRelation::iter().map(relation_info_for).collect();
 
         // "Children" is derived from projection of the secondary index of parents.
         relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
@@ -1140,15 +1131,15 @@ mod tests {
     use crate::db_tx::DbTransaction;
     use crate::odb::object_relations::{WorldStateRelation, WorldStateSequences};
     use crate::odb::rb_worldstate::RelBoxTransaction;
-    use crate::rdb::{RelBox, RelationInfo};
+    use crate::rdb::{AttrType, RelBox, RelationInfo};
 
     fn test_db() -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
                     name: wsr.to_string(),
-                    domain_type_id: 0, /* tbd */
-                    codomain_type_id: 0,
+                    domain_type: AttrType::Integer, /* tbd */
+                    codomain_type: AttrType::Integer,
                     secondary_indexed: false,
                     unique_domain: true,
                 }

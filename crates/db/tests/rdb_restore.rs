@@ -24,7 +24,7 @@ mod test {
     use tracing_test::traced_test;
 
     use crate::support::{History, Type, Value};
-    use moor_db::rdb::{RelBox, RelationInfo};
+    use moor_db::rdb::{AttrType, RelBox, RelationInfo};
     use moor_db::rdb::{RelationId, Transaction};
     use moor_values::util::SliceRef;
 
@@ -86,8 +86,8 @@ mod test {
         let relations = (0..100)
             .map(|i| RelationInfo {
                 name: format!("relation_{}", i),
-                domain_type_id: 0,
-                codomain_type_id: 0,
+                domain_type: AttrType::Integer,
+                codomain_type: AttrType::Integer,
                 secondary_indexed: false,
                 unique_domain: true,
             })

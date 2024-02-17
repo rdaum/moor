@@ -391,7 +391,7 @@ mod tests {
 
     use moor_values::util::SliceRef;
 
-    use crate::rdb::relbox::{RelBox, RelationInfo};
+    use crate::rdb::relbox::{AttrType, RelBox, RelationInfo};
     use crate::rdb::tuples::TupleRef;
     use crate::rdb::tx::transaction::CommitError;
     use crate::rdb::{RelationError, RelationId, Transaction};
@@ -406,8 +406,8 @@ mod tests {
             None,
             &[RelationInfo {
                 name: "test".to_string(),
-                domain_type_id: 0,
-                codomain_type_id: 0,
+                domain_type: AttrType::String,
+                codomain_type: AttrType::String,
                 secondary_indexed: true,
                 unique_domain: true,
             }],

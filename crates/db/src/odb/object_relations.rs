@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use strum::{Display, EnumCount, EnumIter};
+use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
 use uuid::Uuid;
 
 use moor_values::model::ObjSet;
@@ -26,27 +26,44 @@ use crate::rdb::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display, EnumProperty, AsRefStr,
+)]
 pub enum WorldStateRelation {
     /// Object<->Parent
+    #[strum(props(
+        DomainType = "Integer",
+        CodomainType = "Integer",
+        SecondaryIndexed = "true"
+    ))]
     ObjectParent = 0,
     /// Object<->Location
+    #[strum(props(
+        DomainType = "Integer",
+        CodomainType = "Integer",
+        SecondaryIndexed = "true"
+    ))]
     ObjectLocation = 1,
     /// Object->Flags (BitEnum<ObjFlag>)
+    #[strum(props(DomainType = "Integer", CodomainType = "Bytes"))]
     ObjectFlags = 2,
     /// Object->Name
+    #[strum(props(DomainType = "Integer", CodomainType = "String"))]
     ObjectName = 3,
     /// Object->Owner
+    #[strum(props(DomainType = "Integer", CodomainType = "Integer"))]
     ObjectOwner = 4,
-
     /// Object->Verbs (Verbdefs)
+    #[strum(props(DomainType = "Integer", CodomainType = "Bytes"))]
     ObjectVerbs = 5,
     /// Verb UUID->VerbProgram (Binary)
+    #[strum(props(DomainType = "Bytes", CodomainType = "Bytes"))]
     VerbProgram = 6,
-
     /// Object->Properties (Propdefs)
+    #[strum(props(DomainType = "Integer", CodomainType = "Bytes"))]
     ObjectPropDefs = 7,
     /// Property UUID->PropertyValue (Var)
+    #[strum(props(DomainType = "Bytes", CodomainType = "Bytes"))]
     ObjectPropertyValue = 8,
 }
 
@@ -304,15 +321,15 @@ mod tests {
         get_object_by_codomain, get_object_value, insert_object_value, upsert_object_value,
         WorldStateRelation, WorldStateSequences,
     };
-    use crate::rdb::{RelBox, RelationInfo};
+    use crate::rdb::{AttrType, RelBox, RelationInfo};
 
     fn test_db() -> Arc<RelBox> {
         let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
             .map(|wsr| {
                 RelationInfo {
                     name: wsr.to_string(),
-                    domain_type_id: 0, /* tbd */
-                    codomain_type_id: 0,
+                    domain_type: AttrType::Integer, /* tbd */
+                    codomain_type: AttrType::Integer,
                     secondary_indexed: false,
                     unique_domain: true,
                 }
