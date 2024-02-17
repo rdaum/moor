@@ -29,8 +29,7 @@ use crate::rdb::paging::page_storage::PageStore;
 use crate::rdb::paging::wal::{make_wal_entry, WalEntryType, WalManager};
 use crate::rdb::paging::PageId;
 use crate::rdb::paging::TupleBox;
-use crate::rdb::tuples::TxTuple;
-use crate::rdb::tx::WorkingSet;
+use crate::rdb::tx::{TxTupleOp, WorkingSet};
 
 use super::backing::{BackingStoreClient, WriterMessage};
 
@@ -227,8 +226,8 @@ impl ColdStorage {
         let mut dirty_pages = HashSet::new();
         for r in ws.relations.iter() {
             for t in r.1.tuples() {
-                match t {
-                    TxTuple::Insert(new_tuple) => {
+                match &t.op {
+                    TxTupleOp::Insert(new_tuple) => {
                         let (tuple_offset, tuple_size) = tuple_box
                             .page_for(new_tuple.id().page)
                             .expect("Unable to get page for tuple")
@@ -251,7 +250,10 @@ impl ColdStorage {
                         write_batch.push((new_tuple.id().page, Some(wal_entry_buffer)));
                         dirty_pages.insert((new_tuple.id().page, r.1.id));
                     }
-                    TxTuple::Update(old_id, new_tuple) => {
+                    TxTupleOp::Update {
+                        from_tuple: old_tuple,
+                        to_tuple: new_tuple,
+                    } => {
                         let (tuple_offset, tuple_size) = tuple_box
                             .page_for(new_tuple.id().page)
                             .expect("Unable to get page for tuple")
@@ -272,9 +274,10 @@ impl ColdStorage {
                         .expect("Failed to encode update WAL entry");
 
                         write_batch.push((new_tuple.id().page, Some(wal_entry_buffer)));
-                        dirty_pages.insert((old_id.page, r.1.id));
+                        dirty_pages.insert((old_tuple.id().page, r.1.id));
                     }
-                    TxTuple::Tombstone { tuple_id, .. } => {
+                    TxTupleOp::Tombstone(tref, _) => {
+                        let tuple_id = tref.id();
                         let wal_entry_buffer = make_wal_entry(
                             WalEntryType::Delete,
                             tuple_id.page,
@@ -289,7 +292,7 @@ impl ColdStorage {
                         write_batch.push((tuple_id.page, Some(wal_entry_buffer)));
                         dirty_pages.insert((tuple_id.page, r.1.id));
                     }
-                    TxTuple::Value(_) => {
+                    TxTupleOp::Value(_) => {
                         // Untouched value (view), noop, should already exist in backing store.
                     }
                 }
@@ -304,8 +307,6 @@ impl ColdStorage {
                 continue;
             };
 
-            let rl = page.read_lock();
-
             // Copy the page into the WAL entry directly.
             let wal_entry_buffer = make_wal_entry(
                 WalEntryType::PageHeader,
@@ -314,8 +315,8 @@ impl ColdStorage {
                 0, /* not used */
                 ts,
                 0,
-                rl.header_size(),
-                |buf| rl.write_header(buf),
+                page.header_size(),
+                |buf| page.write_header(buf),
             )
             .expect("Failed to encode page index WAL entry");
             write_batch.push((*page_id, Some(wal_entry_buffer)));

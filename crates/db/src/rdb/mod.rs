@@ -23,7 +23,7 @@
 //! TLDR Transactions continue to see a fully snapshot isolated view of the world.
 
 pub use relbox::{RelBox, RelationInfo};
-pub use tuples::TupleError;
+use thiserror::Error;
 pub use tx::{CommitError, Transaction};
 
 mod base_relation;
@@ -44,4 +44,14 @@ impl RelationId {
     pub fn is_transient_relation(&self) -> bool {
         !self.is_base_relation()
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Error)]
+pub enum RelationError {
+    #[error("Tuple not found")]
+    TupleNotFound,
+    #[error("Tuple already exists for unique domain value")]
+    UniqueConstraintViolation,
+    #[error("Ambiguous tuple found; more than one tuple found for presumed-unique domain value")]
+    AmbiguousTuple,
 }

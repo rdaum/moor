@@ -17,4 +17,7 @@ pub use working_set::WorkingSet;
 
 mod relvar;
 mod transaction;
+mod tx_tuple;
 mod working_set;
+
+pub use tx_tuple::TxTupleOp;

@@ -14,7 +14,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, RwLockWriteGuard};
 use std::thread::yield_now;
 
 use thiserror::Error;
@@ -25,10 +25,11 @@ use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::RelBox;
-use crate::rdb::tuples::{TupleError, TupleRef};
+use crate::rdb::tuples::TupleRef;
 use crate::rdb::tx::relvar::RelVar;
+use crate::rdb::tx::tx_tuple::TxTupleOp;
 use crate::rdb::tx::working_set::WorkingSet;
-use crate::rdb::RelationId;
+use crate::rdb::{RelationError, RelationId};
 
 /// A versioned transaction, which is a fork of the current canonical base relations.
 pub struct Transaction {
@@ -53,6 +54,11 @@ pub enum CommitError {
     /// commit set was potentially invalidated by a concurrent commit.
     #[error("Relation contention conflict")]
     RelationContentionConflict,
+    /// A unique constraint violation was detected during the preparation of the commit set.
+    /// This can happen when the transaction has prepared an insert into a relation that has already been
+    /// inserted into for the same unique domain.
+    #[error("Unique constraint violation")]
+    UniqueConstraintViolation,
 }
 
 impl Transaction {
@@ -83,10 +89,10 @@ impl Transaction {
             tries += 1;
             let commit_ts = self.db.clone().next_ts();
             let mut working_set = self.working_set.borrow_mut();
-            let (commit_set, commit_guard) = self
+            let commit_set = self
                 .db
                 .prepare_commit_set(commit_ts, working_set.as_mut().unwrap())?;
-            match self.db.try_commit(commit_set, commit_guard) {
+            match commit_set.try_commit() {
                 Ok(()) => {
                     let working_set = working_set.take().unwrap();
                     self.db.sync(commit_ts, working_set);
@@ -101,7 +107,9 @@ impl Transaction {
                         continue 'retry;
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    return Err(e);
+                }
             }
         }
     }
@@ -111,7 +119,10 @@ impl Transaction {
     }
 
     pub fn rollback(&self) -> Result<(), CommitError> {
-        self.working_set.borrow_mut().as_mut().unwrap().clear();
+        let Some(mut ws) = self.working_set.borrow_mut().take() else {
+            return Ok(());
+        };
+        ws.clear();
         Ok(())
     }
 
@@ -124,24 +135,38 @@ impl Transaction {
         }
     }
 
-    /// Attempt to retrieve a tuple from the transaction's working set by its domain, or from the
-    /// canonical base relations if it's not found in the working set.
+    /// Seek for all tuples that match the given domain.
     pub(crate) fn seek_by_domain(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
-    ) -> Result<TupleRef, TupleError> {
+    ) -> Result<HashSet<TupleRef>, RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
             .seek_by_domain(&self.db, relation_id, domain)
     }
 
+    /// Seek for a tuple in the relation by its domain, assuming that the relation has declared a unique domain
+    /// constraint, or that there is only one tuple for the given domain.
+    pub(crate) fn seek_unique_by_domain(
+        &self,
+        relation_id: RelationId,
+        domain: SliceRef,
+    ) -> Result<TupleRef, RelationError> {
+        let mut ws = self.working_set.borrow_mut();
+        ws.as_mut()
+            .unwrap()
+            .seek_unique_by_domain(&self.db, relation_id, domain)
+    }
+
+    /// Attempt to tuples from the transaction's working set by their codomain. Will only work if
+    /// the relation has a secondary index on the codomain.
     pub(crate) fn seek_by_codomain(
         &self,
         relation_id: RelationId,
         codomain: SliceRef,
-    ) -> Result<HashSet<TupleRef>, TupleError> {
+    ) -> Result<HashSet<TupleRef>, RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
@@ -155,7 +180,7 @@ impl Transaction {
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
@@ -166,7 +191,7 @@ impl Transaction {
         &self,
         relation_id: RelationId,
         f: &F,
-    ) -> Result<Vec<TupleRef>, TupleError> {
+    ) -> Result<Vec<TupleRef>, RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
@@ -175,30 +200,30 @@ impl Transaction {
 
     /// Attempt to update a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) fn update_tuple(
+    pub(crate) fn update_by_domain(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
-            .update_tuple(&self.db, relation_id, domain, codomain)
+            .update_by_domain(&self.db, relation_id, domain, codomain)
     }
 
     /// Attempt to upsert a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) fn upsert_tuple(
+    pub(crate) fn upsert_by_domain(
         &self,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
-            .upsert_tuple(&self.db, relation_id, domain, codomain)
+            .upsert_by_domain(&self.db, relation_id, domain, codomain)
     }
 
     /// Attempt to delete a tuple in the transaction's working set, with the intent of eventually
@@ -207,7 +232,7 @@ impl Transaction {
         &self,
         relation_id: RelationId,
         domain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let mut ws = self.working_set.borrow_mut();
         ws.as_mut()
             .unwrap()
@@ -217,43 +242,141 @@ impl Transaction {
 
 /// A set of tuples to be committed to the canonical base relations, based on a transaction's
 /// working set.
-pub struct CommitSet {
-    pub(crate) ts: u64,
+pub struct CommitSet<'a> {
+    ts: u64,
     relations: Box<BitArray<BaseRelation, 64, Bitset64<1>>>,
 
+    // Holds a lock on the base relations, which we'll swap out with the new relations at successful commit
+    write_guard: RwLockWriteGuard<'a, Vec<BaseRelation>>,
+
+    // I can't/shouldn't be moved around between threads...
     unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
-impl CommitSet {
-    pub(crate) fn new(ts: u64) -> Self {
+impl<'a> CommitSet<'a> {
+    pub(crate) fn new(ts: u64, write_guard: RwLockWriteGuard<'a, Vec<BaseRelation>>) -> Self {
         Self {
             ts,
             relations: Box::new(BitArray::new()),
+            write_guard,
             unsend: Default::default(),
             unsync: Default::default(),
         }
     }
 
-    /// Returns an iterator over the modified relations in the commit set.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (usize, &BaseRelation)> {
-        return self.relations.iter();
+    pub(crate) fn prepare(&mut self, tx_working_set: &mut WorkingSet) -> Result<(), CommitError> {
+        for (_, local_relation) in tx_working_set.relations.iter_mut() {
+            let relation_id = local_relation.id;
+            // scan through the local working set, and for each tuple, check to see if it's safe to
+            // commit. If it is, then we'll add it to the commit set.
+            // note we're not actually committing yet, just producing a candidate commit set
+            for tuple in local_relation.tuples_iter_mut() {
+                match &mut tuple.op {
+                    TxTupleOp::Insert(tuple) => {
+                        // Generally inserts should present no conflicts except for constraint violations.
+
+                        // If this is an insert, we want to verify that unique constraints are not violated, so we
+                        // need to check the canonical relation for the domain value.
+                        // Apply timestamp logic, tho.
+                        let canonical = &self.write_guard[relation_id.0];
+                        let results_canonical = canonical.seek_by_domain(tuple.domain());
+                        let mut replacements = im::HashSet::new();
+                        for t in results_canonical {
+                            if canonical.unique_domain && t.ts() > tuple.ts() {
+                                return Err(CommitError::UniqueConstraintViolation);
+                            }
+                            // Check the timestamp on the upstream value, if it's newer than the read-timestamp,
+                            // we have for this tuple then that's a conflict, because it means someone else has
+                            // already committed a change to this tuple.
+                            // Otherwise, we clobber their value.
+                            if t.ts() > tuple.ts() {
+                                return Err(CommitError::TupleVersionConflict);
+                            }
+                            replacements.insert(t);
+                        }
+
+                        // Otherwise we can straight-away insert into the our fork of the relation.
+                        tuple.update_timestamp(self.ts);
+                        let forked_relation = self.fork(relation_id);
+                        for t in replacements {
+                            forked_relation.remove_tuple(&t.id()).unwrap();
+                        }
+                        forked_relation.insert_tuple(tuple.clone()).unwrap();
+                    }
+                    TxTupleOp::Update {
+                        from_tuple: old_tuple,
+                        to_tuple: new_tuple,
+                    } => {
+                        let canonical = &self.write_guard[relation_id.0];
+
+                        // If this is an update, we want to verify that the tuple we're updating is still there
+                        // If it's not, that's a conflict.
+                        if !canonical.has_tuple(&old_tuple.id()) {
+                            // Someone got here first and deleted the tuple we're trying to update.
+                            // By definition, this is a conflict.
+                            return Err(CommitError::TupleVersionConflict);
+                        };
+
+                        // TODO tuple uniqueness constraint check?
+
+                        // Otherwise apply the change into the forked relation
+                        new_tuple.update_timestamp(self.ts);
+                        let forked_relation = self.fork(relation_id);
+                        forked_relation
+                            .update_tuple(&old_tuple.id(), new_tuple.clone())
+                            .unwrap();
+                    }
+                    TxTupleOp::Tombstone(tuple, _) => {
+                        let canonical = &self.write_guard[relation_id.0];
+
+                        // Check that the tuple we're trying to delete is still there.
+                        if !canonical.has_tuple(&tuple.id()) {
+                            // Someone got here first and deleted the tuple we're trying to delete.
+                            // If this is a tuple with a unique constraint, we need to check if there's a
+                            // newer tuple with the same domain value.
+                            if canonical.unique_domain {
+                                let results_canonical = canonical.seek_by_domain(tuple.domain());
+                                for t in results_canonical {
+                                    if t.ts() > tuple.ts() {
+                                        return Err(CommitError::UniqueConstraintViolation);
+                                    }
+                                }
+                            }
+                            // No confict, and was already deleted. So we don't have to do anything.
+                        } else {
+                            // If so, do the del0rt in our fork.
+                            let forked_relation = self.fork(relation_id);
+                            forked_relation.remove_tuple(&tuple.id()).unwrap();
+                        }
+                    }
+                    TxTupleOp::Value(_) => {
+                        continue;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
-    /// Returns an iterator over the modified relations in the commit set, moving and consuming the
-    /// commit set in the process.
-    pub(crate) fn into_iter(self) -> impl IntoIterator<Item = (usize, BaseRelation)> {
-        self.relations.take_all().into_iter()
+    pub(crate) fn try_commit(mut self) -> Result<(), CommitError> {
+        // Everything passed, so we can commit the changes by swapping in the new canonical
+        // before releasing the lock.
+        let commit_ts = self.ts;
+        for (_, mut relation) in self.relations.take_all() {
+            let idx = relation.id.0;
+
+            relation.ts = commit_ts;
+            self.write_guard[idx] = relation;
+        }
+
+        Ok(())
     }
 
     /// Fork the given base relation into the commit set, if it's not already there.
-    pub(crate) fn fork(
-        &mut self,
-        relation_id: RelationId,
-        canonical: &BaseRelation,
-    ) -> &mut BaseRelation {
+    fn fork(&mut self, relation_id: RelationId) -> &mut BaseRelation {
         if self.relations.get(relation_id.0).is_none() {
-            let r = canonical.clone();
+            let r = self.write_guard[relation_id.0].clone();
             self.relations.set(relation_id.0, r);
         }
         self.relations.get_mut(relation_id.0).unwrap()
@@ -269,9 +392,9 @@ mod tests {
     use moor_values::util::SliceRef;
 
     use crate::rdb::relbox::{RelBox, RelationInfo};
-    use crate::rdb::tuples::{TupleError, TupleRef};
+    use crate::rdb::tuples::TupleRef;
     use crate::rdb::tx::transaction::CommitError;
-    use crate::rdb::{RelationId, Transaction};
+    use crate::rdb::{RelationError, RelationId, Transaction};
 
     fn attr(slice: &[u8]) -> SliceRef {
         SliceRef::from_bytes(slice)
@@ -286,6 +409,7 @@ mod tests {
                 domain_type_id: 0,
                 codomain_type_id: 0,
                 secondary_indexed: true,
+                unique_domain: true,
             }],
             0,
         )
@@ -300,10 +424,12 @@ mod tests {
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .expect_err("Expected insert to fail");
-        tx.update_tuple(rid, attr(b"abc"), attr(b"123"))
+        tx.update_by_domain(rid, attr(b"abc"), attr(b"123"))
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).unwrap().codomain(),
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
+                .unwrap()
+                .codomain(),
             attr(b"123")
         );
         let t = tx
@@ -315,14 +441,64 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(compare_t, vec![(attr(b"abc"), attr(b"123"))]);
 
+        // upsert a few times and verify
+        tx.upsert_by_domain(rid, attr(b"abc"), attr(b"321"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
+                .unwrap()
+                .codomain(),
+            attr(b"321")
+        );
+        tx.upsert_by_domain(rid, attr(b"abc"), attr(b"666"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
+                .unwrap()
+                .codomain(),
+            attr(b"666")
+        );
+        let t = tx
+            .seek_by_codomain(rid, attr(b"666"))
+            .expect("Expected secondary seek to succeed");
+        let compare_t = t
+            .iter()
+            .map(|t| (t.domain().clone(), t.codomain().clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(compare_t, vec![(attr(b"abc"), attr(b"666"))]);
+        // upsert back to  expected value
+        tx.upsert_by_domain(rid, attr(b"abc"), attr(b"123"))
+            .expect("Expected update to succeed");
+
+        // upsert at a net new domain a few times in succession
+        tx.upsert_by_domain(rid, attr(b"def"), attr(b"123"))
+            .expect("Expected update to succeed");
+        tx.upsert_by_domain(rid, attr(b"def"), attr(b"321"))
+            .expect("Expected update to succeed");
+        tx.upsert_by_domain(rid, attr(b"def"), attr(b"666"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr(b"def"))
+                .unwrap()
+                .codomain(),
+            attr(b"666")
+        );
+
+        // Simple check matching by domain, should only get one result since this is a unique domain.
+        let t = tx
+            .seek_by_domain(rid, attr(b"def"))
+            .expect("Expected domain seek to succeed");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t.iter().next().unwrap().domain(), attr(b"def"));
+        assert_eq!(t.iter().next().unwrap().codomain(), attr(b"666"));
         tx.commit().expect("Expected commit to succeed");
 
         // Verify canonical state.
         {
-            let relation = &db.canonical[0].load();
-            let tuple = relation
-                .seek_by_domain(attr(b"abc"))
-                .expect("Expected tuple to exist");
+            let canonical = db.canonical.read().unwrap();
+            let relation = &canonical[0];
+            let set = relation.seek_by_domain(attr(b"abc"));
+            let tuple = set.iter().next().expect("Expected tuple to exist");
             assert_eq!(tuple.codomain().as_slice(), b"123");
 
             let tuples = relation.seek_by_codomain(attr(b"123"));
@@ -343,10 +519,10 @@ mod tests {
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .expect_err("Expected insert to fail");
-        tx.update_tuple(rid, attr(b"abc"), attr(b"123"))
+        tx.update_by_domain(rid, attr(b"abc"), attr(b"123"))
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -356,7 +532,7 @@ mod tests {
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -364,10 +540,10 @@ mod tests {
         );
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def"))
             .expect_err("Expected insert to fail");
-        tx.upsert_tuple(rid, attr(b"abc"), attr(b"321"))
+        tx.upsert_by_domain(rid, attr(b"abc"), attr(b"321"))
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -377,16 +553,16 @@ mod tests {
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"321"
         );
-        tx.upsert_tuple(rid, attr(b"abc"), attr(b"666"))
+        tx.upsert_by_domain(rid, attr(b"abc"), attr(b"666"))
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -396,7 +572,7 @@ mod tests {
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc"))
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -424,21 +600,23 @@ mod tests {
         tx.remove_by_domain(rid, attr(b"abc"))
             .expect("Expected delete to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).unwrap_err(),
-            TupleError::NotFound
+            tx.seek_unique_by_domain(rid, attr(b"abc")).unwrap_err(),
+            RelationError::TupleNotFound
         );
         tx.commit().expect("Expected commit to succeed");
 
         let tx = db.clone().start_tx();
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).unwrap_err(),
-            TupleError::NotFound
+            tx.seek_unique_by_domain(rid, attr(b"abc")).unwrap_err(),
+            RelationError::TupleNotFound
         );
         tx.insert_tuple(rid, attr(b"abc"), attr(b"def")).unwrap();
-        tx.update_tuple(rid, attr(b"abc"), attr(b"321"))
+        tx.update_by_domain(rid, attr(b"abc"), attr(b"321"))
             .expect("Expected update to succeed");
         assert_eq!(
-            tx.seek_by_domain(rid, attr(b"abc")).unwrap().codomain(),
+            tx.seek_unique_by_domain(rid, attr(b"abc"))
+                .unwrap()
+                .codomain(),
             attr(b"321")
         );
         tx.commit().expect("Expected commit to succeed");
@@ -446,7 +624,7 @@ mod tests {
         // And verify primary & secondary index after the commit.
         let tx = db.start_tx();
         let tuple = tx
-            .seek_by_domain(rid, attr(b"abc"))
+            .seek_unique_by_domain(rid, attr(b"abc"))
             .expect("Expected tuple to exist");
         assert_eq!(tuple.codomain().as_slice(), b"321");
 
@@ -466,7 +644,7 @@ mod tests {
     /// The insert is not expected to fail until commit time, as we are fully isolated, but when
     /// commit happens, we should detect the conflict and fail.
     #[test]
-    fn parallel_insert_new_conflict() {
+    fn concurrent_insert_new_conflict() {
         let db = test_db();
         let tx1 = db.clone().start_tx();
         let rid = RelationId(0);
@@ -478,12 +656,12 @@ mod tests {
         assert!(tx1.commit().is_ok());
         assert_eq!(
             tx2.commit().expect_err("Expected conflict"),
-            CommitError::TupleVersionConflict
+            CommitError::UniqueConstraintViolation
         );
     }
 
     #[test]
-    fn parallel_get_update_conflict() {
+    fn concurrent_get_update_conflict() {
         let db = test_db();
         let rid = RelationId(0);
 
@@ -494,21 +672,23 @@ mod tests {
             .unwrap();
         init_tx.commit().unwrap();
 
-        // 2. Two transactions get the value, and then update it, in "parallel".
+        // 2. Two transactions get the value, and then update it, in "concurrent".
         let tx1 = db.clone().start_tx();
         let tx2 = db.clone().start_tx();
-        tx1.update_tuple(rid, attr(b"abc"), attr(b"123")).unwrap();
+        tx1.update_by_domain(rid, attr(b"abc"), attr(b"123"))
+            .unwrap();
         assert_eq!(
-            tx1.seek_by_domain(rid, attr(b"abc"))
+            tx1.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
             b"123"
         );
 
-        tx2.update_tuple(rid, attr(b"abc"), attr(b"321")).unwrap();
+        tx2.update_by_domain(rid, attr(b"abc"), attr(b"321"))
+            .unwrap();
         assert_eq!(
-            tx2.seek_by_domain(rid, attr(b"abc"))
+            tx2.seek_unique_by_domain(rid, attr(b"abc"))
                 .unwrap()
                 .codomain()
                 .as_slice(),
@@ -600,8 +780,11 @@ mod tests {
         // Then insert a pile of of random tuples into the relation, and scan it again.
         let tx = db.clone().start_tx();
         let mut items = vec![];
-        for _ in 0..1000 {
+        while items.len() < 1000 {
             let (domain, codomain) = random_tuple();
+            if items.iter().any(|(d, _)| d == &domain) {
+                continue;
+            }
             items.push((domain.clone(), codomain.clone()));
             tx.insert_tuple(rid, attr(&domain), attr(&codomain))
                 .unwrap();
@@ -637,15 +820,21 @@ mod tests {
         // Randomly update tuples in the relation, and verify that the scan returns the correct
         // values.
         let mut rng = rand::thread_rng();
-        for _ in 0..100 {
+        let mut updated = 0;
+        while updated < 100 {
             let (domain, _) = items[rng.gen_range(0..items.len())].clone();
             let new_codomain = (0..16).map(|_| rng.gen::<u8>()).collect::<Vec<u8>>();
-            tx.update_tuple(rid, attr(&domain), attr(&new_codomain))
+            if items.iter().any(|(_, c)| c == &new_codomain) {
+                continue;
+            }
+            tx.update_by_domain(rid, attr(&domain), attr(&new_codomain))
                 .unwrap();
             // Update in `items`
             let idx = items.iter().position(|(d, _)| d == &domain).unwrap();
             items[idx] = (domain, new_codomain);
+            updated += 1;
         }
+
         // Verify ...
         let tuples = tx.predicate_scan(rid, &|_| true).unwrap();
         assert_same(&tuples, &items);

@@ -26,6 +26,7 @@ pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
             domain_type_id: 0,
             codomain_type_id: 0,
             secondary_indexed: false,
+            unique_domain: true,
         })
         .collect::<Vec<_>>();
 

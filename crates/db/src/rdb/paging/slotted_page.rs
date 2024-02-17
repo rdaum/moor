@@ -45,7 +45,7 @@ pub type SlotId = u32;
 // identical, and we can just start using them right away in a null-state without doing any
 // initialization.
 #[repr(C, align(8))]
-struct PageHeader {
+pub struct PageHeader {
     // The number of bytes used in the page
     used_bytes: u32,
     // The length of our slots index in bytes. Starts at initial zero.
@@ -75,6 +75,7 @@ impl PageHeader {
     }
 
     // Update used size in the positive direction.
+    #[allow(dead_code)] // Not used right now because find_fit usage is commented out.
     fn add_used(mut self: Pin<&mut Self>, size: usize) {
         unsafe {
             let header = self.as_mut().get_unchecked_mut();
@@ -165,6 +166,7 @@ impl IndexEntry {
     }
 
     // Mark a previously free entry as used.
+    #[allow(dead_code)] // Not used right now because find_fit usage is commented out.
     fn mark_used(mut self: Pin<&mut Self>, size: usize) {
         unsafe {
             let entry = self.as_mut().get_unchecked_mut();
@@ -211,7 +213,23 @@ pub const fn slot_index_overhead() -> usize {
 }
 
 impl<'a> SlottedPage<'a> {
-    pub(crate) fn for_page(base_address: *mut u8, page_size: usize) -> Self {
+    pub fn for_page(base_address: *const u8, page_size: usize) -> PageReadGuard<'a> {
+        Self::as_page(base_address, page_size).read_lock()
+    }
+
+    pub fn for_page_mut(base_address: *mut u8, page_size: usize) -> PageWriteGuard<'a> {
+        Self::as_page_mut(base_address, page_size).write_lock()
+    }
+
+    fn as_page(base_address: *const u8, page_size: usize) -> Self {
+        Self {
+            base_address: base_address as *mut u8,
+            page_size: page_size as u32,
+            _marker: Default::default(),
+        }
+    }
+
+    fn as_page_mut(base_address: *mut u8, page_size: usize) -> Self {
         Self {
             base_address,
             page_size: page_size as u32,
@@ -385,7 +403,7 @@ impl<'a> SlottedPage<'a> {
         Ok((self.available_content_bytes(), slot_size, is_empty))
     }
 
-    pub(crate) fn refcount(&self, slot_id: SlotId) -> Result<u16, TupleBoxError> {
+    fn refcount(&self, slot_id: SlotId) -> Result<u16, TupleBoxError> {
         let index_entry = self.get_index_entry(slot_id);
         if !index_entry.used {
             return Err(TupleBoxError::TupleNotFound(slot_id as usize));
@@ -393,13 +411,13 @@ impl<'a> SlottedPage<'a> {
         Ok(index_entry.refcount)
     }
 
-    pub(crate) fn upcount(&self, slot_id: SlotId) -> Result<(), TupleBoxError> {
+    fn upcount(&self, slot_id: SlotId) -> Result<(), TupleBoxError> {
         let mut index_entry = self.get_index_entry_mut(slot_id);
         unsafe { index_entry.as_mut().get_unchecked_mut() }.refcount += 1;
         Ok(())
     }
 
-    pub(crate) fn dncount(&self, slot_id: SlotId) -> Result<bool, TupleBoxError> {
+    fn dncount(&self, slot_id: SlotId) -> Result<bool, TupleBoxError> {
         let mut index_entry = self.get_index_entry_mut(slot_id);
         unsafe { index_entry.as_mut().get_unchecked_mut() }.refcount -= 1;
         if index_entry.refcount == 0 {
@@ -409,7 +427,7 @@ impl<'a> SlottedPage<'a> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, TupleBoxError> {
+    fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, TupleBoxError> {
         // Check that the index is in bounds
         let num_slots = self.header().num_slots as SlotId;
         if slot_id >= num_slots {
@@ -497,7 +515,7 @@ impl<'a> SlottedPage<'a> {
         }
     }
 
-    pub fn write_lock(&'a mut self) -> PageWriteGuard<'a> {
+    pub fn write_lock<'b>(&'a mut self) -> PageWriteGuard<'b> {
         let header = self.header();
         let mut s = header.lock_state.load(Relaxed);
         loop {
@@ -572,6 +590,7 @@ impl<'a> SlottedPage<'a> {
         Ok((index_entry.offset as usize, index_entry.allocated as usize))
     }
 
+    #[allow(dead_code)] // Not used right now because usage is commented out.
     fn find_fit(&self, size: usize) -> (bool, Option<SlotId>) {
         // Find the smallest possible fit by building full-scan candidate, and then sorting.
         let mut fits = vec![];
@@ -655,9 +674,31 @@ pub struct PageWriteGuard<'a> {
 }
 
 impl<'a> PageWriteGuard<'a> {
+    #[inline(always)]
+    #[allow(dead_code)]
+    fn free_space_bytes(&self) -> usize {
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
+        sp.free_space_bytes()
+    }
+
+    #[inline(always)]
+    #[allow(dead_code)]
+    fn header(&self) -> Pin<&PageHeader> {
+        let header_ptr = self.base_address as *const PageHeader;
+
+        unsafe { Pin::new_unchecked(&*header_ptr) }
+    }
+
+    #[inline]
     pub fn get_slot_mut(&mut self, slot_id: SlotId) -> Result<Pin<&'a mut [u8]>, TupleBoxError> {
-        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
         sp.get_slot_mut(slot_id)
+    }
+
+    #[inline]
+    pub fn header_mut(&self) -> Pin<&mut PageHeader> {
+        let header_ptr = self.base_address as *mut PageHeader;
+        unsafe { Pin::new_unchecked(&mut *header_ptr) }
     }
 
     #[inline]
@@ -666,25 +707,45 @@ impl<'a> PageWriteGuard<'a> {
         size: usize,
         initial_value: Option<&[u8]>,
     ) -> Result<(SlotId, usize, Pin<&'a mut [u8]>), TupleBoxError> {
-        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
         sp.allocate(size, initial_value)
     }
 
+    #[inline]
     pub fn remove_slot(&mut self, slot_id: SlotId) -> Result<(usize, usize, bool), TupleBoxError> {
-        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
         sp.remove_slot(slot_id)
     }
 
+    #[inline]
+    pub fn load<LF: FnMut(Pin<&mut [u8]>)>(&mut self, lf: LF) -> Vec<(SlotId, usize, *mut u8)> {
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
+        sp.load(lf)
+    }
+
     #[inline(always)]
-    pub fn upcount(&mut self, slot_id: SlotId) -> Result<(), TupleBoxError> {
-        let sp = SlottedPage::for_page(self.base_address, self.page_size as usize);
+    #[allow(dead_code)]
+    pub fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, TupleBoxError> {
+        let sp = SlottedPage::as_page(self.base_address, self.page_size as usize);
+        sp.get_slot(slot_id)
+    }
+
+    #[inline(always)]
+    pub(crate) fn upcount(&mut self, slot_id: SlotId) -> Result<(), TupleBoxError> {
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
         sp.upcount(slot_id)
     }
 
-    #[inline]
-    fn header_mut(&self) -> Pin<&mut PageHeader> {
-        let header_ptr = self.base_address as *mut PageHeader;
-        unsafe { Pin::new_unchecked(&mut *header_ptr) }
+    #[inline(always)]
+    pub(crate) fn dncount(&mut self, slot_id: SlotId) -> Result<bool, TupleBoxError> {
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
+        sp.dncount(slot_id)
+    }
+
+    #[inline(always)]
+    pub fn available_content_bytes(&self) -> usize {
+        let sp = SlottedPage::as_page_mut(self.base_address, self.page_size as usize);
+        sp.available_content_bytes()
     }
 }
 
@@ -730,8 +791,20 @@ impl<'a> PageReadGuard<'a> {
     #[inline(always)]
     #[allow(dead_code)]
     pub(crate) fn get_slot(&self, slot_id: SlotId) -> Result<Pin<&'a [u8]>, TupleBoxError> {
-        let sp = SlottedPage::for_page(self.base_address as *mut u8, self.page_size as usize);
+        let sp = SlottedPage::as_page(self.base_address as *mut u8, self.page_size as usize);
         sp.get_slot(slot_id)
+    }
+
+    #[inline(always)]
+    pub fn offset_of(&self, tid: SlotId) -> Result<(usize, usize), TupleBoxError> {
+        let sp = SlottedPage::as_page(self.base_address as *mut u8, self.page_size as usize);
+        sp.offset_of(tid)
+    }
+
+    #[inline(always)]
+    pub fn refcount(&self, slot_id: SlotId) -> Result<u16, TupleBoxError> {
+        let sp = SlottedPage::as_page(self.base_address as *mut u8, self.page_size as usize);
+        sp.refcount(slot_id)
     }
 }
 
@@ -752,10 +825,12 @@ impl<'a> Drop for PageReadGuard<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rdb::paging::slotted_page::{slot_page_empty_size, IndexEntry, SlotId, SlottedPage};
+    use crate::rdb::paging::slotted_page::{
+        slot_page_empty_size, IndexEntry, PageWriteGuard, SlotId, SlottedPage,
+    };
     use crate::rdb::paging::TupleBoxError;
 
-    fn random_fill(page: &SlottedPage) -> Vec<(SlotId, Vec<u8>)> {
+    fn random_fill(page: &mut PageWriteGuard) -> Vec<(SlotId, Vec<u8>)> {
         let mut collected_slots = vec![];
         loop {
             let size = rand::random::<usize>() % 100;
@@ -788,7 +863,7 @@ mod tests {
     fn simple_add_get() {
         let mut page_memory = vec![0; 4096];
         let page_ptr = page_memory.as_mut_ptr();
-        let page: SlottedPage = SlottedPage::for_page(page_ptr, 4096);
+        let mut page = SlottedPage::for_page_mut(page_ptr, 4096);
         let avail_before = page.free_space_bytes();
         let test_data = b"hello".to_vec();
         let (tid, free, slc) = page.allocate(test_data.len(), Some(&test_data)).unwrap();
@@ -805,9 +880,9 @@ mod tests {
         // that we can fill the page.
         let mut page_memory = vec![0; 4096];
         let page_ptr = page_memory.as_mut_ptr();
-        let page: SlottedPage = SlottedPage::for_page(page_ptr, 4096);
+        let mut page = SlottedPage::for_page_mut(page_ptr, 4096);
 
-        let collected_slots = random_fill(&page);
+        let collected_slots = random_fill(&mut page);
 
         for (tid, slot) in collected_slots {
             let retrieved = page.get_slot(tid).unwrap();
@@ -821,9 +896,9 @@ mod tests {
         let page_ptr = page_memory.as_mut_ptr();
 
         // Fill the page with random slots.
-        let page: SlottedPage = SlottedPage::for_page(page_ptr, 4096);
+        let mut page = SlottedPage::for_page_mut(page_ptr, 4096);
 
-        let collected_slots = random_fill(&page);
+        let collected_slots = random_fill(&mut page);
 
         // Now randomly delete, and verify that the slot is gone.
         let mut removed_slots = vec![];
@@ -839,7 +914,7 @@ mod tests {
         }
 
         // Now randomly re-fill, and verify that the slots are back.
-        let new_filled_slots = random_fill(&page);
+        let new_filled_slots = random_fill(&mut page);
         for (tid, slot) in new_filled_slots {
             let retrieved = page.get_slot(tid).unwrap();
             assert_eq!(slot, *retrieved);
@@ -860,7 +935,7 @@ mod tests {
     fn test_verify_null_header() {
         let mut page_memory = vec![0; 4096];
         let page_ptr = page_memory.as_mut_ptr();
-        let page: SlottedPage = SlottedPage::for_page(page_ptr, 4096);
+        let mut page = SlottedPage::for_page_mut(page_ptr, 4096);
 
         // Verify that the header is all nulls (well, duh, we made it that way, but let's be
         // paranoid)
@@ -873,7 +948,7 @@ mod tests {
             assert_eq!(memory_as_slice[0..4], vec![0; 4][..]);
         }
         // Fill it, then free everything after.
-        let everything = random_fill(&page);
+        let everything = random_fill(&mut page);
         for (tid, _) in &everything {
             page.remove_slot(*tid).unwrap();
         }
@@ -891,10 +966,10 @@ mod tests {
     fn fill_and_empty() {
         let mut page_memory = vec![0; 4096];
         let page_ptr = page_memory.as_mut_ptr();
-        let page: SlottedPage = SlottedPage::for_page(page_ptr, 4096);
+        let mut page = SlottedPage::for_page_mut(page_ptr, 4096);
 
         // Fill the page with random slots.
-        let collected_slots = random_fill(&page);
+        let collected_slots = random_fill(&mut page);
         // Then remove them all and verify it is now completely empty.
         let mut old_remaining = page.available_content_bytes();
         let mut last_is_empty = false;

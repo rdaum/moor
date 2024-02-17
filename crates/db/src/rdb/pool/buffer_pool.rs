@@ -152,6 +152,10 @@ impl BufferPool {
         // in it (aka PagePointer)
         let addr = self.resolve_ptr(bid).unwrap().0;
 
+        // Clear.
+        unsafe {
+            std::ptr::write_bytes(addr, 0, block_size);
+        }
         Ok((bid, addr, block_size))
     }
 

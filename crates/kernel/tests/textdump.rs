@@ -231,6 +231,21 @@ mod test {
         assert_diff(&input, &output, "", 0);
     }
 
+    #[test]
+    // This is an expensive test, so it's not run by default.
+    #[ignore]
+    fn load_big_core() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
+
+        let (db1, _) = RelBoxWorldState::open(None, 1 << 34);
+        let db1 = Arc::new(db1);
+        load_textdump_file(
+            db1.clone().loader_client().unwrap(),
+            minimal_db.to_str().unwrap(),
+        );
+    }
+
     /// Load a big (JHCore-DEV-2.db) core into a db, then write a new textdump, and then reload
     /// the core to verify it can be loaded.
     #[test]

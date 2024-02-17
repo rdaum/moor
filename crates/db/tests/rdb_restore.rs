@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-
 #[path = "./test-support.rs"]
 mod support;
 
@@ -90,6 +89,7 @@ mod test {
                 domain_type_id: 0,
                 codomain_type_id: 0,
                 secondary_indexed: false,
+                unique_domain: true,
             })
             .collect::<Vec<_>>();
 
@@ -151,8 +151,10 @@ mod test {
                 db.with_relation(*relation, |r| {
                     for k in expected_tuples {
                         let t = from_val(*k);
-                        let v = r
-                            .seek_by_domain(t.clone())
+                        let tuples = r.seek_by_domain(t.clone());
+                        let v = tuples
+                            .iter()
+                            .next()
                             .unwrap_or_else(|| panic!("Tup {:?} not found", k));
                         assert_eq!(v.domain(), t);
                     }

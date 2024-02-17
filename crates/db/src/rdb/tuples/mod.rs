@@ -12,26 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use thiserror::Error;
-
 pub use tuple_ref::TupleRef;
-pub use tx_tuple::TxTuple;
 
 use crate::rdb::paging::{PageId, SlotId};
 
 mod tuple_ref;
-mod tx_tuple;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct TupleId {
     pub page: PageId,
     pub slot: SlotId,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Error)]
-pub enum TupleError {
-    #[error("Tuple not found")]
-    NotFound,
-    #[error("Tuple already exists")]
-    Duplicate,
 }

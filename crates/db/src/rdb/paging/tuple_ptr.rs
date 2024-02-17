@@ -107,16 +107,15 @@ impl TuplePtr {
     }
 
     #[inline]
-    fn buffer(&self) -> &[u8] {
+    pub(crate) fn buffer(&self) -> &[u8] {
         let buf_addr = self.as_ptr();
         unsafe { std::slice::from_raw_parts(buf_addr, self.buflen as usize) }
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn byte_source(&self) -> SlotByteSource {
-        SlotByteSource {
-            ptr: self as *const TuplePtr,
-        }
+        SlotByteSource::new(self)
     }
 
     #[allow(dead_code)]
@@ -150,6 +149,14 @@ pub struct SlotByteSource {
 unsafe impl Send for SlotByteSource {}
 unsafe impl Sync for SlotByteSource {}
 
+impl SlotByteSource {
+    fn new(ptr: *const TuplePtr) -> Self {
+        // upcnt
+        let tp = unsafe { &(*ptr) };
+        tp.upcount();
+        SlotByteSource { ptr }
+    }
+}
 impl ByteSource for SlotByteSource {
     #[inline]
     fn as_slice(&self) -> &[u8] {
@@ -164,4 +171,21 @@ impl ByteSource for SlotByteSource {
     }
 
     fn touch(&self) {}
+}
+
+impl Clone for SlotByteSource {
+    fn clone(&self) -> Self {
+        // Upcount
+        let tp = unsafe { &(*self.ptr) };
+        tp.upcount();
+        SlotByteSource { ptr: self.ptr }
+    }
+}
+
+impl Drop for SlotByteSource {
+    fn drop(&mut self) {
+        // Downcount
+        let tp = unsafe { &(*self.ptr) };
+        tp.dncount();
+    }
 }

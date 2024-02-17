@@ -47,6 +47,7 @@ impl ConnectionsTb {
                     domain_type_id: 0, /* tbd */
                     codomain_type_id: 0,
                     secondary_indexed: false,
+                    unique_domain: true,
                 }
             })
             .collect();
@@ -91,10 +92,10 @@ impl ConnectionsTb {
         // Seek the most recent activity for the connection, so pull in the activity relation for
         // each client.
         let mut times = Vec::new();
-        for client in clients {
+        for client in &clients {
             if let Ok(last_activity) = tx
                 .relation(RelationId(ConnectionRelation::ClientActivity as usize))
-                .seek_by_domain(client.domain())
+                .seek_unique_by_domain(client.domain())
             {
                 let epoch_time_millis: u128 =
                     u128::from_le_bytes(last_activity.codomain().as_slice().try_into().unwrap());
@@ -150,7 +151,7 @@ impl ConnectionsDB for ConnectionsTb {
         for client_id in client_ids {
             let _ = tx
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-                .update_tuple(
+                .update_by_domain(
                     client_id.domain().clone(),
                     to_player.as_sliceref().expect("Invalid player object"),
                 );
@@ -208,7 +209,7 @@ impl ConnectionsDB for ConnectionsTb {
     fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         tx.relation(RelationId(ConnectionRelation::ClientActivity as usize))
-            .upsert_tuple(
+            .upsert_by_domain(
                 SliceRef::from_bytes(client_id.as_bytes()),
                 now_as_sliceref(),
             )
@@ -220,7 +221,7 @@ impl ConnectionsDB for ConnectionsTb {
     fn notify_is_alive(&self, client_id: Uuid, _connection: Objid) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         tx.relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .upsert_tuple(
+            .upsert_by_domain(
                 SliceRef::from_bytes(client_id.as_bytes()),
                 now_as_sliceref(),
             )
@@ -291,7 +292,7 @@ impl ConnectionsDB for ConnectionsTb {
         let client_id = most_recent.0;
         let name = tx
             .relation(RelationId(ConnectionRelation::ClientName as usize))
-            .seek_by_domain(client_id.clone())
+            .seek_unique_by_domain(client_id.clone())
             .expect("Unable to seek client name");
         tx.commit().expect("Unable to commit transaction");
         Ok(String::from_utf8(name.codomain().as_slice().to_vec())
@@ -313,7 +314,7 @@ impl ConnectionsDB for ConnectionsTb {
         for client in clients {
             if let Ok(connect_time) = tx
                 .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-                .seek_by_domain(client.domain())
+                .seek_unique_by_domain(client.domain())
             {
                 let time = sliceref_as_time(connect_time.codomain());
                 times.push((client.domain(), time));
@@ -370,7 +371,7 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let is_valid = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_domain(
+            .seek_unique_by_domain(
                 client_id
                     .as_bytes()
                     .as_sliceref()
@@ -385,7 +386,7 @@ impl ConnectionsDB for ConnectionsTb {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_domain(
+            .seek_unique_by_domain(
                 client_id
                     .as_bytes()
                     .as_sliceref()
@@ -482,12 +483,12 @@ mod tests {
                 assert_eq!(client_ids[0], client_id);
                 db.record_client_activity(client_id, oid).unwrap();
                 db.notify_is_alive(client_id, oid).unwrap();
-                let last_activity = db
-                    .last_activity_for(oid)
-                    .unwrap()
-                    .elapsed()
-                    .unwrap()
-                    .as_secs_f64();
+                let last_activity = db.last_activity_for(oid);
+                assert!(
+                    last_activity.is_ok(),
+                    "Unable to get last activity for {x}th oid ({oid}) client {client_id}",
+                );
+                let last_activity = last_activity.unwrap().elapsed().unwrap().as_secs_f64();
                 assert!(last_activity < 1.0);
                 assert!(db.is_valid_client(client_id));
                 db.update_client_connection(oid, Objid(x))
@@ -531,7 +532,12 @@ mod tests {
                 db.update_client_connection(con_oid2, Objid(x))
                     .expect("Unable to update client connection");
                 let client_ids = db.client_ids_for(Objid(x)).unwrap();
-                assert_eq!(client_ids.len(), 2);
+                assert_eq!(
+                    client_ids.len(),
+                    2,
+                    "Client ids: {:?}, should be ({client_id1}, {client_id2}) in {x}th oid",
+                    client_ids
+                );
                 assert!(client_ids.contains(&client_id2));
 
                 db.record_client_activity(client_id1, Objid(x)).unwrap();

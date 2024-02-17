@@ -54,6 +54,19 @@ impl Hash for SliceRef {
         self.as_slice().hash(state)
     }
 }
+
+impl PartialOrd for SliceRef {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+	Some(self.cmp(other))
+    }
+}
+
+impl Ord for SliceRef {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_slice().cmp(other.as_slice())
+    }
+}
+
 pub trait ByteSource: Send + Sync {
     fn as_slice(&self) -> &[u8];
     fn len(&self) -> usize;
@@ -150,6 +163,13 @@ impl SliceRef {
         self.0.backing_cart().touch();
         let result = self.0.map_project_cloned(move |sl, _| &sl[range]);
         Self(result)
+    }
+
+    pub fn as_hex_string(&self) -> String {
+        format!(
+            "{:x}",
+            self.as_slice().iter().fold(0, |acc, b| acc ^ *b)
+        )
     }
 }
 

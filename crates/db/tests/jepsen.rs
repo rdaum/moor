@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-
 #[path = "./test-support.rs"]
 mod support;
 
@@ -87,7 +86,7 @@ mod tests {
                     // (at invoke)
                     let t = tx
                         .relation(relation)
-                        .seek_by_domain(from_val(expect_val))
+                        .seek_unique_by_domain(from_val(expect_val))
                         .unwrap();
                     let val = to_val(t.domain());
                     assert_eq!(

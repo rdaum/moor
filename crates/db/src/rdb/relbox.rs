@@ -16,15 +16,13 @@
 //   -> datalog-style variable unification
 //   can be used for some of the inheritance graph / verb & property resolution activity done manually now
 
-use arc_swap::ArcSwap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, RwLock};
 
 use crate::rdb::base_relation::BaseRelation;
 use crate::rdb::paging::TupleBox;
-use crate::rdb::tuples::TxTuple;
 use crate::rdb::tx::WorkingSet;
 use crate::rdb::tx::{CommitError, CommitSet, Transaction};
 use crate::rdb::RelationId;
@@ -42,6 +40,8 @@ pub struct RelationInfo {
     pub codomain_type_id: u16,
     /// Whether or not this relation has a secondary index on its codomain.
     pub secondary_indexed: bool,
+    /// Whether the domain is assumed to be uniquely constrained.
+    pub unique_domain: bool,
 }
 
 /// The "RelBox" is the set of relations, referenced by their unique (usize) relation ID.
@@ -60,10 +60,7 @@ pub struct RelBox {
     /// The copy-on-write set of current canonical base relations.
     /// Held in ArcSwap so that we can swap them out atomically for their modified versions, without holding
     /// a lock for reads.
-    pub(crate) canonical: Vec<ArcSwap<BaseRelation>>,
-
-    /// Lock to hold while committing a transaction, prevents other commits from proceeding until we're done.
-    commit_lock: Mutex<()>,
+    pub(crate) canonical: RwLock<Vec<BaseRelation>>,
 
     /// The pager (which contains the buffer pool)
     pager: Arc<Pager>,
@@ -93,7 +90,7 @@ impl RelBox {
         let tuple_box = Arc::new(TupleBox::new(pager.clone()));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
-            base_relations.push(BaseRelation::new(RelationId(rid), 0));
+            base_relations.push(BaseRelation::new(RelationId(rid), r.unique_domain, 0));
             if r.secondary_indexed {
                 base_relations.last_mut().unwrap().add_secondary_index();
             }
@@ -115,14 +112,10 @@ impl RelBox {
         Arc::new(Self {
             relation_info: relations.to_vec(),
             maximum_transaction: AtomicU64::new(0),
-            canonical: base_relations
-                .into_iter()
-                .map(|b| ArcSwap::new(Arc::new(b)))
-                .collect(),
+            canonical: RwLock::new(base_relations),
             sequences,
             tuple_box,
             pager,
-            commit_lock: Mutex::new(()),
         })
     }
 
@@ -174,12 +167,8 @@ impl RelBox {
     }
 
     pub fn with_relation<R, F: Fn(&BaseRelation) -> R>(&self, relation_id: RelationId, f: F) -> R {
-        f(self
-            .canonical
-            .get(relation_id.0)
-            .expect("No such relation")
-            .load()
-            .as_ref())
+        let rl = self.canonical.read().unwrap();
+        f(rl.get(relation_id.0).unwrap())
     }
 
     /// Prepare a commit set for the given transaction. This will scan through the transaction's
@@ -189,116 +178,12 @@ impl RelBox {
         &self,
         commit_ts: u64,
         tx_working_set: &mut WorkingSet,
-    ) -> Result<(CommitSet, MutexGuard<()>), CommitError> {
-        let mut commitset = CommitSet::new(commit_ts);
-        let commit_guard = self.commit_lock.lock().unwrap();
-
-        for (_, local_relation) in tx_working_set.relations.iter_mut() {
-            let relation_id = local_relation.id;
-            // scan through the local working set, and for each tuple, check to see if it's safe to
-            // commit. If it is, then we'll add it to the commit set.
-            // note we're not actually committing yet, just producing a candidate commit set
-            let canonical = &self.canonical[relation_id.0].load();
-            for mut tuple in local_relation.tuples_mut() {
-                // Look for the most recent version for this domain in the canonical relation.
-                let canon_tuple = canonical.seek_by_domain(tuple.domain().clone());
-
-                // If there's no value there, and our local is not tombstoned and we're not doing
-                // an insert -- that's already a conflict.
-                // Otherwise we can straight-away insert into the canonical base relation.
-                let Some(cv) = canon_tuple else {
-                    match &mut tuple {
-                        TxTuple::Insert(t) => {
-                            t.update_timestamp(commit_ts);
-                            let forked_relation = commitset.fork(relation_id, canonical);
-                            forked_relation.insert_tuple(t.clone());
-                            continue;
-                        }
-                        TxTuple::Tombstone { .. } => {
-                            // We let this pass, as this must be a delete of something we inserted
-                            // temporarily previously in our transaction.
-                            continue;
-                        }
-                        TxTuple::Update(..) | TxTuple::Value(..) => {
-                            return Err(CommitError::TupleVersionConflict);
-                        }
-                    }
-                };
-
-                // If the timestamp in our working tuple is our own ts, that's a conflict, because
-                // it means someone else has already committed a change to this tuple that we
-                // thought was net-new (and so used our own TS)
-                if tuple.ts() == commit_ts {
-                    return Err(CommitError::TupleVersionConflict);
-                };
-
-                // Check the timestamp on the value, if it's newer than the read-timestamp,
-                // we have for this tuple then that's a conflict, because it means someone else has
-                // already committed a change to this tuple.
-                if cv.ts() > tuple.ts() {
-                    return Err(CommitError::TupleVersionConflict);
-                }
-
-                // Otherwise apply the change into a new canonical relation, which is a CoW
-                // branching of the old one.
-                let forked_relation = commitset.fork(relation_id, canonical);
-                match &mut tuple {
-                    TxTuple::Update(_, t) => {
-                        t.update_timestamp(commit_ts);
-                        let forked_relation = commitset.fork(relation_id, canonical);
-                        forked_relation.update_tuple(cv.id(), t.clone());
-                    }
-                    TxTuple::Insert(_) => {
-                        panic!("Unexpected insert");
-                    }
-                    TxTuple::Value(..) => {}
-                    TxTuple::Tombstone {
-                        ts: _,
-                        domain: k,
-                        tuple_id: _,
-                    } => {
-                        forked_relation.remove_by_domain(k.clone());
-                    }
-                }
-            }
-        }
-        Ok((commitset, commit_guard))
-    }
-
-    /// Actually commit a transaction's (approved) CommitSet. If the underlying base relations have
-    /// changed since the commit set began, this will return `Err(RelationContentionConflict)`
-    /// and the transaction can choose to try to produce a new CommitSet, or just abort.
-    pub(crate) fn try_commit(
-        &self,
-        commit_set: CommitSet,
-        _commit_guard: MutexGuard<()>,
-    ) -> Result<(), CommitError> {
-        // swap the active canonical state with the new one
-        // but only if the timestamps have not changed in the interim;
-        // we have to hold a lock while this is checked. If any relations have
-        // had their ts change, we probably need to retry because someone else got there first
-        // This shouldn't happen if we have a commit guard.
-        for (_, relation) in commit_set.iter() {
-            // Did the relation get committed to by someone else in the interim? If so, return
-            // back to the transaction letting it know that, and it can decide if it wants to
-            // retry.
-            // This shouldn't happen if we have a commit guard.
-            if relation.ts != self.canonical[relation.id.0].load().ts {
-                return Err(CommitError::RelationContentionConflict);
-            }
-        }
-
-        // Everything passed, so we can commit the changes by swapping in the new canonical
-        // before releasing the lock.
-        let commit_ts = commit_set.ts;
-        for (_, mut relation) in commit_set.into_iter() {
-            let idx = relation.id.0;
-
-            relation.ts = commit_ts;
-            self.canonical[idx].store(Arc::new(relation));
-        }
-
-        Ok(())
+    ) -> Result<CommitSet, CommitError> {
+        // The lock belongs to the transaction now now.
+        let canonical_lock = self.canonical.write().unwrap();
+        let mut commitset = CommitSet::new(commit_ts, canonical_lock);
+        commitset.prepare(tx_working_set)?;
+        Ok(commitset)
     }
 
     pub fn sync(&self, ts: u64, working_set: WorkingSet) {

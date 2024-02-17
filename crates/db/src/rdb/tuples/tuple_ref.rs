@@ -29,15 +29,8 @@ pub struct TupleRef {
     sp: *mut TuplePtr,
 }
 
-impl Debug for TupleRef {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let id = self.id();
-        write!(f, "TupleRef({}/{})", id.page, id.slot)
-    }
-}
-
 #[repr(C, align(8))]
-struct Header {
+struct TupleHeader {
     ts: u64,
     domain_size: u32,
     codomain_size: u32,
@@ -52,6 +45,7 @@ impl TupleRef {
     pub(crate) fn at_tptr(sp: *mut TuplePtr) -> Self {
         Self { sp }
     }
+
     /// Allocate the given tuple in a slotbox.
     pub fn allocate(
         relation_id: RelationId,
@@ -60,19 +54,19 @@ impl TupleRef {
         domain: &[u8],
         codomain: &[u8],
     ) -> Result<TupleRef, TupleBoxError> {
-        let total_size = std::mem::size_of::<Header>() + domain.len() + codomain.len();
+        let total_size = std::mem::size_of::<TupleHeader>() + domain.len() + codomain.len();
         let tuple_ref = sb.clone().allocate(total_size, relation_id, None)?;
         sb.update_with(tuple_ref.id(), |mut buffer| {
             let domain_len = domain.len();
             let codomain_len = codomain.len();
             {
-                let header_ptr = buffer.as_mut().as_mut_ptr() as *mut Header;
+                let header_ptr = buffer.as_mut().as_mut_ptr() as *mut TupleHeader;
                 let header = unsafe { &mut *header_ptr };
                 header.ts = ts;
                 header.domain_size = domain_len as u32;
                 header.codomain_size = codomain_len as u32;
             }
-            let start_pos = std::mem::size_of::<Header>();
+            let start_pos = std::mem::size_of::<TupleHeader>();
             let codomain_start = start_pos + domain_len;
             let codomain_end = codomain_start + codomain_len;
             buffer[start_pos..start_pos + domain_len].copy_from_slice(domain);
@@ -110,7 +104,7 @@ impl TupleRef {
         let header = self.header();
         let domain_size = header.domain_size as usize;
         let buffer = self.slot_buffer();
-        let domain_start = std::mem::size_of::<Header>();
+        let domain_start = std::mem::size_of::<TupleHeader>();
         buffer.slice(domain_start..domain_start + domain_size)
     }
 
@@ -121,29 +115,30 @@ impl TupleRef {
         let domain_size = header.domain_size as usize;
         let codomain_size = header.codomain_size as usize;
         let buffer = self.slot_buffer();
-        let codomain_start = std::mem::size_of::<Header>() + domain_size;
+        let codomain_start = std::mem::size_of::<TupleHeader>() + domain_size;
         buffer.slice(codomain_start..codomain_start + codomain_size)
     }
 
     /// The raw buffer of the tuple, including the header, not dividing up the domain and codomain.
     pub fn slot_buffer(&self) -> SliceRef {
         let slot_ptr = self.resolve_slot_ptr();
-        SliceRef::from_byte_source(slot_ptr.byte_source())
+        let buffer = slot_ptr.buffer();
+        SliceRef::from_vec(buffer.to_vec())
     }
 }
 
 impl TupleRef {
     #[inline]
-    fn header(&self) -> &Header {
+    fn header(&self) -> &TupleHeader {
         let slot_ptr = self.resolve_slot_ptr();
-        let header: *const Header = slot_ptr.as_ptr();
+        let header: *const TupleHeader = slot_ptr.as_ptr();
         unsafe { &*header }
     }
 
     #[inline]
-    fn header_mut(&mut self) -> &mut Header {
+    fn header_mut(&mut self) -> &mut TupleHeader {
         let slot_ptr = self.resolve_slot_ptr_mut();
-        let header: *mut Header = unsafe { slot_ptr.get_unchecked_mut() }.as_mut_ptr();
+        let header: *mut TupleHeader = unsafe { slot_ptr.get_unchecked_mut() }.as_mut_ptr();
         unsafe { &mut *header }
     }
 
@@ -170,17 +165,36 @@ impl TupleRef {
     }
 }
 
+impl Clone for TupleRef {
+    fn clone(&self) -> Self {
+        self.upcount();
+        Self { sp: self.sp }
+    }
+}
+
+impl Debug for TupleRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "TupleRef({:?}: {} => {})",
+            self.id(),
+            self.domain().as_hex_string(),
+            self.codomain().as_hex_string()
+        )
+    }
+}
+
 impl Hash for TupleRef {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let id = self.id();
-        id.hash(state);
+        // The hash of a tuple is the hash of both the domain and codomain.
+        self.domain().hash(state);
+        self.codomain().hash(state);
     }
 }
 
 impl PartialEq for TupleRef {
     fn eq(&self, other: &Self) -> bool {
-        let (id, other_id) = (self.id(), other.id());
-        id == other_id
+        self.domain() == other.domain() && self.codomain() == other.codomain()
     }
 }
 
@@ -192,10 +206,19 @@ impl Drop for TupleRef {
     }
 }
 
-impl Clone for TupleRef {
-    fn clone(&self) -> Self {
-        self.upcount();
-        let sp = self.sp;
-        Self { sp }
+impl PartialOrd for TupleRef {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TupleRef {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Ord on (domain, codomain) pairs.
+        let domain_cmp = self.domain().cmp(&other.domain());
+        if domain_cmp != std::cmp::Ordering::Equal {
+            return domain_cmp;
+        }
+        self.codomain().cmp(&other.codomain())
     }
 }

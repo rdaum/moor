@@ -20,8 +20,9 @@ use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
 
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::{RelBox, RelationInfo};
-use crate::rdb::tuples::{TupleRef, TxTuple};
-use crate::rdb::{RelationId, TupleError};
+use crate::rdb::tuples::{TupleId, TupleRef};
+use crate::rdb::tx::tx_tuple::{DataSource, OpSource, TupleApply, TxTupleEvent, TxTupleOp};
+use crate::rdb::{RelationError, RelationId};
 
 /// The local tx "working set" of mutations to base relations, and consists of the set of operations
 /// we will attempt to make permanent when the transaction commits.
@@ -30,7 +31,7 @@ use crate::rdb::{RelationId, TupleError};
 pub struct WorkingSet {
     pub(crate) ts: u64,
     pub(crate) schema: Vec<RelationInfo>,
-    pub(crate) slotbox: Arc<TupleBox>,
+    pub(crate) tuplebox: Arc<TupleBox>,
     pub(crate) relations: Box<BitArray<TxBaseRelation, 64, Bitset64<1>>>,
 
     unsend: PhantomUnsend,
@@ -42,7 +43,7 @@ impl WorkingSet {
         let relations = Box::new(BitArray::new());
         Self {
             ts,
-            slotbox,
+            tuplebox: slotbox,
             schema: schema.to_vec(),
             relations,
             unsend: Default::default(),
@@ -68,7 +69,8 @@ impl WorkingSet {
         let r = &schema[relation_id.0];
         let new_relation = TxBaseRelation {
             id: relation_id,
-            tuples: Vec::new(),
+            unique_domain: r.unique_domain,
+            tx_tuple_events: HashMap::new(),
             domain_index: HashMap::new(),
             codomain_index: if r.secondary_indexed {
                 Some(HashMap::new())
@@ -88,34 +90,89 @@ impl WorkingSet {
         db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
-    ) -> Result<TupleRef, TupleError> {
+    ) -> Result<HashSet<TupleRef>, RelationError> {
+        let relation = Self::get_relation_mut(relation_id, &self.schema, self.relations.as_mut());
+
+        // Get the list of matches from the base relation, and then apply the local working set overtop.
+        let tuples = db.with_relation(relation_id, |relation| {
+            relation.seek_by_domain(domain.clone())
+        });
+
+        // Stash local references to the tuple we've seen, in case updates happen upstream.
+        for t in tuples {
+            let apply = TupleApply {
+                data_source: DataSource::Base,
+                op_source: OpSource::Seek,
+                replacement_op: Some(TxTupleOp::Value(t.clone())),
+                add_tuple: Some(t.clone()),
+                del_tuple: None,
+            };
+            relation.tuple_apply(apply)?;
+        }
+
+        let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
+        let Some(domain_tuples) = relation.domain_index.get(&domain) else {
+            return Ok(HashSet::default());
+        };
+        let tuples = domain_tuples.iter().filter_map(|tref| {
+            let t = relation.tx_tuple_events.get(tref).unwrap();
+            match &t.op {
+                TxTupleOp::Insert(t)
+                | TxTupleOp::Update { to_tuple: t, .. }
+                | TxTupleOp::Value(t) => Some(t.clone()),
+                TxTupleOp::Tombstone { .. } => None,
+            }
+        });
+
+        Ok(tuples.collect())
+    }
+
+    pub(crate) fn seek_unique_by_domain(
+        &mut self,
+        db: &Arc<RelBox>,
+        relation_id: RelationId,
+        domain: SliceRef,
+    ) -> Result<TupleRef, RelationError> {
         let relation = Self::get_relation_mut(relation_id, &self.schema, self.relations.as_mut());
 
         // Check local first.
-        if let Some(tuple_idx) = relation.domain_index.get(&domain) {
-            let local_version = relation.tuples.get(*tuple_idx).unwrap();
-            return match &local_version {
-                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(t) => Ok(t.clone()),
-                TxTuple::Tombstone { .. } => Err(TupleError::NotFound),
-            };
+        if let Some(tuple_indexes) = relation.domain_index.get(&domain) {
+            if !tuple_indexes.is_empty() {
+                if tuple_indexes.len() > 1 {
+                    return Err(RelationError::AmbiguousTuple);
+                }
+                let tref = tuple_indexes.iter().next().unwrap();
+                let local_version_op = relation.tx_tuple_events.get(tref).unwrap();
+                return match &local_version_op.op {
+                    TxTupleOp::Insert(t)
+                    | TxTupleOp::Update { to_tuple: t, .. }
+                    | TxTupleOp::Value(t) => Ok(t.clone()),
+                    TxTupleOp::Tombstone { .. } => Err(RelationError::TupleNotFound),
+                };
+            }
         }
 
         let canon_t = db.with_relation(relation_id, |relation| {
-            if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
-                Ok(tuple.clone())
-            } else {
-                Err(TupleError::NotFound)
+            let tuples = relation.seek_by_domain(domain.clone());
+            if tuples.is_empty() {
+                return Err(RelationError::TupleNotFound);
             }
+            if tuples.len() > 1 {
+                // We expected a unique value, but got more than one.
+                return Err(RelationError::AmbiguousTuple);
+            }
+            Ok(tuples.into_iter().next().unwrap())
         })?;
-        let tuple_idx = relation.tuples.len();
-        relation.tuples.push(TxTuple::Value(canon_t.clone()));
-        relation.domain_index.insert(domain, tuple_idx);
-        if let Some(ref mut codomain_index) = relation.codomain_index {
-            codomain_index
-                .entry(canon_t.codomain())
-                .or_insert_with(HashSet::new)
-                .insert(tuple_idx);
-        }
+
+        // Stash a local reference to the tuple we've seen, in case updates happen upstream.
+        let apply = TupleApply {
+            data_source: DataSource::Base,
+            op_source: OpSource::Seek,
+            replacement_op: Some(TxTupleOp::Value(canon_t.clone())),
+            add_tuple: Some(canon_t.clone()),
+            del_tuple: None,
+        };
+        relation.tuple_apply(apply)?;
         Ok(canon_t)
     }
 
@@ -124,7 +181,7 @@ impl WorkingSet {
         db: &Arc<RelBox>,
         relation_id: RelationId,
         codomain: SliceRef,
-    ) -> Result<HashSet<TupleRef>, TupleError> {
+    ) -> Result<HashSet<TupleRef>, RelationError> {
         // The codomain index is not guaranteed to be up to date with the working set, so we need
         // to go back to the canonical relation, get the list of tuples for the codomain, then materialize
         // them into our local working set -- which will update the codomain index -- and then actually
@@ -144,21 +201,21 @@ impl WorkingSet {
         // By performing the seek, we'll materialize the tuples into our local working set, which
         // will in turn update the codomain index for those tuples.
         for tuple in tuples_for_codomain {
-            let _ = self.seek_by_domain(db, relation_id, tuple.domain());
+            let _ = self.seek_unique_by_domain(db, relation_id, tuple.domain());
         }
 
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
         let codomain_index = relation.codomain_index.as_ref().expect("No codomain index");
-        let tuple_indexes = codomain_index
-            .get(&codomain)
-            .cloned()
-            .unwrap_or_else(HashSet::new)
-            .into_iter();
-        let tuples = tuple_indexes.filter_map(|tid| {
-            let t = relation.tuples.get(tid).expect("Tuple not found");
-            match &t {
-                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(t) => Some(t.clone()),
-                TxTuple::Tombstone { .. } => None,
+        let Some(codomain_tuples) = codomain_index.get(&codomain) else {
+            return Ok(HashSet::default());
+        };
+        let tuples = codomain_tuples.iter().filter_map(|tref| {
+            let t = relation.tx_tuple_events.get(tref).unwrap();
+            match &t.op {
+                TxTupleOp::Insert(t)
+                | TxTupleOp::Update { to_tuple: t, .. }
+                | TxTupleOp::Value(t) => Some(t.clone()),
+                TxTupleOp::Tombstone { .. } => None,
             }
         });
         Ok(tuples.collect())
@@ -170,34 +227,42 @@ impl WorkingSet {
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
-        // If we already have a local version, that's a dupe, so return an error for that.
-        if relation.domain_index.get(&domain).is_some() {
-            return Err(TupleError::Duplicate);
+        // Enforce unique domain constraint before doing anything else.
+        if relation.unique_domain {
+            if let Some(existing) = relation.domain_index.get(&domain) {
+                if !existing.is_empty() {
+                    return Err(RelationError::UniqueConstraintViolation);
+                }
+            }
+
+            db.with_relation(relation_id, |relation| {
+                if !relation.seek_by_domain(domain.clone()).is_empty() {
+                    // If there's a canonical version, we can't insert, so return an error.
+                    return Err(RelationError::UniqueConstraintViolation);
+                }
+                Ok(())
+            })?;
         }
 
-        db.with_relation(relation_id, |relation| {
-            if relation.seek_by_domain(domain.clone()).is_some() {
-                // If there's a canonical version, we can't insert, so return an error.
-                return Err(TupleError::Duplicate);
-            }
-            Ok(())
-        })?;
-
-        let tuple_idx = relation.tuples.len();
         let new_t = TupleRef::allocate(
             relation_id,
-            self.slotbox.clone(),
+            self.tuplebox.clone(),
             self.ts,
             domain.as_slice(),
             codomain.as_slice(),
-        );
-        relation.tuples.push(TxTuple::Insert(new_t.unwrap()));
-        relation.domain_index.insert(domain, tuple_idx);
-        relation.update_secondary(tuple_idx, None, Some(codomain.clone()));
-
+        )
+        .unwrap();
+        let apply = TupleApply {
+            data_source: DataSource::Base,
+            op_source: OpSource::Insert,
+            replacement_op: Some(TxTupleOp::Insert(new_t.clone())),
+            add_tuple: Some(new_t),
+            del_tuple: None,
+        };
+        relation.tuple_apply(apply)?;
         Ok(())
     }
 
@@ -206,341 +271,415 @@ impl WorkingSet {
         db: &Arc<RelBox>,
         relation_id: RelationId,
         f: F,
-    ) -> Result<Vec<TupleRef>, TupleError> {
-        // First collect all the tuples from the canonical relation, indexing them by domain.
-        let tuples = db.with_relation(relation_id, |relation| relation.predicate_scan(&f));
+    ) -> Result<Vec<TupleRef>, RelationError> {
+        // First collect all the tuples from the canonical relation that match.
+        let mut tuples: HashMap<TupleId, TupleRef> = db
+            .with_relation(relation_id, |relation| relation.predicate_scan(&f))
+            .iter()
+            .map(|t| (t.id(), t.clone()))
+            .collect();
 
-        let mut by_domain = HashMap::new();
-        for t in tuples {
-            by_domain.insert(t.domain().as_slice().to_vec(), t);
-        }
+        // Group by domain...
+        let mut by_domain: HashMap<SliceRef, HashSet<TupleRef>> =
+            tuples.iter().fold(HashMap::new(), |mut acc, (_, t)| {
+                acc.entry(t.domain()).or_default().insert(t.clone());
+                acc
+            });
 
-        // Now pull in the local working set.
+        // Now pull in the local working set and apply overtop.
         // Apply any changes to the tuples we've already collected, and add in any inserts, and
-        // remove any tombstones.
+        // remove anything tombstoned.
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
-        for t in &relation.tuples {
-            if t.ts() > self.ts {
+        for (tr, t) in &relation.tx_tuple_events {
+            if t.op.ts() > self.ts {
+                // Not visible to us.  Prune it out.
+                tuples.remove(tr);
                 continue;
             }
-            match t {
-                TxTuple::Insert(t) | TxTuple::Update(_, t) | TxTuple::Value(t) => {
-                    if f(t) {
-                        by_domain.insert(t.domain().as_slice().to_vec(), t.clone());
-                    } else {
-                        by_domain.remove(t.domain().as_slice());
+            match &t.op {
+                TxTupleOp::Insert(new_tuple) => {
+                    if f(new_tuple) {
+                        // If we have a unique domain constraint, we
+                        // need to remove any existing tuples with the
+                        // same domain, as we're going to replace them
+                        // with this one.
+                        if relation.unique_domain {
+                            let existing = by_domain.get_mut(&new_tuple.domain());
+                            if let Some(existing) = existing {
+                                for existing in existing.iter() {
+                                    tuples.remove(&existing.id());
+                                }
+                                existing.clear();
+                            }
+                        }
+                        tuples.insert(new_tuple.id(), new_tuple.clone());
                     }
                 }
-                TxTuple::Tombstone { domain, .. } => {
-                    by_domain.remove(domain.as_slice());
+                TxTupleOp::Update {
+                    to_tuple: new_tuple,
+                    from_tuple: old_tuple,
+                } => {
+                    tuples.remove(&old_tuple.id());
+                    if f(new_tuple) {
+                        tuples.insert(new_tuple.id(), new_tuple.clone());
+                    }
                 }
+                TxTupleOp::Tombstone(tref, _) => {
+                    tuples.remove(&tref.id());
+                }
+                TxTupleOp::Value(_) => continue,
             }
         }
-
-        // Now we have a map of domain -> tuple, so we can just pull out the tuples and return them.
-        Ok(by_domain.into_values().collect())
+        Ok(tuples.values().cloned().collect())
     }
 
-    pub(crate) fn update_tuple(
+    pub(crate) fn update_by_domain(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
-        // If we have an existing copy, we will update it, but keep its existing derivation
-        // timestamp and operation type.
-        if let Some(tuple_idx) = relation.domain_index.get_mut(&domain).cloned() {
-            let existing = relation.tuples.get_mut(tuple_idx).expect("Tuple not found");
-            let (replacement, old_value) = match &existing {
-                TxTuple::Tombstone { .. } => return Err(TupleError::NotFound),
-                TxTuple::Insert(t) => {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        t.ts(),
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (TxTuple::Insert(new_t.unwrap()), (t.domain(), t.codomain()))
+        // If we have existing copies, we will update each, but keep their existing derivation
+        // timestamps and operation types.
+        // As we're doing this, track the tuple ids for updates, values, and tombstones so we don't look at them again when we go to
+        // the canonical relation.
+        let mut skip_ids = HashSet::new();
+        if let Some(tuple_indexes) = relation.domain_index.get(&domain).cloned() {
+            if relation.unique_domain && tuple_indexes.len() > 1 {
+                return Err(RelationError::AmbiguousTuple);
+            }
+            for tuple_ref in tuple_indexes {
+                let existing = relation
+                    .tx_tuple_events
+                    .get(&tuple_ref)
+                    .expect("Tuple not found");
+                let Some(apply) = existing.transform_to_update(
+                    &domain,
+                    &codomain,
+                    self.tuplebox.clone(),
+                    relation_id,
+                    relation.unique_domain,
+                )?
+                else {
+                    continue;
+                };
+
+                if let Some(id) = relation.tuple_apply(apply)? {
+                    skip_ids.insert(id);
                 }
-                TxTuple::Update(_, t) | TxTuple::Value(t) => {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        t.ts(),
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    let tuple_ref = new_t.unwrap();
-                    (
-                        TxTuple::Update(tuple_ref.id(), tuple_ref),
-                        (t.domain(), t.codomain()),
-                    )
+                // If we have a unique domain constraint, we can stop here.
+                if relation.unique_domain {
+                    return Ok(());
                 }
-            };
-            *existing = replacement;
-            relation.update_secondary(tuple_idx, Some(old_value.1), Some(codomain.clone()));
-            return Ok(());
+            }
         }
 
-        // Check canonical for an existing value.  And get its timestamp if it exists.
+        // Check canonical for existing values.  And get timestamps for each...
         // We will use the ts on that to determine the derivation timestamp for our own version.
         // If there's nothing there or its tombstoned, that's NotFound, and die.
-        let old_tuple = db.with_relation(relation_id, |relation| {
-            if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
-                Ok(tuple)
-            } else {
-                Err(TupleError::NotFound)
-            }
-        })?;
+        let canon_tuples = db.with_relation(relation_id, |relation| {
+            let tuples = relation.seek_by_domain(domain.clone());
 
-        // Write into the local copy an update operation.
-        let tuple_idx = relation.tuples.len();
-        let new_t = TupleRef::allocate(
-            relation_id,
-            self.slotbox.clone(),
-            old_tuple.ts(),
-            domain.as_slice(),
-            codomain.as_slice(),
-        );
-        let new_t = new_t.unwrap();
-        relation.tuples.push(TxTuple::Update(old_tuple.id(), new_t));
-        relation.domain_index.insert(domain, tuple_idx);
-        relation.update_secondary(
-            tuple_idx,
-            Some(old_tuple.codomain()),
-            Some(codomain.clone()),
-        );
+            Ok(tuples)
+        })?;
+        if relation.unique_domain && canon_tuples.len() > 1 {
+            return Err(RelationError::AmbiguousTuple);
+        }
+        for old_tup in canon_tuples {
+            // Skip any tuples we've already updated locally.
+            if skip_ids.contains(&old_tup.id()) {
+                continue;
+            }
+            // Write into the local copy an update operation.
+            let new_t = TupleRef::allocate(
+                relation_id,
+                self.tuplebox.clone(),
+                old_tup.ts(),
+                domain.as_slice(),
+                codomain.as_slice(),
+            )
+            .unwrap();
+            // Update was already done in canonical, so we can just move on.
+            if relation.has_tuple(&new_t) {
+                continue;
+            }
+
+            let apply = TupleApply {
+                data_source: DataSource::Base,
+                op_source: OpSource::Update,
+                replacement_op: Some(TxTupleOp::Update {
+                    from_tuple: old_tup.clone(),
+                    to_tuple: new_t.clone(),
+                }),
+                add_tuple: Some(new_t),
+                del_tuple: None,
+            };
+            relation.tuple_apply(apply)?;
+
+            // If we have a unique domain constraint, we can stop here.
+            if relation.unique_domain {
+                return Ok(());
+            }
+        }
         Ok(())
     }
 
     /// Attempt to upsert a tuple in the transaction's working set, with the intent of eventually
     /// committing it to the canonical base relations.
-    pub(crate) fn upsert_tuple(
+    pub(crate) fn upsert_by_domain(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
         codomain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
         // If we have an existing copy, we will update it, but keep its existing derivation
         // timestamp.
         // If it's an insert, we have to keep it an insert, same for update, but if it's a delete,
         // we have to turn it into an update.
-        if let Some(tuple_idx) = relation.domain_index.get_mut(&domain).cloned() {
-            let existing = relation.tuples.get_mut(tuple_idx).expect("Tuple not found");
-            let (replacement, old) = match &existing {
-                TxTuple::Insert(t) => {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        t.ts(),
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (
-                        TxTuple::Insert(new_t.unwrap()),
-                        Some((t.domain(), t.codomain())),
-                    )
-                }
-                TxTuple::Tombstone { ts, tuple_id, .. } => {
-                    // We need to allocate a new tuple...
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        *ts,
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (TxTuple::Update(*tuple_id, new_t.unwrap()), None)
-                }
-                TxTuple::Update(id, tuple) => {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        tuple.ts(),
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (
-                        TxTuple::Update(*id, new_t.unwrap()),
-                        Some((tuple.domain(), tuple.codomain())),
-                    )
-                }
-                TxTuple::Value(tuple) => {
-                    let new_t = TupleRef::allocate(
-                        relation_id,
-                        self.slotbox.clone(),
-                        tuple.ts(),
-                        domain.as_slice(),
-                        codomain.as_slice(),
-                    );
-                    (
-                        TxTuple::Update(tuple.id(), new_t.unwrap()),
-                        Some((tuple.domain(), tuple.codomain())),
-                    )
-                }
-            };
-            *existing = replacement;
-            relation.update_secondary(tuple_idx, old.map(|o| o.1), Some(codomain.clone()));
-            return Ok(());
+        if let Some(domain_tuples) = relation.domain_index.get(&domain).cloned() {
+            // An upsert by definition should only have one value for the domain.
+            if domain_tuples.len() > 1 {
+                return Err(RelationError::AmbiguousTuple);
+            }
+            if let Some(existing_tref) = domain_tuples.into_iter().next() {
+                let existing_tuple_op = relation
+                    .tx_tuple_events
+                    .get(&existing_tref)
+                    .expect("Tuple not found");
+
+                let apply = existing_tuple_op.transform_to_upsert(
+                    &domain,
+                    &codomain,
+                    self.tuplebox.clone(),
+                    relation_id,
+                )?;
+                relation.tuple_apply(apply)?;
+                return Ok(());
+            }
         }
 
-        // Check canonical for an existing value.  And get its timestamp if it exists.
-        // We will use the ts on that to determine the derivation timestamp for our own version.
-        // If there is no value there, we will use the current transaction timestamp, but it's
-        // an insert rather than an update.
-        let (operation, old) = db.with_relation(relation_id, |relation| {
-            if let Some(old_tuple) = relation.seek_by_domain(domain.clone()) {
+        // Nothing, local, do canonical...
+        let apply = db.with_relation(relation_id, |relation| {
+            let old_tuples = relation.seek_by_domain(domain.clone());
+            // If there's more than one value for this domain, this operation makes no sense, so raise an
+            // ambig error.
+            if old_tuples.len() > 1 {
+                return Err(RelationError::AmbiguousTuple);
+            }
+            let result = if old_tuples.is_empty() {
                 let new_t = TupleRef::allocate(
                     relation_id,
-                    self.slotbox.clone(),
-                    old_tuple.ts(),
-                    domain.as_slice(),
-                    codomain.as_slice(),
-                );
-                (
-                    TxTuple::Update(old_tuple.id(), new_t.unwrap()),
-                    Some(old_tuple),
-                )
-            } else {
-                let new_t = TupleRef::allocate(
-                    relation_id,
-                    self.slotbox.clone(),
+                    self.tuplebox.clone(),
                     self.ts,
                     domain.as_slice(),
                     codomain.as_slice(),
-                );
-                (TxTuple::Insert(new_t.unwrap()), None)
-            }
-        });
-        let tuple_idx = relation.tuples.len();
-        relation.tuples.push(operation);
-        relation.domain_index.insert(domain, tuple_idx);
+                )
+                .unwrap();
+                Ok(Some(TupleApply {
+                    data_source: DataSource::Base,
+                    op_source: OpSource::Upsert,
+                    replacement_op: Some(TxTupleOp::Insert(new_t.clone())),
+                    add_tuple: Some(new_t),
+                    del_tuple: None,
+                }))
+            } else {
+                let old_tuple = old_tuples.into_iter().next().unwrap();
+                // If old domain & codomain are the same as the upsert, we're done, nothing to apply.
+                if old_tuple.domain() == domain && old_tuple.codomain() == codomain {
+                    return Ok(None);
+                }
 
-        // Remove the old codomain->domain index entry if it exists, and then add the new one.
-        relation.update_secondary(tuple_idx, old.map(|o| o.domain()), Some(codomain.clone()));
+                let new_t = TupleRef::allocate(
+                    relation_id,
+                    self.tuplebox.clone(),
+                    self.ts,
+                    domain.as_slice(),
+                    codomain.as_slice(),
+                )
+                .unwrap();
+                Ok(Some(TupleApply {
+                    data_source: DataSource::Base,
+                    op_source: OpSource::Upsert,
+                    replacement_op: Some(TxTupleOp::Update {
+                        from_tuple: old_tuple.clone(),
+                        to_tuple: new_t.clone(),
+                    }),
+                    add_tuple: Some(new_t),
+                    del_tuple: None,
+                }))
+            };
+            result
+        })?;
+
+        if let Some(apply) = apply {
+            relation.tuple_apply(apply)?;
+        }
         Ok(())
     }
 
-    /// Attempt to delete a tuple in the transaction's working set, with the intent of eventually
-    /// committing the delete to the canonical base relations.
+    /// Attempt to delete tuples in the transaction's working set, with the intent of eventually
+    /// committing the delete to the canonical base relation.
     pub(crate) fn remove_by_domain(
         &mut self,
         db: &Arc<RelBox>,
         relation_id: RelationId,
         domain: SliceRef,
-    ) -> Result<(), TupleError> {
+    ) -> Result<(), RelationError> {
         let relation = Self::get_relation_mut(relation_id, &self.schema, &mut self.relations);
 
-        // Delete is basically an update but where we stick a Tombstone.
-        if let Some(tuple_index) = relation.domain_index.get_mut(&domain).cloned() {
-            let tuple_v = relation
-                .tuples
-                .get_mut(tuple_index)
-                .expect("Tuple not found");
-
-            // If the tuple was an insert, we should just remove it.
-            // If it was an update, we can just replace it with a tombstone.
-            // If it was a tombstone, we can just return NotFound.
-
-            let old_v = match &tuple_v {
-                TxTuple::Insert(_) => {
-                    relation.tuples.remove(tuple_index);
-                    relation.domain_index.remove(&domain);
-                    relation.update_secondary(tuple_index, None, None);
-                    return Ok(());
+        let mut found = false;
+        // Delete is basically an update but where we stick a Tombstone in there.
+        if let Some(trefs) = relation.domain_index.get(&domain).cloned() {
+            if relation.unique_domain && trefs.len() > 1 {
+                return Err(RelationError::AmbiguousTuple);
+            }
+            for tref in trefs {
+                let tuple_op = relation
+                    .tx_tuple_events
+                    .get_mut(&tref)
+                    .expect("Tuple op not found for indexed tuple");
+                if let Some(apply) = tuple_op.transform_to_remove()? {
+                    relation.tuple_apply(apply)?;
+                    found = true;
                 }
-                TxTuple::Update(_, t) | TxTuple::Value(t) => t.clone(),
-                TxTuple::Tombstone { .. } => {
-                    return Err(TupleError::NotFound);
-                }
-            };
-            *tuple_v = TxTuple::Tombstone {
-                ts: tuple_v.ts(),
-                tuple_id: tuple_v.origin_tuple_id(),
-                domain: domain.clone(),
-            };
-            relation.update_secondary(tuple_index, Some(old_v.codomain()), None);
+            }
+        }
+
+        if relation.unique_domain && found {
             return Ok(());
         }
 
-        let (ts, old_codomain, tuple) = db.with_relation(relation_id, |relation| {
-            if let Some(tuple) = relation.seek_by_domain(domain.clone()) {
-                Ok((tuple.ts(), tuple.codomain().clone(), tuple))
-            } else {
-                Err(TupleError::NotFound)
+        let old_tuples = db.with_relation(relation_id, |relation| {
+            let tuples = relation.seek_by_domain(domain.clone());
+
+            if relation.unique_domain {
+                if tuples.is_empty() {
+                    return Err(RelationError::TupleNotFound);
+                }
+                if tuples.len() > 1 {
+                    return Err(RelationError::AmbiguousTuple);
+                }
             }
+            Ok(tuples)
         })?;
 
-        let local_tuple_idx = relation.tuples.len();
-        relation.tuples.push(TxTuple::Tombstone {
-            ts,
-            domain: domain.clone(),
-            tuple_id: tuple.id(),
-        });
-        relation.domain_index.insert(domain, local_tuple_idx);
-        relation.update_secondary(local_tuple_idx, Some(old_codomain), None);
+        for old_tuple in old_tuples {
+            let apply = TupleApply {
+                data_source: DataSource::Base,
+                op_source: OpSource::Remove,
+                replacement_op: Some(TxTupleOp::Tombstone(old_tuple.clone(), self.ts)),
+                add_tuple: Some(old_tuple.clone()),
+                del_tuple: None,
+            };
+            relation.tuple_apply(apply)?;
+        }
         Ok(())
     }
 }
 
-/// The transaction-local storage for tuples in relations derived from base relations.
+/// The transaction-local storage for tuples in relations, originally derived from base relations.
 pub(crate) struct TxBaseRelation {
     pub id: RelationId,
-    tuples: Vec<TxTuple>,
-    domain_index: HashMap<SliceRef, usize>,
-    codomain_index: Option<HashMap<SliceRef, HashSet<usize>>>,
+    unique_domain: bool,
+    tx_tuple_events: HashMap<TupleId, TxTupleEvent>,
+    domain_index: HashMap<SliceRef, HashSet<TupleId>>,
+    codomain_index: Option<HashMap<SliceRef, HashSet<TupleId>>>,
 
     unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
 impl TxBaseRelation {
-    pub fn tuples(&self) -> impl Iterator<Item = &TxTuple> {
-        self.tuples.iter()
+    pub fn tuples(&self) -> impl Iterator<Item = &TxTupleEvent> {
+        self.tx_tuple_events.values()
     }
 
-    pub fn tuples_mut(&mut self) -> impl Iterator<Item = &mut TxTuple> {
-        self.tuples.iter_mut()
+    pub fn tuples_iter_mut(&mut self) -> impl Iterator<Item = &mut TxTupleEvent> {
+        self.tx_tuple_events.values_mut()
     }
 
     pub(crate) fn clear(&mut self) {
-        self.tuples.clear();
+        self.tx_tuple_events.clear();
         self.domain_index.clear();
         if let Some(index) = self.codomain_index.as_mut() {
             index.clear();
         }
     }
 
-    /// Update the secondary index for the given tuple.
-    pub(crate) fn update_secondary(
-        &mut self,
-        tuple_id: usize,
-        old_codomain: Option<SliceRef>,
-        new_codomain: Option<SliceRef>,
-    ) {
-        let Some(codomain_index) = self.codomain_index.as_mut() else {
-            return;
-        };
+    // Check for dupes for the given domain value.
+    fn has_tuple(&self, tuple: &TupleRef) -> bool {
+        if let Some(existing) = self.tx_tuple_events.get(&tuple.id()) {
+            return !matches!(&existing.op, TxTupleOp::Tombstone { .. });
+        }
+        false
+    }
 
-        // Clear out the old entry, if there was one.
-        if let Some(old_codomain) = old_codomain {
-            codomain_index
-                .entry(old_codomain)
-                .or_insert_with(HashSet::new)
-                .remove(&tuple_id);
+    /// Apply a tuple apply event to the working set relation, storing it in our set, and updating indexes appropriately.
+    /// This is done to have a consistent process for applying updates to the working set, to avoid having to
+    /// do the index updates in multiple places.
+    fn tuple_apply(&mut self, apply: TupleApply) -> Result<Option<TupleId>, RelationError> {
+        let TupleApply {
+            replacement_op,
+            add_tuple,
+            del_tuple,
+            ..
+        } = apply;
+
+        // Perform deletes as appropriate.
+        if let Some(del_tuple) = &del_tuple {
+            let existing_domain_index = self.domain_index.get_mut(&del_tuple.domain()).unwrap();
+            existing_domain_index.remove(&del_tuple.id());
+            self.tx_tuple_events.remove(&del_tuple.id()).unwrap();
+            if let Some(codomain_index) = &mut self.codomain_index {
+                codomain_index.entry(del_tuple.codomain()).and_modify(|e| {
+                    e.remove(&del_tuple.id());
+                });
+            }
         }
-        if let Some(new_codomain) = new_codomain {
-            codomain_index
-                .entry(new_codomain)
-                .or_insert_with(HashSet::new)
-                .insert(tuple_id);
+        // Then add the new tuple, if there is one.
+        if let Some(add_tuple) = add_tuple {
+            // We can't accommodate a new tuple if it's already in the relation, we're a set not a bag.
+            if self.has_tuple(&add_tuple) {
+                return Err(RelationError::UniqueConstraintViolation);
+            }
+
+            // Insert the new tuple & operation into the indexes and tuple op map.
+            let new_domain_index_entry = self.domain_index.entry(add_tuple.domain()).or_default();
+
+            // If there's a unique domain constraint, we can't accommodate a new tuple if there's already
+            // one in the relation for the same domain.
+            if self.unique_domain && !new_domain_index_entry.is_empty() {
+                return Err(RelationError::UniqueConstraintViolation);
+            }
+
+            // Index the new tuple...
+            new_domain_index_entry.insert(add_tuple.id());
+
+            // Shove in the operation at the new locale.
+            if let Some(replacement_op) = replacement_op {
+                self.tx_tuple_events.insert(
+                    add_tuple.id(),
+                    TxTupleEvent {
+                        op: replacement_op,
+                        op_source: apply.op_source,
+                        data_source: apply.data_source,
+                    },
+                );
+            }
+
+            if let Some(codomain_index) = &mut self.codomain_index {
+                codomain_index
+                    .entry(add_tuple.codomain())
+                    .or_default()
+                    .insert(add_tuple.id());
+            }
         }
+        Ok(del_tuple.map(|t| t.id()))
     }
 }

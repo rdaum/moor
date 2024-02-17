@@ -41,6 +41,7 @@ mod test {
                     domain_type_id: 0, /* tbd */
                     codomain_type_id: 0,
                     secondary_indexed: false,
+                    unique_domain: true,
                 }
             })
             .collect();

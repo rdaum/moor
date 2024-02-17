@@ -91,7 +91,7 @@ pest_derive = "2.7.7"
 ## Error declaration/ handling
 color-eyre = "0.6.2"
 eyre = "0.6.12"
-thiserror = "1.0.56"
+thiserror = "1.0.57"
 
 ## For macro-ing
 paste = "1.0.14"

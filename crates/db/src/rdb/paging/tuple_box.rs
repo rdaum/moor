@@ -39,7 +39,9 @@ use tracing::warn;
 
 use moor_values::util::{BitArray, Bitset64};
 
-use crate::rdb::paging::slotted_page::{slot_index_overhead, slot_page_empty_size, SlottedPage};
+use crate::rdb::paging::slotted_page::{
+    slot_index_overhead, slot_page_empty_size, PageReadGuard, PageWriteGuard, SlottedPage,
+};
 use crate::rdb::paging::tuple_ptr::TuplePtr;
 use crate::rdb::paging::TupleBoxError;
 use crate::rdb::pool::PagerError;
@@ -94,7 +96,7 @@ impl TupleBox {
         let mut inner = self.inner.lock().unwrap();
 
         // Re-allocate the page.
-        let page = inner.do_restore_page(id, page_size).unwrap();
+        let mut page = inner.do_restore_page(id, page_size).unwrap();
 
         // Find all the slots referenced in this page.
         let slot_ids = page.load(|buf| {
@@ -128,7 +130,7 @@ impl TupleBox {
     }
 
     #[inline(always)]
-    pub(crate) fn page_for<'a>(&self, id: PageId) -> Result<SlottedPage<'a>, TupleBoxError> {
+    pub(crate) fn page_for<'a>(&self, id: PageId) -> Result<PageReadGuard<'a>, TupleBoxError> {
         let inner = self.inner.lock().unwrap();
         inner.page_for(id)
     }
@@ -142,16 +144,18 @@ impl TupleBox {
     #[inline(always)]
     pub fn upcount(&self, id: TupleId) -> Result<(), TupleBoxError> {
         let inner = self.inner.lock().unwrap();
-        let page_handle = inner.page_for(id.page)?;
+        let mut page_handle = inner.page_for_mut(id.page)?;
         page_handle.upcount(id.slot)
     }
 
     #[inline(always)]
     pub fn dncount(&self, id: TupleId) -> Result<(), TupleBoxError> {
         let mut inner = self.inner.lock().unwrap();
-        let page_handle = inner.page_for(id.page)?;
+        let mut page_handle = inner.page_for_mut(id.page)?;
         if page_handle.dncount(id.slot)? {
-            inner.do_remove(id)?;
+            // Ownership of the page write lock transfers to do_remove, so it doesn't need to take a new one and
+            // cause deadlock.
+            inner.do_remove(id, page_handle)?;
         }
         Ok(())
     }
@@ -162,10 +166,9 @@ impl TupleBox {
         mut f: F,
     ) -> Result<(), TupleBoxError> {
         let inner = self.inner.lock().unwrap();
-        let mut page_handle = inner.page_for(id.page)?;
-        let mut page_write = page_handle.write_lock();
+        let mut page_handle = inner.page_for_mut(id.page)?;
 
-        let existing = page_write.get_slot_mut(id.slot).expect("Invalid tuple id");
+        let existing = page_handle.get_slot_mut(id.slot).expect("Invalid tuple id");
 
         f(existing);
         Ok(())
@@ -235,11 +238,8 @@ impl Inner {
             // Check if we have a free spot for this relation that can fit the tuple.
             let (page, offset) =
                 { self.find_space(relation_id, tuple_size, slot_page_empty_size(page_size))? };
-            let mut page_handle = self.page_for(page)?;
-            let mut page_write_lock = page_handle.write_lock();
-            if let Ok((slot, page_remaining, mut buf)) =
-                page_write_lock.allocate(size, initial_value)
-            {
+            let mut page_handle = self.page_for_mut(page)?;
+            if let Ok((slot, page_remaining, mut buf)) = page_handle.allocate(size, initial_value) {
                 self.finish_alloc(page, relation_id, offset, page_remaining);
 
                 // Make a swizzlable ptr reference and shove it in our set, and then return a tuple ref
@@ -257,7 +257,7 @@ impl Inner {
                 self.tuple_ptrs.insert(tuple_id, tuple_ptr);
 
                 // Establish initial refcount using this existing lock.
-                page_write_lock.upcount(slot).unwrap();
+                page_handle.upcount(slot).unwrap();
 
                 return Ok(TupleRef::at_tptr(tuple_ptr_addr));
             }
@@ -276,6 +276,7 @@ impl Inner {
                 let tptr_ref = unsafe { Pin::into_inner_unchecked(tptr.as_mut()) };
                 let tptr_ptr = tptr_ref.as_mut_ptr();
 
+                tptr_ref.upcount();
                 TupleRef::at_tptr(tptr_ptr)
             })
             .map_or_else(|| Err(TupleBoxError::TupleNotFound(id.slot as usize)), Ok)
@@ -285,7 +286,7 @@ impl Inner {
         &mut self,
         id: PageId,
         size: usize,
-    ) -> Result<SlottedPage<'a>, TupleBoxError> {
+    ) -> Result<PageWriteGuard<'a>, TupleBoxError> {
         let (addr, page_size) = match self.pager.restore_page(id, size) {
             Ok(v) => v,
             Err(PagerError::CouldNotAccess) => {
@@ -296,7 +297,7 @@ impl Inner {
             }
         };
 
-        Ok(SlottedPage::for_page(addr.load(SeqCst), page_size))
+        Ok(SlottedPage::for_page_mut(addr.load(SeqCst), page_size))
     }
 
     fn do_mark_page_used(&mut self, relation_id: RelationId, free_space: usize, pid: PageId) {
@@ -309,16 +310,13 @@ impl Inner {
         available_page_space.insert(free_space, pid);
     }
 
-    fn do_remove(&mut self, id: TupleId) -> Result<(), TupleBoxError> {
-        // We have to release the lock before dropping the pointer, or we get a fault
-        // decrementing the page's lock count. Unclear to me why.
-        {
-            let mut page_handle = self.page_for(id.page)?;
-            let mut write_lock = page_handle.write_lock();
-            let (new_free, _, is_empty) = write_lock.remove_slot(id.slot)?;
-
-            self.report_free(id.page, new_free, is_empty);
-        }
+    fn do_remove(
+        &mut self,
+        id: TupleId,
+        mut page_handle: PageWriteGuard,
+    ) -> Result<(), TupleBoxError> {
+        let (new_free, _, is_empty) = page_handle.remove_slot(id.slot)?;
+        self.report_free(id.page, new_free, is_empty);
         self.tuple_ptrs.remove(&id);
 
         Ok(())
@@ -338,7 +336,7 @@ impl Inner {
         todo!("page in");
     }
 
-    fn page_for<'a>(&self, page_num: PageId) -> Result<SlottedPage<'a>, TupleBoxError> {
+    fn page_for<'a>(&self, page_num: PageId) -> Result<PageReadGuard<'a>, TupleBoxError> {
         let (page_address, page_size) = match self.pager.resolve_ptr(page_num) {
             Ok(v) => v,
             Err(PagerError::CouldNotAccess) => {
@@ -353,6 +351,22 @@ impl Inner {
         };
         let page_handle = SlottedPage::for_page(page_address, page_size);
         Ok(page_handle)
+    }
+
+    fn page_for_mut<'a>(&self, page_num: PageId) -> Result<PageWriteGuard<'a>, TupleBoxError> {
+        let (page_address, page_size) = match self.pager.resolve_ptr(page_num) {
+            Ok(v) => v,
+            Err(PagerError::CouldNotAccess) => {
+                return Err(TupleBoxError::TupleNotFound(page_num));
+            }
+            Err(PagerError::InvalidPage) => {
+                return Err(TupleBoxError::TupleNotFound(page_num));
+            }
+            _ => {
+                panic!("Unexpected buffer pool error");
+            }
+        };
+        Ok(SlottedPage::for_page_mut(page_address, page_size))
     }
 
     fn alloc(

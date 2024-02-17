@@ -32,13 +32,14 @@ mod support;
 
 /// Build a test database with a bunch of relations
 fn test_db() -> Arc<RelBox> {
-    // Generate 10 test relations that we'll use for testing.
+    // Generate the test relations that we'll use for testing.
     let relations = (0..63)
         .map(|i| RelationInfo {
             name: format!("relation_{}", i),
             domain_type_id: 0,
             codomain_type_id: 0,
             secondary_indexed: false,
+            unique_domain: true,
         })
         .collect::<Vec<_>>();
 
@@ -155,7 +156,9 @@ fn list_append_seek_workload(iters: u64, events: &Vec<History>) -> Duration {
                                 let relation = RelationId(*register as usize);
 
                                 for t in tuples {
-                                    tx.relation(relation).seek_by_domain(from_val(*t)).unwrap();
+                                    tx.relation(relation)
+                                        .seek_unique_by_domain(from_val(*t))
+                                        .unwrap();
                                 }
                             }
                             Value::r(_, _, None) => {

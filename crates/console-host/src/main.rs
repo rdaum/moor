@@ -244,12 +244,9 @@ fn console_loop(
             match narrative_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
                     printer
-                        .print(format!(
-                            "{}",
-                            match msg.event() {
+                        .print((match msg.event() {
                                 moor_values::model::Event::TextNotify(s) => s,
-                            }
-                        ))
+                            }).to_string())
                         .unwrap();
                 }
                 Ok(ConnectionEvent::SystemMessage(o, msg)) => {
@@ -259,7 +256,7 @@ fn console_loop(
                 }
                 Ok(ConnectionEvent::Disconnect()) => {
                     printer
-                        .print(format!("Received disconnect event; Session ending."))
+                        .print("Received disconnect event; Session ending.".to_string())
                         .unwrap();
                     return;
                 }

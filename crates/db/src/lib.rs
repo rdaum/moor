@@ -28,7 +28,6 @@ pub mod loader;
 pub mod rdb;
 
 pub mod odb;
-pub mod util;
 
 pub struct DatabaseBuilder {
     path: Option<std::path::PathBuf>,

@@ -21,7 +21,7 @@ use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
 
-use crate::rdb::TupleError;
+use crate::rdb::RelationError;
 use crate::rdb::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
@@ -75,7 +75,7 @@ pub fn upsert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     value: Codomain,
 ) -> Result<(), WorldStateError> {
     let relation = tx.relation(RelationId(rel as usize));
-    if let Err(e) = relation.upsert_tuple(
+    if let Err(e) = relation.upsert_by_domain(
         oid.as_sliceref().expect("Could not decode OID"),
         value.as_sliceref().expect("Could not decode value"),
     ) {
@@ -97,7 +97,7 @@ pub fn insert_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
         value.as_sliceref().expect("Could not decode value"),
     ) {
         Ok(_) => Ok(()),
-        Err(TupleError::Duplicate) => {
+        Err(RelationError::UniqueConstraintViolation) => {
             Err(WorldStateError::DatabaseError("Duplicate key".to_string()))
         }
         Err(e) => panic!("Unexpected error: {:?}", e),
@@ -139,11 +139,11 @@ pub fn get_object_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
     oid: Objid,
 ) -> Option<Codomain> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
+    match relation.seek_unique_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
         Ok(v) => {
             Some(Codomain::from_sliceref(v.codomain()).expect("Could not decode codomain value"))
         }
-        Err(TupleError::NotFound) => None,
+        Err(RelationError::TupleNotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -154,9 +154,9 @@ pub fn tuple_size_for_object_domain(
     oid: Objid,
 ) -> Option<usize> {
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
+    match relation.seek_unique_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
         Ok(t) => Some(t.slot_buffer().len()),
-        Err(TupleError::NotFound) => None,
+        Err(RelationError::TupleNotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -187,7 +187,7 @@ pub fn tuple_size_for_object_codomain(
     let relation = tx.relation(RelationId(rel as usize));
     match relation.seek_by_codomain(oid.as_sliceref().expect("Could not encode codomain oid")) {
         Ok(ts) => Some(ts.iter().map(|t| t.slot_buffer().len()).sum()),
-        Err(TupleError::NotFound) => None,
+        Err(RelationError::TupleNotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -199,11 +199,11 @@ pub fn get_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
 ) -> Option<Codomain> {
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_domain(key_bytes) {
+    match relation.seek_unique_by_domain(key_bytes) {
         Ok(v) => {
             Some(Codomain::from_sliceref(v.codomain()).expect("Could not decode codomain value"))
         }
-        Err(TupleError::NotFound) => None,
+        Err(RelationError::TupleNotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -216,9 +216,9 @@ pub fn tuple_size_composite(
 ) -> Option<usize> {
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize));
-    match relation.seek_by_domain(key_bytes) {
+    match relation.seek_unique_by_domain(key_bytes) {
         Ok(t) => Some(t.slot_buffer().len()),
-        Err(TupleError::NotFound) => None,
+        Err(RelationError::TupleNotFound) => None,
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -238,7 +238,7 @@ fn insert_composite_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
         value.as_sliceref().expect("Could not encode value"),
     ) {
         Ok(_) => Ok(()),
-        Err(TupleError::Duplicate) => Err(WorldStateError::ObjectNotFound(oid)),
+        Err(RelationError::UniqueConstraintViolation) => Err(WorldStateError::ObjectNotFound(oid)),
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -252,7 +252,7 @@ fn delete_if_exists(
     let relation = tx.relation(RelationId(rel as usize));
     match relation.remove_by_domain(oid.as_sliceref().expect("Could not encode oid")) {
         Ok(_) => Ok(()),
-        Err(TupleError::NotFound) => Ok(()),
+        Err(RelationError::TupleNotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -267,7 +267,7 @@ pub fn delete_composite_if_exists(
     let relation = tx.relation(RelationId(rel as usize));
     match relation.remove_by_domain(key_bytes) {
         Ok(_) => Ok(()),
-        Err(TupleError::NotFound) => Ok(()),
+        Err(RelationError::TupleNotFound) => Ok(()),
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -281,7 +281,7 @@ pub fn upsert_obj_uuid_value<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
 ) -> Result<(), WorldStateError> {
     let key_bytes = composite_key_for(oid, &uuid);
     let relation = tx.relation(RelationId(rel as usize));
-    if let Err(e) = relation.upsert_tuple(
+    if let Err(e) = relation.upsert_by_domain(
         key_bytes,
         value.as_sliceref().expect("Could not encode value"),
     ) {
@@ -314,6 +314,7 @@ mod tests {
                     domain_type_id: 0, /* tbd */
                     codomain_type_id: 0,
                     secondary_indexed: false,
+                    unique_domain: true,
                 }
             })
             .collect();

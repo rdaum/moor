@@ -43,7 +43,7 @@ use crate::odb::object_relations;
 use crate::odb::object_relations::{
     get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
-use crate::rdb::TupleError;
+use crate::rdb::RelationError;
 use crate::rdb::{CommitError, Transaction};
 use crate::rdb::{RelBox, RelationInfo};
 use crate::Database;
@@ -62,6 +62,7 @@ impl RelBoxWorldState {
                     domain_type_id: 0, /* tbd */
                     codomain_type_id: 0,
                     secondary_indexed: false,
+                    unique_domain: true,
                 }
             })
             .collect();
@@ -74,15 +75,15 @@ impl RelBoxWorldState {
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
-            db.canonical[WorldStateRelation::ObjectParent as usize]
-                .load()
+            let canonical = db.canonical.read().unwrap();
+            canonical[WorldStateRelation::ObjectParent as usize]
                 .seek_by_domain(
                     SYSTEM_OBJECT
                         .0
                         .as_sliceref()
                         .expect("Could not encode sysobj id"),
                 )
-                .is_none()
+                .is_empty()
         };
         (Self { db }, fresh_db)
     }
@@ -793,7 +794,7 @@ impl DbTransaction for RelBoxTransaction {
             .relation(WorldStateRelation::ObjectPropertyValue.into());
         match rel.remove_by_domain(key) {
             Ok(_) => Ok(()),
-            Err(TupleError::NotFound) => Ok(()),
+            Err(RelationError::TupleNotFound) => Ok(()),
             Err(e) => {
                 panic!("Unexpected error: {:?}", e)
             }
@@ -1004,6 +1005,7 @@ impl DbTransaction for RelBoxTransaction {
         match self.tx.commit() {
             Ok(_) => Ok(CommitResult::Success),
             Err(CommitError::TupleVersionConflict) => Ok(CommitResult::ConflictRetry),
+            Err(CommitError::UniqueConstraintViolation) => Ok(CommitResult::ConflictRetry),
             Err(CommitError::RelationContentionConflict) => {
                 warn!("Contention conflict; too many concurrent writes on the same relation(s) after retries.");
                 Ok(CommitResult::ConflictRetry)
@@ -1099,6 +1101,14 @@ impl RelBoxTransaction {
     }
 }
 
+impl Drop for RelBoxTransaction {
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            self.tx.rollback().unwrap();
+        }
+    }
+}
+
 impl Database for RelBoxWorldState {
     fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError> {
         let tx = RelBoxTransaction::new(self.db.clone());
@@ -1140,6 +1150,7 @@ mod tests {
                     domain_type_id: 0, /* tbd */
                     codomain_type_id: 0,
                     secondary_indexed: false,
+                    unique_domain: true,
                 }
             })
             .collect();
