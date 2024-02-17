@@ -244,9 +244,12 @@ fn console_loop(
             match narrative_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
                     printer
-                        .print((match msg.event() {
+                        .print(
+                            (match msg.event() {
                                 moor_values::model::Event::TextNotify(s) => s,
-                            }).to_string())
+                            })
+                            .to_string(),
+                        )
                         .unwrap();
                 }
                 Ok(ConnectionEvent::SystemMessage(o, msg)) => {

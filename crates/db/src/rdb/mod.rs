@@ -33,6 +33,10 @@ mod relbox;
 mod tuples;
 mod tx;
 
+// Note: this is 'pub' just to shut dead_code compiler warnings up,
+// and can be removed once the ART index is actually being used
+pub mod index;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RelationId(pub usize);
 

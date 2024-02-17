@@ -57,7 +57,7 @@ impl Hash for SliceRef {
 
 impl PartialOrd for SliceRef {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-	Some(self.cmp(other))
+        Some(self.cmp(other))
     }
 }
 
@@ -166,10 +166,7 @@ impl SliceRef {
     }
 
     pub fn as_hex_string(&self) -> String {
-        format!(
-            "{:x}",
-            self.as_slice().iter().fold(0, |acc, b| acc ^ *b)
-        )
+        format!("{:x}", self.as_slice().iter().fold(0, |acc, b| acc ^ *b))
     }
 }
 
