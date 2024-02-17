@@ -12,8 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::rdb::index::indexed_mapping::IndexedMapping;
 use moor_values::util::{BitArray, Bitset64, BitsetTrait};
+
+use crate::rdb::index::indexed_mapping::IndexedMapping;
 
 use super::NodeMapping;
 

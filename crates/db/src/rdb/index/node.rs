@@ -18,7 +18,6 @@ use moor_values::util::Bitset64;
 
 use crate::rdb::index::direct_mapping::DirectMapping;
 use crate::rdb::index::indexed_mapping::IndexedMapping;
-
 use crate::rdb::index::keyed_mapping::KeyedMapping;
 use crate::rdb::index::NodeMapping;
 

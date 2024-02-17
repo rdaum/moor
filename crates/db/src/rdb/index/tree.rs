@@ -12,20 +12,27 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::rdb::index::node::{Content, Node};
-use crate::rdb::index::tuple_key::TupleKey;
-use crate::rdb::index::vector_partial::VectorPartial;
-use crate::rdb::index::{KeyTrait, Partial};
 use std::cmp::min;
 use std::sync::Arc;
 
+use crate::rdb::index::node::{Content, Node};
+use crate::rdb::index::{KeyTrait, Partial};
+
+use super::iter::Iter;
+
 #[derive(Clone)]
-pub struct AdaptiveRadixTree<ValueType: Clone> {
-    root: Option<Node<VectorPartial, ValueType>>,
-    _phantom: std::marker::PhantomData<TupleKey>,
+pub struct AdaptiveRadixTree<KeyType: KeyTrait, ValueType: Clone> {
+    root: Option<Node<KeyType::PartialType, ValueType>>,
+    _phantom: std::marker::PhantomData<KeyType>,
 }
 
-impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
+impl<KeyType: KeyTrait, ValueType: Clone> Default for AdaptiveRadixTree<KeyType, ValueType> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<KeyType: KeyTrait, ValueType: Clone> AdaptiveRadixTree<KeyType, ValueType> {
     pub fn new() -> Self {
         Self {
             root: None,
@@ -34,17 +41,17 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
     }
 
     #[inline]
-    pub fn get_k(&self, key: &TupleKey) -> Option<&ValueType> {
+    pub fn get_k(&self, key: &KeyType) -> Option<&ValueType> {
         Self::get_iterate(self.root.as_ref()?, key)
     }
 
     #[inline]
-    pub fn get_k_mut(&mut self, key: &TupleKey) -> Option<&mut ValueType> {
+    pub fn get_k_mut(&mut self, key: &KeyType) -> Option<&mut ValueType> {
         Self::get_iterate_mut(self.root.as_mut()?, key)
     }
 
     #[inline]
-    pub fn insert_k(&mut self, key: &TupleKey, value: ValueType) -> Option<ValueType> {
+    pub fn insert_k(&mut self, key: &KeyType, value: ValueType) -> Option<ValueType> {
         if self.root.is_none() {
             self.root = Some(Node::new_leaf(key.to_partial(0), value));
             return None;
@@ -55,7 +62,7 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
         Self::insert_recurse(root, key, value, 0)
     }
 
-    pub fn remove_k(&mut self, key: &TupleKey) -> Option<ValueType> {
+    pub fn remove_k(&mut self, key: &KeyType) -> Option<ValueType> {
         let root = self.root.as_mut()?;
 
         // Don't bother doing anything if there's no prefix match on the root at all.
@@ -86,15 +93,19 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
         result
     }
 
+    pub fn iter(&self) -> Iter<KeyType, KeyType::PartialType, ValueType> {
+        Iter::new(self.root.as_ref())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
     }
 }
 
-impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
+impl<KeyType: KeyTrait, ValueType: Clone> AdaptiveRadixTree<KeyType, ValueType> {
     fn get_iterate<'a>(
-        cur_node: &'a Node<VectorPartial, ValueType>,
-        key: &TupleKey,
+        cur_node: &'a Node<KeyType::PartialType, ValueType>,
+        key: &KeyType,
     ) -> Option<&'a ValueType> {
         let mut cur_node = cur_node;
         let mut depth = 0;
@@ -114,8 +125,8 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
     }
 
     fn get_iterate_mut<'a>(
-        cur_node: &'a mut Node<VectorPartial, ValueType>,
-        key: &TupleKey,
+        cur_node: &'a mut Node<KeyType::PartialType, ValueType>,
+        key: &KeyType,
     ) -> Option<&'a mut ValueType> {
         let mut cur_node = cur_node;
         let mut depth = 0;
@@ -136,8 +147,8 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
     }
 
     fn insert_recurse(
-        cur_node: &mut Node<VectorPartial, ValueType>,
-        key: &TupleKey,
+        cur_node: &mut Node<KeyType::PartialType, ValueType>,
+        key: &KeyType,
         value: ValueType,
         depth: usize,
     ) -> Option<ValueType> {
@@ -205,8 +216,8 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
     }
 
     fn remove_recurse(
-        parent_node: &mut Node<VectorPartial, ValueType>,
-        key: &TupleKey,
+        parent_node: &mut Node<KeyType::PartialType, ValueType>,
+        key: &KeyType,
         depth: usize,
     ) -> Option<ValueType> {
         // Seek the child that matches the key at this depth, which is the first character at the
@@ -251,20 +262,22 @@ impl<ValueType: Clone> AdaptiveRadixTree<ValueType> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rdb::index::tuple_key::TupleKey;
-    use moor_values::util::SliceRef;
+    use std::collections::BTreeSet;
+
     use rand::Rng;
+
+    use crate::rdb::index::vector_key::VectorKey;
 
     /// Verify value is inserted and retrieved correctly, and that forked (cloned) copies behave correctly.
     #[test]
     fn simple_insert_get() {
-        let key = TupleKey::new(SliceRef::from_vec(vec![1, 2, 3]));
+        let key = VectorKey::new_from_vec(vec![1, 2, 3]);
         let mut tree = super::AdaptiveRadixTree::new();
         assert!(tree.is_empty());
         tree.insert_k(&key, 1);
         assert!(!tree.is_empty());
         assert_eq!(tree.get_k(&key), Some(&1));
-        let second_key = TupleKey::new(SliceRef::from_vec(vec![1, 2, 4]));
+        let second_key = VectorKey::new_from_vec(vec![1, 2, 4]);
         assert_eq!(tree.get_k(&second_key), None);
 
         let clone_before_mutate = tree.clone();
@@ -279,7 +292,7 @@ mod tests {
     /// not modified.
     #[test]
     fn insert_get_mut_modify() {
-        let key = TupleKey::new(SliceRef::from_vec(vec![1, 2, 3]));
+        let key = VectorKey::new_from_vec(vec![1, 2, 3]);
         let mut tree = super::AdaptiveRadixTree::new();
         tree.insert_k(&key, 1);
         assert_eq!(tree.get_k(&key), Some(&1));
@@ -296,7 +309,7 @@ mod tests {
     /// affected.
     #[test]
     fn insert_get_remove() {
-        let key = TupleKey::new(SliceRef::from_vec(vec![1, 2, 3]));
+        let key = VectorKey::new_from_vec(vec![1, 2, 3]);
         let mut tree = super::AdaptiveRadixTree::new();
         tree.insert_k(&key, 1);
         assert_eq!(tree.get_k(&key), Some(&1));
@@ -307,14 +320,14 @@ mod tests {
         assert_eq!(clone_before_remove.get_k(&key), Some(&1));
     }
 
-    fn random_key_pair() -> (TupleKey, u32) {
-        let mut rng = rand::thread_rng();
-        let len = rng.gen_range(1..256);
-        let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(rng.gen());
-        }
-        (TupleKey::new(SliceRef::from_vec(v)), rng.gen())
+    fn random_key_pair() -> (u64, u32) {
+        let k = rand::thread_rng().gen();
+        let v = rand::thread_rng().gen();
+        (k, v)
+    }
+
+    fn tk(v: &u64) -> VectorKey {
+        v.into()
     }
 
     #[test]
@@ -325,37 +338,112 @@ mod tests {
         let many_keys = (0..1000).map(|_| random_key_pair()).collect::<Vec<_>>();
         let mut tree = super::AdaptiveRadixTree::new();
         for (key, value) in &many_keys {
-            tree.insert_k(key, *value);
+            tree.insert_k(&tk(key), *value);
         }
         for (key, value) in &many_keys {
-            assert_eq!(tree.get_k(key), Some(value));
+            assert_eq!(tree.get_k(&tk(key)), Some(value));
         }
 
         let clone_before_mutate = tree.clone();
-        for key in &many_keys {
-            assert_eq!(clone_before_mutate.get_k(&key.0), Some(&key.1));
+        for (key, value) in &many_keys {
+            assert_eq!(clone_before_mutate.get_k(&tk(key)), Some(value));
         }
 
         for (k, _) in &many_keys {
-            tree.remove_k(k);
+            tree.remove_k(&tk(k));
         }
         for (k, _) in &many_keys {
-            assert_eq!(tree.get_k(k), None);
+            assert_eq!(tree.get_k(&tk(k)), None);
         }
         for (k, v) in &many_keys {
-            assert_eq!(clone_before_mutate.get_k(k), Some(v));
+            assert_eq!(clone_before_mutate.get_k(&tk(k)), Some(v));
         }
 
         // Now pile in some more keys and verify their insertion and that the clone is not affected.
         let more_keys = (0..1000).map(|_| random_key_pair()).collect::<Vec<_>>();
         for (key, value) in &more_keys {
-            tree.insert_k(key, *value);
+            tree.insert_k(&tk(key), *value);
         }
         for (key, value) in &more_keys {
-            assert_eq!(tree.get_k(key), Some(value));
+            assert_eq!(tree.get_k(&tk(key)), Some(value));
         }
         for (key, value) in &many_keys {
-            assert_eq!(clone_before_mutate.get_k(key), Some(value));
+            assert_eq!(clone_before_mutate.get_k(&tk(key)), Some(value));
+        }
+    }
+
+    #[test]
+    /// Verify .iter() works as expected. Insert a pile of keys, then iterate and confirm that
+    /// the output matches. Then clone, add more keys, and verify that the clone's iteration does
+    /// not include the new keys, but the original does.
+    fn iter() {
+        let many_keys: BTreeSet<_> = (0..1000).map(|_| random_key_pair()).collect();
+        let mut tree = super::AdaptiveRadixTree::new();
+        for (key, value) in &many_keys {
+            tree.insert_k(&tk(key), *value);
+        }
+
+        {
+            let mut iter = tree.iter();
+            for (key, value) in &many_keys {
+                let next = iter.next().unwrap();
+                assert_eq!(next.0, tk(key));
+                assert_eq!(next.1, value);
+            }
+        }
+        let clone_before_mutate = tree.clone();
+        {
+            let mut iter = clone_before_mutate.iter();
+            for (key, value) in &many_keys {
+                let next = iter.next().unwrap();
+                assert_eq!(next.0, tk(key));
+                assert_eq!(next.1, value);
+            }
+        }
+        let orig_iter = tree.iter();
+        assert_eq!(orig_iter.count(), many_keys.len());
+        let clone_iter = clone_before_mutate.iter();
+        assert_eq!(clone_iter.count(), many_keys.len());
+
+        // Now generate additional keys and put them into the first tree only, and the clone should not have them.
+        let more_keys: BTreeSet<_> = (0..1000).map(|_| random_key_pair()).collect();
+        for (key, value) in &more_keys {
+            if many_keys.iter().any(|(k, _)| k == key) {
+                continue;
+            }
+            tree.insert_k(&tk(key), *value);
+        }
+        let orig_iter = tree.iter();
+        let orig_count = orig_iter.count();
+        assert_eq!(orig_count, many_keys.len() + more_keys.len());
+
+        let clone_iter = clone_before_mutate.iter();
+        let clone_count = clone_iter.count();
+        assert_eq!(clone_count, many_keys.len());
+        assert!(orig_count > clone_count);
+
+        let postclone_keys = more_keys
+            .iter()
+            .map(|(k, _)| k.into())
+            .collect::<Vec<VectorKey>>();
+        let union_keys = more_keys.union(&many_keys).collect::<BTreeSet<_>>();
+        {
+            let mut iter = tree.iter();
+            for (key, value) in &union_keys {
+                let next = iter.next().unwrap();
+                assert_eq!(next.0, tk(key));
+                assert_eq!(next.1, value);
+            }
+        }
+        let clone_iter = clone_before_mutate.iter();
+        for entry in clone_iter {
+            let clone_iter_key = &entry.0;
+
+            assert!(
+                !postclone_keys.contains(clone_iter_key),
+                "Clone should not have key {:?}",
+                entry.0
+            );
         }
     }
 }

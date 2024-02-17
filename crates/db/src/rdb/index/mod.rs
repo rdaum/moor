@@ -15,20 +15,25 @@
 //! Adaptive Radix Tree implementation for use for tuple indices.
 //! Supports internal CoW semantics.
 
+pub use array_key::ArrayKey;
+#[allow(unused_imports)] // Future use, stop warning me.
+pub use tree::AdaptiveRadixTree;
+pub use vector_key::VectorKey;
+
+mod array_key;
+mod array_partial;
 mod direct_mapping;
 mod indexed_mapping;
+mod iter;
 mod keyed_mapping;
 mod node;
 mod tree;
-mod tuple_key;
 mod u8_keys;
+mod vector_key;
 mod vector_partial;
 
-#[allow(unused_imports)] // Future use, stop warning me.
-pub use tree::AdaptiveRadixTree;
-
 /// Trait for "node mapping" structures used internally inside the
-trait NodeMapping<N, const NUM_CHILDREN: usize> {
+pub(crate) trait NodeMapping<N, const NUM_CHILDREN: usize> {
     const NUM_CHILDREN: usize = NUM_CHILDREN;
 
     fn add_child(&mut self, key: u8, node: N);
@@ -44,7 +49,7 @@ trait NodeMapping<N, const NUM_CHILDREN: usize> {
 }
 
 /// Trait for the partial key fragments used in the radix tree nodes.
-trait Partial {
+pub trait Partial {
     /// Returns a partial up to `length` bytes.
     fn partial_before(&self, length: usize) -> Self;
     /// Returns a partial from `src_offset` onwards with `length` bytes.
@@ -75,13 +80,14 @@ trait Partial {
 }
 
 // Trait for the keys used in the radix tree nodes.
-trait KeyTrait: Clone + PartialEq + Eq {
+pub trait KeyTrait: Clone + PartialEq + Eq {
     type PartialType: Partial + From<Self> + Clone + PartialEq;
 
     const MAXIMUM_SIZE: Option<usize>;
 
     fn new_from_slice(slice: &[u8]) -> Self;
     fn new_from_partial(partial: &Self::PartialType) -> Self;
+    fn terminate_with_partial(&self, partial: &Self::PartialType) -> Self;
 
     fn extend_from_partial(&self, partial: &Self::PartialType) -> Self;
     fn truncate(&self, at_depth: usize) -> Self;

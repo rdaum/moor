@@ -12,11 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::mem::MaybeUninit;
+
+use moor_values::util::{BitArray, Bitset64, BitsetTrait};
+
 use crate::rdb::index::direct_mapping::DirectMapping;
 use crate::rdb::index::keyed_mapping::KeyedMapping;
 use crate::rdb::index::NodeMapping;
-use moor_values::util::{BitArray, Bitset64, BitsetTrait};
-use std::mem::MaybeUninit;
 
 /// A mapping from keys to separate child pointers. 256 keys, usually 48 children.
 pub struct IndexedMapping<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> {
@@ -36,7 +38,7 @@ impl<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> Default
 impl<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> IndexedMapping<N, WIDTH, Bitset> {
     pub fn new() -> Self {
         Self {
-            child_ptr_indexes: Box::new(Default::default()),
+            child_ptr_indexes: Box::default(),
             children: Box::new(BitArray::new()),
             num_children: 0,
         }
@@ -149,8 +151,9 @@ impl<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> Clone for IndexedMapping
 
 #[cfg(test)]
 mod test {
-    use crate::rdb::index::NodeMapping;
     use moor_values::util::Bitset16;
+
+    use crate::rdb::index::NodeMapping;
 
     #[test]
 

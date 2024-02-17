@@ -12,8 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::util::BitsetTrait;
 use std::mem::MaybeUninit;
+
+use moor_values::util::BitsetTrait;
 
 use crate::rdb::index::indexed_mapping::IndexedMapping;
 use crate::rdb::index::u8_keys::{

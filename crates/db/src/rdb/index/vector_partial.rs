@@ -14,6 +14,7 @@
 
 use std::cmp::min;
 
+use crate::rdb::index::vector_key::VectorKey;
 use crate::rdb::index::{KeyTrait, Partial};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -36,11 +37,11 @@ impl VectorPartial {
             data: Box::from(src),
         }
     }
-
     pub fn to_slice(&self) -> &[u8] {
         &self.data
     }
 
+    #[allow(dead_code)]
     pub fn to_vec(&self) -> Vec<u8> {
         self.data.to_vec()
     }
@@ -121,5 +122,11 @@ impl Partial for VectorPartial {
 
     fn to_slice(&self) -> &[u8] {
         &self.data[..self.data.len()]
+    }
+}
+
+impl From<VectorKey> for VectorPartial {
+    fn from(src: VectorKey) -> Self {
+        src.to_partial(0)
     }
 }
