@@ -14,12 +14,12 @@
 
 use moor_values::util::{BitArray, Bitset64, BitsetTrait};
 
-use crate::rdb::index::indexed_mapping::IndexedMapping;
+use crate::rdb::index::art::indexed_mapping::IndexedMapping;
 
 use super::NodeMapping;
 
 pub struct DirectMapping<N: Clone> {
-    pub(crate) children: BitArray<N, 256, Bitset64<4>>,
+    pub children: BitArray<N, 256, Bitset64<4>>,
     num_children: usize,
 }
 

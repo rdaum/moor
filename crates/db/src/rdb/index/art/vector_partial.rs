@@ -14,8 +14,8 @@
 
 use std::cmp::min;
 
-use crate::rdb::index::vector_key::VectorKey;
-use crate::rdb::index::{KeyTrait, Partial};
+use crate::rdb::index::art::vector_key::VectorKey;
+use crate::rdb::index::art::{KeyTrait, Partial};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct VectorPartial {

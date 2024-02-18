@@ -16,15 +16,15 @@ use std::mem::MaybeUninit;
 
 use moor_values::util::{BitArray, Bitset64, BitsetTrait};
 
-use crate::rdb::index::direct_mapping::DirectMapping;
-use crate::rdb::index::keyed_mapping::KeyedMapping;
-use crate::rdb::index::NodeMapping;
+use crate::rdb::index::art::direct_mapping::DirectMapping;
+use crate::rdb::index::art::keyed_mapping::KeyedMapping;
+use crate::rdb::index::art::NodeMapping;
 
 /// A mapping from keys to separate child pointers. 256 keys, usually 48 children.
 pub struct IndexedMapping<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> {
-    pub(crate) child_ptr_indexes: Box<BitArray<u8, 256, Bitset64<4>>>,
-    pub(crate) children: Box<BitArray<N, WIDTH, Bitset>>,
-    pub(crate) num_children: u8,
+    pub child_ptr_indexes: Box<BitArray<u8, 256, Bitset64<4>>>,
+    pub children: Box<BitArray<N, WIDTH, Bitset>>,
+    pub num_children: u8,
 }
 
 impl<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> Default
@@ -65,7 +65,7 @@ impl<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> IndexedMapping<N, WIDTH,
         im
     }
 
-    pub(crate) fn move_into<const NEW_WIDTH: usize, NM: NodeMapping<N, NEW_WIDTH>>(
+    pub fn move_into<const NEW_WIDTH: usize, NM: NodeMapping<N, NEW_WIDTH>>(
         &mut self,
         nm: &mut NM,
     ) {
@@ -153,7 +153,7 @@ impl<N: Clone, const WIDTH: usize, Bitset: BitsetTrait> Clone for IndexedMapping
 mod test {
     use moor_values::util::Bitset16;
 
-    use crate::rdb::index::NodeMapping;
+    use crate::rdb::index::art::NodeMapping;
 
     #[test]
 

@@ -16,11 +16,11 @@ use std::mem::MaybeUninit;
 
 use moor_values::util::BitsetTrait;
 
-use crate::rdb::index::indexed_mapping::IndexedMapping;
-use crate::rdb::index::u8_keys::{
+use crate::rdb::index::art::indexed_mapping::IndexedMapping;
+use crate::rdb::index::art::u8_keys::{
     u8_keys_find_insert_position_sorted, u8_keys_find_key_position_sorted,
 };
-use crate::rdb::index::NodeMapping;
+use crate::rdb::index::art::NodeMapping;
 
 /// Maps a key to a node, using a sorted array of keys and a corresponding array of nodes.
 /// Presence of a key at a position means there is a node at the same position in children.
@@ -30,9 +30,9 @@ use crate::rdb::index::NodeMapping;
 /// When an item is inserted or deleted the items to the left and right of it are shifted, in
 /// order to keep the array sorted.
 pub struct KeyedMapping<N: Clone, const WIDTH: usize> {
-    pub(crate) keys: [u8; WIDTH],
-    pub(crate) children: Box<[MaybeUninit<N>; WIDTH]>,
-    pub(crate) num_children: u8,
+    pub keys: [u8; WIDTH],
+    pub children: Box<[MaybeUninit<N>; WIDTH]>,
+    pub num_children: u8,
 }
 
 impl<N: Clone, const WIDTH: usize> Default for KeyedMapping<N, WIDTH> {
@@ -59,7 +59,7 @@ impl<N: Clone, const WIDTH: usize> KeyedMapping<N, WIDTH> {
         (key, unsafe { value.assume_init() })
     }
 
-    pub(crate) fn from_indexed<const IDX_WIDTH: usize, FromBitset: BitsetTrait>(
+    pub fn from_indexed<const IDX_WIDTH: usize, FromBitset: BitsetTrait>(
         im: &mut IndexedMapping<N, IDX_WIDTH, FromBitset>,
     ) -> Self {
         let mut new_mapping = KeyedMapping::new();
@@ -81,7 +81,7 @@ impl<N: Clone, const WIDTH: usize> KeyedMapping<N, WIDTH> {
 
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (u8, &N)> {
+    pub fn iter(&self) -> impl Iterator<Item = (u8, &N)> {
         self.keys
             .iter()
             .zip(self.children.iter())
@@ -175,8 +175,8 @@ impl<N: Clone, const WIDTH: usize> Clone for KeyedMapping<N, WIDTH> {
 }
 #[cfg(test)]
 mod tests {
-    use crate::rdb::index::keyed_mapping::KeyedMapping;
-    use crate::rdb::index::NodeMapping;
+    use crate::rdb::index::art::keyed_mapping::KeyedMapping;
+    use crate::rdb::index::art::NodeMapping;
 
     #[test]
     fn test_add_seek_delete() {

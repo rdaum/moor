@@ -14,8 +14,8 @@
 
 use std::mem;
 
-use crate::rdb::index::array_partial::ArrPartial;
-use crate::rdb::index::{KeyTrait, Partial};
+use crate::rdb::index::art::array_partial::ArrPartial;
+use crate::rdb::index::art::{KeyTrait, Partial};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ArrayKey<const N: usize> {
@@ -222,9 +222,9 @@ impl_from_signed!(isize, usize);
 
 #[cfg(test)]
 mod test {
-    use crate::rdb::index::array_key::ArrayKey;
-    use crate::rdb::index::array_partial::ArrPartial;
-    use crate::rdb::index::KeyTrait;
+    use crate::rdb::index::art::array_key::ArrayKey;
+    use crate::rdb::index::art::array_partial::ArrPartial;
+    use crate::rdb::index::art::KeyTrait;
 
     #[test]
     fn make_extend_truncate() {

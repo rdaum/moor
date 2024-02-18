@@ -44,7 +44,7 @@ impl<'a, K: KeyTrait<PartialType = P>, P: Partial + Clone + 'a, V: Clone> IterIn
 }
 
 impl<'a, K: KeyTrait<PartialType = P> + 'a, P: Partial + Clone + 'a, V: Clone> Iter<'a, K, P, V> {
-    pub(crate) fn new(node: Option<&'a Node<P, V>>) -> Self {
+    pub fn new(node: Option<&'a Node<P, V>>) -> Self {
         let Some(root_node) = node else {
             return Self {
                 inner: Box::new(std::iter::empty()),

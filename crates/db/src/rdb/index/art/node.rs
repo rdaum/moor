@@ -16,21 +16,21 @@ use std::sync::Arc;
 
 use moor_values::util::Bitset64;
 
-use crate::rdb::index::direct_mapping::DirectMapping;
-use crate::rdb::index::indexed_mapping::IndexedMapping;
-use crate::rdb::index::keyed_mapping::KeyedMapping;
-use crate::rdb::index::NodeMapping;
+use crate::rdb::index::art::direct_mapping::DirectMapping;
+use crate::rdb::index::art::indexed_mapping::IndexedMapping;
+use crate::rdb::index::art::keyed_mapping::KeyedMapping;
+use crate::rdb::index::art::NodeMapping;
 
 use super::Partial;
 
 #[derive(Clone)]
 pub struct Node<P: Partial + Clone, V: Clone> {
-    pub(crate) prefix: P,
-    pub(crate) content: Arc<Content<P, V>>,
+    pub prefix: P,
+    pub content: Arc<Content<P, V>>,
 }
 
 #[allow(dead_code)]
-pub(crate) enum Content<P: Partial + Clone, V: Clone> {
+pub enum Content<P: Partial + Clone, V: Clone> {
     Leaf(V),
     Node4(KeyedMapping<Node<P, V>, 4>),
     Node16(KeyedMapping<Node<P, V>, 16>),
@@ -41,7 +41,7 @@ pub(crate) enum Content<P: Partial + Clone, V: Clone> {
 #[allow(dead_code)]
 impl<P: Partial + Clone, V: Clone> Node<P, V> {
     #[inline]
-    pub(crate) fn new_leaf(partial: P, value: V) -> Self {
+    pub fn new_leaf(partial: P, value: V) -> Self {
         Self {
             prefix: partial,
             content: Arc::new(Content::Leaf(value)),
@@ -49,7 +49,7 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
     }
 
     #[inline]
-    pub(crate) fn new_inner(prefix: P) -> Self {
+    pub fn new_inner(prefix: P) -> Self {
         let nt = Content::Node4(KeyedMapping::new());
         Self {
             prefix,
@@ -57,14 +57,14 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
         }
     }
 
-    pub(crate) fn value(&self) -> Option<&V> {
+    pub fn value(&self) -> Option<&V> {
         let Content::Leaf(value) = &self.content.as_ref() else {
             return None;
         };
         Some(value)
     }
 
-    pub(crate) fn value_mut(&mut self) -> Option<&mut V> {
+    pub fn value_mut(&mut self) -> Option<&mut V> {
         let mut_contents = Arc::make_mut(&mut self.content);
         match mut_contents {
             Content::Leaf(value) => Some(value),
@@ -72,15 +72,15 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
         }
     }
 
-    pub(crate) fn is_leaf(&self) -> bool {
+    pub fn is_leaf(&self) -> bool {
         matches!(&self.content.as_ref(), Content::Leaf(_))
     }
 
-    pub(crate) fn is_inner(&self) -> bool {
+    pub fn is_inner(&self) -> bool {
         !self.is_leaf()
     }
 
-    pub(crate) fn seek_child(&self, key: u8) -> Option<&Self> {
+    pub fn seek_child(&self, key: u8) -> Option<&Self> {
         if self.num_children() == 0 {
             return None;
         }
@@ -94,7 +94,7 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
         }
     }
 
-    pub(crate) fn seek_child_mut(&mut self, key: u8) -> Option<&mut Self> {
+    pub fn seek_child_mut(&mut self, key: u8) -> Option<&mut Self> {
         if self.num_children() == 0 {
             return None;
         }
@@ -109,7 +109,7 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
         }
     }
 
-    pub(crate) fn add_child(&mut self, key: u8, node: Self) {
+    pub fn add_child(&mut self, key: u8, node: Self) {
         if self.is_full() {
             self.grow();
         }
@@ -132,7 +132,7 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
         }
     }
 
-    pub(crate) fn delete_child(&mut self, key: u8) -> Option<Self> {
+    pub fn delete_child(&mut self, key: u8) -> Option<Self> {
         let mut contents = Arc::make_mut(&mut self.content);
         match &mut contents {
             Content::Node4(ref mut dm) => {
@@ -181,7 +181,7 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
         }
     }
 
-    pub(crate) fn num_children(&self) -> usize {
+    pub fn num_children(&self) -> usize {
         match self.content.as_ref() {
             Content::Node4(n) => n.num_children(),
             Content::Node16(n) => n.num_children(),
@@ -279,7 +279,7 @@ impl<P: Partial + Clone, V: Clone> Node<P, V> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn free(&self) -> usize {
+    pub fn free(&self) -> usize {
         self.capacity() - self.num_children()
     }
 
@@ -309,8 +309,8 @@ impl<P: Partial + Clone, V: Clone> Clone for Content<P, V> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rdb::index::node::Node;
-    use crate::rdb::index::vector_partial::VectorPartial;
+    use crate::rdb::index::art::node::Node;
+    use crate::rdb::index::art::vector_partial::VectorPartial;
 
     #[test]
     fn test_n4() {

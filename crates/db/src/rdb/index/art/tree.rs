@@ -15,8 +15,8 @@
 use std::cmp::min;
 use std::sync::Arc;
 
-use crate::rdb::index::node::{Content, Node};
-use crate::rdb::index::{KeyTrait, Partial};
+use crate::rdb::index::art::node::{Content, Node};
+use crate::rdb::index::art::{KeyTrait, Partial};
 
 use super::iter::Iter;
 
@@ -266,7 +266,7 @@ mod tests {
 
     use rand::Rng;
 
-    use crate::rdb::index::vector_key::VectorKey;
+    use crate::rdb::index::art::vector_key::VectorKey;
 
     /// Verify value is inserted and retrieved correctly, and that forked (cloned) copies behave correctly.
     #[test]

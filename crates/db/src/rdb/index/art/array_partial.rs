@@ -15,8 +15,8 @@
 use std::cmp::min;
 use std::ops::Index;
 
-use crate::rdb::index::array_key::ArrayKey;
-use crate::rdb::index::{KeyTrait, Partial};
+use crate::rdb::index::art::array_key::ArrayKey;
+use crate::rdb::index::art::{KeyTrait, Partial};
 
 #[derive(Clone, Debug, Eq)]
 pub struct ArrPartial<const SIZE: usize> {

@@ -14,8 +14,8 @@
 
 use std::mem;
 
-use crate::rdb::index::vector_partial::VectorPartial;
-use crate::rdb::index::KeyTrait;
+use crate::rdb::index::art::vector_partial::VectorPartial;
+use crate::rdb::index::art::KeyTrait;
 
 // Owns variable sized key data. Used especially for strings where a null-termination is required.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -195,9 +195,9 @@ impl_from_signed!(isize, usize);
 
 #[cfg(test)]
 mod test {
-    use crate::rdb::index::vector_key::VectorKey;
-    use crate::rdb::index::vector_partial::VectorPartial;
-    use crate::rdb::index::KeyTrait;
+    use crate::rdb::index::art::vector_key::VectorKey;
+    use crate::rdb::index::art::vector_partial::VectorPartial;
+    use crate::rdb::index::art::KeyTrait;
 
     #[test]
     fn make_extend_truncate() {
