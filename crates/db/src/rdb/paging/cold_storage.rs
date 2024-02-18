@@ -121,7 +121,7 @@ impl ColdStorage {
             for page_tuple_ids in relation_tuple_ids {
                 for tuple_id in page_tuple_ids {
                     let relation = &mut relations[relation_id.0];
-                    relation.index_tuple(tuple_id);
+                    relation.load_tuple(tuple_id);
                     restored_count += 1;
                 }
             }

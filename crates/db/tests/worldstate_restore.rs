@@ -24,7 +24,7 @@ mod test {
 
     use moor_db::db_tx::DbTransaction;
     use moor_db::odb::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
-    use moor_db::rdb::{AttrType, RelBox, RelationInfo};
+    use moor_db::rdb::{relation_info_for, RelBox, RelationInfo};
     use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
     use moor_values::model::HasUuid;
@@ -34,19 +34,8 @@ mod test {
     use moor_values::NOTHING;
 
     pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
-        let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
-            .map(|wsr| {
-                RelationInfo {
-                    name: wsr.to_string(),
-                    domain_type: AttrType::Integer, /* tbd */
-                    codomain_type: AttrType::Integer,
-                    secondary_indexed: false,
-                    unique_domain: true,
-                }
-            })
-            .collect();
-        relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
-        relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
+        let relations: Vec<RelationInfo> =
+            WorldStateRelation::iter().map(relation_info_for).collect();
 
         RelBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT)
     }

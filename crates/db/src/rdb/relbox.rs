@@ -34,7 +34,7 @@ use super::paging::Pager;
 /// Note that this is not the same as the `moor` Var type, but instead used for declaring the types of the purpose of
 /// indexing and querying. The actual user data can be stored in a variety of ways, but the TupleType is used by the
 /// indexing code to manage e.g. encoding, ordering, hashing, etc.
-#[derive(Clone, Debug, PartialEq, Eq, EnumString)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, EnumString)]
 pub enum AttrType {
     /// The tuple attribute in question is a signed 64-bit integer.
     Integer,
@@ -46,6 +46,14 @@ pub enum AttrType {
     String,
     /// The tuple attribute in question is a byte array.
     Bytes,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, EnumString)]
+pub enum IndexType {
+    /// Viable for integer keys. Keys are ordered and fit in a fixed size.
+    AdaptiveRadixTree,
+    /// Unordered arbitrary slices.
+    Hash,
 }
 
 /// Meta-data about a relation
@@ -61,6 +69,10 @@ pub struct RelationInfo {
     pub secondary_indexed: bool,
     /// Whether the domain is assumed to be uniquely constrained.
     pub unique_domain: bool,
+    /// Type of index to use for this relation.
+    pub index_type: IndexType,
+    /// Type of the codomain index (only used if `secondary_indexed` is true)
+    pub codomain_index_type: Option<IndexType>,
 }
 
 /// The "RelBox" is the set of relations, referenced by their unique (usize) relation ID.

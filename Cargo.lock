@@ -1623,6 +1623,7 @@ dependencies = [
  "io-uring",
  "kanal",
  "libc",
+ "log",
  "moor-values",
  "okaywal",
  "rand",

@@ -211,7 +211,6 @@ impl TxTupleEvent {
                     codomain.as_slice(),
                 )
                 .unwrap();
-                // TODO: do I need to pick Insert if the tombstone is Base-derived?
                 self.fork_to(
                     Some(TxTupleOp::Update {
                         from_tuple: tombstoned_tuple.clone(),
@@ -239,7 +238,7 @@ impl TxTupleEvent {
                         to_tuple: new_t.clone(),
                     }),
                     Some(new_t),
-                    Some(from_tuple.clone()),
+                    Some(to_tuple.clone()),
                 )
             }
             TxTupleOp::Value(tuple) => {

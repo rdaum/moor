@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_db::rdb::{AttrType, RelBox, RelationInfo};
+use moor_db::rdb::{AttrType, IndexType, RelBox, RelationInfo};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,6 +27,8 @@ pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
             codomain_type: AttrType::Integer,
             secondary_indexed: false,
             unique_domain: true,
+            index_type: IndexType::AdaptiveRadixTree,
+            codomain_index_type: None,
         })
         .collect::<Vec<_>>();
 

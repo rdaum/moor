@@ -22,7 +22,7 @@
 //!
 //! TLDR Transactions continue to see a fully snapshot isolated view of the world.
 
-pub use relbox::{AttrType, RelBox, RelationInfo};
+pub use relbox::{AttrType, IndexType, RelBox, RelationInfo};
 use std::fmt::Display;
 use std::str::FromStr;
 use strum::EnumProperty;
@@ -61,6 +61,8 @@ pub enum RelationError {
     UniqueConstraintViolation,
     #[error("Ambiguous tuple found; more than one tuple found for presumed-unique domain value")]
     AmbiguousTuple,
+    #[error("Invalid key type")]
+    BadKey,
 }
 
 /// Convert an enum schema description into RelationInfo (see WorldStateRelation for example)
@@ -84,12 +86,48 @@ pub fn relation_info_for<E: EnumProperty + Display>(relation: E) -> RelationInfo
             codomain_type, relation
         )
     });
-    let secondary_indexed = relation.get_bool("SecondaryIndexed").unwrap_or(false);
+    let secondary_indexed = relation
+        .get_str("SecondaryIndexed")
+        .map(|it| it == "true")
+        .unwrap_or(false);
+
+    let index_type = relation
+        .get_str("IndexType")
+        .map(|it| {
+            IndexType::from_str(it).unwrap_or_else(|_| {
+                panic!(
+                    "Invalid index type: {} for declared relation {}",
+                    it, relation
+                )
+            })
+        })
+        .unwrap_or(IndexType::Hash);
+
+    let codomain_index_type = if secondary_indexed {
+        Some(
+            relation
+                .get_str("CodomainIndexType")
+                .map(|it| {
+                    IndexType::from_str(it).unwrap_or_else(|_| {
+                        panic!(
+                            "Invalid index type: {} for declared relation {}",
+                            it, relation
+                        )
+                    })
+                })
+                .unwrap_or(IndexType::Hash),
+        )
+    } else {
+        None
+    };
+
     RelationInfo {
         name: relation.to_string(),
-        domain_type, /* tbd */
+        domain_type,
         codomain_type,
         secondary_indexed,
         unique_domain: true,
+        index_type,
+        codomain_index_type,
     }
 }

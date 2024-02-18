@@ -41,7 +41,7 @@ use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
 use crate::odb::object_relations;
 use crate::odb::object_relations::{
-    get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
+    encode_oid, get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
 use crate::rdb::{relation_info_for, RelationError};
 use crate::rdb::{CommitError, Transaction};
@@ -55,25 +55,17 @@ pub struct RelBoxWorldState {
 
 impl RelBoxWorldState {
     pub fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
-        let mut relations: Vec<RelationInfo> =
+        let relations: Vec<RelationInfo> =
             WorldStateRelation::iter().map(relation_info_for).collect();
 
-        // "Children" is derived from projection of the secondary index of parents.
-        relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
-        // Same with "contents".
-        relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
         let db = RelBox::new(memory_size, path, &relations, WorldStateSequences::COUNT);
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
             let canonical = db.canonical.read().unwrap();
             canonical[WorldStateRelation::ObjectParent as usize]
-                .seek_by_domain(
-                    SYSTEM_OBJECT
-                        .0
-                        .as_sliceref()
-                        .expect("Could not encode sysobj id"),
-                )
+                .seek_by_domain(encode_oid(SYSTEM_OBJECT))
+                .expect("Could not seek for freshness check on DB")
                 .is_empty()
         };
         (Self { db }, fresh_db)
@@ -112,12 +104,17 @@ impl DbTransaction for RelBoxTransaction {
     }
 
     fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
-        object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj)
+        object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectOwner, obj)
             .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj, owner)
+        object_relations::upsert_object_object(
+            &self.tx,
+            WorldStateRelation::ObjectOwner,
+            obj,
+            owner,
+        )
     }
 
     fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
@@ -146,8 +143,13 @@ impl DbTransaction for RelBoxTransaction {
         };
 
         let owner = attrs.owner.unwrap_or(id);
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectOwner, id, owner)
-            .expect("Unable to insert initial owner");
+        object_relations::upsert_object_object(
+            &self.tx,
+            WorldStateRelation::ObjectOwner,
+            id,
+            owner,
+        )
+        .expect("Unable to insert initial owner");
 
         // Set initial name
         let name = attrs.name.unwrap_or_else(|| format!("Object {}", id));
@@ -241,7 +243,7 @@ impl DbTransaction for RelBoxTransaction {
 
     fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectParent, obj)
+            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectParent, obj)
                 .unwrap_or(NOTHING),
         )
     }
@@ -327,16 +329,14 @@ impl DbTransaction for RelBoxTransaction {
 
         // If this is a new object it won't have a parent, old parent this will come up not-found,
         // and if that's the case we can ignore that.
-        if let Some(old_parent) = object_relations::get_object_value::<Objid>(
-            &self.tx,
-            WorldStateRelation::ObjectParent,
-            o,
-        ) {
+        if let Some(old_parent) =
+            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectParent, o)
+        {
             if old_parent == new_parent {
                 return Ok(());
             }
         };
-        object_relations::upsert_object_value(
+        object_relations::upsert_object_object(
             &self.tx,
             WorldStateRelation::ObjectParent,
             o,
@@ -393,7 +393,7 @@ impl DbTransaction for RelBoxTransaction {
     }
 
     fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(object_relations::get_object_by_codomain(
+        Ok(object_relations::get_objects_by_object_codomain(
             &self.tx,
             WorldStateRelation::ObjectParent,
             obj,
@@ -402,7 +402,7 @@ impl DbTransaction for RelBoxTransaction {
 
     fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError> {
         Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectLocation, obj)
+            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectLocation, obj)
                 .unwrap_or(NOTHING),
         )
     }
@@ -417,7 +417,7 @@ impl DbTransaction for RelBoxTransaction {
             if oid == what {
                 return Err(WorldStateError::RecursiveMove(what, new_location));
             }
-            let Some(location) = object_relations::get_object_value(
+            let Some(location) = object_relations::get_object_object(
                 &self.tx,
                 WorldStateRelation::ObjectLocation,
                 oid,
@@ -431,18 +431,16 @@ impl DbTransaction for RelBoxTransaction {
         // without it. Set new location, get its contents, add o to contents, put contents
         // back with it. Then update the location of o.
         // Get and remove from contents of old location, if we had any.
-        if let Some(old_location) = object_relations::get_object_value::<Objid>(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            what,
-        ) {
+        if let Some(old_location) =
+            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectLocation, what)
+        {
             if old_location == new_location {
                 return Ok(());
             }
         }
 
         // Set new location.
-        object_relations::upsert_object_value(
+        object_relations::upsert_object_object(
             &self.tx,
             WorldStateRelation::ObjectLocation,
             what,
@@ -458,7 +456,7 @@ impl DbTransaction for RelBoxTransaction {
     }
 
     fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(object_relations::get_object_by_codomain(
+        Ok(object_relations::get_objects_by_object_codomain(
             &self.tx,
             WorldStateRelation::ObjectLocation,
             obj,
@@ -537,7 +535,7 @@ impl DbTransaction for RelBoxTransaction {
             }
             // Otherwise, find our parent.  If it's, then set o to it and continue unless we've
             // hit the end of the chain.
-            search_o = match object_relations::get_object_value::<Objid>(
+            search_o = match object_relations::get_object_object(
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 search_o,
@@ -855,7 +853,7 @@ impl DbTransaction for RelBoxTransaction {
             // But if it was clear, we have to continue up the inheritance hierarchy. (But we return
             // the of handle we got, because this is what we want to return for information
             // about permissions, etc.)
-            let Some(parent) = object_relations::get_object_value(
+            let Some(parent) = object_relations::get_object_object(
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 search_obj,
@@ -882,7 +880,7 @@ impl DbTransaction for RelBoxTransaction {
                 break;
             }
             ancestors.push(search);
-            let parent = object_relations::get_object_value(
+            let parent = object_relations::get_object_object(
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 search,
@@ -895,7 +893,7 @@ impl DbTransaction for RelBoxTransaction {
 
     fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
         let ov: Option<Objid> =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectOwner, obj);
+            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectOwner, obj);
         Ok(ov.is_some())
     }
 
@@ -1023,7 +1021,7 @@ impl RelBoxTransaction {
     }
 
     pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let children = object_relations::get_object_by_codomain(
+        let children = object_relations::get_objects_by_object_codomain(
             &self.tx,
             WorldStateRelation::ObjectParent,
             obj,
@@ -1033,7 +1031,7 @@ impl RelBoxTransaction {
         let mut queue: VecDeque<_> = children.iter().collect();
         while let Some(o) = queue.pop_front() {
             descendants.push(o);
-            let children = object_relations::get_object_by_codomain(
+            let children = object_relations::get_objects_by_object_codomain(
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 o,
@@ -1069,7 +1067,7 @@ impl RelBoxTransaction {
 
             if search_a != NOTHING {
                 ancestors_a.insert(search_a);
-                let parent = object_relations::get_object_value(
+                let parent = object_relations::get_object_object(
                     &self.tx,
                     WorldStateRelation::ObjectParent,
                     search_a,
@@ -1080,7 +1078,7 @@ impl RelBoxTransaction {
 
             if search_b != NOTHING {
                 ancestors_b.insert(search_b);
-                let parent = object_relations::get_object_value(
+                let parent = object_relations::get_object_object(
                     &self.tx,
                     WorldStateRelation::ObjectParent,
                     search_b,
@@ -1131,22 +1129,11 @@ mod tests {
     use crate::db_tx::DbTransaction;
     use crate::odb::object_relations::{WorldStateRelation, WorldStateSequences};
     use crate::odb::rb_worldstate::RelBoxTransaction;
-    use crate::rdb::{AttrType, RelBox, RelationInfo};
+    use crate::rdb::{relation_info_for, RelBox, RelationInfo};
 
     fn test_db() -> Arc<RelBox> {
-        let mut relations: Vec<RelationInfo> = WorldStateRelation::iter()
-            .map(|wsr| {
-                RelationInfo {
-                    name: wsr.to_string(),
-                    domain_type: AttrType::Integer, /* tbd */
-                    codomain_type: AttrType::Integer,
-                    secondary_indexed: false,
-                    unique_domain: true,
-                }
-            })
-            .collect();
-        relations[WorldStateRelation::ObjectParent as usize].secondary_indexed = true;
-        relations[WorldStateRelation::ObjectLocation as usize].secondary_indexed = true;
+        let relations: Vec<RelationInfo> =
+            WorldStateRelation::iter().map(relation_info_for).collect();
 
         RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT)
     }
@@ -1549,8 +1536,8 @@ mod tests {
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         let tx = RelBoxTransaction::new(db.clone());
-        assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_location(c).unwrap(), a);
+        assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[c]));
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));

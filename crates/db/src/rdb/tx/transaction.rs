@@ -280,10 +280,12 @@ impl<'a> CommitSet<'a> {
                         // need to check the canonical relation for the domain value.
                         // Apply timestamp logic, tho.
                         let canonical = &self.write_guard[relation_id.0];
-                        let results_canonical = canonical.seek_by_domain(tuple.domain());
+                        let results_canonical = canonical
+                            .seek_by_domain(tuple.domain())
+                            .expect("failed to seek for constraints check");
                         let mut replacements = im::HashSet::new();
                         for t in results_canonical {
-                            if canonical.unique_domain && t.ts() > tuple.ts() {
+                            if canonical.info.unique_domain && t.ts() > tuple.ts() {
                                 return Err(CommitError::UniqueConstraintViolation);
                             }
                             // Check the timestamp on the upstream value, if it's newer than the read-timestamp,
@@ -335,8 +337,10 @@ impl<'a> CommitSet<'a> {
                             // Someone got here first and deleted the tuple we're trying to delete.
                             // If this is a tuple with a unique constraint, we need to check if there's a
                             // newer tuple with the same domain value.
-                            if canonical.unique_domain {
-                                let results_canonical = canonical.seek_by_domain(tuple.domain());
+                            if canonical.info.unique_domain {
+                                let results_canonical = canonical
+                                    .seek_by_domain(tuple.domain())
+                                    .expect("failed to seek for constraints check");
                                 for t in results_canonical {
                                     if t.ts() > tuple.ts() {
                                         return Err(CommitError::UniqueConstraintViolation);
@@ -391,7 +395,7 @@ mod tests {
 
     use moor_values::util::SliceRef;
 
-    use crate::rdb::relbox::{AttrType, RelBox, RelationInfo};
+    use crate::rdb::relbox::{AttrType, IndexType, RelBox, RelationInfo};
     use crate::rdb::tuples::TupleRef;
     use crate::rdb::tx::transaction::CommitError;
     use crate::rdb::{RelationError, RelationId, Transaction};
@@ -400,17 +404,34 @@ mod tests {
         SliceRef::from_bytes(slice)
     }
 
+    fn attr2(i: i64) -> SliceRef {
+        SliceRef::from_bytes(&i.to_le_bytes())
+    }
+
     fn test_db() -> Arc<RelBox> {
         RelBox::new(
             1 << 24,
             None,
-            &[RelationInfo {
-                name: "test".to_string(),
-                domain_type: AttrType::String,
-                codomain_type: AttrType::String,
-                secondary_indexed: true,
-                unique_domain: true,
-            }],
+            &[
+                RelationInfo {
+                    name: "test".to_string(),
+                    domain_type: AttrType::String,
+                    codomain_type: AttrType::String,
+                    secondary_indexed: true,
+                    unique_domain: true,
+                    index_type: IndexType::Hash,
+                    codomain_index_type: Some(IndexType::Hash),
+                },
+                RelationInfo {
+                    name: "test2".to_string(),
+                    domain_type: AttrType::Integer,
+                    codomain_type: AttrType::String,
+                    secondary_indexed: false,
+                    unique_domain: true,
+                    index_type: IndexType::AdaptiveRadixTree,
+                    codomain_index_type: None,
+                },
+            ],
             0,
         )
     }
@@ -497,14 +518,87 @@ mod tests {
         {
             let canonical = db.canonical.read().unwrap();
             let relation = &canonical[0];
-            let set = relation.seek_by_domain(attr(b"abc"));
+            let set = relation.seek_by_domain(attr(b"abc")).unwrap();
             let tuple = set.iter().next().expect("Expected tuple to exist");
             assert_eq!(tuple.codomain().as_slice(), b"123");
 
-            let tuples = relation.seek_by_codomain(attr(b"123"));
+            let tuples = relation.seek_by_codomain(attr(b"123")).unwrap();
             assert_eq!(tuples.len(), 1);
             let tuple = tuples.iter().next().unwrap();
             assert_eq!(tuple.domain().as_slice(), b"abc");
+            assert_eq!(tuple.codomain().as_slice(), b"123");
+        }
+    }
+
+    /// Verifies that base relations ("canonical") get updated when successful commits happen.
+    #[test]
+    fn basic_commit_art() {
+        let db = test_db();
+        let tx = db.clone().start_tx();
+        let rid = RelationId(1);
+        tx.insert_tuple(rid, attr2(123), attr(b"def")).unwrap();
+        tx.insert_tuple(rid, attr2(123), attr(b"def"))
+            .expect_err("Expected insert to fail");
+        tx.update_by_domain(rid, attr2(123), attr(b"123"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr2(123))
+                .unwrap()
+                .codomain(),
+            attr(b"123")
+        );
+
+        // upsert a few times and verify
+        tx.upsert_by_domain(rid, attr2(123), attr(b"321"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr2(123))
+                .unwrap()
+                .codomain(),
+            attr(b"321")
+        );
+        tx.upsert_by_domain(rid, attr2(123), attr(b"666"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr2(123))
+                .unwrap()
+                .codomain(),
+            attr(b"666")
+        );
+
+        // upsert back to  expected value
+        tx.upsert_by_domain(rid, attr2(123), attr(b"123"))
+            .expect("Expected update to succeed");
+
+        // upsert at a net new domain a few times in succession
+        tx.upsert_by_domain(rid, attr2(321), attr(b"123"))
+            .expect("Expected update to succeed");
+        tx.upsert_by_domain(rid, attr2(321), attr(b"321"))
+            .expect("Expected update to succeed");
+        tx.upsert_by_domain(rid, attr2(321), attr(b"666"))
+            .expect("Expected update to succeed");
+        assert_eq!(
+            tx.seek_unique_by_domain(rid, attr2(321))
+                .unwrap()
+                .codomain(),
+            attr(b"666")
+        );
+
+        // Simple check matching by domain, should only get one result since this is a unique domain.
+        let t = tx
+            .seek_by_domain(rid, attr2(321))
+            .expect("Expected domain seek to succeed");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t.iter().next().unwrap().domain(), attr2(321));
+        assert_eq!(t.iter().next().unwrap().codomain(), attr(b"666"));
+        tx.commit().expect("Expected commit to succeed");
+
+        // Verify canonical state.
+        {
+            let canonical = db.canonical.read().unwrap();
+            let relation = &canonical[1];
+            let set = relation.seek_by_domain(attr2(123)).unwrap();
+            let tuple = set.iter().next().expect("Expected tuple to exist");
             assert_eq!(tuple.codomain().as_slice(), b"123");
         }
     }

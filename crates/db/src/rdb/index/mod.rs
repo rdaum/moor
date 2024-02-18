@@ -16,16 +16,18 @@
 //! Supports internal CoW semantics.
 
 mod art;
+mod art_index;
 mod hash_index;
 mod im_hash_index;
 
-use crate::rdb::tuples::{TupleId, TupleRef};
+use crate::rdb::tuples::TupleId;
 pub use art::array_key::ArrayKey;
 #[allow(unused_imports)] // Future use, stop warning me.
 pub use art::tree::AdaptiveRadixTree;
 pub use art::vector_key::VectorKey;
 
 use crate::rdb::RelationError;
+pub use art_index::ArtArrayIndex;
 pub use hash_index::HashIndex;
 pub use im_hash_index::ImHashIndex;
 use moor_values::util::SliceRef;
@@ -34,15 +36,16 @@ pub trait Index {
     /// Check for potential duplicates which could cause ambiguous updates for update operations.
     fn check_for_update(&self, domain: &SliceRef) -> Result<(), RelationError>;
     /// Check (and trigger) the constraints of the given tuple.
-    fn check_domain_constraints(&self, domain: &SliceRef) -> Result<(), RelationError>;
+    fn check_constraints(&self, domain: &SliceRef) -> Result<(), RelationError>;
     /// Seek matching tuples for the given domain value.
-    fn seek_domain(&self, domain: &SliceRef) -> Box<dyn Iterator<Item = TupleId> + '_>;
-    /// Seek matching tuples for the given codomain value.
-    fn seek_codomain(&self, codomain: &SliceRef) -> Box<dyn Iterator<Item = TupleId> + '_>;
+    fn seek(
+        &self,
+        domain: &SliceRef,
+    ) -> Result<Box<dyn Iterator<Item = TupleId> + '_>, RelationError>;
     /// Index the given tuple.
-    fn index_tuple(&mut self, tuple_ref: &TupleRef) -> Result<(), RelationError>;
+    fn index_tuple(&mut self, key: &SliceRef, tuple_id: TupleId) -> Result<(), RelationError>;
     /// Remove the given tuple from the index.
-    fn unindex_tuple(&mut self, tuple_ref: &TupleRef);
+    fn unindex_tuple(&mut self, key: &SliceRef, tuple_id: TupleId) -> Result<(), RelationError>;
     /// Clone the index.
     /// Need this because Clone is not object-safe so the trait can't declare itself clone-able directly.
     fn clone_index(&self) -> Box<dyn Index + Send + Sync>;

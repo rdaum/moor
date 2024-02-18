@@ -24,7 +24,7 @@ mod test {
     use tracing_test::traced_test;
 
     use crate::support::{History, Type, Value};
-    use moor_db::rdb::{AttrType, RelBox, RelationInfo};
+    use moor_db::rdb::{AttrType, IndexType, RelBox, RelationInfo};
     use moor_db::rdb::{RelationId, Transaction};
     use moor_values::util::SliceRef;
 
@@ -90,6 +90,8 @@ mod test {
                 codomain_type: AttrType::Integer,
                 secondary_indexed: false,
                 unique_domain: true,
+                index_type: IndexType::AdaptiveRadixTree,
+                codomain_index_type: None,
             })
             .collect::<Vec<_>>();
 
@@ -151,7 +153,7 @@ mod test {
                 db.with_relation(*relation, |r| {
                     for k in expected_tuples {
                         let t = from_val(*k);
-                        let tuples = r.seek_by_domain(t.clone());
+                        let tuples = r.seek_by_domain(t.clone()).unwrap();
                         let v = tuples
                             .iter()
                             .next()

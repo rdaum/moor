@@ -44,35 +44,40 @@ enum ConnectionRelation {
     #[strum(props(
         DomainType = "Integer",
         CodomainType = "Bytes",
-        SecondaryIndexed = "true"
+        SecondaryIndexed = "true",
+        IndexType = "Hash"
     ))]
     ClientConnection = 0,
     // Client -> SystemTime of last activity
     #[strum(props(
         DomainType = "Bytes",
         CodomainType = "Bytes",
-        SecondaryIndexed = "false"
+        SecondaryIndexed = "false",
+        IndexType = "Hash"
     ))]
     ClientActivity = 1,
     // Client connect time.
     #[strum(props(
         DomainType = "Bytes",
         CodomainType = "Bytes",
-        SecondaryIndexed = "false"
+        SecondaryIndexed = "false",
+        IndexType = "Hash"
     ))]
     ClientConnectTime = 2,
     // Client last ping time.
     #[strum(props(
         DomainType = "Bytes",
         CodomainType = "Bytes",
-        SecondaryIndexed = "false"
+        SecondaryIndexed = "false",
+        IndexType = "Hash"
     ))]
     ClientPingTime = 3,
     // Client hostname / connection "name"
     #[strum(props(
         DomainType = "Bytes",
         CodomainType = "Bytes",
-        SecondaryIndexed = "false"
+        SecondaryIndexed = "false",
+        IndexType = "Hash"
     ))]
     ClientName = 4,
 }

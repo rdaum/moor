@@ -45,3 +45,4 @@ io-uring.workspace = true
 kanal.workspace = true
 libc.workspace = true
 okaywal.workspace = true
+log = "0.4.20"

@@ -12,13 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use log::error;
 use std::collections::HashSet;
 
 use moor_values::util::SliceRef;
 
-use crate::rdb::index::{ImHashIndex, Index};
+use crate::rdb::index::{ArtArrayIndex, ImHashIndex, Index};
 use crate::rdb::tuples::{TupleId, TupleRef};
-use crate::rdb::{RelationError, RelationId, RelationInfo};
+use crate::rdb::{IndexType, RelationError, RelationId, RelationInfo};
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,
 /// with a default (hash) index on the domain and an optional (hash) index on the codomain.
@@ -39,15 +40,16 @@ use crate::rdb::{RelationError, RelationId, RelationInfo};
 pub struct BaseRelation {
     pub(crate) id: RelationId,
 
+    pub(crate) info: RelationInfo,
+
     /// The last successful committer's tx timestamp
     pub(crate) ts: u64,
-
-    pub(crate) unique_domain: bool,
 
     /// All the tuples in this relation. Indexed by their TupleId, so we can map back from the values in the indexes.
     tuples: im::HashMap<TupleId, TupleRef>,
 
-    index: Box<dyn Index + Send + Sync>,
+    domain_index: Box<dyn Index + Send + Sync>,
+    codomain_index: Option<Box<dyn Index + Send + Sync>>,
 }
 
 impl Clone for Box<dyn Index + Send + Sync> {
@@ -59,22 +61,55 @@ impl Clone for Box<dyn Index + Send + Sync> {
 impl BaseRelation {
     pub(crate) fn new(id: RelationId, relation_info: RelationInfo, timestamp: u64) -> Self {
         let unique_domain = relation_info.unique_domain;
+        let domain_index: Box<dyn Index + Send + Sync> = match relation_info.index_type {
+            IndexType::AdaptiveRadixTree => {
+                Box::new(ArtArrayIndex::new(relation_info.domain_type, unique_domain))
+            }
+            IndexType::Hash => Box::new(ImHashIndex::new(unique_domain)),
+        };
+        let codomain_index: Option<Box<dyn Index + Send + Sync>> =
+            match relation_info.codomain_index_type {
+                Some(IndexType::AdaptiveRadixTree) => Some(Box::new(ArtArrayIndex::new(
+                    relation_info.codomain_type,
+                    false,
+                ))),
+                Some(IndexType::Hash) => Some(Box::new(ImHashIndex::new(false))),
+                None => None,
+            };
         Self {
             id,
             ts: timestamp,
             tuples: Default::default(),
-            index: Box::new(ImHashIndex::new(relation_info)),
-            unique_domain,
+            domain_index,
+            codomain_index,
+            info: relation_info,
         }
     }
 
-    /// Establish indexes for a tuple initial-loaded from secondary storage. Basically a, "trust us,
+    /// Establish indexes & storage for a tuple initial-loaded from secondary storage. Basically a, "trust us,
     /// this exists" move.
-    pub(crate) fn index_tuple(&mut self, mut tuple: TupleRef) {
+    pub(crate) fn load_tuple(&mut self, mut tuple: TupleRef) {
         // Reset timestamp to 0, since this is a tuple initial-loaded from secondary storage.
         tuple.update_timestamp(0);
 
-        self.index.index_tuple(&tuple).expect("Indexing failed");
+        let d_result = self.domain_index.index_tuple(&tuple.domain(), tuple.id());
+        if let Err(e) = d_result {
+            error!(
+                "Domain indexing failed on load for tuple {:?} in relation {:?}: {:?}",
+                tuple, self.info.name, e
+            );
+            return;
+        }
+
+        if let Some(codomain_index) = &mut self.codomain_index {
+            let c_result = codomain_index.index_tuple(&tuple.codomain(), tuple.id());
+            if let Err(e) = c_result {
+                error!(
+                    "Codomain indexing failed on load for tuple {:?} in relation {:?}: {:?}",
+                    tuple, self.info.name, e
+                );
+            }
+        }
 
         // Add the tuple to the relation.
         self.tuples.insert(tuple.id(), tuple);
@@ -86,21 +121,30 @@ impl BaseRelation {
     }
 
     pub fn check_domain_constraints(&self, domain: &SliceRef) -> Result<(), RelationError> {
-        self.index.check_domain_constraints(domain)
+        self.domain_index.check_constraints(domain)
     }
 
-    pub fn seek_by_domain(&self, domain: SliceRef) -> HashSet<TupleRef> {
-        self.index
-            .seek_domain(&domain)
-            .map(|id| self.tuples.get(&id).unwrap().clone())
-            .collect()
+    pub fn seek_by_domain(&self, domain: SliceRef) -> Result<HashSet<TupleRef>, RelationError> {
+        Ok(self
+            .domain_index
+            .seek(&domain)?
+            .map(|id| {
+                self.tuples
+                    .get(&id)
+                    .expect("missing tuple for indexed id")
+                    .clone()
+            })
+            .collect())
     }
 
-    pub fn seek_by_codomain(&self, codomain: SliceRef) -> HashSet<TupleRef> {
-        self.index
-            .seek_codomain(&codomain)
+    pub fn seek_by_codomain(&self, codomain: SliceRef) -> Result<HashSet<TupleRef>, RelationError> {
+        Ok(self
+            .codomain_index
+            .as_ref()
+            .expect("no codomain index")
+            .seek(&codomain)?
             .map(|id| self.tuples.get(&id).unwrap().clone())
-            .collect()
+            .collect())
     }
 
     pub fn predicate_scan<F: Fn(&TupleRef) -> bool>(&self, f: &F) -> HashSet<TupleRef> {
@@ -113,24 +157,31 @@ impl BaseRelation {
             return Err(RelationError::TupleNotFound);
         };
 
-        self.index.unindex_tuple(&tuple_ref);
-
+        self.domain_index
+            .unindex_tuple(&tuple_ref.domain(), tuple_ref.id())?;
+        if let Some(codomain_index) = &mut self.codomain_index {
+            codomain_index.unindex_tuple(&tuple_ref.codomain(), tuple_ref.id())?;
+        }
         Ok(())
     }
 
     /// Add a net-new tuple into the relation, and update indexes accordingly.
-    pub(crate) fn insert_tuple(&mut self, tuple: TupleRef) -> Result<(), RelationError> {
+    pub(crate) fn insert_tuple(&mut self, tuple_ref: TupleRef) -> Result<(), RelationError> {
         {
             // We're a set not a bag.
             // There's gotta be a more efficient way to do this.
-            let domain_entries = self.index.seek_domain(&tuple.domain());
+            let domain_entries = self.domain_index.seek(&tuple_ref.domain())?;
             let mut domain_tuples = domain_entries.map(|id| self.tuples.get(&id).unwrap());
-            if domain_tuples.any(|t| t == &tuple) {
+            if domain_tuples.any(|t| t == &tuple_ref) {
                 return Err(RelationError::UniqueConstraintViolation);
             }
         }
-        self.index.index_tuple(&tuple)?;
-        self.tuples.insert(tuple.id(), tuple.clone());
+        self.domain_index
+            .index_tuple(&tuple_ref.domain(), tuple_ref.id())?;
+        if let Some(codomain_index) = &mut self.codomain_index {
+            codomain_index.index_tuple(&tuple_ref.codomain(), tuple_ref.id())?;
+        }
+        self.tuples.insert(tuple_ref.id(), tuple_ref.clone());
 
         Ok(())
     }
@@ -145,11 +196,17 @@ impl BaseRelation {
             return Err(RelationError::TupleNotFound);
         };
         // Remove the old tuple from the domain index (and codomain index if it exists)
-        self.index.unindex_tuple(&old_tref);
+        self.domain_index
+            .unindex_tuple(&old_tref.domain(), old_tref.id())?;
+        if let Some(codomain_index) = &mut self.codomain_index {
+            codomain_index.unindex_tuple(&old_tref.codomain(), old_tref.id())?;
+        }
 
         // Add the new tuple to the domain index
-        self.index.index_tuple(&tuple)?;
-
+        self.domain_index.index_tuple(&tuple.domain(), tuple.id())?;
+        if let Some(codomain_index) = &mut self.codomain_index {
+            codomain_index.index_tuple(&tuple.codomain(), tuple.id())?;
+        }
         self.tuples.insert(tuple.id(), tuple.clone());
 
         Ok(())
