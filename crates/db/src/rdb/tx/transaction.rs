@@ -655,7 +655,7 @@ mod tests {
 
         assert!(tx1.commit().is_ok());
         assert_eq!(
-            tx2.commit().expect_err("Expected conflict"),
+            tx2.commit().expect_err("Expected constraint violation"),
             CommitError::UniqueConstraintViolation
         );
     }

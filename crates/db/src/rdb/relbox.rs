@@ -109,10 +109,7 @@ impl RelBox {
         let tuple_box = Arc::new(TupleBox::new(pager.clone()));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
-            base_relations.push(BaseRelation::new(RelationId(rid), r.unique_domain, 0));
-            if r.secondary_indexed {
-                base_relations.last_mut().unwrap().add_secondary_index();
-            }
+            base_relations.push(BaseRelation::new(RelationId(rid), r.clone(), 0));
         }
         let mut sequences = vec![0; num_sequences];
 
