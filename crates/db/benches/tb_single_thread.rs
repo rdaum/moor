@@ -41,6 +41,7 @@ fn test_db() -> Arc<RelBox> {
             secondary_indexed: false,
             unique_domain: true,
             index_type: IndexType::AdaptiveRadixTree,
+            codomain_index_type: None,
         })
         .collect::<Vec<_>>();
 
