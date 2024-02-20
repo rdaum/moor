@@ -22,20 +22,15 @@ use crate::rdb::tuples::{TupleId, TupleRef};
 use crate::rdb::{RelationError, RelationId, RelationInfo};
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,
-/// with a default (hash) index on the domain and an optional (hash) index on the codomain.
+/// with an index on the domain and an optional index on the codomain.
 ///
-/// In this representation we do not differentiate the Domain & Codomain type; they are
-/// stored and managed as raw byte-arrays and it is up to layers above to interpret the the values
+/// In this layer  we do not really differentiate the Domain & Codomain type; they are
+/// stored and managed as ref-counted byte-arrays and it is up to layers above & below to interpret the the values
 /// correctly.
 ///
 // TODO: Add some kind of 'type' flag to the relation & tuple values,
 //   so that we can do type-checking on the values, though for our purposes this may be overkill at this time.
 // TODO: Indexes should be paged.
-// TODO: support ordered indexes, not just hash indexes.
-//   if we're staying with in-memory, use an Adaptive Radix Tree; my implementation, but hopefully
-//   modified to support CoW/shared ownership of the tree nodes, like the im::HashMap does.
-//   if we're going to support on-disk indexes, use a CoW B+Tree, which I have implemented elsewhere,
-//   but will need to bring in here, optimize, and provide loving care to.
 #[derive(Clone)]
 pub struct BaseRelation {
     pub(crate) id: RelationId,
@@ -48,7 +43,9 @@ pub struct BaseRelation {
     /// All the tuples in this relation. Indexed by their TupleId, so we can map back from the values in the indexes.
     tuples: im::HashMap<TupleId, TupleRef>,
 
+    /// Domain -> TupleIds
     domain_index: Box<dyn Index + Send + Sync>,
+    /// Codomain -> TupleIds
     codomain_index: Option<Box<dyn Index + Send + Sync>>,
 }
 
