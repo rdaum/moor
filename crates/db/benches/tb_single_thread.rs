@@ -16,7 +16,8 @@
 //! Does not measure single-item reads, deletes, or updates, or concurrent access.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use moor_db::rdb::{AttrType, IndexType, RelBox, RelationInfo};
+use moor_db::rdb::index::{AttrType, IndexType};
+use moor_db::rdb::{RelBox, RelationInfo};
 use moor_values::util::SliceRef;
 use std::rc::Rc;
 use std::sync::Arc;

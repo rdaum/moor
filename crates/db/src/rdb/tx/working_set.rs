@@ -19,12 +19,12 @@ use tracing::{error, warn};
 use moor_values::util::{BitArray, Bitset64};
 use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
 
-use crate::rdb::index::{ArtArrayIndex, HashIndex, Index};
+use crate::rdb::index::{pick_tx_index, Index};
 use crate::rdb::paging::TupleBox;
 use crate::rdb::relbox::{RelBox, RelationInfo};
 use crate::rdb::tuples::{TupleId, TupleRef};
 use crate::rdb::tx::tx_tuple::{DataSource, OpSource, TupleApply, TxTupleEvent, TxTupleOp};
-use crate::rdb::{IndexType, RelationError, RelationId};
+use crate::rdb::{RelationError, RelationId};
 
 /// The local tx "working set" of mutations to base relations, and consists of the set of operations
 /// we will attempt to make permanent when the transaction commits.
@@ -70,20 +70,7 @@ impl WorkingSet {
         }
         let r = &schema[relation_id.0];
 
-        let unique_domain = r.unique_domain;
-        let domain_index: Box<dyn Index> = match r.index_type {
-            IndexType::AdaptiveRadixTree => {
-                Box::new(ArtArrayIndex::new(r.domain_type, unique_domain))
-            }
-            IndexType::Hash => Box::new(HashIndex::new(unique_domain)),
-        };
-        let codomain_index: Option<Box<dyn Index>> = match r.codomain_index_type {
-            Some(IndexType::AdaptiveRadixTree) => {
-                Some(Box::new(ArtArrayIndex::new(r.codomain_type, false)))
-            }
-            Some(IndexType::Hash) => Some(Box::new(HashIndex::new(false))),
-            None => None,
-        };
+        let (domain_index, codomain_index) = pick_tx_index(r);
 
         let new_relation = TxBaseRelation {
             id: relation_id,
@@ -644,13 +631,11 @@ impl TxBaseRelation {
         } = apply;
         // Perform deletes as appropriate.
         if let Some(del_tuple) = &del_tuple {
-            if let Ok(_) = self
+            if self
                 .domain_index
                 .unindex_tuple(&del_tuple.domain(), del_tuple.id())
-            {
-                if !self.tx_tuple_events.remove(&del_tuple.id()).is_some() {
-                    warn!("Tried to remove a tuple that wasn't there");
-                }
+                .is_ok() && self.tx_tuple_events.remove(&del_tuple.id()).is_none() {
+                warn!("Tried to remove a tuple that wasn't there");
             }
             if let Some(index) = &mut self.codomain_index {
                 index.unindex_tuple(&del_tuple.codomain(), del_tuple.id())?;

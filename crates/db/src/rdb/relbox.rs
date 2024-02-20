@@ -16,45 +16,18 @@
 //   -> datalog-style variable unification
 //   can be used for some of the inheritance graph / verb & property resolution activity done manually now
 
-use std::fmt::Debug;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, RwLock};
-use strum::EnumString;
-
 use crate::rdb::base_relation::BaseRelation;
+use crate::rdb::index::{AttrType, IndexType};
 use crate::rdb::paging::TupleBox;
 use crate::rdb::tx::WorkingSet;
 use crate::rdb::tx::{CommitError, CommitSet, Transaction};
 use crate::rdb::RelationId;
+use std::fmt::Debug;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, RwLock};
 
 use super::paging::Pager;
-
-/// Types that domains or codomains can be.
-/// Note that this is not the same as the `moor` Var type, but instead used for declaring the types of the purpose of
-/// indexing and querying. The actual user data can be stored in a variety of ways, but the TupleType is used by the
-/// indexing code to manage e.g. encoding, ordering, hashing, etc.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, EnumString)]
-pub enum AttrType {
-    /// The tuple attribute in question is a signed 64-bit integer.
-    Integer,
-    /// The tuple attribute in question is an unsigned 64-bit integer.
-    UnsignedInteger,
-    /// The tuple attribute in question is a 64-bit floating point number.
-    Float,
-    /// The tuple attribute in question is a string.
-    String,
-    /// The tuple attribute in question is a byte array.
-    Bytes,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, EnumString)]
-pub enum IndexType {
-    /// Viable for integer keys. Keys are ordered and fit in a fixed size.
-    AdaptiveRadixTree,
-    /// Unordered arbitrary slices.
-    Hash,
-}
 
 /// Meta-data about a relation
 #[derive(Clone, Debug)]

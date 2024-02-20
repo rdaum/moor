@@ -24,7 +24,8 @@ mod test {
     use tracing_test::traced_test;
 
     use crate::support::{History, Type, Value};
-    use moor_db::rdb::{AttrType, IndexType, RelBox, RelationInfo};
+    use moor_db::rdb::index::{AttrType, IndexType};
+    use moor_db::rdb::{RelBox, RelationInfo};
     use moor_db::rdb::{RelationId, Transaction};
     use moor_values::util::SliceRef;
 

@@ -22,7 +22,9 @@
 //!
 //! TLDR Transactions continue to see a fully snapshot isolated view of the world.
 
-pub use relbox::{AttrType, IndexType, RelBox, RelationInfo};
+pub use index::AttrType;
+pub use index::IndexType;
+pub use relbox::{RelBox, RelationInfo};
 use std::fmt::Display;
 use std::str::FromStr;
 use strum::EnumProperty;

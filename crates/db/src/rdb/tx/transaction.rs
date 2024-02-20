@@ -395,7 +395,8 @@ mod tests {
 
     use moor_values::util::SliceRef;
 
-    use crate::rdb::relbox::{AttrType, IndexType, RelBox, RelationInfo};
+    use crate::rdb::index::{AttrType, IndexType};
+    use crate::rdb::relbox::{RelBox, RelationInfo};
     use crate::rdb::tuples::TupleRef;
     use crate::rdb::tx::transaction::CommitError;
     use crate::rdb::{RelationError, RelationId, Transaction};

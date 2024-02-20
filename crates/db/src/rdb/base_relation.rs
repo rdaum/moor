@@ -17,9 +17,9 @@ use std::collections::HashSet;
 
 use moor_values::util::SliceRef;
 
-use crate::rdb::index::{ArtArrayIndex, ImHashIndex, Index};
+use crate::rdb::index::{pick_base_index, Index};
 use crate::rdb::tuples::{TupleId, TupleRef};
-use crate::rdb::{IndexType, RelationError, RelationId, RelationInfo};
+use crate::rdb::{RelationError, RelationId, RelationInfo};
 
 /// Represents a 'canonical' base binary relation, which is a set of tuples of domain, codomain,
 /// with a default (hash) index on the domain and an optional (hash) index on the codomain.
@@ -60,22 +60,7 @@ impl Clone for Box<dyn Index + Send + Sync> {
 
 impl BaseRelation {
     pub(crate) fn new(id: RelationId, relation_info: RelationInfo, timestamp: u64) -> Self {
-        let unique_domain = relation_info.unique_domain;
-        let domain_index: Box<dyn Index + Send + Sync> = match relation_info.index_type {
-            IndexType::AdaptiveRadixTree => {
-                Box::new(ArtArrayIndex::new(relation_info.domain_type, unique_domain))
-            }
-            IndexType::Hash => Box::new(ImHashIndex::new(unique_domain)),
-        };
-        let codomain_index: Option<Box<dyn Index + Send + Sync>> =
-            match relation_info.codomain_index_type {
-                Some(IndexType::AdaptiveRadixTree) => Some(Box::new(ArtArrayIndex::new(
-                    relation_info.codomain_type,
-                    false,
-                ))),
-                Some(IndexType::Hash) => Some(Box::new(ImHashIndex::new(false))),
-                None => None,
-            };
+        let (domain_index, codomain_index) = pick_base_index(&relation_info);
         Self {
             id,
             ts: timestamp,

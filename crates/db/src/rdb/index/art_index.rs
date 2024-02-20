@@ -12,9 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::rdb::index::{AdaptiveRadixTree, ArrayKey, Index};
+use crate::rdb::index::{AdaptiveRadixTree, ArrayKey, AttrType, Index};
 use crate::rdb::tuples::TupleId;
-use crate::rdb::{AttrType, RelationError};
+use crate::rdb::{IndexType, RelationError};
 use moor_values::util::SliceRef;
 use std::collections::HashSet;
 use tracing::error;
@@ -75,6 +75,10 @@ impl ArtArrayIndex {
 }
 
 impl Index for ArtArrayIndex {
+    fn index_type(&self) -> IndexType {
+        IndexType::AdaptiveRadixTree
+    }
+
     fn check_for_update(&self, attr: &SliceRef) -> Result<(), RelationError> {
         let attr_keys = self.to_attr_key(attr)?;
         if let Some(tuples) = self.index.get_k(&attr_keys) {
