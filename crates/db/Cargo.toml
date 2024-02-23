@@ -8,24 +8,16 @@ repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
-[[bench]]
-name = "tb_single_thread"
-harness = false
-
 [dev-dependencies]
-criterion.workspace = true
-rand.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 tracing-test.workspace = true
 
 [dependencies]
 ## Own
 moor-values = { path = "../values" }
+moor-rdb = { path = "../rdb" }
 
 ## General usefullness
-human_bytes.workspace = true
 strum.workspace = true
 uuid.workspace = true
 
@@ -35,14 +27,3 @@ thiserror.workspace = true
 ## Logging & tracing
 tracing.workspace = true
 
-# For the DB layer.
-arc-swap.workspace = true
-atomic-wait.workspace = true
-binary-layout.workspace = true
-hi_sparse_bitset.workspace = true
-im.workspace = true
-io-uring.workspace = true
-kanal.workspace = true
-libc.workspace = true
-okaywal.workspace = true
-log = "0.4.20"

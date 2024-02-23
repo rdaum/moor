@@ -9,6 +9,7 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+moor-rdb = { path = "../rdb" }
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }

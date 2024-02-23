@@ -43,10 +43,10 @@ use crate::odb::object_relations;
 use crate::odb::object_relations::{
     encode_oid, get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
 };
-use crate::rdb::{relation_info_for, RelationError};
-use crate::rdb::{CommitError, Transaction};
-use crate::rdb::{RelBox, RelationInfo};
 use crate::Database;
+use moor_rdb::{relation_info_for, RelationError};
+use moor_rdb::{CommitError, Transaction};
+use moor_rdb::{RelBox, RelationInfo};
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the rdb as its backing
 pub struct RelBoxWorldState {
@@ -62,7 +62,7 @@ impl RelBoxWorldState {
 
         // Check the db for sys (#0) object to see if this is a fresh DB or not.
         let fresh_db = {
-            let canonical = db.canonical.read().unwrap();
+            let canonical = db.copy_canonical();
             canonical[WorldStateRelation::ObjectParent as usize]
                 .seek_by_domain(encode_oid(SYSTEM_OBJECT))
                 .expect("Could not seek for freshness check on DB")
@@ -1129,7 +1129,7 @@ mod tests {
     use crate::db_tx::DbTransaction;
     use crate::odb::object_relations::{WorldStateRelation, WorldStateSequences};
     use crate::odb::rb_worldstate::RelBoxTransaction;
-    use crate::rdb::{relation_info_for, RelBox, RelationInfo};
+    use moor_rdb::{relation_info_for, RelBox, RelationInfo};
 
     fn test_db() -> Arc<RelBox> {
         let relations: Vec<RelationInfo> =

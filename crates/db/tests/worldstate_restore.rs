@@ -12,9 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#[path = "./test-support.rs"]
-mod support;
-
 #[cfg(test)]
 mod test {
     use std::path::PathBuf;
@@ -24,7 +21,7 @@ mod test {
 
     use moor_db::db_tx::DbTransaction;
     use moor_db::odb::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
-    use moor_db::rdb::{relation_info_for, RelBox, RelationInfo};
+    use moor_rdb::{relation_info_for, RelBox, RelationInfo};
     use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
     use moor_values::model::HasUuid;

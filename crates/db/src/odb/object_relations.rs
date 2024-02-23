@@ -21,8 +21,8 @@ use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
 
-use crate::rdb::RelationError;
-use crate::rdb::{RelationId, Transaction};
+use moor_rdb::RelationError;
+use moor_rdb::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]
@@ -386,7 +386,7 @@ mod tests {
         get_object_by_object_codomain, get_object_object, get_objects_by_object_codomain,
         insert_object_object, upsert_object_object, WorldStateRelation, WorldStateSequences,
     };
-    use crate::rdb::{relation_info_for, RelBox, RelationInfo};
+    use moor_rdb::{relation_info_for, RelBox, RelationInfo};
 
     fn test_db() -> Arc<RelBox> {
         let relations: Vec<RelationInfo> =

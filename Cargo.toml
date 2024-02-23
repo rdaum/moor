@@ -5,6 +5,7 @@ members = [
   "crates/values",
   "crates/compiler",
   "crates/kernel",
+  "crates/rdb",
   "crates/db",
   "crates/rpc-common",
   "crates/rpc-sync-client",

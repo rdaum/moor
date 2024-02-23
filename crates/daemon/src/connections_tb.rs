@@ -24,8 +24,8 @@ use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty, IntoEnumIterat
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use moor_db::rdb::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use moor_kernel::tasks::sessions::SessionError;
+use moor_rdb::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::AsByteBuffer;

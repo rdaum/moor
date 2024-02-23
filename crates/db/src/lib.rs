@@ -25,7 +25,6 @@ mod db_loader_client;
 pub mod db_tx;
 mod db_worldstate;
 pub mod loader;
-pub mod rdb;
 
 pub mod odb;
 

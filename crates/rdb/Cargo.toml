@@ -1,0 +1,46 @@
+[package]
+name = "moor-rdb"
+version = "0.1.0"
+description = "Db kernel for supporting storage"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bench]]
+name = "tb_single_thread"
+harness = false
+
+[dev-dependencies]
+criterion.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tracing-test.workspace = true
+
+[dependencies]
+## Own
+## This should be moved up to its own crate probably, separate from the rest of -values
+moor-values = { path = "../values" }
+
+## General usefullness
+human_bytes.workspace = true
+strum.workspace = true
+
+## Error declaration/ handling
+thiserror.workspace = true
+
+## Logging & tracing
+tracing.workspace = true
+
+# For the DB layer.
+atomic-wait.workspace = true
+binary-layout.workspace = true
+hi_sparse_bitset.workspace = true
+im.workspace = true
+io-uring.workspace = true
+kanal.workspace = true
+libc.workspace = true
+okaywal.workspace = true
