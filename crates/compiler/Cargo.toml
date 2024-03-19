@@ -19,7 +19,7 @@ unindent.workspace = true
 ## Own
 moor-values = { path = "../values" }
 
-## General usefullness
+## General usefulness
 bincode.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true

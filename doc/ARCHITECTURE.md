@@ -102,7 +102,7 @@ consistent views of the data.
 
 #### Permissions
 
-Moor objects are all permissioned. This permission system is baseds on the classic LambdaMOO model, which follows a
+Moor objects are all permissioned. This permission system is based on the classic LambdaMOO model, which follows a
 somewhat Unix-like Access Control List (ACL) model based around ownership and permission bits.
 
 Every object, verb, and property has owners and permission bits which determine who can read, write (or execute) them.
@@ -175,7 +175,7 @@ Additionally, there are two broadcast `pubsub` channels which are used to send e
 - The `narrative` channel is used to send "narrative" events, which are used to inform the host processes of things
   that have happened in the world. This ultimately ties back to the MOO `notify` built-in function. For now this
   merely dispatches text strings, but in the future it will dispatch more structured events which clients can use
-  to update their user interface or locla model of the world. Other events that occur on this channel include:
+  to update their user interface or local model of the world. Other events that occur on this channel include:
     - `SystemMessage` for notifications of system-level events
     - `RequestInput` for prompting the user for input
     - `Disconnect` for notifying the user that they have been disconnected and requesting that the host close or 
@@ -205,8 +205,8 @@ which listens for telnet connections and dispatches them to the daemon process.
 
 To provide a more modern web-based interface, a `web` host process is provided. This is a simple HTTP server which
 provides a RESTful API for interacting with the system for login, verb execution, and property retrieval. The web host
-process additionally maintains a WebSockets connecton to the daemon process for sending commands and receiving 
-narrative events in the same style as the telnet interface. In the future, additional WebSockts modalities will be
+process additionally maintains a WebSockets connection to the daemon process for sending commands and receiving
+narrative events in the same style as the telnet interface. In the future, additional WebSockets modalities will be
 provided for receiving structured JSON events to provide a richer user interface.
 
 In addition to these, a `console` host process is provided. This is a simple command-line interface which is used for

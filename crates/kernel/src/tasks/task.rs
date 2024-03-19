@@ -75,7 +75,7 @@ pub(crate) struct Task {
 }
 
 // TODO Propagate default ticks, seconds values from global config / args properly.
-//   Note these can be overriden in-core as well, server_options, will need caching, etc.
+//   Note these can be overridden in-core as well, server_options, will need caching, etc.
 const DEFAULT_FG_TICKS: usize = 60_000;
 const DEFAULT_BG_TICKS: usize = 30_000;
 const DEFAULT_FG_SECONDS: u64 = 5;
@@ -630,7 +630,7 @@ impl Task {
             }
         };
         let (verb_info, target) = match parse_results {
-            // If we have a successul match, that's what we'll call into
+            // If we have a successful match, that's what we'll call into
             Some((verb_info, target)) => {
                 trace!(
                     ?parsed_command,

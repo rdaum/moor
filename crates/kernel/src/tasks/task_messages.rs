@@ -85,7 +85,7 @@ pub enum SchedulerControlMsg {
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.
     TaskVerbNotFound(Objid, String),
-    /// An execption was thrown while executing the verb.
+    /// An exception was thrown while executing the verb.
     TaskException(UncaughtException),
     /// The task is requesting that it be forked.
     TaskRequestFork(Fork, OneshotSender<TaskId>),

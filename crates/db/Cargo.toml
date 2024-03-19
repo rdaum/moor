@@ -17,7 +17,7 @@ tracing-test.workspace = true
 moor-values = { path = "../values" }
 moor-rdb = { path = "../rdb" }
 
-## General usefullness
+## General usefulness
 strum.workspace = true
 uuid.workspace = true
 

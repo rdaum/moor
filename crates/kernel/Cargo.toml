@@ -33,7 +33,7 @@ moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-values = { path = "../values" }
 
-## General usefullness
+## General usefulness
 chrono.workspace = true
 dashmap.workspace = true
 decorum.workspace = true

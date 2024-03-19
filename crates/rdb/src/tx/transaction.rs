@@ -347,7 +347,7 @@ impl<'a> CommitSet<'a> {
                                     }
                                 }
                             }
-                            // No confict, and was already deleted. So we don't have to do anything.
+                            // No conflict, and was already deleted. So we don't have to do anything.
                         } else {
                             // If so, do the del0rt in our fork.
                             let forked_relation = self.fork(relation_id);
