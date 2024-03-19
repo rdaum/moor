@@ -52,7 +52,7 @@ tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tracing-test = "0.2.4"
 
-# General usefullness
+# General usefulness
 arc-swap = "1.6.0"
 atomic-wait = "1.1.0"
 binary-layout = "4.0.0"

@@ -25,7 +25,7 @@ tracing-test.workspace = true
 ## This should be moved up to its own crate probably, separate from the rest of -values
 moor-values = { path = "../values" }
 
-## General usefullness
+## General usefulness
 human_bytes.workspace = true
 strum.workspace = true
 

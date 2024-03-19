@@ -45,7 +45,7 @@ pub enum DecompileError {
 struct Decompile {
     /// The program we are decompiling.
     program: Program,
-    /// The fork vector # we're decompiling, or None if from the main strema.
+    /// The fork vector # we're decompiling, or None if from the main stream.
     fork_vector: Option<usize>,
     /// The current position in the opcode stream as it is being decompiled.
     position: usize,

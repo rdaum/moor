@@ -107,7 +107,7 @@ const MooSyntax= {
             [/[;,.]/, 'delimiter'],
 
             // strings
-            [/"([^"\\]|\\.)*$/, 'string.invalid'],  // non-teminated string
+            [/"([^"\\]|\\.)*$/, 'string.invalid'],  // non-terminated string
             [/"/, 'string', '@string_double'],
         ],
 
