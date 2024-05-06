@@ -78,7 +78,7 @@ yoke = "0.7.3"
 yoke-derive = "0.7.3"
 
 ## Required for MOO builtins.
-chrono-tz = "0.8.5"
+chrono-tz = "0.9.0"
 iana-time-zone = "0.1.60"
 md5 = "0.7.0" # For MOO's "string_hash"
 onig = { version = "6.4.0", default-features = false  }
@@ -86,13 +86,13 @@ pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) ba
 rand = "0.8.5"
 
 ## Compiler grammar/parser
-pest = "2.7.7"
-pest_derive = "2.7.7"
+pest = "2.7.10"
+pest_derive = "2.7.10"
 
 ## Error declaration/ handling
-color-eyre = "0.6.2"
+color-eyre = "0.6.3"
 eyre = "0.6.12"
-thiserror = "1.0.57"
+thiserror = "1.0.59"
 
 ## For macro-ing
 paste = "1.0.14"
@@ -101,13 +101,13 @@ paste = "1.0.14"
 bincode = "2.0.0-rc.3" # For serializing/deserializing values
 hi_sparse_bitset = "0.6.0" # For buffer pool allocator in the DB
 im = "15.1.0" # Immutable data structures
-io-uring = "0.6.3"
-libc = "0.2.153"
+io-uring = "0.6.4"
+libc = "0.2.154"
 okaywal = "0.3.1"
 text_io = "0.1.12" # Used for reading text dumps.
 
 # Dev dependencies
-tempfile = "3.10.0"
+tempfile = "3.10.1"
 
 # testing
 pretty_assertions = "1.4.0"
@@ -116,5 +116,5 @@ unindent = "0.2.3"
 
 # Auth/Auth
 ed25519-dalek = { version = "2.1.1", features = ["zeroize", "pkcs8", "rand_core"] }
-pem = "3.0.3"
+pem = "3.0.4"
 rusty_paseto = { version = "0.6.1" }
