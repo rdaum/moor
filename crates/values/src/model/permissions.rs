@@ -74,7 +74,7 @@ impl Perms {
         &self,
         object_owner: Objid,
         object_flags: BitEnum<ObjFlag>,
-        allows: ObjFlag,
+        allows: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
         if self.who == object_owner {
             return Ok(());
@@ -82,7 +82,7 @@ impl Perms {
         if self.flags.contains(ObjFlag::Wizard) {
             return Ok(());
         }
-        if !object_flags.contains(allows) {
+        if !object_flags.contains_all(allows) {
             return Err(WorldStateError::ObjectPermissionDenied);
         }
         Ok(())

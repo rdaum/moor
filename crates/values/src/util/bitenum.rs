@@ -92,6 +92,11 @@ impl<T: ToPrimitive> BitEnum<T> {
     pub fn contains(&self, value: T) -> bool {
         self.value & (1 << value.to_u64().unwrap()) != 0
     }
+
+    pub fn contains_all(&self, values: BitEnum<T>) -> bool {
+        // Verify that all bits from values are in self.value
+        values.value & self.value == values.value
+    }
 }
 
 impl<T: ToPrimitive> BitOr for BitEnum<T> {

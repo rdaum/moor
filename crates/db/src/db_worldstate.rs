@@ -71,7 +71,7 @@ impl WorldState for DbTxWorldState {
         // Owner or wizard only.
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, flags, ObjFlag::Write)?;
+            .check_object_allows(owner, flags, ObjFlag::Write.into())?;
         self.tx.set_object_flags(obj, new_flags)
     }
 
@@ -96,12 +96,11 @@ impl WorldState for DbTxWorldState {
     ) -> Result<Objid, WorldStateError> {
         if parent != NOTHING {
             let (flags, parent_owner) = (self.flags_of(parent)?, self.owner_of(parent)?);
-            // TODO check_object_allows should take a BitEnum arg for `allows`
-            //   so we can check for multiple flags at once.
-            self.perms(perms)?
-                .check_object_allows(parent_owner, flags, ObjFlag::Read)?;
-            self.perms(perms)?
-                .check_object_allows(parent_owner, flags, ObjFlag::Fertile)?;
+            self.perms(perms)?.check_object_allows(
+                parent_owner,
+                flags,
+                BitEnum::new_with(ObjFlag::Read) | ObjFlag::Fertile,
+            )?;
         }
 
         let owner = (owner != NOTHING).then_some(owner);
@@ -123,7 +122,7 @@ impl WorldState for DbTxWorldState {
     fn recycle_object(&mut self, perms: Objid, obj: Objid) -> Result<(), WorldStateError> {
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, flags, ObjFlag::Write)?;
+            .check_object_allows(owner, flags, ObjFlag::Write.into())?;
 
         self.tx.recycle_object(obj)
     }
@@ -140,7 +139,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, flags, ObjFlag::Write)?;
+            .check_object_allows(owner, flags, ObjFlag::Write.into())?;
 
         self.tx.set_object_location(obj, new_loc)
     }
@@ -156,7 +155,7 @@ impl WorldState for DbTxWorldState {
     fn verbs(&self, perms: Objid, obj: Objid) -> Result<VerbDefs, WorldStateError> {
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, flags, ObjFlag::Read)?;
+            .check_object_allows(owner, flags, ObjFlag::Read.into())?;
 
         self.tx.get_verbs(obj)
     }
@@ -165,7 +164,7 @@ impl WorldState for DbTxWorldState {
     fn properties(&self, perms: Objid, obj: Objid) -> Result<PropDefs, WorldStateError> {
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, flags, ObjFlag::Read)?;
+            .check_object_allows(owner, flags, ObjFlag::Read.into())?;
 
         let properties = self.tx.get_properties(obj)?;
         Ok(properties)
@@ -295,7 +294,7 @@ impl WorldState for DbTxWorldState {
 
             // User is either wizard or owner
             self.perms(perms)?
-                .check_object_allows(objowner, flags, ObjFlag::Write)?;
+                .check_object_allows(objowner, flags, ObjFlag::Write.into())?;
             if pname == "name" {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
@@ -438,7 +437,7 @@ impl WorldState for DbTxWorldState {
         // must be the perms
         let (flags, objowner) = (self.flags_of(location)?, self.owner_of(location)?);
         self.perms(perms)?
-            .check_object_allows(objowner, flags, ObjFlag::Write)?;
+            .check_object_allows(objowner, flags, ObjFlag::Write.into())?;
         self.perms(perms)?.check_obj_owner_perms(propowner)?;
 
         self.tx.define_property(
@@ -483,7 +482,7 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         let (objflags, obj_owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(obj_owner, objflags, ObjFlag::Write)?;
+            .check_object_allows(obj_owner, objflags, ObjFlag::Write.into())?;
 
         self.tx
             .add_object_verb(obj, owner, names, binary, binary_type, flags, args)?;
@@ -621,7 +620,7 @@ impl WorldState for DbTxWorldState {
 
         let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, objflags, ObjFlag::Read)?;
+            .check_object_allows(owner, objflags, ObjFlag::Read.into())?;
 
         let spec_for_fn = |oid, pco| -> ArgSpec {
             if pco == oid {
@@ -677,13 +676,14 @@ impl WorldState for DbTxWorldState {
         if new_parent != NOTHING {
             let (parentflags, parentowner) =
                 (self.flags_of(new_parent)?, self.owner_of(new_parent)?);
-            self.perms(perms)?
-                .check_object_allows(parentowner, parentflags, ObjFlag::Write)?;
-            self.perms(perms)?
-                .check_object_allows(parentowner, parentflags, ObjFlag::Fertile)?;
+            self.perms(perms)?.check_object_allows(
+                parentowner,
+                parentflags,
+                BitEnum::new_with(ObjFlag::Write) | ObjFlag::Fertile,
+            )?;
         }
         self.perms(perms)?
-            .check_object_allows(owner, objflags, ObjFlag::Write)?;
+            .check_object_allows(owner, objflags, ObjFlag::Write.into())?;
 
         self.tx.set_object_parent(obj, new_parent)
     }
@@ -692,7 +692,7 @@ impl WorldState for DbTxWorldState {
     fn children_of(&self, perms: Objid, obj: Objid) -> Result<ObjSet, WorldStateError> {
         let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
-            .check_object_allows(owner, objflags, ObjFlag::Read)?;
+            .check_object_allows(owner, objflags, ObjFlag::Read.into())?;
 
         self.tx.get_object_children(obj)
     }
