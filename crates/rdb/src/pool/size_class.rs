@@ -14,6 +14,8 @@
 
 use std::io;
 use std::ptr::null_mut;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Mutex;
 
 use human_bytes::human_bytes;
 use libc::{madvise, MADV_DONTNEED, MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
@@ -27,12 +29,12 @@ pub struct SizeClass {
     pub block_size: usize,
     pub base_addr: *mut u8,
     pub virt_size: usize,
-    free_list: Vec<usize>,
-    allocset: BitSet,
-    highest_block: usize,
+    free_list: crossbeam_queue::ArrayQueue<usize>,
+    allocset: Mutex<BitSet>,
+    highest_block: AtomicUsize,
 
     // stats
-    num_blocks_used: u32,
+    num_blocks_used: AtomicUsize,
 }
 
 unsafe impl Send for SizeClass {}
@@ -73,24 +75,27 @@ impl SizeClass {
             base_addr,
             virt_size,
 
-            free_list: vec![],
-            allocset: BitSet::new(),
-            highest_block: 0,
+            free_list: crossbeam_queue::ArrayQueue::new(256),
+            allocset: Mutex::new(BitSet::new()),
+            highest_block: AtomicUsize::new(0),
 
-            num_blocks_used: 0,
+            num_blocks_used: AtomicUsize::new(0),
         })
     }
 
-    pub fn alloc(&mut self) -> Result<usize, BufferPoolError> {
+    pub fn alloc(&self) -> Result<usize, BufferPoolError> {
         // Check the free list first.
         if let Some(blocknum) = self.free_list.pop() {
-            self.allocset.insert(blocknum);
-            self.num_blocks_used += 1;
+            let mut allocset = self.allocset.lock().unwrap();
+            allocset.insert(blocknum);
+            self.num_blocks_used
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return Ok(blocknum);
         }
 
-        let blocknum = self.highest_block;
-        self.highest_block += 1;
+        let blocknum = self
+            .highest_block
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         if blocknum >= self.virt_size / self.block_size {
             return Err(BufferPoolError::InsufficientRoom {
@@ -99,12 +104,14 @@ impl SizeClass {
             });
         }
 
-        self.allocset.insert(blocknum);
-        self.num_blocks_used += 1;
+        let mut allocset = self.allocset.lock().unwrap();
+        allocset.insert(blocknum);
+        self.num_blocks_used
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(blocknum)
     }
 
-    pub fn free(&mut self, blocknum: usize) -> Result<(), BufferPoolError> {
+    pub fn free(&self, blocknum: usize) -> Result<(), BufferPoolError> {
         unsafe {
             let base_addr = self.base_addr;
             let addr = base_addr.offset(blocknum as isize * self.block_size as isize);
@@ -118,9 +125,14 @@ impl SizeClass {
                 );
             }
         }
-        self.allocset.remove(blocknum);
-        self.free_list.push(blocknum);
-        self.num_blocks_used += 1;
+        let mut allocset = self.allocset.lock().unwrap();
+        allocset.remove(blocknum);
+        // Attempt to push to the free list, unless it's full.
+        // If so, that's ok, that's just an optimization, and we'll hunt for free blocks manually
+        // when it's empty
+        self.free_list.push(blocknum).ok();
+        self.num_blocks_used
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 
@@ -143,17 +155,22 @@ impl SizeClass {
                 );
             }
         }
-        self.allocset.remove(blocknum);
-        self.num_blocks_used += 1;
+        let mut allocset = self.allocset.lock().unwrap();
+        allocset.remove(blocknum);
+        self.num_blocks_used
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 
     pub fn is_allocated(&self, blocknum: usize) -> bool {
-        self.allocset.contains(blocknum)
+        let allocset = self.allocset.lock().unwrap();
+        allocset.contains(blocknum)
     }
 
     pub fn bytes_used(&self) -> usize {
-        self.num_blocks_used as usize
+        self.num_blocks_used
+            .load(std::sync::atomic::Ordering::Relaxed)
+            * self.block_size
     }
 
     pub fn available(&self) -> usize {

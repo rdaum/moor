@@ -47,10 +47,10 @@ pub enum BufferPoolError {
 
 pub trait BufferPool {
     /// Allocate a buffer of the given size.
-    fn alloc(&mut self, size: usize) -> Result<(Bid, *mut u8, usize), BufferPoolError>;
+    fn alloc(&self, size: usize) -> Result<(Bid, *mut u8, usize), BufferPoolError>;
     /// Free a buffer, completely deallocating it, by which we mean removing it from the index of
     /// used pages.
-    fn free(&mut self, page: Bid) -> Result<(), BufferPoolError>;
+    fn free(&self, page: Bid) -> Result<(), BufferPoolError>;
     /// Check if a given buffer handle is allocated.
     fn is_allocated(&self, page: Bid) -> bool;
     /// Returns the physical pointer and page size for a page.

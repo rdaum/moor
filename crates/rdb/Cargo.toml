@@ -38,6 +38,8 @@ tracing.workspace = true
 # For the DB layer.
 atomic-wait.workspace = true
 binary-layout.workspace = true
+crossbeam-queue.workspace = true
+dashmap.workspace = true
 hi_sparse_bitset.workspace = true
 im.workspace = true
 io-uring.workspace = true

@@ -119,7 +119,7 @@ impl MmapBufferPool {
 
 impl BufferPool for MmapBufferPool {
     /// Allocate a buffer of the given size.
-    fn alloc(&mut self, size: usize) -> Result<(Bid, *mut u8, usize), BufferPoolError> {
+    fn alloc(&self, size: usize) -> Result<(Bid, *mut u8, usize), BufferPoolError> {
         if size > self.available_bytes.load(Ordering::SeqCst) {
             return Err(BufferPoolError::InsufficientRoom {
                 desired: size,
@@ -134,7 +134,7 @@ impl BufferPool for MmapBufferPool {
             return Err(BufferPoolError::UnsupportedSize(1 << np2));
         }
 
-        let nearest_class = &mut self.size_classes[sc_idx];
+        let nearest_class = &self.size_classes[sc_idx];
         let block_size = nearest_class.block_size;
 
         // Ask the size class for its offset for allocation.
@@ -160,9 +160,9 @@ impl BufferPool for MmapBufferPool {
     }
     /// Free a buffer, completely deallocating it, by which we mean removing it from the index of
     /// used pages.
-    fn free(&mut self, page: Bid) -> Result<(), BufferPoolError> {
+    fn free(&self, page: Bid) -> Result<(), BufferPoolError> {
         let sc = Self::size_class_of(page);
-        let sc = &mut self.size_classes[sc as usize];
+        let sc = &self.size_classes[sc as usize];
         let block_size = sc.block_size;
         let offset = Self::offset_of(page);
         sc.free(offset / block_size)?;
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_buffer_allocation_perfect() {
         let capacity = MB_256;
-        let mut bp = MmapBufferPool::new(capacity).unwrap();
+        let bp = MmapBufferPool::new(capacity).unwrap();
 
         // Allocate buffers that fit just inside powers of 2, so no fragmentation will occur due to
         // rounding up nearest size.
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn test_buffer_allocation_fragmented() {
         let capacity = MB_256;
-        let mut bp = MmapBufferPool::new(capacity).unwrap();
+        let bp = MmapBufferPool::new(capacity).unwrap();
 
         // Allocate buffers that fit 10 bytes under some powers of 2, so we accumulate some
         // fragmentation.
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn test_error_conditions() {
         let capacity = MB_256;
-        let mut bp = MmapBufferPool::new(capacity).unwrap();
+        let bp = MmapBufferPool::new(capacity).unwrap();
 
         // Test capacity limit
         let res = bp.alloc(capacity + 1);

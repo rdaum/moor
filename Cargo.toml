@@ -98,6 +98,7 @@ thiserror = "1.0.59"
 paste = "1.0.14"
 
 # For the DB & values layer.
+crossbeam-queue = "0.3.11"
 bincode = "2.0.0-rc.3" # For serializing/deserializing values
 hi_sparse_bitset = "0.6.0" # For buffer pool allocator in the DB
 im = "15.1.0" # Immutable data structures

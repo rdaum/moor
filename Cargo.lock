@@ -1666,6 +1666,8 @@ dependencies = [
  "atomic-wait",
  "binary-layout",
  "criterion",
+ "crossbeam-queue",
+ "dashmap",
  "hi_sparse_bitset",
  "human_bytes",
  "im",

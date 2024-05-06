@@ -22,8 +22,8 @@ use crate::{
     pool::{Bid, BufferPoolError, MmapBufferPool},
     tx::WorkingSet,
 };
+use dashmap::DashMap;
 use std::{
-    collections::HashMap,
     path::PathBuf,
     pin::Pin,
     sync::{
@@ -35,14 +35,14 @@ use std::{
 use super::{backing::BackingStoreClient, cold_storage::ColdStorage, PageId, TupleBox};
 
 pub struct Pager {
-    inner: Mutex<Inner>,
+    inner: Inner,
     next_pid: AtomicUsize,
     cold_storage: Mutex<Option<BackingStoreClient>>,
 }
 
 struct Inner {
     pool: MmapBufferPool,
-    page_table: HashMap<PageId, Bid>,
+    page_table: DashMap<PageId, Bid>,
 }
 
 impl Pager {
@@ -51,10 +51,10 @@ impl Pager {
         let pool = MmapBufferPool::new(size)?;
 
         Ok(Self {
-            inner: Mutex::new(Inner {
+            inner: Inner {
                 pool,
-                page_table: HashMap::new(),
-            }),
+                page_table: DashMap::new(),
+            },
             cold_storage: Mutex::new(None),
             next_pid: AtomicUsize::new(0),
         })
@@ -89,35 +89,34 @@ impl Pager {
     where
         F: FnMut(Pin<&mut [u8]>),
     {
-        let mut inner = self.inner.lock().unwrap();
-        let (bid, buf_ptr, used_size) = inner.pool.alloc(size)?;
+        let (bid, buf_ptr, used_size) = self.inner.pool.alloc(size)?;
         let as_slice = unsafe { std::slice::from_raw_parts_mut(buf_ptr, size) };
         let mut as_pin = Pin::new(as_slice);
         fill_func(as_pin.as_mut());
 
         let page_id = self.next_pid.fetch_add(1, Ordering::SeqCst);
-        inner.page_table.insert(page_id, bid);
+        self.inner.page_table.insert(page_id, bid);
         Ok((page_id, used_size))
     }
 
     /// Free a page, and return it to the pool.
     pub fn free(&self, page_id: PageId) -> Result<(), BufferPoolError> {
-        let mut inner = self.inner.lock().unwrap();
-        let bid = inner
+        let bid = self
+            .inner
             .page_table
             .remove(&page_id)
             .ok_or(BufferPoolError::InvalidPage)?;
-        inner.pool.free(bid)
+        self.inner.pool.free(bid.1)
     }
 
     /// Resolve a page id to a pointer to the page's buffer.
     pub fn resolve_ptr(&self, page_id: PageId) -> Result<(*mut u8, usize), BufferPoolError> {
-        let inner = self.inner.lock().unwrap();
-        let bid = inner
+        let bid = self
+            .inner
             .page_table
             .get(&page_id)
             .ok_or(BufferPoolError::InvalidPage)?;
-        inner.pool.resolve_ptr(*bid)
+        self.inner.pool.resolve_ptr(*bid)
     }
 
     /// Restore knowledge of a page (and a buffer) provided from cold storage.
@@ -126,12 +125,11 @@ impl Pager {
         page_id: PageId,
         page_size: usize,
     ) -> Result<(AtomicPtr<u8>, usize), BufferPoolError> {
-        let mut inner = self.inner.lock().unwrap();
         // If there's already a buffer for this page, confirm it's the
         // right size, and just return its existing address.
         // Otherwise allocate a new buffer.
-        if let Some(bid) = inner.page_table.get(&page_id) {
-            let (ptr, size) = inner.pool.resolve_ptr(*bid)?;
+        if let Some(bid) = self.inner.page_table.get(&page_id) {
+            let (ptr, size) = self.inner.pool.resolve_ptr(*bid)?;
             if size != page_size {
                 panic!("Page size mismatch at restore for pid {} already-mapped to bid {} (expected {}, got {})",
                        page_id, bid.0, page_size, size);
@@ -140,8 +138,8 @@ impl Pager {
         }
 
         // Allocate a buffer for this page, and insert it into the page table.
-        let (bid, buf_ptr, used_size) = inner.pool.alloc(page_size)?;
-        inner.page_table.insert(page_id, bid);
+        let (bid, buf_ptr, used_size) = self.inner.pool.alloc(page_size)?;
+        self.inner.page_table.insert(page_id, bid);
         Ok((AtomicPtr::new(buf_ptr), used_size))
     }
 
