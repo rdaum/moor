@@ -12,7 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use buffer_pool::BufferPool;
+pub use buffer_pool::MmapBufferPool;
+use std::sync::atomic::AtomicPtr;
 
 mod buffer_pool;
 mod size_class;
@@ -24,7 +25,7 @@ mod size_class;
 pub struct Bid(pub u64);
 
 #[derive(thiserror::Error, Debug)]
-pub enum PagerError {
+pub enum BufferPoolError {
     #[error("Error in setting up the page / buffer pool: {0}")]
     InitializationError(String),
 
@@ -42,4 +43,29 @@ pub enum PagerError {
 
     #[error("Invalid page")]
     InvalidPage,
+}
+
+pub trait BufferPool {
+    /// Allocate a buffer of the given size.
+    fn alloc(&mut self, size: usize) -> Result<(Bid, *mut u8, usize), BufferPoolError>;
+    /// Free a buffer, completely deallocating it, by which we mean removing it from the index of
+    /// used pages.
+    fn free(&mut self, page: Bid) -> Result<(), BufferPoolError>;
+    /// Check if a given buffer handle is allocated.
+    fn is_allocated(&self, page: Bid) -> bool;
+    /// Returns the physical pointer and page size for a page.
+    fn resolve_ptr(&self, bid: Bid) -> Result<(*mut u8, usize), BufferPoolError>;
+    /// Find the buffer id (bid) for a given pointer. Can be used to identify the page
+    /// that a pointer belongs to, in case of page fault.
+    #[allow(dead_code)] // Legitimate potential future use
+    fn identify_page<T>(&self, ptr: AtomicPtr<T>) -> Result<Bid, BufferPoolError>;
+    /// Get the total reserved capacity of the buffer pool.
+    #[allow(dead_code)] // Legitimate potential future use
+    fn capacity_bytes(&self) -> usize;
+    /// Get the total usable free space in the buffer pool.
+    #[allow(dead_code)] // Legitimate potential future use
+    fn available_bytes(&self) -> usize;
+    /// Get the total used space in the buffer pool.
+    #[allow(dead_code)] // Legitimate potential future use
+    fn allocated_bytes(&self) -> usize;
 }

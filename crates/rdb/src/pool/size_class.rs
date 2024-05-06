@@ -19,7 +19,7 @@ use human_bytes::human_bytes;
 use libc::{madvise, MADV_DONTNEED, MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use tracing::info;
 
-use crate::pool::PagerError;
+use crate::pool::BufferPoolError;
 
 type BitSet = hi_sparse_bitset::BitSet<hi_sparse_bitset::config::_128bit>;
 
@@ -39,7 +39,7 @@ unsafe impl Send for SizeClass {}
 unsafe impl Sync for SizeClass {}
 
 impl SizeClass {
-    pub fn new_anon(block_size: usize, virt_size: usize) -> Result<Self, PagerError> {
+    pub fn new_anon(block_size: usize, virt_size: usize) -> Result<Self, BufferPoolError> {
         let base_addr = unsafe {
             libc::mmap64(
                 null_mut(),
@@ -53,7 +53,7 @@ impl SizeClass {
 
         if base_addr == libc::MAP_FAILED {
             let err = io::Error::last_os_error();
-            return Err(PagerError::InitializationError(format!(
+            return Err(BufferPoolError::InitializationError(format!(
                 "Mmap failed for size class block_size: {block_size}, virt_size {virt_size}: {err}"
             )));
         }
@@ -81,7 +81,7 @@ impl SizeClass {
         })
     }
 
-    pub fn alloc(&mut self) -> Result<usize, PagerError> {
+    pub fn alloc(&mut self) -> Result<usize, BufferPoolError> {
         // Check the free list first.
         if let Some(blocknum) = self.free_list.pop() {
             self.allocset.insert(blocknum);
@@ -93,7 +93,7 @@ impl SizeClass {
         self.highest_block += 1;
 
         if blocknum >= self.virt_size / self.block_size {
-            return Err(PagerError::InsufficientRoom {
+            return Err(BufferPoolError::InsufficientRoom {
                 desired: self.block_size,
                 available: self.available(),
             });
@@ -104,7 +104,7 @@ impl SizeClass {
         Ok(blocknum)
     }
 
-    pub fn free(&mut self, blocknum: usize) -> Result<(), PagerError> {
+    pub fn free(&mut self, blocknum: usize) -> Result<(), BufferPoolError> {
         unsafe {
             let base_addr = self.base_addr;
             let addr = base_addr.offset(blocknum as isize * self.block_size as isize);
@@ -125,7 +125,7 @@ impl SizeClass {
     }
 
     #[allow(dead_code)] // Legitimate potential future use
-    pub fn page_out(&mut self, blocknum: usize) -> Result<(), PagerError> {
+    pub fn page_out(&mut self, blocknum: usize) -> Result<(), BufferPoolError> {
         unsafe {
             let addr = self.base_addr;
             // Panic on fail here because this working is a fundamental invariant that we cannot

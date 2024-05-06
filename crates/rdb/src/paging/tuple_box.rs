@@ -44,7 +44,7 @@ use crate::paging::slotted_page::{
 };
 use crate::paging::tuple_ptr::TuplePtr;
 use crate::paging::TupleBoxError;
-use crate::pool::PagerError;
+use crate::pool::BufferPoolError;
 use crate::tuples::{TupleId, TupleRef};
 use crate::RelationId;
 
@@ -289,7 +289,7 @@ impl Inner {
     ) -> Result<PageWriteGuard<'a>, TupleBoxError> {
         let (addr, page_size) = match self.pager.restore_page(id, size) {
             Ok(v) => v,
-            Err(PagerError::CouldNotAccess) => {
+            Err(BufferPoolError::CouldNotAccess) => {
                 return Err(TupleBoxError::TupleNotFound(id));
             }
             Err(e) => {
@@ -339,10 +339,10 @@ impl Inner {
     fn page_for<'a>(&self, page_num: PageId) -> Result<PageReadGuard<'a>, TupleBoxError> {
         let (page_address, page_size) = match self.pager.resolve_ptr(page_num) {
             Ok(v) => v,
-            Err(PagerError::CouldNotAccess) => {
+            Err(BufferPoolError::CouldNotAccess) => {
                 return Err(TupleBoxError::TupleNotFound(page_num));
             }
-            Err(PagerError::InvalidPage) => {
+            Err(BufferPoolError::InvalidPage) => {
                 return Err(TupleBoxError::TupleNotFound(page_num));
             }
             _ => {
@@ -356,10 +356,10 @@ impl Inner {
     fn page_for_mut<'a>(&self, page_num: PageId) -> Result<PageWriteGuard<'a>, TupleBoxError> {
         let (page_address, page_size) = match self.pager.resolve_ptr(page_num) {
             Ok(v) => v,
-            Err(PagerError::CouldNotAccess) => {
+            Err(BufferPoolError::CouldNotAccess) => {
                 return Err(TupleBoxError::TupleNotFound(page_num));
             }
-            Err(PagerError::InvalidPage) => {
+            Err(BufferPoolError::InvalidPage) => {
                 return Err(TupleBoxError::TupleNotFound(page_num));
             }
             _ => {
@@ -377,7 +377,7 @@ impl Inner {
         // Ask the buffer pool for a new page of the given size.
         let (pid, actual_size) = match self.pager.alloc(page_size, |_| {}) {
             Ok(v) => v,
-            Err(PagerError::InsufficientRoom { desired, available }) => {
+            Err(BufferPoolError::InsufficientRoom { desired, available }) => {
                 return Err(TupleBoxError::BoxFull(desired, available));
             }
             Err(e) => {

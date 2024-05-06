@@ -30,7 +30,7 @@ use std::cmp::max;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 use crate::pool::size_class::SizeClass;
-use crate::pool::{Bid, PagerError};
+use crate::pool::{Bid, BufferPool, BufferPoolError};
 
 // 32k -> 1MB page sizes supported.
 // TODO: Handle storage of big-values / big-pages / blobs
@@ -41,7 +41,7 @@ use crate::pool::{Bid, PagerError};
 pub const LOWEST_SIZE_CLASS_POWER_OF: usize = 12;
 pub const HIGHEST_SIZE_CLASS_POWER_OF: usize = 20;
 
-pub struct BufferPool {
+pub struct MmapBufferPool {
     // Statistics.
     pub capacity_bytes: AtomicUsize,
     pub allocated_bytes: AtomicUsize,
@@ -49,8 +49,8 @@ pub struct BufferPool {
     pub size_classes: [SizeClass; HIGHEST_SIZE_CLASS_POWER_OF - LOWEST_SIZE_CLASS_POWER_OF + 1],
 }
 
-impl BufferPool {
-    pub fn new(capacity: usize) -> Result<Self, PagerError> {
+impl MmapBufferPool {
+    pub fn new(capacity: usize) -> Result<Self, BufferPoolError> {
         let region_4k = SizeClass::new_anon(1 << 12, capacity)?;
         let region_8k = SizeClass::new_anon(1 << 13, capacity)?;
         let region_16k = SizeClass::new_anon(1 << 14, capacity)?;
@@ -95,12 +95,12 @@ impl BufferPool {
         Bid(bid)
     }
 
-    pub fn offset_of(bid: Bid) -> usize {
+    fn offset_of(bid: Bid) -> usize {
         // Offset is our value with the lower 4 bits masked out.
         bid.0 as usize & !0b1111
     }
 
-    pub fn size_class_of(bid: Bid) -> u8 {
+    fn size_class_of(bid: Bid) -> u8 {
         // Size class is the lower 4 bits.
         (bid.0 & 0b1111) as u8
     }
@@ -117,11 +117,11 @@ impl BufferPool {
     }
 }
 
-impl BufferPool {
+impl BufferPool for MmapBufferPool {
     /// Allocate a buffer of the given size.
-    pub fn alloc(&mut self, size: usize) -> Result<(Bid, *mut u8, usize), PagerError> {
+    fn alloc(&mut self, size: usize) -> Result<(Bid, *mut u8, usize), BufferPoolError> {
         if size > self.available_bytes.load(Ordering::SeqCst) {
-            return Err(PagerError::InsufficientRoom {
+            return Err(BufferPoolError::InsufficientRoom {
                 desired: size,
                 available: self.allocated_bytes.load(Ordering::SeqCst),
             });
@@ -131,7 +131,7 @@ impl BufferPool {
         let sc_idx = np2 - (LOWEST_SIZE_CLASS_POWER_OF as isize);
         let sc_idx = max(sc_idx, 0) as usize;
         if sc_idx >= self.size_classes.len() {
-            return Err(PagerError::UnsupportedSize(1 << np2));
+            return Err(BufferPoolError::UnsupportedSize(1 << np2));
         }
 
         let nearest_class = &mut self.size_classes[sc_idx];
@@ -158,10 +158,9 @@ impl BufferPool {
         }
         Ok((bid, addr, block_size))
     }
-
     /// Free a buffer, completely deallocating it, by which we mean removing it from the index of
     /// used pages.
-    pub fn free(&mut self, page: Bid) -> Result<(), PagerError> {
+    fn free(&mut self, page: Bid) -> Result<(), BufferPoolError> {
         let sc = Self::size_class_of(page);
         let sc = &mut self.size_classes[sc as usize];
         let block_size = sc.block_size;
@@ -174,20 +173,18 @@ impl BufferPool {
 
         Ok(())
     }
-
     /// Check if a given buffer handle is allocated.
-    pub fn is_allocated(&self, page: Bid) -> bool {
+    fn is_allocated(&self, page: Bid) -> bool {
         let sc_num = Self::size_class_of(page);
         let sc = &self.size_classes[sc_num as usize];
         let block_size = sc.block_size;
         let offset = Self::offset_of(page);
         sc.is_allocated(offset / block_size)
     }
-
     /// Returns the physical pointer and page size for a page.
-    pub fn resolve_ptr(&self, bid: Bid) -> Result<(*mut u8, usize), PagerError> {
+    fn resolve_ptr(&self, bid: Bid) -> Result<(*mut u8, usize), BufferPoolError> {
         if !Self::is_allocated(self, bid) {
-            return Err(PagerError::CouldNotAccess);
+            return Err(BufferPoolError::CouldNotAccess);
         }
 
         let sc_num = Self::size_class_of(bid);
@@ -201,11 +198,10 @@ impl BufferPool {
 
         Ok((addr as _, sc.block_size))
     }
-
     /// Find the buffer id (bid) for a given pointer. Can be used to identify the page
     /// that a pointer belongs to, in case of page fault.
     #[allow(dead_code)] // Legitimate potential future use
-    pub fn identify_page<T>(&self, ptr: AtomicPtr<T>) -> Result<Bid, PagerError> {
+    fn identify_page<T>(&self, ptr: AtomicPtr<T>) -> Result<Bid, BufferPoolError> {
         // Look at the address ranges for each size class to find the one that contains the pointer.
         for (sc_idx, sc) in self.size_classes.iter().enumerate() {
             let base = sc.base_addr as usize;
@@ -221,38 +217,36 @@ impl BufferPool {
                 return Ok(bid);
             }
         }
-        Err(PagerError::InvalidTuplePointer)
+        Err(BufferPoolError::InvalidTuplePointer)
     }
-
     /// Get the total reserved capacity of the buffer pool.
     #[allow(dead_code)] // Legitimate potential future use
-    pub fn capacity_bytes(&self) -> usize {
+    fn capacity_bytes(&self) -> usize {
         self.capacity_bytes.load(Ordering::Relaxed)
     }
     /// Get the total usable free space in the buffer pool.
     #[allow(dead_code)] // Legitimate potential future use
-    pub fn available_bytes(&self) -> usize {
+    fn available_bytes(&self) -> usize {
         self.available_bytes.load(Ordering::Relaxed)
     }
-
     /// Get the total used space in the buffer pool.
     #[allow(dead_code)] // Legitimate potential future use
-    pub fn allocated_bytes(&self) -> usize {
+    fn allocated_bytes(&self) -> usize {
         self.allocated_bytes.load(Ordering::Relaxed)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::pool::buffer_pool::{BufferPool, HIGHEST_SIZE_CLASS_POWER_OF};
-    use crate::pool::PagerError;
+    use crate::pool::buffer_pool::{BufferPool, MmapBufferPool, HIGHEST_SIZE_CLASS_POWER_OF};
+    use crate::pool::BufferPoolError;
 
     const MB_256: usize = 1 << 28;
 
     #[test]
     fn test_empty_pool() {
         let capacity = MB_256;
-        let bp = BufferPool::new(capacity).unwrap();
+        let bp = MmapBufferPool::new(capacity).unwrap();
 
         assert_eq!(bp.capacity_bytes(), capacity);
         assert_eq!(bp.available_bytes(), capacity);
@@ -262,7 +256,7 @@ mod tests {
     #[test]
     fn test_buffer_allocation_perfect() {
         let capacity = MB_256;
-        let mut bp = BufferPool::new(capacity).unwrap();
+        let mut bp = MmapBufferPool::new(capacity).unwrap();
 
         // Allocate buffers that fit just inside powers of 2, so no fragmentation will occur due to
         // rounding up nearest size.
@@ -290,7 +284,7 @@ mod tests {
     #[test]
     fn test_buffer_allocation_fragmented() {
         let capacity = MB_256;
-        let mut bp = BufferPool::new(capacity).unwrap();
+        let mut bp = MmapBufferPool::new(capacity).unwrap();
 
         // Allocate buffers that fit 10 bytes under some powers of 2, so we accumulate some
         // fragmentation.
@@ -327,15 +321,15 @@ mod tests {
     #[test]
     fn test_error_conditions() {
         let capacity = MB_256;
-        let mut bp = BufferPool::new(capacity).unwrap();
+        let mut bp = MmapBufferPool::new(capacity).unwrap();
 
         // Test capacity limit
         let res = bp.alloc(capacity + 1);
-        assert!(matches!(res, Err(PagerError::InsufficientRoom { .. })));
+        assert!(matches!(res, Err(BufferPoolError::InsufficientRoom { .. })));
 
         // Test unsupported size class
         let res = bp.alloc(1 << (HIGHEST_SIZE_CLASS_POWER_OF + 1));
-        assert!(matches!(res, Err(PagerError::UnsupportedSize(_))));
+        assert!(matches!(res, Err(BufferPoolError::UnsupportedSize(_))));
 
         // Test unable to allocate
         let mut allocated = vec![];
@@ -346,7 +340,7 @@ mod tests {
                     allocated.push(bh);
                 }
                 Err(e) => {
-                    assert!(matches!(e, PagerError::InsufficientRoom { .. }));
+                    assert!(matches!(e, BufferPoolError::InsufficientRoom { .. }));
                     break;
                 }
             }
