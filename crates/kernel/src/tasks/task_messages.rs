@@ -18,9 +18,9 @@ use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
 use std::sync::Arc;
 
-use kanal::OneshotSender;
 use moor_compiler::Program;
 
+use crossbeam_channel::Sender;
 use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::model::{Perms, WorldStateSource};
 use moor_values::var::Objid;
@@ -68,7 +68,7 @@ pub enum TaskControlMsg {
     ///   Causes deadlock if the task _requesting_ the description is the task being
     ///   described, so I need to rethink this. Right now this is prevented by the
     ///   runtime, but it's not a good design.
-    Describe(OneshotSender<TaskDescription>),
+    Describe(Sender<TaskDescription>),
     /// The scheduler is telling the task to abort itself.
     Abort,
 }
@@ -88,7 +88,7 @@ pub enum SchedulerControlMsg {
     /// An exception was thrown while executing the verb.
     TaskException(UncaughtException),
     /// The task is requesting that it be forked.
-    TaskRequestFork(Fork, OneshotSender<TaskId>),
+    TaskRequestFork(Fork, Sender<TaskId>),
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
     /// The task is letting us know that it has reached its abort limits.
@@ -98,19 +98,19 @@ pub enum SchedulerControlMsg {
     /// Tell the scheduler we're suspending until we get input from the client.
     TaskRequestInput,
     /// Task is requesting a list of all other tasks known to the scheduler.
-    DescribeOtherTasks(OneshotSender<Vec<TaskDescription>>),
+    DescribeOtherTasks(Sender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,
         sender_permissions: Perms,
-        result_sender: OneshotSender<Var>,
+        result_sender: Sender<Var>,
     },
     /// Task is requesting that the scheduler resume another task.
     ResumeTask {
         queued_task_id: TaskId,
         sender_permissions: Perms,
         return_value: Var,
-        result_sender: OneshotSender<Var>,
+        result_sender: Sender<Var>,
     },
     /// Task is requesting that the scheduler boot a player.
     BootPlayer {

@@ -18,14 +18,13 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use bincode::{Decode, Encode};
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dashmap::DashMap;
-use kanal::{OneshotReceiver, OneshotSender, Sender};
 
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use kanal::Receiver;
 use std::sync::Mutex;
 use std::thread::yield_now;
 
@@ -111,7 +110,7 @@ struct KillRequest {
     requesting_task_id: TaskId,
     victim_task_id: TaskId,
     sender_permissions: Perms,
-    result_sender: OneshotSender<Var>,
+    result_sender: Sender<Var>,
 }
 
 struct ResumeRequest {
@@ -119,12 +118,12 @@ struct ResumeRequest {
     queued_task_id: TaskId,
     sender_permissions: Perms,
     return_value: Var,
-    result_sender: OneshotSender<Var>,
+    result_sender: Sender<Var>,
 }
 
 struct ForkRequest {
     fork_request: Fork,
-    reply: OneshotSender<TaskId>,
+    reply: Sender<TaskId>,
     session: Arc<dyn Session>,
 }
 
@@ -141,7 +140,7 @@ struct TaskControl {
     waiting_input: Option<Uuid>,
     resume_time: Option<SystemTime>,
     // subscribers for when the task is aborted, succeeded, etc.
-    subscribers: Mutex<Vec<OneshotSender<TaskWaiterResult>>>,
+    subscribers: Mutex<Vec<Sender<TaskWaiterResult>>>,
     _join_handle: std::thread::JoinHandle<()>,
 }
 
@@ -150,7 +149,7 @@ enum TaskHandleResult {
     Remove(TaskId),
     Notify(TaskId, TaskWaiterResult),
     Fork(ForkRequest),
-    Describe(TaskId, OneshotSender<Vec<TaskDescription>>),
+    Describe(TaskId, Sender<Vec<TaskDescription>>),
     Kill(KillRequest),
     Resume(ResumeRequest),
     Disconnect(TaskId, Objid),
@@ -161,7 +160,7 @@ enum TaskHandleResult {
 impl Scheduler {
     pub fn new(database: Arc<dyn Database + Send + Sync>, config: Config) -> Self {
         let config = Arc::new(config);
-        let (control_sender, control_receiver) = kanal::unbounded();
+        let (control_sender, control_receiver) = unbounded();
         Self {
             running: Arc::new(Mutex::new(false)),
             database,
@@ -177,9 +176,9 @@ impl Scheduler {
     pub fn subscribe_to_task(
         &self,
         task_id: TaskId,
-    ) -> Result<OneshotReceiver<TaskWaiterResult>, SchedulerError> {
+    ) -> Result<Receiver<TaskWaiterResult>, SchedulerError> {
         trace!(?task_id, "Subscribing to task");
-        let (sender, receiver) = kanal::oneshot();
+        let (sender, receiver) = bounded(1);
         if let Some(task) = self.tasks.get_mut(&task_id) {
             let mut subscribers = task.subscribers.lock().unwrap();
             subscribers.push(sender);
@@ -404,7 +403,7 @@ impl Scheduler {
         for t in self.tasks.iter() {
             let (task_id, task) = (t.key(), t.value());
             trace!(task_id, "Requesting task description");
-            let (t_send, t_reply) = kanal::oneshot();
+            let (t_send, t_reply) = bounded(1);
             let tcs = task.task_control_sender.clone();
             if let Err(e) = tcs.send(TaskControlMsg::Describe(t_send)) {
                 warn!(task_id, error = ?e, "Could not request task description for task. Dead?");
@@ -473,7 +472,6 @@ impl Scheduler {
                 let mut number_suspended_tasks = 0;
                 let mut number_readblocked_tasks = 0;
                 let mut number_subscriptions = 0;
-                let mut number_zombies = 0;
                 let number_tasks = this.clone().tasks.len();
 
                 for task in this.clone().tasks.iter() {
@@ -483,22 +481,13 @@ impl Scheduler {
                     if task.waiting_input.is_some() {
                         number_readblocked_tasks += 1;
                     }
-                    if task.task_control_sender.is_closed()
-                        || task.task_control_sender.is_disconnected()
-                    {
-                        number_zombies += 1;
-                    }
                     let subscribers = task.subscribers.lock().unwrap();
                     number_subscriptions += subscribers.len()
                 }
 
                 debug!(
                     number_readblocked_tasks,
-                    number_tasks,
-                    number_subscriptions,
-                    number_zombies,
-                    number_suspended_tasks,
-                    "..."
+                    number_tasks, number_subscriptions, number_suspended_tasks, "..."
                 );
                 std::thread::sleep(METRICS_POLLER_TICK_TIME);
             })
@@ -523,19 +512,8 @@ impl Scheduler {
                     break;
                 }
                 let mut to_wake = Vec::new();
-                let mut to_prune = Vec::new();
                 for t in this.clone().tasks.iter() {
                     let (task_id, task) = (t.key(), t.value());
-                    if task.task_control_sender.is_closed()
-                        || task.task_control_sender.is_disconnected()
-                    {
-                        warn!(
-                            task_id,
-                            "Task is present but its channel is closed.  Pruning."
-                        );
-                        to_prune.push(*task_id);
-                        continue;
-                    }
 
                     if !task.suspended {
                         continue;
@@ -549,9 +527,6 @@ impl Scheduler {
                 }
                 if !to_wake.is_empty() {
                     this.clone().process_wake_ups(&to_wake);
-                }
-                if !to_prune.is_empty() {
-                    this.clone().process_task_removals(&to_prune);
                 }
                 std::thread::sleep(SCHEDULER_TICK_TIME);
             })
@@ -1076,7 +1051,7 @@ impl Scheduler {
     fn process_describe_request(
         &self,
         requesting_task_id: TaskId,
-        reply: OneshotSender<Vec<TaskDescription>>,
+        reply: Sender<Vec<TaskDescription>>,
     ) -> Vec<TaskId> {
         let mut to_remove = vec![];
 
@@ -1104,7 +1079,7 @@ impl Scheduler {
                     other_task = task_id,
                     "Requesting task description"
                 );
-                let (t_send, t_reply) = kanal::oneshot();
+                let (t_send, t_reply) = bounded(1);
                 let tcs = task.task_control_sender.clone();
                 if let Err(e) = tcs.send(TaskControlMsg::Describe(t_send)) {
                     error!(?task_id, error = ?e,
@@ -1354,7 +1329,7 @@ impl Scheduler {
         is_background: bool,
     ) -> Result<TaskId, SchedulerError> {
         let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
-        let (task_control_sender, task_control_receiver) = kanal::unbounded();
+        let (task_control_sender, task_control_receiver) = unbounded();
 
         let state_source = self
             .database

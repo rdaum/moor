@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tracing::{error, warn};
 
 use moor_values::util::{BitArray, Bitset64};
-use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
+use moor_values::util::{PhantomUnsync, SliceRef};
 
 use crate::index::{pick_tx_index, Index};
 use crate::paging::TupleBox;
@@ -36,7 +36,7 @@ pub struct WorkingSet {
     pub(crate) tuplebox: Arc<TupleBox>,
     pub(crate) relations: Box<BitArray<TxBaseRelation, 64, Bitset64<1>>>,
 
-    unsend: PhantomUnsend,
+    // unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
@@ -48,7 +48,7 @@ impl WorkingSet {
             tuplebox: slotbox,
             schema: schema.to_vec(),
             relations,
-            unsend: Default::default(),
+            // unsend: Default::default(),
             unsync: Default::default(),
         }
     }
@@ -78,7 +78,7 @@ impl WorkingSet {
             tx_tuple_events: HashMap::new(),
             domain_index,
             codomain_index,
-            unsend: Default::default(),
+            // unsend: Default::default(),
             unsync: Default::default(),
         };
 
@@ -590,7 +590,7 @@ pub(crate) struct TxBaseRelation {
     domain_index: Box<dyn Index>,
     codomain_index: Option<Box<dyn Index>>,
 
-    unsend: PhantomUnsend,
+    // unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 

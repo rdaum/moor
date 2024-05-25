@@ -2,18 +2,18 @@
 resolver = "2"
 
 members = [
-  "crates/values",
-  "crates/compiler",
-  "crates/kernel",
-  "crates/rdb",
-  "crates/db",
-  "crates/rpc-common",
-  "crates/rpc-sync-client",
-  "crates/rpc-async-client",
-  "crates/daemon",
-  "crates/telnet-host",
-  "crates/web-host",
-  "crates/console-host",
+    "crates/values",
+    "crates/compiler",
+    "crates/kernel",
+    "crates/rdb",
+    "crates/db",
+    "crates/rpc-common",
+    "crates/rpc-sync-client",
+    "crates/rpc-async-client",
+    "crates/daemon",
+    "crates/telnet-host",
+    "crates/web-host",
+    "crates/console-host",
 ]
 
 [workspace.package]
@@ -41,7 +41,7 @@ futures = "0.3.30"
 futures-util = { version = "0.3.30", features = ["sink", "std"] }
 tokio = { version = "1.37.0", features = ["full"] }
 tokio-test = "0.4.4"
-tokio-util = { version = "0.7.11",  features = ["full"] }
+tokio-util = { version = "0.7.11", features = ["full"] }
 
 # Used for RPC daemon/client
 tmq = "0.4.0"
@@ -58,7 +58,7 @@ atomic-wait = "1.1.0"
 binary-layout = "4.0.2"
 bytes = "1.6.0"
 chrono = "0.4.38"
-owo-colors = "4.0.0"
+crossbeam-channel = "0.5.13"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 dashmap = "5.5.3"
 decorum = "0.3.1"  # For ordering & comparing our floats
@@ -67,8 +67,8 @@ fast-counter = "1.0.0"
 human_bytes = "0.4.3"
 inventory = "0.3.15"
 itertools = "0.12.1"
-kanal = "0.1.0-pre8"
 lazy_static = "1.4.0"
+owo-colors = "4.0.0"
 num-traits = "0.2.19"
 rustyline = "14.0.0"
 strum = { version = "0.26.2", features = ["derive"] }
@@ -81,7 +81,7 @@ yoke-derive = "0.7.3"
 chrono-tz = "0.9.0"
 iana-time-zone = "0.1.60"
 md5 = "0.7.0" # For MOO's "string_hash"
-onig = { version = "6.4.0", default-features = false  }
+onig = { version = "6.4.0", default-features = false }
 pwhash = "1.0.0" # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
 rand = "0.8.5"
 

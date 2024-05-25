@@ -61,6 +61,7 @@ pub mod vm_test_utils {
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
     use crate::vm::VmExecParams;
+    use crossbeam_channel::unbounded;
     use moor_values::model::WorldState;
     use moor_values::var::Var;
     use moor_values::SYSTEM_OBJECT;
@@ -73,7 +74,7 @@ pub mod vm_test_utils {
         verb_name: &str,
         args: Vec<Var>,
     ) -> Var {
-        let (scs_tx, _scs_rx) = kanal::unbounded();
+        let (scs_tx, _scs_rx) = unbounded();
         let mut vm_host = VmHost::new(
             0,
             20,
@@ -83,7 +84,7 @@ pub mod vm_test_utils {
             scs_tx,
         );
 
-        let (sched_send, _) = kanal::unbounded();
+        let (sched_send, _) = unbounded();
         let _vm_exec_params = VmExecParams {
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
