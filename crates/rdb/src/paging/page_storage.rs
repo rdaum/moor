@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
-use std::thread::{yield_now, JoinHandle};
+use std::thread::{self, yield_now, JoinHandle};
 use std::time::Duration;
 
 use io_uring::squeue::Flags;
@@ -117,6 +117,7 @@ fn event_fd_listen_thread(event_fd: &Fd, ps: Arc<PageStore>, running_flag: Arc<A
         let completed = ps.clone().process_completions();
 
         debug!("Synced all pages to disk? {}", completed);
+        thread::sleep(Duration::from_millis(100));
     }
     info!("Shutting down eventfd listener");
 }
