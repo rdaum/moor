@@ -1,5 +1,7 @@
 target/
+.target
 .vscode/
+.cargo
 
 /.idea/.gitignore
 /.idea/modules.xml
@@ -8,3 +10,4 @@ target/
 
 connections.json
 development.db
+*.pem
