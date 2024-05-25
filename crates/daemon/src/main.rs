@@ -123,6 +123,9 @@ struct Args {
         default_value = "8"
     )]
     num_io_threads: i32,
+
+    #[arg(long, help = "Enable debug logging", default_value = "false")]
+    debug: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -136,7 +139,11 @@ fn main() -> Result<(), Report> {
         .with_file(true)
         .with_line_number(true)
         .with_thread_names(true)
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(if args.debug {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
