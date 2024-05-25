@@ -90,7 +90,9 @@ impl RelBox {
         relations: &[RelationInfo],
         num_sequences: usize,
     ) -> Arc<Self> {
-        let pager = Arc::new(Pager::new(memory_size).expect("Unable to create pager"));
+        let pager = Arc::new(Pager::new(memory_size).expect(
+            "Unable to create pager. You may need to set /proc/sys/vm/overcommit_memory to '1'",
+        ));
         let tuple_box = Arc::new(TupleBox::new(pager.clone()));
         let mut base_relations = Vec::with_capacity(relations.len());
         for (rid, r) in relations.iter().enumerate() {
