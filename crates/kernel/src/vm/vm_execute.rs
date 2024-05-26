@@ -184,6 +184,11 @@ impl VM {
 
         let opcodes = state.top_mut().frame.program.main_vector.clone();
 
+        // Special case for empty opcodes set, just return v_none() immediately.
+        if opcodes.is_empty() {
+            return ExecutionResult::Complete(v_none());
+        }
+
         while state.tick_count < state.tick_slice {
             state.tick_count += 1;
 

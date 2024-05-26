@@ -514,6 +514,25 @@ mod tests {
         assert_eq!(result, v_int(5));
     }
 
+    /// A VM body that is empty should return v_none() and not panic.
+    #[test]
+    fn test_regression_zero_body_function() {
+        let binary = Program {
+            literals: vec![],
+            jump_labels: vec![],
+            var_names: Names::default(),
+            main_vector: Arc::new(vec![]),
+            fork_vectors: vec![],
+            line_number_spans: vec![],
+        };
+        let mut state = test_db_with_verb("test", &binary)
+            .new_world_state()
+            .unwrap();
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(state.as_mut(), session.clone(), "test", vec![]);
+        assert_eq!(result, v_none());
+    }
+
     #[test_case("return 1;", v_int(1); "simple return")]
     #[test_case(
         r#"rest = "me:words"; rest[1..0] = ""; return rest;"#,
