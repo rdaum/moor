@@ -47,6 +47,9 @@ struct Args {
         default_value = "tcp://0.0.0.0:7898"
     )]
     narrative_server: String,
+
+    #[arg(long, help = "Enable debug logging", default_value = "false")]
+    debug: bool,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -60,7 +63,11 @@ async fn main() -> Result<(), eyre::Error> {
         .with_file(true)
         .with_line_number(true)
         .with_thread_names(true)
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(if args.debug {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
