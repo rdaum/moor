@@ -82,7 +82,7 @@ impl IndexType {
     }
 }
 
-pub trait Index: Send {
+pub trait Index {
     /// Return the index type for the index.
     fn index_type(&self) -> IndexType;
     /// Check for potential duplicates which could cause ambiguous updates for update operations.

@@ -21,8 +21,9 @@ mod bf_strings;
 mod bf_values;
 mod bf_verbs;
 
-use crossbeam_channel::Sender;
 use std::sync::Arc;
+
+use kanal::Sender;
 
 use moor_values::model::Perms;
 use moor_values::model::WorldState;

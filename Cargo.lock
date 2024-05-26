@@ -657,9 +657,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.13"
+version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
+checksum = "ab3db02a9c5b5121e1e42fbdb1aeb65f5e02624cc58c43f2884c6ccac0b82f95"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1422,6 +1422,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kanal"
+version = "0.1.0-pre8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05d55519627edaf7fd0f29981f6dc03fb52df3f5b257130eb8d0bf2801ea1d7"
+dependencies = [
+ "futures-core",
+ "lock_api",
+]
+
+[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1621,11 +1631,11 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "criterion",
- "crossbeam-channel",
  "dashmap",
  "decorum",
  "iana-time-zone",
  "inventory",
+ "kanal",
  "lazy_static",
  "libc",
  "md5",
@@ -1656,13 +1666,13 @@ dependencies = [
  "atomic-wait",
  "binary-layout",
  "criterion",
- "crossbeam-channel",
  "crossbeam-queue",
  "dashmap",
  "hi_sparse_bitset",
  "human_bytes",
  "im",
  "io-uring",
+ "kanal",
  "libc",
  "moor-values",
  "okaywal",

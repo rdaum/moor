@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crossbeam_channel::Sender;
+use kanal::Sender;
 use std::sync::Arc;
 use std::time::Duration;
 

@@ -12,7 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
+use kanal::{ReceiveErrorTimeout, Receiver, Sender};
+
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -209,7 +210,7 @@ impl Task {
             // avoid spinning.
             let control_msg = if task.vm_host.is_running() {
                 match task_control_receiver.try_recv() {
-                    Ok(msg) => Some(msg),
+                    Ok(msg) => msg,
                     Err(_) => {
                         warn!(task_id = ?task.task_id, "Channel closed");
                         task.done = true;
@@ -220,7 +221,7 @@ impl Task {
             } else {
                 match task_control_receiver.recv_timeout(Duration::from_millis(50)) {
                     Ok(msg) => Some(msg),
-                    Err(RecvTimeoutError::Timeout) => {
+                    Err(ReceiveErrorTimeout::Timeout) => {
                         // No message, just keep going.
                         if task.vm_host.is_running() {
                             warn!(task_id = ?task.task_id, "Task not running, but in blocking receive. Why?");
@@ -350,7 +351,7 @@ impl Task {
                 // send a message back asking it to fork the task and return the new task id on a
                 // reply channel.
                 // We will then take the new task id and send it back to the caller.
-                let (send, reply) = bounded(1);
+                let (send, reply) = kanal::oneshot();
                 let task_id_var = fork_request.task_id;
                 self.scheduler_control_sender
                     .send((

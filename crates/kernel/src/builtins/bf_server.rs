@@ -18,7 +18,6 @@ use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
-use crossbeam_channel::bounded;
 use iana_time_zone::get_timezone;
 
 use tracing::{debug, error, info, warn};
@@ -418,7 +417,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
-    let (send, receive) = bounded(1);
+    let (send, receive) = kanal::oneshot();
     debug!("sending DescribeOtherTasks to scheduler");
     bf_args
         .scheduler_sender
@@ -481,7 +480,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
     }
 
-    let (send, receive) = bounded(1);
+    let (send, receive) = kanal::oneshot();
     bf_args
         .scheduler_sender
         .send((
@@ -525,7 +524,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    let (send, receive) = bounded(1);
+    let (send, receive) = kanal::oneshot();
     bf_args
         .scheduler_sender
         .send((
