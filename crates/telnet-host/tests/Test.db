@@ -73,7 +73,7 @@ return #3;
 .
 #2:0
 notify(player, "-=!-^-!=-");
-notify(player, toliteral(eval(("return " + argstr) + ";")[2]));
+notify(player, toliteral(eval(argstr)[2]));
 notify(player, "-=!-v-!=-");
 .
 0 clocks

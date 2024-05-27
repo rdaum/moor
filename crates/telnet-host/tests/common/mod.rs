@@ -119,7 +119,7 @@ impl Client {
         })
     }
 
-    fn send_string<S>(&mut self, s: S) -> Result<(), std::io::Error>
+    pub fn send_string<S>(&mut self, s: S) -> Result<(), std::io::Error>
     where
         S: AsRef<str>,
     {
