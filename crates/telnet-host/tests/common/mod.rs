@@ -9,6 +9,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// The current DB implementation reserves this much RAM. Default is 1TB, and
+/// we rely on `vm.overcommit_memory` to allow this to be allocated. Instead of
+/// trying to set `vm.overcommit_memory` on GitHub Actions test envs,
+/// limit the DB size. This is plenty for the tests and, unlike the default,
+/// allocation succeeds.
+const MAX_BUFFER_POOL_BYTES: usize = 1 << 24;
+
 struct ManagedChild {
     child: Child,
 }
@@ -54,7 +61,7 @@ fn start_daemon(db: &Path) -> ManagedChild {
             .arg(minimal_db)
             .arg("--generate-keypair")
             .arg("--max-buffer-pool-bytes")
-            .arg((1 << 24).to_string())
+            .arg(MAX_BUFFER_POOL_BYTES.to_string())
             .arg(db)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
