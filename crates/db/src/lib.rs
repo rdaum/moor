@@ -51,7 +51,7 @@ impl DatabaseBuilder {
         self
     }
 
-    pub fn with_memory_size(&mut self, memory_size_bytes: usize) -> &mut Self {
+    pub fn with_memory_size(mut self, memory_size_bytes: usize) -> Self {
         self.memory_size = Some(memory_size_bytes);
         self
     }

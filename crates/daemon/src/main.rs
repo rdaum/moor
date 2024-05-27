@@ -124,6 +124,19 @@ struct Args {
     )]
     num_io_threads: i32,
 
+    #[arg(
+        long,
+        value_name = "max_buffer_pool_bytes",
+        help = "Maximum size of the database buffer pool in bytes when using the `relbox` database. \
+                Note that the system will mmap this quantity of memory via mmap, but the actual \
+                memory usage (in RSS) will be less than this value. Further, the quantity of memory \
+                requested is actually divided up into multiple different mmap regions for different \
+                buffer 'size classes'. \
+                The default very large number requires vm_overcommit to be set to enabled.",
+        default_value = "1099511627776" // 1TB
+    )]
+    max_buffer_pool_bytes: usize,
+
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
 }
@@ -190,7 +203,9 @@ fn main() -> Result<(), Report> {
     };
 
     info!("Daemon starting...");
-    let db_source_builder = DatabaseBuilder::new().with_path(args.db.clone());
+    let db_source_builder = DatabaseBuilder::new()
+        .with_path(args.db.clone())
+        .with_memory_size(args.max_buffer_pool_bytes);
     let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
     info!(path = ?args.db, "Opened database");
 
