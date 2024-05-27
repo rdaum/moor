@@ -53,6 +53,8 @@ fn start_daemon(db: &Path) -> ManagedChild {
             .arg("--textdump")
             .arg(minimal_db)
             .arg("--generate-keypair")
+            .arg("--max-buffer-pool-bytes")
+            .arg((1 << 24).to_string())
             .arg(db)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -75,8 +77,6 @@ fn telnet_host_bin() -> &'static PathBuf {
     })
 }
 
-// Because of this function, it might be cleaner to host integration tests
-// in a separate crate.
 fn start_telnet_host() -> ManagedChild {
     ManagedChild::new(
         "telnet-host",

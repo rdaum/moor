@@ -1,4 +1,5 @@
 mod common;
+use pretty_assertions::assert_eq;
 
 #[test]
 fn test_echo() -> eyre::Result<()> {
