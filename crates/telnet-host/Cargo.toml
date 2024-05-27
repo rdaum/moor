@@ -39,3 +39,4 @@ uuid.workspace = true
 pretty_assertions.workspace = true
 escargot.workspace = true
 tempfile.workspace = true
+fs4.workspace = true

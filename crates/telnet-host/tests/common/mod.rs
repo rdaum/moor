@@ -1,12 +1,15 @@
 use std::{
+    fs::File,
     io::{BufRead, BufReader, Write},
     net::TcpStream,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::OnceLock,
-    thread::{self},
+    thread,
     time::{Duration, Instant},
 };
+
+use fs4::FileExt;
 
 /// The current DB implementation reserves this much RAM. Default is 1TB, and
 /// we rely on `vm.overcommit_memory` to allow this to be allocated. Instead of
@@ -14,6 +17,31 @@ use std::{
 /// limit the DB size. This is plenty for the tests and, unlike the default,
 /// allocation succeeds.
 const MAX_BUFFER_POOL_BYTES: usize = 1 << 24;
+
+/// These tests spin up a daemon and a telnet host. That means binding to the same port
+/// will fail in all but one test. We could switch to using Unix domain sockets, but the
+/// performance gain is negligible, and in exchange parallel test runs can cause confusion.
+/// So: ensure we run the tests sequentially with a lock file.
+const FLOCK_PATH: &str = "/tmp/moor-e2e-test.lock";
+
+struct Flock {
+    file: File,
+}
+impl Flock {
+    fn new() -> Result<Self, std::io::Error> {
+        if !Path::new(FLOCK_PATH).exists() {
+            let _ = File::create_new(FLOCK_PATH);
+        }
+        let file = File::open(FLOCK_PATH)?;
+        file.lock_exclusive()?;
+        Ok(Self { file })
+    }
+}
+impl Drop for Flock {
+    fn drop(&mut self) {
+        self.file.unlock().expect("Failed to unlock file");
+    }
+}
 
 struct ManagedChild {
     child: Child,
@@ -165,6 +193,8 @@ pub fn run_test_as<F>(connect_params: &[&str], f: F) -> eyre::Result<()>
 where
     F: FnOnce(Client) -> eyre::Result<()>,
 {
+    let _lock = Flock::new()?;
+
     let db = tempfile::TempDir::new()?;
     let _daemon = start_daemon(db.path());
     let _telnet_host = start_telnet_host();
