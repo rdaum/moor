@@ -1,4 +1,3 @@
-use assert_cmd::prelude::*;
 use std::{
     io::{BufRead, BufReader, Write},
     net::TcpStream,
@@ -49,14 +48,27 @@ impl Drop for ManagedChild {
     }
 }
 
+static DAEMON_HOST_BIN: OnceLock<PathBuf> = OnceLock::new();
+fn daemon_host_bin() -> &'static PathBuf {
+    DAEMON_HOST_BIN.get_or_init(|| {
+        escargot::CargoBuild::new()
+            .bin("moor-daemon")
+            .manifest_path("../daemon/Cargo.toml")
+            .current_release()
+            .run()
+            .expect("Failed to build moor-daemon")
+            .path()
+            .to_owned()
+    })
+}
+
 fn start_daemon(db: &Path) -> ManagedChild {
     let mut minimal_db = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     minimal_db.push("tests/Test.db");
 
     ManagedChild::new(
         "daemon",
-        Command::cargo_bin("moor-daemon")
-            .expect("Failed to find moor-daemon binary")
+        Command::new(daemon_host_bin())
             .arg("--textdump")
             .arg(minimal_db)
             .arg("--generate-keypair")

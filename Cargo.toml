@@ -122,7 +122,6 @@ tempfile = "3.10.1"
 pretty_assertions = "1.4.0"
 test-case = "3.3.1"
 unindent = "0.2.3"
-assert_cmd = "2.0.14"
 escargot = "0.5.10"
 
 # Auth/Auth
