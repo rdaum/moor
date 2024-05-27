@@ -34,3 +34,9 @@ tracing.workspace = true
 tmq.workspace = true
 uuid.workspace = true
 
+# Testing
+[dev-dependencies]
+assert_cmd.workspace = true
+pretty_assertions.workspace = true
+escargot.workspace = true
+tempfile.workspace = true

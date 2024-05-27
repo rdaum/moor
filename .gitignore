@@ -10,4 +10,5 @@ target/
 
 connections.json
 development.db
+connections.db
 *.pem
