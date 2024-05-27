@@ -90,7 +90,7 @@ fn daemon_host_bin() -> &'static PathBuf {
     })
 }
 
-fn start_daemon(db: &Path) -> ManagedChild {
+fn start_daemon(workdir: &Path) -> ManagedChild {
     let mut minimal_db = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     minimal_db.push("tests/Test.db");
 
@@ -102,7 +102,8 @@ fn start_daemon(db: &Path) -> ManagedChild {
             .arg("--generate-keypair")
             .arg("--max-buffer-pool-bytes")
             .arg(MAX_BUFFER_POOL_BYTES.to_string())
-            .arg(db)
+            .arg("test.db")
+            .current_dir(workdir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -195,9 +196,10 @@ where
 {
     let _lock = Flock::new()?;
 
-    let db = tempfile::TempDir::new()?;
-    let _daemon = start_daemon(db.path());
+    let daemon_workdir = tempfile::TempDir::new()?;
+    let _daemon = start_daemon(daemon_workdir.path());
     let _telnet_host = start_telnet_host();
+
     let start = Instant::now();
     loop {
         if let Ok(mut client) = Client::new(8080) {
