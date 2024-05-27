@@ -8,3 +8,12 @@ fn test_echo() -> eyre::Result<()> {
         Ok(())
     })
 }
+
+#[test]
+fn test_suspend_returns() -> eyre::Result<()> {
+    common::run_test_as(&["wizard"], |mut client| {
+        client.command("; suspend(0)")?;
+        assert_eq!("\"ohai\"\n", client.command("; \"ohai\"")?);
+        Ok(())
+    })
+}
