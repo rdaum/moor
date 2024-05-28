@@ -342,6 +342,11 @@ impl From<i64> for Var {
         v_int(i)
     }
 }
+impl From<&i64> for Var {
+    fn from(i: &i64) -> Self {
+        v_int(*i)
+    }
+}
 
 impl From<f64> for Var {
     fn from(f: f64) -> Self {
@@ -358,6 +363,15 @@ impl From<Objid> for Var {
 impl From<Vec<Self>> for Var {
     fn from(l: Vec<Self>) -> Self {
         v_listv(l)
+    }
+}
+
+impl<T, const COUNT: usize> From<[T; COUNT]> for Var
+where
+    for<'a> Var: From<&'a T>,
+{
+    fn from(a: [T; COUNT]) -> Self {
+        v_list(&a.iter().map(|v| v.into()).collect::<Vec<_>>())
     }
 }
 

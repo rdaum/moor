@@ -24,7 +24,7 @@ use tracing::{debug, error, info, warn};
 
 use moor_values::model::ObjFlag;
 use moor_values::model::{world_state_err, NarrativeEvent, WorldStateError};
-use moor_values::var::Error::{E_INVARG, E_PERM, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_PERM, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 use moor_values::var::{v_listv, Error};
@@ -767,7 +767,7 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Str(program_code) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
