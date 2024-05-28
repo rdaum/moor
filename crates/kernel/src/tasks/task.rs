@@ -326,7 +326,8 @@ impl Task {
             }
             TaskStart::StartEval { player, program } => {
                 self.scheduled_start_time = None;
-                self.vm_host.start_eval(self.task_id, player, program);
+                self.vm_host
+                    .start_eval(self.task_id, player, program, self.world_state.as_ref());
             }
         };
         true

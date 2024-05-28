@@ -21,7 +21,7 @@ fn test_changing_programmer_and_wizard_flags() {
     let db = create_db();
 
     // Create an object we can work with
-    let obj = eval(db.clone(), WIZARD, "return create(#2);");
+    let obj = eval(db.clone(), WIZARD, "return create(#2);").unwrap();
 
     // Start: it's neither a programmer nor a wizard
     assert_eq!(

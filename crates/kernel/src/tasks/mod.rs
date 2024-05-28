@@ -75,6 +75,31 @@ pub mod vm_test_utils {
         Exception(UncaughtException),
     }
 
+    impl ExecResult {
+        pub fn unwrap(self) -> Var {
+            match self {
+                ExecResult::Success(v) => v,
+                ExecResult::Exception(e) => panic!("Unwrapping exception: {:?}", e),
+            }
+        }
+
+        pub fn unwrap_err(self) -> UncaughtException {
+            match self {
+                ExecResult::Success(v) => panic!("Unwrapping success: {:?}", v),
+                ExecResult::Exception(e) => e,
+            }
+        }
+    }
+
+    impl<T> From<T> for ExecResult
+    where
+        T: Into<Var>,
+    {
+        fn from(t: T) -> Self {
+            ExecResult::Success(t.into())
+        }
+    }
+
     fn execute<F>(world_state: &mut dyn WorldState, session: Arc<dyn Session>, fun: F) -> ExecResult
     where
         F: FnOnce(&mut dyn WorldState, &mut VmHost),
@@ -161,8 +186,8 @@ pub mod vm_test_utils {
         player: Objid,
         program: Program,
     ) -> ExecResult {
-        execute(world_state, session, |_world_state, vm_host| {
-            vm_host.start_eval(0, player, program);
+        execute(world_state, session, |world_state, vm_host| {
+            vm_host.start_eval(0, player, program, world_state);
         })
     }
 }
