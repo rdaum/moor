@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_values::var::v_empty_str;
 use moor_values::NOTHING;
 use uuid::Uuid;
 
@@ -345,17 +346,17 @@ impl Activation {
             temp: v_none(),
         };
         set_constants(&mut frame);
-        frame.set_gvar(GlobalName::this, v_objid(player));
+        frame.set_gvar(GlobalName::this, v_objid(NOTHING));
         frame.set_gvar(GlobalName::player, v_objid(player));
         frame.set_gvar(GlobalName::caller, v_objid(player));
-        frame.set_gvar(GlobalName::verb, v_str("eval"));
+        frame.set_gvar(GlobalName::verb, v_empty_str());
         frame.set_gvar(GlobalName::args, v_empty_list());
-        frame.set_gvar(GlobalName::argstr, v_str(""));
+        frame.set_gvar(GlobalName::argstr, v_empty_str());
         frame.set_gvar(GlobalName::dobj, v_objid(NOTHING));
-        frame.set_gvar(GlobalName::dobjstr, v_str(""));
-        frame.set_gvar(GlobalName::prepstr, v_str(""));
+        frame.set_gvar(GlobalName::dobjstr, v_empty_str());
+        frame.set_gvar(GlobalName::prepstr, v_empty_str());
         frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
-        frame.set_gvar(GlobalName::iobjstr, v_str(""));
+        frame.set_gvar(GlobalName::iobjstr, v_empty_str());
 
         Self {
             frame,
