@@ -17,7 +17,9 @@ use moor_compiler::Program;
 use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
-use moor_kernel::tasks::vm_test_utils::{call_verb, ExecResult};
+use moor_kernel::tasks::vm_test_utils::call_eval_builtin;
+use moor_kernel::tasks::vm_test_utils::call_verb;
+use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_kernel::textdump::textdump_load;
 use moor_values::model::CommitResult;
 use moor_values::model::Named;
@@ -42,6 +44,7 @@ fn load_textdump(db: Arc<dyn Database>) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
+#[allow(unused)]
 fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
@@ -73,7 +76,8 @@ fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
+#[allow(unused)]
+fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db.clone(), &[(&verb_uuid, &binary)]);
@@ -84,6 +88,14 @@ fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
         &verb_uuid,
         vec![],
     );
+    state.commit().unwrap();
+    result
+}
+
+fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
+    let binary = compile(expression).unwrap();
+    let mut state = db.new_world_state().unwrap();
+    let result = call_eval_builtin(state.as_mut(), Arc::new(NoopClientSession::new()), binary);
     state.commit().unwrap();
     result
 }
@@ -114,15 +126,15 @@ fn run_basic_test(test_dir: &str) {
     let (db, _) = RelBoxWorldState::open(None, 1 << 30);
     let db = Arc::new(db);
     load_textdump(db.clone());
-    for (line_num, (input, expected_output)) in zipped.enumerate() {
-        let evaluated_output = eval(db.clone(), input);
-        let expected_ouput = eval(db.clone(), expected_output);
+    for (line_num, (input, expected_str)) in zipped.enumerate() {
+        let actual = eval(db.clone(), &format!("return {};", input.trim()));
+        let expected = eval(db.clone(), &format!("return {};", expected_str.trim()));
         assert_eq!(
-            evaluated_output,
-            expected_ouput,
+            actual,
+            expected,
             "{test_dir}: line {}: {input}",
             line_num + 1
-        )
+        );
     }
 }
 
