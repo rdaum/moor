@@ -13,7 +13,7 @@
 //
 
 mod common;
-use common::{create_db, eval, testsuite_dir};
+use common::{create_db, eval, testsuite_dir, WIZARD};
 use pretty_assertions::assert_eq;
 
 fn run_basic_test(test_dir: &str) {
@@ -35,8 +35,12 @@ fn run_basic_test(test_dir: &str) {
     // Zip
     let zipped = in_lines.zip(out_lines);
     for (line_num, (input, expected_str)) in zipped.enumerate() {
-        let actual = eval(db.clone(), &format!("return {};", input.trim()));
-        let expected = eval(db.clone(), &format!("return {};", expected_str.trim()));
+        let actual = eval(db.clone(), WIZARD, &format!("return {};", input.trim()));
+        let expected = eval(
+            db.clone(),
+            WIZARD,
+            &format!("return {};", expected_str.trim()),
+        );
         assert_eq!(actual, expected, "{test_dir}: line {line_num}: {input}")
     }
 }
