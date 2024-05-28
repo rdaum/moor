@@ -64,7 +64,7 @@ pub mod vm_test_utils {
     use crate::vm::VmExecParams;
     use moor_compiler::Program;
     use moor_values::model::WorldState;
-    use moor_values::var::Var;
+    use moor_values::var::{Objid, Var};
     use moor_values::SYSTEM_OBJECT;
     use std::sync::Arc;
     use std::time::Duration;
@@ -158,10 +158,11 @@ pub mod vm_test_utils {
     pub fn call_eval_builtin(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
+        player: Objid,
         program: Program,
     ) -> ExecResult {
         execute(world_state, session, |_world_state, vm_host| {
-            vm_host.start_eval(0, SYSTEM_OBJECT, program);
+            vm_host.start_eval(0, player, program);
         })
     }
 }

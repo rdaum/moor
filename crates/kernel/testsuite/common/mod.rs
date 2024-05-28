@@ -32,6 +32,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
 
+pub const WIZARD: Objid = Objid(3);
+
 pub fn testsuite_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     Path::new(manifest_dir).join("testsuite")
@@ -99,10 +101,15 @@ pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResul
     result
 }
 
-pub fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
+pub fn eval(db: Arc<dyn WorldStateSource>, player: Objid, expression: &str) -> ExecResult {
     let binary = compile(expression).unwrap();
     let mut state = db.new_world_state().unwrap();
-    let result = call_eval_builtin(state.as_mut(), Arc::new(NoopClientSession::new()), binary);
+    let result = call_eval_builtin(
+        state.as_mut(),
+        Arc::new(NoopClientSession::new()),
+        player,
+        binary,
+    );
     state.commit().unwrap();
     result
 }
