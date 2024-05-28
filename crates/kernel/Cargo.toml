@@ -22,6 +22,10 @@ unindent.workspace = true
 name = "basic-testsuite"
 path = "testsuite/basic_suite.rs"
 
+[[test]]
+name = "eval-testsuite"
+path = "testsuite/eval_suite.rs"
+
 [[bench]]
 name = "vm_benches"
 harness = false
