@@ -13,8 +13,8 @@
 //
 
 mod common;
-use common::{create_db, eval, WIZARD};
-use pretty_assertions::assert_eq;
+use common::{create_db, eval, AssertEval, WIZARD};
+use moor_values::var::v_none;
 
 #[test]
 fn test_changing_programmer_and_wizard_flags() {
@@ -24,42 +24,33 @@ fn test_changing_programmer_and_wizard_flags() {
     let obj = eval(db.clone(), WIZARD, "return create(#2);").unwrap();
 
     // Start: it's neither a programmer nor a wizard
-    assert_eq!(
-        eval(
-            db.clone(),
-            WIZARD,
-            &format!("return {{ {obj}.programmer, {obj}.wizard }};")
-        ),
-        [0, 0].into()
+    db.assert_eval(
+        WIZARD,
+        format!("return {{ {obj}.programmer, {obj}.wizard }};"),
+        [0, 0],
     );
 
     // Set both, verify
-    eval(
-        db.clone(),
+    db.assert_eval(
         WIZARD,
-        &format!("{obj}.programmer = 1; {obj}.wizard = 1;"),
+        format!("{obj}.programmer = 1; {obj}.wizard = 1;"),
+        v_none(),
     );
-    assert_eq!(
-        eval(
-            db.clone(),
-            WIZARD,
-            &format!("return {{ {obj}.programmer, {obj}.wizard }};")
-        ),
-        [1, 1].into()
+    db.assert_eval(
+        WIZARD,
+        format!("return {{ {obj}.programmer, {obj}.wizard }};"),
+        [1, 1],
     );
 
     // Clear both, verify
-    eval(
-        db.clone(),
+    db.assert_eval(
         WIZARD,
-        &format!("{obj}.programmer = 0; {obj}.wizard = 0;"),
+        format!("{obj}.programmer = 0; {obj}.wizard = 0;"),
+        v_none(),
     );
-    assert_eq!(
-        eval(
-            db.clone(),
-            WIZARD,
-            &format!("return {{ {obj}.programmer, {obj}.wizard }};")
-        ),
-        [0, 0].into()
+    db.assert_eval(
+        WIZARD,
+        format!("return {{ {obj}.programmer, {obj}.wizard }};"),
+        [0, 0],
     );
 }

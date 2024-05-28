@@ -28,6 +28,7 @@ use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::var::Objid;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+use pretty_assertions::assert_eq;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -112,4 +113,44 @@ pub fn eval(db: Arc<dyn WorldStateSource>, player: Objid, expression: &str) -> E
     );
     state.commit().unwrap();
     result
+}
+
+pub trait AssertEval {
+    fn assert_eval<T: Into<ExecResult>, S: AsRef<str>>(
+        &self,
+        player: Objid,
+        expression: S,
+        expected: T,
+    );
+    fn assert_eval_exception<S: AsRef<str>>(
+        &self,
+        player: Objid,
+        expression: S,
+        expected: moor_values::var::Error,
+    );
+}
+
+impl AssertEval for Arc<RelBoxWorldState> {
+    fn assert_eval<T: Into<ExecResult>, S: AsRef<str>>(
+        &self,
+        player: Objid,
+        expression: S,
+        expected: T,
+    ) {
+        let expected = expected.into();
+        let actual = eval(self.clone(), player, expression.as_ref());
+        assert_eq!(actual, expected, "{}", expression.as_ref());
+    }
+
+    fn assert_eval_exception<S: AsRef<str>>(
+        &self,
+        player: Objid,
+        expression: S,
+        expected: moor_values::var::Error,
+    ) {
+        let actual = eval(self.clone(), player, expression.as_ref())
+            .unwrap_err()
+            .code;
+        assert_eq!(actual, expected, "{}", expression.as_ref());
+    }
 }
