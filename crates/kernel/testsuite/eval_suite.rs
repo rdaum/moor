@@ -21,47 +21,45 @@ use pretty_assertions::assert_eq;
 fn test_that_eval_cannot_be_called_by_non_programmers() {
     let db = create_db();
     eval(db.clone(), WIZARD, "player.programmer = 0;");
-    assert_eq!(
-        eval(db.clone(), WIZARD, r#"return eval("return 5;");"#),
-        E_PERM.into()
-    );
-}
-
-#[test]
-#[ignore = "This is currently broken, which is *extremely weird* - note the lack of extra eval(...)"]
-fn test_direct_eval_cannot_be_called_by_non_programmers() {
-    let db = create_db();
-    eval(db.clone(), WIZARD, "player.programmer = 0;");
     assert_eq!(eval(db.clone(), WIZARD, r#"return 5;"#), E_PERM.into());
 }
 
 #[test]
-#[ignore = "This is currently broken, which is *extremely weird* - note the lack of extra eval(...)"]
-fn test_direct_eval_cannot_be_called_by_non_programmers_nonself() {
+fn test_bf_eval_cannot_be_called_by_non_programmers() {
     let db = create_db();
-
-    let obj_var = eval(db.clone(), WIZARD, "return create(#2);");
-    let obj = match obj_var.variant() {
-        moor_values::var::Variant::Obj(obj) => obj,
-        _ => panic!("Expected an object"),
-    };
-
-    assert_eq!(eval(db.clone(), *obj, r#"return 5;"#), E_PERM.into());
+    assert_eq!(
+        eval(
+            db.clone(),
+            WIZARD,
+            r#"player.programmer = 0; return eval("return 5;");"#
+        )
+        .unwrap_err()
+        .code,
+        E_PERM
+    );
 }
 
 #[test]
-fn test_that_eval_requires_at_least_one_argument() {
+fn test_that_bf_eval_requires_at_least_one_argument() {
     let db = create_db();
-    assert_eq!(eval(db, WIZARD, "return eval();"), E_ARGS.into());
+    assert_eq!(eval(db, WIZARD, "return eval();").unwrap_err().code, E_ARGS);
 }
 
 #[test]
 fn test_that_eval_requires_string_arguments() {
     let db = create_db();
-    assert_eq!(eval(db.clone(), WIZARD, "return eval(1);"), E_TYPE.into());
+    assert_eq!(
+        eval(db.clone(), WIZARD, "return eval(1);")
+            .unwrap_err()
+            .code,
+        E_TYPE
+    );
     // TODO uncomment when `eval()` gets support for multiple arguments
     // assert_eq!(eval(db, WIZARD, "return eval(1, 2);"), E_ARGS.into());
-    assert_eq!(eval(db, WIZARD, "return eval({});"), E_TYPE.into());
+    assert_eq!(
+        eval(db, WIZARD, "return eval({});").unwrap_err().code,
+        E_TYPE
+    );
 }
 
 #[test]

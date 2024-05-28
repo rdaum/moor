@@ -22,18 +22,18 @@ use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
 use kanal::Sender;
-use moor_compiler::Name;
 use moor_compiler::Program;
-use moor_values::model::BinaryType;
+use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
+use moor_values::model::{BinaryType, ObjFlag};
 use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
@@ -176,7 +176,24 @@ impl VmHost {
     }
 
     /// Start execution of an eval request.
-    pub fn start_eval(&mut self, task_id: TaskId, player: Objid, program: Program) {
+    pub fn start_eval(
+        &mut self,
+        task_id: TaskId,
+        player: Objid,
+        program: Program,
+        world_state: &dyn WorldState,
+    ) {
+        let is_programmer = world_state
+            .flags_of(player)
+            .inspect_err(|e| error!(?e, "Failed to read player flags"))
+            .map(|flags| flags.contains(ObjFlag::Programmer))
+            .unwrap_or(false);
+        let program = if is_programmer {
+            program
+        } else {
+            compile("return E_PERM;").unwrap()
+        };
+
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
