@@ -14,7 +14,13 @@
 
 mod common;
 use common::{create_db, eval, WIZARD};
-use moor_values::var::Error::{E_ARGS, E_PERM, E_TYPE};
+use moor_values::{
+    var::{
+        v_empty_list, v_empty_str,
+        Error::{E_ARGS, E_PERM, E_TYPE},
+    },
+    NOTHING,
+};
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -83,4 +89,21 @@ fn test_that_eval_evaluates_a_single_string() {
         eval(db, WIZARD, r#"return eval("return 5;");"#),
         [1, 5].into()
     );
+}
+
+#[test]
+fn test_eval_builtin_variables() {
+    // As seen on https://stunt.io/ProgrammersManual.html#Language
+    let db = create_db();
+    assert_eq!(eval(db.clone(), WIZARD, "return player;"), WIZARD.into());
+    assert_eq!(eval(db.clone(), WIZARD, "return this;"), NOTHING.into());
+    assert_eq!(eval(db.clone(), WIZARD, "return caller;"), WIZARD.into());
+    assert_eq!(eval(db.clone(), WIZARD, "return args;"), v_empty_list());
+    assert_eq!(eval(db.clone(), WIZARD, "return argstr;"), v_empty_str());
+    assert_eq!(eval(db.clone(), WIZARD, "return verb;"), v_empty_str());
+    assert_eq!(eval(db.clone(), WIZARD, "return dobjstr;"), v_empty_str());
+    assert_eq!(eval(db.clone(), WIZARD, "return dobj;"), NOTHING.into());
+    assert_eq!(eval(db.clone(), WIZARD, "return prepstr;"), v_empty_str());
+    assert_eq!(eval(db.clone(), WIZARD, "return iobjstr;"), v_empty_str());
+    assert_eq!(eval(db.clone(), WIZARD, "return iobj;"), NOTHING.into());
 }
