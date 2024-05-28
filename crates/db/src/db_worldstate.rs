@@ -192,7 +192,6 @@ impl WorldState for DbTxWorldState {
         } else if pname == "owner" {
             return self.owner_of(obj).map(Var::from);
         } else if pname == "programmer" {
-            // TODO these can be set, too.
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Programmer) {
                 Ok(v_int(1))
@@ -360,9 +359,17 @@ impl WorldState for DbTxWorldState {
             // Gott get and then set flags
             let mut flags = self.flags_of(obj)?;
             if pname == "programmer" {
-                flags.set(ObjFlag::Programmer);
+                if value.is_true() {
+                    flags.set(ObjFlag::Programmer);
+                } else {
+                    flags.clear(ObjFlag::Programmer);
+                }
             } else if pname == "wizard" {
-                flags.set(ObjFlag::Wizard);
+                if value.is_true() {
+                    flags.set(ObjFlag::Wizard);
+                } else {
+                    flags.clear(ObjFlag::Wizard);
+                }
             }
 
             self.tx.set_object_flags(obj, flags)?;
