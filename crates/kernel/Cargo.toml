@@ -20,7 +20,7 @@ unindent.workspace = true
 
 [[test]]
 name = "basic-testsuite"
-path = "testsuite/basic/basic_suite.rs"
+path = "testsuite/basic_suite.rs"
 
 [[bench]]
 name = "vm_benches"
