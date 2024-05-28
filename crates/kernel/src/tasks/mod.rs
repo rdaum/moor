@@ -60,7 +60,9 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
-    use crate::vm::{UncaughtException, VmExecParams};
+    use crate::vm::UncaughtException;
+    use crate::vm::VmExecParams;
+    use moor_compiler::Program;
     use moor_values::model::WorldState;
     use moor_values::var::Var;
     use moor_values::SYSTEM_OBJECT;
@@ -73,12 +75,10 @@ pub mod vm_test_utils {
         Exception(UncaughtException),
     }
 
-    pub fn call_verb(
-        world_state: &mut dyn WorldState,
-        session: Arc<dyn Session>,
-        verb_name: &str,
-        args: Vec<Var>,
-    ) -> ExecResult {
+    fn execute<F>(world_state: &mut dyn WorldState, session: Arc<dyn Session>, fun: F) -> ExecResult
+    where
+        F: FnOnce(&mut dyn WorldState, &mut VmHost),
+    {
         let (scs_tx, _scs_rx) = kanal::unbounded();
         let mut vm_host = VmHost::new(
             0,
@@ -95,23 +95,7 @@ pub mod vm_test_utils {
             max_stack_depth: 50,
         };
 
-        let vi = world_state
-            .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
-            .unwrap();
-        vm_host.start_call_method_verb(
-            0,
-            SYSTEM_OBJECT,
-            vi,
-            VerbCall {
-                verb_name: verb_name.to_string(),
-                location: SYSTEM_OBJECT,
-                this: SYSTEM_OBJECT,
-                player: SYSTEM_OBJECT,
-                args,
-                argstr: "".to_string(),
-                caller: SYSTEM_OBJECT,
-            },
-        );
+        fun(world_state, &mut vm_host);
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
@@ -142,5 +126,42 @@ pub mod vm_test_utils {
                 }
             }
         }
+    }
+
+    pub fn call_verb(
+        world_state: &mut dyn WorldState,
+        session: Arc<dyn Session>,
+        verb_name: &str,
+        args: Vec<Var>,
+    ) -> ExecResult {
+        execute(world_state, session, |world_state, vm_host| {
+            let vi = world_state
+                .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
+                .unwrap();
+            vm_host.start_call_method_verb(
+                0,
+                SYSTEM_OBJECT,
+                vi,
+                VerbCall {
+                    verb_name: verb_name.to_string(),
+                    location: SYSTEM_OBJECT,
+                    this: SYSTEM_OBJECT,
+                    player: SYSTEM_OBJECT,
+                    args,
+                    argstr: "".to_string(),
+                    caller: SYSTEM_OBJECT,
+                },
+            );
+        })
+    }
+
+    pub fn call_eval_builtin(
+        world_state: &mut dyn WorldState,
+        session: Arc<dyn Session>,
+        program: Program,
+    ) -> ExecResult {
+        execute(world_state, session, |_world_state, vm_host| {
+            vm_host.start_eval(0, SYSTEM_OBJECT, program);
+        })
     }
 }
