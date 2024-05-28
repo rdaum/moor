@@ -98,7 +98,7 @@ impl Perms {
     }
 
     pub fn check_wizard(&self) -> Result<(), WorldStateError> {
-        if self.flags.contains(ObjFlag::Wizard) {
+        if self.check_is_wizard()? {
             return Ok(());
         }
         Err(WorldStateError::ObjectPermissionDenied)
@@ -106,6 +106,20 @@ impl Perms {
 
     pub fn check_is_wizard(&self) -> Result<bool, WorldStateError> {
         if self.flags.contains(ObjFlag::Wizard) {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub fn check_programmer(&self) -> Result<(), WorldStateError> {
+        if self.check_is_programmer()? {
+            return Ok(());
+        }
+        Err(WorldStateError::ObjectPermissionDenied)
+    }
+
+    pub fn check_is_programmer(&self) -> Result<bool, WorldStateError> {
+        if self.flags.contains(ObjFlag::Programmer) {
             return Ok(true);
         }
         Ok(false)

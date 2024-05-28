@@ -18,11 +18,35 @@ use moor_values::var::Error::{E_ARGS, E_PERM, E_TYPE};
 use pretty_assertions::assert_eq;
 
 #[test]
-#[ignore = "This check is not currently implemented"]
 fn test_that_eval_cannot_be_called_by_non_programmers() {
     let db = create_db();
     eval(db.clone(), WIZARD, "player.programmer = 0;");
-    assert_eq!(eval(db, WIZARD, "return 5;"), E_PERM.into());
+    assert_eq!(
+        eval(db.clone(), WIZARD, r#"return eval("return 5;");"#),
+        E_PERM.into()
+    );
+}
+
+#[test]
+#[ignore = "This is currently broken, which is *extremely weird* - note the lack of extra eval(...)"]
+fn test_direct_eval_cannot_be_called_by_non_programmers() {
+    let db = create_db();
+    eval(db.clone(), WIZARD, "player.programmer = 0;");
+    assert_eq!(eval(db.clone(), WIZARD, r#"return 5;"#), E_PERM.into());
+}
+
+#[test]
+#[ignore = "This is currently broken, which is *extremely weird* - note the lack of extra eval(...)"]
+fn test_direct_eval_cannot_be_called_by_non_programmers_nonself() {
+    let db = create_db();
+
+    let obj_var = eval(db.clone(), WIZARD, "return create(#2);");
+    let obj = match obj_var.variant() {
+        moor_values::var::Variant::Obj(obj) => obj,
+        _ => panic!("Expected an object"),
+    };
+
+    assert_eq!(eval(db.clone(), *obj, r#"return 5;"#), E_PERM.into());
 }
 
 #[test]

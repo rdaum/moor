@@ -766,6 +766,10 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+    bf_args
+        .task_perms()?
+        .check_programmer()
+        .map_err(world_state_err)?;
     if bf_args.args.len() != 1 {
         return Err(E_ARGS);
     }
