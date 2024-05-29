@@ -14,7 +14,7 @@
 
 mod common;
 use common::{create_db, eval, AssertEval, AssertRunAsVerb, WIZARD};
-use moor_values::var::{v_empty_list, v_none, Var, Variant};
+use moor_values::var::{v_empty_list, v_none, Error::E_PROPNF, Var, Variant};
 
 #[test]
 fn test_changing_programmer_and_wizard_flags() {
@@ -86,4 +86,12 @@ fn test_properties_does_not_list_parent_props() {
         format!("return properties({objid});"),
         v_empty_list(),
     );
+}
+
+#[test]
+#[ignore = "Currently broken"]
+fn test_setting_undefined_property_fails() {
+    let db = create_db();
+
+    db.assert_eval(WIZARD, "#2.x = 42;", E_PROPNF);
 }
