@@ -29,7 +29,7 @@ use std::time::Duration;
 use io_uring::squeue::Flags;
 use io_uring::types::Fd;
 use io_uring::{opcode, IoUring};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 use crate::paging::{PageId, SlotId};
 use crate::RelationId;
@@ -103,16 +103,14 @@ fn event_fd_listen_thread(event_fd: &Fd, ps: Arc<PageStore>, running_flag: Arc<A
                 break;
             }
         }
-        let mut pollfd = libc::pollfd {
-            fd: event_fd.0,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let ret = unsafe { libc::poll(&mut pollfd, 1, 100) };
+        let mut eventfd_v: libc::eventfd_t = 0;
+
+        let ret = unsafe { libc::eventfd_read(event_fd.0, &mut eventfd_v) };
 
         if ret < 0 {
             panic!("Unable to read eventfd");
         }
+        trace!("Poll returned {}", ret);
 
         let completed = ps.clone().process_completions();
 
