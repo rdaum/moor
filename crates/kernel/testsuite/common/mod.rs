@@ -88,7 +88,7 @@ pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) 
 
 #[allow(unused)]
 pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
-    let binary = compile(format!("return {expression};").as_str()).unwrap();
+    let binary = compile(expression).unwrap();
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db.clone(), &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
@@ -151,6 +151,17 @@ impl AssertEval for Arc<RelBoxWorldState> {
         let actual = eval(self.clone(), player, expression.as_ref())
             .unwrap_err()
             .code;
+        assert_eq!(actual, expected, "{}", expression.as_ref());
+    }
+}
+
+pub trait AssertRunAsVerb {
+    fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T);
+}
+impl AssertRunAsVerb for Arc<RelBoxWorldState> {
+    fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T) {
+        let expected = expected.into();
+        let actual = run_as_verb(self.clone(), expression.as_ref());
         assert_eq!(actual, expected, "{}", expression.as_ref());
     }
 }
