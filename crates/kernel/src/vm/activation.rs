@@ -329,7 +329,7 @@ impl Activation {
                 NOTHING,
                 NOTHING,
                 &["eval"],
-                BitEnum::new_with(VerbFlag::Exec),
+                BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
                 BinaryType::None,
                 VerbArgsSpec::this_none_this(),
             ),
