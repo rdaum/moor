@@ -29,6 +29,7 @@ use std::time::Duration;
 use io_uring::squeue::Flags;
 use io_uring::types::Fd;
 use io_uring::{opcode, IoUring};
+use libc::eventfd_write;
 use tracing::{debug, info, trace};
 
 use crate::paging::{PageId, SlotId};
@@ -175,6 +176,13 @@ impl PageStore {
         self.running
             .store(false, std::sync::atomic::Ordering::SeqCst);
         let jh = self.join_handle.lock().unwrap().take();
+        // Write to the eventfd
+        unsafe {
+            let ret = eventfd_write(self.event_fd.0, 1);
+            if ret != 0 {
+                panic!("Unable to write to eventfd");
+            }
+        }
         if let Some(jh) = jh {
             jh.join().unwrap();
             let inner = self.inner.lock().unwrap();
