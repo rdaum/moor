@@ -1638,6 +1638,7 @@ dependencies = [
  "criterion",
  "dashmap",
  "decorum",
+ "eyre",
  "iana-time-zone",
  "inventory",
  "kanal",
@@ -1655,6 +1656,7 @@ dependencies = [
  "strum",
  "tempfile",
  "test-case",
+ "test_each_file",
  "text-diff",
  "text_io",
  "thiserror",
@@ -2810,6 +2812,18 @@ dependencies = [
  "quote",
  "syn 2.0.66",
  "test-case-core",
+]
+
+[[package]]
+name = "test_each_file"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f1a92330478de0709111391059475f7d960692519e2c54c823c662408bab365"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
+ "unicode-ident",
 ]
 
 [[package]]

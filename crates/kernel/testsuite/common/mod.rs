@@ -33,6 +33,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[allow(dead_code)]
 pub const WIZARD: Objid = Objid(3);
 
 pub fn testsuite_dir() -> PathBuf {
@@ -102,17 +103,21 @@ pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResul
     result
 }
 
-pub fn eval(db: Arc<dyn WorldStateSource>, player: Objid, expression: &str) -> ExecResult {
-    let binary = compile(expression).unwrap();
-    let mut state = db.new_world_state().unwrap();
+pub fn eval(
+    db: Arc<dyn WorldStateSource>,
+    player: Objid,
+    expression: &str,
+) -> eyre::Result<ExecResult> {
+    let binary = compile(expression)?;
+    let mut state = db.new_world_state()?;
     let result = call_eval_builtin(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
         player,
         binary,
     );
-    state.commit().unwrap();
-    result
+    state.commit()?;
+    Ok(result)
 }
 
 pub trait AssertEval {
@@ -138,7 +143,7 @@ impl AssertEval for Arc<RelBoxWorldState> {
         expected: T,
     ) {
         let expected = expected.into();
-        let actual = eval(self.clone(), player, expression.as_ref());
+        let actual = eval(self.clone(), player, expression.as_ref()).unwrap();
         assert_eq!(actual, expected, "{}", expression.as_ref());
     }
 
@@ -149,6 +154,7 @@ impl AssertEval for Arc<RelBoxWorldState> {
         expected: moor_values::var::Error,
     ) {
         let actual = eval(self.clone(), player, expression.as_ref())
+            .unwrap()
             .unwrap_err()
             .code;
         assert_eq!(actual, expected, "{}", expression.as_ref());

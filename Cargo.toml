@@ -123,6 +123,7 @@ pretty_assertions = "1.4.0"
 test-case = "3.3.1"
 unindent = "0.2.3"
 escargot = "0.5.10"
+test_each_file = "0.3.2"
 
 # Auth/Auth
 ed25519-dalek = { version = "2.1.1", features = [

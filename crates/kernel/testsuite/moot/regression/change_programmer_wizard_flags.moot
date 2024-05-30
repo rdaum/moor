@@ -1,0 +1,21 @@
+; return create(#2);
+#4
+
+; return {#4.programmer, #4.wizard};
+{0, 0}
+
+; #4.programmer = 1;
+; return {#4.programmer, #4.wizard};
+{1, 0}
+
+; #4.wizard = 1;
+; return {#4.programmer, #4.wizard};
+{1, 1}
+
+; #4.programmer = 0;
+; return {#4.programmer, #4.wizard};
+{0, 1}
+
+; #4.wizard = 0;
+; return {#4.programmer, #4.wizard};
+{0, 0}

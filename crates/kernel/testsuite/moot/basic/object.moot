@@ -1,0 +1,38 @@
+; return parent(create(#2));
+#2
+
+; return create(#2).name;
+""
+
+; return create(#2).location;
+#-1
+
+; return create(#2).contents;
+{}
+
+; return create(#2).programmer;
+0
+
+; return create(#2).wizard;
+0
+
+; return create(#2).r;
+0
+
+; return create(#2).w;
+0
+
+; return create(#2).f;
+0
+
+; return is_player(create(#2));
+0
+
+; return valid(#-1);
+0
+
+; return valid(#0);
+1
+
+; return children(#0);
+{}

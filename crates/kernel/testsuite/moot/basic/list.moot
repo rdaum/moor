@@ -1,0 +1,26 @@
+; return length({1, 2, 3});
+3
+
+; return listappend({1, 2}, 3);
+{1, 2, 3}
+
+; return listappend({1, 2}, 3, 1);
+{1, 3, 2}
+
+; return listinsert({1, 2}, 3, 2);
+{1, 3, 2}
+
+; return listinsert({1, 2}, 3, 1);
+{3, 1, 2}
+
+; return listdelete({1, 2, 3}, 2);
+{1, 3}
+
+; return listset({1, 2, 3}, 4, 2);
+{1, 4, 3}
+
+; return setadd({1, 2}, 3);
+{1, 2, 3}
+
+; return setadd({1, 2}, 2);
+{1, 2}
