@@ -29,7 +29,6 @@ use std::{
 use common::create_db;
 use eyre::Context;
 use moor_db::odb::RelBoxWorldState;
-use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_values::var::v_none;
 use pretty_assertions::assert_eq;
 
@@ -121,14 +120,14 @@ impl MootState {
         db: Arc<RelBoxWorldState>,
     ) -> eyre::Result<()> {
         let expected = if let Some(expectation) = expectation {
-            common::eval(db.clone(), WIZARD, &format!("return {expectation};"))?.unwrap()
+            common::eval(db.clone(), WIZARD, &format!("return {expectation};"))??
         } else {
             v_none()
         };
         let actual_exec_result = common::eval(db, WIZARD, command)?;
         let actual = match actual_exec_result {
-            ExecResult::Success(v) => v,
-            ExecResult::Exception(e) => e.code.into(),
+            Ok(v) => v,
+            Err(e) => e.code.into(),
         };
         assert_eq!(actual, expected, "Line {line_no}: {command}");
         Ok(())

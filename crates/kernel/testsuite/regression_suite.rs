@@ -18,7 +18,7 @@ use common::{create_db, AssertRunAsVerb};
 #[test]
 fn test_testhelper_verb_redefinition() {
     let db = create_db();
-    db.assert_run_as_verb("return 42;", 42);
-    db.assert_run_as_verb("return create(#2).name;", "");
-    db.assert_run_as_verb("return 200;", 200);
+    db.assert_run_as_verb("return 42;", Ok(42.into()));
+    db.assert_run_as_verb("return create(#2).name;", Ok("".into()));
+    db.assert_run_as_verb("return 200;", Ok(200.into()));
 }
