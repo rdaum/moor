@@ -1,9 +1,8 @@
 # Docker composition for starting up the Moor system in cargo-watch mode, running with separate `daemon` and `host`
-# binaries (communicating via ZMQ RPC), with VictoriaMetrics and VMagent for metrics collection, and Grafana for
-# visualization.
+# binaries (communicating via ZMQ RPC),
 
 # The first time the image starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
-# JaysHouseCore database, with no modifications. After import, `development.db` will contain the (RocksDb) database
+# JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
 # that resulted. To re-import the textdump, simply delete this directory.
 
 # This composition is not intended for production use, but for development and testing, but could be used as a template
@@ -12,10 +11,6 @@
 # After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
 # system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
 
-# Grafana will be available at http://localhost:3000/ password is admin/admin
-# victoriametrics will be available at http://localhost:8428/
-
-version: "3.9"
 volumes:
   vmagentdata: {}
   vmdata: {}
