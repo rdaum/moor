@@ -1,0 +1,3 @@
+# non-programmers shouldn't be able to execute bf_eval
+; player.programmer = 0; return eval("return 5;");
+E_PERM

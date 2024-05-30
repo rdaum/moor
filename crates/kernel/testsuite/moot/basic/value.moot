@@ -1,0 +1,83 @@
+; return typeof(3) == INT;
+1
+
+; return typeof("abc") == STR;
+1
+
+; return typeof(1.0) == FLOAT;
+1
+
+; return typeof({"foo"}) == LIST;
+1
+
+; return typeof(#0) == OBJ;
+1
+
+; return tostr(17);
+"17"
+
+; return tostr(3.0);
+"3.0"
+
+; return tostr(#0);
+"#0"
+
+; return tostr({1, 2});
+"{list}"
+
+; return toliteral(17);
+"17"
+
+; return toliteral(3.0);
+"3.0"
+
+; return toliteral(#0);
+"#0"
+
+; return toliteral({1, 2});
+"{1, 2}"
+
+; return toint(10);
+10
+
+; return toint(3.0);
+3
+
+; return toint(#2);
+2
+
+; return toint("-34");
+-34
+
+; return toobj("2");
+#2
+
+; return toobj(2);
+#2
+
+; return toobj("foo");
+#0
+
+; return tofloat(34);
+34.0
+
+; return tofloat("34.7");
+34.7
+
+; return tofloat(7.3);
+7.3
+
+; return equal(1 + 1, 2);
+1
+
+; return equal("Foo", "foo");
+0
+
+; return equal("foo", "foo");
+1
+
+; return equal({1, 2}, {1, 2});
+1
+
+; return equal({1, 2}, {1, 3});
+0

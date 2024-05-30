@@ -1,0 +1,26 @@
+; return 1 + 1;
+2
+
+; return 4 - 2;
+2
+
+; return 5 * 7;
+35
+
+; return 8 - 11;
+-3
+
+; return 12 / 6;
+2
+
+; return 12 / 7;
+1
+
+; return 11.0 - 5.5;
+5.5
+
+; return (2 + 2) * 3;
+12
+
+; return sqrt(4.0);
+2.0

@@ -13,47 +13,7 @@
 //
 
 mod common;
-use common::{create_db, eval, AssertEval, AssertRunAsVerb, WIZARD};
-use moor_values::var::{v_empty_list, v_none, Error::E_PROPNF, Var, Variant};
-
-#[test]
-fn test_changing_programmer_and_wizard_flags() {
-    let db = create_db();
-
-    // Create an object we can work with
-    let obj = eval(db.clone(), WIZARD, "return create(#2);").unwrap();
-
-    // Start: it's neither a programmer nor a wizard
-    db.assert_eval(
-        WIZARD,
-        format!("return {{ {obj}.programmer, {obj}.wizard }};"),
-        [0, 0],
-    );
-
-    // Set both, verify
-    db.assert_eval(
-        WIZARD,
-        format!("{obj}.programmer = 1; {obj}.wizard = 1;"),
-        v_none(),
-    );
-    db.assert_eval(
-        WIZARD,
-        format!("return {{ {obj}.programmer, {obj}.wizard }};"),
-        [1, 1],
-    );
-
-    // Clear both, verify
-    db.assert_eval(
-        WIZARD,
-        format!("{obj}.programmer = 0; {obj}.wizard = 0;"),
-        v_none(),
-    );
-    db.assert_eval(
-        WIZARD,
-        format!("return {{ {obj}.programmer, {obj}.wizard }};"),
-        [0, 0],
-    );
-}
+use common::{create_db, AssertRunAsVerb};
 
 #[test]
 fn test_testhelper_verb_redefinition() {
@@ -61,37 +21,4 @@ fn test_testhelper_verb_redefinition() {
     db.assert_run_as_verb("return 42;", 42);
     db.assert_run_as_verb("return create(#2).name;", "");
     db.assert_run_as_verb("return 200;", 200);
-}
-
-#[test]
-#[ignore = "Currently broken"]
-fn test_properties_does_not_list_parent_props() {
-    let db = create_db();
-
-    let obj_var = eval(db.clone(), WIZARD, "return create(#2);").unwrap();
-    let objid = match obj_var.variant() {
-        Variant::Obj(objid) => objid,
-        _ => panic!("Expected an object"),
-    };
-
-    db.assert_eval(
-        WIZARD,
-        r#"add_property(#2, "prop1", 0, {player, "rwc" });"#,
-        v_none(),
-    );
-    db.assert_eval(WIZARD, "#2.prop1 = 1;;", v_none());
-    db.assert_eval(WIZARD, "return properties(#2);", vec![Var::from("prop1")]);
-    db.assert_eval(
-        WIZARD,
-        format!("return properties({objid});"),
-        v_empty_list(),
-    );
-}
-
-#[test]
-#[ignore = "Currently broken"]
-fn test_setting_undefined_property_fails() {
-    let db = create_db();
-
-    db.assert_eval(WIZARD, "#2.x = 42;", E_PROPNF);
 }

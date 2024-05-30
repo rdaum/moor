@@ -9,6 +9,7 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dev-dependencies]
+eyre.workspace = true
 criterion.workspace = true
 inventory.workspace = true
 pretty_assertions.workspace = true
@@ -17,18 +18,15 @@ test-case.workspace = true
 text-diff.workspace = true
 tracing-test.workspace = true
 unindent.workspace = true
-
-[[test]]
-name = "basic-testsuite"
-path = "testsuite/basic_suite.rs"
-
-[[test]]
-name = "eval-testsuite"
-path = "testsuite/eval_suite.rs"
+test_each_file.workspace = true
 
 [[test]]
 name = "regression-suite"
 path = "testsuite/regression_suite.rs"
+
+[[test]]
+name = "moot-suite"
+path = "testsuite/moot_suite.rs"
 
 [[bench]]
 name = "vm_benches"
