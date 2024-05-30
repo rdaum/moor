@@ -69,36 +69,7 @@ pub mod vm_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    #[derive(Debug, Clone, Eq, PartialEq)]
-    pub enum ExecResult {
-        Success(Var),
-        Exception(UncaughtException),
-    }
-
-    impl ExecResult {
-        pub fn unwrap(self) -> Var {
-            match self {
-                ExecResult::Success(v) => v,
-                ExecResult::Exception(e) => panic!("Unwrapping exception: {:?}", e),
-            }
-        }
-
-        pub fn unwrap_err(self) -> UncaughtException {
-            match self {
-                ExecResult::Success(v) => panic!("Unwrapping success: {:?}", v),
-                ExecResult::Exception(e) => e,
-            }
-        }
-    }
-
-    impl<T> From<T> for ExecResult
-    where
-        T: Into<Var>,
-    {
-        fn from(t: T) -> Self {
-            ExecResult::Success(t.into())
-        }
-    }
+    pub type ExecResult = Result<Var, UncaughtException>;
 
     fn execute<F>(world_state: &mut dyn WorldState, session: Arc<dyn Session>, fun: F) -> ExecResult
     where
@@ -135,10 +106,10 @@ pub mod vm_test_utils {
                     panic!("Unexpected abort: {:?}", a);
                 }
                 VMHostResponse::CompleteException(e) => {
-                    return ExecResult::Exception(e);
+                    return Err(e);
                 }
                 VMHostResponse::CompleteSuccess(v) => {
-                    return ExecResult::Success(v);
+                    return Ok(v);
                 }
                 VMHostResponse::CompleteAbort => {
                     panic!("Unexpected abort");
