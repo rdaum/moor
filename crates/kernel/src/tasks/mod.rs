@@ -60,19 +60,25 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
-    use crate::vm::VmExecParams;
+    use crate::vm::{UncaughtException, VmExecParams};
     use moor_values::model::WorldState;
     use moor_values::var::Var;
     use moor_values::SYSTEM_OBJECT;
     use std::sync::Arc;
     use std::time::Duration;
 
+    #[derive(Debug, Clone, Eq, PartialEq)]
+    pub enum ExecResult {
+        Success(Var),
+        Exception(UncaughtException),
+    }
+
     pub fn call_verb(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
         verb_name: &str,
         args: Vec<Var>,
-    ) -> Var {
+    ) -> ExecResult {
         let (scs_tx, _scs_rx) = kanal::unbounded();
         let mut vm_host = VmHost::new(
             0,
@@ -120,10 +126,10 @@ pub mod vm_test_utils {
                     panic!("Unexpected abort: {:?}", a);
                 }
                 VMHostResponse::CompleteException(e) => {
-                    panic!("Unexpected exception: {:?}", e)
+                    return ExecResult::Exception(e);
                 }
                 VMHostResponse::CompleteSuccess(v) => {
-                    return v;
+                    return ExecResult::Success(v);
                 }
                 VMHostResponse::CompleteAbort => {
                     panic!("Unexpected abort");

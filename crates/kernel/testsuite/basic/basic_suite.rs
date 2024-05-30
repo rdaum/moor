@@ -17,7 +17,7 @@ use moor_compiler::Program;
 use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
-use moor_kernel::tasks::vm_test_utils::call_verb;
+use moor_kernel::tasks::vm_test_utils::{call_verb, ExecResult};
 use moor_kernel::textdump::textdump_load;
 use moor_values::model::CommitResult;
 use moor_values::model::Named;
@@ -73,7 +73,7 @@ fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> Var {
+fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
     compile_verbs(db.clone(), &[("test", &binary)]);
     let mut state = db.new_world_state().unwrap();

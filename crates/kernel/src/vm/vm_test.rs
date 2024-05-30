@@ -32,7 +32,7 @@ mod tests {
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::tasks::sessions::NoopClientSession;
-    use crate::tasks::vm_test_utils::call_verb;
+    use crate::tasks::vm_test_utils::{call_verb, ExecResult};
     use moor_compiler::compile;
     use moor_compiler::Names;
     use moor_compiler::Op;
@@ -107,7 +107,7 @@ mod tests {
         let mut state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_none());
+        assert_eq!(result, ExecResult::Success(v_none()));
     }
 
     #[test]
@@ -124,7 +124,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_str("e"));
+        assert_eq!(result, ExecResult::Success(v_str("e")));
     }
 
     #[test]
@@ -149,7 +149,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_str("ell"));
+        assert_eq!(result, ExecResult::Success(v_str("ell")));
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_int(222));
+        assert_eq!(result, ExecResult::Success(v_int(222)));
     }
 
     #[test]
@@ -195,7 +195,10 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_list(&[222.into(), 333.into()]));
+        assert_eq!(
+            result,
+            ExecResult::Success(v_list(&[222.into(), 333.into()]))
+        );
     }
 
     #[test]
@@ -236,7 +239,10 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_list(&[111.into(), 321.into(), 123.into()]));
+        assert_eq!(
+            result,
+            ExecResult::Success(v_list(&[111.into(), 321.into(), 123.into()]))
+        );
     }
 
     #[test]
@@ -248,7 +254,10 @@ mod tests {
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_list(&[2.into(), 3.into(), 4.into()]));
+        assert_eq!(
+            result,
+            ExecResult::Success(v_list(&[2.into(), 3.into(), 4.into()]))
+        );
     }
 
     #[test]
@@ -259,7 +268,7 @@ mod tests {
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_int(1));
+        assert_eq!(result, ExecResult::Success(v_int(1)));
     }
 
     #[test]
@@ -296,7 +305,7 @@ mod tests {
         .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_str("manbozorian"));
+        assert_eq!(result, ExecResult::Success(v_str("manbozorian")));
     }
 
     #[test]
@@ -326,7 +335,7 @@ mod tests {
         }
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_int(666));
+        assert_eq!(result, ExecResult::Success(v_int(666)));
     }
 
     #[test]
@@ -362,7 +371,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test_call_verb", vec![]);
 
-        assert_eq!(result, v_int(666));
+        assert_eq!(result, ExecResult::Success(v_int(666)));
     }
 
     fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
@@ -378,7 +387,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_int(3));
+        assert_eq!(result, ExecResult::Success(v_int(3)));
     }
 
     #[test]
@@ -388,7 +397,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, v_int(75));
+        assert_eq!(result, ExecResult::Success(v_int(75)));
     }
 
     #[test]
@@ -399,7 +408,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_int(50));
+        assert_eq!(result, ExecResult::Success(v_int(50)));
     }
 
     #[test]
@@ -409,7 +418,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_int(50));
+        assert_eq!(result, ExecResult::Success(v_int(50)));
     }
 
     #[test]
@@ -432,7 +441,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_int(50));
+        assert_eq!(result, ExecResult::Success(v_int(50)));
     }
 
     #[test]
@@ -454,7 +463,10 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_list(&[v_int(3), v_int(2), v_int(1)]));
+        assert_eq!(
+            result,
+            ExecResult::Success(v_list(&[v_int(3), v_int(2), v_int(1)]))
+        );
     }
 
     #[test]
@@ -474,7 +486,7 @@ mod tests {
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
 
-        assert_eq!(result, v_int(6));
+        assert_eq!(result, ExecResult::Success(v_int(6)));
     }
 
     #[test]
@@ -500,7 +512,7 @@ mod tests {
             vec![v_objid(SYSTEM_OBJECT), v_obj(32)],
         );
 
-        assert_eq!(result, v_int(0));
+        assert_eq!(result, ExecResult::Success(v_int(0)));
     }
 
     #[test]
@@ -511,7 +523,7 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session.clone(), "test", vec![]);
-        assert_eq!(result, v_int(5));
+        assert_eq!(result, ExecResult::Success(v_int(5)));
     }
 
     /// A VM body that is empty should return v_none() and not panic.
@@ -530,7 +542,7 @@ mod tests {
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session.clone(), "test", vec![]);
-        assert_eq!(result, v_none());
+        assert_eq!(result, ExecResult::Success(v_none()));
     }
 
     #[test_case("return 1;", v_int(1); "simple return")]
@@ -627,6 +639,6 @@ mod tests {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(state.as_mut(), session, "test", vec![]);
-        assert_eq!(result, expected_result);
+        assert_eq!(result, ExecResult::Success(expected_result));
     }
 }
