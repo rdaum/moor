@@ -131,4 +131,4 @@ ed25519-dalek = { version = "2.1.1", features = [
     "rand_core",
 ] }
 pem = "3.0.4"
-rusty_paseto = { version = "0.6.1" }
+rusty_paseto = { version = "0.7" }
