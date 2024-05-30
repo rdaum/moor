@@ -61,3 +61,39 @@ impl Default for PropAttrs {
         Self::new()
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+pub struct PropPerms {
+    owner: Objid,
+    flags: BitEnum<PropFlag>,
+}
+
+impl PropPerms {
+    #[must_use]
+    pub fn new(owner: Objid, flags: BitEnum<PropFlag>) -> Self {
+        Self { owner, flags }
+    }
+    #[must_use]
+    pub fn owner(&self) -> Objid {
+        self.owner
+    }
+
+    #[must_use]
+    pub fn flags(&self) -> BitEnum<PropFlag> {
+        self.flags
+    }
+
+    pub fn with_owner(self, owner: Objid) -> Self {
+        Self {
+            owner,
+            flags: self.flags,
+        }
+    }
+
+    pub fn with_flags(self, flags: BitEnum<PropFlag>) -> Self {
+        Self {
+            owner: self.owner,
+            flags,
+        }
+    }
+}

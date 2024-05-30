@@ -22,7 +22,7 @@ pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
 pub use crate::model::objset::{ObjSet, ObjSetIter};
 pub use crate::model::permissions::Perms;
 pub use crate::model::propdef::{PropDef, PropDefs};
-pub use crate::model::props::{PropAttr, PropAttrs, PropFlag};
+pub use crate::model::props::{PropAttr, PropAttrs, PropFlag, PropPerms};
 pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec, PREP_LIST};
 pub use crate::model::verb_info::VerbInfo;
 pub use crate::model::verbdef::{VerbDef, VerbDefs};
@@ -129,6 +129,7 @@ impl From<WorldStateError> for Error {
 }
 
 pub fn world_state_err(err: WorldStateError) -> Error {
+    eprintln!("WorldStateError: {:?}", err);
     err.into()
 }
 

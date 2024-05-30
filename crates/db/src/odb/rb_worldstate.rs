@@ -21,19 +21,19 @@ use strum::{EnumCount, IntoEnumIterator};
 use tracing::warn;
 use uuid::Uuid;
 
-use moor_values::model::ObjSet;
 use moor_values::model::PropFlag;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, ObjFlag};
+use moor_values::model::{ObjSet, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::BitEnum;
-use moor_values::var::Objid;
-use moor_values::var::{v_none, Var};
+use moor_values::var::Var;
+use moor_values::var::{v_none, Objid};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 use crate::db_tx::DbTransaction;
@@ -127,8 +127,10 @@ impl DbTransaction for RelBoxTransaction {
     }
 
     fn get_object_name(&self, obj: Objid) -> Result<String, WorldStateError> {
-        object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
-            .ok_or(WorldStateError::ObjectNotFound(obj))
+        Ok(
+            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
+                .unwrap_or("".to_string()),
+        )
     }
 
     fn create_object(&self, id: Option<Objid>, attrs: ObjAttrs) -> Result<Objid, WorldStateError> {
@@ -151,10 +153,16 @@ impl DbTransaction for RelBoxTransaction {
         )
         .expect("Unable to insert initial owner");
 
-        // Set initial name
-        let name = attrs.name.unwrap_or_else(|| format!("Object {}", id));
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, id, name)
+        // Set initial name if provided.
+        if let Some(name) = attrs.name {
+            object_relations::upsert_object_value(
+                &self.tx,
+                WorldStateRelation::ObjectName,
+                id,
+                name,
+            )
             .expect("Unable to insert initial name");
+        }
 
         // We use our own setters for these, since there's biz-logic attached here...
         if let Some(parent) = attrs.parent {
@@ -693,50 +701,78 @@ impl DbTransaction for RelBoxTransaction {
         value: Option<Var>,
     ) -> Result<Uuid, WorldStateError> {
         let descendants = self.descendants(location)?;
-        let locations = ObjSet::from(&[location]).with_concatenated(descendants);
+
+        // If the property is already defined at us or above or below us, that's a failure.
+        let props = match object_relations::get_object_value::<PropDefs>(
+            &self.tx,
+            WorldStateRelation::ObjectPropDefs,
+            location,
+        ) {
+            None => PropDefs::empty(),
+            Some(propdefs) => {
+                if propdefs.find_first_named(name.as_str()).is_some() {
+                    return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
+                }
+                propdefs
+            }
+        };
+        let ancestors = self.ancestors(location)?;
+        let check_locations = ObjSet::from(&[location]).with_concatenated(ancestors);
+        for location in check_locations.iter() {
+            if let Some(descendant_props) = object_relations::get_object_value::<PropDefs>(
+                &self.tx,
+                WorldStateRelation::ObjectPropDefs,
+                location,
+            ) {
+                // Verify we don't already have a property with this name. If we do, return an error.
+                if descendant_props.find_first_named(name.as_str()).is_some() {
+                    return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
+                }
+            }
+        }
 
         // Generate a new property ID. This will get shared all the way down the pipe.
         // But the key for the actual value is always composite of oid,uuid
         let u = Uuid::new_v4();
 
-        for location in locations.iter() {
-            let props = object_relations::get_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                location,
-            )
-            .unwrap_or(PropDefs::empty());
+        let prop = PropDef::new(u, definer, location, name.as_str());
+        object_relations::upsert_object_value(
+            &self.tx,
+            WorldStateRelation::ObjectPropDefs,
+            location,
+            props.with_added(prop),
+        )
+        .expect("Unable to set property definition");
 
-            // Verify we don't already have a property with this name. If we do, return an error.
-            if props.find_first_named(name.as_str()).is_some() {
-                return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
-            }
-
-            let prop = PropDef::new(u, definer, location, name.as_str(), perms, owner);
-            object_relations::upsert_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                location,
-                props.with_added(prop),
-            )
-            .expect("Unable to set property definition")
-        }
-        // If we have an initial value, set it.
+        // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
             object_relations::upsert_obj_uuid_value(
                 &self.tx,
                 WorldStateRelation::ObjectPropertyValue,
-                definer,
+                location,
                 u,
                 value,
             )
-            .expect("Unable to set initial property value")
+            .expect("Unable to set property value");
+        }
+
+        // Put the initial object owner on ourselves and all our descendants.
+        let value_locations = ObjSet::from(&[location]).with_concatenated(descendants);
+        for location in value_locations.iter() {
+            object_relations::upsert_obj_uuid_value(
+                &self.tx,
+                WorldStateRelation::ObjectPropertyPermissions,
+                location,
+                u,
+                PropPerms::new(owner, perms),
+            )
+            .expect("Unable to set property owner");
         }
 
         Ok(u)
     }
 
-    fn update_property_definition(
+    fn update_property_info(
         &self,
         obj: Objid,
         uuid: Uuid,
@@ -744,34 +780,59 @@ impl DbTransaction for RelBoxTransaction {
         new_flags: Option<BitEnum<PropFlag>>,
         new_name: Option<String>,
     ) -> Result<(), WorldStateError> {
-        let props =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectPropDefs, obj)
-                .unwrap_or(PropDefs::empty());
+        if new_owner.is_none() && new_flags.is_none() && new_name.is_none() {
+            return Ok(());
+        }
 
-        let Some(props) = props.with_updated(uuid, |p| {
-            let name = match &new_name {
-                None => p.name(),
-                Some(s) => s.as_str(),
+        // We only need to update the propdef if there's a new name.
+        if let Some(new_name) = new_name {
+            let props = object_relations::get_object_value(
+                &self.tx,
+                WorldStateRelation::ObjectPropDefs,
+                obj,
+            )
+            .unwrap_or(PropDefs::empty());
+
+            let Some(props) = props.with_updated(uuid, |p| {
+                PropDef::new(p.uuid(), p.definer(), p.location(), &new_name)
+            }) else {
+                return Err(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)));
             };
 
-            PropDef::new(
-                p.uuid(),
-                p.definer(),
-                p.location(),
-                name,
-                new_flags.unwrap_or_else(|| p.flags()),
-                new_owner.unwrap_or_else(|| p.owner()),
-            )
-        }) else {
-            return Err(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)));
-        };
+            object_relations::upsert_object_value(
+                &self.tx,
+                WorldStateRelation::ObjectPropDefs,
+                obj,
+                props,
+            )?;
+        }
 
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropDefs,
-            obj,
-            props,
-        )?;
+        // If flags or perms updated, do that.
+        if new_flags.is_some() || new_owner.is_some() {
+            let mut perms: PropPerms = object_relations::get_composite_value(
+                &self.tx,
+                WorldStateRelation::ObjectPropertyPermissions,
+                obj,
+                uuid,
+            )
+            .expect("Unable to get property permissions for update. Integrity error");
+
+            if let Some(new_flags) = new_flags {
+                perms = perms.with_flags(new_flags);
+            }
+
+            if let Some(new_owner) = new_owner {
+                perms = perms.with_owner(new_owner);
+            }
+
+            object_relations::upsert_obj_uuid_value(
+                &self.tx,
+                WorldStateRelation::ObjectPropertyPermissions,
+                obj,
+                uuid,
+                perms,
+            )?;
+        }
 
         Ok(())
     }
@@ -816,60 +877,114 @@ impl DbTransaction for RelBoxTransaction {
         Ok(())
     }
 
-    fn retrieve_property(&self, obj: Objid, uuid: Uuid) -> Result<Var, WorldStateError> {
-        object_relations::get_composite_value(
+    fn retrieve_property(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
+        let value = object_relations::get_composite_value(
             &self.tx,
             WorldStateRelation::ObjectPropertyValue,
             obj,
             uuid,
+        );
+        let owner = object_relations::get_composite_value(
+            &self.tx,
+            WorldStateRelation::ObjectPropertyPermissions,
+            obj,
+            uuid,
         )
-        .ok_or_else(|| WorldStateError::PropertyNotFound(obj, format!("{}", uuid)))
+        .expect("Unable to get property owner, coherence problem");
+        Ok((value, owner))
+    }
+
+    fn retrieve_property_permissions(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<PropPerms, WorldStateError> {
+        object_relations::get_composite_value(
+            &self.tx,
+            WorldStateRelation::ObjectPropertyPermissions,
+            obj,
+            uuid,
+        )
+        .ok_or(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)))
     }
 
     fn resolve_property(
         &self,
         obj: Objid,
         name: String,
-    ) -> Result<(PropDef, Var), WorldStateError> {
-        let propdef = self
-            .get_properties(obj)?
-            .find_first_named(name.as_str())
-            .ok_or_else(|| WorldStateError::PropertyNotFound(obj, name.clone()))?;
-
-        // Then we're going to resolve the value up the tree, skipping 'clear' (un-found) until we
-        // get a value.
+    ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError> {
+        // Walk up the inheritance tree looking for the property definition.
         let mut search_obj = obj;
-        loop {
-            // Look for the value. If we're not 'clear', we can return straight away. that's our thing.
-            if let Some(found) = object_relations::get_composite_value::<Var>(
-                &self.tx,
-                WorldStateRelation::ObjectPropertyValue,
-                search_obj,
-                propdef.uuid(),
-            ) {
-                return Ok((propdef, found));
+        let propdef = loop {
+            let propdef = self
+                .get_properties(search_obj)?
+                .find_first_named(name.as_str());
+
+            if let Some(propdef) = propdef {
+                break propdef;
             }
 
-            // But if it was clear, we have to continue up the inheritance hierarchy. (But we return
-            // the of handle we got, because this is what we want to return for information
-            // about permissions, etc.)
-            let Some(parent) = object_relations::get_object_object(
+            if let Some(parent) = object_relations::get_object_object(
                 &self.tx,
                 WorldStateRelation::ObjectParent,
                 search_obj,
-            ) else {
-                // If we hit the end of the chain, we're done.
-                break;
+            ) {
+                search_obj = parent;
+                continue;
             };
 
-            if parent == NOTHING {
-                // This is an odd one, clear all the way up. so our value will end up being
-                // NONE, I guess.
-                break;
+            return Err(WorldStateError::PropertyNotFound(obj, name));
+        };
+
+        // Now that we have the propdef, we can look for the value & owner.
+        // We should *always* have the owner.
+        // But value could be 'clear' in which case we need to look in the parent.
+        let owner = object_relations::get_composite_value(
+            &self.tx,
+            WorldStateRelation::ObjectPropertyPermissions,
+            obj,
+            propdef.uuid(),
+        )
+        .expect("Unable to get property owner, coherence problem");
+
+        match object_relations::get_composite_value::<Var>(
+            &self.tx,
+            WorldStateRelation::ObjectPropertyValue,
+            obj,
+            propdef.uuid(),
+        ) {
+            Some(value) => Ok((propdef, value, owner, false)),
+            None => {
+                let mut search_obj = obj;
+                loop {
+                    let Some(parent) = object_relations::get_object_object(
+                        &self.tx,
+                        WorldStateRelation::ObjectParent,
+                        search_obj,
+                    ) else {
+                        break Ok((propdef, v_none(), owner, true));
+                    };
+                    if parent == NOTHING {
+                        break Ok((propdef, v_none(), owner, true));
+                    }
+                    search_obj = parent;
+
+                    let value = object_relations::get_composite_value(
+                        &self.tx,
+                        WorldStateRelation::ObjectPropertyValue,
+                        search_obj,
+                        propdef.uuid(),
+                    );
+                    if let Some(value) = value {
+                        break Ok((propdef, value, owner, true));
+                    }
+                }
             }
-            search_obj = parent;
         }
-        Ok((propdef, v_none()))
     }
 
     fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
@@ -1115,15 +1230,15 @@ mod tests {
 
     use strum::{EnumCount, IntoEnumIterator};
 
-    use moor_values::model::ObjAttrs;
     use moor_values::model::ObjSet;
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::{BinaryType, VerbAttrs};
     use moor_values::model::{CommitResult, WorldStateError};
     use moor_values::model::{HasUuid, Named};
+    use moor_values::model::{ObjAttrs, PropFlag};
     use moor_values::util::BitEnum;
-    use moor_values::var::v_str;
     use moor_values::var::Objid;
+    use moor_values::var::{v_int, v_str};
     use moor_values::NOTHING;
 
     use crate::db_tx::DbTransaction;
@@ -1570,9 +1685,11 @@ mod tests {
             Some(v_str("test")),
         )
         .unwrap();
-        let (prop, v) = tx.resolve_property(oid, "test".into()).unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(oid, "test".into()).unwrap();
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(!is_clear);
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
@@ -1677,9 +1794,11 @@ mod tests {
             Some(v_str("test_value")),
         )
         .unwrap();
-        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(is_clear);
 
         // Verify we *don't* get this property for an unrelated, unhinged object by reparenting b
         // to new parent c.  This should remove the defs for a's properties from b.
@@ -1746,20 +1865,183 @@ mod tests {
             Some(v_str("test_value")),
         )
         .unwrap();
-        let (prop, v) = tx.resolve_property(b, "test".into()).unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
         assert_eq!(prop.name(), "test");
         assert_eq!(v, v_str("test_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(is_clear);
 
-        // Define the property again, but on the object 'b',
-        // This should raise an error because the child already *has* this property.
-        // MOO will not let this happen. The right way to handle overloading is to set the value
-        // on the child.
-        let result = tx.define_property(a, b, "test".into(), NOTHING, BitEnum::new(), None);
-        assert!(matches!(
-            result,
-            Err(WorldStateError::DuplicatePropertyDefinition(_, _))
-        ));
+        // Set the property on the child to a new value.
+        tx.set_property(b, prop.uuid(), v_int(666)).unwrap();
+
+        // Verify the new value is present.
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name(), "test");
+        assert_eq!(v, v_int(666));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(!is_clear);
+
+        // Now clear, and we should get the old value, but with clear status.
+        tx.clear_property(b, prop.uuid()).unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name(), "test");
+        assert_eq!(v, v_str("test_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(is_clear);
+
+        // Changing flags or owner should have nothing to do with the clarity of the property value.
+        tx.update_property_info(
+            b,
+            prop.uuid(),
+            Some(b),
+            Some(BitEnum::new_with(PropFlag::Read)),
+            None,
+        )
+        .unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name(), "test");
+        assert_eq!(v, v_str("test_value"));
+        assert_eq!(perms.owner(), b);
+        assert_eq!(perms.flags(), BitEnum::new_with(PropFlag::Read));
+        assert!(is_clear);
+
+        // Setting the value again makes it not clear
+        tx.set_property(b, prop.uuid(), v_int(666)).unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name(), "test");
+        assert_eq!(v, v_int(666));
+        assert_eq!(perms.owner(), b);
+        assert_eq!(perms.flags(), BitEnum::new_with(PropFlag::Read));
+        assert_eq!(is_clear, false);
+
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
+    #[test]
+    fn test_rename_property() {
+        let db = test_db();
+        let tx = RelBoxTransaction::new(db);
+        let a = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        let b = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test2".into()),
+                    parent: Some(a),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        let uuid = tx
+            .define_property(
+                a,
+                a,
+                "test".into(),
+                NOTHING,
+                BitEnum::new(),
+                Some(v_str("test_value")),
+            )
+            .unwrap();
+
+        // I can update the name on the parent...
+        tx.update_property_info(a, uuid, None, None, Some("a_new_name".to_string()))
+            .unwrap();
+
+        // And now resolve that new name on the child.
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "a_new_name".into()).unwrap();
+        assert_eq!(prop.name(), "a_new_name");
+        assert_eq!(v, v_str("test_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(is_clear);
+
+        // But it's illegal to try to rename it on the child who doesn't define it.
+        assert!(tx
+            .update_property_info(b, uuid, None, None, Some("a_new_name".to_string()))
+            .is_err())
+    }
+
+    /// Test regression where parent properties were present via `properties()` on children.
+    #[test]
+    fn test_regression_properties() {
+        let db = test_db();
+        let tx = RelBoxTransaction::new(db);
+
+        let a = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test".into()),
+                    parent: Some(NOTHING),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        let b = tx
+            .create_object(
+                None,
+                ObjAttrs {
+                    owner: Some(NOTHING),
+                    name: Some("test2".into()),
+                    parent: Some(a),
+                    location: Some(NOTHING),
+                    flags: Some(BitEnum::new()),
+                },
+            )
+            .unwrap();
+
+        // Define 1 property on parent
+        tx.define_property(
+            a,
+            a,
+            "test".into(),
+            NOTHING,
+            BitEnum::new(),
+            Some(v_str("test_value")),
+        )
+        .unwrap();
+        let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+        assert_eq!(prop.name(), "test");
+        assert_eq!(v, v_str("test_value"));
+        assert_eq!(perms.owner(), NOTHING);
+        assert!(is_clear);
+
+        // And another on child
+        let child_prop = tx
+            .define_property(
+                b,
+                b,
+                "test2".into(),
+                NOTHING,
+                BitEnum::new(),
+                Some(v_str("test_value2")),
+            )
+            .unwrap();
+
+        let props = tx.get_properties(b).unwrap();
+
+        // Our prop should be there
+        assert!(props.find(&child_prop).is_some());
+
+        // Listing the set of properties on the child should include only the child's properties
+        assert_eq!(props.len(), 1);
     }
 
     #[test]

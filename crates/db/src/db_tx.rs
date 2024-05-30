@@ -14,12 +14,12 @@
 
 use uuid::Uuid;
 
-use moor_values::model::ObjSet;
 use moor_values::model::PropFlag;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{ObjAttrs, ObjFlag};
+use moor_values::model::{ObjSet, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
@@ -157,7 +157,7 @@ pub trait DbTransaction {
     ) -> Result<Uuid, WorldStateError>;
 
     /// Set the property info on the given object.
-    fn update_property_definition(
+    fn update_property_info(
         &self,
         obj: Objid,
         uuid: Uuid,
@@ -173,13 +173,30 @@ pub trait DbTransaction {
     /// Delete the property from the given object, and propagate the deletion to all children.
     fn delete_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError>;
 
-    /// Retrieve the value of the property without following inheritance.
-    fn retrieve_property(&self, obj: Objid, uuid: Uuid) -> Result<Var, WorldStateError>;
+    /// Retrieve the value & owner of the property without following inheritance.
+    /// If the value is 'clear', the value will be None,
+    fn retrieve_property(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<(Option<Var>, PropPerms), WorldStateError>;
+
+    /// Retrieve the owner of the property without following inheritance.
+    fn retrieve_property_permissions(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<PropPerms, WorldStateError>;
 
     /// Resolve the given property name on the given object, following the inheritance hierarchy up
     /// the chain of parents.
-    fn resolve_property(&self, obj: Objid, name: String)
-        -> Result<(PropDef, Var), WorldStateError>;
+    /// Returns the resolved value and the perms (owner & flags) of the property, and whether the
+    /// value was 'clear'.
+    fn resolve_property(
+        &self,
+        obj: Objid,
+        name: String,
+    ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError>;
 
     /// Return the (rough) size of the database in bytes.
     fn db_usage(&self) -> Result<usize, WorldStateError>;

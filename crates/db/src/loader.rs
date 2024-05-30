@@ -14,13 +14,13 @@
 
 use uuid::Uuid;
 
-use moor_values::model::ObjAttrs;
 use moor_values::model::ObjSet;
 use moor_values::model::PropFlag;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDefs;
 use moor_values::model::VerbFlag;
 use moor_values::model::{CommitResult, WorldStateError};
+use moor_values::model::{ObjAttrs, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
@@ -92,12 +92,16 @@ pub trait LoaderInterface {
     /// Get the properties defined on a given object
     fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError>;
 
-    fn get_property_value(&self, obj: Objid, uuid: Uuid) -> Result<Option<Var>, WorldStateError>;
+    fn get_property_value(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<(Option<Var>, PropPerms), WorldStateError>;
 
     /// Returns all the property values from the root of the inheritance hierarchy down to the
     /// bottom, for the given object.
     fn get_all_property_values(
         &self,
         objid: Objid,
-    ) -> Result<Vec<(PropDef, Option<Var>)>, WorldStateError>;
+    ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError>;
 }

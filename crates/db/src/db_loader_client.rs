@@ -14,7 +14,6 @@
 
 use uuid::Uuid;
 
-use moor_values::model::HasUuid;
 use moor_values::model::ObjAttrs;
 use moor_values::model::ObjSet;
 use moor_values::model::PropFlag;
@@ -22,6 +21,7 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDefs;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
+use moor_values::model::{HasUuid, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
@@ -91,7 +91,7 @@ impl LoaderInterface for DbTxWorldState {
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
         // First find the property.
-        let (propdef, _) = self.tx.resolve_property(objid, propname.to_string())?;
+        let (propdef, _, _, _) = self.tx.resolve_property(objid, propname.to_string())?;
 
         // Now set the value if provided.
         if let Some(value) = value {
@@ -99,13 +99,8 @@ impl LoaderInterface for DbTxWorldState {
         }
 
         // And then set the flags and owner the child had.
-        self.tx.update_property_definition(
-            objid,
-            propdef.uuid(),
-            Some(owner),
-            Some(flags),
-            None,
-        )?;
+        self.tx
+            .update_property_info(objid, propdef.uuid(), Some(owner), Some(flags), None)?;
         Ok(())
     }
 
@@ -144,13 +139,12 @@ impl LoaderInterface for DbTxWorldState {
         self.tx.get_properties(objid)
     }
 
-    fn get_property_value(&self, obj: Objid, uuid: Uuid) -> Result<Option<Var>, WorldStateError> {
-        match self.tx.retrieve_property(obj, uuid) {
-            Ok(propval) => Ok(Some(propval)),
-            // Property is 'clear'
-            Err(WorldStateError::PropertyNotFound(_, _)) => Ok(None),
-            Err(e) => Err(e),
-        }
+    fn get_property_value(
+        &self,
+        obj: Objid,
+        uuid: Uuid,
+    ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
+        self.tx.retrieve_property(obj, uuid)
     }
 
     // propvals in textdumps have wonky logic which resolve relative to position of propdefs
@@ -166,11 +160,7 @@ impl LoaderInterface for DbTxWorldState {
     fn get_all_property_values(
         &self,
         this: Objid,
-    ) -> Result<Vec<(PropDef, Option<Var>)>, WorldStateError> {
-        // Get the property definitions for ourselves, and this is how we will resolve
-        // the updated flags, owners, etc. on us vs the definition.
-        let propdefs = self.tx.get_properties(this)?;
-
+    ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError> {
         // First get the entire inheritance hierarchy.
         let hierarchy = self.tx.ancestors(this)?;
 
@@ -184,14 +174,8 @@ impl LoaderInterface for DbTxWorldState {
                 if p.definer() != obj {
                     continue;
                 }
-                let local_def = propdefs.iter().find(|pd| pd.uuid() == p.uuid()).unwrap();
-                let value = match self.tx.retrieve_property(this, p.uuid()) {
-                    Ok(propval) => Some(propval),
-                    // Property is 'clear'
-                    Err(WorldStateError::PropertyNotFound(_, _)) => None,
-                    Err(e) => return Err(e),
-                };
-                properties.push((local_def, value));
+                let value = self.tx.retrieve_property(this, p.uuid())?;
+                properties.push((p.clone(), value));
             }
         }
         Ok(properties)

@@ -22,8 +22,8 @@ use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::verb_info::VerbInfo;
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
-use crate::model::CommitResult;
 use crate::model::WorldStateError;
+use crate::model::{CommitResult, PropPerms};
 use crate::util::BitEnum;
 use crate::var::Objid;
 use crate::var::Var;
@@ -113,12 +113,13 @@ pub trait WorldState {
     ) -> Result<Var, WorldStateError>;
 
     /// Get information about a property, without walking the inheritance tree.
+    /// Returns the PropDef as well as the owner of the property.
     fn get_property_info(
         &self,
         perms: Objid,
         obj: Objid,
         pname: &str,
-    ) -> Result<PropDef, WorldStateError>;
+    ) -> Result<(PropDef, PropPerms), WorldStateError>;
 
     fn set_property_info(
         &mut self,

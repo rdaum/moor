@@ -15,7 +15,7 @@
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::verbs::VerbFlag;
-use crate::model::WorldStateError;
+use crate::model::{PropPerms, WorldStateError};
 use crate::util::BitEnum;
 use crate::var::Objid;
 
@@ -36,17 +36,16 @@ impl Perms {
 
     pub fn check_property_allows(
         &self,
-        property_owner: Objid,
-        property_flags: BitEnum<PropFlag>,
+        property_permissions: &PropPerms,
         allows: PropFlag,
     ) -> Result<(), WorldStateError> {
-        if self.who == property_owner {
+        if self.who == property_permissions.owner() {
             return Ok(());
         }
         if self.flags.contains(ObjFlag::Wizard) {
             return Ok(());
         }
-        if !property_flags.contains(allows) {
+        if !property_permissions.flags().contains(allows) {
             return Err(WorldStateError::PropertyPermissionDenied);
         }
         Ok(())

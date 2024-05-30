@@ -202,13 +202,6 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
             );
         }
 
-        // let db_propdefs = tx.get_object_properties(*db_objid).unwrap();
-        // let propdefs: Vec<_> = db_propdefs
-        //     .iter()
-        //     .filter(|p| p.definer() == *db_objid && p.location() == *db_objid)
-        //     .map(|p| p.name().into())
-        //     .collect();
-
         // propvals have wonky logic which resolve relative to position in the inheritance hierarchy of
         // propdefs up to the root. So we grab that all from the loader_client, and then we can just
         // iterate through them all.
@@ -223,12 +216,12 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
         }
 
         let mut propvals = vec![];
-        for (p, value) in properties {
-            let owner = p.owner();
-            let flags = p.flags().to_u16() as u8;
-            let is_clear = value.is_none();
+        for (_, (pval, perms)) in properties {
+            let owner = perms.owner();
+            let flags = perms.flags().to_u16() as u8;
+            let is_clear = pval.is_none();
             propvals.push(Propval {
-                value: value.unwrap_or(v_none()),
+                value: pval.unwrap_or(v_none()),
                 owner,
                 flags,
                 is_clear,

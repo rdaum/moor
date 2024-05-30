@@ -128,9 +128,7 @@ pub fn read_textdump<T: io::Read>(
                     // .parent(o.parent)
                     .flags(flags),
             )
-            .map_err(|e| {
-                TextdumpReaderError::LoadError(format!("creating object {}", objid), e.clone())
-            })?;
+            .expect(format!("creating object {}", objid).as_str());
     }
 
     info!("Setting object attributes (parent/location/owner)");
@@ -144,9 +142,7 @@ pub fn read_textdump<T: io::Read>(
         })?;
         loader
             .set_object_location(*objid, o.location)
-            .map_err(|e| {
-                TextdumpReaderError::LoadError(format!("setting location of {}", objid), e.clone())
-            })?;
+            .expect(format!("setting location of {}", objid).as_str());
     }
 
     info!("Defining properties...");
@@ -170,12 +166,7 @@ pub fn read_textdump<T: io::Read>(
                         flags,
                         value,
                     )
-                    .map_err(|e| {
-                        TextdumpReaderError::LoadError(
-                            format!("defining property on {}", objid),
-                            e.clone(),
-                        )
-                    })?;
+                    .expect(format!("defining property on {}", objid).as_str());
             }
         }
     }
@@ -190,12 +181,7 @@ pub fn read_textdump<T: io::Read>(
 
             loader
                 .set_property(*objid, resolved.name.as_str(), p.owner, flags, value)
-                .map_err(|e| {
-                    TextdumpReaderError::LoadError(
-                        format!("setting property on {}", objid),
-                        e.clone(),
-                    )
-                })?;
+                .expect(format!("setting property on {}", objid).as_str());
         }
     }
 
