@@ -14,8 +14,6 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
-use crate::model::props::PropFlag;
-use crate::util::BitEnum;
 use crate::util::SliceRef;
 use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
@@ -31,8 +29,6 @@ binary_layout!(propdef, LittleEndian, {
     uuid: [u8; 16],
     definer: Objid as i64,
     location: Objid as i64,
-    owner: Objid as i64,
-    flags: BitEnum<PropFlag> as u16,
     name: [u8],
 });
 
@@ -42,14 +38,7 @@ impl PropDef {
     }
 
     #[must_use]
-    pub fn new(
-        uuid: Uuid,
-        definer: Objid,
-        location: Objid,
-        name: &str,
-        flags: BitEnum<PropFlag>,
-        owner: Objid,
-    ) -> Self {
+    pub fn new(uuid: Uuid, definer: Objid, location: Objid, name: &str) -> Self {
         let header_size = propdef::name::OFFSET;
         let mut buf = vec![0; header_size + name.len() + 8];
         let mut propdef_view = propdef::View::new(&mut buf);
@@ -63,14 +52,6 @@ impl PropDef {
             .location_mut()
             .try_write(location)
             .expect("Failed to encode location");
-        propdef_view
-            .owner_mut()
-            .try_write(owner)
-            .expect("Failed to encode owner");
-        propdef_view
-            .flags_mut()
-            .try_write(flags)
-            .expect("Failed to encode flags");
 
         let mut name_buf = propdef_view.name_mut();
         name_buf.put_u8(name.len() as u8);
@@ -104,20 +85,7 @@ impl PropDef {
             .try_read()
             .expect("Failed to decode location")
     }
-    #[must_use]
-    pub fn owner(&self) -> Objid {
-        self.get_layout_view()
-            .owner()
-            .try_read()
-            .expect("Failed to decode owner")
-    }
-    #[must_use]
-    pub fn flags(&self) -> BitEnum<PropFlag> {
-        self.get_layout_view()
-            .flags()
-            .try_read()
-            .expect("Failed to decode flags")
-    }
+
     #[must_use]
     pub fn name(&self) -> &str {
         let names_offset = propdef::name::OFFSET;
@@ -174,7 +142,7 @@ pub type PropDefs = Defs<PropDef>;
 mod tests {
     use crate::model::defset::HasUuid;
     use crate::model::propdef::{PropDef, PropDefs};
-    use crate::util::BitEnum;
+
     use crate::util::SliceRef;
     use crate::var::Objid;
     use crate::AsByteBuffer;
@@ -183,65 +151,33 @@ mod tests {
     #[test]
     fn test_create_reconstitute() {
         let uuid = Uuid::new_v4();
-        let test_pd = PropDef::new(
-            uuid,
-            Objid(1),
-            Objid(2),
-            "test",
-            BitEnum::from_u8(0b101),
-            Objid(3),
-        );
+        let test_pd = PropDef::new(uuid, Objid(1), Objid(2), "test");
 
         let re_pd = PropDef::from_bytes(test_pd.0);
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
         assert_eq!(re_pd.location(), Objid(2));
-        assert_eq!(re_pd.owner(), Objid(3));
-        assert_eq!(re_pd.flags(), BitEnum::from_u8(0b101));
         assert_eq!(re_pd.name(), "test");
     }
 
     #[test]
     fn test_create_reconstitute_as_byte_buffer() {
         let uuid = Uuid::new_v4();
-        let test_pd = PropDef::new(
-            uuid,
-            Objid(1),
-            Objid(2),
-            "test",
-            BitEnum::from_u8(0b101),
-            Objid(3),
-        );
+        let test_pd = PropDef::new(uuid, Objid(1), Objid(2), "test");
 
         let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec).unwrap();
         let re_pd = PropDef::from_sliceref(SliceRef::from_bytes(&bytes)).unwrap();
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
         assert_eq!(re_pd.location(), Objid(2));
-        assert_eq!(re_pd.owner(), Objid(3));
-        assert_eq!(re_pd.flags(), BitEnum::from_u8(0b101));
         assert_eq!(re_pd.name(), "test");
     }
 
     #[test]
     fn test_in_propdefs() {
-        let test_pd1 = PropDef::new(
-            Uuid::new_v4(),
-            Objid(1),
-            Objid(2),
-            "test",
-            BitEnum::from_u8(0b101),
-            Objid(3),
-        );
+        let test_pd1 = PropDef::new(Uuid::new_v4(), Objid(1), Objid(2), "test");
 
-        let test_pd2 = PropDef::new(
-            Uuid::new_v4(),
-            Objid(10),
-            Objid(12),
-            "test2",
-            BitEnum::from_u8(0b101),
-            Objid(13),
-        );
+        let test_pd2 = PropDef::new(Uuid::new_v4(), Objid(10), Objid(12), "test2");
 
         let pds = PropDefs::empty().with_all_added(&[test_pd1.clone(), test_pd2.clone()]);
         let pd1 = pds.find_first_named("test").unwrap();
@@ -255,7 +191,5 @@ mod tests {
         assert_eq!(pd2.name(), "test2");
         assert_eq!(pd2.definer(), Objid(10));
         assert_eq!(pd2.location(), Objid(12));
-        assert_eq!(pd2.owner(), Objid(13));
-        assert_eq!(pd2.flags(), BitEnum::from_u8(0b101));
     }
 }

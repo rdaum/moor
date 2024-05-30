@@ -66,9 +66,12 @@ pub enum WorldStateRelation {
     /// Object->Properties (Propdefs)
     #[strum(props(DomainType = "Integer", CodomainType = "Bytes", IndexType = "Hash"))]
     ObjectPropDefs = 7,
-    /// Property UUID->PropertyValue (Var)
+    /// (Objid, Property UUID)->PropertyValue (Var)
     #[strum(props(DomainType = "Bytes", CodomainType = "Bytes", IndexType = "Hash"))]
     ObjectPropertyValue = 8,
+    /// (Objid, Property UUID)->PropPerms
+    #[strum(props(DomainType = "Bytes", CodomainType = "Bytes", IndexType = "Hash"))]
+    ObjectPropertyPermissions = 9,
 }
 
 impl From<WorldStateRelation> for RelationId {

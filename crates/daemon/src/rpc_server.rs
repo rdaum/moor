@@ -15,7 +15,7 @@
 use std::path::PathBuf;
 /// The core of the server logic for the RPC daemon
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime};
+use std::time::SystemTime;
 
 use eyre::{Context, Error};
 
@@ -57,15 +57,6 @@ pub struct RpcServer {
     world_state_source: Arc<dyn WorldStateSource>,
     scheduler: Arc<Scheduler>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-struct ConnectionRecord {
-    client_id: Uuid,
-    player: Objid,
-    name: String,
-    last_activity: Instant,
-    connect_time: Instant,
 }
 
 pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Vec<u8> {

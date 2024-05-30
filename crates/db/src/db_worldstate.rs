@@ -14,7 +14,6 @@
 
 use uuid::Uuid;
 
-use moor_values::model::CommitResult;
 use moor_values::model::HasUuid;
 use moor_values::model::ObjSet;
 use moor_values::model::Perms;
@@ -23,6 +22,7 @@ use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
+use moor_values::model::{CommitResult, PropPerms};
 use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
@@ -229,9 +229,9 @@ impl WorldState for DbTxWorldState {
             };
         }
 
-        let (ph, value) = self.tx.resolve_property(obj, pname.to_string())?;
+        let (_, value, propperms, _) = self.tx.resolve_property(obj, pname.to_string())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
+            .check_property_allows(&propperms, PropFlag::Read)?;
         Ok(value)
     }
 
@@ -240,15 +240,16 @@ impl WorldState for DbTxWorldState {
         perms: Objid,
         obj: Objid,
         pname: &str,
-    ) -> Result<PropDef, WorldStateError> {
+    ) -> Result<(PropDef, PropPerms), WorldStateError> {
         let properties = self.tx.get_properties(obj)?;
-        let ph = properties
+        let pdef = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+        let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
+            .check_property_allows(&propperms, PropFlag::Read)?;
 
-        Ok(ph.clone())
+        Ok((pdef.clone(), propperms))
     }
 
     fn set_property_info(
@@ -259,12 +260,13 @@ impl WorldState for DbTxWorldState {
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
         let properties = self.tx.get_properties(obj)?;
-        let ph = properties
+        let pdef = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
 
+        let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
+            .check_property_allows(&propperms, PropFlag::Write)?;
 
         // TODO Also keep a close eye on 'clear' & perms:
         //  "raises `E_INVARG' if <owner> is not valid" & If <object> is the definer of the property
@@ -272,7 +274,7 @@ impl WorldState for DbTxWorldState {
         //   `E_INVARG'
 
         self.tx
-            .update_property_definition(obj, ph.uuid(), attrs.owner, attrs.flags, attrs.name)?;
+            .update_property_info(obj, pdef.uuid(), attrs.owner, attrs.flags, attrs.name)?;
         Ok(())
     }
 
@@ -367,15 +369,11 @@ impl WorldState for DbTxWorldState {
             return Ok(());
         }
 
-        let properties = self.tx.get_properties(obj)?;
-        let ph = properties
-            .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
-
+        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname.to_string())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
+            .check_property_allows(&propperms, PropFlag::Write)?;
 
-        self.tx.set_property(obj, ph.uuid(), value.clone())?;
+        self.tx.set_property(obj, pdef.uuid(), value.clone())?;
         Ok(())
     }
 
@@ -385,22 +383,10 @@ impl WorldState for DbTxWorldState {
         obj: Objid,
         pname: &str,
     ) -> Result<bool, WorldStateError> {
-        let properties = self.tx.get_properties(obj)?;
-        let ph = properties
-            .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+        let (_, _, propperms, clear) = self.tx.resolve_property(obj, pname.to_string())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Read)?;
-
-        // Now RetrieveProperty and if it's not there, it's clear.
-        let result = self.tx.retrieve_property(obj, ph.uuid());
-        // What we want is an ObjectError::PropertyNotFound, that will tell us if it's clear.
-        let is_clear = match result {
-            Err(WorldStateError::PropertyNotFound(_, _)) => true,
-            Ok(_) => false,
-            Err(e) => return Err(e),
-        };
-        Ok(is_clear)
+            .check_property_allows(&propperms, PropFlag::Read)?;
+        Ok(clear)
     }
 
     fn clear_property(
@@ -411,14 +397,10 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         // This is just deleting the local *value* portion of the property.
         // First seek the property handle.
-        let properties = self.tx.get_properties(obj)?;
-        let ph = properties
-            .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname.to_string())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
-
-        self.tx.clear_property(obj, ph.uuid())?;
+            .check_property_allows(&propperms, PropFlag::Write)?;
+        self.tx.clear_property(obj, pdef.uuid())?;
         Ok(())
     }
 
@@ -459,13 +441,14 @@ impl WorldState for DbTxWorldState {
         pname: &str,
     ) -> Result<(), WorldStateError> {
         let properties = self.tx.get_properties(obj)?;
-        let ph = properties
+        let pdef = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+        let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
-            .check_property_allows(ph.owner(), ph.flags(), PropFlag::Write)?;
+            .check_property_allows(&propperms, PropFlag::Write)?;
 
-        self.tx.delete_property(obj, ph.uuid())
+        self.tx.delete_property(obj, pdef.uuid())
     }
 
     #[tracing::instrument(skip(self))]

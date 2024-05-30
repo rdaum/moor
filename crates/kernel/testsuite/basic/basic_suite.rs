@@ -25,10 +25,10 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::var::Objid;
-use moor_values::var::Var;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use uuid::Uuid;
 
 fn testsuite_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -75,12 +75,13 @@ fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
 
 fn eval(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
     let binary = compile(format!("return {expression};").as_str()).unwrap();
-    compile_verbs(db.clone(), &[("test", &binary)]);
+    let verb_uuid = Uuid::new_v4().to_string();
+    compile_verbs(db.clone(), &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
     let result = call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
-        "test",
+        &verb_uuid,
         vec![],
     );
     state.commit().unwrap();
@@ -114,9 +115,14 @@ fn run_basic_test(test_dir: &str) {
     let db = Arc::new(db);
     load_textdump(db.clone());
     for (line_num, (input, expected_output)) in zipped.enumerate() {
-        let evaluated = eval(db.clone(), input);
-        let output = eval(db.clone(), expected_output);
-        assert_eq!(evaluated, output, "{test_dir}: line {line_num}: {input}")
+        let evaluated_output = eval(db.clone(), input);
+        let expected_ouput = eval(db.clone(), expected_output);
+        assert_eq!(
+            evaluated_output,
+            expected_ouput,
+            "{test_dir}: line {}: {input}",
+            line_num + 1
+        )
     }
 }
 

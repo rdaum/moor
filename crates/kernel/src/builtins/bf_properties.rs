@@ -40,12 +40,12 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
         return Err(E_TYPE);
     };
-    let property_info = bf_args
+    let (_, perms) = bf_args
         .world_state
         .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
         .map_err(world_state_err)?;
-    let owner = property_info.owner();
-    let flags = property_info.flags();
+    let owner = perms.owner();
+    let flags = perms.flags();
 
     // Turn perm flags into string: r w c
     let mut perms = String::new();

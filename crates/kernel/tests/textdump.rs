@@ -318,23 +318,24 @@ mod test {
                     o,
                     p1.name()
                 );
+
+                let (value1, perms1) = tx1.get_property_value(o, p1.uuid()).unwrap();
+                let (value2, perms2) = tx2.get_property_value(o, p2.uuid()).unwrap();
+
                 assert_eq!(
-                    p1.flags(),
-                    p2.flags(),
+                    perms1.flags(),
+                    perms2.flags(),
                     "{}.{}, flags mismatch",
                     o,
                     p1.name(),
                 );
                 assert_eq!(
-                    p1.owner(),
-                    p2.owner(),
+                    perms1.owner(),
+                    perms2.owner(),
                     "{}.{}, owner mismatch",
                     o,
                     p1.name(),
                 );
-
-                let value1 = tx1.get_property_value(o, p1.uuid()).unwrap();
-                let value2 = tx2.get_property_value(o, p2.uuid()).unwrap();
 
                 assert_eq!(
                     value1,
