@@ -45,7 +45,7 @@ pub fn testsuite_dir() -> PathBuf {
 /// Create a minimal Db to support the test harness.
 pub fn load_textdump(db: Arc<dyn Database>) {
     let tx = db.loader_client().unwrap();
-    textdump_load(tx.clone(), testsuite_dir().join("Minimal.db")).expect("Could not load textdump");
+    textdump_load(tx.clone(), testsuite_dir().join("Test.db")).expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 

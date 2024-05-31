@@ -1,21 +1,20 @@
-; return create(#2);
-#4
+; $o = create(#2);
 
-; return {#4.programmer, #4.wizard};
+; return {$o.programmer, $o.wizard};
 {0, 0}
 
-; #4.programmer = 1;
-; return {#4.programmer, #4.wizard};
+; $o.programmer = 1;
+; return {$o.programmer, $o.wizard};
 {1, 0}
 
-; #4.wizard = 1;
-; return {#4.programmer, #4.wizard};
+; $o.wizard = 1;
+; return {$o.programmer, $o.wizard};
 {1, 1}
 
-; #4.programmer = 0;
-; return {#4.programmer, #4.wizard};
+; $o.programmer = 0;
+; return {$o.programmer, $o.wizard};
 {0, 1}
 
-; #4.wizard = 0;
-; return {#4.programmer, #4.wizard};
+; $o.wizard = 0;
+; return {$o.programmer, $o.wizard};
 {0, 0}
