@@ -63,14 +63,8 @@ impl MootState {
                         line_no: new_line_no,
                         command: rest.trim_start().to_string(),
                     })
-                } else if let Some(player) = line.strip_prefix('@') {
-                    let session = session.clone();
-                    match player {
-                        "wizard" => Ok(MootState::new(session, WIZARD)),
-                        "programmer" => Ok(MootState::new(session, PROGRAMMER)),
-                        "nonprogrammer" => Ok(MootState::new(session, NONPROGRAMMER)),
-                        _ => Err(eyre::eyre!("Unknown player: {player}")),
-                    }
+                } else if let Some(new_player) = line.strip_prefix('@') {
+                    Ok(MootState::new(session.clone(), Self::player(new_player)?))
                 } else if line.is_empty() || line.starts_with("//") {
                     Ok(self)
                 } else {
@@ -93,6 +87,16 @@ impl MootState {
                         line_no,
                         command,
                     })
+                } else if let Some(new_player) = line.strip_prefix('@') {
+                    Self::execute_test(
+                        &command,
+                        None,
+                        line_no,
+                        db.clone(),
+                        session.clone(),
+                        player,
+                    )?;
+                    Ok(MootState::new(session, Self::player(new_player)?))
                 } else if line.starts_with(';') || line.is_empty() {
                     Self::execute_test(
                         &command,
@@ -132,6 +136,8 @@ impl MootState {
                 }
                 if line.is_empty() || line.starts_with("//") {
                     Ok(MootState::new(session, player))
+                } else if let Some(new_player) = line.strip_prefix('@') {
+                    Ok(MootState::new(session, Self::player(new_player)?))
                 } else if line.starts_with(';') {
                     MootState::new(session, player).process_line(new_line_no, line, db)
                 } else {
@@ -145,6 +151,15 @@ impl MootState {
                     })
                 }
             }
+        }
+    }
+
+    fn player(s: &str) -> eyre::Result<Objid> {
+        match s {
+            "wizard" => Ok(WIZARD),
+            "programmer" => Ok(PROGRAMMER),
+            "nonprogrammer" => Ok(NONPROGRAMMER),
+            _ => Err(eyre::eyre!("Unknown player: {s}")),
         }
     }
 

@@ -19,7 +19,7 @@ use tracing::{debug, error, trace};
 use moor_values::model::{world_state_err, WorldStateError};
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
-use moor_values::var::Error::{E_INVARG, E_NACC, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_NACC, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_none, v_objid, v_str};
 use moor_values::var::{v_listv, Error};
@@ -111,7 +111,7 @@ const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(parent) = bf_args.args[0].variant() else {
         return Err(E_TYPE);

@@ -9,8 +9,9 @@ Notable objects:
 
 Globals:
 
-- `$nothing`
-- `$o`, `$tmp`, `$tmp1`, `$tmp2`: for use as variables that persist across commands
+- `$nothing`: `#-1`
+- `$system`: `#0`
+- `$object`, `$tmp`, `$tmp1`, `$tmp2`: for use as variables that persist across commands
 
 Verbs:
 
