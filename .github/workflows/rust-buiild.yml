@@ -19,6 +19,8 @@ jobs:
           packages: cmake python3-dev swig
           version: 1.0
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - name: Build
         run: cargo build --verbose
       - name: Run tests
@@ -32,6 +34,8 @@ jobs:
           packages: cmake python3-dev swig
           version: 1.0
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
         with:
