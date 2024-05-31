@@ -1,0 +1,91 @@
+// https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_create.rb
+
+// test_that_an_argument_is_required
+; create();
+E_ARGS
+
+// test_that_the_first_argument_must_be_an_object
+; create(1);
+E_TYPE
+; create({1});
+E_TYPE
+; create("foo");
+E_TYPE
+
+// test_that_the_second_argument_is_the_owner_if_it_is_an_object_number
+; $object = create($nothing, $nothing);
+; return $object.owner;
+$object
+; return create($nothing, $object).owner;
+$object
+
+// test_that_a_wizard_can_change_the_fertile_flag
+@programmer
+; $object = create($nothing);
+@wizard
+; $object.f = 1;
+; return $object.f;
+1
+
+// test_that_an_owner_can_change_the_fertile_flag
+@wizard
+; $object = create($nothing);
+@programmer
+; $object.f = 1;
+E_PERM
+; return $tmp.f;
+0
+; player.f = 1;
+; return player.f;
+1
+@wizard
+
+// test_that_a_wizard_can_create_even_if_the_fertile_flag_is_not_set
+; return $system.f;
+0
+; create($system);
+; $object.f = 1;
+; create($object);
+
+// test_that_an_owner_can_create_even_if_the_fertile_flag_is_not_set
+@programmer
+; player.f = 0;
+; create(player);
+@wizard
+
+// test_that_a_programmer_can_create_only_when_the_fertile_flag_is_set
+@programmer
+; return $object.f;
+1
+; $tmp = create($nothing);
+; return $tmp.f;
+0
+; create($tmp);
+E_PERM
+@wizard
+
+// test_that_creating_an_object_creates_an_object
+; return typeof(create($object));
+OBJ
+
+// test_that_creating_an_object_increments_max_object
+; $tmp1 = max_object();
+; create($object);
+; return max_object() == $tmp1;
+0
+
+// test_that_creating_an_object_calls_initialize
+; $tmp2 = create($nothing);
+; add_property($tmp2, "initialize_called", 0, {player, ""});
+; add_verb($tmp2, {player, "xd", "initialize"}, {"this", "none", "this"});
+
+; set_verb_code($tmp2, "initialize", {
+>   "typeof(this) == OBJ || raise(E_INVARG);",
+>   "$tmp2.initialize_called = 1;"
+> });
+
+; return $tmp2.initialize_called;
+0
+; create($tmp2);
+; return $tmp2.initialize_called;
+1

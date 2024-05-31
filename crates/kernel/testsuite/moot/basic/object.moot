@@ -5,7 +5,7 @@
 ""
 
 ; return create(#2).location;
-#-1
+$nothing
 
 ; return create(#2).contents;
 {}
@@ -28,7 +28,7 @@
 ; return is_player(create(#2));
 0
 
-; return valid(#-1);
+; return valid($nothing);
 0
 
 ; return valid(#0);

@@ -24,7 +24,7 @@ E_TYPE
 ; return player;
 #3
 ; return this;
-#-1
+$nothing
 ; return caller;
 #3
 ; return args;
@@ -38,10 +38,10 @@ E_TYPE
 ; return dobjstr;
 ""
 ; return dobj;
-#-1
+$nothing
 ; return prepstr;
 ""
 ; return iobjstr;
 ""
 ; return iobj;
-#-1
+$nothing
