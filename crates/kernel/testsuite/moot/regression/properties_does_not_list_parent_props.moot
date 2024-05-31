@@ -1,5 +1,4 @@
-; return create(#2);
-#4
+; $o = create(#2);
 
 ; add_property(#2, "prop1", 0, {player, "wrc"});
 ; #2.prop1 = 1;
@@ -7,5 +6,5 @@
 ; return properties(#2);
 {"prop1"}
 
-; return properties(#4);
+; return properties($o);
 {}
