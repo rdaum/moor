@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 fn main() {
     let path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let third_party_dir = path.join("third_party");
+    let third_party_dir = path.join("third-party");
     let wiredtiger_dir = third_party_dir.join("wiredtiger");
 
     // Run cmake to build wiredtiger as a static library
