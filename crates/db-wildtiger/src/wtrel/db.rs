@@ -52,17 +52,21 @@ where
         // TODO: provide an options struct for configuration of cache size, and durability mode.
         //   esp with durability, some users may not care about full fsync durable transactions,
         //     and would be willing to live with checkpoint-only durability.
-        let options = OpenConfig::new()
+        let mut options = OpenConfig::new()
             .create(true)
-            .cache_cursors(true)
-            .in_memory(transient)
             .cache_size(1 << 30)
-            .log(LogConfig::new().enabled(true))
-            .transaction_sync(
-                TransactionSync::new()
-                    .enabled(true)
-                    .method(SyncMethod::Fsync),
-            );
+            .cache_cursors(true)
+            .in_memory(transient);
+
+        if !transient {
+            options = options
+                .log(LogConfig::new().enabled(true))
+                .transaction_sync(
+                    TransactionSync::new()
+                        .enabled(true)
+                        .method(SyncMethod::Fsync),
+                );
+        }
         let connection = Connection::open(path, options).unwrap();
 
         let sequences = Arc::new([(); MAX_NUM_SEQUENCES].map(|_| AtomicI64::new(0)));
