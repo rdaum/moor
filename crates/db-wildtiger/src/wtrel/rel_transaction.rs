@@ -621,8 +621,7 @@ mod tests {
         let db = WiredTigerRelDb::new(path, Sequences, true);
         db.create_tables();
         db.load_sequences();
-
-        Arc::new(db)
+        db
     }
 
     #[test]

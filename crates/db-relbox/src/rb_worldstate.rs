@@ -77,6 +77,11 @@ impl WorldStateSource for RelBoxWorldState {
         let tx = RelBoxTransaction::new(self.db.clone());
         Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
     }
+
+    fn checkpoint(&self) -> Result<(), WorldStateError> {
+        // noop
+        Ok(())
+    }
 }
 
 pub struct RelBoxTransaction {
@@ -84,12 +89,42 @@ pub struct RelBoxTransaction {
 }
 
 impl WorldStateTransaction for RelBoxTransaction {
+    fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
+        let ov: Option<Objid> =
+            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectOwner, obj);
+        Ok(ov.is_some())
+    }
+
+    fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        let mut ancestors = vec![];
+        let mut search = obj;
+        loop {
+            if search == NOTHING {
+                break;
+            }
+            ancestors.push(search);
+            let parent = object_relations::get_object_object(
+                &self.tx,
+                WorldStateRelation::ObjectParent,
+                search,
+            )
+            .unwrap_or(NOTHING);
+            search = parent;
+        }
+        Ok(ObjSet::from_items(&ancestors))
+    }
+
     fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
         get_all_object_keys_matching(
             &self.tx,
             WorldStateRelation::ObjectFlags,
             |_, _: BitEnum<ObjFlag>| true,
         )
+    }
+
+    fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+        object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj)
+            .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     fn get_players(&self) -> Result<ObjSet, WorldStateError> {
@@ -101,6 +136,14 @@ impl WorldStateTransaction for RelBoxTransaction {
             WorldStateRelation::ObjectFlags,
             |_, flags: BitEnum<ObjFlag>| flags.contains(ObjFlag::User),
         )
+    }
+
+    fn get_max_object(&self) -> Result<Objid, WorldStateError> {
+        Ok(Objid(
+            self.tx
+                .sequence_current(WorldStateSequences::MaximumObject as usize) as i64
+                - 1,
+        ))
     }
 
     fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
@@ -117,11 +160,6 @@ impl WorldStateTransaction for RelBoxTransaction {
         )
     }
 
-    fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
-        object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj)
-            .ok_or(WorldStateError::ObjectNotFound(obj))
-    }
-
     fn set_object_flags(&self, obj: Objid, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError> {
         object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj, flags)
     }
@@ -131,6 +169,10 @@ impl WorldStateTransaction for RelBoxTransaction {
             object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
                 .unwrap_or("".to_string()),
         )
+    }
+
+    fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
+        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, obj, name)
     }
 
     fn create_object(&self, id: Option<Objid>, attrs: ObjAttrs) -> Result<Objid, WorldStateError> {
@@ -242,10 +284,6 @@ impl WorldStateTransaction for RelBoxTransaction {
             .expect("Unable to delete propdefs");
 
         Ok(())
-    }
-
-    fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, obj, name)
     }
 
     fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
@@ -414,6 +452,107 @@ impl WorldStateTransaction for RelBoxTransaction {
         )
     }
 
+    fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        Ok(object_relations::get_objects_by_object_codomain(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            obj,
+        ))
+    }
+
+    fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
+        let mut size = 0;
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectFlags,
+            obj,
+        )
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectName,
+            obj,
+        )
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectOwner,
+            obj,
+        )
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectParent,
+            obj,
+        )
+        .unwrap_or(0);
+
+        size += object_relations::tuple_size_for_object_domain(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            obj,
+        )
+        .unwrap_or(0);
+
+        if let Some(verbs) = object_relations::get_object_value::<VerbDefs>(
+            &self.tx,
+            WorldStateRelation::ObjectVerbs,
+            obj,
+        ) {
+            size += object_relations::tuple_size_for_object_domain(
+                &self.tx,
+                WorldStateRelation::ObjectVerbs,
+                obj,
+            )
+            .unwrap_or(0);
+
+            for v in verbs.iter() {
+                size += object_relations::tuple_size_composite(
+                    &self.tx,
+                    WorldStateRelation::VerbProgram,
+                    obj,
+                    v.uuid(),
+                )
+                .unwrap_or(0)
+            }
+        };
+
+        if let Some(props) = object_relations::get_object_value::<PropDefs>(
+            &self.tx,
+            WorldStateRelation::ObjectPropDefs,
+            obj,
+        ) {
+            size += object_relations::tuple_size_for_object_domain(
+                &self.tx,
+                WorldStateRelation::ObjectPropDefs,
+                obj,
+            )
+            .unwrap_or(0);
+
+            for p in props.iter() {
+                size += object_relations::tuple_size_composite(
+                    &self.tx,
+                    WorldStateRelation::ObjectPropertyValue,
+                    obj,
+                    p.uuid(),
+                )
+                .unwrap_or(0)
+            }
+        };
+
+        size += object_relations::tuple_size_for_object_codomain(
+            &self.tx,
+            WorldStateRelation::ObjectLocation,
+            obj,
+        )
+        .unwrap_or(0);
+
+        Ok(size)
+    }
+
     fn set_object_location(&self, what: Objid, new_location: Objid) -> Result<(), WorldStateError> {
         // Detect recursive move
         let mut oid = new_location;
@@ -460,22 +599,6 @@ impl WorldStateTransaction for RelBoxTransaction {
         }
 
         Ok(())
-    }
-
-    fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(object_relations::get_objects_by_object_codomain(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            obj,
-        ))
-    }
-
-    fn get_max_object(&self) -> Result<Objid, WorldStateError> {
-        Ok(Objid(
-            self.tx
-                .sequence_current(WorldStateSequences::MaximumObject as usize) as i64
-                - 1,
-        ))
     }
 
     fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError> {
@@ -984,122 +1107,8 @@ impl WorldStateTransaction for RelBoxTransaction {
         }
     }
 
-    fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let mut ancestors = vec![];
-        let mut search = obj;
-        loop {
-            if search == NOTHING {
-                break;
-            }
-            ancestors.push(search);
-            let parent = object_relations::get_object_object(
-                &self.tx,
-                WorldStateRelation::ObjectParent,
-                search,
-            )
-            .unwrap_or(NOTHING);
-            search = parent;
-        }
-        Ok(ObjSet::from_items(&ancestors))
-    }
-
-    fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
-        let ov: Option<Objid> =
-            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectOwner, obj);
-        Ok(ov.is_some())
-    }
-
-    fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
-        let mut size = 0;
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectFlags,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectName,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectOwner,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectParent,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            obj,
-        )
-        .unwrap_or(0);
-
-        if let Some(verbs) = object_relations::get_object_value::<VerbDefs>(
-            &self.tx,
-            WorldStateRelation::ObjectVerbs,
-            obj,
-        ) {
-            size += object_relations::tuple_size_for_object_domain(
-                &self.tx,
-                WorldStateRelation::ObjectVerbs,
-                obj,
-            )
-            .unwrap_or(0);
-
-            for v in verbs.iter() {
-                size += object_relations::tuple_size_composite(
-                    &self.tx,
-                    WorldStateRelation::VerbProgram,
-                    obj,
-                    v.uuid(),
-                )
-                .unwrap_or(0)
-            }
-        };
-
-        if let Some(props) = object_relations::get_object_value::<PropDefs>(
-            &self.tx,
-            WorldStateRelation::ObjectPropDefs,
-            obj,
-        ) {
-            size += object_relations::tuple_size_for_object_domain(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                obj,
-            )
-            .unwrap_or(0);
-
-            for p in props.iter() {
-                size += object_relations::tuple_size_composite(
-                    &self.tx,
-                    WorldStateRelation::ObjectPropertyValue,
-                    obj,
-                    p.uuid(),
-                )
-                .unwrap_or(0)
-            }
-        };
-
-        size += object_relations::tuple_size_for_object_codomain(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            obj,
-        )
-        .unwrap_or(0);
-
-        Ok(size)
+    fn db_usage(&self) -> Result<usize, WorldStateError> {
+        Ok(self.tx.db_usage_bytes())
     }
 
     fn commit(&self) -> Result<CommitResult, WorldStateError> {
@@ -1119,10 +1128,6 @@ impl WorldStateTransaction for RelBoxTransaction {
             Ok(_) => Ok(()),
             Err(e) => Err(WorldStateError::DatabaseError(e.to_string())),
         }
-    }
-
-    fn db_usage(&self) -> Result<usize, WorldStateError> {
-        Ok(self.tx.db_usage_bytes())
     }
 }
 

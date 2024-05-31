@@ -26,7 +26,7 @@ pub use create_config::CreateConfig;
 pub use cursor::Datum;
 pub use cursor_config::{Bounds, BoundsConfig, CursorConfig};
 pub use data::{FormatType, Pack, Unpack};
-pub use open_config::{OpenConfig, SyncMethod, TransactionSync, Verbosity};
+pub use open_config::{LogConfig, OpenConfig, SyncMethod, TransactionSync, Verbosity};
 pub use session::Session;
 pub use session_config::{Isolation, SessionConfig, TransactionConfig};
 

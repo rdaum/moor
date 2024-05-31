@@ -150,6 +150,14 @@ struct Args {
     )]
     db_flavour: DatabaseFlavour,
 
+    #[arg(
+        long,
+        value_name = "checkpoint-interval-seconds",
+        help = "Interval in seconds between database checkpoints",
+        default_value = "10"
+    )]
+    checkpoint_interval_seconds: u16,
+
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
 }
@@ -274,6 +282,23 @@ fn main() -> Result<(), Report> {
         .spawn(move || loop_scheduler.run())?;
 
     let kill_switch = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Background DB checkpoint thread.
+    let checkpoint_kill_switch = kill_switch.clone();
+    let checkpoint_state_source = state_source.clone();
+    let _checkpoint_thread = std::thread::Builder::new()
+        .name("moor-checkpoint".to_string())
+        .spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(
+                args.checkpoint_interval_seconds as u64,
+            ));
+            if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+            checkpoint_state_source
+                .checkpoint()
+                .expect("Checkpoint failed");
+        })?;
 
     let rpc_kill_switch = kill_switch.clone();
     let rpc_listen = args.rpc_listen.clone();

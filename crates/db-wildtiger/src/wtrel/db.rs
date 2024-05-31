@@ -19,8 +19,8 @@ use std::sync::Arc;
 use tracing::{debug, info};
 
 use crate::bindings::{
-    Connection, CursorConfig, Datum, Error, Isolation, OpenConfig, SessionConfig, SyncMethod,
-    TransactionConfig, TransactionSync,
+    Connection, CursorConfig, Datum, Error, Isolation, LogConfig, OpenConfig, SessionConfig,
+    SyncMethod, TransactionConfig, TransactionSync,
 };
 use crate::wtrel::rel_transaction::WiredTigerRelTransaction;
 use crate::wtrel::relation::WiredTigerRelation;
@@ -38,7 +38,6 @@ where
     /// The current value of sequences. Which are loaded on startup, and periodically flushed to
     /// table independent of transaction.
     sequences: Arc<[AtomicI64; MAX_NUM_SEQUENCES]>,
-    // TODO: A periodic background thread that flushes the sequences to the sequence table.
 }
 
 impl<TableType> WiredTigerRelDb<TableType>
@@ -46,15 +45,19 @@ where
     TableType: WiredTigerRelation,
     TableType: Copy,
 {
-    pub fn new(path: &Path, sequence_table: TableType, transient: bool) -> Self {
+    pub fn new(path: &Path, sequence_table: TableType, transient: bool) -> Arc<Self> {
         // The directory needs to exist if not already there.
         std::fs::create_dir_all(path).expect("Failed to create database directory");
 
+        // TODO: provide an options struct for configuration of cache size, and durability mode.
+        //   esp with durability, some users may not care about full fsync durable transactions,
+        //     and would be willing to live with checkpoint-only durability.
         let options = OpenConfig::new()
             .create(true)
             .cache_cursors(true)
             .in_memory(transient)
             .cache_size(1 << 30)
+            .log(LogConfig::new().enabled(true))
             .transaction_sync(
                 TransactionSync::new()
                     .enabled(true)
@@ -64,11 +67,11 @@ where
 
         let sequences = Arc::new([(); MAX_NUM_SEQUENCES].map(|_| AtomicI64::new(0)));
 
-        WiredTigerRelDb {
+        Arc::new(WiredTigerRelDb {
             connection,
             sequence_table,
             sequences,
-        }
+        })
     }
 
     pub fn create_tables(&self) {
@@ -155,6 +158,7 @@ where
     TableType: WiredTigerRelation,
 {
     fn drop(&mut self) {
+        debug!("Synchronizing sequences...");
         self.sync_sequences();
     }
 }

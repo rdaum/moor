@@ -125,11 +125,7 @@ impl WireTigerWorldState {
                 path
             }
         };
-        let db = Arc::new(WiredTigerRelDb::new(
-            db_path,
-            WtWorldStateTable::Sequences,
-            path.is_none(),
-        ));
+        let db = WiredTigerRelDb::new(db_path, WtWorldStateTable::Sequences, path.is_none());
 
         // Check for presence of our relations
         let fresh_db = {
@@ -162,6 +158,11 @@ impl WorldStateSource for WireTigerWorldState {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = WtWorldStateTransaction::new(self.db.clone());
         Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
+    }
+
+    fn checkpoint(&self) -> Result<(), WorldStateError> {
+        self.db.sync_sequences();
+        Ok(())
     }
 }
 

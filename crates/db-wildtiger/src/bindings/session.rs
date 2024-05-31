@@ -127,7 +127,6 @@ impl Session {
     /// Commit the current transaction.
     /// A transaction must be in progress when this method is called.
     pub fn commit(&self) -> Result<(), Error> {
-        info!("Committing transaction");
         let result = unsafe {
             let wt_session = *self.session;
             let commit_function = wt_session.commit_transaction.unwrap();
@@ -208,7 +207,6 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        info!("Dropping session");
         unsafe {
             let result = (*self.session).close.unwrap()(
                 self.session,

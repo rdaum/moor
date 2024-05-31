@@ -293,4 +293,8 @@ pub trait WorldStateSource: Send + Sync {
     /// Create a new world state for the given player.
     /// Returns the world state, and a permissions context for the player.
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError>;
+
+    /// Synchronize any in-memory state with the backing store.
+    /// e.g. sequences
+    fn checkpoint(&self) -> Result<(), WorldStateError>;
 }

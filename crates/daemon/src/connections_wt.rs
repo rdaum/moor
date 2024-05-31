@@ -95,11 +95,7 @@ impl ConnectionsWT {
                 path
             }
         };
-        let db = Arc::new(WiredTigerRelDb::new(
-            db_path,
-            ConnectionRelation::Sequences,
-            path.is_none(),
-        ));
+        let db = WiredTigerRelDb::new(db_path, ConnectionRelation::Sequences, path.is_none());
 
         // Check for presence of our relations
         let fresh_db = {
