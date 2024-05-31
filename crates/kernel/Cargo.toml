@@ -55,10 +55,10 @@ uuid.workspace = true
 
 ## Required for MOO builtins.
 chrono-tz.workspace = true
+crypt-sys.workspace = true
 iana-time-zone.workspace = true
 md5.workspace = true
 onig.workspace = true
-pwhash.workspace = true
 rand.workspace = true
 
 ## Error declaration/ handling

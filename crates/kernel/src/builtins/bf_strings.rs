@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::ffi::{CStr, CString};
 use std::sync::Arc;
 
 use rand::distributions::Alphanumeric;
@@ -193,8 +194,14 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
-        let crypted = pwhash::unix::crypt(text.as_str(), salt.as_str()).unwrap();
-        Ok(Ret(v_string(crypted)))
+        let text_c_cstring = CString::new(text.as_str()).unwrap();
+        let salt_c_cstring = CString::new(salt.as_str()).unwrap();
+        let crypted = unsafe { crypt_sys::crypt(text_c_cstring.as_ptr(), salt_c_cstring.as_ptr()) };
+        if crypted.is_null() {
+            return Err(E_INVARG);
+        }
+        let crypted = unsafe { CStr::from_ptr(crypted) };
+        Ok(Ret(v_string(crypted.to_str().unwrap().to_string())))
     } else {
         Err(E_TYPE)
     }

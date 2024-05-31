@@ -66,9 +66,10 @@ tracing-test = "0.2"
 arc-swap = "1.7"
 atomic-wait = "1.1"
 binary-layout = "4.0"
+bindgen = "0.69"
 bytes = "1.6"
 chrono = "0.4"
-owo-colors = "4.0"
+cmake = "0.1"
 criterion = { version = "0.5", features = ["async_tokio"] }
 dashmap = "5.5"
 decorum = "0.3"                                             # For ordering & comparing our floats
@@ -80,6 +81,7 @@ itertools = "0.13.0"
 kanal = "0.1.0-pre8"
 lazy_static = "1.4.0"
 num-traits = "0.2.19"
+owo-colors = "3.5"
 rustyline = "14.0.0"
 strum = { version = "0.26.2", features = ["derive"] }
 text-diff = "0.4.0"
@@ -89,10 +91,10 @@ yoke-derive = "0.7.3"
 
 ## Required for MOO builtins.
 chrono-tz = "0.9.0"
+crypt-sys = "0.1.0"
 iana-time-zone = "0.1.60"
 md5 = "0.7"                                          # For MOO's "string_hash"
 onig = { version = "6.4.0", default-features = false }
-pwhash = "1.0"                                       # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
 rand = "0.8"
 
 ## Compiler grammar/parser
