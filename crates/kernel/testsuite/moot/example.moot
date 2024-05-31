@@ -1,14 +1,14 @@
-# This is a comment.
+// This is a comment.
 ; return 42;
 42
 
-# Empty lines are ignored
+// Empty lines are ignored
 
-# Both thrown and return exceptions can be matched with a simple error value
+// Both thrown and return exceptions can be matched with a simple error value
 ; eval();
 E_ARGS
 
-# Multi-line commands: continuation with `>`.
+// Multi-line commands: continuation with `>`.
 ; return 1 + 2 +
 > 3;
 6
