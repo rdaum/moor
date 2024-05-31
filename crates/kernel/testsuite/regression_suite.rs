@@ -13,11 +13,19 @@
 //
 
 mod common;
-use common::{create_db, AssertRunAsVerb};
+use common::{create_relbox_db, create_wiretiger_db, AssertRunAsVerb};
 
 #[test]
-fn test_testhelper_verb_redefinition() {
-    let db = create_db();
+fn test_testhelper_verb_redefinition_relbox() {
+    let db = create_relbox_db();
+    db.assert_run_as_verb("return 42;", Ok(42.into()));
+    db.assert_run_as_verb("return create(#2).name;", Ok("".into()));
+    db.assert_run_as_verb("return 200;", Ok(200.into()));
+}
+
+#[test]
+fn test_testhelper_verb_redefinition_wiretiger() {
+    let db = create_wiretiger_db();
     db.assert_run_as_verb("return 42;", Ok(42.into()));
     db.assert_run_as_verb("return create(#2).name;", Ok("".into()));
     db.assert_run_as_verb("return 200;", Ok(200.into()));
