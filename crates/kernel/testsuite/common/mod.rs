@@ -17,6 +17,7 @@ use moor_compiler::Program;
 use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::NoopClientSession;
+use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils::call_eval_builtin;
 use moor_kernel::tasks::vm_test_utils::call_verb;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
@@ -55,7 +56,7 @@ pub fn create_db() -> Arc<RelBoxWorldState> {
     db
 }
 
-#[allow(unused)]
+#[allow(dead_code)]
 pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
@@ -87,7 +88,7 @@ pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) 
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-#[allow(unused)]
+#[allow(dead_code)]
 pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
     let binary = compile(expression).unwrap();
     let verb_uuid = Uuid::new_v4().to_string();
@@ -103,62 +104,18 @@ pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResul
     result
 }
 
+#[allow(dead_code)]
 pub fn eval(
     db: Arc<dyn WorldStateSource>,
     player: Objid,
     expression: &str,
+    session: Arc<dyn Session>,
 ) -> eyre::Result<ExecResult> {
     let binary = compile(expression)?;
     let mut state = db.new_world_state()?;
-    let result = call_eval_builtin(
-        state.as_mut(),
-        Arc::new(NoopClientSession::new()),
-        player,
-        binary,
-    );
+    let result = call_eval_builtin(state.as_mut(), session, player, binary);
     state.commit()?;
     Ok(result)
-}
-
-pub trait AssertEval {
-    fn assert_eval<T: Into<ExecResult>, S: AsRef<str>>(
-        &self,
-        player: Objid,
-        expression: S,
-        expected: T,
-    );
-    fn assert_eval_exception<S: AsRef<str>>(
-        &self,
-        player: Objid,
-        expression: S,
-        expected: moor_values::var::Error,
-    );
-}
-
-impl AssertEval for Arc<RelBoxWorldState> {
-    fn assert_eval<T: Into<ExecResult>, S: AsRef<str>>(
-        &self,
-        player: Objid,
-        expression: S,
-        expected: T,
-    ) {
-        let expected = expected.into();
-        let actual = eval(self.clone(), player, expression.as_ref()).unwrap();
-        assert_eq!(actual, expected, "{}", expression.as_ref());
-    }
-
-    fn assert_eval_exception<S: AsRef<str>>(
-        &self,
-        player: Objid,
-        expression: S,
-        expected: moor_values::var::Error,
-    ) {
-        let actual = eval(self.clone(), player, expression.as_ref())
-            .unwrap()
-            .unwrap_err()
-            .code;
-        assert_eq!(actual, expected, "{}", expression.as_ref());
-    }
 }
 
 pub trait AssertRunAsVerb {

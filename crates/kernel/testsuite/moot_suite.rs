@@ -29,26 +29,33 @@ use std::{
 use common::create_db;
 use eyre::Context;
 use moor_db::odb::RelBoxWorldState;
+use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_values::var::v_none;
 use pretty_assertions::assert_eq;
 
 use crate::common::WIZARD;
 
-#[derive(Debug, Default)]
 enum MootState {
-    #[default]
-    Ready,
+    Ready {
+        session: Arc<dyn Session>,
+    },
     ReadingCommand {
+        session: Arc<dyn Session>,
         line_no: usize,
         command: String,
     },
     ReadingExpectation {
+        session: Arc<dyn Session>,
         line_no: usize,
         command: String,
         expectation: String,
     },
 }
 impl MootState {
+    fn new(session: Arc<dyn Session>) -> Self {
+        MootState::Ready { session }
+    }
+
     // Could implement this with `nom` I guess, but this seems simple enough, and it's probably easier to read.
     fn process_line(
         self,
@@ -58,9 +65,10 @@ impl MootState {
     ) -> eyre::Result<Self> {
         let line = line.trim_end_matches('\n');
         match self {
-            MootState::Ready => {
+            MootState::Ready { ref session } => {
                 if let Some(rest) = line.strip_prefix(';') {
                     Ok(MootState::ReadingCommand {
+                        session: session.clone(),
                         line_no: new_line_no,
                         command: rest.trim_start().to_string(),
                     })
@@ -73,17 +81,23 @@ impl MootState {
                 }
             }
             MootState::ReadingCommand {
+                session,
                 line_no,
                 mut command,
             } => {
                 if let Some(rest) = line.strip_prefix('>') {
                     command.push_str(rest);
-                    Ok(MootState::ReadingCommand { line_no, command })
+                    Ok(MootState::ReadingCommand {
+                        session,
+                        line_no,
+                        command,
+                    })
                 } else if line.starts_with(';') || line.is_empty() {
-                    Self::execute_test(&command, None, line_no, db.clone())?;
-                    MootState::Ready.process_line(new_line_no, line, db)
+                    Self::execute_test(&command, None, line_no, db.clone(), session.clone())?;
+                    MootState::new(session).process_line(new_line_no, line, db)
                 } else {
                     Ok(MootState::ReadingExpectation {
+                        session,
                         line_no,
                         command,
                         expectation: line.to_string(),
@@ -91,19 +105,28 @@ impl MootState {
                 }
             }
             MootState::ReadingExpectation {
+                session,
                 line_no,
                 command,
                 mut expectation,
             } => {
+                if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+                    Self::execute_test(
+                        &command,
+                        Some(&expectation),
+                        line_no,
+                        db.clone(),
+                        session.clone(),
+                    )?;
+                }
                 if line.is_empty() || line.starts_with('#') {
-                    Self::execute_test(&command, Some(&expectation), line_no, db)?;
-                    Ok(MootState::Ready)
+                    Ok(MootState::new(session))
                 } else if line.starts_with(';') {
-                    Self::execute_test(&command, Some(&expectation), line_no, db.clone())?;
-                    MootState::Ready.process_line(new_line_no, line, db)
+                    MootState::new(session).process_line(new_line_no, line, db)
                 } else {
                     expectation.push_str(line);
                     Ok(MootState::ReadingExpectation {
+                        session,
                         line_no,
                         command,
                         expectation,
@@ -118,13 +141,20 @@ impl MootState {
         expectation: Option<&str>,
         line_no: usize,
         db: Arc<RelBoxWorldState>,
+        session: Arc<dyn Session>,
     ) -> eyre::Result<()> {
         let expected = if let Some(expectation) = expectation {
-            common::eval(db.clone(), WIZARD, &format!("return {expectation};"))??
+            common::eval(
+                db.clone(),
+                WIZARD,
+                &format!("return {expectation};"),
+                session.clone(),
+            )??
         } else {
             v_none()
         };
-        let actual_exec_result = common::eval(db, WIZARD, command)?;
+
+        let actual_exec_result = common::eval(db, WIZARD, command, session)?;
         let actual = match actual_exec_result {
             Ok(v) => v,
             Err(e) => e.code.into(),
@@ -144,7 +174,7 @@ fn test(path: &Path) {
     let f = BufReader::new(File::open(path).unwrap());
     let db = create_db();
 
-    let mut state = MootState::default();
+    let mut state = MootState::new(Arc::new(NoopClientSession::new()));
     for (line_no, line) in f.lines().enumerate() {
         state = state
             .process_line(line_no + 1, &line.unwrap(), db.clone())
