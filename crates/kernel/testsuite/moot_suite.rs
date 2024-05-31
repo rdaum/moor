@@ -2,17 +2,17 @@
 //!
 //! Example test:
 //!
-//! # This is a comment.
+//! // This is a comment.
 //! ; return 42;
 //! 42
 //!
-//! # Empty lines are ignored
+//! // Empty lines are ignored
 //!
-//! # Both thrown and returned errors can be matched with a simple error value
+//! // Both thrown and returned errors can be matched with a simple error value
 //! ; eval();
 //! E_ARGS
 //!
-//! # Multi-line commands: continuation with `>`.
+//! // Multi-line commands: continuation with `>`.
 //! ; return 1 + 2 +
 //! > 3;
 //! 6
@@ -28,8 +28,8 @@ use std::{
 
 use common::create_db;
 use eyre::Context;
-use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_db_relbox::RelBoxWorldState;
+use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_values::var::v_none;
 use pretty_assertions::assert_eq;
 
@@ -72,11 +72,11 @@ impl MootState {
                         line_no: new_line_no,
                         command: rest.trim_start().to_string(),
                     })
-                } else if line.is_empty() || line.starts_with('#') {
+                } else if line.is_empty() || line.starts_with("//") {
                     Ok(self)
                 } else {
                     Err(eyre::eyre!(
-                        "Expected a command (starting `;`), a comment (starting `#`), or an empty line"
+                        "Expected a command (starting `;`), a comment (starting `//`), or an empty line"
                     ))
                 }
             }
@@ -110,7 +110,7 @@ impl MootState {
                 command,
                 mut expectation,
             } => {
-                if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+                if line.is_empty() || line.starts_with("//") || line.starts_with(';') {
                     Self::execute_test(
                         &command,
                         Some(&expectation),

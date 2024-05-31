@@ -1,7 +1,7 @@
 ; return create(#2);
 #4
 
-; add_property(#2, "prop1", 0, {player, "wrc" });
+; add_property(#2, "prop1", 0, {player, "wrc"});
 ; #2.prop1 = 1;
 
 ; return properties(#2);

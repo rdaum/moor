@@ -1,4 +1,4 @@
-# non-programmers shouldn't be able to execute the eval trampoline
+// non-programmers shouldn't be able to execute the eval trampoline
 ; player.programmer = 0;
 ; return 5;
 E_PERM
