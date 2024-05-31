@@ -17,120 +17,253 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use strum::{EnumCount, IntoEnumIterator};
-use tracing::warn;
+use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
+use tempfile::TempDir;
 use uuid::Uuid;
 
-use moor_values::model::PropFlag;
+use moor_db::db_worldstate::DbTxWorldState;
+use moor_db::loader::LoaderInterface;
+use moor_db::worldstate_transaction::WorldStateTransaction;
+use moor_db::{Database, RelationalError, RelationalTransaction};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, ObjFlag};
-use moor_values::model::{ObjSet, PropPerms};
+use moor_values::model::{ObjSet, ValSet};
 use moor_values::model::{PropDef, PropDefs};
+use moor_values::model::{PropFlag, PropPerms};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::BitEnum;
-use moor_values::var::Var;
-use moor_values::var::{v_none, Objid};
-use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+use moor_values::var::Objid;
+use moor_values::var::{v_none, Var};
+use moor_values::NOTHING;
 
-use crate::db_tx::DbTransaction;
-use crate::db_worldstate::DbTxWorldState;
-use crate::loader::LoaderInterface;
-use crate::odb::object_relations;
-use crate::odb::object_relations::{
-    encode_oid, get_all_object_keys_matching, WorldStateRelation, WorldStateSequences,
-};
-use crate::Database;
-use moor_rdb::{relation_info_for, RelationError};
-use moor_rdb::{CommitError, Transaction};
-use moor_rdb::{RelBox, RelationInfo};
+use crate::wtrel::db::WiredTigerRelDb;
+use crate::wtrel::rel_transaction::WiredTigerRelTransaction;
+use crate::wtrel::relation::WiredTigerRelation;
 
-/// An implementation of `WorldState` / `WorldStateSource` that uses the rdb as its backing
-pub struct RelBoxWorldState {
-    db: Arc<RelBox>,
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount)]
+pub enum WtWorldStateSequence {
+    MaximumObject = 0,
 }
 
-impl RelBoxWorldState {
-    pub fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
-        let relations: Vec<RelationInfo> =
-            WorldStateRelation::iter().map(relation_info_for).collect();
-
-        let db = RelBox::new(memory_size, path, &relations, WorldStateSequences::COUNT);
-
-        // Check the db for sys (#0) object to see if this is a fresh DB or not.
-        let fresh_db = {
-            let canonical = db.copy_canonical();
-            canonical[WorldStateRelation::ObjectParent as usize]
-                .seek_by_domain(encode_oid(SYSTEM_OBJECT))
-                .expect("Could not seek for freshness check on DB")
-                .is_empty()
-        };
-        (Self { db }, fresh_db)
+impl From<WtWorldStateSequence> for u8 {
+    fn from(val: WtWorldStateSequence) -> Self {
+        val as u8
     }
 }
 
-impl WorldStateSource for RelBoxWorldState {
+/// The set of binary relations that are used to represent the world state in the moor system.
+#[repr(usize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display, EnumProperty, AsRefStr,
+)]
+pub enum WtWorldStateTable {
+    /// Object<->Parent
+    #[strum(props(SecondaryIndexed = "true"))]
+    ObjectParent = 0,
+    /// Object<->Location
+    #[strum(props(SecondaryIndexed = "true"))]
+    ObjectLocation = 1,
+    /// Object->Flags (BitEnum<ObjFlag>)
+    ObjectFlags = 2,
+    /// Object->Name
+    ObjectName = 3,
+    /// Object->Owner
+    ObjectOwner = 4,
+    /// Object->Verbs (Verbdefs)
+    ObjectVerbs = 5,
+    /// (Object, UUID)->VerbProgram (Binary)
+    #[strum(props(CompositeDomain = "true", Domain_A_Size = "8", Domain_B_Size = "16"))]
+    VerbProgram = 6,
+    /// Object->Properties (Propdefs)
+    ObjectPropDefs = 7,
+    /// (Object, UUID)->PropertyValue (Var)
+    #[strum(props(CompositeDomain = "true", Domain_A_Size = "8", Domain_B_Size = "16"))]
+    ObjectPropertyValue = 8,
+    /// Object->PropertyPermissions (PropPerms)
+    #[strum(props(CompositeDomain = "true", Domain_A_Size = "8", Domain_B_Size = "16"))]
+    ObjectPropertyPermissions = 9,
+    /// Set of sequences sequence_id -> current_value
+    Sequences = 10,
+}
+
+fn err_map(e: RelationalError) -> WorldStateError {
+    match e {
+        RelationalError::ConflictRetry => WorldStateError::RollbackRetry,
+        _ => WorldStateError::DatabaseError(format!("{:?}", e)),
+    }
+}
+
+impl WiredTigerRelation for WtWorldStateTable {}
+
+/// An implementation of `WorldState` / `WorldStateSource` that uses the relbox as its backing
+pub struct WireTigerWorldState {
+    db: Arc<WiredTigerRelDb<WtWorldStateTable>>,
+    // If this is a temporary database, since it seems WiredTiger wants a path no matter what,
+    // we'll create a temporary directory and use that as the path.
+    // We hold it here so RAII can clean it up when we're done.
+    _tmpdir: Option<TempDir>,
+}
+
+impl WireTigerWorldState {
+    pub fn open(path: Option<&PathBuf>) -> (Self, bool) {
+        let tmpdir = match path {
+            Some(_path) => None,
+            None => {
+                let tmpdir = tempfile::tempdir().expect("Unable to create temporary directory");
+                Some(tmpdir)
+            }
+        };
+        let db_path = match path {
+            Some(path) => path,
+            None => {
+                let path = tmpdir.as_ref().unwrap().path();
+                path
+            }
+        };
+        let db = Arc::new(WiredTigerRelDb::new(
+            db_path,
+            WtWorldStateTable::Sequences,
+            path.is_none(),
+        ));
+
+        // Check for presence of our relations
+        let fresh_db = {
+            let tx = db.start_tx();
+            let is_fresh = !WtWorldStateTable::has_tables(tx.session());
+            tx.rollback();
+            is_fresh
+        };
+
+        // If fresh, create the tables.
+        if fresh_db {
+            let tx = db.start_tx();
+            db.create_tables();
+            tx.commit();
+        }
+
+        db.load_sequences();
+
+        (
+            Self {
+                db,
+                _tmpdir: tmpdir,
+            },
+            fresh_db,
+        )
+    }
+}
+
+impl WorldStateSource for WireTigerWorldState {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
-        let tx = RelBoxTransaction::new(self.db.clone());
+        let tx = WtWorldStateTransaction::new(self.db.clone());
         Ok(Box::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 }
 
-pub struct RelBoxTransaction {
-    tx: Transaction,
+pub struct WtWorldStateTransaction {
+    tx: WiredTigerRelTransaction<WtWorldStateTable>,
 }
 
-impl DbTransaction for RelBoxTransaction {
+impl WorldStateTransaction for WtWorldStateTransaction {
+    fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
+        let ov: Option<Objid> = self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectOwner, obj)
+            .map_err(err_map)?;
+        Ok(ov.is_some())
+    }
+
+    fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        let mut ancestors = vec![];
+        let mut search = obj;
+        loop {
+            if search == NOTHING {
+                break;
+            }
+            ancestors.push(search);
+            let parent = self
+                .tx
+                .seek_unique_by_domain(WtWorldStateTable::ObjectParent, search)
+                .map_err(err_map)?
+                .unwrap_or(NOTHING);
+            search = parent;
+        }
+        Ok(ObjSet::from_items(&ancestors))
+    }
+
     fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
-        get_all_object_keys_matching(
-            &self.tx,
-            WorldStateRelation::ObjectFlags,
-            |_, _: BitEnum<ObjFlag>| true,
-        )
+        let objs = self
+            .tx
+            .scan_with_predicate(
+                WtWorldStateTable::ObjectFlags,
+                |&_: &Objid, _: &BitEnum<ObjFlag>| true,
+            )
+            .map_err(err_map)?;
+        Ok(ObjSet::from_iter(objs.iter().map(|(o, _)| *o)))
+    }
+
+    fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+        self.tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectFlags, obj)
+            .map_err(err_map)?
+            .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     fn get_players(&self) -> Result<ObjSet, WorldStateError> {
         // TODO: Improve get_players retrieval in world state
         //   this is going to be not-at-all performant in the long run, and we'll need a way to
         //   cache this or index it better
-        get_all_object_keys_matching(
-            &self.tx,
-            WorldStateRelation::ObjectFlags,
-            |_, flags: BitEnum<ObjFlag>| flags.contains(ObjFlag::User),
-        )
+        let players = self
+            .tx
+            .scan_with_predicate(
+                WtWorldStateTable::ObjectFlags,
+                |&_, flags: &BitEnum<ObjFlag>| flags.contains(ObjFlag::User),
+            )
+            .map_err(err_map)?;
+        Ok(ObjSet::from_iter(players.iter().map(|(o, _)| *o)))
+    }
+
+    fn get_max_object(&self) -> Result<Objid, WorldStateError> {
+        Ok(Objid(
+            self.tx.get_sequence(WtWorldStateSequence::MaximumObject),
+        ))
     }
 
     fn get_object_owner(&self, obj: Objid) -> Result<Objid, WorldStateError> {
-        object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectOwner, obj)
+        self.tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectOwner, obj)
+            .map_err(err_map)?
             .ok_or(WorldStateError::ObjectNotFound(obj))
     }
 
     fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
-        object_relations::upsert_object_object(
-            &self.tx,
-            WorldStateRelation::ObjectOwner,
-            obj,
-            owner,
-        )
-    }
-
-    fn get_object_flags(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
-        object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj)
-            .ok_or(WorldStateError::ObjectNotFound(obj))
+        self.tx
+            .upsert(WtWorldStateTable::ObjectOwner, obj, owner)
+            .map_err(err_map)
     }
 
     fn set_object_flags(&self, obj: Objid, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError> {
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectFlags, obj, flags)
+        self.tx
+            .upsert(WtWorldStateTable::ObjectFlags, obj, flags)
+            .map_err(err_map)
     }
 
     fn get_object_name(&self, obj: Objid) -> Result<String, WorldStateError> {
-        Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectName, obj)
-                .unwrap_or("".to_string()),
-        )
+        self.tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectName, obj)
+            .map_err(err_map)?
+            .ok_or(WorldStateError::ObjectNotFound(obj))
+    }
+
+    fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
+        self.tx
+            .upsert(WtWorldStateTable::ObjectName, obj, name)
+            .map_err(err_map)
     }
 
     fn create_object(&self, id: Option<Objid>, attrs: ObjAttrs) -> Result<Objid, WorldStateError> {
@@ -139,56 +272,40 @@ impl DbTransaction for RelBoxTransaction {
             None => {
                 let max = self
                     .tx
-                    .increment_sequence(WorldStateSequences::MaximumObject as usize);
-                Objid(max as i64)
+                    .increment_sequence(WtWorldStateSequence::MaximumObject);
+                Objid(max)
             }
         };
 
-        let owner = attrs.owner.unwrap_or(id);
-        object_relations::upsert_object_object(
-            &self.tx,
-            WorldStateRelation::ObjectOwner,
-            id,
-            owner,
-        )
-        .expect("Unable to insert initial owner");
+        let owner = attrs.owner().unwrap_or(NOTHING);
+        self.tx
+            .upsert(WtWorldStateTable::ObjectOwner, id, owner)
+            .expect("Unable to insert initial owner");
 
-        // Set initial name if provided.
-        if let Some(name) = attrs.name {
-            object_relations::upsert_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectName,
-                id,
-                name,
-            )
+        // Set initial name
+        let name = attrs.name().unwrap_or_else(|| format!("Object {}", id));
+        self.tx
+            .upsert(WtWorldStateTable::ObjectName, id, name)
             .expect("Unable to insert initial name");
-        }
 
         // We use our own setters for these, since there's biz-logic attached here...
-        if let Some(parent) = attrs.parent {
+        if let Some(parent) = attrs.parent() {
             self.set_object_parent(id, parent)
                 .expect("Unable to set parent");
         }
-        if let Some(location) = attrs.location {
+        if let Some(location) = attrs.location() {
             self.set_object_location(id, location)
                 .expect("Unable to set location");
         }
 
-        let default_object_flags = BitEnum::new();
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectFlags,
-            id,
-            attrs.flags.unwrap_or(default_object_flags),
-        )
-        .expect("Unable to insert initial flags");
+        self.tx
+            .upsert(WtWorldStateTable::ObjectFlags, id, attrs.flags())
+            .expect("Unable to insert initial flags");
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
-        self.tx.update_sequence_max(
-            WorldStateSequences::MaximumObject as usize,
-            (id.0 + 1) as u64,
-        );
+        self.tx
+            .update_sequence_max(WtWorldStateSequence::MaximumObject, id.0 + 1);
 
         Ok(id)
     }
@@ -214,48 +331,44 @@ impl DbTransaction for RelBoxTransaction {
         // Now we can remove this object from all relevant column relations
         // First the simple ones which are keyed on the object id.
         let oid_relations = [
-            WorldStateRelation::ObjectFlags,
-            WorldStateRelation::ObjectName,
-            WorldStateRelation::ObjectOwner,
-            WorldStateRelation::ObjectParent,
-            WorldStateRelation::ObjectLocation,
-            WorldStateRelation::ObjectVerbs,
+            WtWorldStateTable::ObjectFlags,
+            WtWorldStateTable::ObjectName,
+            WtWorldStateTable::ObjectOwner,
+            WtWorldStateTable::ObjectParent,
+            WtWorldStateTable::ObjectLocation,
+            WtWorldStateTable::ObjectVerbs,
         ];
         for rel in oid_relations.iter() {
-            let relation = self.tx.relation((*rel).into());
-            relation
-                .remove_by_domain(obj.0.as_sliceref().expect("Unable to encode object id"))
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+            self.tx.remove_by_domain(*rel, obj).map_err(err_map)?;
         }
 
         let propdefs = self.get_properties(obj)?;
         for p in propdefs.iter() {
-            let key = object_relations::composite_key_for(obj, &p.uuid());
-            let relation = self
-                .tx
-                .relation(WorldStateRelation::ObjectPropertyValue.into());
-            relation.remove_by_domain(key).unwrap_or(());
+            self.tx
+                .delete_composite_if_exists(
+                    WtWorldStateTable::ObjectPropertyValue,
+                    obj,
+                    p.uuid().to_bytes_le(),
+                )
+                .unwrap_or(());
         }
 
-        let obj_propdefs_rel = self.tx.relation(WorldStateRelation::ObjectPropDefs.into());
-        obj_propdefs_rel
-            .remove_by_domain(obj.0.as_sliceref().expect("Unable to encode object id"))
+        self.tx
+            .remove_by_domain(WtWorldStateTable::ObjectPropDefs, obj)
             .expect("Unable to delete propdefs");
 
         Ok(())
     }
 
-    fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
-        object_relations::upsert_object_value(&self.tx, WorldStateRelation::ObjectName, obj, name)
-    }
-
     fn get_object_parent(&self, obj: Objid) -> Result<Objid, WorldStateError> {
-        Ok(
-            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectParent, obj)
-                .unwrap_or(NOTHING),
-        )
+        Ok(self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectParent, obj)
+            .map_err(err_map)?
+            .unwrap_or(NOTHING))
     }
 
+    // TODO: wildtiger has joins. we should add join&transitive join to the interface and use it
     fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), WorldStateError> {
         // Steps for object re-parenting:
 
@@ -271,35 +384,32 @@ impl DbTransaction for RelBoxTransaction {
         // This will find a) our shared ancestor, b) all ancestors not shared with new ancestor,
         // c) all the new ancestors we'd have after the reparenting, all in one go. Hopefully.
         let (_shared_ancestor, new_ancestors, old_ancestors) =
-            self.closest_common_ancestor_with_ancestors(new_parent, o);
+            self.closest_common_ancestor_with_ancestors(new_parent, o)?;
 
         // Remove from _me_ any of the properties defined by any of my ancestors
-        if let Some(old_props) = object_relations::get_object_value::<PropDefs>(
-            &self.tx,
-            WorldStateRelation::ObjectPropDefs,
-            o,
-        ) {
+        if let Some(old_props) = self
+            .tx
+            .seek_unique_by_domain::<Objid, PropDefs>(WtWorldStateTable::ObjectPropDefs, o)
+            .map_err(err_map)?
+        {
             let mut delort_props = vec![];
             for p in old_props.iter() {
                 if old_ancestors.contains(&p.definer()) {
                     delort_props.push(p.uuid());
-                    object_relations::delete_composite_if_exists(
-                        &self.tx,
-                        WorldStateRelation::ObjectPropertyValue,
-                        o,
-                        p.uuid(),
-                    )
-                    .expect("Unable to delete property");
+
+                    self.tx
+                        .delete_composite_if_exists(
+                            WtWorldStateTable::ObjectPropertyValue,
+                            o,
+                            p.uuid().to_bytes_le(),
+                        )
+                        .expect("Unable to delete property");
                 }
             }
             let new_props = old_props.with_all_removed(&delort_props);
-            object_relations::upsert_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                o,
-                new_props,
-            )
-            .expect("Unable to update propdefs");
+            self.tx
+                .upsert(WtWorldStateTable::ObjectPropDefs, o, new_props)
+                .expect("Unable to update propdefs");
         }
 
         // Now walk all-my-children and destroy all the properties whose definer is me or any
@@ -310,21 +420,21 @@ impl DbTransaction for RelBoxTransaction {
         for c in descendants.iter() {
             let mut inherited_props = vec![];
             // Remove the set values.
-            if let Some(old_props) = object_relations::get_object_value::<PropDefs>(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                o,
-            ) {
+            if let Some(old_props) = self
+                .tx
+                .seek_unique_by_domain::<Objid, PropDefs>(WtWorldStateTable::ObjectPropDefs, o)
+                .map_err(err_map)?
+            {
                 for p in old_props.iter() {
                     if old_ancestors.contains(&p.definer()) {
                         inherited_props.push(p.uuid());
-                        object_relations::delete_composite_if_exists(
-                            &self.tx,
-                            WorldStateRelation::ObjectPropertyValue,
-                            c,
-                            p.uuid(),
-                        )
-                        .expect("Unable to delete property");
+                        self.tx
+                            .delete_composite_if_exists(
+                                WtWorldStateTable::ObjectPropertyValue,
+                                c,
+                                p.uuid().to_bytes_le(),
+                            )
+                            .expect("Unable to delete property");
                     }
                 }
                 // And update the property list to not include them
@@ -337,20 +447,19 @@ impl DbTransaction for RelBoxTransaction {
 
         // If this is a new object it won't have a parent, old parent this will come up not-found,
         // and if that's the case we can ignore that.
-        if let Some(old_parent) =
-            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectParent, o)
+        if let Some(old_parent) = self
+            .tx
+            .seek_unique_by_domain::<Objid, Objid>(WtWorldStateTable::ObjectParent, o)
+            .map_err(err_map)?
         {
             if old_parent == new_parent {
                 return Ok(());
             }
         };
-        object_relations::upsert_object_object(
-            &self.tx,
-            WorldStateRelation::ObjectParent,
-            o,
-            new_parent,
-        )
-        .expect("Unable to update parent");
+
+        self.tx
+            .upsert(WtWorldStateTable::ObjectParent, o, new_parent)
+            .expect("Unable to update parent");
 
         if new_parent == NOTHING {
             return Ok(());
@@ -362,11 +471,11 @@ impl DbTransaction for RelBoxTransaction {
         // Now collect properties defined on the new ancestors.
         let mut new_props = vec![];
         for a in new_ancestors {
-            if let Some(props) = object_relations::get_object_value::<PropDefs>(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                a,
-            ) {
+            if let Some(props) = self
+                .tx
+                .seek_unique_by_domain::<Objid, PropDefs>(WtWorldStateTable::ObjectPropDefs, a)
+                .map_err(err_map)?
+            {
                 for p in props.iter() {
                     if p.definer() == a {
                         new_props.push(p.clone())
@@ -380,39 +489,116 @@ impl DbTransaction for RelBoxTransaction {
         for c in descendants.iter().chain(std::iter::once(o)) {
             // Check if we have a cached/modified copy from above in descendant_props
             let c_props = match descendant_props.remove(&c) {
-                None => object_relations::get_object_value(
-                    &self.tx,
-                    WorldStateRelation::ObjectPropDefs,
-                    c,
-                )
-                .unwrap_or_else(PropDefs::empty),
+                None => self
+                    .tx
+                    .seek_unique_by_domain(WtWorldStateTable::ObjectPropDefs, c)
+                    .map_err(err_map)?
+                    .unwrap_or_else(PropDefs::empty),
                 Some(props) => props,
             };
             let c_props = c_props.with_all_added(&new_props);
-            object_relations::upsert_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                c,
-                c_props,
-            )
-            .expect("Unable to update propdefs");
+            self.tx
+                .upsert(WtWorldStateTable::ObjectPropDefs, c, c_props)
+                .expect("Unable to update propdefs");
         }
         Ok(())
     }
 
     fn get_object_children(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(object_relations::get_objects_by_object_codomain(
-            &self.tx,
-            WorldStateRelation::ObjectParent,
-            obj,
-        ))
+        self.tx
+            .seek_by_codomain::<Objid, Objid, ObjSet>(WtWorldStateTable::ObjectParent, obj)
+            .map_err(err_map)
     }
 
     fn get_object_location(&self, obj: Objid) -> Result<Objid, WorldStateError> {
-        Ok(
-            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectLocation, obj)
-                .unwrap_or(NOTHING),
-        )
+        Ok(self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectLocation, obj)
+            .map_err(err_map)?
+            .unwrap_or(NOTHING))
+    }
+
+    fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        self.tx
+            .seek_by_codomain::<Objid, Objid, ObjSet>(WtWorldStateTable::ObjectLocation, obj)
+            .map_err(err_map)
+    }
+
+    fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
+        let mut size = 0;
+        size += self
+            .tx
+            .tuple_size_for_unique_domain(WtWorldStateTable::ObjectOwner, obj)
+            .map_err(err_map)?
+            .unwrap_or(0);
+        size += self
+            .tx
+            .tuple_size_for_unique_domain(WtWorldStateTable::ObjectFlags, obj)
+            .map_err(err_map)?
+            .unwrap_or(0);
+        size += self
+            .tx
+            .tuple_size_for_unique_domain(WtWorldStateTable::ObjectName, obj)
+            .map_err(err_map)?
+            .unwrap_or(0);
+        size += self
+            .tx
+            .tuple_size_for_unique_domain(WtWorldStateTable::ObjectParent, obj)
+            .map_err(err_map)?
+            .unwrap_or(0);
+        size += self
+            .tx
+            .tuple_size_for_unique_domain(WtWorldStateTable::ObjectLocation, obj)
+            .map_err(err_map)?
+            .unwrap_or(0);
+
+        if let Some(verbs) = self
+            .tx
+            .seek_unique_by_domain::<Objid, VerbDefs>(WtWorldStateTable::ObjectVerbs, obj)
+            .map_err(err_map)?
+        {
+            size += self
+                .tx
+                .tuple_size_for_unique_domain(WtWorldStateTable::ObjectVerbs, obj)
+                .map_err(err_map)?
+                .unwrap_or(0);
+            for v in verbs.iter() {
+                size += self
+                    .tx
+                    .tuple_size_by_composite_domain(
+                        WtWorldStateTable::VerbProgram,
+                        obj,
+                        v.uuid().to_bytes_le(),
+                    )
+                    .map_err(err_map)?
+                    .unwrap_or(0);
+            }
+        }
+
+        if let Some(props) = self
+            .tx
+            .seek_unique_by_domain::<Objid, PropDefs>(WtWorldStateTable::ObjectPropDefs, obj)
+            .map_err(err_map)?
+        {
+            size += self
+                .tx
+                .tuple_size_for_unique_domain(WtWorldStateTable::ObjectPropDefs, obj)
+                .map_err(err_map)?
+                .unwrap_or(0);
+            for p in props.iter() {
+                size += self
+                    .tx
+                    .tuple_size_by_composite_domain(
+                        WtWorldStateTable::ObjectPropertyValue,
+                        obj,
+                        p.uuid().to_bytes_le(),
+                    )
+                    .map_err(err_map)?
+                    .unwrap_or(0);
+            }
+        }
+
+        Ok(size)
     }
 
     fn set_object_location(&self, what: Objid, new_location: Objid) -> Result<(), WorldStateError> {
@@ -425,11 +611,11 @@ impl DbTransaction for RelBoxTransaction {
             if oid == what {
                 return Err(WorldStateError::RecursiveMove(what, new_location));
             }
-            let Some(location) = object_relations::get_object_object(
-                &self.tx,
-                WorldStateRelation::ObjectLocation,
-                oid,
-            ) else {
+            let Some(location) = self
+                .tx
+                .seek_unique_by_domain(WtWorldStateTable::ObjectLocation, oid)
+                .map_err(err_map)?
+            else {
                 break;
             };
             oid = location
@@ -439,8 +625,10 @@ impl DbTransaction for RelBoxTransaction {
         // without it. Set new location, get its contents, add o to contents, put contents
         // back with it. Then update the location of o.
         // Get and remove from contents of old location, if we had any.
-        if let Some(old_location) =
-            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectLocation, what)
+        if let Some(old_location) = self
+            .tx
+            .seek_unique_by_domain::<Objid, Objid>(WtWorldStateTable::ObjectLocation, what)
+            .map_err(err_map)?
         {
             if old_location == new_location {
                 return Ok(());
@@ -448,13 +636,9 @@ impl DbTransaction for RelBoxTransaction {
         }
 
         // Set new location.
-        object_relations::upsert_object_object(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            what,
-            new_location,
-        )
-        .expect("Unable to update location");
+        self.tx
+            .upsert(WtWorldStateTable::ObjectLocation, what, new_location)
+            .map_err(err_map)?;
 
         if new_location == NOTHING {
             return Ok(());
@@ -463,38 +647,31 @@ impl DbTransaction for RelBoxTransaction {
         Ok(())
     }
 
-    fn get_object_contents(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        Ok(object_relations::get_objects_by_object_codomain(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            obj,
-        ))
-    }
-
-    fn get_max_object(&self) -> Result<Objid, WorldStateError> {
-        Ok(Objid(
-            self.tx
-                .sequence_current(WorldStateSequences::MaximumObject as usize) as i64
-                - 1,
-        ))
-    }
-
     fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError> {
-        Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
-                .unwrap_or(VerbDefs::empty()),
-        )
+        Ok(self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectVerbs, obj)
+            .map_err(err_map)?
+            .unwrap_or(VerbDefs::empty()))
     }
 
     fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError> {
-        object_relations::get_composite_value(&self.tx, WorldStateRelation::VerbProgram, obj, uuid)
+        self.tx
+            .seek_by_unique_composite_domain(
+                WtWorldStateTable::VerbProgram,
+                obj,
+                uuid.to_bytes_le(),
+            )
+            .map_err(err_map)?
             .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", uuid)))
     }
 
     fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError> {
-        let verbdefs: VerbDefs =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
-                .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.clone()))?;
+        let verbdefs: VerbDefs = self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectVerbs, obj)
+            .map_err(err_map)?
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.clone()))?;
         Ok(verbdefs
             .find_named(name.as_str())
             .first()
@@ -507,10 +684,11 @@ impl DbTransaction for RelBoxTransaction {
         if index >= verbs.len() {
             return Err(WorldStateError::VerbNotFound(obj, format!("{}", index)));
         }
-        verbs
+        let verbs = verbs
             .iter()
             .nth(index)
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", index)))
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", index)));
+        verbs
     }
 
     fn resolve_verb(
@@ -521,11 +699,11 @@ impl DbTransaction for RelBoxTransaction {
     ) -> Result<VerbDef, WorldStateError> {
         let mut search_o = obj;
         loop {
-            if let Some(verbdefs) = object_relations::get_object_value::<VerbDefs>(
-                &self.tx,
-                WorldStateRelation::ObjectVerbs,
-                search_o,
-            ) {
+            if let Some(verbdefs) = self
+                .tx
+                .seek_unique_by_domain::<Objid, VerbDefs>(WtWorldStateTable::ObjectVerbs, search_o)
+                .map_err(err_map)?
+            {
                 // If we found the verb, return it.
                 let name_matches = verbdefs.find_named(name.as_str());
                 for verb in name_matches {
@@ -543,11 +721,11 @@ impl DbTransaction for RelBoxTransaction {
             }
             // Otherwise, find our parent.  If it's, then set o to it and continue unless we've
             // hit the end of the chain.
-            search_o = match object_relations::get_object_object(
-                &self.tx,
-                WorldStateRelation::ObjectParent,
-                search_o,
-            ) {
+            search_o = match self
+                .tx
+                .seek_unique_by_domain::<Objid, Objid>(WtWorldStateTable::ObjectParent, search_o)
+                .map_err(err_map)?
+            {
                 Some(NOTHING) | None => {
                     break;
                 }
@@ -563,8 +741,10 @@ impl DbTransaction for RelBoxTransaction {
         uuid: Uuid,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let Some(verbdefs): Option<VerbDefs> =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, obj)
+        let Some(verbdefs): Option<VerbDefs> = self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectVerbs, obj)
+            .map_err(err_map)?
         else {
             return Err(WorldStateError::VerbNotFound(obj, format!("{}", uuid)));
         };
@@ -587,21 +767,19 @@ impl DbTransaction for RelBoxTransaction {
             return Err(WorldStateError::VerbNotFound(obj, format!("{}", uuid)));
         };
 
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectVerbs,
-            obj,
-            verbdefs,
-        )?;
+        self.tx
+            .upsert(WtWorldStateTable::ObjectVerbs, obj, verbdefs)
+            .map_err(err_map)?;
 
         if verb_attrs.binary.is_some() {
-            object_relations::upsert_obj_uuid_value(
-                &self.tx,
-                WorldStateRelation::VerbProgram,
-                obj,
-                uuid,
-                verb_attrs.binary.unwrap(),
-            )?;
+            self.tx
+                .upsert_composite(
+                    WtWorldStateTable::VerbProgram,
+                    obj,
+                    uuid.to_bytes_le(),
+                    verb_attrs.binary.unwrap(),
+                )
+                .map_err(err_map)?;
         }
         Ok(())
     }
@@ -616,9 +794,11 @@ impl DbTransaction for RelBoxTransaction {
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
     ) -> Result<(), WorldStateError> {
-        let verbdefs =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, oid)
-                .unwrap_or(VerbDefs::empty());
+        let verbdefs = self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectVerbs, oid)
+            .map_err(err_map)?
+            .unwrap_or(VerbDefs::empty());
 
         let uuid = Uuid::new_v4();
         let verbdef = VerbDef::new(
@@ -633,62 +813,65 @@ impl DbTransaction for RelBoxTransaction {
 
         let verbdefs = verbdefs.with_added(verbdef);
 
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectVerbs,
-            oid,
-            verbdefs,
-        )?;
-        object_relations::upsert_obj_uuid_value(
-            &self.tx,
-            WorldStateRelation::VerbProgram,
-            oid,
-            uuid,
-            binary,
-        )?;
+        self.tx
+            .upsert(WtWorldStateTable::ObjectVerbs, oid, verbdefs)
+            .map_err(err_map)?;
+
+        self.tx
+            .upsert_composite(
+                WtWorldStateTable::VerbProgram,
+                oid,
+                uuid.to_bytes_le(),
+                binary,
+            )
+            .map_err(err_map)?;
 
         Ok(())
     }
 
     fn delete_verb(&self, location: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
-        let verbdefs: VerbDefs =
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectVerbs, location)
-                .ok_or_else(|| WorldStateError::VerbNotFound(location, format!("{}", uuid)))?;
+        let verbdefs: VerbDefs = self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectVerbs, location)
+            .map_err(err_map)?
+            .ok_or_else(|| WorldStateError::VerbNotFound(location, format!("{}", uuid)))?;
 
         let verbdefs = verbdefs
             .with_removed(uuid)
             .ok_or_else(|| WorldStateError::VerbNotFound(location, format!("{}", uuid)))?;
 
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectVerbs,
-            location,
-            verbdefs,
-        )?;
+        self.tx
+            .upsert(WtWorldStateTable::ObjectVerbs, location, verbdefs)
+            .map_err(err_map)?;
 
-        let rel = self.tx.relation(WorldStateRelation::VerbProgram.into());
-        rel.remove_by_domain(object_relations::composite_key_for(location, &uuid))
-            .expect("Unable to delete verb program");
+        self.tx
+            .remove_by_composite_domain(
+                WtWorldStateTable::VerbProgram,
+                location,
+                uuid.to_bytes_le(),
+            )
+            .map_err(err_map)?;
 
         Ok(())
     }
 
     fn get_properties(&self, obj: Objid) -> Result<PropDefs, WorldStateError> {
-        Ok(
-            object_relations::get_object_value(&self.tx, WorldStateRelation::ObjectPropDefs, obj)
-                .unwrap_or(PropDefs::empty()),
-        )
+        Ok(self
+            .tx
+            .seek_unique_by_domain(WtWorldStateTable::ObjectPropDefs, obj)
+            .map_err(err_map)?
+            .unwrap_or(PropDefs::empty()))
     }
 
     fn set_property(&self, obj: Objid, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
-        object_relations::upsert_obj_uuid_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropertyValue,
-            obj,
-            uuid,
-            value,
-        )?;
-        Ok(())
+        self.tx
+            .upsert_composite(
+                WtWorldStateTable::ObjectPropertyValue,
+                obj,
+                uuid.to_bytes_le(),
+                value,
+            )
+            .map_err(err_map)
     }
 
     fn define_property(
@@ -703,11 +886,11 @@ impl DbTransaction for RelBoxTransaction {
         let descendants = self.descendants(location)?;
 
         // If the property is already defined at us or above or below us, that's a failure.
-        let props = match object_relations::get_object_value::<PropDefs>(
-            &self.tx,
-            WorldStateRelation::ObjectPropDefs,
-            location,
-        ) {
+        let props = match self
+            .tx
+            .seek_unique_by_domain::<Objid, PropDefs>(WtWorldStateTable::ObjectPropDefs, location)
+            .map_err(err_map)?
+        {
             None => PropDefs::empty(),
             Some(propdefs) => {
                 if propdefs.find_first_named(name.as_str()).is_some() {
@@ -717,13 +900,16 @@ impl DbTransaction for RelBoxTransaction {
             }
         };
         let ancestors = self.ancestors(location)?;
-        let check_locations = ObjSet::from(&[location]).with_concatenated(ancestors);
+        let check_locations = ObjSet::from_items(&[location]).with_concatenated(ancestors);
         for location in check_locations.iter() {
-            if let Some(descendant_props) = object_relations::get_object_value::<PropDefs>(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                location,
-            ) {
+            if let Some(descendant_props) = self
+                .tx
+                .seek_unique_by_domain::<Objid, PropDefs>(
+                    WtWorldStateTable::ObjectPropDefs,
+                    location,
+                )
+                .map_err(err_map)?
+            {
                 // Verify we don't already have a property with this name. If we do, return an error.
                 if descendant_props.find_first_named(name.as_str()).is_some() {
                     return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
@@ -736,37 +922,37 @@ impl DbTransaction for RelBoxTransaction {
         let u = Uuid::new_v4();
 
         let prop = PropDef::new(u, definer, location, name.as_str());
-        object_relations::upsert_object_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropDefs,
-            location,
-            props.with_added(prop),
-        )
-        .expect("Unable to set property definition");
+        self.tx
+            .upsert(
+                WtWorldStateTable::ObjectPropDefs,
+                location,
+                props.with_added(prop),
+            )
+            .expect("Unable to set property definition");
 
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
-            object_relations::upsert_obj_uuid_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropertyValue,
-                location,
-                u,
-                value,
-            )
-            .expect("Unable to set property value");
+            self.tx
+                .upsert_composite(
+                    WtWorldStateTable::ObjectPropertyValue,
+                    location,
+                    u.to_bytes_le(),
+                    value,
+                )
+                .expect("Unable to set property value");
         }
 
         // Put the initial object owner on ourselves and all our descendants.
-        let value_locations = ObjSet::from(&[location]).with_concatenated(descendants);
+        let value_locations = ObjSet::from_items(&[location]).with_concatenated(descendants);
         for location in value_locations.iter() {
-            object_relations::upsert_obj_uuid_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropertyPermissions,
-                location,
-                u,
-                PropPerms::new(owner, perms),
-            )
-            .expect("Unable to set property owner");
+            self.tx
+                .upsert_composite(
+                    WtWorldStateTable::ObjectPropertyPermissions,
+                    location,
+                    u.to_bytes_le(),
+                    PropPerms::new(owner, perms),
+                )
+                .expect("Unable to set property owner");
         }
 
         Ok(u)
@@ -786,12 +972,11 @@ impl DbTransaction for RelBoxTransaction {
 
         // We only need to update the propdef if there's a new name.
         if let Some(new_name) = new_name {
-            let props = object_relations::get_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                obj,
-            )
-            .unwrap_or(PropDefs::empty());
+            let props = self
+                .tx
+                .seek_unique_by_domain(WtWorldStateTable::ObjectPropDefs, obj)
+                .map_err(err_map)?
+                .unwrap_or(PropDefs::empty());
 
             let Some(props) = props.with_updated(uuid, |p| {
                 PropDef::new(p.uuid(), p.definer(), p.location(), &new_name)
@@ -799,23 +984,22 @@ impl DbTransaction for RelBoxTransaction {
                 return Err(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)));
             };
 
-            object_relations::upsert_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                obj,
-                props,
-            )?;
+            self.tx
+                .upsert(WtWorldStateTable::ObjectPropDefs, obj, props)
+                .map_err(err_map)?;
         }
 
         // If flags or perms updated, do that.
         if new_flags.is_some() || new_owner.is_some() {
-            let mut perms: PropPerms = object_relations::get_composite_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropertyPermissions,
-                obj,
-                uuid,
-            )
-            .expect("Unable to get property permissions for update. Integrity error");
+            let mut perms: PropPerms = self
+                .tx
+                .seek_by_unique_composite_domain(
+                    WtWorldStateTable::ObjectPropertyPermissions,
+                    obj,
+                    uuid.to_bytes_le(),
+                )
+                .unwrap()
+                .expect("Unable to get property permissions for update. Integrity error");
 
             if let Some(new_flags) = new_flags {
                 perms = perms.with_flags(new_flags);
@@ -825,54 +1009,48 @@ impl DbTransaction for RelBoxTransaction {
                 perms = perms.with_owner(new_owner);
             }
 
-            object_relations::upsert_obj_uuid_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropertyPermissions,
-                obj,
-                uuid,
-                perms,
-            )?;
+            self.tx
+                .upsert_composite(
+                    WtWorldStateTable::ObjectPropertyPermissions,
+                    obj,
+                    uuid.to_bytes_le(),
+                    perms,
+                )
+                .map_err(err_map)?;
         }
 
         Ok(())
     }
 
     fn clear_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
-        let key = object_relations::composite_key_for(obj, &uuid);
-        let rel = self
-            .tx
-            .relation(WorldStateRelation::ObjectPropertyValue.into());
-        match rel.remove_by_domain(key) {
-            Ok(_) => Ok(()),
-            Err(RelationError::TupleNotFound) => Ok(()),
-            Err(e) => {
-                panic!("Unexpected error: {:?}", e)
-            }
-        }
+        self.tx
+            .delete_composite_if_exists(
+                WtWorldStateTable::ObjectPropertyValue,
+                obj,
+                uuid.to_bytes_le(),
+            )
+            .unwrap_or(());
+        Ok(())
     }
 
     fn delete_property(&self, obj: Objid, uuid: Uuid) -> Result<(), WorldStateError> {
         // delete propdef from self and all descendants
         let descendants = self.descendants(obj)?;
-        let locations = ObjSet::from(&[obj]).with_concatenated(descendants);
+        let locations = ObjSet::from_items(&[obj]).with_concatenated(descendants);
         for location in locations.iter() {
-            let props: PropDefs = object_relations::get_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                location,
-            )
-            .expect("Unable to get property definitions");
+            let props: PropDefs = self
+                .tx
+                .seek_unique_by_domain(WtWorldStateTable::ObjectPropDefs, location)
+                .map_err(err_map)?
+                .expect("Unable to find property for object, invalid object");
 
             let props = props
                 .with_removed(uuid)
                 .expect("Unable to remove property definition");
 
-            object_relations::upsert_object_value(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                location,
-                props,
-            )?;
+            self.tx
+                .upsert(WtWorldStateTable::ObjectPropDefs, location, props)
+                .map_err(err_map)?;
         }
         Ok(())
     }
@@ -882,20 +1060,16 @@ impl DbTransaction for RelBoxTransaction {
         obj: Objid,
         uuid: Uuid,
     ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
-        let value = object_relations::get_composite_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropertyValue,
-            obj,
-            uuid,
-        );
-        let owner = object_relations::get_composite_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropertyPermissions,
-            obj,
-            uuid,
-        )
-        .expect("Unable to get property owner, coherence problem");
-        Ok((value, owner))
+        let value = self
+            .tx
+            .seek_by_unique_composite_domain(
+                WtWorldStateTable::ObjectPropertyValue,
+                obj,
+                uuid.to_bytes_le(),
+            )
+            .map_err(err_map)?;
+        let perms = self.retrieve_property_permissions(obj, uuid)?;
+        Ok((value, perms))
     }
 
     fn retrieve_property_permissions(
@@ -903,13 +1077,14 @@ impl DbTransaction for RelBoxTransaction {
         obj: Objid,
         uuid: Uuid,
     ) -> Result<PropPerms, WorldStateError> {
-        object_relations::get_composite_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropertyPermissions,
-            obj,
-            uuid,
-        )
-        .ok_or(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)))
+        self.tx
+            .seek_by_unique_composite_domain::<_, _, PropPerms>(
+                WtWorldStateTable::ObjectPropertyPermissions,
+                obj,
+                uuid.to_bytes_le(),
+            )
+            .map_err(err_map)?
+            .ok_or(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)))
     }
 
     fn resolve_property(
@@ -928,11 +1103,11 @@ impl DbTransaction for RelBoxTransaction {
                 break propdef;
             }
 
-            if let Some(parent) = object_relations::get_object_object(
-                &self.tx,
-                WorldStateRelation::ObjectParent,
-                search_obj,
-            ) {
+            if let Some(parent) = self
+                .tx
+                .seek_unique_by_domain(WtWorldStateTable::ObjectParent, search_obj)
+                .map_err(err_map)?
+            {
                 search_obj = parent;
                 continue;
             };
@@ -943,279 +1118,74 @@ impl DbTransaction for RelBoxTransaction {
         // Now that we have the propdef, we can look for the value & owner.
         // We should *always* have the owner.
         // But value could be 'clear' in which case we need to look in the parent.
-        let owner = object_relations::get_composite_value(
-            &self.tx,
-            WorldStateRelation::ObjectPropertyPermissions,
-            obj,
-            propdef.uuid(),
-        )
-        .expect("Unable to get property owner, coherence problem");
+        let perms = self
+            .tx
+            .seek_by_unique_composite_domain::<_, _, PropPerms>(
+                WtWorldStateTable::ObjectPropertyPermissions,
+                obj,
+                propdef.uuid().to_bytes_le(),
+            )
+            .map_err(err_map)?
+            .expect("Unable to get property permissions, coherence problem");
 
-        match object_relations::get_composite_value::<Var>(
-            &self.tx,
-            WorldStateRelation::ObjectPropertyValue,
-            obj,
-            propdef.uuid(),
-        ) {
-            Some(value) => Ok((propdef, value, owner, false)),
+        match self
+            .tx
+            .seek_by_unique_composite_domain::<_, _, Var>(
+                WtWorldStateTable::ObjectPropertyValue,
+                obj,
+                propdef.uuid().to_bytes_le(),
+            )
+            .map_err(err_map)?
+        {
+            Some(value) => Ok((propdef, value, perms, false)),
             None => {
                 let mut search_obj = obj;
                 loop {
-                    let Some(parent) = object_relations::get_object_object(
-                        &self.tx,
-                        WorldStateRelation::ObjectParent,
-                        search_obj,
-                    ) else {
-                        break Ok((propdef, v_none(), owner, true));
+                    let Some(parent) = self
+                        .tx
+                        .seek_unique_by_domain(WtWorldStateTable::ObjectParent, search_obj)
+                        .map_err(err_map)?
+                    else {
+                        break Ok((propdef, v_none(), perms, true));
                     };
                     if parent == NOTHING {
-                        break Ok((propdef, v_none(), owner, true));
+                        break Ok((propdef, v_none(), perms, true));
                     }
                     search_obj = parent;
 
-                    let value = object_relations::get_composite_value(
-                        &self.tx,
-                        WorldStateRelation::ObjectPropertyValue,
-                        search_obj,
-                        propdef.uuid(),
-                    );
+                    let value = self
+                        .tx
+                        .seek_by_unique_composite_domain(
+                            WtWorldStateTable::ObjectPropertyValue,
+                            search_obj,
+                            propdef.uuid().to_bytes_le(),
+                        )
+                        .map_err(err_map)?;
                     if let Some(value) = value {
-                        break Ok((propdef, value, owner, true));
+                        break Ok((propdef, value, perms, true));
                     }
                 }
             }
         }
     }
 
-    fn ancestors(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let mut ancestors = vec![];
-        let mut search = obj;
-        loop {
-            if search == NOTHING {
-                break;
-            }
-            ancestors.push(search);
-            let parent = object_relations::get_object_object(
-                &self.tx,
-                WorldStateRelation::ObjectParent,
-                search,
-            )
-            .unwrap_or(NOTHING);
-            search = parent;
-        }
-        Ok(ObjSet::from(&ancestors))
-    }
-
-    fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError> {
-        let ov: Option<Objid> =
-            object_relations::get_object_object(&self.tx, WorldStateRelation::ObjectOwner, obj);
-        Ok(ov.is_some())
-    }
-
-    fn get_object_size_bytes(&self, obj: Objid) -> Result<usize, WorldStateError> {
-        let mut size = 0;
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectFlags,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectName,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectOwner,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectParent,
-            obj,
-        )
-        .unwrap_or(0);
-
-        size += object_relations::tuple_size_for_object_domain(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            obj,
-        )
-        .unwrap_or(0);
-
-        if let Some(verbs) = object_relations::get_object_value::<VerbDefs>(
-            &self.tx,
-            WorldStateRelation::ObjectVerbs,
-            obj,
-        ) {
-            size += object_relations::tuple_size_for_object_domain(
-                &self.tx,
-                WorldStateRelation::ObjectVerbs,
-                obj,
-            )
-            .unwrap_or(0);
-
-            for v in verbs.iter() {
-                size += object_relations::tuple_size_composite(
-                    &self.tx,
-                    WorldStateRelation::VerbProgram,
-                    obj,
-                    v.uuid(),
-                )
-                .unwrap_or(0)
-            }
-        };
-
-        if let Some(props) = object_relations::get_object_value::<PropDefs>(
-            &self.tx,
-            WorldStateRelation::ObjectPropDefs,
-            obj,
-        ) {
-            size += object_relations::tuple_size_for_object_domain(
-                &self.tx,
-                WorldStateRelation::ObjectPropDefs,
-                obj,
-            )
-            .unwrap_or(0);
-
-            for p in props.iter() {
-                size += object_relations::tuple_size_composite(
-                    &self.tx,
-                    WorldStateRelation::ObjectPropertyValue,
-                    obj,
-                    p.uuid(),
-                )
-                .unwrap_or(0)
-            }
-        };
-
-        size += object_relations::tuple_size_for_object_codomain(
-            &self.tx,
-            WorldStateRelation::ObjectLocation,
-            obj,
-        )
-        .unwrap_or(0);
-
-        Ok(size)
+    fn db_usage(&self) -> Result<usize, WorldStateError> {
+        todo!("Implement db_usage")
     }
 
     fn commit(&self) -> Result<CommitResult, WorldStateError> {
-        match self.tx.commit() {
-            Ok(_) => Ok(CommitResult::Success),
-            Err(CommitError::TupleVersionConflict) => Ok(CommitResult::ConflictRetry),
-            Err(CommitError::UniqueConstraintViolation) => Ok(CommitResult::ConflictRetry),
-            Err(CommitError::RelationContentionConflict) => {
-                warn!("Contention conflict; too many concurrent writes on the same relation(s) after retries.");
-                Ok(CommitResult::ConflictRetry)
-            }
-        }
+        Ok(self.tx.commit())
     }
 
     fn rollback(&self) -> Result<(), WorldStateError> {
-        match self.tx.rollback() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(WorldStateError::DatabaseError(e.to_string())),
-        }
-    }
-
-    fn db_usage(&self) -> Result<usize, WorldStateError> {
-        Ok(self.tx.db_usage_bytes())
+        self.tx.rollback();
+        Ok(())
     }
 }
 
-impl RelBoxTransaction {
-    pub fn new(db: Arc<RelBox>) -> Self {
-        let tx = db.start_tx();
-        Self { tx }
-    }
-
-    pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
-        let children = object_relations::get_objects_by_object_codomain(
-            &self.tx,
-            WorldStateRelation::ObjectParent,
-            obj,
-        );
-
-        let mut descendants = vec![];
-        let mut queue: VecDeque<_> = children.iter().collect();
-        while let Some(o) = queue.pop_front() {
-            descendants.push(o);
-            let children = object_relations::get_objects_by_object_codomain(
-                &self.tx,
-                WorldStateRelation::ObjectParent,
-                o,
-            );
-            queue.extend(children.iter());
-        }
-
-        Ok(ObjSet::from(&descendants))
-    }
-    fn closest_common_ancestor_with_ancestors(
-        &self,
-        a: Objid,
-        b: Objid,
-    ) -> (Option<Objid>, HashSet<Objid>, HashSet<Objid>) {
-        let mut ancestors_a = HashSet::new();
-        let mut search_a = a;
-
-        let mut ancestors_b = HashSet::new();
-        let mut search_b = b;
-
-        loop {
-            if search_a == NOTHING && search_b == NOTHING {
-                return (None, ancestors_a, ancestors_b); // No common ancestor found
-            }
-
-            if ancestors_b.contains(&search_a) {
-                return (Some(search_a), ancestors_a, ancestors_b); // Common ancestor found
-            }
-
-            if ancestors_a.contains(&search_b) {
-                return (Some(search_b), ancestors_a, ancestors_b); // Common ancestor found
-            }
-
-            if search_a != NOTHING {
-                ancestors_a.insert(search_a);
-                let parent = object_relations::get_object_object(
-                    &self.tx,
-                    WorldStateRelation::ObjectParent,
-                    search_a,
-                )
-                .unwrap_or(NOTHING);
-                search_a = parent;
-            }
-
-            if search_b != NOTHING {
-                ancestors_b.insert(search_b);
-                let parent = object_relations::get_object_object(
-                    &self.tx,
-                    WorldStateRelation::ObjectParent,
-                    search_b,
-                )
-                .unwrap_or(NOTHING);
-                search_b = parent;
-            }
-        }
-    }
-}
-
-impl Drop for RelBoxTransaction {
-    fn drop(&mut self) {
-        if !std::thread::panicking() {
-            self.tx.rollback().unwrap();
-        }
-    }
-}
-
-impl Database for RelBoxWorldState {
+impl Database for WireTigerWorldState {
     fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError> {
-        let tx = RelBoxTransaction::new(self.db.clone());
+        let tx = WtWorldStateTransaction::new(self.db.clone());
         Ok(Rc::new(DbTxWorldState { tx: Box::new(tx) }))
     }
 
@@ -1224,49 +1194,111 @@ impl Database for RelBoxWorldState {
     }
 }
 
+impl WtWorldStateTransaction {
+    pub fn new(db: Arc<WiredTigerRelDb<WtWorldStateTable>>) -> Self {
+        let tx = db.start_tx();
+        Self { tx }
+    }
+
+    pub(crate) fn descendants(&self, obj: Objid) -> Result<ObjSet, WorldStateError> {
+        let children = self
+            .tx
+            .seek_by_codomain::<Objid, Objid, ObjSet>(WtWorldStateTable::ObjectParent, obj)
+            .map_err(err_map)?;
+
+        let mut descendants = vec![];
+        let mut queue: VecDeque<_> = children.iter().collect();
+        while let Some(o) = queue.pop_front() {
+            descendants.push(o);
+            let children = self
+                .tx
+                .seek_by_codomain::<Objid, Objid, ObjSet>(WtWorldStateTable::ObjectParent, o)
+                .map_err(err_map)?;
+            queue.extend(children.iter());
+        }
+
+        Ok(ObjSet::from_items(&descendants))
+    }
+
+    fn closest_common_ancestor_with_ancestors(
+        &self,
+        a: Objid,
+        b: Objid,
+    ) -> Result<(Option<Objid>, HashSet<Objid>, HashSet<Objid>), WorldStateError> {
+        let mut ancestors_a = HashSet::new();
+        let mut search_a = a;
+
+        let mut ancestors_b = HashSet::new();
+        let mut search_b = b;
+
+        loop {
+            if search_a == NOTHING && search_b == NOTHING {
+                return Ok((None, ancestors_a, ancestors_b)); // No common ancestor found
+            }
+
+            if ancestors_b.contains(&search_a) {
+                return Ok((Some(search_a), ancestors_a, ancestors_b)); // Common ancestor found
+            }
+
+            if ancestors_a.contains(&search_b) {
+                return Ok((Some(search_b), ancestors_a, ancestors_b)); // Common ancestor found
+            }
+
+            if search_a != NOTHING {
+                ancestors_a.insert(search_a);
+                let parent = self
+                    .tx
+                    .seek_unique_by_domain(WtWorldStateTable::ObjectParent, search_a)
+                    .map_err(err_map)?
+                    .unwrap_or(NOTHING);
+                search_a = parent;
+            }
+
+            if search_b != NOTHING {
+                ancestors_b.insert(search_b);
+                let parent = self
+                    .tx
+                    .seek_unique_by_domain(WtWorldStateTable::ObjectParent, search_b)
+                    .map_err(err_map)?
+                    .unwrap_or(NOTHING);
+                search_b = parent;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use strum::{EnumCount, IntoEnumIterator};
-
-    use moor_values::model::ObjSet;
+    use moor_db::worldstate_transaction::WorldStateTransaction;
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::{BinaryType, VerbAttrs};
     use moor_values::model::{CommitResult, WorldStateError};
     use moor_values::model::{HasUuid, Named};
     use moor_values::model::{ObjAttrs, PropFlag};
+    use moor_values::model::{ObjSet, ValSet};
     use moor_values::util::BitEnum;
     use moor_values::var::Objid;
     use moor_values::var::{v_int, v_str};
     use moor_values::NOTHING;
 
-    use crate::db_tx::DbTransaction;
-    use crate::odb::object_relations::{WorldStateRelation, WorldStateSequences};
-    use crate::odb::rb_worldstate::RelBoxTransaction;
-    use moor_rdb::{relation_info_for, RelBox, RelationInfo};
+    use crate::worldstate::wt_worldstate::{WireTigerWorldState, WtWorldStateTransaction};
 
-    fn test_db() -> Arc<RelBox> {
-        let relations: Vec<RelationInfo> =
-            WorldStateRelation::iter().map(relation_info_for).collect();
+    fn test_db() -> WireTigerWorldState {
+        let db = WireTigerWorldState::open(None);
+        db.0.db.create_tables();
+        db.0.db.load_sequences();
 
-        RelBox::new(1 << 24, None, &relations, WorldStateSequences::COUNT)
+        db.0
     }
 
     #[test]
     fn test_create_object() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db.clone());
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         let oid = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
         assert_eq!(oid, Objid(0));
@@ -1278,15 +1310,15 @@ mod tests {
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         // Verify existence in a new transaction.
-        let tx = RelBoxTransaction::new(db);
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         assert!(tx.object_valid(oid).unwrap());
         assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
     }
 
     #[test]
     fn test_create_object_fixed_id() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         // Force at 1.
         let oid = tx
             .create_object(Some(Objid(1)), ObjAttrs::default())
@@ -1300,33 +1332,20 @@ mod tests {
 
     #[test]
     fn test_parent_children() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
-
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         // Single parent/child relationship.
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -1334,7 +1353,7 @@ mod tests {
         assert!(tx
             .get_object_children(a)
             .unwrap()
-            .is_same(ObjSet::from(&[b])));
+            .is_same(ObjSet::from_items(&[b])));
 
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
@@ -1343,13 +1362,7 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
 
@@ -1357,7 +1370,7 @@ mod tests {
         assert!(tx
             .get_object_children(a)
             .unwrap()
-            .is_same(ObjSet::from(&[b, c])));
+            .is_same(ObjSet::from_items(&[b, c])));
 
         assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
@@ -1366,13 +1379,7 @@ mod tests {
         let d = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test3".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
 
@@ -1381,29 +1388,23 @@ mod tests {
         assert!(tx
             .get_object_children(a)
             .unwrap()
-            .is_same(ObjSet::from(&[c])));
+            .is_same(ObjSet::from_items(&[c])));
         assert!(tx
             .get_object_children(d)
             .unwrap()
-            .is_same(ObjSet::from(&[b])));
+            .is_same(ObjSet::from_items(&[b])));
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
     #[test]
     fn test_descendants() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
         assert_eq!(a, Objid(0));
@@ -1411,13 +1412,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
         assert_eq!(b, Objid(1));
@@ -1425,13 +1420,7 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
         assert_eq!(c, Objid(2));
@@ -1439,68 +1428,56 @@ mod tests {
         let d = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test4".into()),
-                    parent: Some(c),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, c, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
         assert_eq!(d, Objid(3));
 
-        assert!(tx.descendants(a).unwrap().is_same(ObjSet::from(&[b, c, d])));
+        assert!(tx
+            .descendants(a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b, c, d])));
         assert_eq!(tx.descendants(b).unwrap(), ObjSet::empty());
-        assert_eq!(tx.descendants(c).unwrap(), ObjSet::from(&[d]));
+        assert_eq!(tx.descendants(c).unwrap(), ObjSet::from_items(&[d]));
 
         // Now reparent d to b
         tx.set_object_parent(d, b).unwrap();
         assert!(tx
             .get_object_children(a)
             .unwrap()
-            .is_same(ObjSet::from(&[b, c])));
-        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from(&[d]));
+            .is_same(ObjSet::from_items(&[b, c])));
+        assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from_items(&[d]));
         assert_eq!(tx.get_object_children(c).unwrap(), ObjSet::empty());
-        assert!(tx.descendants(a).unwrap().is_same(ObjSet::from(&[b, c, d])));
-        assert_eq!(tx.descendants(b).unwrap(), ObjSet::from(&[d]));
+        assert!(tx
+            .descendants(a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b, c, d])));
+        assert_eq!(tx.descendants(b).unwrap(), ObjSet::from_items(&[d]));
         assert_eq!(tx.descendants(c).unwrap(), ObjSet::empty());
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
     #[test]
     fn test_location_contents() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db.clone());
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(NOTHING),
-                    location: Some(a),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
             )
             .unwrap();
 
         assert_eq!(tx.get_object_location(b).unwrap(), a);
-        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from_items(&[b]));
 
         assert_eq!(tx.get_object_location(a).unwrap(), NOTHING);
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
@@ -1508,45 +1485,33 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test3".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
 
         tx.set_object_location(b, c).unwrap();
         assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from_items(&[b]));
 
         let d = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test4".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
         tx.set_object_location(d, c).unwrap();
         assert!(tx
             .get_object_contents(c)
             .unwrap()
-            .is_same(ObjSet::from(&[b, d])));
+            .is_same(ObjSet::from_items(&[b, d])));
         assert_eq!(tx.get_object_location(d).unwrap(), c);
 
         tx.set_object_location(a, c).unwrap();
         assert!(tx
             .get_object_contents(c)
             .unwrap()
-            .is_same(ObjSet::from(&[b, d, a])));
+            .is_same(ObjSet::from_items(&[b, d, a])));
         assert_eq!(tx.get_object_location(a).unwrap(), c);
 
         // Validate recursive move detection.
@@ -1574,45 +1539,26 @@ mod tests {
     /// Test data integrity of object moves between commits.
     #[test]
     fn test_object_move_commits() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db.clone());
-
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(NOTHING),
-                    location: Some(a),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
             )
             .unwrap();
 
         let c = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test3".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
 
@@ -1623,21 +1569,21 @@ mod tests {
         assert!(tx
             .get_object_contents(a)
             .unwrap()
-            .is_same(ObjSet::from(&[b, c])));
+            .is_same(ObjSet::from_items(&[b, c])));
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::empty());
 
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
-        let tx = RelBoxTransaction::new(db.clone());
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         assert_eq!(tx.get_object_location(b).unwrap(), a);
         assert_eq!(tx.get_object_location(c).unwrap(), a);
         let contents = tx.get_object_contents(a).expect("Unable to get contents");
         assert!(
-            contents.is_same(ObjSet::from(&[b, c])),
+            contents.is_same(ObjSet::from_items(&[b, c])),
             "Contents of a are not as expected: {:?} vs {:?}",
             contents,
-            ObjSet::from(&[b, c])
+            ObjSet::from_items(&[b, c])
         );
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::empty());
@@ -1645,34 +1591,28 @@ mod tests {
         tx.set_object_location(b, c).unwrap();
         assert_eq!(tx.get_object_location(b).unwrap(), c);
         assert_eq!(tx.get_object_location(c).unwrap(), a);
-        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[c]));
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from_items(&[c]));
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from_items(&[b]));
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
-        let tx = RelBoxTransaction::new(db.clone());
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         assert_eq!(tx.get_object_location(c).unwrap(), a);
         assert_eq!(tx.get_object_location(b).unwrap(), c);
-        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from(&[c]));
+        assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from_items(&[c]));
         assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
-        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from(&[b]));
+        assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from_items(&[b]));
     }
 
     #[test]
     fn test_simple_property() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let oid = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
@@ -1696,18 +1636,12 @@ mod tests {
     /// Regression test for updating-verbs failing.
     #[test]
     fn test_verb_add_update() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db.clone());
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         let oid = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
         tx.add_object_verb(
@@ -1748,7 +1682,7 @@ mod tests {
 
         // Now commit, and try to resolve again.
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
-        let tx = RelBoxTransaction::new(db);
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         let vh = tx.resolve_verb(oid, "test2".into(), None).unwrap();
         assert_eq!(vh.names(), vec!["test2"]);
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -1756,32 +1690,20 @@ mod tests {
 
     #[test]
     fn test_transitive_property_resolution() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -1805,13 +1727,7 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test3".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
 
@@ -1827,32 +1743,20 @@ mod tests {
 
     #[test]
     fn test_transitive_property_resolution_clear_property() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -1912,38 +1816,26 @@ mod tests {
         assert_eq!(v, v_int(666));
         assert_eq!(perms.owner(), b);
         assert_eq!(perms.flags(), BitEnum::new_with(PropFlag::Read));
-        assert_eq!(is_clear, false);
+        assert!(!is_clear);
 
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
     #[test]
     fn test_rename_property() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -1978,32 +1870,20 @@ mod tests {
     /// Test regression where parent properties were present via `properties()` on children.
     #[test]
     fn test_regression_properties() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -2046,19 +1926,13 @@ mod tests {
 
     #[test]
     fn test_verb_resolve() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db.clone());
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
@@ -2108,7 +1982,7 @@ mod tests {
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
         // Verify existence in a new transaction.
-        let tx = RelBoxTransaction::new(db);
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         assert_eq!(
             tx.resolve_verb(a, "test".into(), None).unwrap().names(),
             vec!["test"]
@@ -2122,32 +1996,20 @@ mod tests {
 
     #[test]
     fn test_verb_resolve_inherited() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
 
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 
         let b = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test2".into()),
-                    parent: Some(a),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -2181,18 +2043,12 @@ mod tests {
 
     #[test]
     fn test_verb_resolve_wildcard() {
-        let db = test_db();
-        let tx = RelBoxTransaction::new(db);
+        let ws = test_db();
+        let tx = WtWorldStateTransaction::new(ws.db.clone());
         let a = tx
             .create_object(
                 None,
-                ObjAttrs {
-                    owner: Some(NOTHING),
-                    name: Some("test".into()),
-                    parent: Some(NOTHING),
-                    location: Some(NOTHING),
-                    flags: Some(BitEnum::new()),
-                },
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
             )
             .unwrap();
 

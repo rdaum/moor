@@ -22,7 +22,7 @@ use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
-use moor_values::model::{CommitResult, PropPerms};
+use moor_values::model::{CommitResult, PropPerms, ValSet};
 use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
@@ -34,10 +34,10 @@ use moor_values::var::{v_int, v_objid, Var};
 use moor_values::var::{v_listv, Objid};
 use moor_values::NOTHING;
 
-use crate::db_tx::DbTransaction;
+use crate::worldstate_transaction::WorldStateTransaction;
 
 pub struct DbTxWorldState {
-    pub tx: Box<dyn DbTransaction>,
+    pub tx: Box<dyn WorldStateTransaction>,
 }
 
 impl DbTxWorldState {
@@ -103,19 +103,11 @@ impl WorldState for DbTxWorldState {
             )?;
         }
 
-        let owner = (owner != NOTHING).then_some(owner);
-
         // TODO: ownership_quota support
         //    If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
-        let attrs = ObjAttrs {
-            owner,
-            name: None,
-            parent: Some(parent),
-            location: None,
-            flags: Some(flags),
-        };
+        let attrs = ObjAttrs::new(owner, parent, NOTHING, flags, "");
         self.tx.create_object(None, attrs)
     }
 

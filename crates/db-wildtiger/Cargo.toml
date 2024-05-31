@@ -1,0 +1,23 @@
+[package]
+name = "wtdb"
+description = "WildTiger DB layer/bindings"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+cmake = "0.1.50"
+bindgen = "0.69.4"
+libc.workspace = true
+
+[dependencies]
+moor-values = { path = "../values" }
+moor-db = { path = "../db" }
+
+tempfile.workspace = true
+strum.workspace = true
+uuid.workspace = true
+tracing.workspace = true

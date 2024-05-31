@@ -9,6 +9,9 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dev-dependencies]
+moor-db-relbox = { path = "../db-relbox" }
+wtdb = { path = "../db-wildtiger" }
+
 eyre.workspace = true
 criterion.workspace = true
 inventory.workspace = true

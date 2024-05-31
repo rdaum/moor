@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_rdb::index::{AttrType, IndexType};
-use moor_rdb::{RelBox, RelationInfo};
+use relbox::index::{AttrType, IndexType};
+use relbox::{RelBox, RelationInfo};
 use std::path::PathBuf;
 use std::sync::Arc;
 

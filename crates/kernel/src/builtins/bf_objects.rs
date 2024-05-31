@@ -16,8 +16,8 @@ use std::sync::Arc;
 
 use tracing::{debug, error, trace};
 
-use moor_values::model::ObjFlag;
 use moor_values::model::{world_state_err, WorldStateError};
+use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::var::Error::{E_INVARG, E_NACC, E_TYPE};
 use moor_values::var::Variant;

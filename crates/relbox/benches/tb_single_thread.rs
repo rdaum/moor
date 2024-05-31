@@ -16,17 +16,17 @@
 //! Does not measure single-item reads, deletes, or updates, or concurrent access.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use moor_rdb::index::{AttrType, IndexType};
-use moor_rdb::{RelBox, RelationInfo};
 use moor_values::util::SliceRef;
+use relbox::index::{AttrType, IndexType};
+use relbox::{RelBox, RelationInfo};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // This is a struct that tells Criterion.rs to use the "futures" crate's current-thread executor
 use crate::support::{History, Type, Value};
-use moor_rdb::RelationId;
 use moor_values::util::{BitArray, Bitset64};
+use relbox::RelationId;
 
 #[path = "../tests/test-support.rs"]
 mod support;

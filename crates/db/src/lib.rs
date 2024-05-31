@@ -19,54 +19,37 @@ use moor_values::model::WorldStateError;
 use moor_values::model::WorldStateSource;
 
 use crate::loader::LoaderInterface;
-use crate::odb::RelBoxWorldState;
 
 mod db_loader_client;
-pub mod db_tx;
-mod db_worldstate;
+pub mod db_worldstate;
 pub mod loader;
+mod relational_transaction;
+pub mod worldstate_transaction;
 
-pub mod odb;
-
-pub struct DatabaseBuilder {
-    path: Option<std::path::PathBuf>,
-    memory_size: Option<usize>,
-}
+pub use relational_transaction::{RelationalError, RelationalTransaction};
 
 pub trait Database {
     fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError>;
     fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError>;
 }
 
-impl DatabaseBuilder {
-    pub fn new() -> Self {
-        Self {
-            path: None,
-            memory_size: None,
-        }
-    }
-
-    pub fn with_path(mut self, path: std::path::PathBuf) -> Self {
-        self.path = Some(path);
-        self
-    }
-
-    pub fn with_memory_size(mut self, memory_size_bytes: usize) -> Self {
-        self.memory_size = Some(memory_size_bytes);
-        self
-    }
-
-    /// Returns a new database instance. The second value in the result tuple is true if the
-    /// database was newly created, and false if it was already present.
-    pub fn open_db(&self) -> Result<(Arc<dyn Database + Send + Sync>, bool), String> {
-        let (db, fresh) =
-            RelBoxWorldState::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40));
-        Ok((Arc::new(db), fresh))
-    }
+/// Possible backend storage engines.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DatabaseFlavour {
+    /// WiredTiger, a high-performance, scalable, transactional storage engine, also used in MongoDB.
+    /// Adaptation still under development.
+    WiredTiger,
+    /// In-house in-memory MVCC transactional store based on copy-on-write hashes and trees and
+    /// custom buffer pool management. Consider experimental.
+    RelBox,
 }
 
-impl Default for DatabaseBuilder {
-    fn default() -> Self {
-        Self::new()
+impl From<&str> for DatabaseFlavour {
+    fn from(s: &str) -> Self {
+        match s {
+            "wiredtiger" => DatabaseFlavour::WiredTiger,
+            "relbox" => DatabaseFlavour::RelBox,
+            _ => panic!("Unknown database flavour: {}", s),
+        }
     }
 }

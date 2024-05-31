@@ -24,10 +24,10 @@ mod test {
     use tracing_test::traced_test;
 
     use crate::support::{History, Type, Value};
-    use moor_rdb::index::{AttrType, IndexType};
-    use moor_rdb::{RelBox, RelationInfo};
-    use moor_rdb::{RelationId, Transaction};
     use moor_values::util::SliceRef;
+    use relbox::index::{AttrType, IndexType};
+    use relbox::{RelBox, RelationInfo};
+    use relbox::{RelationId, Transaction};
 
     fn from_val(value: i64) -> SliceRef {
         SliceRef::from_bytes(&value.to_le_bytes()[..])

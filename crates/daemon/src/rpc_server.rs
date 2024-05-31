@@ -13,12 +13,14 @@
 //
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 /// The core of the server logic for the RPC daemon
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use eyre::{Context, Error};
 
+use moor_db::DatabaseFlavour;
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
 };
@@ -48,7 +50,8 @@ use rpc_common::{
 };
 
 use crate::connections::ConnectionsDB;
-use crate::connections_tb::ConnectionsTb;
+use crate::connections_rb::ConnectionsRb;
+use crate::connections_wt::ConnectionsWT;
 use crate::rpc_session::RpcSession;
 
 pub struct RpcServer {
@@ -74,6 +77,8 @@ impl RpcServer {
         narrative_endpoint: &str,
         wss: Arc<dyn WorldStateSource>,
         scheduler: Arc<Scheduler>,
+        // For determining the flavor for the connections database.
+        db_flavor: DatabaseFlavour,
     ) -> Self {
         info!(
             "Creating new RPC server; with {} ZMQ IO threads...",
@@ -85,7 +90,10 @@ impl RpcServer {
         publish
             .bind(narrative_endpoint)
             .expect("Unable to bind ZMQ PUB socket");
-        let connections = Arc::new(ConnectionsTb::new(Some(connections_db_path)));
+        let connections: Arc<dyn ConnectionsDB + Send + Sync> = match db_flavor {
+            DatabaseFlavour::WiredTiger => Arc::new(ConnectionsWT::new(Some(connections_db_path))),
+            DatabaseFlavour::RelBox => Arc::new(ConnectionsRb::new(Some(connections_db_path))),
+        };
         info!(
             "Created connections list, with {} initial known connections",
             connections.connections().len()
@@ -1000,9 +1008,11 @@ pub(crate) fn zmq_loop(
     connections_db_path: PathBuf,
     wss: Arc<dyn WorldStateSource>,
     scheduler: Arc<Scheduler>,
-    rpc_endpoint: &str,
-    narrative_endpoint: &str,
+    rpc_endpoint: String,
+    narrative_endpoint: String,
     num_threads: Option<i32>,
+    kill_switch: Arc<AtomicBool>,
+    db_flavour: DatabaseFlavour,
 ) -> eyre::Result<()> {
     let zmq_ctx = zmq::Context::new();
     if let Some(num_threads) = num_threads {
@@ -1013,9 +1023,10 @@ pub(crate) fn zmq_loop(
         keypair,
         connections_db_path,
         zmq_ctx.clone(),
-        narrative_endpoint,
+        &narrative_endpoint,
         wss,
         scheduler,
+        db_flavour,
     ));
 
     // Start up the ping-ponger timer in a background thread...
@@ -1030,7 +1041,7 @@ pub(crate) fn zmq_loop(
     // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
     // are visible...
     let rpc_socket = zmq_ctx.socket(zmq::REP)?;
-    rpc_socket.bind(rpc_endpoint)?;
+    rpc_socket.bind(&rpc_endpoint)?;
 
     info!(
         "0mq server listening on {} with {} IO threads",
@@ -1039,6 +1050,16 @@ pub(crate) fn zmq_loop(
     );
 
     loop {
+        if kill_switch.load(Ordering::Relaxed) {
+            info!("Kill switch activated, exiting");
+            return Ok(());
+        }
+        let poll_result = rpc_socket
+            .poll(zmq::POLLIN, 100)
+            .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
+        if poll_result == 0 {
+            continue;
+        }
         match rpc_socket.recv_multipart(0) {
             Err(_) => {
                 info!("ZMQ socket closed, exiting");

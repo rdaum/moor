@@ -35,7 +35,7 @@ use super::backing::{BackingStoreClient, WriterMessage};
 
 // TODO: move "cold storage" functionality under the pager rather than above it.
 
-/// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the rdb.
+/// Uses WAL + custom page store as the persistent backing store & write-ahead-log for the relbox.
 pub struct ColdStorage {}
 
 binary_layout!(sequence_page, LittleEndian, {

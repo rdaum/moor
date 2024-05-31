@@ -14,8 +14,8 @@
 
 use moor_compiler::compile;
 use moor_compiler::Program;
-use moor_db::odb::RelBoxWorldState;
 use moor_db::Database;
+use moor_db_relbox::RelBoxWorldState;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils::call_eval_builtin;

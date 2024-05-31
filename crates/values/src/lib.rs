@@ -12,7 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use encode::AsByteBuffer;
+extern crate core;
+
+pub use encode::{AsByteBuffer, DecodingError, EncodingError};
 
 use crate::var::Objid;
 

@@ -59,9 +59,6 @@ pub trait ConnectionsDB {
     /// Return all connection objects (player or not)
     fn connections(&self) -> Vec<Objid>;
 
-    /// Return whether the given client is a valid client.
-    fn is_valid_client(&self, client_id: Uuid) -> bool;
-
     /// Retrieve the connection object for the given client.
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid>;
 

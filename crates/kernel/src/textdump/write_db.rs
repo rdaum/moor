@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
-use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
+use moor_values::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
@@ -77,7 +77,7 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
     let mut children_map = BTreeMap::new();
     for id in db_objects.keys() {
         let obj = db_objects.get(id).expect("Failed to get object");
-        let parent = obj.parent.unwrap();
+        let parent = obj.parent().unwrap_or(NOTHING);
         children_map
             .entry(parent)
             .or_insert_with(Vec::new)
@@ -88,7 +88,7 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
     let mut contents_map = BTreeMap::new();
     for id in db_objects.keys() {
         let obj = db_objects.get(id).expect("Failed to get object");
-        let location = obj.location.unwrap();
+        let location = obj.location().unwrap_or(NOTHING);
         contents_map
             .entry(location)
             .or_insert_with(Vec::new)
@@ -104,7 +104,7 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
     for (db_objid, db_obj) in db_objects.iter() {
         // To find 'next' for contents, we seek the contents of our location, and find the object right after
         // the current object in that vector
-        let location = db_obj.location.unwrap();
+        let location = db_obj.location().unwrap_or(NOTHING);
 
         let next = if location != NOTHING {
             let roommates = contents_map
@@ -131,7 +131,7 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
             None => NOTHING,
         };
 
-        let parent = db_obj.parent.unwrap();
+        let parent = db_obj.parent().unwrap_or(NOTHING);
 
         // Same for 'sibling' using children/parent
         let siblings = children_map
@@ -231,15 +231,15 @@ pub fn make_textdump(tx: Rc<dyn LoaderInterface>, version: Option<&str>) -> Text
         // is the current object, and add them to the list.
         let obj = Object {
             id: *db_objid,
-            owner: db_obj.owner.unwrap(),
-            location: db_obj.location.unwrap(),
+            owner: db_obj.owner().unwrap(),
+            location: db_obj.location().unwrap_or(NOTHING),
             contents,
             next,
             parent,
             child,
             sibling,
-            name: db_obj.name.clone().unwrap(),
-            flags: db_obj.flags.unwrap().to_u16() as _,
+            name: db_obj.name().clone().unwrap(),
+            flags: db_obj.flags().to_u16() as _,
             verbdefs,
             propdefs,
             propvals,

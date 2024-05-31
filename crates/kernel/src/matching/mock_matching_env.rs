@@ -14,8 +14,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use moor_values::model::ObjSet;
 use moor_values::model::WorldStateError;
+use moor_values::model::{ObjSet, ValSet};
 use moor_values::NOTHING;
 
 use crate::matching::match_env::MatchEnvironment;
@@ -68,7 +68,7 @@ impl MatchEnvironment for MockMatchEnv {
                 result.extend(location_obj.contents.iter().cloned());
             }
         }
-        Ok(ObjSet::from(&result))
+        Ok(ObjSet::from_items(&result))
     }
 
     fn location_of(&mut self, oid: Objid) -> Result<Objid, WorldStateError> {
@@ -110,14 +110,14 @@ pub fn setup_mock_environment() -> MockMatchEnv {
         &mut env,
         MOCK_ROOM1,
         NOTHING,
-        ObjSet::from(&[MOCK_THING1, MOCK_THING2]),
+        ObjSet::from_items(&[MOCK_THING1, MOCK_THING2]),
         vec!["room1".to_string(), "r1".to_string()],
     );
     create_mock_object(
         &mut env,
         MOCK_ROOM2,
         NOTHING,
-        ObjSet::from(&[MOCK_THING3]),
+        ObjSet::from_items(&[MOCK_THING3]),
         vec!["room2".to_string()],
     );
     create_mock_object(

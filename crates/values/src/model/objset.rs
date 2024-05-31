@@ -13,6 +13,7 @@
 //
 
 use crate::encode::{DecodingError, EncodingError};
+use crate::model::ValSet;
 use crate::util::SliceRef;
 use crate::var::Objid;
 use crate::AsByteBuffer;
@@ -98,24 +99,7 @@ impl Iterator for ObjSetIter {
 }
 
 impl ObjSet {
-    #[must_use]
-    pub fn empty() -> Self {
-        EMPTY_OBJSET.clone()
-    }
-
-    #[must_use]
-    pub fn from(oids: &[Objid]) -> Self {
-        if oids.is_empty() {
-            return EMPTY_OBJSET.clone();
-        }
-        let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
-        for i in oids {
-            v.put_i64_le(i.0);
-        }
-        Self(SliceRef::from_vec(v))
-    }
-
-    pub fn from_oid_iter<I: Iterator<Item = Objid>>(i: I) -> Self {
+    pub fn from_iter<I: Iterator<Item = Objid>>(i: I) -> Self {
         let mut v = Vec::with_capacity(4);
         let mut total = 0usize;
         for item in i {
@@ -131,30 +115,9 @@ impl ObjSet {
     }
 
     #[must_use]
-    pub fn iter(&self) -> ObjSetIter {
-        ObjSetIter {
-            position: 0,
-            buffer: self.0.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn len(&self) -> usize {
-        if self.0.is_empty() {
-            return 0;
-        }
-        self.0.len() / std::mem::size_of::<Objid>()
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    #[must_use]
     pub fn with_inserted(&self, oid: Objid) -> Self {
         if self.0.is_empty() {
-            return Self::from(&[oid]);
+            return Self::from_items(&[oid]);
         }
         // Note, we're stupid and don't check for dupes. It's called a 'set' but it ain't.
         let _capacity = self.len();
@@ -228,7 +191,7 @@ impl ObjSet {
     #[must_use]
     pub fn with_appended(&self, values: &[Objid]) -> Self {
         if self.0.is_empty() {
-            return Self::from(values);
+            return Self::from_items(values);
         }
         let new_len = self.len() + values.len();
         let mut new_buf = Vec::with_capacity(
@@ -239,6 +202,45 @@ impl ObjSet {
             new_buf.put_i64_le(i.0);
         }
         Self(SliceRef::from_vec(new_buf))
+    }
+}
+
+impl ValSet<Objid> for ObjSet {
+    #[must_use]
+    fn empty() -> Self {
+        EMPTY_OBJSET.clone()
+    }
+
+    #[must_use]
+    fn from_items(oids: &[Objid]) -> Self {
+        if oids.is_empty() {
+            return EMPTY_OBJSET.clone();
+        }
+        let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
+        for i in oids {
+            v.put_i64_le(i.0);
+        }
+        Self(SliceRef::from_vec(v))
+    }
+    #[must_use]
+    fn iter(&self) -> impl Iterator<Item = Objid> {
+        ObjSetIter {
+            position: 0,
+            buffer: self.0.clone(),
+        }
+    }
+
+    #[must_use]
+    fn len(&self) -> usize {
+        if self.0.is_empty() {
+            return 0;
+        }
+        self.0.len() / std::mem::size_of::<Objid>()
+    }
+
+    #[must_use]
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

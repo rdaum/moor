@@ -22,8 +22,8 @@ mod tests {
     use std::sync::Arc;
     use tracing_test::traced_test;
 
-    use moor_rdb::RelBox;
-    use moor_rdb::{RelationId, Transaction};
+    use relbox::RelBox;
+    use relbox::{RelationId, Transaction};
 
     use crate::support::{History, Type, Value};
     use moor_values::util::SliceRef;

@@ -15,6 +15,7 @@
 use bincode::{Decode, Encode};
 use std::time::SystemTime;
 
+use crate::AsByteBuffer;
 use thiserror::Error;
 
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
@@ -97,6 +98,10 @@ pub enum WorldStateError {
     // Catch-alls for system level object DB errors.
     #[error("DB communications/internal error: {0}")]
     DatabaseError(String),
+
+    /// A rollback was requested, and the caller should retry the operation.
+    #[error("Rollback requested, retry operation")]
+    RollbackRetry,
 }
 
 /// Translations from WorldStateError to MOO error codes.
@@ -122,6 +127,14 @@ impl WorldStateError {
     }
 }
 
+pub trait ValSet<V: AsByteBuffer> {
+    fn empty() -> Self;
+    fn from_items(items: &[V]) -> Self;
+    fn iter(&self) -> impl Iterator<Item = V>;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
+}
+
 impl From<WorldStateError> for Error {
     fn from(val: WorldStateError) -> Self {
         val.to_error_code()
@@ -129,7 +142,6 @@ impl From<WorldStateError> for Error {
 }
 
 pub fn world_state_err(err: WorldStateError) -> Error {
-    eprintln!("WorldStateError: {:?}", err);
     err.into()
 }
 

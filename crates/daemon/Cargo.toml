@@ -9,11 +9,13 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-moor-rdb = { path = "../rdb" }
+relbox = { path = "../relbox" }
 moor-db = { path = "../db" }
+moor-db-relbox = { path = "../db-relbox" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
+wtdb = { path = "../db-wildtiger" }
 
 ## Command line arguments parsing.
 clap.workspace = true
@@ -22,8 +24,10 @@ strum.workspace = true
 
 # General.
 bincode.workspace = true
+signal-hook.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
+tempfile.workspace = true
 
 ## Logging & tracing
 tracing-subscriber.workspace = true

@@ -16,13 +16,13 @@
 mod test {
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
-    use moor_db::odb::RelBoxWorldState;
     use moor_db::Database;
+    use moor_db_relbox::RelBoxWorldState;
     use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
-    use moor_values::model::CommitResult;
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::VerbFlag;
     use moor_values::model::WorldStateSource;
+    use moor_values::model::{CommitResult, ValSet};
     use moor_values::model::{HasUuid, Named};
     use moor_values::util::SliceRef;
     use moor_values::var::Objid;
@@ -34,6 +34,7 @@ mod test {
     use std::rc::Rc;
     use std::sync::Arc;
     use text_diff::assert_diff;
+    use wtdb::WireTigerWorldState;
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -46,7 +47,7 @@ mod test {
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
 
-    fn write_textdump(db: Arc<RelBoxWorldState>, version: &str) -> String {
+    fn write_textdump(db: Arc<WireTigerWorldState>, version: &str) -> String {
         let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
         let textdump = make_textdump(tx.clone(), Some(version));
@@ -174,7 +175,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = RelBoxWorldState::open(None, 1 << 30);
+        let (db, _) = WireTigerWorldState::open(None);
         let db = Arc::new(db);
         let tx = db.clone().loader_client().unwrap();
         textdump_load(tx.clone(), minimal_db).unwrap();
@@ -213,7 +214,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = RelBoxWorldState::open(None, 1 << 30);
+        let (db, _) = WireTigerWorldState::open(None);
         let db = Arc::new(db);
         load_textdump_file(
             db.clone().loader_client().unwrap(),
@@ -233,12 +234,11 @@ mod test {
 
     #[test]
     // This is an expensive test, so it's not run by default.
-    #[ignore]
     fn load_big_core() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
 
-        let (db1, _) = RelBoxWorldState::open(None, 1 << 34);
+        let (db1, _) = WireTigerWorldState::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap(),
@@ -255,7 +255,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
 
-        let (db1, _) = RelBoxWorldState::open(None, 1 << 34);
+        let (db1, _) = WireTigerWorldState::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap(),

@@ -205,6 +205,7 @@ mod tests {
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::verbdef::{VerbDef, VerbDefs};
     use crate::model::verbs::VerbFlag;
+    use crate::model::ValSet;
     use crate::util::BitEnum;
     use crate::util::SliceRef;
     use crate::var::Objid;
@@ -282,7 +283,7 @@ mod tests {
 
         let vds = VerbDefs::from_items(&[vd1, vd2]);
         let bytes = vds.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let vds2 = VerbDefs::from_sliceref(SliceRef::from_vec(bytes));
+        let vds2 = VerbDefs::from_sliceref(SliceRef::from_vec(bytes)).unwrap();
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
         assert_eq!(rvd1.uuid(), vd1_id);

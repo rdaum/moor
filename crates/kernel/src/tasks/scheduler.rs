@@ -13,7 +13,7 @@
 //
 
 use std::fs::File;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -64,7 +64,7 @@ pub struct Scheduler {
     control_receiver: Receiver<(TaskId, SchedulerControlMsg)>,
     config: Arc<Config>,
 
-    running: Arc<Mutex<bool>>,
+    running: Arc<AtomicBool>,
     database: Arc<dyn Database + Send + Sync>,
     next_task_id: AtomicUsize,
     tasks: DashMap<TaskId, TaskControl>,
@@ -163,7 +163,7 @@ impl Scheduler {
         let config = Arc::new(config);
         let (control_sender, control_receiver) = kanal::unbounded();
         Self {
-            running: Arc::new(Mutex::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
             database,
             next_task_id: Default::default(),
             tasks: DashMap::new(),
@@ -189,15 +189,8 @@ impl Scheduler {
 
     /// Execute the scheduler loop, run from the server process.
     pub fn run(self: Arc<Self>) {
-        {
-            let mut running = self.running.lock().unwrap();
-            *running = true;
-        }
+        self.running.store(true, Ordering::SeqCst);
         self.clone().do_process();
-        {
-            let mut running = self.running.lock().unwrap();
-            *running = false;
-        }
         info!("Scheduler done.");
     }
 
@@ -425,6 +418,7 @@ impl Scheduler {
 
     /// Stop the scheduler run loop.
     pub fn stop(&self) -> Result<(), SchedulerError> {
+        warn!("Issuing clean shutdown...");
         // Send shut down to all the tasks.
         for t in self.tasks.iter() {
             let task = t.value();
@@ -434,12 +428,15 @@ impl Scheduler {
                 continue;
             }
         }
+        warn!("Waiting for tasks to finish...");
+
         // Then spin until they're all done.
         while !self.tasks.is_empty() {
             yield_now();
         }
-        let mut runlock = self.running.lock().unwrap();
-        (*runlock) = false;
+
+        warn!("All tasks finished.  Stopping scheduler.");
+        self.running.store(false, Ordering::SeqCst);
 
         Ok(())
     }
@@ -458,15 +455,15 @@ impl Scheduler {
     fn do_process(self: Arc<Self>) {
         let this = self.clone();
 
+        let metrics_poller_running = self.running.clone();
+
         // Track active tasks in metrics.
         std::thread::Builder::new()
             .name("metrics-poller".to_string())
             .spawn(move || loop {
                 let this = this.clone();
-                let is_running = {
-                    let running = this.running.lock().unwrap();
-                    *running
-                };
+
+                let is_running = metrics_poller_running.load(Ordering::SeqCst);
                 if !is_running {
                     break;
                 }
@@ -511,14 +508,12 @@ impl Scheduler {
         // TODO: Improve scheduler "tick" and "prune" logic.  It's a bit of a mess.
         //  we might be able to use a vector of delay-futures for this instead, and just poll
         //  those using some futures_util magic.
+        let tick_running = self.running.clone();
         std::thread::Builder::new()
             .name("scheduler-tick".to_string())
             .spawn(move || loop {
                 let this = this.clone();
-                let is_running = {
-                    let running = this.running.lock().unwrap();
-                    *running
-                };
+                let is_running = tick_running.load(Ordering::SeqCst);
                 if !is_running {
                     break;
                 }
@@ -561,24 +556,20 @@ impl Scheduler {
 
         info!("Starting scheduler loop");
         loop {
-            let is_running = {
-                let running = this.running.lock().unwrap();
-                *running
-            };
+            let is_running = self.running.load(Ordering::SeqCst);
             if !is_running {
+                warn!("Scheduler stopping");
                 break;
             }
 
-            match this.control_receiver.recv() {
-                Ok((task_id, msg)) => {
-                    let actions = this.clone().clone().handle_task_control_msg(task_id, msg);
-                    if !actions.is_empty() {
-                        this.clone().process_task_actions(actions);
-                    }
-                }
-                Err(e) => {
-                    error!(reason = ?e, "Scheduler control channel closed");
-                    return;
+            if let Ok(msg) = self
+                .control_receiver
+                .recv_timeout(Duration::from_millis(100))
+            {
+                let (task_id, msg) = msg;
+                let actions = this.clone().handle_task_control_msg(task_id, msg);
+                if !actions.is_empty() {
+                    this.clone().process_task_actions(actions);
                 }
             }
         }

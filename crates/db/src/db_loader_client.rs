@@ -21,7 +21,7 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDefs;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::model::{HasUuid, PropPerms};
+use moor_values::model::{HasUuid, PropPerms, ValSet};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
@@ -118,13 +118,13 @@ impl LoaderInterface for DbTxWorldState {
     }
 
     fn get_object(&self, objid: Objid) -> Result<ObjAttrs, WorldStateError> {
-        Ok(ObjAttrs {
-            owner: Some(self.tx.get_object_owner(objid)?),
-            name: Some(self.tx.get_object_name(objid)?),
-            parent: Some(self.tx.get_object_parent(objid)?),
-            location: Some(self.tx.get_object_location(objid)?),
-            flags: Some(self.tx.get_object_flags(objid)?),
-        })
+        Ok(ObjAttrs::new(
+            self.tx.get_object_owner(objid)?,
+            self.tx.get_object_parent(objid)?,
+            self.tx.get_object_location(objid)?,
+            self.tx.get_object_flags(objid)?,
+            &self.tx.get_object_name(objid)?,
+        ))
     }
 
     fn get_object_verbs(&self, objid: Objid) -> Result<VerbDefs, WorldStateError> {

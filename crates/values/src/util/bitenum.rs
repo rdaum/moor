@@ -17,6 +17,7 @@ use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
 
 use crate::encode::{DecodingError, EncodingError};
+
 use bincode::{Decode, Encode};
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;

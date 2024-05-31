@@ -38,7 +38,7 @@ mod tests {
     use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
-    use moor_db::odb::RelBoxWorldState;
+    use moor_db_relbox::RelBoxWorldState;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {

@@ -1,0 +1,27 @@
+[package]
+name = "moor-db-relbox"
+version = "0.1.0"
+description = "Database layer using RelBox"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[dependencies]
+moor-values = { path = "../values" }
+moor-db = { path = "../db" }
+
+relbox = { path = "../relbox" }
+
+## General usefulness
+strum.workspace = true
+uuid.workspace = true
+
+
+## Logging & tracing
+tracing.workspace = true
+

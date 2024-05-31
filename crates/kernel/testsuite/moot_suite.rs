@@ -28,8 +28,8 @@ use std::{
 
 use common::create_db;
 use eyre::Context;
-use moor_db::odb::RelBoxWorldState;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
+use moor_db_relbox::RelBoxWorldState;
 use moor_values::var::v_none;
 use pretty_assertions::assert_eq;
 

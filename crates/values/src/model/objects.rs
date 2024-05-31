@@ -12,12 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use binary_layout::{binary_layout, Field};
 use std::fmt::{Display, Formatter};
 
+use crate::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
 
-use crate::util::BitEnum;
+use crate::util::{BitEnum, SliceRef};
 use crate::var::Objid;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
@@ -53,50 +55,199 @@ impl Display for ObjAttr {
     }
 }
 
-impl Default for ObjAttrs {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+binary_layout!(objattrs_buf, LittleEndian, {
+    owner: Objid as i64,
+    parent: Objid as i64,
+    location: Objid as i64,
+    flags: BitEnum<ObjFlag> as u16,
+    name: [u8],
+});
+
+#[derive(Debug, Clone)]
+pub struct ObjAttrs(SliceRef);
 
 impl ObjAttrs {
     #[must_use]
-    pub fn new() -> Self {
-        Self {
-            owner: None,
-            name: None,
-            parent: None,
-            location: None,
-            flags: None,
+    pub fn empty() -> Self {
+        let mut buffer = vec![0; objattrs_buf::name::OFFSET];
+        let mut objattrs_view = objattrs_buf::View::new(&mut buffer);
+        objattrs_view
+            .owner_mut()
+            .try_write(NOTHING)
+            .expect("Failed to encode owner");
+        objattrs_view
+            .parent_mut()
+            .try_write(NOTHING)
+            .expect("Failed to encode parent");
+        objattrs_view
+            .location_mut()
+            .try_write(NOTHING)
+            .expect("Failed to encode location");
+        objattrs_view
+            .flags_mut()
+            .try_write(BitEnum::new())
+            .expect("Failed to encode flags");
+
+        Self(SliceRef::from_vec(buffer))
+    }
+
+    pub fn new(
+        owner: Objid,
+        parent: Objid,
+        location: Objid,
+        flags: BitEnum<ObjFlag>,
+        name: &str,
+    ) -> Self {
+        let header_size = objattrs_buf::name::OFFSET;
+        let name_bytes = name.as_bytes();
+        let mut buf = vec![0; header_size + name_bytes.len()];
+        let mut objattrs_view = objattrs_buf::View::new(&mut buf);
+        objattrs_view
+            .owner_mut()
+            .try_write(owner)
+            .expect("Failed to encode owner");
+        objattrs_view
+            .parent_mut()
+            .try_write(parent)
+            .expect("Failed to encode parent");
+        objattrs_view
+            .location_mut()
+            .try_write(location)
+            .expect("Failed to encode location");
+        objattrs_view
+            .flags_mut()
+            .try_write(flags)
+            .expect("Failed to encode flags");
+
+        buf[header_size..].copy_from_slice(name_bytes);
+
+        Self(SliceRef::from_vec(buf))
+    }
+
+    pub fn owner(&self) -> Option<Objid> {
+        let objattrs_view = objattrs_buf::View::new(self.0.as_slice());
+        let oid = objattrs_view.owner().try_read().unwrap();
+        if oid == NOTHING {
+            None
+        } else {
+            Some(oid)
         }
     }
-    pub fn owner(&mut self, o: Objid) -> &mut Self {
-        self.owner = Some(o);
+
+    pub fn set_owner(&mut self, o: Objid) -> &mut Self {
+        let mut buffer_as_vec = self.0.as_slice().to_vec();
+        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
+        objattrs_view
+            .owner_mut()
+            .try_write(o)
+            .expect("Failed to encode owner");
+        self.0 = SliceRef::from_vec(buffer_as_vec);
         self
     }
-    pub fn location(&mut self, o: Objid) -> &mut Self {
-        self.location = Some(o);
+
+    pub fn location(&self) -> Option<Objid> {
+        let objattrs_view = objattrs_buf::View::new(self.0.as_slice());
+        let oid = objattrs_view.location().try_read().unwrap();
+        if oid == NOTHING {
+            None
+        } else {
+            Some(oid)
+        }
+    }
+
+    pub fn set_location(&mut self, o: Objid) -> &mut Self {
+        let mut buffer_as_vec = self.0.as_slice().to_vec();
+        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
+        objattrs_view
+            .location_mut()
+            .try_write(o)
+            .expect("Failed to encode location");
+        self.0 = SliceRef::from_vec(buffer_as_vec);
         self
     }
-    pub fn parent(&mut self, o: Objid) -> &mut Self {
-        self.parent = Some(o);
+
+    pub fn parent(&self) -> Option<Objid> {
+        let objattrs_view = objattrs_buf::View::new(self.0.as_slice());
+        let oid = objattrs_view.parent().try_read().unwrap();
+        if oid == NOTHING {
+            None
+        } else {
+            Some(oid)
+        }
+    }
+
+    pub fn set_parent(&mut self, o: Objid) -> &mut Self {
+        let mut buffer_as_vec = self.0.as_slice().to_vec();
+        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
+        objattrs_view
+            .parent_mut()
+            .try_write(o)
+            .expect("Failed to encode parent");
+        self.0 = SliceRef::from_vec(buffer_as_vec);
         self
     }
-    pub fn name(&mut self, s: &str) -> &mut Self {
-        self.name = Some(String::from(s));
+
+    pub fn flags(&self) -> BitEnum<ObjFlag> {
+        let objattrs_view = objattrs_buf::View::new(self.0.as_slice());
+        objattrs_view.flags().try_read().unwrap()
+    }
+
+    pub fn set_flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut Self {
+        let mut buffer_as_vec = self.0.as_slice().to_vec();
+        let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
+        objattrs_view
+            .flags_mut()
+            .try_write(flags)
+            .expect("Failed to encode flags");
+        self.0 = SliceRef::from_vec(buffer_as_vec);
         self
     }
-    pub fn flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut Self {
-        self.flags = Some(flags);
+
+    pub fn name(&self) -> Option<String> {
+        if self.0.len() == objattrs_buf::name::OFFSET {
+            return None;
+        }
+        let objattrs_view = objattrs_buf::View::new(self.0.as_slice());
+        objattrs_view.name().to_vec();
+        Some(String::from_utf8(objattrs_view.name().to_vec()).unwrap())
+    }
+
+    pub fn set_name(&mut self, s: &str) -> &mut Self {
+        let mut buffer_as_vec = self.0.as_slice().to_vec();
+        let name_as_vec = s.as_bytes().to_vec();
+        buffer_as_vec.extend_from_slice(&name_as_vec);
+        self.0 = SliceRef::from_vec(buffer_as_vec);
         self
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct ObjAttrs {
-    pub owner: Option<Objid>,
-    pub name: Option<String>,
-    pub parent: Option<Objid>,
-    pub location: Option<Objid>,
-    pub flags: Option<BitEnum<ObjFlag>>,
+impl Default for ObjAttrs {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl AsByteBuffer for ObjAttrs {
+    fn size_bytes(&self) -> usize {
+        self.0.len()
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_slice().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    where
+        Self: Sized,
+    {
+        Ok(Self(bytes))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.0.clone())
+    }
 }

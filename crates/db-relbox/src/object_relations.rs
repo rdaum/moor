@@ -21,8 +21,8 @@ use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
 
-use moor_rdb::RelationError;
-use moor_rdb::{RelationId, Transaction};
+use relbox::RelationError;
+use relbox::{RelationId, Transaction};
 
 /// The set of binary relations that are used to represent the world state in the moor system.
 #[repr(usize)]
@@ -192,7 +192,7 @@ where
         ));
     };
     let objs = all_tuples.into_iter().map(|v| decode_oid(&v.domain()));
-    Ok(ObjSet::from_oid_iter(objs))
+    Ok(ObjSet::from_iter(objs))
 }
 
 pub fn get_object_object(tx: &Transaction, rel: WorldStateRelation, oid: Objid) -> Option<Objid> {
@@ -261,7 +261,7 @@ pub fn get_objects_by_object_codomain(
         .expect("Unable to seek by codomain")
         .into_iter()
         .map(|v| decode_oid(&v.domain()));
-    ObjSet::from_oid_iter(objs)
+    ObjSet::from_iter(objs)
 }
 
 pub fn tuple_size_for_object_codomain(
@@ -381,15 +381,15 @@ mod tests {
 
     use strum::{EnumCount, IntoEnumIterator};
 
-    use moor_values::model::ObjSet;
+    use moor_values::model::{ObjSet, ValSet};
     use moor_values::var::Objid;
 
-    use crate::odb::object_relations::WorldStateRelation::ObjectParent;
-    use crate::odb::object_relations::{
+    use crate::object_relations::WorldStateRelation::ObjectParent;
+    use crate::object_relations::{
         get_object_by_object_codomain, get_object_object, get_objects_by_object_codomain,
         insert_object_object, upsert_object_object, WorldStateRelation, WorldStateSequences,
     };
-    use moor_rdb::{relation_info_for, RelBox, RelationInfo};
+    use relbox::{relation_info_for, RelBox, RelationInfo};
 
     fn test_db() -> Arc<RelBox> {
         let relations: Vec<RelationInfo> =
@@ -423,19 +423,19 @@ mod tests {
 
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(3)),
-            ObjSet::from(&[])
+            ObjSet::empty()
         );
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(2)),
-            ObjSet::from(&[Objid(3)])
+            ObjSet::from_items(&[Objid(3)])
         );
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(1)),
-            ObjSet::from(&[Objid(2)])
+            ObjSet::from_items(&[Objid(2)])
         );
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(0)),
-            ObjSet::from(&[Objid(1)])
+            ObjSet::from_items(&[Objid(1)])
         );
 
         // Now commit and re-verify.
@@ -457,19 +457,19 @@ mod tests {
 
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(3)),
-            ObjSet::from(&[])
+            ObjSet::from_items(&[])
         );
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(2)),
-            ObjSet::from(&[Objid(3)])
+            ObjSet::from_items(&[Objid(3)])
         );
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(1)),
-            ObjSet::from(&[Objid(2)])
+            ObjSet::from_items(&[Objid(2)])
         );
         assert_eq!(
             get_objects_by_object_codomain(&tx, ObjectParent, Objid(0)),
-            ObjSet::from(&[Objid(1)])
+            ObjSet::from_items(&[Objid(1)])
         );
 
         // And then update a value and verify.
@@ -491,6 +491,6 @@ mod tests {
         );
         // Now check the old value.
         let children = get_objects_by_object_codomain(&tx, ObjectParent, Objid(0));
-        assert_eq!(children, ObjSet::from(&[]));
+        assert_eq!(children, ObjSet::from_items(&[]));
     }
 }

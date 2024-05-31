@@ -22,7 +22,7 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use moor_compiler::compile;
-use moor_db::odb::RelBoxWorldState;
+use moor_db_relbox::RelBoxWorldState;
 use moor_kernel::tasks::scheduler::AbortLimitReason;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::vm_host::{VMHostResponse, VmHost};

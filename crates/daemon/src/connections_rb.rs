@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! An implementation of the connections db that uses rdb.
+//! An implementation of the connections db that uses relbox.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -25,10 +25,10 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::SessionError;
-use moor_rdb::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
+use relbox::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use rpc_common::RpcRequestError;
 
 use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
@@ -83,11 +83,11 @@ enum ConnectionRelation {
 }
 
 const CONNECTIONS_DB_MEM_SIZE: usize = 1 << 26;
-pub struct ConnectionsTb {
+pub struct ConnectionsRb {
     tb: Arc<RelBox>,
 }
 
-impl ConnectionsTb {
+impl ConnectionsRb {
     pub fn new(path: Option<PathBuf>) -> Self {
         let mut relations: Vec<RelationInfo> =
             ConnectionRelation::iter().map(relation_info_for).collect();
@@ -98,7 +98,7 @@ impl ConnectionsTb {
     }
 }
 
-impl ConnectionsTb {
+impl ConnectionsRb {
     fn most_recent_client_connection(
         tx: &Transaction,
         connection_obj: Objid,
@@ -152,7 +152,7 @@ fn now_as_sliceref() -> SliceRef {
     )
 }
 
-impl ConnectionsDB for ConnectionsTb {
+impl ConnectionsDB for ConnectionsRb {
     fn update_client_connection(
         &self,
         from_connection: Objid,
@@ -390,21 +390,6 @@ impl ConnectionsDB for ConnectionsTb {
         connections.into_iter().collect()
     }
 
-    fn is_valid_client(&self, client_id: Uuid) -> bool {
-        let tx = self.tb.clone().start_tx();
-        let is_valid = tx
-            .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_unique_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            )
-            .is_ok();
-        tx.commit().expect("Unable to commit transaction");
-        is_valid
-    }
-
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid> {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
@@ -479,7 +464,7 @@ mod tests {
     use moor_values::var::Objid;
 
     use crate::connections::ConnectionsDB;
-    use crate::connections_tb::ConnectionsTb;
+    use crate::connections_rb::ConnectionsRb;
 
     /// Simple test of:
     ///     * Attach a connection<->client
@@ -491,7 +476,7 @@ mod tests {
     ///     * Verify the connection has no clients
     #[test]
     fn test_single_connection() {
-        let db = Arc::new(ConnectionsTb::new(None));
+        let db = Arc::new(ConnectionsRb::new(None));
         let mut jh = vec![];
 
         for x in 1..100 {
@@ -513,14 +498,12 @@ mod tests {
                 );
                 let last_activity = last_activity.unwrap().elapsed().unwrap().as_secs_f64();
                 assert!(last_activity < 1.0);
-                assert!(db.is_valid_client(client_id));
                 db.update_client_connection(oid, Objid(x))
                     .expect("Unable to update client connection");
                 let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
                 db.remove_client_connection(client_id).unwrap();
-                assert!(!db.is_valid_client(client_id));
                 let client_ids = db.client_ids_for(Objid(x)).unwrap();
                 assert!(client_ids.is_empty());
             }));
@@ -533,7 +516,7 @@ mod tests {
     /// Test that a given player can have multiple clients connected to it.
     #[test]
     fn test_multiple_connections() {
-        let db = Arc::new(ConnectionsTb::new(None));
+        let db = Arc::new(ConnectionsRb::new(None));
         let mut jh = vec![];
         for x in 1..100 {
             let db = db.clone();
@@ -585,7 +568,7 @@ mod tests {
     // Validate that ping check works.
     #[test]
     fn ping_test() {
-        let db = Arc::new(ConnectionsTb::new(None));
+        let db = Arc::new(ConnectionsRb::new(None));
         let client_id1 = uuid::Uuid::new_v4();
         let ob = db
             .new_connection(client_id1, "localhost".to_string(), None)
@@ -593,7 +576,6 @@ mod tests {
         db.ping_check();
         let client_ids = db.connections();
         assert_eq!(client_ids.len(), 1);
-        assert!(db.is_valid_client(client_id1));
         assert_eq!(db.connection_object_for_client(client_id1), Some(ob));
     }
 }

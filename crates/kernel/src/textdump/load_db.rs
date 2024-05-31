@@ -33,7 +33,7 @@ use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
 use moor_values::var::Var;
-use moor_values::AsByteBuffer;
+use moor_values::{AsByteBuffer, NOTHING};
 
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{
@@ -121,12 +121,7 @@ pub fn read_textdump<T: io::Read>(
         loader
             .create_object(
                 Some(*objid),
-                ObjAttrs::new()
-                    // .owner(o.owner)
-                    // .location(o.location)
-                    .name(o.name.as_str())
-                    // .parent(o.parent)
-                    .flags(flags),
+                &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, &o.name),
             )
             .expect(format!("creating object {}", objid).as_str());
     }

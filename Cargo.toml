@@ -5,7 +5,8 @@ members = [
     "crates/values",
     "crates/compiler",
     "crates/kernel",
-    "crates/rdb",
+    "crates/relbox",
+    "crates/db-wildtiger",
     "crates/db",
     "crates/rpc-common",
     "crates/rpc-sync-client",
@@ -14,6 +15,7 @@ members = [
     "crates/telnet-host",
     "crates/web-host",
     "crates/console-host",
+    "crates/db-relbox",
 ]
 
 [workspace.package]
@@ -133,3 +135,4 @@ ed25519-dalek = { version = "2.1.1", features = [
 ] }
 pem = "3.0.4"
 rusty_paseto = { version = "0.7" }
+signal-hook = "0.3.17"

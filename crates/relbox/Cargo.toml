@@ -1,5 +1,5 @@
 [package]
-name = "moor-rdb"
+name = "relbox"
 version = "0.1.0"
 description = "Db kernel for supporting storage"
 edition.workspace = true

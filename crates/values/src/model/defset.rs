@@ -13,6 +13,7 @@
 //
 
 use crate::encode::{DecodingError, EncodingError};
+use crate::model::ValSet;
 use crate::util::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
@@ -82,22 +83,16 @@ impl<T: AsByteBuffer> Iterator for DefsIter<T> {
     }
 }
 
-impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
+impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
     #[must_use]
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             bytes: SliceRef::empty(),
             _phantom: Default::default(),
         }
     }
-    #[must_use]
-    pub fn from_sliceref(bytes: SliceRef) -> Self {
-        Self {
-            bytes,
-            _phantom: Default::default(),
-        }
-    }
-    pub fn from_items(items: &[T]) -> Self {
+
+    fn from_items(items: &[T]) -> Self {
         let mut bytes = Vec::new();
         for item in items {
             item.with_byte_buffer(|item_bytes| {
@@ -111,7 +106,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             _phantom: Default::default(),
         }
     }
-    pub fn iter(&self) -> impl Iterator<Item = T> {
+    fn iter(&self) -> impl Iterator<Item = T> {
         DefsIter {
             position: 0,
             buffer: self.bytes.clone(),
@@ -120,15 +115,17 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
     }
     // Provides the number of items in the buffer.
     #[must_use]
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.iter().count()
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.iter().next().is_none()
     }
+}
 
+impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
     #[must_use]
     pub fn contains(&self, uuid: Uuid) -> bool {
         self.iter().any(|p| p.uuid() == uuid)
@@ -164,7 +161,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             })
             .expect("Failed to encode item");
         }
-        Some(Self::from_sliceref(SliceRef::from_bytes(&buf)))
+        Some(Self::from_sliceref(SliceRef::from_bytes(&buf)).unwrap())
     }
 
     #[must_use]
@@ -179,7 +176,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             })
             .expect("Failed to encode item");
         }
-        Self::from_sliceref(SliceRef::from_bytes(&buf))
+        Self::from_sliceref(SliceRef::from_bytes(&buf)).unwrap()
     }
 
     // TODO Add builder patterns for these that construct in-place, building the buffer right in us.
@@ -192,7 +189,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             new_buf.put_slice(bytes);
         })
         .expect("Failed to encode item");
-        Self::from_sliceref(SliceRef::from_bytes(&new_buf))
+        Self::from_sliceref(SliceRef::from_bytes(&new_buf)).unwrap()
     }
     pub fn with_all_added(&self, v: &[T]) -> Self {
         let mut new_buf = self.bytes.as_slice().to_vec();
@@ -205,7 +202,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             })
             .expect("Failed to encode item");
         }
-        Self::from_sliceref(SliceRef::from_bytes(&new_buf))
+        Self::from_sliceref(SliceRef::from_bytes(&new_buf)).unwrap()
     }
     pub fn with_updated<F: Fn(&T) -> T>(&self, uuid: Uuid, f: F) -> Option<Self> {
         if !self.contains(uuid) {
@@ -233,7 +230,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
                 .expect("Failed to encode item");
             };
         }
-        Some(Self::from_sliceref(SliceRef::from_bytes(&new_buf)))
+        Some(Self::from_sliceref(SliceRef::from_bytes(&new_buf)).unwrap())
     }
 }
 

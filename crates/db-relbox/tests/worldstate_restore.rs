@@ -19,9 +19,8 @@ mod test {
     use std::time::Duration;
     use strum::{EnumCount, IntoEnumIterator};
 
-    use moor_db::db_tx::DbTransaction;
-    use moor_db::odb::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
-    use moor_rdb::{relation_info_for, RelBox, RelationInfo};
+    use moor_db::worldstate_transaction::WorldStateTransaction;
+    use moor_db_relbox::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
     use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
     use moor_values::model::HasUuid;
@@ -29,6 +28,7 @@ mod test {
     use moor_values::model::VerbArgsSpec;
     use moor_values::util::BitEnum;
     use moor_values::NOTHING;
+    use relbox::{relation_info_for, RelBox, RelationInfo};
 
     pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
         let relations: Vec<RelationInfo> =
@@ -50,13 +50,7 @@ mod test {
             let a = tx
                 .create_object(
                     None,
-                    ObjAttrs {
-                        owner: Some(NOTHING),
-                        name: Some("test".into()),
-                        parent: Some(NOTHING),
-                        location: Some(NOTHING),
-                        flags: Some(BitEnum::new()),
-                    },
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
                 )
                 .unwrap();
 

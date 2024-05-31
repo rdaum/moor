@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::model::ObjSet;
+use moor_values::model::{ObjSet, ValSet};
 use moor_values::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 use moor_values::model::WorldStateError;

@@ -21,20 +21,23 @@ use clap_derive::Parser;
 use ed25519_dalek::SigningKey;
 use eyre::Report;
 
+use moor_db::DatabaseFlavour;
+use moor_db_relbox::RelBoxDatabaseBuilder;
 use pem::Pem;
 use rand::rngs::OsRng;
 use rusty_paseto::core::Key;
-use tracing::info;
+use tracing::{info, warn};
 
-use moor_db::DatabaseBuilder;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::textdump_load;
+use wtdb::WiredTigerDatabaseBuilder;
 
 use crate::rpc_server::zmq_loop;
 
 mod connections;
-mod connections_tb;
+mod connections_rb;
+mod connections_wt;
 mod rpc_server;
 mod rpc_session;
 
@@ -137,6 +140,16 @@ struct Args {
     )]
     max_buffer_pool_bytes: usize,
 
+    #[arg(
+        long,
+        value_name = "db-flavour",
+        // For those that don't appreciate proper English.
+        alias = "db-flavor",
+        help = "The database flavour to use",
+        default_value = "relbox"
+    )]
+    db_flavour: DatabaseFlavour,
+
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
 }
@@ -203,10 +216,22 @@ fn main() -> Result<(), Report> {
     };
 
     info!("Daemon starting...");
-    let db_source_builder = DatabaseBuilder::new()
-        .with_path(args.db.clone())
-        .with_memory_size(args.max_buffer_pool_bytes);
-    let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
+    let (db_source, freshly_made) = match args.db_flavour {
+        DatabaseFlavour::WiredTiger => {
+            let db_source_builder = WiredTigerDatabaseBuilder::new().with_path(args.db.clone());
+            let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
+            info!(path = ?args.db, "Opened database");
+            (db_source, freshly_made)
+        }
+        DatabaseFlavour::RelBox => {
+            let db_source_builder = RelBoxDatabaseBuilder::new()
+                .with_path(args.db.clone())
+                .with_memory_size(args.max_buffer_pool_bytes);
+            let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
+            info!(path = ?args.db, "Opened database");
+            (db_source, freshly_made)
+        }
+    };
     info!(path = ?args.db, "Opened database");
 
     // If the database already existed, do not try to import the textdump...
@@ -248,22 +273,39 @@ fn main() -> Result<(), Report> {
         .name("moor-scheduler".to_string())
         .spawn(move || loop_scheduler.run())?;
 
-    zmq_loop(
-        keypair,
-        args.connections_file,
-        state_source,
-        scheduler.clone(),
-        args.rpc_listen.as_str(),
-        args.narrative_listen.as_str(),
-        Some(args.num_io_threads),
-    )
-    .expect("RPC server loop failed");
+    let kill_switch = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
+    let rpc_kill_switch = kill_switch.clone();
+    let rpc_listen = args.rpc_listen.clone();
+    let rpc_narrative_listen = args.narrative_listen.clone();
+    let rpc_scheduler = scheduler.clone();
+    let rpc_loop_thread = std::thread::Builder::new()
+        .name("moor-rpc".to_string())
+        .spawn(move || {
+            let _ = zmq_loop(
+                keypair,
+                args.connections_file,
+                state_source,
+                rpc_scheduler,
+                rpc_listen,
+                rpc_narrative_listen,
+                Some(args.num_io_threads),
+                rpc_kill_switch,
+                args.db_flavour,
+            );
+        })?;
+
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, kill_switch.clone())?;
     info!(
         rpc_endpoint = args.rpc_listen,
         narrative_endpoint = args.narrative_listen,
         "Daemon started. Listening for RPC events."
     );
+    rpc_loop_thread.join().expect("RPC thread panicked");
+    warn!("RPC thread exited. Departing...");
+
+    scheduler.stop().expect("Scheduler thread failed to stop");
     scheduler_loop_jh.join().expect("Scheduler thread panicked");
     info!("Done.");
 

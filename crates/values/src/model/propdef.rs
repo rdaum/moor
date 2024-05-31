@@ -142,7 +142,7 @@ pub type PropDefs = Defs<PropDef>;
 mod tests {
     use crate::model::defset::HasUuid;
     use crate::model::propdef::{PropDef, PropDefs};
-
+    use crate::model::ValSet;
     use crate::util::SliceRef;
     use crate::var::Objid;
     use crate::AsByteBuffer;
@@ -184,7 +184,7 @@ mod tests {
         assert_eq!(pd1.uuid(), test_pd1.uuid());
 
         let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let pds2 = PropDefs::from_sliceref(SliceRef::from_vec(byte_vec));
+        let pds2 = PropDefs::from_sliceref(SliceRef::from_vec(byte_vec)).unwrap();
         let pd2 = pds2.find_first_named("test2").unwrap();
         assert_eq!(pd2.uuid(), test_pd2.uuid());
 
