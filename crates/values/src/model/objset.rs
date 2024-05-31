@@ -98,11 +98,11 @@ impl Iterator for ObjSetIter {
     }
 }
 
-impl ObjSet {
-    pub fn from_iter<I: Iterator<Item = Objid>>(i: I) -> Self {
+impl FromIterator<Objid> for ObjSet {
+    fn from_iter<T: IntoIterator<Item = Objid>>(iter: T) -> Self {
         let mut v = Vec::with_capacity(4);
         let mut total = 0usize;
-        for item in i {
+        for item in iter {
             v.put_i64_le(item.0);
             total += 1;
         }
@@ -113,7 +113,9 @@ impl ObjSet {
         }
         Self(SliceRef::from_vec(v))
     }
+}
 
+impl ObjSet {
     #[must_use]
     pub fn with_inserted(&self, oid: Objid) -> Self {
         if self.0.is_empty() {
@@ -222,7 +224,6 @@ impl ValSet<Objid> for ObjSet {
         }
         Self(SliceRef::from_vec(v))
     }
-    #[must_use]
     fn iter(&self) -> impl Iterator<Item = Objid> {
         ObjSetIter {
             position: 0,

@@ -81,9 +81,7 @@ where
         // For example: we have a RANGE_WIDTH of 48 and a bitset of 64x1 or 32x2.
         // So we need to check that the first empty bit is within the range width, or people could
         // get the idea they could append beyond our permitted range.
-        let Some(first_empty) = self.bitset.first_empty() else {
-            return None;
-        };
+        let first_empty = self.bitset.first_empty()?;
         if first_empty > RANGE_WIDTH {
             return None;
         }
