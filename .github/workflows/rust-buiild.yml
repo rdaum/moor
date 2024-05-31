@@ -1,5 +1,4 @@
 name: Rust
-
 on:
   push:
     branches: [ "main" ]
@@ -15,15 +14,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake python3-dev swig
+          version: 1.0
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
 
   clippy_check:
     runs-on: ubuntu-latest
     steps:
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake python3-dev swig
+          version: 1.0
       - uses: actions/checkout@v4
       - run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
