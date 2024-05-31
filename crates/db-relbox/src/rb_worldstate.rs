@@ -144,7 +144,7 @@ impl WorldStateTransaction for RelBoxTransaction {
             }
         };
 
-        let owner = attrs.owner().unwrap_or(NOTHING);
+        let owner = attrs.owner().unwrap_or(id);
         object_relations::upsert_object_object(
             &self.tx,
             WorldStateRelation::ObjectOwner,
