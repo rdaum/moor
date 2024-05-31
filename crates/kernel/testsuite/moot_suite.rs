@@ -10,11 +10,13 @@ use std::{
     sync::Arc,
 };
 
-use common::{create_db, NONPROGRAMMER, PROGRAMMER};
+use common::{create_relbox_db, create_wiretiger_db, NONPROGRAMMER, PROGRAMMER};
 use eyre::Context;
-use moor_db_relbox::RelBoxWorldState;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
-use moor_values::var::{v_none, Objid};
+use moor_values::{
+    model::WorldStateSource,
+    var::{v_none, Objid},
+};
 use pretty_assertions::assert_eq;
 
 use crate::common::WIZARD;
@@ -48,7 +50,7 @@ impl MootState {
         self,
         new_line_no: usize,
         line: &str,
-        db: Arc<RelBoxWorldState>,
+        db: Arc<dyn WorldStateSource>,
     ) -> eyre::Result<Self> {
         let line = line.trim_end_matches('\n');
         match self {
@@ -167,7 +169,7 @@ impl MootState {
         command: &str,
         expectation: Option<&str>,
         line_no: usize,
-        db: Arc<RelBoxWorldState>,
+        db: Arc<dyn WorldStateSource>,
         session: Arc<dyn Session>,
         player: Objid,
     ) -> eyre::Result<()> {
@@ -192,15 +194,23 @@ impl MootState {
     }
 }
 
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as moot => test }
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as relbox => test_relbox }
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiretiger => test_wiretiger }
 
-fn test(path: &Path) {
+fn test_relbox(path: &Path) {
+    test(create_relbox_db(), path);
+}
+
+fn test_wiretiger(path: &Path) {
+    test(create_wiretiger_db(), path);
+}
+
+fn test(db: Arc<dyn WorldStateSource>, path: &Path) {
     if path.is_dir() {
         return;
     }
     eprintln!("Test definition: {}", path.display());
     let f = BufReader::new(File::open(path).unwrap());
-    let db = create_db();
 
     let mut state = MootState::new(Arc::new(NoopClientSession::new()), WIZARD);
     for (line_no, line) in f.lines().enumerate() {

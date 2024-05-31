@@ -33,6 +33,7 @@ use pretty_assertions::assert_eq;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
+use wtdb::WireTigerWorldState;
 
 #[allow(dead_code)]
 pub const WIZARD: Objid = Objid(3);
@@ -53,8 +54,15 @@ pub fn load_textdump(db: Arc<dyn Database>) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-pub fn create_db() -> Arc<RelBoxWorldState> {
+pub fn create_relbox_db() -> Arc<dyn WorldStateSource> {
     let (db, _) = RelBoxWorldState::open(None, 1 << 30);
+    let db = Arc::new(db);
+    load_textdump(db.clone());
+    db
+}
+
+pub fn create_wiretiger_db() -> Arc<dyn WorldStateSource> {
+    let (db, _) = WireTigerWorldState::open(None);
     let db = Arc::new(db);
     load_textdump(db.clone());
     db
@@ -126,7 +134,7 @@ pub fn eval(
 pub trait AssertRunAsVerb {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T);
 }
-impl AssertRunAsVerb for Arc<RelBoxWorldState> {
+impl AssertRunAsVerb for Arc<dyn WorldStateSource> {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T) {
         let expected = expected.into();
         let actual = run_as_verb(self.clone(), expression.as_ref());
