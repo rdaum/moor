@@ -1262,7 +1262,7 @@ mod tests {
             .unwrap();
         assert_eq!(oid, Objid(0));
         assert!(tx.object_valid(oid).unwrap());
-        assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_owner(oid).unwrap(), oid);
         assert_eq!(tx.get_object_parent(oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_location(oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(oid).unwrap(), "test");
@@ -1271,7 +1271,7 @@ mod tests {
         // Verify existence in a new transaction.
         let tx = RelBoxTransaction::new(db);
         assert!(tx.object_valid(oid).unwrap());
-        assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_owner(oid).unwrap(), oid);
     }
 
     #[test]
