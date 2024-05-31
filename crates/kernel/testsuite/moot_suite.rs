@@ -1,22 +1,6 @@
 //! Moot is a simple text-based test format for testing the kernel.
 //!
-//! Example test:
-//!
-//! // This is a comment.
-//! ; return 42;
-//! 42
-//!
-//! // Empty lines are ignored
-//!
-//! // Both thrown and returned errors can be matched with a simple error value
-//! ; eval();
-//! E_ARGS
-//!
-//! // Multi-line commands: continuation with `>`.
-//! ; return 1 + 2 +
-//! > 3;
-//! 6
-//!
+//! See example.moot for a full-fledged example
 
 mod common;
 use std::{
@@ -26,11 +10,11 @@ use std::{
     sync::Arc,
 };
 
-use common::create_db;
+use common::{create_db, NONPROGRAMMER, PROGRAMMER};
 use eyre::Context;
 use moor_db_relbox::RelBoxWorldState;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
-use moor_values::var::v_none;
+use moor_values::var::{v_none, Objid};
 use pretty_assertions::assert_eq;
 
 use crate::common::WIZARD;
@@ -38,22 +22,25 @@ use crate::common::WIZARD;
 enum MootState {
     Ready {
         session: Arc<dyn Session>,
+        player: Objid,
     },
     ReadingCommand {
         session: Arc<dyn Session>,
+        player: Objid,
         line_no: usize,
         command: String,
     },
     ReadingExpectation {
         session: Arc<dyn Session>,
+        player: Objid,
         line_no: usize,
         command: String,
         expectation: String,
     },
 }
 impl MootState {
-    fn new(session: Arc<dyn Session>) -> Self {
-        MootState::Ready { session }
+    fn new(session: Arc<dyn Session>, player: Objid) -> Self {
+        MootState::Ready { session, player }
     }
 
     // Could implement this with `nom` I guess, but this seems simple enough, and it's probably easier to read.
@@ -65,23 +52,36 @@ impl MootState {
     ) -> eyre::Result<Self> {
         let line = line.trim_end_matches('\n');
         match self {
-            MootState::Ready { ref session } => {
+            MootState::Ready {
+                ref session,
+                player,
+            } => {
                 if let Some(rest) = line.strip_prefix(';') {
                     Ok(MootState::ReadingCommand {
                         session: session.clone(),
+                        player,
                         line_no: new_line_no,
                         command: rest.trim_start().to_string(),
                     })
+                } else if let Some(player) = line.strip_prefix('@') {
+                    let session = session.clone();
+                    match player {
+                        "wizard" => Ok(MootState::new(session, WIZARD)),
+                        "programmer" => Ok(MootState::new(session, PROGRAMMER)),
+                        "nonprogrammer" => Ok(MootState::new(session, NONPROGRAMMER)),
+                        _ => Err(eyre::eyre!("Unknown player: {player}")),
+                    }
                 } else if line.is_empty() || line.starts_with("//") {
                     Ok(self)
                 } else {
                     Err(eyre::eyre!(
-                        "Expected a command (starting `;`), a comment (starting `//`), or an empty line"
+                        "Expected a command (starting `;`), a comment (starting `//`), a player switch (starting `@`), or an empty line"
                     ))
                 }
             }
             MootState::ReadingCommand {
                 session,
+                player,
                 line_no,
                 mut command,
             } => {
@@ -89,15 +89,24 @@ impl MootState {
                     command.push_str(rest);
                     Ok(MootState::ReadingCommand {
                         session,
+                        player,
                         line_no,
                         command,
                     })
                 } else if line.starts_with(';') || line.is_empty() {
-                    Self::execute_test(&command, None, line_no, db.clone(), session.clone())?;
-                    MootState::new(session).process_line(new_line_no, line, db)
+                    Self::execute_test(
+                        &command,
+                        None,
+                        line_no,
+                        db.clone(),
+                        session.clone(),
+                        player,
+                    )?;
+                    MootState::new(session, player).process_line(new_line_no, line, db)
                 } else {
                     Ok(MootState::ReadingExpectation {
                         session,
+                        player,
                         line_no,
                         command,
                         expectation: line.to_string(),
@@ -106,6 +115,7 @@ impl MootState {
             }
             MootState::ReadingExpectation {
                 session,
+                player,
                 line_no,
                 command,
                 mut expectation,
@@ -117,16 +127,18 @@ impl MootState {
                         line_no,
                         db.clone(),
                         session.clone(),
+                        player,
                     )?;
                 }
-                if line.is_empty() || line.starts_with('#') {
-                    Ok(MootState::new(session))
+                if line.is_empty() || line.starts_with("//") {
+                    Ok(MootState::new(session, player))
                 } else if line.starts_with(';') {
-                    MootState::new(session).process_line(new_line_no, line, db)
+                    MootState::new(session, player).process_line(new_line_no, line, db)
                 } else {
                     expectation.push_str(line);
                     Ok(MootState::ReadingExpectation {
                         session,
+                        player,
                         line_no,
                         command,
                         expectation,
@@ -142,6 +154,7 @@ impl MootState {
         line_no: usize,
         db: Arc<RelBoxWorldState>,
         session: Arc<dyn Session>,
+        player: Objid,
     ) -> eyre::Result<()> {
         let expected = if let Some(expectation) = expectation {
             common::eval(
@@ -154,7 +167,7 @@ impl MootState {
             v_none()
         };
 
-        let actual_exec_result = common::eval(db, WIZARD, command, session)?;
+        let actual_exec_result = common::eval(db, player, command, session)?;
         let actual = match actual_exec_result {
             Ok(v) => v,
             Err(e) => e.code.into(),
@@ -174,7 +187,7 @@ fn test(path: &Path) {
     let f = BufReader::new(File::open(path).unwrap());
     let db = create_db();
 
-    let mut state = MootState::new(Arc::new(NoopClientSession::new()));
+    let mut state = MootState::new(Arc::new(NoopClientSession::new()), WIZARD);
     for (line_no, line) in f.lines().enumerate() {
         state = state
             .process_line(line_no + 1, &line.unwrap(), db.clone())

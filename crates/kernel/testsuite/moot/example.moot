@@ -12,3 +12,18 @@ E_ARGS
 ; return 1 + 2 +
 > 3;
 6
+
+// You can change the player used to execute commands
+@programmer
+; return player;
+#4
+; return {player.programmer, player.wizard, player.name};
+{1, 0, "programmer"}
+
+@nonprogrammer
+; return 42;
+E_PERM
+
+@wizard
+; return {player.programmer, player.wizard, player};
+{1, 1, #3}

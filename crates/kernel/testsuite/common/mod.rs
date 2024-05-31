@@ -36,6 +36,10 @@ use uuid::Uuid;
 
 #[allow(dead_code)]
 pub const WIZARD: Objid = Objid(3);
+#[allow(dead_code)]
+pub const PROGRAMMER: Objid = Objid(4);
+#[allow(dead_code)]
+pub const NONPROGRAMMER: Objid = Objid(5);
 
 pub fn testsuite_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
