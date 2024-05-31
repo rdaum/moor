@@ -428,8 +428,7 @@ mod tests {
         cursor.search().unwrap();
         assert_eq!(cursor.get_key().unwrap().as_slice(), key_datum.as_slice());
         let d = cursor.get_value().unwrap();
-        let mut unpacked_value =
-            Unpack::unpack(&session, &[FormatType::NulTerminatedString(None)], d);
+        let mut unpacked_value = Unpack::new(&session, &[FormatType::NulTerminatedString(None)], d);
         let str = unpacked_value.unpack_str();
         assert_eq!(str, value);
     }
@@ -544,12 +543,12 @@ mod tests {
         // Now accumulate the keys and values into a new vec
         let mut kvs2 = vec![];
         loop {
-            let mut unpack_key = Unpack::unpack(
+            let mut unpack_key = Unpack::new(
                 &session,
                 &[FormatType::NulTerminatedString(None)],
                 cursor.get_key().unwrap(),
             );
-            let mut unpack_value = Unpack::unpack(
+            let mut unpack_value = Unpack::new(
                 &session,
                 &[FormatType::NulTerminatedString(None)],
                 cursor.get_value().unwrap(),
@@ -612,14 +611,14 @@ mod tests {
         cursor.set_key(key_pack).unwrap();
         cursor.search().unwrap();
 
-        let mut unpack_key = Unpack::unpack(&session, key_format, cursor.get_key().unwrap());
+        let mut unpack_key = Unpack::new(&session, key_format, cursor.get_key().unwrap());
         let id = unpack_key.unpack_uint();
         let name = unpack_key.unpack_str();
         unpack_key.close();
         assert_eq!(id, 123);
         assert_eq!(name, "ryan");
 
-        let mut unpack_value = Unpack::unpack(&session, value_format, cursor.get_value().unwrap());
+        let mut unpack_value = Unpack::new(&session, value_format, cursor.get_value().unwrap());
         let age = unpack_value.unpack_uint();
         let name = unpack_value.unpack_str();
         let bytes = unpack_value.unpack_item();

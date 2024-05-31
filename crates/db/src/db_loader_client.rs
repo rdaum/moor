@@ -157,6 +157,7 @@ impl LoaderInterface for DbTxWorldState {
     // hierarchy in a single call.
     // Really this is just a way of reordering our local propdefs to match the inheritance hierarchy.
     // which is something LambdaMOO does automagically internally, but we don't bother to.
+    #[allow(clippy::type_complexity)]
     fn get_all_property_values(
         &self,
         this: Objid,

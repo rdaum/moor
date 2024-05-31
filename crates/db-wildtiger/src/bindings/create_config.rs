@@ -49,7 +49,7 @@ pub enum HuffmanEncoding {
 
 #[allow(dead_code)]
 impl HuffmanEncoding {
-    pub fn to_encoding(&self) -> String {
+    pub fn as_str(&self) -> String {
         match self {
             HuffmanEncoding::None => "none".into(),
             HuffmanEncoding::English => "english".into(),

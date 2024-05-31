@@ -40,6 +40,8 @@ mod session;
 mod session_config;
 
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
+
 mod wiredtiger {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
@@ -55,7 +57,9 @@ unsafe fn get_error(code: c_int) -> String {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr)]
 #[non_exhaustive]
+#[allow(non_camel_case_types)]
 #[repr(u8)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum PosixError {
     /// Operation not permitted
     EPERM = 1,
@@ -318,6 +322,7 @@ pub enum PosixError {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 pub enum Error {
     /// Errors from the underlying Posix layer.
     Posix(PosixError),
@@ -343,7 +348,6 @@ pub enum Error {
 
 impl Error {
     fn from_errorcode(code: c_int) -> Self {
-        let code = code;
         // Error codes greater than 0 are POSIX errors.
         if code > 0 {
             Self::Posix(PosixError::from_repr(code as u8).unwrap())

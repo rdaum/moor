@@ -1220,6 +1220,7 @@ impl WtWorldStateTransaction {
         Ok(ObjSet::from_items(&descendants))
     }
 
+    #[allow(clippy::type_complexity)]
     fn closest_common_ancestor_with_ancestors(
         &self,
         a: Objid,

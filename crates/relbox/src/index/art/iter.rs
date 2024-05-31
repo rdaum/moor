@@ -89,9 +89,7 @@ impl<'a, K: KeyTrait<PartialType = P>, P: Partial + Clone + 'a, V: Clone> Iterat
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // Get working node iterator off the stack. If there is none, we're done.
-            let Some((tree_depth, last_iter)) = self.node_iter_stack.last_mut() else {
-                return None;
-            };
+            let (tree_depth, last_iter) = self.node_iter_stack.last_mut()?;
             let tree_depth = *tree_depth;
 
             // Pull the next node from the node iterator. If there's none, pop that iterator off

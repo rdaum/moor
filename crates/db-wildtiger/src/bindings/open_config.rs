@@ -57,7 +57,7 @@ pub struct OpenConfig {
     operation_tracking: Option<OperationTracking>,
     /// enable additional diagnostics.
     extra_diagnostics: Option<Vec<String>>,
-    /// keep data in memory only. See In-memory databases for more information.	a boolean flag; default false
+    /// keep data in memory only. See In-memory databases for more information.
     in_memory: Option<bool>,
     /// enable messages for various subsystems and operations. Options are given as a list, where
     /// each message type can optionally define an associated verbosity level,
@@ -91,7 +91,7 @@ impl TransactionSync {
         }
 
         if let Some(method) = &self.method {
-            options.push(format!("method={}", method.to_string()));
+            options.push(format!("method={}", method.as_str()));
         }
         options.join(",")
     }
@@ -126,11 +126,11 @@ pub enum SyncMethod {
 
 #[allow(dead_code)]
 impl SyncMethod {
-    pub fn to_string(&self) -> String {
+    pub fn as_str(&self) -> &str {
         match self {
-            SyncMethod::Fsync => "fsync".to_string(),
-            SyncMethod::Dsync => "dsync".to_string(),
-            SyncMethod::None => "none".to_string(),
+            SyncMethod::Fsync => "fsync",
+            SyncMethod::Dsync => "dsync",
+            SyncMethod::None => "none",
         }
     }
 }
@@ -212,9 +212,9 @@ impl OpenConfig {
                 .iter()
                 .map(|(v, l)| {
                     if let Some(l) = l {
-                        format!("{}:{}", v.to_string(), l)
+                        format!("{}:{}", v.as_str(), l)
                     } else {
-                        v.to_string()
+                        v.as_str().to_string()
                     }
                 })
                 .collect::<Vec<String>>()
@@ -541,49 +541,49 @@ pub enum Verbosity {
 }
 
 impl Verbosity {
-    pub fn to_string(&self) -> String {
+    pub fn as_str(&self) -> &str {
         match self {
-            Verbosity::Api => "api".to_string(),
-            Verbosity::Backup => "backup".to_string(),
-            Verbosity::Block => "block".to_string(),
-            Verbosity::BlockCache => "block_cache".to_string(),
-            Verbosity::Checkpoint => "checkpoint".to_string(),
-            Verbosity::CheckpointCleanup => "checkpoint_cleanup".to_string(),
-            Verbosity::CheckpointProgress => "checkpoint_progress".to_string(),
-            Verbosity::Compact => "compact".to_string(),
-            Verbosity::CompactProgress => "compact_progress".to_string(),
-            Verbosity::ErrorReturns => "error_returns".to_string(),
-            Verbosity::Evict => "evict".to_string(),
-            Verbosity::EvictStuck => "evict_stuck".to_string(),
-            Verbosity::EvictServer => "evictserver".to_string(),
-            Verbosity::FileOps => "fileops".to_string(),
-            Verbosity::Generation => "generation".to_string(),
-            Verbosity::HandleOps => "handleops".to_string(),
-            Verbosity::HistoryStore => "history_store".to_string(),
-            Verbosity::HistoryStoreActivity => "history_store_activity".to_string(),
-            Verbosity::Log => "log".to_string(),
-            Verbosity::Lsm => "lsm".to_string(),
-            Verbosity::LsmManager => "lsm_manager".to_string(),
-            Verbosity::Metadata => "metadata".to_string(),
-            Verbosity::Mutex => "mutex".to_string(),
-            Verbosity::OutOfOrder => "out_of_order".to_string(),
-            Verbosity::Overflow => "overflow".to_string(),
-            Verbosity::Read => "read".to_string(),
-            Verbosity::Reconcile => "reconcile".to_string(),
-            Verbosity::Recovery => "recovery".to_string(),
-            Verbosity::RecoveryProgress => "recovery_progress".to_string(),
-            Verbosity::Rts => "rts".to_string(),
-            Verbosity::Salvage => "salvage".to_string(),
-            Verbosity::SharedCache => "shared_cache".to_string(),
-            Verbosity::Split => "split".to_string(),
-            Verbosity::Temporary => "temporary".to_string(),
-            Verbosity::ThreadGroup => "thread_group".to_string(),
-            Verbosity::Tiered => "tiered".to_string(),
-            Verbosity::Timestamp => "timestamp".to_string(),
-            Verbosity::Transaction => "transaction".to_string(),
-            Verbosity::Verify => "verify".to_string(),
-            Verbosity::Version => "version".to_string(),
-            Verbosity::Write => "write".to_string(),
+            Verbosity::Api => "api",
+            Verbosity::Backup => "backup",
+            Verbosity::Block => "block",
+            Verbosity::BlockCache => "block_cache",
+            Verbosity::Checkpoint => "checkpoint",
+            Verbosity::CheckpointCleanup => "checkpoint_cleanup",
+            Verbosity::CheckpointProgress => "checkpoint_progress",
+            Verbosity::Compact => "compact",
+            Verbosity::CompactProgress => "compact_progress",
+            Verbosity::ErrorReturns => "error_returns",
+            Verbosity::Evict => "evict",
+            Verbosity::EvictStuck => "evict_stuck",
+            Verbosity::EvictServer => "evictserver",
+            Verbosity::FileOps => "fileops",
+            Verbosity::Generation => "generation",
+            Verbosity::HandleOps => "handleops",
+            Verbosity::HistoryStore => "history_store",
+            Verbosity::HistoryStoreActivity => "history_store_activity",
+            Verbosity::Log => "log",
+            Verbosity::Lsm => "lsm",
+            Verbosity::LsmManager => "lsm_manager",
+            Verbosity::Metadata => "metadata",
+            Verbosity::Mutex => "mutex",
+            Verbosity::OutOfOrder => "out_of_order",
+            Verbosity::Overflow => "overflow",
+            Verbosity::Read => "read",
+            Verbosity::Reconcile => "reconcile",
+            Verbosity::Recovery => "recovery",
+            Verbosity::RecoveryProgress => "recovery_progress",
+            Verbosity::Rts => "rts",
+            Verbosity::Salvage => "salvage",
+            Verbosity::SharedCache => "shared_cache",
+            Verbosity::Split => "split",
+            Verbosity::Temporary => "temporary",
+            Verbosity::ThreadGroup => "thread_group",
+            Verbosity::Tiered => "tiered",
+            Verbosity::Timestamp => "timestamp",
+            Verbosity::Transaction => "transaction",
+            Verbosity::Verify => "verify",
+            Verbosity::Version => "version",
+            Verbosity::Write => "write",
         }
     }
 }

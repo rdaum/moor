@@ -30,7 +30,6 @@ pub struct Session {
     pub session: *mut WT_SESSION,
 }
 
-///
 #[allow(dead_code)]
 impl Session {
     /// Create a table, column group, index or file.

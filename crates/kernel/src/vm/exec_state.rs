@@ -155,10 +155,7 @@ impl VMExecState {
     }
 
     pub(crate) fn time_left(&self) -> Option<Duration> {
-        let Some(max_time) = self.maximum_time else {
-            return None;
-        };
-
+        let max_time = self.maximum_time?;
         let now = SystemTime::now();
         let elapsed = now
             .duration_since(self.start_time.expect("No start time for task?"))

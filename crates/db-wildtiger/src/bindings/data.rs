@@ -102,7 +102,7 @@ pub struct Unpack {
 
 #[allow(dead_code)]
 impl Unpack {
-    pub fn unpack(session: &Session, format: &[FormatType], datum: Rc<Datum>) -> Self {
+    pub fn new(session: &Session, format: &[FormatType], datum: Rc<Datum>) -> Self {
         let mut stream: *mut WT_PACK_STREAM = std::ptr::null_mut();
         let format = format
             .iter()

@@ -168,9 +168,7 @@ fn translate_pattern(pattern: &str) -> Option<String> {
             break;
         };
         if c == '%' {
-            let Some(escape) = c_iter.next() else {
-                return None;
-            };
+            let escape = c_iter.next()?;
             if ".*+?[^$|()123456789bB<>wW".contains(escape) {
                 s.push('\\');
             }
@@ -182,33 +180,16 @@ fn translate_pattern(pattern: &str) -> Option<String> {
             continue;
         }
         if c == '[' {
-            /* Any '%' or '\' characters inside a charset should be copied
-             * over without translation. */
             s.push(c);
-            let Some(next) = c_iter.next() else {
-                return None;
-            };
+            let next = c_iter.next()?;
             c = next;
-            if c == '^' {
+            if c == '^' || c == ']' {
                 s.push(c);
-                let Some(next) = c_iter.next() else {
-                    return None;
-                };
-                c = next;
-            }
-            if c == ']' {
-                s.push(c);
-                let Some(next) = c_iter.next() else {
-                    return None;
-                };
-                c = next;
+                c = c_iter.next()?;
             }
             while c != ']' {
                 s.push(c);
-                let Some(next) = c_iter.next() else {
-                    return None;
-                };
-                c = next;
+                c = c_iter.next()?;
             }
             s.push(c);
             continue;

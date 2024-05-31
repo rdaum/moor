@@ -326,6 +326,7 @@ impl PageStore {
                         .write(true)
                         .append(false)
                         .create(true)
+                        .truncate(true)
                         .open(path)?;
                     pages.insert(*page_id, Arc::new(file));
                 }

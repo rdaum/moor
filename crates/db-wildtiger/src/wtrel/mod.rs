@@ -37,7 +37,7 @@ fn to_datum<V: AsByteBuffer>(session: &Session, v: &V) -> Datum {
 }
 
 fn from_datum<V: AsByteBuffer>(session: &Session, d: Rc<Datum>) -> V {
-    let mut unpack = Unpack::unpack(session, &[RawByte(None)], d);
+    let mut unpack = Unpack::new(session, &[RawByte(None)], d);
     let bytes = unpack.unpack_item();
     V::from_sliceref(SliceRef::from_vec(bytes)).unwrap()
 }

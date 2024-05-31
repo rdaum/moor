@@ -1003,6 +1003,7 @@ impl RpcServer {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn zmq_loop(
     keypair: Key<64>,
     connections_db_path: PathBuf,

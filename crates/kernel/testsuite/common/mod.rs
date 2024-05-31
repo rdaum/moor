@@ -118,6 +118,7 @@ pub fn eval(
     Ok(result)
 }
 
+#[allow(dead_code)]
 pub trait AssertRunAsVerb {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T);
 }

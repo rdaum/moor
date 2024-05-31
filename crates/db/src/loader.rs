@@ -100,6 +100,7 @@ pub trait LoaderInterface {
 
     /// Returns all the property values from the root of the inheritance hierarchy down to the
     /// bottom, for the given object.
+    #[allow(clippy::type_complexity)]
     fn get_all_property_values(
         &self,
         objid: Objid,
