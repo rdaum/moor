@@ -25,6 +25,10 @@ fn main() {
         .uses_cxx11()
         .build_target("wt")
         .define("ENABLE_STATIC", "1")
+        .define("ENABLE_PYTHON", "0")
+        // WiredTiger has naughties that causes -Werror=array-bounds to puke all over in release
+        // build.
+        .cflag("-Wno-error=array-bounds")
         .build();
     let build = dst.join("build");
     let include_dir = build.join("include");
