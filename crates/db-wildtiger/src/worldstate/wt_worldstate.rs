@@ -277,13 +277,13 @@ impl WorldStateTransaction for WtWorldStateTransaction {
             }
         };
 
-        let owner = attrs.owner().unwrap_or(NOTHING);
+        let owner = attrs.owner().unwrap_or(id);
         self.tx
             .upsert(WtWorldStateTable::ObjectOwner, id, owner)
             .expect("Unable to insert initial owner");
 
         // Set initial name
-        let name = attrs.name().unwrap_or_else(|| format!("Object {}", id));
+        let name = attrs.name().unwrap_or_default();
         self.tx
             .upsert(WtWorldStateTable::ObjectName, id, name)
             .expect("Unable to insert initial name");
@@ -1304,7 +1304,7 @@ mod tests {
             .unwrap();
         assert_eq!(oid, Objid(0));
         assert!(tx.object_valid(oid).unwrap());
-        assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_owner(oid).unwrap(), oid);
         assert_eq!(tx.get_object_parent(oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_location(oid).unwrap(), NOTHING);
         assert_eq!(tx.get_object_name(oid).unwrap(), "test");
@@ -1313,7 +1313,7 @@ mod tests {
         // Verify existence in a new transaction.
         let tx = WtWorldStateTransaction::new(ws.db.clone());
         assert!(tx.object_valid(oid).unwrap());
-        assert_eq!(tx.get_object_owner(oid).unwrap(), NOTHING);
+        assert_eq!(tx.get_object_owner(oid).unwrap(), oid);
     }
 
     #[test]
