@@ -3,16 +3,8 @@
 ; return eval(1);
 E_TYPE
 
-// TODO: uncomment once our eval supports multiple arguments
-//; return eval(1, 2);
-//E_TYPE
-
 ; return eval({});
 E_TYPE
-
-// TODO: uncomment once our eval supports multiple arguments
-//;return eval("x = 0;", "for i in [1..5]", "x = x + i;", "endfor", "return x;");
-//{1, 15}
 
 // `eval` takes a single string
 ; return eval("return 5;");
