@@ -26,19 +26,19 @@ authors = [
 ]
 repository = "https://github.com/rdaum/moor.git"
 license = "GPL-3"
-rust-version = "1.75.0"
+rust-version = "1.78.0"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
-clap = "4.5.4"
-clap_derive = "4.5.4"
+clap = "4.5"
+clap_derive = "4.5"
 
 ## HTTP/websockets front-end
-axum = { version = "0.7.5", features = ["ws"] }
-axum-extra = "0.9.3"
-serde = { version = "1.0.200", features = ["derive"] }
-serde_derive = "1.0.200"
-serde_json = "1.0.116"
+axum = { version = "0.7", features = ["ws"] }
+axum-extra = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = "1.0"
+serde_json = "1.0"
 tower-http = { version = "0.5.2", features = [
     "add-extension",
     "auth",
@@ -47,36 +47,36 @@ tower-http = { version = "0.5.2", features = [
 ] }
 
 ## Asynchronous transaction processing & networking
-futures = "0.3.30"
-futures-util = { version = "0.3.30", features = ["sink", "std"] }
-tokio = { version = "1.37.0", features = ["full"] }
-tokio-test = "0.4.4"
-tokio-util = { version = "0.7.11", features = ["full"] }
+futures = "0.3"
+futures-util = { version = "0.3", features = ["sink", "std"] }
+tokio = { version = "1.37", features = ["full"] }
+tokio-test = "0.4"
+tokio-util = { version = "0.7", features = ["full"] }
 
 # Used for RPC daemon/client
 tmq = "0.4.0"
 zmq = "0.10.0"
 
 ## Logging & tracing
-tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
-tracing-test = "0.2.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tracing-test = "0.2"
 
 # General usefulness
-arc-swap = "1.7.1"
-atomic-wait = "1.1.0"
-binary-layout = "4.0.2"
-bytes = "1.6.0"
-chrono = "0.4.38"
-owo-colors = "4.0.0"
-criterion = { version = "0.5.1", features = ["async_tokio"] }
-dashmap = "5.5.3"
-decorum = "0.3.1"                                             # For ordering & comparing our floats
-enum-primitive-derive = "0.3.0"
-fast-counter = "1.0.0"
-human_bytes = "0.4.3"
+arc-swap = "1.7"
+atomic-wait = "1.1"
+binary-layout = "4.0"
+bytes = "1.6"
+chrono = "0.4"
+owo-colors = "4.0"
+criterion = { version = "0.5", features = ["async_tokio"] }
+dashmap = "5.5"
+decorum = "0.3"                                             # For ordering & comparing our floats
+enum-primitive-derive = "0.3"
+fast-counter = "1.0"
+human_bytes = "0.4"
 inventory = "0.3.15"
-itertools = "0.12.1"
+itertools = "0.13.0"
 kanal = "0.1.0-pre8"
 lazy_static = "1.4.0"
 num-traits = "0.2.19"
@@ -90,49 +90,49 @@ yoke-derive = "0.7.3"
 ## Required for MOO builtins.
 chrono-tz = "0.9.0"
 iana-time-zone = "0.1.60"
-md5 = "0.7.0"                                          # For MOO's "string_hash"
+md5 = "0.7"                                          # For MOO's "string_hash"
 onig = { version = "6.4.0", default-features = false }
-pwhash = "1.0.0"                                       # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
-rand = "0.8.5"
+pwhash = "1.0"                                       # For MOO's hokey "crypt" function, which is unix's crypt(3) basically
+rand = "0.8"
 
 ## Compiler grammar/parser
 pest = "2.7.10"
 pest_derive = "2.7.10"
 
 ## Error declaration/ handling
-color-eyre = "0.6.3"
-eyre = "0.6.12"
-thiserror = "1.0.59"
+color-eyre = "0.6"
+eyre = "0.6"
+thiserror = "1.0"
 
 ## For macro-ing
-paste = "1.0.14"
+paste = "1.0"
 
 # For the DB & values layer.
-crossbeam-queue = "0.3.11"
+crossbeam-queue = "0.3"
 bincode = "2.0.0-rc.3"     # For serializing/deserializing values
-hi_sparse_bitset = "0.6.0" # For buffer pool allocator in the DB
-im = "15.1.0"              # Immutable data structures
-io-uring = "0.6.4"
-libc = "0.2.155"
-okaywal = "0.3.1"
-text_io = "0.1.12"         # Used for reading text dumps.
+hi_sparse_bitset = "0.6" # For buffer pool allocator in the DB
+im = "15.1"              # Immutable data structures
+io-uring = "0.6"
+libc = "0.2"
+okaywal = "0.3"
+text_io = "0.1"         # Used for reading text dumps.
 
 # Dev dependencies
-tempfile = "3.10.1"
+tempfile = "3.10"
 
 # testing
-pretty_assertions = "1.4.0"
-test-case = "3.3.1"
-unindent = "0.2.3"
-escargot = "0.5.10"
-test_each_file = "0.3.2"
+escargot = "0.5"
+pretty_assertions = "1.4"
+test-case = "3.3"
+test_each_file = "0.3"
+unindent = "0.2"
 
 # Auth/Auth
-ed25519-dalek = { version = "2.1.1", features = [
+ed25519-dalek = { version = "2.1", features = [
     "zeroize",
     "pkcs8",
     "rand_core",
 ] }
-pem = "3.0.4"
+pem = "3.0"
 rusty_paseto = { version = "0.7" }
-signal-hook = "0.3.17"
+signal-hook = "0.3"
