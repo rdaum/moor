@@ -93,7 +93,7 @@ yoke-derive = "0.7.3"
 chrono-tz = "0.9.0"
 crypt-sys = "0.1.0"
 iana-time-zone = "0.1.60"
-md5 = "0.7"                                          # For MOO's "string_hash"
+md5 = "0.7"                                            # For MOO's "string_hash"
 onig = { version = "6.4.0", default-features = false }
 rand = "0.8"
 
@@ -111,13 +111,13 @@ paste = "1.0"
 
 # For the DB & values layer.
 crossbeam-queue = "0.3"
-bincode = "2.0.0-rc.3"     # For serializing/deserializing values
+bincode = "2.0.0-rc.3"   # For serializing/deserializing values
 hi_sparse_bitset = "0.6" # For buffer pool allocator in the DB
 im = "15.1"              # Immutable data structures
 io-uring = "0.6"
 libc = "0.2"
 okaywal = "0.3"
-text_io = "0.1"         # Used for reading text dumps.
+text_io = "0.1"          # Used for reading text dumps.
 
 # Dev dependencies
 tempfile = "3.10"

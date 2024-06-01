@@ -18,8 +18,7 @@ use moor_db::Database;
 use moor_db_relbox::RelBoxWorldState;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
-use moor_kernel::tasks::vm_test_utils::call_eval_builtin;
-use moor_kernel::tasks::vm_test_utils::call_verb;
+use moor_kernel::tasks::vm_test_utils;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_kernel::textdump::textdump_load;
 use moor_values::model::CommitResult;
@@ -54,14 +53,14 @@ pub fn load_textdump(db: Arc<dyn Database>) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-pub fn create_relbox_db() -> Arc<dyn WorldStateSource> {
+pub fn create_relbox_db() -> Arc<dyn Database + Send + Sync> {
     let (db, _) = RelBoxWorldState::open(None, 1 << 30);
     let db = Arc::new(db);
     load_textdump(db.clone());
     db
 }
 
-pub fn create_wiretiger_db() -> Arc<dyn WorldStateSource> {
+pub fn create_wiretiger_db() -> Arc<dyn Database + Send + Sync> {
     let (db, _) = WireTigerWorldState::open(None);
     let db = Arc::new(db);
     load_textdump(db.clone());
@@ -106,7 +105,7 @@ pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResul
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db.clone(), &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
-    let result = call_verb(
+    let result = vm_test_utils::call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
         &verb_uuid,
@@ -125,7 +124,7 @@ pub fn eval(
 ) -> eyre::Result<ExecResult> {
     let binary = compile(expression)?;
     let mut state = db.new_world_state()?;
-    let result = call_eval_builtin(state.as_mut(), session, player, binary);
+    let result = vm_test_utils::call_eval_builtin(state.as_mut(), session, player, binary);
     state.commit()?;
     Ok(result)
 }
@@ -134,10 +133,13 @@ pub fn eval(
 pub trait AssertRunAsVerb {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T);
 }
-impl AssertRunAsVerb for Arc<dyn WorldStateSource> {
+impl AssertRunAsVerb for Arc<dyn Database + Send + Sync> {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T) {
         let expected = expected.into();
-        let actual = run_as_verb(self.clone(), expression.as_ref());
+        let actual = run_as_verb(
+            self.clone().world_state_source().unwrap(),
+            expression.as_ref(),
+        );
         assert_eq!(actual, expected, "{}", expression.as_ref());
     }
 }

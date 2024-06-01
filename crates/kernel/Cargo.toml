@@ -12,16 +12,18 @@ rust-version.workspace = true
 moor-db-relbox = { path = "../db-relbox" }
 wtdb = { path = "../db-wildtiger" }
 
-eyre.workspace = true
 criterion.workspace = true
+eyre.workspace = true
 inventory.workspace = true
 pretty_assertions.workspace = true
 tempfile.workspace = true
 test-case.workspace = true
+test_each_file.workspace = true
 text-diff.workspace = true
 tracing-test.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 unindent.workspace = true
-test_each_file.workspace = true
 
 [[test]]
 name = "regression-suite"
