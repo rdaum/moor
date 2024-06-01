@@ -27,3 +27,16 @@ E_PERM
 @wizard
 ; return {player.programmer, player.wizard, player};
 {1, 1, #3}
+
+// Execute non-eval commands (i.e. verbs) with `%`
+// Remember to still quote the expected output for `eval()`!
+; $object = create($nothing);
+; add_verb($object, {player, "xd", "accept"}, {"this", "none", "this"});
+; set_verb_code($object, "accept", {"return 1;"});
+; add_verb($object, {player, "xd", "hi"}, {"this", "none", "this"});
+; set_verb_code($object, "hi", {
+>   "return \"hello player\";"
+> });
+; move(player, $object);
+% hi
+"hello player"

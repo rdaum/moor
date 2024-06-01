@@ -84,7 +84,7 @@ pub enum TaskWaiterResult {
     Error(SchedulerError),
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode)]
+#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
 pub enum SchedulerError {
     #[error("Task not found: {0:?}")]
     TaskNotFound(TaskId),
@@ -94,15 +94,15 @@ pub enum SchedulerError {
     #[error("Could not start task (internal error)")]
     CouldNotStartTask,
     #[error("Eval compilation error")]
-    EvalCompilationError(CompileError),
+    EvalCompilationError(#[source] CompileError),
     #[error("Could not start command")]
-    CommandExecutionError(CommandError),
+    CommandExecutionError(#[source] CommandError),
     #[error("Task aborted due to limit: {0:?}")]
     TaskAbortedLimit(AbortLimitReason),
     #[error("Task aborted due to error.")]
     TaskAbortedError,
-    #[error("Task aborted due to exception: {0:?}")]
-    TaskAbortedException(UncaughtException),
+    #[error("Task aborted due to exception")]
+    TaskAbortedException(#[source] UncaughtException),
     #[error("Task aborted due to cancellation.")]
     TaskAbortedCancelled,
 }

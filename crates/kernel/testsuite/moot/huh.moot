@@ -1,0 +1,21 @@
+// :huh verb on player doesn't work
+@wizard
+; move(player, $nothing);
+@programmer
+; add_verb(player, {player, "xd", "huh"}, {"this", "none", "this"});
+; set_verb_code(player, "huh", {"return \"test huh\";"});
+% zip
+E_VERBNF
+
+// :huh verb on location works
+@wizard
+; $object = create($nothing);
+; add_verb($object, {player, "xd", "accept"}, {"this", "none", "this"});
+; set_verb_code($object, "accept", {"return 1;"});
+; add_verb($object, {player, "xd", "huh"}, {"this", "none", "this"});
+; set_verb_code($object, "huh", {
+>   "return \"test2 huh\";"
+> });
+; move(player, $object);
+% zip
+"test2 huh"
