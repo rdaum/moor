@@ -64,7 +64,7 @@ pub enum GlobalName {
     iobjstr,
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode)]
+#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
 pub enum CompileError {
     #[error("Failure to parse string: {0}")]
     StringLexError(String),

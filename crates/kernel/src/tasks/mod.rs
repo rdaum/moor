@@ -162,3 +162,79 @@ pub mod vm_test_utils {
         })
     }
 }
+
+pub mod scheduler_test_utils {
+    use crate::config::Config;
+    use crate::tasks::sessions::Session;
+    use crate::vm::UncaughtException;
+    use moor_db::Database;
+    use moor_values::model::{CommandError, WorldStateSource};
+    use moor_values::var::{Error::E_VERBNF, Objid, Var};
+    use std::sync::Arc;
+
+    use super::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
+    use super::TaskId;
+    use crate::tasks::scheduler_test_utils::SchedulerError::{
+        CommandExecutionError, TaskAbortedException,
+    };
+
+    pub type ExecResult = Result<Var, UncaughtException>;
+
+    fn execute<F>(database: Arc<dyn Database + Send + Sync>, fun: F) -> Result<Var, SchedulerError>
+    where
+        F: FnOnce(Arc<dyn WorldStateSource>, Arc<Scheduler>) -> Result<TaskId, SchedulerError>,
+    {
+        let scheduler = Arc::new(Scheduler::new(database.clone(), Config::default()));
+        let task_id = fun(database.world_state_source().unwrap(), scheduler.clone())?;
+        let subscriber = scheduler.subscribe_to_task(task_id).unwrap();
+
+        let loop_scheduler = scheduler.clone();
+        let scheduler_loop_jh = std::thread::Builder::new()
+            .name("moor-scheduler".to_string())
+            .spawn(move || loop_scheduler.run())
+            .unwrap();
+
+        let result = match subscriber
+            .recv()
+            .inspect_err(|e| eprintln!("subscriber.recv() failed: {e}"))
+            .unwrap()
+        {
+            TaskWaiterResult::Error(TaskAbortedException(UncaughtException { code, .. })) => {
+                Ok(code.into())
+            }
+            TaskWaiterResult::Error(CommandExecutionError(CommandError::NoCommandMatch)) => {
+                Ok(E_VERBNF.into())
+            }
+            TaskWaiterResult::Error(err) => Err(err),
+            TaskWaiterResult::Success(var) => Ok(var),
+        };
+        scheduler
+            .submit_shutdown(task_id, Some("Test is done".to_string()))
+            .unwrap();
+        scheduler_loop_jh.join().unwrap();
+
+        result
+    }
+
+    pub fn call_command(
+        database: Arc<dyn Database + Send + Sync>,
+        session: Arc<dyn Session>,
+        player: Objid,
+        command: &str,
+    ) -> Result<Var, SchedulerError> {
+        execute(database, |_world_state, scheduler: Arc<Scheduler>| {
+            scheduler.submit_command_task(player, command, session)
+        })
+    }
+
+    pub fn call_eval(
+        database: Arc<dyn Database + Send + Sync>,
+        session: Arc<dyn Session>,
+        player: Objid,
+        code: String,
+    ) -> Result<Var, SchedulerError> {
+        execute(database, |_world_state, scheduler: Arc<Scheduler>| {
+            scheduler.submit_eval_task(player, player, code, session)
+        })
+    }
+}

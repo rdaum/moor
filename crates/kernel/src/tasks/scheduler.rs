@@ -19,7 +19,7 @@ use std::time::{Duration, SystemTime};
 
 use bincode::{Decode, Encode};
 use dashmap::DashMap;
-use kanal::{OneshotReceiver, OneshotSender, Sender};
+use kanal::{OneshotReceiver, OneshotSender, SendError, Sender};
 
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -84,7 +84,7 @@ pub enum TaskWaiterResult {
     Error(SchedulerError),
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode)]
+#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
 pub enum SchedulerError {
     #[error("Task not found: {0:?}")]
     TaskNotFound(TaskId),
@@ -94,15 +94,15 @@ pub enum SchedulerError {
     #[error("Could not start task (internal error)")]
     CouldNotStartTask,
     #[error("Eval compilation error")]
-    EvalCompilationError(CompileError),
+    EvalCompilationError(#[source] CompileError),
     #[error("Could not start command")]
-    CommandExecutionError(CommandError),
+    CommandExecutionError(#[source] CommandError),
     #[error("Task aborted due to limit: {0:?}")]
     TaskAbortedLimit(AbortLimitReason),
     #[error("Task aborted due to error.")]
     TaskAbortedError,
-    #[error("Task aborted due to exception: {0:?}")]
-    TaskAbortedException(UncaughtException),
+    #[error("Task aborted due to exception")]
+    TaskAbortedException(#[source] UncaughtException),
     #[error("Task aborted due to cancellation.")]
     TaskAbortedCancelled,
 }
@@ -371,6 +371,12 @@ impl Scheduler {
         Ok(task_id)
     }
 
+    pub fn submit_shutdown(&self, task: TaskId, reason: Option<String>) -> Result<(), SendError> {
+        self.control_sender
+            .send((task, SchedulerControlMsg::Shutdown(reason)))?;
+        Ok(())
+    }
+
     pub fn abort_player_tasks(&self, player: Objid) -> Result<(), SchedulerError> {
         let mut to_abort = Vec::new();
         for t in self.tasks.iter() {
@@ -521,12 +527,27 @@ impl Scheduler {
                 let mut to_prune = Vec::new();
                 for t in this.clone().tasks.iter() {
                     let (task_id, task) = (t.key(), t.value());
-                    if task.task_control_sender.is_closed()
-                        || task.task_control_sender.is_disconnected()
+                    if (task.task_control_sender.is_closed()
+                        || task.task_control_sender.is_disconnected())
+                        && task
+                            .subscribers
+                            .lock()
+                            .map(|subs| subs.is_empty())
+                            .inspect_err(|e| {
+                                tracing::warn!(
+                                    "Failed to get task subscribers lock for {task_id}: {e}"
+                                )
+                            })
+                            .unwrap_or(true)
                     {
                         warn!(
                             task_id,
-                            "Task is present but its channel is closed.  Pruning."
+                            "Task is present but its channel is {}.  Pruning.",
+                            if task.task_control_sender.is_closed() {
+                                "closed"
+                            } else {
+                                "disconnected"
+                            }
                         );
                         to_prune.push(*task_id);
                         continue;
@@ -861,21 +882,36 @@ impl Scheduler {
                 vec![]
             }
             SchedulerControlMsg::Shutdown(msg) => {
+                info!("Shutting down scheduler. Reason: {msg:?}");
+                let result_mst = match self.stop() {
+                    Ok(_) => v_string("Scheduler stopping.".to_string()),
+                    Err(e) => v_string(format!("Shutdown failed: {e}")),
+                };
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
                     return vec![TaskHandleResult::Remove(task_id)];
                 };
-                let Ok(()) = task.session.shutdown(msg) else {
-                    warn!("Could not notify player; aborting task");
-                    return vec![
-                        TaskHandleResult::Notify(
-                            task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
-                        ),
-                        TaskHandleResult::Remove(task_id),
-                    ];
-                };
-                vec![]
+                match task.session.shutdown(msg) {
+                    Ok(_) => {
+                        vec![
+                            TaskHandleResult::Notify(
+                                task_id,
+                                TaskWaiterResult::Success(result_mst),
+                            ),
+                            TaskHandleResult::Remove(task_id),
+                        ]
+                    }
+                    Err(e) => {
+                        warn!(?e, "Could not notify player; aborting task");
+                        vec![
+                            TaskHandleResult::Notify(
+                                task_id,
+                                TaskWaiterResult::Error(TaskAbortedError),
+                            ),
+                            TaskHandleResult::Remove(task_id),
+                        ]
+                    }
+                }
             }
             SchedulerControlMsg::Checkpoint => {
                 let Some(textdump_path) = self.config.textdump_output.clone() else {

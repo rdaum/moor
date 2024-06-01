@@ -200,8 +200,8 @@ pub enum CommandError {
     NoObjectMatch,
     #[error("Could not find verb match for command")]
     NoCommandMatch,
-    #[error("Could not start transaction due to database error: {0}")]
-    DatabaseError(WorldStateError),
+    #[error("Could not start transaction due to database error")]
+    DatabaseError(#[source] WorldStateError),
     #[error("Permission denied")]
     PermissionDenied,
 }

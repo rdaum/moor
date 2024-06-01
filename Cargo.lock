@@ -1700,6 +1700,7 @@ dependencies = [
  "text_io",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "tracing-test",
  "unindent",
  "uuid",
