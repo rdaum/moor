@@ -1,0 +1,21 @@
+// https://github.com/toddsundsted/stunt/blob/300cedc/test/test_equality.rb
+
+; return 10 == 5 + 5;
+1
+; return 10.0 == 5.0 + 5.0;
+1
+; return "10" == "1" + "0";
+1
+; return #10 == #10;
+1
+; return E_NONE == E_NONE;
+1
+; x = {1, 2.0}; y = {#3, "four"}; return {1, 2.0, #3, "four"} == {@x, @y};
+1
+
+; return 1 == 1.0;
+0
+; return 1.0 == #1;
+0
+; return #1 == "1";
+0
