@@ -185,13 +185,7 @@ pub mod scheduler_test_utils {
         let task_id = fun()?;
         let subscriber = scheduler.subscribe_to_task(task_id).unwrap();
 
-        let loop_scheduler = scheduler.clone();
-        let scheduler_loop_jh = std::thread::Builder::new()
-            .name("moor-scheduler".to_string())
-            .spawn(move || loop_scheduler.run())
-            .unwrap();
-
-        let result = match subscriber
+        match subscriber
             .recv()
             .inspect_err(|e| eprintln!("subscriber.recv() failed: {e}"))
             .unwrap()
@@ -204,13 +198,7 @@ pub mod scheduler_test_utils {
             }
             TaskWaiterResult::Error(err) => Err(err),
             TaskWaiterResult::Success(var) => Ok(var),
-        };
-        scheduler
-            .submit_shutdown(task_id, Some("Test is done".to_string()))
-            .unwrap();
-        scheduler_loop_jh.join().unwrap();
-
-        result
+        }
     }
 
     pub fn call_command(
