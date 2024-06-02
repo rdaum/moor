@@ -190,6 +190,8 @@ pub mod scheduler_test_utils {
             .inspect_err(|e| eprintln!("subscriber.recv() failed: {e}"))
             .unwrap()
         {
+            // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
+            // `moot` tests can match against them.
             TaskWaiterResult::Error(TaskAbortedException(UncaughtException { code, .. })) => {
                 Ok(code.into())
             }
