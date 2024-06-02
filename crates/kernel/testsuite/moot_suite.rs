@@ -280,7 +280,6 @@ fn init_logging() {
 }
 
 fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
-    // Uncomment to get server logs for debugging; usually too noisy
     init_logging();
     if path.is_dir() {
         return;
@@ -288,8 +287,15 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
     eprintln!("Test definition: {}", path.display());
     let f = BufReader::new(File::open(path).unwrap());
 
+    let scheduler = Arc::new(Scheduler::new(db, Config::default()));
+    let loop_scheduler = scheduler.clone();
+    let scheduler_loop_jh = std::thread::Builder::new()
+        .name("moor-scheduler".to_string())
+        .spawn(move || loop_scheduler.run())
+        .unwrap();
+
     let mut state = MootState::new(
-        Arc::new(Scheduler::new(db, Config::default())),
+        scheduler.clone(),
         Arc::new(NoopClientSession::new()),
         WIZARD,
     );
@@ -300,6 +306,11 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
             .unwrap();
     }
     state.finalize().unwrap();
+
+    scheduler
+        .submit_shutdown(0, Some("Test is done".to_string()))
+        .unwrap();
+    scheduler_loop_jh.join().unwrap();
 }
 
 #[test]
@@ -307,5 +318,7 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_relbox(&testsuite_dir().join("moot/example.moot"));
+    for _ in [0; 10] {
+        test_relbox(&testsuite_dir().join("moot/example.moot"));
+    }
 }
