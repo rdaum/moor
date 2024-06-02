@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use common::{create_relbox_db, create_wiretiger_db, NONPROGRAMMER, PROGRAMMER};
+use common::{create_relbox_db, create_wiretiger_db, testsuite_dir, NONPROGRAMMER, PROGRAMMER};
 use eyre::Context;
 use moor_db::Database;
 use moor_kernel::tasks::{
@@ -281,4 +281,13 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
             .unwrap();
     }
     state.finalize(db).unwrap();
+}
+
+#[test]
+#[ignore = "Useful for debugging; just run a single test"]
+fn test_single() {
+    // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
+    for _ in [0; 10] {
+        test_relbox(&testsuite_dir().join("moot/example.moot"));
+    }
 }
