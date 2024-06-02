@@ -164,11 +164,9 @@ pub mod vm_test_utils {
 }
 
 pub mod scheduler_test_utils {
-    use crate::config::Config;
     use crate::tasks::sessions::Session;
     use crate::vm::UncaughtException;
-    use moor_db::Database;
-    use moor_values::model::{CommandError, WorldStateSource};
+    use moor_values::model::CommandError;
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
     use std::sync::Arc;
 
@@ -180,12 +178,11 @@ pub mod scheduler_test_utils {
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
-    fn execute<F>(database: Arc<dyn Database + Send + Sync>, fun: F) -> Result<Var, SchedulerError>
+    fn execute<F>(scheduler: Arc<Scheduler>, fun: F) -> Result<Var, SchedulerError>
     where
-        F: FnOnce(Arc<dyn WorldStateSource>, Arc<Scheduler>) -> Result<TaskId, SchedulerError>,
+        F: FnOnce() -> Result<TaskId, SchedulerError>,
     {
-        let scheduler = Arc::new(Scheduler::new(database.clone(), Config::default()));
-        let task_id = fun(database.world_state_source().unwrap(), scheduler.clone())?;
+        let task_id = fun()?;
         let subscriber = scheduler.subscribe_to_task(task_id).unwrap();
 
         let loop_scheduler = scheduler.clone();
@@ -217,23 +214,23 @@ pub mod scheduler_test_utils {
     }
 
     pub fn call_command(
-        database: Arc<dyn Database + Send + Sync>,
+        scheduler: Arc<Scheduler>,
         session: Arc<dyn Session>,
         player: Objid,
         command: &str,
     ) -> Result<Var, SchedulerError> {
-        execute(database, |_world_state, scheduler: Arc<Scheduler>| {
+        execute(scheduler.clone(), || {
             scheduler.submit_command_task(player, command, session)
         })
     }
 
     pub fn call_eval(
-        database: Arc<dyn Database + Send + Sync>,
+        scheduler: Arc<Scheduler>,
         session: Arc<dyn Session>,
         player: Objid,
         code: String,
     ) -> Result<Var, SchedulerError> {
-        execute(database, |_world_state, scheduler: Arc<Scheduler>| {
+        execute(scheduler.clone(), || {
             scheduler.submit_eval_task(player, player, code, session)
         })
     }
