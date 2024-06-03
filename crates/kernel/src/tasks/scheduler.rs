@@ -507,8 +507,18 @@ impl Scheduler {
                     break;
                 }
                 let mut to_wake = Vec::new();
+                let mut to_prune = Vec::new();
                 for t in this.clone().tasks.iter() {
                     let (task_id, task) = (t.key(), t.value());
+                    if !task.task_control_sender.is_ready() {
+                        warn!(
+                            task_id,
+                            "Task is present but its channel is invalid.  Pruning."
+                        );
+                        to_prune.push(*task_id);
+                        continue;
+                    }
+
                     if !task.suspended {
                         continue;
                     }
@@ -521,6 +531,9 @@ impl Scheduler {
                 }
                 if !to_wake.is_empty() {
                     this.clone().process_wake_ups(&to_wake);
+                }
+                if !to_prune.is_empty() {
+                    this.clone().process_task_removals(&to_prune);
                 }
                 std::thread::sleep(SCHEDULER_TICK_TIME);
             })

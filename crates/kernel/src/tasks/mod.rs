@@ -30,12 +30,16 @@ pub mod vm_host;
 
 pub type TaskId = usize;
 
-pub struct TaskHandle(pub TaskId, pub oneshot::Receiver<TaskWaiterResult>);
+pub struct TaskHandle(TaskId, oneshot::Receiver<TaskWaiterResult>);
 impl TaskHandle {
     pub fn task_id(&self) -> TaskId {
         self.0
     }
+    pub fn receiver(self) -> oneshot::Receiver<TaskWaiterResult> {
+        self.1
+    }
 }
+
 pub(crate) type PhantomUnsync = PhantomData<Cell<()>>;
 pub(crate) type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
 
@@ -196,7 +200,7 @@ pub mod scheduler_test_utils {
             .recv_timeout(Duration::from_secs(1))
             .inspect_err(|e| {
                 eprintln!(
-                    "subscriber.recv() failed for task {}: {e}",
+                    "subscriber.recv_timeout() failed for task {}: {e}",
                     task_handle.task_id(),
                 )
             })

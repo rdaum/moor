@@ -476,7 +476,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-        let receiver = task_handle.1;
+        let receiver = task_handle.receiver();
         let player = match receiver.recv() {
             Ok(TaskWaiterResult::Success(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
@@ -586,7 +586,8 @@ impl RpcServer {
         // TODO: fold this functionality into Task.
 
         let arguments = parse_into_words(command.as_str());
-        if let Ok(task_handle) = self.clone().scheduler.submit_verb_task(
+
+        if let Ok(do_command_task_handle) = self.clone().scheduler.submit_verb_task(
             connection,
             SYSTEM_OBJECT,
             "do_command".to_string(),
@@ -595,8 +596,8 @@ impl RpcServer {
             SYSTEM_OBJECT,
             session.clone(),
         ) {
-            let task_id = task_handle.task_id();
-            if let Ok(value) = self.clone().watch_command_task(task_handle) {
+            let task_id = do_command_task_handle.task_id();
+            if let Ok(value) = self.clone().watch_command_task(do_command_task_handle) {
                 if value != v_bool(false) {
                     return Ok(RpcResponse::CommandSubmitted(task_id));
                 }
@@ -611,7 +612,7 @@ impl RpcServer {
             ?connection,
             "Invoking submit_command_task"
         );
-        let task_handle =
+        let parse_command_task_handle =
             match self
                 .clone()
                 .scheduler
@@ -627,7 +628,9 @@ impl RpcServer {
                 }
             };
 
-        Ok(RpcResponse::CommandSubmitted(task_handle.task_id()))
+        Ok(RpcResponse::CommandSubmitted(
+            parse_command_task_handle.task_id(),
+        ))
     }
 
     fn respond_input(
@@ -666,7 +669,7 @@ impl RpcServer {
             task_id = task_handle.task_id(),
             "Subscribed to command task results"
         );
-        match task_handle.1.recv() {
+        match task_handle.receiver().recv() {
             Ok(TaskWaiterResult::Success(value)) => Ok(value),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
@@ -729,7 +732,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-        match task_handle.1.recv() {
+        match task_handle.receiver().recv() {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
