@@ -352,7 +352,7 @@ impl Task {
                 // send a message back asking it to fork the task and return the new task id on a
                 // reply channel.
                 // We will then take the new task id and send it back to the caller.
-                let (send, reply) = kanal::oneshot();
+                let (send, reply) = oneshot::channel();
                 let task_id_var = fork_request.task_id;
                 self.scheduler_control_sender
                     .send((

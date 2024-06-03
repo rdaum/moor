@@ -417,7 +417,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
-    let (send, receive) = kanal::oneshot();
+    let (send, receive) = oneshot::channel();
     debug!("sending DescribeOtherTasks to scheduler");
     bf_args
         .scheduler_sender
@@ -480,7 +480,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
     }
 
-    let (send, receive) = kanal::oneshot();
+    let (send, receive) = oneshot::channel();
     bf_args
         .scheduler_sender
         .send((
@@ -524,7 +524,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         return Err(E_INVARG);
     }
 
-    let (send, receive) = kanal::oneshot();
+    let (send, receive) = oneshot::channel();
     bf_args
         .scheduler_sender
         .send((

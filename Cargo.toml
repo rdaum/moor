@@ -80,6 +80,7 @@ inventory = "0.3.15"
 itertools = "0.13.0"
 kanal = "0.1.0-pre8"
 lazy_static = "1.4.0"
+oneshot = { version = "0.1", default-features = false, features = ["std"] }
 num-traits = "0.2.19"
 owo-colors = "3.5"
 rustyline = "14.0.0"

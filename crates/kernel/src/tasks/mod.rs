@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::tasks::scheduler::TaskWaiterResult;
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::cell::Cell;
@@ -29,6 +30,12 @@ pub mod vm_host;
 
 pub type TaskId = usize;
 
+pub struct TaskHandle(pub TaskId, pub oneshot::Receiver<TaskWaiterResult>);
+impl TaskHandle {
+    pub fn task_id(&self) -> TaskId {
+        self.0
+    }
+}
 pub(crate) type PhantomUnsync = PhantomData<Cell<()>>;
 pub(crate) type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
 
@@ -171,21 +178,20 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
 
     use super::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
-    use super::TaskId;
+    use super::TaskHandle;
     use crate::tasks::scheduler_test_utils::SchedulerError::{
         CommandExecutionError, TaskAbortedException,
     };
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
-    fn execute<F>(scheduler: Arc<Scheduler>, fun: F) -> Result<Var, SchedulerError>
+    fn execute<F>(fun: F) -> Result<Var, SchedulerError>
     where
-        F: FnOnce() -> Result<TaskId, SchedulerError>,
+        F: FnOnce() -> Result<TaskHandle, SchedulerError>,
     {
-        let task_id = fun()?;
-        let subscriber = scheduler.subscribe_to_task(task_id).unwrap();
-
-        match subscriber
+        let task_handle = fun()?;
+        match task_handle
+            .1
             .recv()
             .inspect_err(|e| eprintln!("subscriber.recv() failed: {e}"))
             .unwrap()
@@ -209,9 +215,7 @@ pub mod scheduler_test_utils {
         player: Objid,
         command: &str,
     ) -> Result<Var, SchedulerError> {
-        execute(scheduler.clone(), || {
-            scheduler.submit_command_task(player, command, session)
-        })
+        execute(|| scheduler.submit_command_task(player, command, session))
     }
 
     pub fn call_eval(
@@ -220,8 +224,6 @@ pub mod scheduler_test_utils {
         player: Objid,
         code: String,
     ) -> Result<Var, SchedulerError> {
-        execute(scheduler.clone(), || {
-            scheduler.submit_eval_task(player, player, code, session)
-        })
+        execute(|| scheduler.submit_eval_task(player, player, code, session))
     }
 }
