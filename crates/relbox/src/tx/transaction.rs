@@ -20,7 +20,7 @@ use std::thread::yield_now;
 use thiserror::Error;
 
 use moor_values::util::{BitArray, Bitset64};
-use moor_values::util::{PhantomUnsend, PhantomUnsync, SliceRef};
+use moor_values::util::{PhantomUnsync, SliceRef};
 
 use crate::base_relation::BaseRelation;
 use crate::paging::TupleBox;
@@ -39,8 +39,6 @@ pub struct Transaction {
     /// to the transaction, and represents the set of values that will be committed to the base
     /// relations at commit time.
     pub(crate) working_set: RefCell<Option<WorkingSet>>,
-
-    unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
@@ -68,7 +66,6 @@ impl Transaction {
         Self {
             db,
             working_set: RefCell::new(Some(ws)),
-            unsend: Default::default(),
             unsync: Default::default(),
         }
     }
@@ -249,8 +246,6 @@ pub struct CommitSet<'a> {
     // Holds a lock on the base relations, which we'll swap out with the new relations at successful commit
     write_guard: RwLockWriteGuard<'a, Vec<BaseRelation>>,
 
-    // I can't/shouldn't be moved around between threads...
-    unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
@@ -260,7 +255,6 @@ impl<'a> CommitSet<'a> {
             ts,
             relations: Box::new(BitArray::new()),
             write_guard,
-            unsend: Default::default(),
             unsync: Default::default(),
         }
     }

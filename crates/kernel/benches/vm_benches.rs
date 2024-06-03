@@ -52,7 +52,7 @@ pub fn prepare_call_verb(
     args: Vec<Var>,
     max_ticks: usize,
 ) -> VmHost {
-    let (scs_tx, _scs_rx) = kanal::unbounded();
+    let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
     let mut vm_host = VmHost::new(
         0,
         20,

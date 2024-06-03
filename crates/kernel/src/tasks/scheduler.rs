@@ -18,14 +18,15 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use bincode::{Decode, Encode};
+use crossbeam_channel::Sender;
 use dashmap::DashMap;
-use kanal::{SendError, Sender};
 
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use kanal::Receiver;
+use crossbeam_channel::internal::SelectHandle;
+use crossbeam_channel::Receiver;
 use std::sync::Mutex;
 use std::thread::yield_now;
 
@@ -160,7 +161,7 @@ enum TaskHandleResult {
 impl Scheduler {
     pub fn new(database: Arc<dyn Database + Send + Sync>, config: Config) -> Self {
         let config = Arc::new(config);
-        let (control_sender, control_receiver) = kanal::unbounded();
+        let (control_sender, control_receiver) = crossbeam_channel::unbounded();
         Self {
             running: Arc::new(AtomicBool::new(false)),
             database,
@@ -347,9 +348,15 @@ impl Scheduler {
         )
     }
 
-    pub fn submit_shutdown(&self, task: TaskId, reason: Option<String>) -> Result<(), SendError> {
+    pub fn submit_shutdown(
+        &self,
+        task: TaskId,
+        reason: Option<String>,
+    ) -> Result<(), SchedulerError> {
+        // If we can't deliver a shutdown message, that's really a cause for panic!
         self.control_sender
-            .send((task, SchedulerControlMsg::Shutdown(reason)))?;
+            .send((task, SchedulerControlMsg::Shutdown(reason)))
+            .expect("could not send clean shutdown message");
         Ok(())
     }
 
@@ -462,9 +469,7 @@ impl Scheduler {
                     if task.waiting_input.is_some() {
                         number_readblocked_tasks += 1;
                     }
-                    if task.task_control_sender.is_closed()
-                        || task.task_control_sender.is_disconnected()
-                    {
+                    if !task.task_control_sender.is_ready() {
                         number_zombies += 1;
                     }
                     let sender_lock = task.result_sender.lock().unwrap();
@@ -1330,7 +1335,7 @@ impl Scheduler {
         is_background: bool,
     ) -> Result<TaskHandle, SchedulerError> {
         let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
-        let (task_control_sender, task_control_receiver) = kanal::unbounded();
+        let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
 
         let state_source = self
             .database

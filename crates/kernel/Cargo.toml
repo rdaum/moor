@@ -46,9 +46,9 @@ moor-values = { path = "../values" }
 
 ## General usefulness
 chrono.workspace = true
+crossbeam-channel.workspace = true
 dashmap.workspace = true
 decorum.workspace = true
-kanal.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
 oneshot.workspace = true

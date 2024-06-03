@@ -16,7 +16,7 @@
 //! Used for write-ahead type storage at commit-time, and backed by whatever preferred physical
 //! storage mechanism is desired.
 
-use kanal::Sender;
+use crossbeam_channel::Sender;
 use std::thread::yield_now;
 
 use crate::tx::WorkingSet;

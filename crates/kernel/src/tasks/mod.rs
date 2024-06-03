@@ -82,7 +82,7 @@ pub mod vm_test_utils {
     where
         F: FnOnce(&mut dyn WorldState, &mut VmHost),
     {
-        let (scs_tx, _scs_rx) = kanal::unbounded();
+        let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
         let mut vm_host = VmHost::new(
             0,
             20,
@@ -92,7 +92,7 @@ pub mod vm_test_utils {
             scs_tx,
         );
 
-        let (sched_send, _) = kanal::unbounded();
+        let (sched_send, _) = crossbeam_channel::unbounded();
         let _vm_exec_params = VmExecParams {
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
