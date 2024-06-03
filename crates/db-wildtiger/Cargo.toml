@@ -7,6 +7,9 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 rust-version.workspace = true
+categories.workspace = true
+keywords.workspace = true
+readme.workspace = true
 
 [build-dependencies]
 cmake = "0.1.50"

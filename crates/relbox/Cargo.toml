@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+categories.workspace = true
+keywords.workspace = true
+readme.workspace = true
 
 [[bench]]
 name = "tb_single_thread"

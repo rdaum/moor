@@ -7,6 +7,9 @@ repository.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+categories.workspace = true
+keywords.workspace = true
+readme.workspace = true
 
 [dependencies]
 moor-values = { path = "../values" }

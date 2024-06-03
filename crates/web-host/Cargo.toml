@@ -3,10 +3,13 @@ name = "moor-web-host"
 version = "0.1.0"
 description = "A RESTful web front end for interacting with the moor system"
 edition.workspace = true
-repository.workspace = true
 license.workspace = true
+repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+categories.workspace = true
+keywords.workspace = true
+readme.workspace = true
 
 [dependencies]
 moor-values = { path = "../values" }

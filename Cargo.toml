@@ -5,9 +5,10 @@ members = [
     "crates/values",
     "crates/compiler",
     "crates/kernel",
-    "crates/relbox",
-    "crates/db-wildtiger",
     "crates/db",
+    "crates/db-wildtiger",
+    "crates/relbox",
+    "crates/db-relbox",
     "crates/rpc-common",
     "crates/rpc-sync-client",
     "crates/rpc-async-client",
@@ -15,7 +16,6 @@ members = [
     "crates/telnet-host",
     "crates/web-host",
     "crates/console-host",
-    "crates/db-relbox",
 ]
 
 [workspace.package]
@@ -27,6 +27,9 @@ authors = [
 repository = "https://github.com/rdaum/moor.git"
 license = "GPL-3"
 rust-version = "1.78.0"
+categories = ["game", "virtual-world", "mud", "database", "programming-language"]
+keywords = ["mud", "programming-language", "virtual-world", "game", "virtual-machine"]
+readme = "README.md"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
