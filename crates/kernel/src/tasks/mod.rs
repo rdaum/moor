@@ -176,6 +176,7 @@ pub mod scheduler_test_utils {
     use moor_values::model::CommandError;
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
     use std::sync::Arc;
+    use std::time::Duration;
 
     use super::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
     use super::TaskHandle;
@@ -192,8 +193,13 @@ pub mod scheduler_test_utils {
         let task_handle = fun()?;
         match task_handle
             .1
-            .recv()
-            .inspect_err(|e| eprintln!("subscriber.recv() failed: {e}"))
+            .recv_timeout(Duration::from_secs(1))
+            .inspect_err(|e| {
+                eprintln!(
+                    "subscriber.recv() failed for task {}: {e}",
+                    task_handle.task_id(),
+                )
+            })
             .unwrap()
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
