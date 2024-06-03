@@ -144,6 +144,7 @@ impl MootState {
                     Self::execute_test(&ctx, &command, command_kind, None, line_no)?;
                     MootState::from(ctx).process_line(new_line_no, line)
                 } else {
+                    let line = line.strip_prefix('<').unwrap_or(line);
                     Ok(MootState::ReadingExpectation {
                         ctx,
                         line_no,
@@ -170,6 +171,8 @@ impl MootState {
                 } else if line.starts_with([';', '%']) {
                     MootState::from(ctx).process_line(new_line_no, line)
                 } else {
+                    expectation.push('\n');
+                    let line = line.strip_prefix('<').unwrap_or(line);
                     expectation.push_str(line);
                     Ok(MootState::ReadingExpectation {
                         ctx,
