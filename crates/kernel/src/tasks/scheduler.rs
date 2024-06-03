@@ -142,7 +142,6 @@ struct TaskControl {
     resume_time: Option<SystemTime>,
     // subscribers for when the task is aborted, succeeded, etc.
     subscribers: Mutex<Vec<OneshotSender<TaskWaiterResult>>>,
-    _join_handle: std::thread::JoinHandle<()>,
 }
 
 /// The set of actions that the scheduler needs to take in response to a task control message.
@@ -1396,7 +1395,22 @@ impl Scheduler {
         let task_session = session.clone();
 
         let name = format!("moor-task-{}-player-{}", task_id, player);
-        let join_handle = std::thread::Builder::new()
+        let task_control = TaskControl {
+            task_id,
+            player,
+            task_control_sender,
+            state_source,
+            session,
+            suspended: false,
+            waiting_input: None,
+            resume_time: None,
+            subscribers: Mutex::new(vec![]),
+        };
+        self.tasks.insert(task_id, task_control);
+
+        // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
+
+        std::thread::Builder::new()
             .name(name)
             .spawn(move || {
                 trace!(?task_id, ?task_start, "Starting up task");
@@ -1414,20 +1428,6 @@ impl Scheduler {
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
-
-        let task_control = TaskControl {
-            task_id,
-            player,
-            task_control_sender,
-            state_source,
-            session,
-            suspended: false,
-            waiting_input: None,
-            resume_time: None,
-            subscribers: Mutex::new(vec![]),
-            _join_handle: join_handle,
-        };
-        self.tasks.insert(task_id, task_control);
 
         Ok(task_id)
     }
