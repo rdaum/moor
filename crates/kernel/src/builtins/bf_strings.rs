@@ -19,7 +19,7 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 
 use moor_values::var::Error;
-use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_int, v_str, v_string};
 
@@ -63,7 +63,7 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         };
         *case_matters == 1
     } else {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     };
     let (subject, what, with) = (
         bf_args.args[0].variant(),
@@ -112,7 +112,7 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         };
         *case_matters == 1
     } else {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -136,7 +136,7 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         };
         *case_matters == 1
     } else {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -153,7 +153,7 @@ bf_declare!(rindex, bf_rindex);
 
 fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
@@ -176,7 +176,7 @@ encryption "salt" in the algorithm. If salt is not provided, a random pair of ch
 */
 fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let salt = if bf_args.args.len() == 1 {
@@ -210,7 +210,7 @@ bf_declare!(crypt, bf_crypt);
 
 fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {

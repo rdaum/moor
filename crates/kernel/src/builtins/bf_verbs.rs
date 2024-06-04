@@ -25,7 +25,7 @@ use moor_values::model::{world_state_err, WorldStateError};
 use moor_values::model::{ArgSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_values::var::List;
 use moor_values::var::Objid;
 use moor_values::var::Variant;
@@ -47,7 +47,7 @@ use moor_compiler::Program;
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -139,7 +139,7 @@ fn get_verbdef(
 
 fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     if info.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     match (info[0].variant(), info[1].variant(), info[2].variant()) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
@@ -178,7 +178,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
 // set_verb_info (obj <object>, str <verb-desc>, list <info>) => none
 fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -227,7 +227,7 @@ bf_declare!(set_verb_info, bf_set_verb_info);
 
 fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -254,7 +254,7 @@ bf_declare!(verb_args, bf_verb_args);
 
 fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
     if verbinfo.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     match (
         verbinfo[0].variant(),
@@ -278,7 +278,7 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
 // set_verb_args (obj <object>, str <verb-desc>, list <args>) => none
 fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -336,7 +336,7 @@ bf_declare!(set_verb_args, bf_set_verb_args);
 fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //verb_code (obj object, str verb-desc [, fully-paren [, indent]]) => list
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -413,7 +413,7 @@ bf_declare!(verb_code, bf_verb_code);
 fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //set_verb_code (obj object, str verb-desc, list code) => none
     if bf_args.args.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -490,7 +490,7 @@ bf_declare!(set_verb_code, bf_set_verb_code);
 // Function: none add_verb (obj object, list info, list args)
 fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -538,7 +538,7 @@ bf_declare!(add_verb, bf_add_verb);
 //Function: none delete_verb (obj object, str verb-desc)
 fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -578,7 +578,7 @@ bf_declare!(delete_verb, bf_delete_verb);
 // the output of `disassemble()' interesting to peruse as a way to gain a deeper appreciation of how the server works.
 fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);

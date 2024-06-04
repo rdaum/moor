@@ -18,7 +18,7 @@ use std::sync::Arc;
 use onig::{Region, SearchOptions, SyntaxOperator};
 
 use moor_compiler::offset_for_builtin;
-use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_int, v_list, v_string};
 use moor_values::var::{v_listv, Error};
@@ -31,7 +31,7 @@ use crate::vm::VM;
 
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let (value, list) = (&bf_args.args[0], &bf_args.args[1]);
     let Variant::List(list) = list.variant() else {
@@ -47,7 +47,7 @@ bf_declare!(is_member, bf_is_member);
 
 fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let len = bf_args.args.len();
     let value = bf_args.args[1].clone();
@@ -74,7 +74,7 @@ bf_declare!(listinsert, bf_listinsert);
 
 fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let value = bf_args.args[1].clone();
     let list = &mut bf_args.args[0];
@@ -96,7 +96,7 @@ bf_declare!(listappend, bf_listappend);
 
 fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let index = bf_args.args[1].clone();
     let list = bf_args.args[0].variant_mut();
@@ -113,7 +113,7 @@ bf_declare!(listdelete, bf_listdelete);
 
 fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let index = bf_args.args[2].clone();
     let value = bf_args.args[1].clone();
@@ -131,7 +131,7 @@ bf_declare!(listset, bf_listset);
 
 fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let value = bf_args.args[1].clone();
     let list = &mut bf_args.args[0];
@@ -147,7 +147,7 @@ bf_declare!(setadd, bf_setadd);
 
 fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let value = bf_args.args[1].clone();
     let list = bf_args.args[0].variant_mut();
@@ -266,7 +266,7 @@ fn perform_regex_match(
 /// Common code for both match and rmatch.
 fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let (subject, pattern) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
         (Variant::Str(subject), Variant::Str(pattern)) => (subject, pattern),
@@ -378,7 +378,7 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
 
 fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let (template, subs) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
         (Variant::Str(template), Variant::List(subs)) => (template, subs),
@@ -388,7 +388,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Subs is of form {<start>, <end>, <replacements>, <subject>}
     // "replacement" and subject are what we're interested in.
     if subs.len() != 4 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let (Variant::List(subs), Variant::Str(source)) = (subs[2].variant(), subs[3].variant()) else {
