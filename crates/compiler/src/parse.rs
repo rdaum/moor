@@ -572,16 +572,30 @@ fn parse_statement(
         }
         Rule::break_statement => {
             let mut parts = pair.into_inner();
-            let label = parts
-                .next()
-                .map(|id| names.borrow_mut().find_or_add_name(id.as_str()));
+            let label = match parts.next() {
+                None => None,
+                Some(s) => {
+                    let label = s.as_str();
+                    let Some(label) = names.borrow_mut().find_name(label) else {
+                        return Err(CompileError::UnknownLoopLabel(label.to_string()));
+                    };
+                    Some(label)
+                }
+            };
             Ok(Some(Stmt::new(StmtNode::Break { exit: label }, line)))
         }
         Rule::continue_statement => {
             let mut parts = pair.into_inner();
-            let label = parts
-                .next()
-                .map(|id| names.borrow_mut().find_or_add_name(id.as_str()));
+            let label = match parts.next() {
+                None => None,
+                Some(s) => {
+                    let label = s.as_str();
+                    let Some(label) = names.borrow_mut().find_name(label) else {
+                        return Err(CompileError::UnknownLoopLabel(label.to_string()));
+                    };
+                    Some(label)
+                }
+            };
             Ok(Some(Stmt::new(StmtNode::Continue { exit: label }, line)))
         }
         Rule::return_statement => {
@@ -831,6 +845,7 @@ mod tests {
     };
     use crate::labels::Names;
     use crate::parse::{parse_program, unquote_str};
+    use crate::CompileError;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
@@ -1991,5 +2006,23 @@ mod tests {
                 StmtNode::Return(Some(Id(parse.names.find_name("pass").unwrap()))),
             ]
         );
+    }
+
+    #[test]
+    fn test_unknown_label() {
+        let program = r#"
+            while (1)
+                break unknown;
+            endwhile
+        "#;
+        let parse = parse_program(program);
+        assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_))));
+
+        let program = r#"
+            while (1)
+                continue unknown;
+            endwhile"#;
+        let parse = parse_program(program);
+        assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_))));
     }
 }
