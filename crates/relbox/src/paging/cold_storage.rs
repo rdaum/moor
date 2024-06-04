@@ -17,10 +17,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread::JoinHandle;
 
 use binary_layout::{binary_layout, Field};
+use crossbeam_channel::{unbounded, Receiver};
 use human_bytes::human_bytes;
-use kanal::Receiver;
 use okaywal::WriteAheadLog;
 use tracing::{debug, error, info};
 
@@ -134,15 +135,30 @@ impl ColdStorage {
         );
 
         // Start the listen loop
-        let (writer_send, writer_receive) = kanal::unbounded();
-        let ps = page_storage.clone();
-        let cs_join = std::thread::Builder::new()
-            .name("moor-coldstorage-listen".to_string())
-            .spawn(move || Self::listen_loop(writer_receive, wal, tuple_box.clone(), ps))
-            .expect("Unable to spawn coldstorage listen thread");
+        let (writer_send, writer_receive) = unbounded();
+        let cs_join = Self::start_listen_loop(
+            writer_receive,
+            wal.clone(),
+            tuple_box.clone(),
+            page_storage.clone(),
+        );
 
         // And return the client to it.
         BackingStoreClient::new(writer_send, cs_join)
+    }
+
+    fn start_listen_loop(
+        writer_receive: Receiver<WriterMessage>,
+        wal: WriteAheadLog,
+        tuple_box: Arc<TupleBox>,
+        ps: Arc<PageStore>,
+    ) -> JoinHandle<()> {
+        let cs_join = std::thread::Builder::new()
+            .name("moor-coldstorage-listen".to_string())
+            .spawn(move || Self::listen_loop(writer_receive, wal, tuple_box, ps))
+            .expect("Unable to spawn coldstorage listen thread");
+
+        cs_join
     }
 
     fn listen_loop(

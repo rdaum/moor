@@ -249,8 +249,6 @@ pub struct CommitSet<'a> {
     // Holds a lock on the base relations, which we'll swap out with the new relations at successful commit
     write_guard: RwLockWriteGuard<'a, Vec<BaseRelation>>,
 
-    // I can't/shouldn't be moved around between threads...
-    unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
@@ -260,7 +258,6 @@ impl<'a> CommitSet<'a> {
             ts,
             relations: Box::new(BitArray::new()),
             write_guard,
-            unsend: Default::default(),
             unsync: Default::default(),
         }
     }

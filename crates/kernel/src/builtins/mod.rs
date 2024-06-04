@@ -23,7 +23,7 @@ mod bf_verbs;
 
 use std::sync::Arc;
 
-use kanal::Sender;
+use crossbeam_channel::Sender;
 
 use moor_values::model::Perms;
 use moor_values::model::WorldState;

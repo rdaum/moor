@@ -12,9 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! The core of the server logic for the RPC daemon
+
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-/// The core of the server logic for the RPC daemon
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -33,7 +34,7 @@ use zmq::{Socket, SocketType};
 use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
-use moor_kernel::tasks::TaskId;
+use moor_kernel::tasks::TaskHandle;
 use moor_values::model::NarrativeEvent;
 use moor_values::model::WorldStateSource;
 use moor_values::util::parse_into_words;
@@ -459,7 +460,7 @@ impl RpcServer {
         let Ok(session) = self.clone().new_session(client_id, connection) else {
             return Err(RpcRequestError::CreateSessionFailed);
         };
-        let task_id = match self.clone().scheduler.submit_verb_task(
+        let task_handle = match self.clone().scheduler.submit_verb_task(
             connection,
             SYSTEM_OBJECT,
             "do_login_command".to_string(),
@@ -475,14 +476,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-        let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
-            Ok(r) => r,
-            Err(e) => {
-                error!(error = ?e, "Error subscribing to login task");
-
-                return Err(RpcRequestError::LoginTaskFailed);
-            }
-        };
+        let receiver = task_handle.into_receiver();
         let player = match receiver.recv() {
             Ok(TaskWaiterResult::Success(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
@@ -592,7 +586,8 @@ impl RpcServer {
         // TODO: fold this functionality into Task.
 
         let arguments = parse_into_words(command.as_str());
-        if let Ok(task_id) = self.clone().scheduler.submit_verb_task(
+
+        if let Ok(do_command_task_handle) = self.clone().scheduler.submit_verb_task(
             connection,
             SYSTEM_OBJECT,
             "do_command".to_string(),
@@ -601,7 +596,8 @@ impl RpcServer {
             SYSTEM_OBJECT,
             session.clone(),
         ) {
-            if let Ok(value) = self.clone().watch_command_task(task_id) {
+            let task_id = do_command_task_handle.task_id();
+            if let Ok(value) = self.clone().watch_command_task(do_command_task_handle) {
                 if value != v_bool(false) {
                     return Ok(RpcResponse::CommandSubmitted(task_id));
                 }
@@ -616,7 +612,7 @@ impl RpcServer {
             ?connection,
             "Invoking submit_command_task"
         );
-        let task_id =
+        let parse_command_task_handle =
             match self
                 .clone()
                 .scheduler
@@ -632,7 +628,9 @@ impl RpcServer {
                 }
             };
 
-        Ok(RpcResponse::CommandSubmitted(task_id))
+        Ok(RpcResponse::CommandSubmitted(
+            parse_command_task_handle.task_id(),
+        ))
     }
 
     fn respond_input(
@@ -663,17 +661,15 @@ impl RpcServer {
         Ok(RpcResponse::InputThanks)
     }
 
-    fn watch_command_task(self: Arc<Self>, task_id: TaskId) -> Result<Var, RpcRequestError> {
-        debug!(task_id, "Subscribed to command task results");
-        let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
-            Ok(r) => r,
-            Err(e) => {
-                error!(error = ?e, "Error subscribing to command task");
-                return Err(RpcRequestError::InternalError(e.to_string()));
-            }
-        };
-
-        match receiver.recv() {
+    fn watch_command_task(
+        self: Arc<Self>,
+        task_handle: TaskHandle,
+    ) -> Result<Var, RpcRequestError> {
+        debug!(
+            task_id = task_handle.task_id(),
+            "Subscribed to command task results"
+        );
+        match task_handle.into_receiver().recv() {
             Ok(TaskWaiterResult::Success(value)) => Ok(value),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
@@ -695,7 +691,7 @@ impl RpcServer {
         };
 
         let command_components = parse_into_words(command.as_str());
-        let task_id = match self.clone().scheduler.submit_out_of_band_task(
+        let task_handle = match self.clone().scheduler.submit_out_of_band_task(
             connection,
             command_components,
             command,
@@ -712,7 +708,7 @@ impl RpcServer {
         // let the session run to completion on its own and output back to the client.
         // Maybe we should be returning a value from this for the future, but the way clients are
         // written right now, there's little point.
-        Ok(RpcResponse::CommandSubmitted(task_id))
+        Ok(RpcResponse::CommandSubmitted(task_handle.task_id()))
     }
 
     fn eval(
@@ -725,7 +721,7 @@ impl RpcServer {
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
-        let task_id = match self
+        let task_handle = match self
             .clone()
             .scheduler
             .submit_eval_task(connection, connection, expression, session)
@@ -736,16 +732,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-
-        let receiver = match self.clone().scheduler.subscribe_to_task(task_id) {
-            Ok(r) => r,
-            Err(e) => {
-                error!(error = ?e, "Error subscribing to command task");
-                return Err(RpcRequestError::InternalError(e.to_string()));
-            }
-        };
-
-        match receiver.recv() {
+        match task_handle.into_receiver().recv() {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))

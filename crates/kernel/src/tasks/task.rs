@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use kanal::{ReceiveErrorTimeout, Receiver, Sender};
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, TryRecvError};
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -211,26 +211,30 @@ impl Task {
             let control_msg = if task.vm_host.is_running() {
                 match task_control_receiver.try_recv() {
                     Ok(msg) => msg,
-                    Err(_) => {
+                    Err(TryRecvError::Disconnected) => {
                         warn!(task_id = ?task.task_id, "Channel closed");
                         task.done = true;
 
                         break;
                     }
+                    Err(TryRecvError::Empty) => {
+                        // No message, just keep going.
+                        continue;
+                    }
                 }
             } else {
                 match task_control_receiver.recv_timeout(Duration::from_millis(50)) {
-                    Ok(msg) => Some(msg),
-                    Err(ReceiveErrorTimeout::Timeout) => {
+                    Ok(msg) => msg,
+                    Err(RecvTimeoutError::Timeout) => {
                         // No message, just keep going.
                         if task.vm_host.is_running() {
                             warn!(task_id = ?task.task_id, "Task not running, but in blocking receive. Why?");
                             task.done = true;
                         }
-                        None
+                        continue;
                     }
-                    Err(e) => {
-                        trace!(task_id = ?task.task_id, "Channel closed: {:?}", e);
+                    Err(RecvTimeoutError::Disconnected) => {
+                        trace!(task_id = ?task.task_id, "Channel disconnected");
                         task.done = true;
 
                         break;
@@ -238,12 +242,10 @@ impl Task {
                 }
             };
 
-            if let Some(control_msg) = control_msg {
-                if let Some(response) = task.handle_control_message(control_msg) {
-                    scheduler_control_sender
-                        .send((task.task_id, response))
-                        .expect("Could not send response");
-                }
+            if let Some(response) = task.handle_control_message(control_msg) {
+                scheduler_control_sender
+                    .send((task.task_id, response))
+                    .expect("Could not send response");
             }
         }
     }
@@ -352,7 +354,7 @@ impl Task {
                 // send a message back asking it to fork the task and return the new task id on a
                 // reply channel.
                 // We will then take the new task id and send it back to the caller.
-                let (send, reply) = kanal::oneshot();
+                let (send, reply) = oneshot::channel();
                 let task_id_var = fork_request.task_id;
                 self.scheduler_control_sender
                     .send((

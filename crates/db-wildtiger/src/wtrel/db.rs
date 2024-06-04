@@ -16,7 +16,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::bindings::{
     Connection, CursorConfig, Datum, Error, Isolation, LogConfig, OpenConfig, SessionConfig,
@@ -93,7 +93,6 @@ where
         let session = self.connection.open_session(session_config).unwrap();
         let tx_config = TransactionConfig::new();
         session.begin_transaction(Some(tx_config)).unwrap();
-        info!("Starting transaction...");
         WiredTigerRelTransaction::new(session, self.sequences.clone())
     }
 

@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::tasks::scheduler::TaskWaiterResult;
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::cell::Cell;
@@ -28,6 +29,19 @@ pub mod task_messages;
 pub mod vm_host;
 
 pub type TaskId = usize;
+
+/// Just a handle to a task, with a receiver for the result.
+pub struct TaskHandle(TaskId, oneshot::Receiver<TaskWaiterResult>);
+impl TaskHandle {
+    pub fn task_id(&self) -> TaskId {
+        self.0
+    }
+
+    /// Dissolve the handle into a receiver for the result.
+    pub fn into_receiver(self) -> oneshot::Receiver<TaskWaiterResult> {
+        self.1
+    }
+}
 
 pub(crate) type PhantomUnsync = PhantomData<Cell<()>>;
 pub(crate) type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
@@ -75,7 +89,7 @@ pub mod vm_test_utils {
     where
         F: FnOnce(&mut dyn WorldState, &mut VmHost),
     {
-        let (scs_tx, _scs_rx) = kanal::unbounded();
+        let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
         let mut vm_host = VmHost::new(
             0,
             20,
@@ -85,7 +99,7 @@ pub mod vm_test_utils {
             scs_tx,
         );
 
-        let (sched_send, _) = kanal::unbounded();
+        let (sched_send, _) = crossbeam_channel::unbounded();
         let _vm_exec_params = VmExecParams {
             scheduler_sender: sched_send.clone(),
             max_stack_depth: 50,
@@ -169,25 +183,30 @@ pub mod scheduler_test_utils {
     use moor_values::model::CommandError;
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
     use std::sync::Arc;
+    use std::time::Duration;
 
     use super::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
-    use super::TaskId;
+    use super::TaskHandle;
     use crate::tasks::scheduler_test_utils::SchedulerError::{
         CommandExecutionError, TaskAbortedException,
     };
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
-    fn execute<F>(scheduler: Arc<Scheduler>, fun: F) -> Result<Var, SchedulerError>
+    fn execute<F>(fun: F) -> Result<Var, SchedulerError>
     where
-        F: FnOnce() -> Result<TaskId, SchedulerError>,
+        F: FnOnce() -> Result<TaskHandle, SchedulerError>,
     {
-        let task_id = fun()?;
-        let subscriber = scheduler.subscribe_to_task(task_id).unwrap();
-
-        match subscriber
-            .recv()
-            .inspect_err(|e| eprintln!("subscriber.recv() failed: {e}"))
+        let task_handle = fun()?;
+        match task_handle
+            .1
+            .recv_timeout(Duration::from_secs(1))
+            .inspect_err(|e| {
+                eprintln!(
+                    "subscriber.recv_timeout() failed for task {}: {e}",
+                    task_handle.task_id(),
+                )
+            })
             .unwrap()
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
@@ -209,9 +228,7 @@ pub mod scheduler_test_utils {
         player: Objid,
         command: &str,
     ) -> Result<Var, SchedulerError> {
-        execute(scheduler.clone(), || {
-            scheduler.submit_command_task(player, command, session)
-        })
+        execute(|| scheduler.submit_command_task(player, command, session))
     }
 
     pub fn call_eval(
@@ -220,8 +237,6 @@ pub mod scheduler_test_utils {
         player: Objid,
         code: String,
     ) -> Result<Var, SchedulerError> {
-        execute(scheduler.clone(), || {
-            scheduler.submit_eval_task(player, player, code, session)
-        })
+        execute(|| scheduler.submit_eval_task(player, player, code, session))
     }
 }

@@ -21,7 +21,7 @@ use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
-use kanal::Sender;
+use crossbeam_channel::Sender;
 use moor_compiler::Program;
 use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
