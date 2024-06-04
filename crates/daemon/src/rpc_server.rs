@@ -476,7 +476,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-        let receiver = task_handle.receiver();
+        let receiver = task_handle.into_receiver();
         let player = match receiver.recv() {
             Ok(TaskWaiterResult::Success(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
@@ -669,7 +669,7 @@ impl RpcServer {
             task_id = task_handle.task_id(),
             "Subscribed to command task results"
         );
-        match task_handle.receiver().recv() {
+        match task_handle.into_receiver().recv() {
             Ok(TaskWaiterResult::Success(value)) => Ok(value),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
@@ -732,7 +732,7 @@ impl RpcServer {
                 return Err(RpcRequestError::InternalError(e.to_string()));
             }
         };
-        match task_handle.receiver().recv() {
+        match task_handle.into_receiver().recv() {
             Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))

@@ -30,12 +30,15 @@ pub mod vm_host;
 
 pub type TaskId = usize;
 
+/// Just a handle to a task, with a receiver for the result.
 pub struct TaskHandle(TaskId, oneshot::Receiver<TaskWaiterResult>);
 impl TaskHandle {
     pub fn task_id(&self) -> TaskId {
         self.0
     }
-    pub fn receiver(self) -> oneshot::Receiver<TaskWaiterResult> {
+
+    /// Dissolve the handle into a receiver for the result.
+    pub fn into_receiver(self) -> oneshot::Receiver<TaskWaiterResult> {
         self.1
     }
 }
