@@ -444,9 +444,9 @@ impl VM {
                 Op::Div => {
                     // Explicit division by zero check to raise E_DIV.
                     // Note that LambdaMOO consider 1/0.0 to be E_DIV, but Rust permits it, creating
-                    // `inf`. I'll follow Rust's lead here, unless it leads to problems.
+                    // `inf`.
                     let divargs = f.peek_range(2);
-                    if let Variant::Int(0) = divargs[1].variant() {
+                    if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
                         return self.push_error(state, E_DIV);
                     };
                     binary_var_op!(self, f, state, div);
@@ -458,6 +458,10 @@ impl VM {
                     binary_var_op!(self, f, state, pow);
                 }
                 Op::Mod => {
+                    let divargs = f.peek_range(2);
+                    if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
+                        return self.push_error(state, E_DIV);
+                    };
                     binary_var_op!(self, f, state, modulus);
                 }
                 Op::And(label) => {

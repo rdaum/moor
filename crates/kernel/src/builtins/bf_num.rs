@@ -18,7 +18,7 @@ use decorum::R64;
 use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
-use moor_values::var::Error::{E_ARGS, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_float, v_int, v_str};
 
@@ -78,9 +78,10 @@ fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let mut rng = rand::thread_rng();
-    match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_int(rng.gen_range(0..*i)))),
-        Variant::Float(f) => Ok(Ret(v_float(rng.gen_range(0.0..*f)))),
+    match bf_args.args.first().map(|var| var.variant()) {
+        Some(Variant::Int(i)) if *i > 0 => Ok(Ret(v_int(rng.gen_range(1..=*i)))),
+        Some(Variant::Int(_)) => Err(BfErr::Code(E_INVARG)),
+        None => Ok(Ret(v_int(rng.gen_range(1..=2147483647)))),
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }

@@ -1,0 +1,84 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_math.rb
+@programmer
+
+// test_that_random_0_is_invalid
+; random(0);
+E_INVARG
+
+; random(42.123);
+E_TYPE
+
+// test_that_random_1_returns_1
+; return random(1);
+1
+
+// test_that_random_returns_a_number_between_1_and_2147483647
+; for i in [1..1000]; n = random(); if (n <= 0 || n > 2147483647); return "FAIL"; endif; endfor; return "PASS";
+"PASS"
+
+// test_that_random_requires_a_positive_integer
+; random(-3);
+E_INVARG
+
+// more than 1 argument is invalid
+; random(1, 2, 3);
+E_ARGS
+
+// test_that_division_by_zero_fails
+; return 1.1 / 0.0;
+E_DIV
+; 1 / 0;
+E_DIV
+; 1.1 % 0.0;
+E_DIV
+; 1 % 0;
+E_DIV
+
+// test_the_minint_edge_case
+// Note: LambdaMOO 1.8.1 crashes and burns (core dumped) on this first case
+// The result in Toast seems nonsensical (-2147483648 / -1 => -2147483648)
+// Sooo let's just... do the right thing here.
+; return -2147483648 / -1;
+2147483648
+; return -2147483648 % -1;
+0
+
+// test_division
+// ints
+; return -15 / -3;
+5
+; return -15 / 3;
+-5
+; return 15 / -3;
+-5
+; return 15 / 3;
+5
+// floats
+; return -15.0 / -3.0;
+5.0
+; return -15.0 / 3.0;
+-5.0
+; return 15.0 / -3.0;
+-5.0
+; return 15.0 / 3.0;
+5.0
+
+// test_modulus
+// ints
+; return -15 % -4;
+-3
+; return -15 % 4;
+-3
+; return 15 % -4;
+3
+; return 15 % 4;
+3
+// floats
+; return -15.0 % -4.0;
+-3.0
+; return -15.0 % 4.0;
+-3.0
+; return 15.0 % -4.0;
+3.0
+; return 15.0 % 4.0;
+3.0

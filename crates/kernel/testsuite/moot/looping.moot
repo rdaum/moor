@@ -36,3 +36,7 @@ E_TYPE
 
 ; return eval("x = {}; for i in ({1, 2, 3}); break bar; endfor; return x;");
 {0, "Could not find loop with id: bar"}
+
+// test loop over a range
+; x = {}; for i in [1..5]; x = setadd(x, i); endfor; return x;
+{1, 2, 3, 4, 5}
