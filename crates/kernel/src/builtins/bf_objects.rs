@@ -40,7 +40,7 @@ Returns a non-zero integer (i.e., a true value) if object is a valid object (one
 */
 fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -52,7 +52,7 @@ bf_declare!(valid, bf_valid);
 
 fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -70,7 +70,7 @@ bf_declare!(parent, bf_parent);
 
 fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -88,7 +88,7 @@ bf_declare!(chparent, bf_chparent);
 
 fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -190,7 +190,7 @@ const BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC: usize = 0;
 const BF_RECYCLE_TRAMPOLINE_DONE_MOVE: usize = 1;
 fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -336,7 +336,7 @@ bf_declare!(recycle, bf_recycle);
 
 fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let max_obj = bf_args
         .world_state
@@ -353,7 +353,7 @@ const BF_MOVE_TRAMPOLINE_DONE: usize = 3;
 
 fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(what) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -565,7 +565,7 @@ bf_declare!(move, bf_move);
 
 fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -588,7 +588,7 @@ Returns a list of the names of the properties defined directly on the given obje
  */
 fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -604,7 +604,7 @@ bf_declare!(properties, bf_properties);
 
 fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let (Variant::Obj(obj), Variant::Int(f)) =
@@ -650,7 +650,7 @@ bf_declare!(set_player_flag, bf_set_player_flag);
 
 fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let players = bf_args.world_state.players().map_err(world_state_err)?;
 

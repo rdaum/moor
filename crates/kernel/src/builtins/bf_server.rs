@@ -49,7 +49,7 @@ bf_declare!(noop, bf_noop);
 
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
@@ -87,7 +87,7 @@ bf_declare!(notify, bf_notify);
 
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     Ok(Ret(v_listv(
@@ -104,7 +104,7 @@ bf_declare!(connected_players, bf_connected_players);
 
 fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
@@ -122,7 +122,7 @@ bf_declare!(is_player, bf_is_player);
 
 fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     Ok(Ret(v_objid(bf_args.caller_perms())))
@@ -131,7 +131,7 @@ bf_declare!(caller_perms, bf_caller_perms);
 
 fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(perms_for) = bf_args.args[0].variant().clone() else {
         return Err(E_TYPE);
@@ -150,7 +150,7 @@ bf_declare!(set_task_perms, bf_set_task_perms);
 
 fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     // We have to exempt ourselves from the callers list.
@@ -182,7 +182,7 @@ bf_declare!(callers, bf_callers);
 
 fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
@@ -191,7 +191,7 @@ bf_declare!(task_id, bf_task_id);
 
 fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -206,7 +206,7 @@ bf_declare!(idle_seconds, bf_idle_seconds);
 
 fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -228,7 +228,7 @@ Returns a network-specific string identifying the connection being used by the g
  */
 fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Obj(player) = bf_args.args[0].variant() else {
@@ -256,7 +256,7 @@ bf_declare!(connection_name, bf_connection_name);
 
 fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let msg = if bf_args.args.is_empty() {
         None
@@ -286,7 +286,7 @@ bf_declare!(shutdown, bf_shutdown);
 
 fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     Ok(Ret(v_int(
         SystemTime::now()
@@ -299,7 +299,7 @@ bf_declare!(time, bf_time);
 
 fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let time = if bf_args.args.is_empty() {
         SystemTime::now()
@@ -335,7 +335,7 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // and <value>, which defaults to zero, are made available to any `try'-`except' statements that catch the error.  If the error is not caught, then <message> will
     // appear on the first line of the traceback printed to the user.
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Err(err) = bf_args.args[0].variant() else {
@@ -351,7 +351,7 @@ bf_declare!(raise, bf_raise);
 
 fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     // TODO: Support server version flag passed down the pipe, rather than hardcoded
     //   This is a placeholder for now, should be set by the server on startup. But right now
@@ -367,7 +367,7 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // Suspends the current task for <seconds> seconds.  If <seconds> is not specified, the task is suspended indefinitely.  The task may be resumed early by
     // calling `resume' on it.
     if bf_args.args.len() > 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let seconds = if bf_args.args.is_empty() {
@@ -385,7 +385,7 @@ bf_declare!(suspend, bf_suspend);
 
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     // We don't actually support reading from arbitrary connections that aren't the current player,
@@ -413,7 +413,7 @@ bf_declare!(read, bf_read);
 
 fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
@@ -464,7 +464,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //
     // Kills the task with the given <task-id>.  The task must be queued or suspended, and the current task must be the owner of the task being killed.
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Int(victim_task_id) = bf_args.args[0].variant() else {
@@ -503,7 +503,7 @@ bf_declare!(kill_task, bf_kill_task);
 
 fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Int(resume_task_id) = bf_args.args[0].variant() else {
@@ -551,7 +551,7 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //
     // Returns the number of ticks left in the current time slice.
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let ticks_left = bf_args.exec_state.tick_slice - bf_args.exec_state.tick_count;
@@ -565,7 +565,7 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //
     // Returns the number of seconds left in the current time slice.
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let seconds_left = match bf_args.exec_state.time_left() {
@@ -582,7 +582,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //
     // Disconnects the player with the given object number.
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Obj(player) = bf_args.args[0].variant() else {
@@ -614,7 +614,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //
     // Calls the given function with the given arguments and returns the result.
     if bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Str(func_name) = bf_args.args[0].variant() else {
@@ -649,7 +649,7 @@ is not a wizard, then `E_PERM' is raised.  If <is-error> is provided and true, t
 */
 fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let Variant::Str(message) = bf_args.args[0].variant() else {
@@ -721,7 +721,7 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
 
 fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     if bf_args.args.len() == 1 {
@@ -749,7 +749,7 @@ bf_declare!(function_info, bf_function_info);
 
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     // TODO: Return something better from bf_listeners, rather than hardcoded value
@@ -829,7 +829,7 @@ bf_declare!(dump_database, bf_dump_database);
 
 fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     // Must be wizard.
@@ -886,7 +886,7 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     //
     // Returns the number of bytes currently occupied by the database on disk.
     if !bf_args.args.is_empty() {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     // Must be wizard.

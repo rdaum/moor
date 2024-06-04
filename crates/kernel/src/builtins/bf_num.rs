@@ -18,7 +18,7 @@ use decorum::R64;
 use rand::Rng;
 
 use moor_values::var::Error;
-use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_float, v_int, v_str};
 
@@ -30,7 +30,7 @@ use moor_compiler::offset_for_builtin;
 
 fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     match bf_args.args[0].variant() {
@@ -43,7 +43,7 @@ bf_declare!(abs, bf_abs);
 
 fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
@@ -59,7 +59,7 @@ bf_declare!(min, bf_min);
 
 fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
@@ -75,7 +75,7 @@ bf_declare!(max, bf_max);
 
 fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() > 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let mut rng = rand::thread_rng();
@@ -89,7 +89,7 @@ bf_declare!(random, bf_random);
 
 fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -118,7 +118,7 @@ bf_declare!(floatstr, bf_floatstr);
 
 fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -132,7 +132,7 @@ bf_declare!(sin, bf_sin);
 
 fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -146,7 +146,7 @@ bf_declare!(cos, bf_cos);
 
 fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -160,7 +160,7 @@ bf_declare!(tan, bf_tan);
 
 fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -178,7 +178,7 @@ bf_declare!(sqrt, bf_sqrt);
 
 fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -196,7 +196,7 @@ bf_declare!(asin, bf_asin);
 
 fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -214,7 +214,7 @@ bf_declare!(acos, bf_acos);
 
 fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let y = match bf_args.args[0].variant() {
@@ -233,7 +233,7 @@ bf_declare!(atan, bf_atan);
 
 fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -247,7 +247,7 @@ bf_declare!(sinh, bf_sinh);
 
 fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -261,7 +261,7 @@ bf_declare!(cosh, bf_cosh);
 
 fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -275,7 +275,7 @@ bf_declare!(tanh, bf_tanh);
 
 fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -289,7 +289,7 @@ bf_declare!(exp, bf_exp);
 
 fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -307,7 +307,7 @@ bf_declare!(log, bf_log);
 
 fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -325,7 +325,7 @@ bf_declare!(log10, bf_log10);
 
 fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -339,7 +339,7 @@ bf_declare!(ceil, bf_ceil);
 
 fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {
@@ -353,7 +353,7 @@ bf_declare!(floor, bf_floor);
 
 fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 1 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let x = match bf_args.args[0].variant() {

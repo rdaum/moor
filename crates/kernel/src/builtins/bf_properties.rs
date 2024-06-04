@@ -17,7 +17,7 @@ use std::sync::Arc;
 use moor_values::model::world_state_err;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Error::{E_INVARG, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string, Var};
 use moor_values::var::{v_empty_list, Error};
@@ -32,7 +32,7 @@ use moor_compiler::offset_for_builtin;
 //  {<owner>, <perms> }
 fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -70,7 +70,7 @@ enum InfoParseResult {
 
 fn info_to_prop_attrs(info: &[Var]) -> InfoParseResult {
     if info.len() < 2 || info.len() > 3 {
-        return InfoParseResult::Fail(E_INVARG);
+        return InfoParseResult::Fail(E_ARGS);
     }
     let Variant::Obj(owner) = info[0].variant() else {
         return InfoParseResult::Fail(E_TYPE);
@@ -108,7 +108,7 @@ fn info_to_prop_attrs(info: &[Var]) -> InfoParseResult {
 
 fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -137,7 +137,7 @@ bf_declare!(set_property_info, bf_set_property_info);
 
 fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -155,7 +155,7 @@ bf_declare!(is_clear_property, bf_is_clear_property);
 
 fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
@@ -174,7 +174,7 @@ bf_declare!(set_clear_property, bf_clear_property);
 // add_property (obj <object>, str <prop-name>, <value>, list <info>) => none
 fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 4 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
 
     let (Variant::Obj(location), Variant::Str(name), value, Variant::List(info)) = (
@@ -211,7 +211,7 @@ bf_declare!(add_property, bf_add_property);
 
 fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     if bf_args.args.len() != 2 {
-        return Err(E_INVARG);
+        return Err(E_ARGS);
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(E_TYPE);
