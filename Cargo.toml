@@ -6,7 +6,7 @@ members = [
     "crates/compiler",
     "crates/kernel",
     "crates/db",
-    "crates/db-wildtiger",
+    "crates/db-wiredtiger",
     "crates/relbox",
     "crates/db-relbox",
     "crates/rpc-common",

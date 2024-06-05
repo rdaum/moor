@@ -369,7 +369,7 @@ impl WorldStateTransaction for WtWorldStateTransaction {
             .unwrap_or(NOTHING))
     }
 
-    // TODO: wildtiger has joins. we should add join&transitive join to the interface and use it
+    // TODO: wiredtiger has joins. we should add join&transitive join to the interface and use it
     fn set_object_parent(&self, o: Objid, new_parent: Objid) -> Result<(), WorldStateError> {
         // Steps for object re-parenting:
 

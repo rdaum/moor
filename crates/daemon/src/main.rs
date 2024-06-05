@@ -28,10 +28,10 @@ use rand::rngs::OsRng;
 use rusty_paseto::core::Key;
 use tracing::{info, warn};
 
+use moor_db_wiredtiger::WiredTigerDatabaseBuilder;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::textdump_load;
-use wtdb::WiredTigerDatabaseBuilder;
 
 use crate::rpc_server::zmq_loop;
 

@@ -41,7 +41,7 @@ fn main() {
     // Link to the generated wiredtiger library
     println!("cargo:rustc-link-lib=wiredtiger");
 
-    //  Bindings will be built off our wrapper.h file, which includes wiretiger.h
+    //  Bindings will be built off our wrapper.h file, which includes wiredtiger.h
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate
         // bindings for.
