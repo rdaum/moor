@@ -146,7 +146,7 @@ struct Args {
         // For those that don't appreciate proper English.
         alias = "db-flavor",
         help = "The database flavour to use",
-        default_value = "relbox"
+        default_value = "wiredtiger"
     )]
     db_flavour: DatabaseFlavour,
 
