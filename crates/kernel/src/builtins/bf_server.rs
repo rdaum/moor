@@ -19,26 +19,25 @@ use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
-
 use tracing::{debug, error, info, warn};
 
+use moor_compiler::compile;
+use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 use moor_values::model::ObjFlag;
-use moor_values::model::{world_state_err, NarrativeEvent, WorldStateError};
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_PERM, E_TYPE};
+use moor_values::model::{NarrativeEvent, WorldStateError};
+use moor_values::var::Error::{E_ARGS, E_PERM, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 use moor_values::var::{v_listv, Error};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
-use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
-use moor_compiler::compile;
-use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 
-fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // TODO: Remove bf_noop panic
     //   right now we panic on unimplemented builtins, but we should just return an error and log,
     //   this was done this way to support discovering which builtins are unimplemented, but
@@ -47,25 +46,25 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(noop, bf_noop);
 
-fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
     let msg = bf_args.args[1].variant();
     let Variant::Str(msg) = msg else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_obj_owner_perms(*player)
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
 
     let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
 
@@ -85,9 +84,9 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(notify, bf_notify);
 
-fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_listv(
@@ -102,45 +101,45 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(connected_players, bf_connected_players);
 
-fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     let is_player = match bf_args.world_state.flags_of(*player) {
         Ok(flags) => flags.contains(ObjFlag::User),
-        Err(WorldStateError::ObjectNotFound(_)) => return Err(E_INVARG),
-        Err(e) => return Err(e.into()),
+        Err(WorldStateError::ObjectNotFound(_)) => return Err(BfErr::Code(E_ARGS)),
+        Err(e) => return Err(world_state_bf_err(e)),
     };
     Ok(Ret(v_bool(is_player)))
 }
 bf_declare!(is_player, bf_is_player);
 
-fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_objid(bf_args.caller_perms())))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
-fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Obj(perms_for) = bf_args.args[0].variant().clone() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     // If the caller is not a wizard, perms_for must be the caller
-    let perms = bf_args.task_perms().map_err(world_state_err)?;
-    if !perms.check_is_wizard().map_err(world_state_err)? && perms_for != perms.who {
-        return Err(E_PERM);
+    let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    if !perms.check_is_wizard().map_err(world_state_bf_err)? && perms_for != perms.who {
+        return Err(BfErr::Code(E_PERM));
     }
     bf_args.exec_state.set_task_perms(perms_for);
 
@@ -148,9 +147,9 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(set_task_perms, bf_set_task_perms);
 
-fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     // We have to exempt ourselves from the callers list.
@@ -180,39 +179,39 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(callers, bf_callers);
 
-fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
 }
 bf_declare!(task_id, bf_task_id);
 
-fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
     let Ok(idle_seconds) = bf_args.session.idle_seconds(*who) else {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     };
 
     Ok(Ret(v_int(idle_seconds as i64)))
 }
 bf_declare!(idle_seconds, bf_idle_seconds);
 
-fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
     let Ok(connected_seconds) = bf_args.session.connected_seconds(*who) else {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     };
 
     Ok(Ret(v_int(connected_seconds as i64)))
@@ -226,52 +225,52 @@ Returns a network-specific string identifying the connection being used by the g
 <player>, then `E_PERM' is raised.  If <player> is not currently connected, then `E_INVARG' is raised.
 
  */
-fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Obj(player) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     let caller = bf_args.caller_perms();
     if !bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_is_wizard()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         && caller != *player
     {
-        return Err(E_PERM);
+        return Err(BfErr::Code(E_PERM));
     }
 
     let Ok(connection_name) = bf_args.session.connection_name(*player) else {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     };
 
     Ok(Ret(v_string(connection_name)))
 }
 bf_declare!(connection_name, bf_connection_name);
 
-fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let msg = if bf_args.args.is_empty() {
         None
     } else {
         let Variant::Str(msg) = bf_args.args[0].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         Some(msg.as_str().to_string())
     };
 
     bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_wizard()
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     bf_args
         .scheduler_sender
         .send((
@@ -284,9 +283,9 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(shutdown, bf_shutdown);
 
-fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     Ok(Ret(v_int(
         SystemTime::now()
@@ -297,15 +296,15 @@ fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(time, bf_time);
 
-fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let time = if bf_args.args.is_empty() {
         SystemTime::now()
     } else {
         let Variant::Int(time) = bf_args.args[0].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         if *time < 0 {
             SystemTime::UNIX_EPOCH - Duration::from_secs(time.unsigned_abs())
@@ -328,30 +327,43 @@ fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     Ok(Ret(v_string(datetime_str.to_string())))
 }
 bf_declare!(ctime, bf_ctime);
-fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
     //
     // Raises <code> as an error in the same way as other MOO expressions, statements, and functions do.  <Message>, which defaults to the value of `tostr(<code>)',
     // and <value>, which defaults to zero, are made available to any `try'-`except' statements that catch the error.  If the error is not caught, then <message> will
     // appear on the first line of the traceback printed to the user.
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Err(err) = bf_args.args[0].variant() else {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     };
 
-    // TODO implement message & value params for raised errors
-    //   can't do that with the existing bf interface for returning errors right now :-(
-    //   will require a refactor of Error results throughout
-    Err(*err)
+    let msg = if bf_args.args.len() > 1 {
+        let Variant::Str(msg) = bf_args.args[1].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        Some(msg.to_string())
+    } else {
+        None
+    };
+
+    let value = if bf_args.args.len() > 2 {
+        Some(bf_args.args[2].clone())
+    } else {
+        None
+    };
+
+    Err(BfErr::Raise(*err, msg, value))
 }
+
 bf_declare!(raise, bf_raise);
 
-fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     // TODO: Support server version flag passed down the pipe, rather than hardcoded
     //   This is a placeholder for now, should be set by the server on startup. But right now
@@ -361,20 +373,20 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(server_version, bf_server_version);
 
-fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  suspend(<seconds>)   => none
     //
     // Suspends the current task for <seconds> seconds.  If <seconds> is not specified, the task is suspended indefinitely.  The task may be resumed early by
     // calling `resume' on it.
     if bf_args.args.len() > 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let seconds = if bf_args.args.is_empty() {
         None
     } else {
         let Variant::Int(seconds) = bf_args.args[0].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         Some(Duration::from_secs(*seconds as u64))
     };
@@ -383,9 +395,9 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(suspend, bf_suspend);
 
-fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     // We don't actually support reading from arbitrary connections that aren't the current player,
@@ -393,7 +405,7 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     // network listener model.
     if bf_args.args.len() == 1 {
         let Variant::Obj(requested_player) = bf_args.args[0].variant() else {
-            return Err(E_INVARG);
+            return Err(BfErr::Code(E_ARGS));
         };
         let player = bf_args.exec_state.top().player;
         if *requested_player != player {
@@ -403,7 +415,7 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
                 caller = ?bf_args.exec_state.caller(),
                 ?player,
                 "read() called with non-current player");
-            return Err(E_INVARG);
+            return Err(BfErr::Code(E_ARGS));
         }
     }
 
@@ -411,9 +423,9 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(read, bf_read);
 
-fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
@@ -459,16 +471,16 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
 
-fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  kill_task(<task-id>)   => none
     //
     // Kills the task with the given <task-id>.  The task must be queued or suspended, and the current task must be the owner of the task being killed.
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Int(victim_task_id) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     // If the task ID is itself, that means returning an Complete execution result, which will cascade
@@ -487,7 +499,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             bf_args.exec_state.task_id,
             SchedulerControlMsg::KillTask {
                 victim_task_id,
-                sender_permissions: bf_args.task_perms().map_err(world_state_err)?,
+                sender_permissions: bf_args.task_perms().map_err(world_state_bf_err)?,
                 result_sender: send,
             },
         ))
@@ -495,19 +507,19 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 
     let result = receive.recv().expect("scheduler is not listening");
     if let Variant::Err(err) = result.variant() {
-        return Err(*err);
+        return Err(BfErr::Code(*err));
     }
     Ok(Ret(result))
 }
 bf_declare!(kill_task, bf_kill_task);
 
-fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Int(resume_task_id) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     // Optional 2nd argument is the value to return from suspend() in the resumed task.
@@ -521,7 +533,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 
     // Resuming ourselves makes no sense, it's not suspended. E_INVARG.
     if task_id == bf_args.exec_state.task_id {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let (send, receive) = oneshot::channel();
@@ -531,7 +543,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             bf_args.exec_state.task_id,
             SchedulerControlMsg::ResumeTask {
                 queued_task_id: task_id,
-                sender_permissions: bf_args.task_perms().map_err(world_state_err)?,
+                sender_permissions: bf_args.task_perms().map_err(world_state_bf_err)?,
                 return_value,
                 result_sender: send,
             },
@@ -540,18 +552,18 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 
     let result = receive.recv().expect("scheduler is not listening");
     if let Variant::Err(err) = result.variant() {
-        return Err(*err);
+        return Err(BfErr::Code(*err));
     }
     Ok(Ret(result))
 }
 bf_declare!(resume, bf_resume);
 
-fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  ticks_left()   => int
     //
     // Returns the number of ticks left in the current time slice.
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let ticks_left = bf_args.exec_state.tick_slice - bf_args.exec_state.tick_count;
@@ -560,12 +572,12 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(ticks_left, bf_ticks_left);
 
-fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  seconds_left()   => int
     //
     // Returns the number of seconds left in the current time slice.
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let seconds_left = match bf_args.exec_state.time_left() {
@@ -577,21 +589,21 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(seconds_left, bf_seconds_left);
 
-fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  boot_player(<player>)   => none
     //
     // Disconnects the player with the given object number.
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Obj(player) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
-    let task_perms = bf_args.task_perms().map_err(world_state_err)?;
-    if task_perms.who != *player && !task_perms.check_is_wizard().map_err(world_state_err)? {
-        return Err(E_PERM);
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    if task_perms.who != *player && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_PERM));
     }
 
     bf_args
@@ -609,16 +621,16 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(boot_player, bf_boot_player);
 
-fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  call_function(<func>, <arg1>, <arg2>, ...)   => value
     //
     // Calls the given function with the given arguments and returns the result.
     if bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Str(func_name) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     // Arguments are everything left, if any.
@@ -630,7 +642,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         .iter()
         .position(|bf| bf.name == func_name)
     else {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     };
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
@@ -647,18 +659,18 @@ The text in <message> is sent to the server log with a distinctive prefix (so th
 is not a wizard, then `E_PERM' is raised.  If <is-error> is provided and true, then <message> is marked in the server log as an error.
 
 */
-fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let Variant::Str(message) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     let is_error = if bf_args.args.len() == 2 {
         let Variant::Int(is_error) = bf_args.args[1].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         *is_error == 1
     } else {
@@ -667,11 +679,11 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 
     if !bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_is_wizard()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
     {
-        return Err(E_PERM);
+        return Err(BfErr::Code(E_PERM));
     }
 
     if is_error {
@@ -719,21 +731,21 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
     ])
 }
 
-fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     if bf_args.args.len() == 1 {
         let Variant::Str(func_name) = bf_args.args[0].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         let bf = BUILTIN_DESCRIPTORS
             .iter()
             .find(|bf| bf.name == func_name.as_str())
             .map(bf_function_info_to_list);
         let Some(desc) = bf else {
-            return Err(E_INVARG);
+            return Err(BfErr::Code(E_ARGS));
         };
         return Ok(Ret(desc));
     }
@@ -747,9 +759,9 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(function_info, bf_function_info);
 
-fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     // TODO: Return something better from bf_listeners, rather than hardcoded value
@@ -765,16 +777,17 @@ bf_declare!(listeners, bf_listeners);
 pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
-fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
-        .task_perms()?
+        .task_perms()
+        .map_err(world_state_bf_err)?
         .check_programmer()
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Str(program_code) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(BfErr::Code(E_TYPE));
     };
 
     let tramp = bf_args
@@ -811,59 +824,59 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(eval, bf_eval);
 
-fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_wizard()
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
 
     bf_args
         .scheduler_sender
         .send((bf_args.exec_state.task_id, SchedulerControlMsg::Checkpoint))
-        .map_err(|_| Error::E_QUOTA)?;
+        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
 
     Ok(Ret(v_bool(true)))
 }
 bf_declare!(dump_database, bf_dump_database);
 
-fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     // Must be wizard.
     bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_wizard()
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
 
     // Get system page size
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     if page_size == -1 {
-        return Err(Error::E_QUOTA);
+        return Err(BfErr::Code(Error::E_QUOTA));
     }
 
     // Then read /proc/self/statm
     let mut statm = String::new();
     std::fs::File::open("/proc/self/statm")
-        .map_err(|_| Error::E_QUOTA)?
+        .map_err(|_| BfErr::Code(Error::E_QUOTA))?
         .read_to_string(&mut statm)
-        .map_err(|_| Error::E_QUOTA)?;
+        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
 
     // Split on whitespace -- then we have VmSize and VmRSS in pages
     let mut statm = statm.split_whitespace();
     let vm_size = statm
         .next()
-        .ok_or(Error::E_QUOTA)?
+        .ok_or(BfErr::Code(Error::E_QUOTA))?
         .parse::<i64>()
-        .map_err(|_| Error::E_QUOTA)?;
+        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
     let vm_rss = statm
         .next()
-        .ok_or(Error::E_QUOTA)?
+        .ok_or(BfErr::Code(Error::E_QUOTA))?
         .parse::<i64>()
-        .map_err(|_| Error::E_QUOTA)?;
+        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
 
     // Return format for memory_usage is:
     // {block-size, nused, nfree}
@@ -881,22 +894,22 @@ fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(memory_usage, bf_memory_usage);
 
-fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  db_disk_size()   => int
     //
     // Returns the number of bytes currently occupied by the database on disk.
     if !bf_args.args.is_empty() {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     // Must be wizard.
     bf_args
         .task_perms()
-        .map_err(world_state_err)?
+        .map_err(world_state_bf_err)?
         .check_wizard()
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
 
-    let disk_size = bf_args.world_state.db_usage().map_err(world_state_err)?;
+    let disk_size = bf_args.world_state.db_usage().map_err(world_state_bf_err)?;
 
     Ok(Ret(v_int(disk_size as i64)))
 }

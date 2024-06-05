@@ -18,16 +18,15 @@ use std::sync::Arc;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 
-use moor_values::var::Error;
+use moor_compiler::offset_for_builtin;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_int, v_str, v_string};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::offset_for_builtin;
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
@@ -54,16 +53,16 @@ fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
 }
 
 //Function: str strsub (str subject, str what, str with [, case-matters])
-fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
         let Variant::Int(case_matters) = bf_args.args[3].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     };
     let (subject, what, with) = (
         bf_args.args[0].variant(),
@@ -74,7 +73,7 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => Ok(Ret(v_str(
             strsub(subject.as_str(), what.as_str(), with.as_str(), case_matters).as_str(),
         ))),
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(strsub, bf_strsub);
@@ -103,16 +102,16 @@ fn str_rindex(subject: &str, what: &str, case_matters: bool) -> i64 {
     }
 }
 
-fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -122,21 +121,21 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             what.as_str(),
             case_matters,
         )))),
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(index, bf_index);
 
-fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         *case_matters == 1
     } else {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     };
 
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
@@ -146,21 +145,21 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             what.as_str(),
             case_matters,
         )))),
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(rindex, bf_rindex);
 
-fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
         (Variant::Str(str1), Variant::Str(str2)) => {
             Ok(Ret(v_int(str1.as_str().cmp(str2.as_str()) as i64)))
         }
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(strcmp, bf_strcmp);
@@ -174,9 +173,9 @@ encryption "salt" in the algorithm. If salt is not provided, a random pair of ch
  In any case, the salt used is also returned as the first two characters of the resulting encrypted
  string.
 */
-fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let salt = if bf_args.args.len() == 1 {
@@ -189,7 +188,7 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         salt
     } else {
         let Variant::Str(salt) = bf_args.args[1].variant() else {
-            return Err(E_TYPE);
+            return Err(BfErr::Code(E_TYPE));
         };
         String::from(salt.as_str())
     };
@@ -198,31 +197,31 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         let salt_c_cstring = CString::new(salt.as_str()).unwrap();
         let crypted = unsafe { crypt_sys::crypt(text_c_cstring.as_ptr(), salt_c_cstring.as_ptr()) };
         if crypted.is_null() {
-            return Err(E_INVARG);
+            return Err(BfErr::Code(E_INVARG));
         }
         let crypted = unsafe { CStr::from_ptr(crypted) };
         Ok(Ret(v_string(crypted.to_str().unwrap().to_string())))
     } else {
-        Err(E_TYPE)
+        Err(BfErr::Code(E_TYPE))
     }
 }
 bf_declare!(crypt, bf_crypt);
 
-fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
             let hash_digest = md5::compute(s.as_str().as_bytes());
             Ok(Ret(v_str(format!("{:x}", hash_digest).as_str())))
         }
-        _ => Err(E_INVARG),
+        _ => Err(BfErr::Code(E_INVARG)),
     }
 }
 bf_declare!(string_hash, bf_string_hash);
 
-fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     unimplemented!("binary_hash")
 }
 bf_declare!(binary_hash, bf_binary_hash);

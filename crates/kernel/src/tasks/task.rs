@@ -473,6 +473,18 @@ impl Task {
 
                 Some(SchedulerControlMsg::TaskAbortLimitsReached(reason))
             }
+            VMHostResponse::RollbackRetry => {
+                warn!(task_id = self.task_id, "Task rollback requested, retrying");
+
+                self.vm_host.stop();
+                self.done = true;
+
+                self.world_state
+                    .rollback()
+                    .expect("Could not rollback world state");
+
+                Some(SchedulerControlMsg::TaskConflictRetry)
+            }
         }
     }
 

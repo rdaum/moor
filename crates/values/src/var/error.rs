@@ -125,11 +125,11 @@ impl Error {
     }
 
     #[must_use]
-    pub fn make_error_pack(&self, msg: Option<String>) -> ErrorPack {
+    pub fn make_error_pack(&self, msg: Option<String>, value: Option<Var>) -> ErrorPack {
         ErrorPack {
             code: *self,
             msg: msg.unwrap_or(self.message().to_string()),
-            value: v_none(),
+            value: value.unwrap_or(v_none()),
         }
     }
 }

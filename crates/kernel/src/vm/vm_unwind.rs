@@ -250,14 +250,20 @@ impl VM {
                 .flags()
                 .contains(VerbFlag::Debug)
             {
-                return self.raise_error_pack(state, code.make_error_pack(None));
+                return self.raise_error_pack(state, code.make_error_pack(None, None));
             }
         }
         ExecutionResult::More
     }
 
     /// Same as push_error, but for returns from builtin functions.
-    pub(crate) fn push_bf_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
+    pub(crate) fn push_bf_error(
+        &self,
+        state: &mut VMExecState,
+        code: Error,
+        msg: Option<String>,
+        value: Option<Var>,
+    ) -> ExecutionResult {
         trace!(?code, "push_bf_error");
         // No matter what, the error value has to be on the stack of the *calling* verb, not on this
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
@@ -275,7 +281,7 @@ impl VM {
                 .flags()
                 .contains(VerbFlag::Debug)
             {
-                return self.raise_error_pack(state, code.make_error_pack(None));
+                return self.raise_error_pack(state, code.make_error_pack(msg, value));
             }
         }
         // If we're not unwinding, we need to pop the builtin function's activation frame.
@@ -311,7 +317,7 @@ impl VM {
                 .flags()
                 .contains(VerbFlag::Debug)
             {
-                return self.raise_error_pack(state, code.make_error_pack(None));
+                return self.raise_error_pack(state, code.make_error_pack(None, None));
             }
         }
         ExecutionResult::More
@@ -320,7 +326,7 @@ impl VM {
     /// Explicitly raise an error, regardless of the 'd' bit.
     pub(crate) fn throw_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "raise_error");
-        self.raise_error_pack(state, code.make_error_pack(None))
+        self.raise_error_pack(state, code.make_error_pack(None, None))
     }
 
     /// Unwind the stack with the given reason and return an execution result back to the VM loop

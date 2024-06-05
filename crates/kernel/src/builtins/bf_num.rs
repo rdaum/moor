@@ -17,33 +17,32 @@ use std::sync::Arc;
 use decorum::R64;
 use rand::Rng;
 
-use moor_values::var::Error;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_compiler::offset_for_builtin;
+use moor_values::var::Error::{E_ARGS, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::offset_for_builtin;
 
-fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(i.abs()))),
         Variant::Float(f) => Ok(Ret(v_float(f.abs()))),
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(abs, bf_abs);
 
-fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
@@ -52,14 +51,14 @@ fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             let m = R64::from(*a).min(R64::from(*b));
             Ok(Ret(v_float(m.into())))
         }
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(min, bf_min);
 
-fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
@@ -68,43 +67,43 @@ fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             let m = R64::from(*a).max(R64::from(*b));
             Ok(Ret(v_float(m.into())))
         }
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(max, bf_max);
 
-fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let mut rng = rand::thread_rng();
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(rng.gen_range(0..*i)))),
         Variant::Float(f) => Ok(Ret(v_float(rng.gen_range(0.0..*f)))),
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(random, bf_random);
 
-fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     let precision = match bf_args.args[1].variant() {
         Variant::Int(i) if *i > 0 => *i as usize,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     let scientific = match bf_args.args[2].variant() {
         Variant::Int(b) => *b == 1,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     let mut s = format!("{:.*}", precision, x);
@@ -116,249 +115,249 @@ fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(floatstr, bf_floatstr);
 
-fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.sin())))
 }
 bf_declare!(sin, bf_sin);
 
-fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.cos())))
 }
 bf_declare!(cos, bf_cos);
 
-fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.tan())))
 }
 bf_declare!(tan, bf_tan);
 
-fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     if *x < 0.0 {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_float(x.sqrt())))
 }
 bf_declare!(sqrt, bf_sqrt);
 
-fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     if !(-1.0..=1.0).contains(x) {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_float(x.asin())))
 }
 bf_declare!(asin, bf_asin);
 
-fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     if !(-1.0..=1.0).contains(x) {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_float(x.acos())))
 }
 bf_declare!(acos, bf_acos);
 
-fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let y = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     let x = match bf_args.args[1].variant() {
         Variant::Float(f) => *f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(y.atan2(x))))
 }
 bf_declare!(atan, bf_atan);
 
-fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.sinh())))
 }
 bf_declare!(sinh, bf_sinh);
 
-fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.cosh())))
 }
 bf_declare!(cosh, bf_cosh);
 
-fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.tanh())))
 }
 bf_declare!(tanh, bf_tanh);
 
-fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.exp())))
 }
 bf_declare!(exp, bf_exp);
 
-fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     if *x <= 0.0 {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_float(x.ln())))
 }
 bf_declare!(log, bf_log);
 
-fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     if *x <= 0.0 {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     Ok(Ret(v_float(x.log10())))
 }
 bf_declare!(log10, bf_log10);
 
-fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.ceil())))
 }
 bf_declare!(ceil, bf_ceil);
 
-fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.floor())))
 }
 bf_declare!(floor, bf_floor);
 
-fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(E_TYPE),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
     Ok(Ret(v_float(x.trunc())))

@@ -53,6 +53,8 @@ pub enum VMHostResponse {
     CompleteAbort,
     /// The VM threw an exception. (FinallyReason::Uncaught in MOO VM)
     CompleteException(UncaughtException),
+    /// A rollback-retry was requested.
+    RollbackRetry,
 }
 
 /// A 'host' for running the MOO virtual machine inside a task.
@@ -342,6 +344,10 @@ impl VmHost {
                             );
                         }
                     };
+                }
+                ExecutionResult::RollbackRestart => {
+                    trace!(task_id, "Task rollback-restart");
+                    return VMHostResponse::RollbackRetry;
                 }
             }
         }

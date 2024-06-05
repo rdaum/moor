@@ -141,6 +141,9 @@ fn execute(world_state: &mut dyn WorldState, vm_host: &mut VmHost) -> bool {
             VMHostResponse::CompleteAbort => {
                 panic!("Unexpected abort");
             }
+            VMHostResponse::RollbackRetry => {
+                panic!("Unexpected rollback retry");
+            }
         }
     }
 }
