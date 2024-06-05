@@ -134,6 +134,9 @@ pub mod vm_test_utils {
                 VMHostResponse::SuspendNeedInput => {
                     panic!("Unexpected suspend need input");
                 }
+                VMHostResponse::RollbackRetry => {
+                    panic!("Unexpected rollback retry");
+                }
             }
         }
     }

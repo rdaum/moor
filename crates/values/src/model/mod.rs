@@ -141,10 +141,6 @@ impl From<WorldStateError> for Error {
     }
 }
 
-pub fn world_state_err(err: WorldStateError) -> Error {
-    err.into()
-}
-
 /// A narrative event is a record of something that happened in the world, and is what `bf_notify`
 /// or similar ultimately create.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]

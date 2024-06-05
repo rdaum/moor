@@ -14,36 +14,36 @@
 
 use std::sync::Arc;
 
-use moor_values::model::world_state_err;
+use moor_compiler::offset_for_builtin;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
+use moor_values::var::v_empty_list;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string, Var};
-use moor_values::var::{v_empty_list, Error};
 
 use crate::bf_declare;
+use crate::builtins::BfErr::Code;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::offset_for_builtin;
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }
-fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(Code(E_ARGS));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let (_, perms) = bf_args
         .world_state
         .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     let owner = perms.owner();
     let flags = perms.flags();
 
@@ -106,23 +106,23 @@ fn info_to_prop_attrs(info: &[Var]) -> InfoParseResult {
     })
 }
 
-fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
-        return Err(E_ARGS);
+        return Err(Code(E_ARGS));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let Variant::List(info) = bf_args.args[2].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
 
     let attrs = match info_to_prop_attrs(&info[..]) {
         InfoParseResult::Fail(e) => {
-            return Err(e);
+            return Err(Code(e));
         }
         InfoParseResult::Success(a) => a,
     };
@@ -130,51 +130,51 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
     bf_args
         .world_state
         .set_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str(), attrs)
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
 bf_declare!(set_property_info, bf_set_property_info);
 
-fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(Code(E_ARGS));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let is_clear = bf_args
         .world_state
         .is_property_clear(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_bool(is_clear)))
 }
 bf_declare!(is_clear_property, bf_is_clear_property);
 
-fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(Code(E_ARGS));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     bf_args
         .world_state
         .clear_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
 bf_declare!(set_clear_property, bf_clear_property);
 
 // add_property (obj <object>, str <prop-name>, <value>, list <info>) => none
-fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 4 {
-        return Err(E_ARGS);
+        return Err(Code(E_ARGS));
     }
 
     let (Variant::Obj(location), Variant::Str(name), value, Variant::List(info)) = (
@@ -183,12 +183,12 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
         bf_args.args[2].clone(),
         bf_args.args[3].variant(),
     ) else {
-        return Err(E_INVARG);
+        return Err(Code(E_ARGS));
     };
 
     let attrs = match info_to_prop_attrs(&info[..]) {
         InfoParseResult::Fail(e) => {
-            return Err(e);
+            return Err(Code(e));
         }
         InfoParseResult::Success(a) => a,
     };
@@ -204,25 +204,25 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             attrs.flags.unwrap(),
             Some(value),
         )
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_none()))
 }
 bf_declare!(add_property, bf_add_property);
 
-fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(Code(E_ARGS));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(E_TYPE);
+        return Err(Code(E_TYPE));
     };
     bf_args
         .world_state
         .delete_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
-        .map_err(world_state_err)?;
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
 bf_declare!(delete_property, bf_delete_property);

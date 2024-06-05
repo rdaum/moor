@@ -12,18 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod bf_list_sets;
-mod bf_num;
-mod bf_objects;
-mod bf_properties;
-pub mod bf_server;
-mod bf_strings;
-mod bf_values;
-mod bf_verbs;
-
 use std::sync::Arc;
 
 use crossbeam_channel::Sender;
+use thiserror::Error;
 
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
@@ -36,6 +28,15 @@ use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VMExecState};
+
+mod bf_list_sets;
+mod bf_num;
+mod bf_objects;
+mod bf_properties;
+pub mod bf_server;
+mod bf_strings;
+mod bf_values;
+mod bf_verbs;
 
 /// The arguments and other state passed to a built-in function.
 pub struct BfCallState<'a> {
@@ -71,7 +72,7 @@ impl BfCallState<'_> {
 
 pub trait BuiltinFunction: Sync + Send {
     fn name(&self) -> &str;
-    fn call(&self, bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error>;
+    fn call(&self, bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr>;
 }
 
 /// Return possibilities from a built-in function.
@@ -81,6 +82,16 @@ pub enum BfRet {
     /// BF wants to return control back to the VM, with specific instructions to things like
     /// `suspend` or dispatch to a verb call or execute eval.
     VmInstr(ExecutionResult),
+}
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum BfErr {
+    #[error("Error in built-in function: {0}")]
+    Code(Error),
+    #[error("Raised error: {0:?} {1:?} {2:?}")]
+    Raise(Error, Option<String>, Option<Var>),
+    #[error("Transaction rollback-retry")]
+    Rollback,
 }
 
 #[macro_export]
@@ -97,10 +108,17 @@ macro_rules! bf_declare {
                 fn call(
                     &self,
                     bf_args: &mut BfCallState<'_>
-                ) -> Result<BfRet, Error> {
+                ) -> Result<BfRet, BfErr> {
                     $action(bf_args)
                 }
             }
         }
     };
+}
+
+pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
+    match err {
+        WorldStateError::RollbackRetry => BfErr::Rollback,
+        _ => BfErr::Code(err.into()),
+    }
 }

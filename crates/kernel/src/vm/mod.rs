@@ -29,7 +29,6 @@ pub(crate) mod exec_state;
 pub(crate) mod vm_call;
 pub(crate) mod vm_execute;
 pub(crate) mod vm_unwind;
-pub(crate) mod vm_util;
 
 // Exports to the rest of the kernel
 pub use exec_state::VMExecState;

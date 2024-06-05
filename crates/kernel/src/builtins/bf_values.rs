@@ -16,7 +16,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use moor_values::var::Error;
+use moor_compiler::offset_for_builtin;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_float, v_int, v_obj, v_str};
@@ -24,17 +24,16 @@ use moor_values::AsByteBuffer;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfRet, BuiltinFunction};
+use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::VM;
-use moor_compiler::offset_for_builtin;
 
-fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];
     Ok(Ret(v_int(arg.type_id() as i64)))
 }
 bf_declare!(typeof, bf_typeof);
 
-fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut result = String::new();
     for arg in &bf_args.args {
         match arg.variant() {
@@ -51,18 +50,18 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(tostr, bf_tostr);
 
-fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let literal = bf_args.args[0].to_literal();
     Ok(Ret(v_str(literal.as_str())))
 }
 bf_declare!(toliteral, bf_toliteral);
 
-fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(*i))),
@@ -76,14 +75,14 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             }
         }
         Variant::Err(e) => Ok(Ret(v_int(*e as i64))),
-        _ => Err(E_INVARG),
+        _ => Err(BfErr::Code(E_INVARG)),
     }
 }
 bf_declare!(toint, bf_toint);
 
-fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_obj(*i))),
@@ -102,14 +101,14 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
                 Err(_) => Ok(Ret(v_obj(0))),
             }
         }
-        _ => Err(E_INVARG),
+        _ => Err(BfErr::Code(E_INVARG)),
     }
 }
 bf_declare!(toobj, bf_toobj);
 
-fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
@@ -122,14 +121,14 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
             }
         }
         Variant::Err(e) => Ok(Ret(v_float(*e as u8 as f64))),
-        _ => Err(E_INVARG),
+        _ => Err(BfErr::Code(E_INVARG)),
     }
 }
 bf_declare!(tofloat, bf_tofloat);
 
-fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
         (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str().to_lowercase(),
@@ -139,18 +138,18 @@ fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(equal, bf_equal);
 
-fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let count = bf_args.args[0].size_bytes();
     Ok(Ret(v_int(count as i64)))
 }
 bf_declare!(value_bytes, bf_value_bytes);
 
-fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let mut s = DefaultHasher::new();
     bf_args.args[0].hash(&mut s);
@@ -158,32 +157,33 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
 }
 bf_declare!(value_hash, bf_value_hash);
 
-fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
 
     match bf_args.args[0].variant() {
         Variant::Str(s) => Ok(Ret(v_int(s.len() as i64))),
         Variant::List(l) => Ok(Ret(v_int(l.len() as i64))),
-        _ => Err(E_TYPE),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(length, bf_length);
 
-fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, Error> {
+fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(E_ARGS);
+        return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Obj(o) = bf_args.args[0].variant() else {
-        return Err(E_INVARG);
+        return Err(BfErr::Code(E_INVARG));
     };
-    if !bf_args.world_state.valid(*o)? {
-        return Err(E_INVARG);
+    if !bf_args.world_state.valid(*o).map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_INVARG));
     };
     let size = bf_args
         .world_state
-        .object_bytes(bf_args.caller_perms(), *o)?;
+        .object_bytes(bf_args.caller_perms(), *o)
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_int(size as i64)))
 }
 bf_declare!(object_bytes, bf_object_bytes);

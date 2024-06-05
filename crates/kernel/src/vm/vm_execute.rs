@@ -15,6 +15,7 @@
 use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::debug;
 
 use moor_compiler::{Name, Offset};
 
@@ -24,9 +25,11 @@ use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::{TaskId, VerbCall};
 use moor_compiler::Program;
 use moor_compiler::{Op, ScatterLabel};
-use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
-use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_MAXREC, E_RANGE, E_TYPE, E_VARNF};
+use moor_values::model::{VerbInfo, WorldStateError};
+use moor_values::var::Error::{
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_MAXREC, E_RANGE, E_TYPE, E_VARNF,
+};
 use moor_values::var::Objid;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
@@ -117,6 +120,9 @@ pub enum ExecutionResult {
         /// The program to execute.
         program: Program,
     },
+    /// Rollback the current transaction and restart the task in a new transaction.
+    /// This can happen when a conflict occurs during execution, independent of a commit.
+    RollbackRestart,
 }
 
 macro_rules! binary_bool_op {
@@ -573,44 +579,79 @@ impl VM {
                 Op::GetProp => {
                     let (propname, obj) = (f.pop(), f.peek_top());
 
-                    match self.resolve_property(
-                        a.permissions,
-                        world_state,
-                        propname.clone(),
-                        obj.clone(),
-                    ) {
-                        Ok(v) => f.poke(0, v),
-                        Err(e) => {
-                            f.pop();
-                            return self.push_error(state, e);
+                    let Variant::Str(propname) = propname.variant() else {
+                        return self.push_error(state, E_TYPE);
+                    };
+
+                    let Variant::Obj(obj) = obj.variant() else {
+                        return self.push_error(state, E_INVIND);
+                    };
+                    let result =
+                        world_state.retrieve_property(a.permissions, *obj, propname.as_str());
+                    match result {
+                        Ok(v) => {
+                            f.poke(0, v);
                         }
-                    }
+                        Err(WorldStateError::RollbackRetry) => {
+                            return ExecutionResult::RollbackRestart;
+                        }
+                        Err(e) => {
+                            debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
+                            return self.push_error(state, e.to_error_code());
+                        }
+                    };
                 }
                 Op::PushGetProp => {
                     let (propname, obj) = f.peek2();
-                    match self.resolve_property(
-                        a.permissions,
-                        world_state,
-                        propname.clone(),
-                        obj.clone(),
-                    ) {
-                        Ok(v) => f.push(v),
-                        Err(e) => return self.push_error(state, e),
-                    }
+
+                    let Variant::Str(propname) = propname.variant() else {
+                        return self.push_error(state, E_TYPE);
+                    };
+
+                    let Variant::Obj(obj) = obj.variant() else {
+                        return self.push_error(state, E_INVIND);
+                    };
+                    let result =
+                        world_state.retrieve_property(a.permissions, *obj, propname.as_str());
+                    match result {
+                        Ok(v) => {
+                            f.push(v);
+                        }
+                        Err(WorldStateError::RollbackRetry) => {
+                            return ExecutionResult::RollbackRestart;
+                        }
+                        Err(e) => {
+                            debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
+                            return self.push_error(state, e.to_error_code());
+                        }
+                    };
                 }
                 Op::PutProp => {
                     let (rhs, propname, obj) = (f.pop(), f.pop(), f.peek_top());
-                    match self.set_property(
+
+                    let (propname, obj) = match (propname.variant(), obj.variant()) {
+                        (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
+                        (_, _) => {
+                            return self.push_error(state, E_TYPE);
+                        }
+                    };
+
+                    let update_result = world_state.update_property(
                         a.permissions,
-                        world_state,
-                        propname.clone(),
-                        obj.clone(),
-                        rhs.clone(),
-                    ) {
-                        Ok(v) => f.poke(0, v),
+                        *obj,
+                        propname.as_str(),
+                        &rhs.clone(),
+                    );
+
+                    match update_result {
+                        Ok(()) => {
+                            f.poke(0, rhs);
+                        }
+                        Err(WorldStateError::RollbackRetry) => {
+                            return ExecutionResult::RollbackRestart
+                        }
                         Err(e) => {
-                            f.pop();
-                            return self.push_error(state, e);
+                            return self.push_error(state, e.to_error_code());
                         }
                     }
                 }

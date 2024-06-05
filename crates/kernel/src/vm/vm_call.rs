@@ -22,7 +22,7 @@ use moor_values::var::Objid;
 use moor_values::var::{v_int, Var};
 
 use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
-use crate::builtins::{BfCallState, BfRet};
+use crate::builtins::{BfCallState, BfErr, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
 use crate::tasks::VerbCall;
@@ -95,6 +95,9 @@ impl VM {
                 Err(WorldStateError::ObjectPermissionDenied) => {
                     return self.push_error(vm_state, E_PERM);
                 }
+                Err(WorldStateError::RollbackRetry) => {
+                    return ExecutionResult::RollbackRestart;
+                }
                 Err(WorldStateError::VerbPermissionDenied) => {
                     return self.push_error(vm_state, E_PERM);
                 }
@@ -135,16 +138,25 @@ impl VM {
         // get parent of verb definer object & current verb name.
         let definer = vm_state.top().verb_definer();
         let permissions = vm_state.top().permissions;
-        let parent = world_state
-            .parent_of(permissions, definer)
-            .expect("unable to lookup parent");
+
+        let parent = match world_state.parent_of(permissions, definer) {
+            Ok(parent) => parent,
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::RollbackRestart;
+            }
+            Err(e) => return self.raise_error(vm_state, e.to_error_code()),
+        };
         let verb = vm_state.top().verb_name.to_string();
 
         // call verb on parent, but with our current 'this'
         trace!(task_id = vm_state.task_id, verb, ?definer, ?parent);
 
-        let Ok(vi) = world_state.find_method_verb_on(permissions, parent, verb.as_str()) else {
-            return self.raise_error(vm_state, E_VERBNF);
+        let vi = match world_state.find_method_verb_on(permissions, parent, verb.as_str()) {
+            Ok(vi) => vi,
+            Err(WorldStateError::RollbackRetry) => {
+                return ExecutionResult::RollbackRestart;
+            }
+            Err(e) => return self.raise_error(vm_state, e.to_error_code()),
         };
 
         let caller = vm_state.caller();
@@ -267,7 +279,9 @@ impl VM {
             Ok(BfRet::Ret(result)) => {
                 self.unwind_stack(vm_state, FinallyReason::Return(result.clone()))
             }
-            Err(e) => self.push_bf_error(vm_state, e),
+            Err(BfErr::Code(e)) => self.push_bf_error(vm_state, e, None, None),
+            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(vm_state, e, msg, value),
+            Err(BfErr::Rollback) => ExecutionResult::RollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         };
 
@@ -313,7 +327,10 @@ impl VM {
             Ok(BfRet::Ret(result)) => {
                 self.unwind_stack(vm_state, FinallyReason::Return(result.clone()))
             }
-            Err(e) => self.push_bf_error(vm_state, e),
+            Err(BfErr::Code(e)) => self.push_bf_error(vm_state, e, None, None),
+            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(vm_state, e, msg, value),
+
+            Err(BfErr::Rollback) => ExecutionResult::RollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }
     }
