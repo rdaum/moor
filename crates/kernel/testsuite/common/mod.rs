@@ -16,6 +16,7 @@ use moor_compiler::compile;
 use moor_compiler::Program;
 use moor_db::Database;
 use moor_db_relbox::RelBoxWorldState;
+use moor_db_wiredtiger::WireTigerWorldState;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils;
@@ -32,7 +33,6 @@ use pretty_assertions::assert_eq;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
-use wtdb::WireTigerWorldState;
 
 #[allow(dead_code)]
 pub const WIZARD: Objid = Objid(3);
@@ -60,7 +60,7 @@ pub fn create_relbox_db() -> Arc<dyn Database + Send + Sync> {
     db
 }
 
-pub fn create_wiretiger_db() -> Arc<dyn Database + Send + Sync> {
+pub fn create_wiredtiger_db() -> Arc<dyn Database + Send + Sync> {
     let (db, _) = WireTigerWorldState::open(None);
     let db = Arc::new(db);
     load_textdump(db.clone());

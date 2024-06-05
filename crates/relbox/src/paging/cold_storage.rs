@@ -153,12 +153,12 @@ impl ColdStorage {
         tuple_box: Arc<TupleBox>,
         ps: Arc<PageStore>,
     ) -> JoinHandle<()> {
-        let cs_join = std::thread::Builder::new()
+        
+
+        std::thread::Builder::new()
             .name("moor-coldstorage-listen".to_string())
             .spawn(move || Self::listen_loop(writer_receive, wal, tuple_box, ps))
-            .expect("Unable to spawn coldstorage listen thread");
-
-        cs_join
+            .expect("Unable to spawn coldstorage listen thread")
     }
 
     fn listen_loop(

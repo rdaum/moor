@@ -18,6 +18,7 @@ mod test {
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
     use moor_db_relbox::RelBoxWorldState;
+    use moor_db_wiredtiger::WireTigerWorldState;
     use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::VerbFlag;
@@ -34,7 +35,6 @@ mod test {
     use std::rc::Rc;
     use std::sync::Arc;
     use text_diff::assert_diff;
-    use wtdb::WireTigerWorldState;
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

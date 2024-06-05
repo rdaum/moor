@@ -18,7 +18,7 @@ moor-db-relbox = { path = "../db-relbox" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
-wtdb = { path = "../db-wildtiger" }
+moor-db-wiredtiger = { path = "../db-wiredtiger" }
 
 ## Command line arguments parsing.
 clap.workspace = true

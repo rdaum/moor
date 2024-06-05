@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Once},
 };
 
-use common::{create_relbox_db, create_wiretiger_db, testsuite_dir, NONPROGRAMMER, PROGRAMMER};
+use common::{create_relbox_db, create_wiredtiger_db, testsuite_dir, NONPROGRAMMER, PROGRAMMER};
 use eyre::Context;
 use moor_db::Database;
 use moor_kernel::{
@@ -253,14 +253,14 @@ impl MootState {
 }
 
 test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as relbox => test_relbox }
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiretiger => test_wiretiger }
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
 
 fn test_relbox(path: &Path) {
     test(create_relbox_db(), path);
 }
 
-fn test_wiretiger(path: &Path) {
-    test(create_wiretiger_db(), path);
+fn test_wiredtiger(path: &Path) {
+    test(create_wiredtiger_db(), path);
 }
 
 #[allow(dead_code)]

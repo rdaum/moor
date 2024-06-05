@@ -1,6 +1,6 @@
 [package]
-name = "wtdb"
-description = "WildTiger DB layer/bindings"
+name = "moor-db-wiredtiger"
+description = "WiredTiger DB layer/bindings"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true

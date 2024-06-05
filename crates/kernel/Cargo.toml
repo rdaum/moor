@@ -13,7 +13,7 @@ readme.workspace = true
 
 [dev-dependencies]
 moor-db-relbox = { path = "../db-relbox" }
-wtdb = { path = "../db-wildtiger" }
+moor-db-wiredtiger = { path = "../db-wiredtiger" }
 
 criterion.workspace = true
 eyre.workspace = true
