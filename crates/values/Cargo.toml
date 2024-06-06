@@ -24,3 +24,4 @@ strum.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 yoke.workspace = true
+paste.workspace = true
