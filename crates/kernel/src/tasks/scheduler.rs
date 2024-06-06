@@ -22,7 +22,7 @@ use crossbeam_channel::Sender;
 use dashmap::DashMap;
 
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use crossbeam_channel::internal::SelectHandle;
@@ -56,7 +56,6 @@ use crate::vm::Fork;
 use crate::vm::UncaughtException;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
-const METRICS_POLLER_TICK_TIME: Duration = Duration::from_secs(5);
 
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
@@ -147,7 +146,6 @@ struct TaskControl {
 
 /// The set of actions that the scheduler needs to take in response to a task control message.
 enum TaskHandleResult {
-    Remove(TaskId),
     Notify(TaskId, TaskWaiterResult),
     Fork(ForkRequest),
     Describe(TaskId, oneshot::Sender<Vec<TaskDescription>>),
@@ -168,7 +166,7 @@ impl Scheduler {
             next_task_id: Default::default(),
             tasks: DashMap::new(),
             input_requests: Default::default(),
-            config: config.clone(),
+            config,
             control_sender,
             control_receiver,
         }
@@ -441,106 +439,10 @@ impl Scheduler {
 }
 
 impl Scheduler {
-    fn do_process(self: Arc<Self>) {
-        let this = self.clone();
-
-        let metrics_poller_running = self.running.clone();
-
-        // Track active tasks in metrics.
-        std::thread::Builder::new()
-            .name("metrics-poller".to_string())
-            .spawn(move || loop {
-                let this = this.clone();
-
-                let is_running = metrics_poller_running.load(Ordering::SeqCst);
-                if !is_running {
-                    break;
-                }
-                let mut number_suspended_tasks = 0;
-                let mut number_readblocked_tasks = 0;
-                let mut number_subscriptions = 0;
-                let mut number_zombies = 0;
-                let number_tasks = this.clone().tasks.len();
-
-                for task in this.clone().tasks.iter() {
-                    if task.suspended {
-                        number_suspended_tasks += 1;
-                    }
-                    if task.waiting_input.is_some() {
-                        number_readblocked_tasks += 1;
-                    }
-                    if !task.task_control_sender.is_ready() {
-                        number_zombies += 1;
-                    }
-                    let sender_lock = task.result_sender.lock().unwrap();
-                    if sender_lock.is_some() {
-                        number_subscriptions += 1;
-                    }
-                }
-
-                debug!(
-                    number_readblocked_tasks,
-                    number_tasks,
-                    number_subscriptions,
-                    number_zombies,
-                    number_suspended_tasks,
-                    "..."
-                );
-                std::thread::sleep(METRICS_POLLER_TICK_TIME);
-            })
-            .expect("Could not start metrics poller");
-
-        let this = self.clone();
-
-        // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-        // Or tasks that need pruning.
+    fn do_process(&self) {
         // TODO: Improve scheduler "tick" and "prune" logic.  It's a bit of a mess.
         //  we might be able to use a vector of delay-futures for this instead, and just poll
         //  those using some futures_util magic.
-        let tick_running = self.running.clone();
-        std::thread::Builder::new()
-            .name("scheduler-tick".to_string())
-            .spawn(move || loop {
-                let this = this.clone();
-                let is_running = tick_running.load(Ordering::SeqCst);
-                if !is_running {
-                    break;
-                }
-                let mut to_wake = Vec::new();
-                let mut to_prune = Vec::new();
-                for t in this.clone().tasks.iter() {
-                    let (task_id, task) = (t.key(), t.value());
-                    if !task.task_control_sender.is_ready() {
-                        warn!(
-                            task_id,
-                            "Task is present but its channel is invalid.  Pruning."
-                        );
-                        to_prune.push(*task_id);
-                        continue;
-                    }
-
-                    if !task.suspended {
-                        continue;
-                    }
-                    let Some(delay) = task.resume_time else {
-                        continue;
-                    };
-                    if delay <= SystemTime::now() {
-                        to_wake.push(*task_id);
-                    }
-                }
-                if !to_wake.is_empty() {
-                    this.clone().process_wake_ups(&to_wake);
-                }
-                if !to_prune.is_empty() {
-                    this.clone().process_task_removals(&to_prune);
-                }
-                std::thread::sleep(SCHEDULER_TICK_TIME);
-            })
-            .expect("Could not start scheduler tick");
-
-        let this = self.clone();
-
         info!("Starting scheduler loop");
         loop {
             let is_running = self.running.load(Ordering::SeqCst);
@@ -549,14 +451,41 @@ impl Scheduler {
                 break;
             }
 
-            if let Ok(msg) = self
-                .control_receiver
-                .recv_timeout(Duration::from_millis(100))
-            {
+            // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
+            // Or tasks that need pruning.
+            let mut to_wake = Vec::new();
+            let mut to_prune = Vec::new();
+            for t in self.tasks.iter() {
+                let (task_id, task) = (t.key(), t.value());
+                if !task.task_control_sender.is_ready() {
+                    warn!(
+                        task_id,
+                        "Task is present but its channel is invalid.  Pruning."
+                    );
+                    to_prune.push(*task_id);
+                    continue;
+                }
+
+                if !task.suspended {
+                    continue;
+                }
+                let Some(delay) = task.resume_time else {
+                    continue;
+                };
+                if delay <= SystemTime::now() {
+                    to_wake.push(*task_id);
+                }
+            }
+            if !to_wake.is_empty() {
+                self.process_wake_ups(&to_wake);
+            }
+            if !to_prune.is_empty() {
+                self.process_task_removals(&to_prune);
+            }
+            if let Ok(msg) = self.control_receiver.recv_timeout(SCHEDULER_TICK_TIME) {
                 let (task_id, msg) = msg;
-                let actions = this.clone().handle_task_control_msg(task_id, msg);
-                if !actions.is_empty() {
-                    this.clone().process_task_actions(actions);
+                if let Some(action) = self.handle_task_control_msg(task_id, msg) {
+                    self.process_task_action(action);
                 }
             }
         }
@@ -566,61 +495,55 @@ impl Scheduler {
     /// Handle scheduler control messages inbound from tasks.
     /// Note: this function should never be allowed to panic, as it is called from the scheduler main loop.
     fn handle_task_control_msg(
-        self: Arc<Self>,
+        &self,
         task_id: TaskId,
         msg: SchedulerControlMsg,
-    ) -> Vec<TaskHandleResult> {
+    ) -> Option<TaskHandleResult> {
         match msg {
             SchedulerControlMsg::TaskSuccess(value) => {
                 // Commit the session.
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for success");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return vec![
-                        TaskHandleResult::Notify(
-                            task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
-                        ),
-                        TaskHandleResult::Remove(task_id),
-                    ];
+                    return Some(TaskHandleResult::Notify(
+                        task_id,
+                        TaskWaiterResult::Error(TaskAbortedError),
+                    ));
                 };
                 trace!(?task_id, result = ?value, "Task succeeded");
-                vec![
-                    TaskHandleResult::Notify(task_id, TaskWaiterResult::Success(value)),
-                    TaskHandleResult::Remove(task_id),
-                ]
+                Some(TaskHandleResult::Notify(
+                    task_id,
+                    TaskWaiterResult::Success(value),
+                ))
             }
             SchedulerControlMsg::TaskConflictRetry => {
                 trace!(?task_id, "Task retrying due to conflict");
 
                 // Ask the task to restart itself, using its stashed original start info, but with
                 // a brand new transaction.
-                vec![TaskHandleResult::Retry(task_id)]
+                Some(TaskHandleResult::Retry(task_id))
             }
             SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
                 // I'd make this 'warn' but `do_command` gets invoked for every command and
                 // many cores don't have it at all. So it would just be way too spammy.
                 trace!(this = ?this, verb, ?task_id, "Verb not found, task cancelled");
 
-                vec![
-                    TaskHandleResult::Notify(task_id, TaskWaiterResult::Error(TaskAbortedError)),
-                    TaskHandleResult::Remove(task_id),
-                ]
+                Some(TaskHandleResult::Notify(
+                    task_id,
+                    TaskWaiterResult::Error(TaskAbortedError),
+                ))
             }
             SchedulerControlMsg::TaskCommandError(parse_command_error) => {
                 // This is a common occurrence, so we don't want to log it at warn level.
                 trace!(?task_id, error = ?parse_command_error, "command parse error");
 
-                vec![
-                    TaskHandleResult::Notify(
-                        task_id,
-                        TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
-                    ),
-                    TaskHandleResult::Remove(task_id),
-                ]
+                Some(TaskHandleResult::Notify(
+                    task_id,
+                    TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
+                ))
             }
             SchedulerControlMsg::TaskAbortCancelled => {
                 warn!(?task_id, "Task cancelled");
@@ -628,7 +551,7 @@ impl Scheduler {
                 // Rollback the session.
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
                 if let Err(send_error) = task
                     .session
@@ -639,21 +562,15 @@ impl Scheduler {
 
                 let Ok(()) = task.session.rollback() else {
                     warn!("Could not rollback session; aborting task");
-                    return vec![
-                        TaskHandleResult::Notify(
-                            task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
-                        ),
-                        TaskHandleResult::Remove(task_id),
-                    ];
-                };
-                vec![
-                    TaskHandleResult::Notify(
+                    return Some(TaskHandleResult::Notify(
                         task_id,
-                        TaskWaiterResult::Error(TaskAbortedCancelled),
-                    ),
-                    TaskHandleResult::Remove(task_id),
-                ]
+                        TaskWaiterResult::Error(TaskAbortedError),
+                    ));
+                };
+                Some(TaskHandleResult::Notify(
+                    task_id,
+                    TaskWaiterResult::Error(TaskAbortedCancelled),
+                ))
             }
             SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
                 let abort_reason_text = match limit_reason {
@@ -670,7 +587,7 @@ impl Scheduler {
                 // Commit the session.
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
 
                 task.session
@@ -679,20 +596,17 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                vec![
-                    TaskHandleResult::Notify(
-                        task_id,
-                        TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
-                    ),
-                    TaskHandleResult::Remove(task_id),
-                ]
+                Some(TaskHandleResult::Notify(
+                    task_id,
+                    TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
+                ))
             }
             SchedulerControlMsg::TaskException(exception) => {
                 warn!(?task_id, finally_reason = ?exception, "Task threw exception");
 
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
 
                 // Compose a string out of the backtrace
@@ -712,13 +626,10 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                vec![
-                    TaskHandleResult::Notify(
-                        task_id,
-                        TaskWaiterResult::Error(TaskAbortedException(exception)),
-                    ),
-                    TaskHandleResult::Remove(task_id),
-                ]
+                Some(TaskHandleResult::Notify(
+                    task_id,
+                    TaskWaiterResult::Error(TaskAbortedException(exception)),
+                ))
             }
             SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
                 trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
@@ -728,13 +639,13 @@ impl Scheduler {
                 // borrowed here.
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for fork request");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
-                vec![TaskHandleResult::Fork(ForkRequest {
+                Some(TaskHandleResult::Fork(ForkRequest {
                     fork_request,
                     reply,
                     session: task.session.clone(),
-                })]
+                }))
             }
             SchedulerControlMsg::TaskSuspend(resume_time) => {
                 trace!(task_id, "Handling task suspension until {:?}", resume_time);
@@ -743,25 +654,22 @@ impl Scheduler {
 
                 let Some(mut task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for suspend request");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
 
                 // Commit the session.
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return vec![
-                        TaskHandleResult::Notify(
-                            task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
-                        ),
-                        TaskHandleResult::Remove(task_id),
-                    ];
+                    return Some(TaskHandleResult::Notify(
+                        task_id,
+                        TaskWaiterResult::Error(TaskAbortedError),
+                    ));
                 };
                 task.suspended = true;
                 task.resume_time = resume_time;
 
                 trace!(task_id, resume_time = ?task.resume_time, "Task suspended");
-                vec![]
+                None
             }
             SchedulerControlMsg::TaskRequestInput => {
                 // Task has gone into suspension waiting for input from the client.
@@ -772,27 +680,24 @@ impl Scheduler {
                 {
                     let Some(mut task) = self.tasks.get_mut(&task_id) else {
                         warn!(task_id, "Task not found for input request");
-                        return vec![TaskHandleResult::Remove(task_id)];
+                        return None;
                     };
                     let Ok(()) = task.session.request_input(task.player, input_request_id) else {
                         warn!("Could not request input from session; aborting task");
-                        return vec![
-                            TaskHandleResult::Notify(
-                                task_id,
-                                TaskWaiterResult::Error(TaskAbortedError),
-                            ),
-                            TaskHandleResult::Remove(task_id),
-                        ];
+                        return Some(TaskHandleResult::Notify(
+                            task_id,
+                            TaskWaiterResult::Error(TaskAbortedError),
+                        ));
                     };
                     task.waiting_input = Some(input_request_id);
                 }
                 self.input_requests.insert(input_request_id, task_id);
                 trace!(?task_id, "Task suspended waiting for input");
-                vec![]
+                None
             }
             SchedulerControlMsg::DescribeOtherTasks(reply) => {
                 // Task is asking for a description of all other tasks.
-                vec![TaskHandleResult::Describe(task_id, reply)]
+                Some(TaskHandleResult::Describe(task_id, reply))
             }
             SchedulerControlMsg::KillTask {
                 victim_task_id,
@@ -800,52 +705,47 @@ impl Scheduler {
                 result_sender,
             } => {
                 // Task is asking to kill another task.
-                vec![TaskHandleResult::Kill(KillRequest {
+                Some(TaskHandleResult::Kill(KillRequest {
                     requesting_task_id: task_id,
                     victim_task_id,
                     sender_permissions,
                     result_sender,
-                })]
+                }))
             }
             SchedulerControlMsg::ResumeTask {
                 queued_task_id,
                 sender_permissions,
                 return_value,
                 result_sender,
-            } => {
-                vec![TaskHandleResult::Resume(ResumeRequest {
-                    requesting_task_id: task_id,
-                    queued_task_id,
-                    sender_permissions,
-                    return_value,
-                    result_sender,
-                })]
-            }
+            } => Some(TaskHandleResult::Resume(ResumeRequest {
+                requesting_task_id: task_id,
+                queued_task_id,
+                sender_permissions,
+                return_value,
+                result_sender,
+            })),
             SchedulerControlMsg::BootPlayer {
                 player,
                 sender_permissions: _,
             } => {
                 // Task is asking to boot a player.
-                vec![TaskHandleResult::Disconnect(task_id, player)]
+                Some(TaskHandleResult::Disconnect(task_id, player))
             }
             SchedulerControlMsg::Notify { player, event } => {
                 // Task is asking to notify a player.
 
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
                 let Ok(()) = task.session.send_event(player, event) else {
                     warn!("Could not notify player; aborting task");
-                    return vec![
-                        TaskHandleResult::Notify(
-                            task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
-                        ),
-                        TaskHandleResult::Remove(task_id),
-                    ];
+                    return Some(TaskHandleResult::Notify(
+                        task_id,
+                        TaskWaiterResult::Error(TaskAbortedError),
+                    ));
                 };
-                vec![]
+                None
             }
             SchedulerControlMsg::Shutdown(msg) => {
                 info!("Shutting down scheduler. Reason: {msg:?}");
@@ -855,41 +755,34 @@ impl Scheduler {
                 };
                 let Some(task) = self.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
-                    return vec![TaskHandleResult::Remove(task_id)];
+                    return None;
                 };
                 match task.session.shutdown(msg) {
-                    Ok(_) => {
-                        vec![
-                            TaskHandleResult::Notify(
-                                task_id,
-                                TaskWaiterResult::Success(result_mst),
-                            ),
-                            TaskHandleResult::Remove(task_id),
-                        ]
-                    }
+                    Ok(_) => Some(TaskHandleResult::Notify(
+                        task_id,
+                        TaskWaiterResult::Success(result_mst),
+                    )),
                     Err(e) => {
                         warn!(?e, "Could not notify player; aborting task");
-                        vec![
-                            TaskHandleResult::Notify(
-                                task_id,
-                                TaskWaiterResult::Error(TaskAbortedError),
-                            ),
-                            TaskHandleResult::Remove(task_id),
-                        ]
+                        Some(TaskHandleResult::Notify(
+                            task_id,
+                            TaskWaiterResult::Error(TaskAbortedError),
+                        ))
                     }
                 }
             }
             SchedulerControlMsg::Checkpoint => {
                 let Some(textdump_path) = self.config.textdump_output.clone() else {
                     error!("Cannot textdump as textdump_file not configured");
-                    return vec![];
+                    return None;
                 };
 
+                let db = self.database.clone();
                 let tr = std::thread::Builder::new()
                     .name("textdump-thread".to_string())
                     .spawn(move || {
                         let loader_client = {
-                            match self.database.clone().loader_client() {
+                            match db.loader_client() {
                                 Ok(tx) => tx,
                                 Err(e) => {
                                     error!(?e, "Could not start transaction for checkpoint");
@@ -922,13 +815,13 @@ impl Scheduler {
                 if let Err(e) = tr {
                     error!(?e, "Could not start textdump thread");
                 }
-                vec![]
+                None
             }
         }
     }
 
     fn submit_fork_task(
-        self: Arc<Self>,
+        &self,
         fork: Fork,
         session: Arc<dyn Session>,
     ) -> Result<TaskId, SchedulerError> {
@@ -965,50 +858,43 @@ impl Scheduler {
         Ok(task_id)
     }
 
-    fn process_task_actions(self: Arc<Self>, task_actions: Vec<TaskHandleResult>) {
+    fn process_task_action(&self, task_action: TaskHandleResult) {
         let mut to_remove = vec![];
-        for action in task_actions {
-            match action {
-                TaskHandleResult::Remove(r) => to_remove.push(r),
-                TaskHandleResult::Notify(task_id, result) => {
-                    to_remove.extend(self.clone().process_notification(task_id, result))
-                }
-                TaskHandleResult::Fork(fork_request) => {
-                    self.clone().process_fork_request(fork_request);
-                }
-                TaskHandleResult::Describe(task_id, reply) => {
-                    to_remove.extend(self.clone().process_describe_request(task_id, reply))
-                }
-                TaskHandleResult::Kill(kill_request) => {
-                    to_remove.extend(self.clone().process_kill_request(kill_request))
-                }
-                TaskHandleResult::Resume(resume_request) => {
-                    to_remove.extend(self.clone().process_resume_request(resume_request))
-                }
-                TaskHandleResult::Disconnect(task_id, player) => {
-                    self.clone().process_disconnect(task_id, player);
-                }
-                TaskHandleResult::Retry(task_id) => {
-                    to_remove.extend(self.clone().process_retry_request(task_id));
-                }
+        match task_action {
+            TaskHandleResult::Notify(task_id, result) => {
+                to_remove.extend(self.process_notification(task_id, result))
+            }
+            TaskHandleResult::Fork(fork_request) => {
+                self.process_fork_request(fork_request);
+            }
+            TaskHandleResult::Describe(task_id, reply) => {
+                to_remove.extend(self.process_describe_request(task_id, reply))
+            }
+            TaskHandleResult::Kill(kill_request) => {
+                to_remove.extend(self.process_kill_request(kill_request))
+            }
+            TaskHandleResult::Resume(resume_request) => {
+                to_remove.extend(self.process_resume_request(resume_request))
+            }
+            TaskHandleResult::Disconnect(task_id, player) => {
+                self.process_disconnect(task_id, player);
+            }
+            TaskHandleResult::Retry(task_id) => {
+                to_remove.extend(self.process_retry_request(task_id));
             }
         }
         self.process_task_removals(&to_remove);
     }
 
-    fn process_notification(
-        self: Arc<Self>,
-        task_id: TaskId,
-        result: TaskWaiterResult,
-    ) -> Vec<TaskId> {
+    fn process_notification(&self, task_id: TaskId, result: TaskWaiterResult) -> Vec<TaskId> {
         trace!(task_id, "Processing notifications to subscribers");
-        let Some(task) = self.tasks.get_mut(&task_id) else {
+        let Some((task_id, task_control)) = self.tasks.remove(&task_id) else {
             // Missing task, must have ended already. This is odd though? So we'll warn.
             warn!(task_id, "Task not found for notification, ignoring");
-            return vec![task_id];
+            return vec![];
         };
         let result_sender = {
-            let mut result_sender_lock = task.result_sender.lock().unwrap();
+            let mut result_sender_lock = task_control.result_sender.lock().unwrap();
             result_sender_lock.take()
         };
         if let Some(result_sender) = result_sender {
@@ -1045,7 +931,7 @@ impl Scheduler {
     }
 
     fn process_fork_request(
-        self: Arc<Self>,
+        &self,
         ForkRequest {
             fork_request,
             reply,
@@ -1137,8 +1023,6 @@ impl Scheduler {
             result_sender,
         }: KillRequest,
     ) -> Vec<TaskId> {
-        let result_sender = result_sender;
-
         let mut to_remove = vec![];
 
         // If the task somehow is requesting a kill on itself, that would lead to deadlock,
@@ -1202,8 +1086,6 @@ impl Scheduler {
             result_sender,
         }: ResumeRequest,
     ) -> Option<TaskId> {
-        let result_sender = result_sender;
-
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
         // request.
         if requesting_task_id == queued_task_id {
@@ -1293,7 +1175,7 @@ impl Scheduler {
         None
     }
 
-    fn process_disconnect(self: Arc<Self>, disconnect_task_id: TaskId, player: Objid) {
+    fn process_disconnect(&self, disconnect_task_id: TaskId, player: Objid) {
         let Some(task) = self.tasks.get_mut(&disconnect_task_id) else {
             warn!(task = disconnect_task_id, "Disconnecting task not found");
             return;
