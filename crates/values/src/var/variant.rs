@@ -22,7 +22,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use super::Var;
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
 pub enum Variant {
     None,
     Str(Str),

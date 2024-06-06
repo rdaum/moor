@@ -15,6 +15,7 @@
 #[cfg(test)]
 mod tests {
 
+    use pretty_assertions::assert_eq;
     use std::sync::Arc;
 
     use moor_values::model::PropFlag;
@@ -623,6 +624,7 @@ mod tests {
         v_list(&[v_int(4), v_int(10)]); "for list loop")]
     #[test_case(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#, 
         v_int(666); "verb_info invalid object error")]
+    #[test_case("return -9223372036854775808;", v_int(i64::MIN); "minint")]
     fn test_run(program: &str, expected_result: Var) {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());

@@ -23,7 +23,7 @@ use bincode::{Decode, Encode};
 use crate::var::error::Error;
 use crate::var::{v_err, v_str, v_string, Var};
 
-#[derive(Clone, Encode, Decode, Ord, PartialOrd)]
+#[derive(Clone, Encode, Decode, Ord, PartialOrd, Debug)]
 pub struct Str {
     inner: Arc<String>,
 }

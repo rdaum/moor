@@ -21,7 +21,7 @@ use std::str::FromStr;
 use moor_values::SYSTEM_OBJECT;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use moor_values::var::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
@@ -68,10 +68,13 @@ fn parse_atom(
             let objid = Objid(oid);
             Ok(Expr::Value(v_objid(objid)))
         }
-        Rule::integer => {
-            let int = pairs.as_str().parse::<i64>().unwrap();
-            Ok(Expr::Value(v_int(int)))
-        }
+        Rule::integer => match pairs.as_str().parse::<i64>() {
+            Ok(int) => Ok(Expr::Value(v_int(int))),
+            Err(e) => {
+                warn!("Failed to parse '{}' to i64: {}", pairs.as_str(), e);
+                Ok(Expr::Value(v_err(E_INVARG)))
+            }
+        },
         Rule::float => {
             let float = pairs.as_str().parse::<f64>().unwrap();
             Ok(Expr::Value(v_float(float)))
@@ -291,6 +294,13 @@ fn parse_expr(
                 let expr = parse_expr(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(expr)
             }
+            Rule::integer => match primary.as_str().parse::<i64>() {
+                Ok(int) => Ok(Expr::Value(v_int(int))),
+                Err(e) => {
+                    warn!("Failed to parse '{}' to i64: {}", primary.as_str(), e);
+                    Ok(Expr::Value(v_err(E_INVARG)))
+                }
+            },
             _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
         })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
