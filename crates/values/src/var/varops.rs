@@ -18,6 +18,7 @@ use crate::var::variant::Variant;
 use crate::var::{v_empty_list, v_empty_str, v_listv, Var};
 use crate::var::{v_err, v_float, v_int};
 use num_traits::Zero;
+use paste::paste;
 use std::ops::{Div, Mul, Neg, Sub};
 
 macro_rules! binary_numeric_coercion_op {
@@ -25,7 +26,9 @@ macro_rules! binary_numeric_coercion_op {
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
             match (self.variant(), v.variant()) {
                 (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.$op(*r))),
-                (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.$op(*r))),
+                (Variant::Int(l), Variant::Int(r)) => {
+                    paste! { l.[<checked_ $op>](*r).map(v_int).ok_or(E_INVARG) }
+                }
                 (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.$op(*r as f64))),
                 (Variant::Int(l), Variant::Float(r)) => Ok(v_float((*l as f64).$op(*r))),
                 (_, _) => Ok(v_err(E_TYPE)),
@@ -100,7 +103,7 @@ impl Var {
     pub fn add(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l + *r)),
-            (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l + r)),
+            (Variant::Int(l), Variant::Int(r)) => l.checked_add(*r).map(v_int).ok_or(E_INVARG),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l + (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + *r)),
             (Variant::Str(s), Variant::Str(r)) => Ok(s.append(r)),
@@ -110,7 +113,7 @@ impl Var {
 
     pub fn negative(&self) -> Result<Self, Error> {
         match self.variant() {
-            Variant::Int(l) => Ok(v_int(-*l)),
+            Variant::Int(l) => l.checked_neg().map(v_int).ok_or(E_INVARG),
             Variant::Float(f) => Ok(v_float(f.neg())),
             _ => Ok(v_err(E_TYPE)),
         }
@@ -119,7 +122,7 @@ impl Var {
     pub fn modulus(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(*l % *r)),
-            (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l % r)),
+            (Variant::Int(l), Variant::Int(r)) => l.checked_rem(*r).map(v_int).ok_or(E_INVARG),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(*l % (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 % (*r))),
             (_, _) => Ok(v_err(E_TYPE)),
@@ -129,7 +132,10 @@ impl Var {
     pub fn pow(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
-            (Variant::Int(l), Variant::Int(r)) => Ok(v_int(l.pow(*r as u32))),
+            (Variant::Int(l), Variant::Int(r)) => {
+                let r = u32::try_from(*r).map_err(|_| E_INVARG)?;
+                l.checked_pow(r).map(v_int).ok_or(E_INVARG)
+            }
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(*r as i32))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float((*l as f64).powf(*r))),
             (_, _) => Ok(v_err(E_TYPE)),

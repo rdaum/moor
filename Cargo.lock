@@ -1770,6 +1770,7 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "num-traits",
+ "paste",
  "strum",
  "thiserror",
  "uuid",
