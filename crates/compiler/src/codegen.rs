@@ -333,13 +333,10 @@ impl CodegenState {
                     Variant::Obj(oid) => {
                         self.emit(Op::ImmObjid(*oid));
                     }
-                    Variant::Int(ref i) => {
-                        if i <= &(i32::MAX as i64) {
-                            self.emit(Op::ImmInt(*i as i32));
-                        } else {
-                            self.emit(Op::ImmBigInt(*i));
-                        }
-                    }
+                    Variant::Int(i) => match i32::try_from(*i) {
+                        Ok(n) => self.emit(Op::ImmInt(n)),
+                        Err(_) => self.emit(Op::ImmBigInt(*i)),
+                    },
                     Variant::Err(e) => {
                         self.emit(Op::ImmErr(*e));
                     }

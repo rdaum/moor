@@ -274,7 +274,7 @@ fn init_logging() {
             .with_file(true)
             .with_line_number(true)
             .with_thread_names(true)
-            .with_max_level(tracing::Level::TRACE)
+            .with_max_level(tracing::Level::WARN)
             .with_test_writer()
             .finish();
         tracing::subscriber::set_global_default(main_subscriber)
@@ -321,7 +321,5 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    for _ in [0; 10] {
-        test_relbox(&testsuite_dir().join("moot/example.moot"));
-    }
+    test_relbox(&testsuite_dir().join("moot/single.moot"));
 }

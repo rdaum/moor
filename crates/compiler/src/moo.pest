@@ -59,7 +59,7 @@ anycode = { ^"any" }
 return_statement = { ^"return" ~ (expr)? ~ ";" }
 expr_statement   = { (expr)? ~ ";" }
 
-expr = { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix*)* }
+expr = { (integer | (prefix* ~ primary)) ~ postfix* ~ (infix ~ (integer | (prefix* ~ primary)) ~ postfix*)* }
 
 infix    = _{
     add
