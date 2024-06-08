@@ -861,9 +861,7 @@ impl Scheduler {
     fn process_task_action(&self, task_action: TaskHandleResult) {
         let mut to_remove = vec![];
         match task_action {
-            TaskHandleResult::Notify(task_id, result) => {
-                to_remove.extend(self.process_notification(task_id, result))
-            }
+            TaskHandleResult::Notify(task_id, result) => self.process_notification(task_id, result),
             TaskHandleResult::Fork(fork_request) => {
                 self.process_fork_request(fork_request);
             }
@@ -886,24 +884,27 @@ impl Scheduler {
         self.process_task_removals(&to_remove);
     }
 
-    fn process_notification(&self, task_id: TaskId, result: TaskWaiterResult) -> Vec<TaskId> {
-        trace!(task_id, "Processing notifications to subscribers");
+    fn process_notification(&self, task_id: TaskId, result: TaskWaiterResult) {
         let Some((task_id, task_control)) = self.tasks.remove(&task_id) else {
             // Missing task, must have ended already. This is odd though? So we'll warn.
             warn!(task_id, "Task not found for notification, ignoring");
-            return vec![];
+            return;
         };
         let result_sender = {
             let mut result_sender_lock = task_control.result_sender.lock().unwrap();
             result_sender_lock.take()
         };
-        if let Some(result_sender) = result_sender {
-            if result_sender.send(result.clone()).is_err() {
-                error!("Notify to task {} failed", task_id);
-            }
+        let Some(result_sender) = result_sender else {
+            return;
+        };
+        // There's no guarantee that the other side didn't just go away and drop the Receiver
+        // because it's not interested in subscriptions.
+        if result_sender.is_closed() {
+            return;
         }
-        trace!("Done subscriber notifications");
-        vec![]
+        if result_sender.send(result.clone()).is_err() {
+            error!("Notify to task {} failed", task_id);
+        }
     }
 
     fn process_wake_ups(&self, to_wake: &[TaskId]) -> Vec<TaskId> {
