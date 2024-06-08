@@ -1658,6 +1658,7 @@ name = "moor-db"
 version = "0.1.0"
 dependencies = [
  "moor-values",
+ "strum",
  "tempfile",
  "thiserror",
  "tracing",

@@ -15,11 +15,11 @@
 use moor_db::Database;
 use std::sync::Arc;
 
-mod object_relations;
 mod rb_worldstate;
+mod rel_transaction;
 
-pub use object_relations::{WorldStateRelation, WorldStateSequences};
-pub use rb_worldstate::{RelBoxTransaction, RelBoxWorldState};
+pub use rb_worldstate::RelBoxWorldState;
+pub use rel_transaction::RelboxTransaction;
 
 pub struct RelBoxDatabaseBuilder {
     path: Option<std::path::PathBuf>,

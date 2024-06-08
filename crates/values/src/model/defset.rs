@@ -125,6 +125,23 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
     }
 }
 
+impl<T: AsByteBuffer + Clone + HasUuid + Named> FromIterator<T> for Defs<T> {
+    fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> Self {
+        let mut bytes = Vec::new();
+        for item in iter {
+            item.with_byte_buffer(|item_bytes| {
+                bytes.put_u32_le(item_bytes.len() as u32);
+                bytes.put_slice(item_bytes);
+            })
+            .expect("Failed to encode item");
+        }
+        Self {
+            bytes: SliceRef::from_bytes(&bytes),
+            _phantom: Default::default(),
+        }
+    }
+}
+
 impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
     #[must_use]
     pub fn contains(&self, uuid: Uuid) -> bool {

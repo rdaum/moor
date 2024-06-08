@@ -246,6 +246,12 @@ impl ValSet<ClientId> for ClientSet {
     }
 }
 
+impl FromIterator<ClientId> for ClientSet {
+    fn from_iter<T: IntoIterator<Item = ClientId>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl ConnectionsDB for ConnectionsWT {
     fn update_client_connection(
         &self,

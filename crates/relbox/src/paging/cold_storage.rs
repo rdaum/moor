@@ -153,8 +153,6 @@ impl ColdStorage {
         tuple_box: Arc<TupleBox>,
         ps: Arc<PageStore>,
     ) -> JoinHandle<()> {
-        
-
         std::thread::Builder::new()
             .name("moor-coldstorage-listen".to_string())
             .spawn(move || Self::listen_loop(writer_receive, wal, tuple_box, ps))
