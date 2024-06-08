@@ -187,7 +187,6 @@ impl VM {
 
         // Try to consume & execute as many opcodes as we can without returning back to the task
         // scheduler, for efficiency reasons...
-
         let opcodes = state.top_mut().frame.program.main_vector.clone();
 
         // Special case for empty opcodes set, just return v_none() immediately.
@@ -195,7 +194,19 @@ impl VM {
             return ExecutionResult::Complete(v_none());
         }
 
-        while state.tick_count < state.tick_slice {
+        // The per-execution slice count. This is used to limit the amount of work we do in a single
+        // execution slice for this task.
+        // We should not execute more than `tick_slice` in a single VM intruction fetch/execute
+        // run. This is to allow us to be responsive to the task scheduler.
+        // Note this is not the same as the total amount of ticks aportioned to the task -- that's
+        // `max_ticks` on the task itself.
+        // For clarity, to avoid regressions again:
+        // `tick_count` tracks the total task execution, `task_slice` the maximum current _slice_
+        //   and the variable `tick_slice_count` that slice's progress.
+        //  `max_ticks` on the task is the total limit which is checked above us, outside this loop.
+        let mut tick_slice_count = 0;
+        while tick_slice_count < state.tick_slice {
+            tick_slice_count += 1;
             state.tick_count += 1;
 
             // Borrow the top of the activation stack for the lifetime of this execution.
