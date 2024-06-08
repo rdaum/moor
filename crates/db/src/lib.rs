@@ -24,9 +24,16 @@ mod db_loader_client;
 pub mod db_worldstate;
 pub mod loader;
 mod relational_transaction;
+mod relational_worldstate;
+mod worldstate_tables;
 pub mod worldstate_transaction;
 
+mod worldstate_tests;
+
 pub use relational_transaction::{RelationalError, RelationalTransaction};
+pub use relational_worldstate::RelationalWorldStateTransaction;
+pub use worldstate_tables::{WorldStateSequence, WorldStateTable};
+pub use worldstate_tests::*;
 
 pub trait Database {
     fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError>;

@@ -23,7 +23,7 @@ use crate::bindings::cursor::Cursor;
 use crate::bindings::session_config::{CheckpointConfig, Isolation, TransactionConfig};
 use crate::bindings::{
     cursor_config, get_error, wiredtiger::WT_CURSOR, wiredtiger::WT_EVENT_HANDLER,
-    wiredtiger::WT_SESSION, DataSource, Error,
+    wiredtiger::WT_SESSION, DataSource, Error, PosixError,
 };
 
 pub struct Session {
@@ -150,7 +150,14 @@ impl Session {
             rollback_function(self.session, null::<c_char>())
         };
         if result != 0 {
-            Err(Error::from_errorcode(result))
+            let error = Error::from_errorcode(result);
+
+            // EINVAL is returned if there is no transaction in progress (because maybe already
+            // rolled back). We can ignore this error for rollback.
+            if let Error::Posix(PosixError::EINVAL) = error {
+                return Ok(());
+            }
+            Err(error)
         } else {
             Ok(())
         }

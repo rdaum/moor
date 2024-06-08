@@ -127,7 +127,7 @@ impl WorldStateError {
     }
 }
 
-pub trait ValSet<V: AsByteBuffer> {
+pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn empty() -> Self;
     fn from_items(items: &[V]) -> Self;
     fn iter(&self) -> impl Iterator<Item = V>;

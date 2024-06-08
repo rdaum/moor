@@ -20,7 +20,8 @@ mod test {
     use strum::{EnumCount, IntoEnumIterator};
 
     use moor_db::worldstate_transaction::WorldStateTransaction;
-    use moor_db_relbox::{RelBoxTransaction, WorldStateRelation, WorldStateSequences};
+    use moor_db::{RelationalWorldStateTransaction, WorldStateSequence, WorldStateTable};
+    use moor_db_relbox::RelboxTransaction;
     use moor_values::model::BinaryType;
     use moor_values::model::CommitResult;
     use moor_values::model::HasUuid;
@@ -31,10 +32,16 @@ mod test {
     use relbox::{relation_info_for, RelBox, RelationInfo};
 
     pub fn test_db(dir: PathBuf) -> Arc<RelBox> {
-        let relations: Vec<RelationInfo> =
-            WorldStateRelation::iter().map(relation_info_for).collect();
+        let relations: Vec<RelationInfo> = WorldStateTable::iter().map(relation_info_for).collect();
 
-        RelBox::new(1 << 24, Some(dir), &relations, WorldStateSequences::COUNT)
+        RelBox::new(1 << 24, Some(dir), &relations, WorldStateSequence::COUNT)
+    }
+
+    pub fn begin_tx(
+        db: Arc<RelBox>,
+    ) -> RelationalWorldStateTransaction<RelboxTransaction<WorldStateTable>> {
+        let tx = RelboxTransaction::new(db.clone().start_tx());
+        RelationalWorldStateTransaction { tx }
     }
 
     #[test]
@@ -44,8 +51,7 @@ mod test {
 
         let a = {
             let db = test_db(tmpdir.path().into());
-
-            let tx = RelBoxTransaction::new(db.clone());
+            let tx = begin_tx(db.clone());
 
             let a = tx
                 .create_object(
@@ -87,7 +93,7 @@ mod test {
                 .next()
                 .is_some());
 
-            let tx = RelBoxTransaction::new(db.clone());
+            let tx = begin_tx(db.clone());
 
             let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
             assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
