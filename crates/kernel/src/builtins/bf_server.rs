@@ -566,7 +566,10 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let ticks_left = bf_args.exec_state.tick_slice - bf_args.exec_state.tick_count;
+    let ticks_left = bf_args
+        .exec_state
+        .max_ticks
+        .saturating_sub(bf_args.exec_state.tick_count);
 
     Ok(Ret(v_int(ticks_left as i64)))
 }

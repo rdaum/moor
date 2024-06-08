@@ -32,6 +32,8 @@ pub struct VMExecState {
     pub(crate) stack: Vec<Activation>,
     /// The tick slice for the current execution.
     pub(crate) tick_slice: usize,
+    /// The total number of ticks that the task is allowed to run.
+    pub(crate) max_ticks: usize,
     /// The number of ticks that have been executed so far.
     pub(crate) tick_count: usize,
     /// The time at which the task was started.
@@ -44,12 +46,13 @@ pub struct VMExecState {
 }
 
 impl VMExecState {
-    pub fn new(task_id: TaskId) -> Self {
+    pub fn new(task_id: TaskId, max_ticks: usize) -> Self {
         Self {
             task_id,
             stack: vec![],
             tick_count: 0,
             start_time: None,
+            max_ticks,
             tick_slice: 0,
             maximum_time: None,
             unsend: Default::default(),

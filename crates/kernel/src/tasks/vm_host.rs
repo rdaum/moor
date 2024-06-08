@@ -87,7 +87,7 @@ impl VmHost {
         scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
     ) -> Self {
         let vm = VM::new();
-        let vm_exec_state = VMExecState::new(task_id);
+        let vm_exec_state = VMExecState::new(task_id, max_ticks);
 
         // Created in an initial suspended state.
         Self {
