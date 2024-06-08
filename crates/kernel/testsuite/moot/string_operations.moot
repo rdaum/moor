@@ -1,0 +1,104 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_string_operations.rb
+@programmer
+
+// test_that_index_finds_position_of_substring_in_a_string
+; return index("foobar", "x");
+0
+; return index("foobar", "o");
+2
+
+// test_that_index_finds_position_of_substring_in_a_string_with_case_matters
+; return index("foobar", "O", 1);
+0
+; return index("foobar", "O", 0);
+2
+
+// test_that_rindex_finds_position_of_substring_in_a_string
+; return rindex("foobar", "x");
+0
+; return rindex("foobar", "o");
+3
+
+// test_that_rindex_finds_position_of_substring_in_a_string_with_case_matters
+; return rindex("foobar", "O", 1);
+0
+; return rindex("foobar", "O", 0);
+3
+
+// Further non-Stunt tests based on examples in https://www.hayseed.net/MOO/manuals/ProgrammersManual.html
+
+// strsub
+; return strsub("foobar", "ob", "bo");
+"foboar"
+; return strsub("foobar", "o", "i");
+"fiibar"
+; return strsub("foobar", "", "");
+"foobar"
+; return strsub("oOoO", "O", "i", 1);
+"oioi"
+; return strsub("%n is a fink.", "%n", "Fred");
+"Fred is a fink."
+
+// length
+; return length("foo");
+3
+; return length("");
+0
+
+// strcmp 
+; return strcmp("woo", "woo");
+0
+; return strcmp("axx", "baa");
+-1
+; return strcmp("baa", "axx");
+1
+
+// decode_binary - skip: not implemented
+// ; return decode_binary("foo");
+// {"foo"}
+// ; return decode_binary("~~foo");
+// {"~foo"}
+// ; return decode_binary("foo~0D~0A");
+// {"foo", 13, 10}
+// ; return decode_binary("foo~0Abar~0Abaz");
+// {"foo", 10, "bar", 10, "baz"}
+// ; return decode_binary("foo~0D~0A", 1);
+// {102, 111, 111, 13, 10}
+
+// encode_binary - skip: not implemented
+// ; return encode_binary("~foo");
+// "~7Efoo"
+// ; return encode_binary({"foo", 10}, {"bar", 13});
+// "foo~0Abar~0D"
+// ; return encode_binary("foo", 10, "bar", 13);
+// "foo~0Abar~0D"
+
+// match & rmatch 
+; return match("foo", "^f*o$");
+{}
+; return match("foo", "^fo*$");
+{1, 3, {{0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "foo"}
+; return match("foobar", "o*b");
+{2, 4, {{0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "foobar"}
+; return rmatch("foobar", "o*b");
+{4, 4, {{0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "foobar"}
+; return match("foobar", "f%(o*%)b");
+{1, 4, {{2, 3}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "foobar"}
+
+// substitute 
+; subs = match("*** Welcome to LambdaMOO!!!", "%(%w*%) to %(%w*%)"); return substitute("I thank you for your %1 here in %2.", subs);
+"I thank you for your Welcome here in LambdaMOO."
+
+// crypt 
+; return crypt("foobar", "J3");
+"J3fSFQfgkp26w"
+; return crypt("mumble", "J3");
+"J3D0.dh.jjmWQ"
+; return crypt("foobar", "J4");
+"J4AcPxOJ4ncq2"
+
+// string_hash
+; return string_hash("foo") == string_hash("bar");
+0
+; return string_hash("foo") == string_hash("foo");
+1
