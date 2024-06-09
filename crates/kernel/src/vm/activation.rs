@@ -287,11 +287,29 @@ impl Activation {
         // From the command, if any...
         if let Some(ref command) = verb_call_request.command {
             frame.set_gvar(GlobalName::argstr, v_string(command.argstr.clone()));
-            frame.set_gvar(GlobalName::dobj, v_objid(command.dobj));
-            frame.set_gvar(GlobalName::dobjstr, v_string(command.dobjstr.clone()));
-            frame.set_gvar(GlobalName::prepstr, v_string(command.prepstr.clone()));
-            frame.set_gvar(GlobalName::iobj, v_objid(command.iobj));
-            frame.set_gvar(GlobalName::iobjstr, v_string(command.iobjstr.clone()));
+            frame.set_gvar(GlobalName::dobj, v_objid(command.dobj.unwrap_or(NOTHING)));
+            frame.set_gvar(
+                GlobalName::dobjstr,
+                command
+                    .dobjstr
+                    .as_ref()
+                    .map_or_else(|| v_empty_str(), |s| v_string(s.clone())),
+            );
+            frame.set_gvar(
+                GlobalName::prepstr,
+                command
+                    .prepstr
+                    .as_ref()
+                    .map_or_else(|| v_empty_str(), |s| v_string(s.clone())),
+            );
+            frame.set_gvar(GlobalName::iobj, v_objid(command.iobj.unwrap_or(NOTHING)));
+            frame.set_gvar(
+                GlobalName::iobjstr,
+                command
+                    .iobjstr
+                    .as_ref()
+                    .map_or_else(|| v_empty_str(), |s| v_string(s.clone())),
+            );
         } else {
             frame.set_gvar(
                 GlobalName::argstr,
