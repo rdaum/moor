@@ -45,14 +45,14 @@ pub struct ParsedCommand {
     pub argstr: String,
     pub args: Vec<Var>,
 
-    pub dobjstr: String,
-    pub dobj: Objid,
+    pub dobjstr: Option<String>,
+    pub dobj: Option<Objid>,
 
-    pub prepstr: String,
+    pub prepstr: Option<String>,
     pub prep: PrepSpec,
 
-    pub iobjstr: String,
-    pub iobj: Objid,
+    pub iobjstr: Option<String>,
+    pub iobj: Option<Objid>,
 }
 
 #[derive(Clone)]
@@ -104,7 +104,7 @@ fn match_preposition(prep: &str) -> Option<Prep> {
 }
 
 pub trait ParseMatcher {
-    fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError>;
+    fn match_object(&self, name: &str) -> Result<Option<Objid>, WorldStateError>;
 }
 
 #[derive(thiserror::Error, Debug, Clone, Decode, Encode)]
@@ -122,7 +122,7 @@ pub enum ParseCommandError {
 #[tracing::instrument(skip(command_environment))]
 pub fn parse_command<M>(
     input: &str,
-    mut command_environment: M,
+    command_environment: M,
 ) -> Result<ParsedCommand, ParseCommandError>
 where
     M: ParseMatcher,
@@ -143,28 +143,6 @@ where
         return Err(ParseCommandError::EmptyCommand);
     }
 
-    // Check for built-in commands
-    let i = 0;
-    let verb = words[i].to_string();
-    let dobjstr;
-    let mut dobj = None;
-    let mut prepstr = String::new();
-    let mut prep = PrepSpec::None;
-    let mut iobjstr = String::new();
-    let mut iobj = None;
-    if [
-        "PREFIX",
-        "OUTPUTPREFIX",
-        "SUFFIX",
-        "OUTPUTSUFFIX",
-        ".program",
-        ".flush",
-    ]
-    .contains(&verb.as_str())
-    {
-        // TODO: Handle built-in commands like .program, .flush, etc.
-        return Err(ParseCommandError::UnimplementedBuiltInCommand);
-    }
     // Split into verb and argument string
     let mut parts = command.splitn(2, ' ');
     let verb = parts.next().unwrap_or_default().to_string();
@@ -174,41 +152,55 @@ where
 
     // Normal MOO command
     // Find preposition, if any
-    let mut prep_index = None;
-    for (j, word) in words.iter().enumerate() {
-        if let Some(p) = match_preposition(word) {
-            prep_index = Some(j);
-            prepstr = word.to_string();
-            prep = PrepSpec::Other(Preposition::from_repr(p.id as u16).unwrap());
-            break;
-        }
-    }
+    let (prep_index, prep, prepstr) = words
+        .iter()
+        .enumerate()
+        .find(|(_, word)| match_preposition(word).is_some())
+        .map_or((None, PrepSpec::None, None), |(j, word)| {
+            (
+                Some(j),
+                PrepSpec::Other(
+                    Preposition::from_repr(match_preposition(word).unwrap().id as u16).unwrap(),
+                ),
+                Some(word.to_string()),
+            )
+        });
 
     // Get direct object string
-    if let Some(j) = prep_index {
-        dobjstr = words[0..j].join(" ");
-    } else {
-        dobjstr = words.join(" ");
-    }
+    let dobjstr = match prep_index {
+        Some(j) => {
+            if j == 0 {
+                None
+            } else {
+                Some(words[0..j].join(" "))
+            }
+        }
+        None => {
+            if words.is_empty() {
+                None
+            } else {
+                Some(words.join(" "))
+            }
+        }
+    };
+    let dobj = match &dobjstr {
+        Some(dobjstr) => command_environment
+            .match_object(dobjstr)
+            .map_err(ParseCommandError::ErrorDuringMatch)?,
+        None => None,
+    };
 
     // Get indirect object string
-    if let Some(j) = prep_index {
-        iobjstr = words[j + 1..].join(" ");
-    }
+    let iobjstr = prep_index.map(|j| words[j + 1..].join(" "));
 
     // Get indirect object object
-    if prep != PrepSpec::None && !iobjstr.is_empty() {
-        iobj = command_environment
-            .match_object(&iobjstr)
-            .map_err(ParseCommandError::ErrorDuringMatch)?;
-    }
-
-    // Get direct object object
-    if !dobjstr.is_empty() {
-        dobj = command_environment
-            .match_object(&dobjstr)
-            .map_err(ParseCommandError::ErrorDuringMatch)?;
-    }
+    let iobj = match (prep, &iobjstr) {
+        (PrepSpec::None, _) => None,
+        (_, Some(iobjstr)) => command_environment
+            .match_object(iobjstr)
+            .map_err(ParseCommandError::ErrorDuringMatch)?,
+        _ => None,
+    };
 
     // Build and return ParsedCommand
     let args: Vec<Var> = words.iter().map(|w| v_str(w)).collect();
@@ -218,11 +210,11 @@ where
         argstr,
         args,
         dobjstr,
-        dobj: dobj.unwrap_or(Objid(-1)),
+        dobj,
         prepstr,
         prep,
         iobjstr,
-        iobj: iobj.unwrap_or(Objid(-1)),
+        iobj,
     })
 }
 
@@ -231,7 +223,7 @@ mod tests {
     use moor_values::model::Preposition;
     use moor_values::util::parse_into_words;
     use moor_values::var::v_str;
-    use moor_values::{FAILED_MATCH, NOTHING};
+    use moor_values::FAILED_MATCH;
 
     use crate::matching::match_env::MatchEnvironmentParseMatcher;
     use crate::matching::mock_matching_env::{
@@ -270,7 +262,7 @@ mod tests {
 
     struct SimpleParseMatcher {}
     impl ParseMatcher for SimpleParseMatcher {
-        fn match_object(&mut self, name: &str) -> Result<Option<Objid>, WorldStateError> {
+        fn match_object(&self, name: &str) -> Result<Option<Objid>, WorldStateError> {
             Ok(match name {
                 "obj" => Some(Objid(1)),
                 "player" => Some(Objid(2)),
@@ -285,11 +277,11 @@ mod tests {
         let command = "look obj";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "look");
-        assert_eq!(parsed.dobjstr, "obj");
-        assert_eq!(parsed.dobj, Objid(1));
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobjstr, Some("obj".to_string()));
+        assert_eq!(parsed.dobj, Some(Objid(1)));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
+        assert_eq!(parsed.iobj, None);
         assert_eq!(parsed.args, vec![v_str("obj")]);
         assert_eq!(parsed.argstr, "obj");
     }
@@ -299,12 +291,13 @@ mod tests {
         // Test normal MOO command with multiple args
         let command = "test arg1 arg2 arg3";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
+
         assert_eq!(parsed.verb, "test");
-        assert_eq!(parsed.dobjstr, "arg1 arg2 arg3");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobjstr, Some("arg1 arg2 arg3".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
         assert_eq!(
             parsed.args,
             vec![v_str("arg1"), v_str("arg2"), v_str("arg3")]
@@ -318,12 +311,12 @@ mod tests {
         let command = "give obj to player";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "give");
-        assert_eq!(parsed.dobjstr, "obj");
-        assert_eq!(parsed.dobj, Objid(1));
-        assert_eq!(parsed.prepstr, "to");
+        assert_eq!(parsed.dobjstr, Some("obj".to_string()));
+        assert_eq!(parsed.dobj, Some(Objid(1)));
+        assert_eq!(parsed.prepstr, Some("to".to_string()));
         assert_eq!(parsed.prep, PrepSpec::Other(Preposition::AtTo));
-        assert_eq!(parsed.iobjstr, "player");
-        assert_eq!(parsed.iobj, Objid(2));
+        assert_eq!(parsed.iobjstr, Some("player".to_string()));
+        assert_eq!(parsed.iobj, Some(Objid(2)));
         assert_eq!(
             parsed.args,
             vec![v_str("obj"), v_str("to"), v_str("player")]
@@ -337,13 +330,13 @@ mod tests {
         let command = "\"hello, world!";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "say");
-        assert_eq!(parsed.dobjstr, "hello, world!");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, Some("hello, world!".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.args, vec![v_str("hello,"), v_str("world!")]);
         assert_eq!(parsed.argstr, "hello, world!");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
     }
 
     #[test]
@@ -352,13 +345,13 @@ mod tests {
         let command = ":waves happily.";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "emote");
-        assert_eq!(parsed.dobjstr, "waves happily.");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, Some("waves happily.".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.args, vec![v_str("waves"), v_str("happily.")]);
         assert_eq!(parsed.argstr, "waves happily.");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
     }
 
     #[test]
@@ -367,13 +360,13 @@ mod tests {
         let command = "emote waves happily.";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "emote");
-        assert_eq!(parsed.dobjstr, "waves happily.");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, Some("waves happily.".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.args, vec![v_str("waves"), v_str("happily.")]);
         assert_eq!(parsed.argstr, "waves happily.");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
     }
 
     #[test]
@@ -382,13 +375,13 @@ mod tests {
         let command = ";1 + 1";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "eval");
-        assert_eq!(parsed.dobjstr, "1 + 1");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, Some("1 + 1".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.args, vec![v_str("1"), v_str("+"), v_str("1")]);
         assert_eq!(parsed.argstr, "1 + 1");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
     }
 
     #[test]
@@ -397,13 +390,13 @@ mod tests {
         let command = "blork \"hello, world!\"";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "blork");
-        assert_eq!(parsed.dobjstr, "hello, world!");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, Some("hello, world!".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.args, vec![v_str("hello, world!")]);
         assert_eq!(parsed.argstr, "\"hello, world!\"");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
     }
 
     #[test]
@@ -412,13 +405,13 @@ mod tests {
         let command = "\"\"hello, world!\"";
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "say");
-        assert_eq!(parsed.dobjstr, "hello, world!");
-        assert_eq!(parsed.prepstr, "");
-        assert_eq!(parsed.iobjstr, "");
+        assert_eq!(parsed.dobjstr, Some("hello, world!".to_string()));
+        assert_eq!(parsed.prepstr, None);
+        assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.args, vec![v_str("hello, world!")]);
         assert_eq!(parsed.argstr, "\"hello, world!\"");
-        assert_eq!(parsed.dobj, Objid(-1));
-        assert_eq!(parsed.iobj, Objid(-1));
+        assert_eq!(parsed.dobj, None);
+        assert_eq!(parsed.iobj, None);
     }
 
     #[test]
@@ -432,12 +425,12 @@ mod tests {
         assert_eq!(result.verb, "get".to_string());
         assert_eq!(result.argstr, "thing1".to_string());
         assert_eq!(result.args, vec![v_str("thing1")]);
-        assert_eq!(result.dobjstr, "thing1".to_string());
-        assert_eq!(result.dobj, MOCK_THING1);
-        assert_eq!(result.prepstr, "".to_string());
+        assert_eq!(result.dobjstr, Some("thing1".to_string()));
+        assert_eq!(result.dobj, Some(MOCK_THING1));
+        assert_eq!(result.prepstr, None);
         assert_eq!(result.prep, PrepSpec::None);
-        assert_eq!(result.iobjstr, "".to_string());
-        assert_eq!(result.iobj, NOTHING);
+        assert_eq!(result.iobjstr, None);
+        assert_eq!(result.iobj, None);
     }
 
     #[test]
@@ -452,12 +445,12 @@ mod tests {
         assert_eq!(result.verb, "put".to_string());
         assert_eq!(result.argstr, "thing1 in t2".to_string());
         assert_eq!(result.args, vec![v_str("thing1"), v_str("in"), v_str("t2")]);
-        assert_eq!(result.dobjstr, "thing1".to_string());
-        assert_eq!(result.dobj, MOCK_THING1);
-        assert_eq!(result.prepstr, "in".to_string());
+        assert_eq!(result.dobjstr, Some("thing1".to_string()));
+        assert_eq!(result.dobj, Some(MOCK_THING1));
+        assert_eq!(result.prepstr, Some("in".to_string()));
         assert_eq!(result.prep, PrepSpec::Other(Preposition::IntoIn));
-        assert_eq!(result.iobjstr, "t2".to_string());
-        assert_eq!(result.iobj, MOCK_THING2);
+        assert_eq!(result.iobjstr, Some("t2".to_string()));
+        assert_eq!(result.iobj, Some(MOCK_THING2));
     }
 
     #[test]
@@ -472,12 +465,12 @@ mod tests {
         assert_eq!(result.verb, "look".to_string());
         assert_eq!(result.argstr, "at here".to_string());
         assert_eq!(result.args, vec![v_str("at"), v_str("here"),]);
-        assert_eq!(result.dobjstr, "".to_string());
-        assert_eq!(result.dobj, NOTHING);
-        assert_eq!(result.prepstr, "at".to_string());
+        assert_eq!(result.dobjstr, None);
+        assert_eq!(result.dobj, None);
+        assert_eq!(result.prepstr, Some("at".to_string()));
         assert_eq!(result.prep, PrepSpec::Other(Preposition::AtTo));
-        assert_eq!(result.iobjstr, "here".to_string());
-        assert_eq!(result.iobj, MOCK_ROOM1);
+        assert_eq!(result.iobjstr, Some("here".to_string()));
+        assert_eq!(result.iobj, Some(MOCK_ROOM1));
     }
 
     #[test]
@@ -491,15 +484,14 @@ mod tests {
         // We had a regression where the first numeric argument was being confused with a
         // preposition after I added numeric preposition support.
         let result = parse_command("ins 1", match_object_fn).unwrap();
-
         assert_eq!(result.verb, "ins".to_string());
         assert_eq!(result.prep, PrepSpec::None);
         assert_eq!(result.argstr, "1".to_string());
         assert_eq!(result.args, vec![v_str("1")]);
-        assert_eq!(result.dobjstr, "1".to_string());
-        assert_eq!(result.dobj, FAILED_MATCH);
-        assert_eq!(result.prepstr, "".to_string());
-        assert_eq!(result.iobjstr, "".to_string());
-        assert_eq!(result.iobj, NOTHING);
+        assert_eq!(result.dobjstr, Some("1".to_string()));
+        assert_eq!(result.dobj, Some(FAILED_MATCH));
+        assert_eq!(result.prepstr, None);
+        assert_eq!(result.iobjstr, None);
+        assert_eq!(result.iobj, None);
     }
 }

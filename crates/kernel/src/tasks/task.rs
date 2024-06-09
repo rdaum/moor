@@ -707,10 +707,21 @@ fn find_verb_for_command(
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
 ) -> Result<Option<(VerbInfo, Objid)>, CommandError> {
-    let targets_to_search = vec![player, player_location, pc.dobj, pc.iobj];
+    let targets_to_search = vec![
+        player,
+        player_location,
+        pc.dobj.unwrap_or(NOTHING),
+        pc.iobj.unwrap_or(NOTHING),
+    ];
     for target in targets_to_search {
-        let match_result =
-            ws.find_command_verb_on(player, target, pc.verb.as_str(), pc.dobj, pc.prep, pc.iobj);
+        let match_result = ws.find_command_verb_on(
+            player,
+            target,
+            pc.verb.as_str(),
+            pc.dobj.unwrap_or(NOTHING),
+            pc.prep,
+            pc.iobj.unwrap_or(NOTHING),
+        );
         let match_result = match match_result {
             Ok(m) => m,
             Err(WorldStateError::VerbPermissionDenied) => return Err(PermissionDenied),

@@ -27,18 +27,18 @@ pub struct WsMatchEnv<'a> {
 }
 
 impl<'a> MatchEnvironment for WsMatchEnv<'a> {
-    fn obj_valid(&mut self, oid: Objid) -> Result<bool, WorldStateError> {
+    fn obj_valid(&self, oid: Objid) -> Result<bool, WorldStateError> {
         self.ws.valid(oid)
     }
 
-    fn get_names(&mut self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
+    fn get_names(&self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
         let mut names = self.ws.names_of(self.perms, oid)?;
         let mut object_names = vec![names.0];
         object_names.append(&mut names.1);
         Ok(object_names)
     }
 
-    fn get_surroundings(&mut self, player: Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_surroundings(&self, player: Objid) -> Result<ObjSet, WorldStateError> {
         let location = self.ws.location_of(self.perms, player)?;
         let surroundings = self
             .ws
@@ -48,7 +48,7 @@ impl<'a> MatchEnvironment for WsMatchEnv<'a> {
         Ok(surroundings)
     }
 
-    fn location_of(&mut self, player: Objid) -> Result<Objid, WorldStateError> {
+    fn location_of(&self, player: Objid) -> Result<Objid, WorldStateError> {
         self.ws.location_of(self.perms, player)
     }
 }
