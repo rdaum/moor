@@ -79,7 +79,7 @@ pub enum AbortLimitReason {
 
 /// Results returned to waiters on tasks during subscription.
 #[derive(Clone, Debug)]
-pub enum TaskWaiterResult {
+pub enum TaskResult {
     Success(Var),
     Error(SchedulerError),
 }
@@ -107,27 +107,6 @@ pub enum SchedulerError {
     TaskAbortedCancelled,
 }
 
-struct KillRequest {
-    requesting_task_id: TaskId,
-    victim_task_id: TaskId,
-    sender_permissions: Perms,
-    result_sender: oneshot::Sender<Var>,
-}
-
-struct ResumeRequest {
-    requesting_task_id: TaskId,
-    queued_task_id: TaskId,
-    sender_permissions: Perms,
-    return_value: Var,
-    result_sender: oneshot::Sender<Var>,
-}
-
-struct ForkRequest {
-    fork_request: Fork,
-    reply: oneshot::Sender<TaskId>,
-    session: Arc<dyn Session>,
-}
-
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
 /// not shared elsewhere.
 struct TaskControl {
@@ -141,16 +120,35 @@ struct TaskControl {
     waiting_input: Option<Uuid>,
     resume_time: Option<SystemTime>,
     // TODO: find a way for this not to be in a mutex.
-    result_sender: Mutex<Option<oneshot::Sender<TaskWaiterResult>>>,
+    result_sender: Mutex<Option<oneshot::Sender<TaskResult>>>,
 }
 
 /// The set of actions that the scheduler needs to take in response to a task control message.
 enum TaskHandleResult {
-    Notify(TaskId, TaskWaiterResult),
-    Fork(ForkRequest),
+    /// The final result of a task, to be sent back to the task's subscriber if there is one.
+    /// (Otherwise the result is thrown away).
+    Result(TaskId, TaskResult),
+    /// A request to fork a new task.
+    Fork {
+        fork_request: Fork,
+        reply: oneshot::Sender<TaskId>,
+        session: Arc<dyn Session>,
+    },
+    /// A request for a description of another task.
     Describe(TaskId, oneshot::Sender<Vec<TaskDescription>>),
-    Kill(KillRequest),
-    Resume(ResumeRequest),
+    Kill {
+        requesting_task_id: TaskId,
+        victim_task_id: TaskId,
+        sender_permissions: Perms,
+        result_sender: oneshot::Sender<Var>,
+    },
+    Resume {
+        requesting_task_id: TaskId,
+        queued_task_id: TaskId,
+        sender_permissions: Perms,
+        return_value: Var,
+        result_sender: oneshot::Sender<Var>,
+    },
     Disconnect(TaskId, Objid),
     Retry(TaskId),
 }
@@ -520,15 +518,15 @@ impl Scheduler {
                 };
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return Some(TaskHandleResult::Notify(
+                    return Some(TaskHandleResult::Result(
                         task_id,
-                        TaskWaiterResult::Error(TaskAbortedError),
+                        TaskResult::Error(TaskAbortedError),
                     ));
                 };
                 trace!(?task_id, result = ?value, "Task succeeded");
-                Some(TaskHandleResult::Notify(
+                Some(TaskHandleResult::Result(
                     task_id,
-                    TaskWaiterResult::Success(value),
+                    TaskResult::Success(value),
                 ))
             }
             SchedulerControlMsg::TaskConflictRetry => {
@@ -543,18 +541,18 @@ impl Scheduler {
                 // many cores don't have it at all. So it would just be way too spammy.
                 trace!(this = ?this, verb, ?task_id, "Verb not found, task cancelled");
 
-                Some(TaskHandleResult::Notify(
+                Some(TaskHandleResult::Result(
                     task_id,
-                    TaskWaiterResult::Error(TaskAbortedError),
+                    TaskResult::Error(TaskAbortedError),
                 ))
             }
             SchedulerControlMsg::TaskCommandError(parse_command_error) => {
                 // This is a common occurrence, so we don't want to log it at warn level.
                 trace!(?task_id, error = ?parse_command_error, "command parse error");
 
-                Some(TaskHandleResult::Notify(
+                Some(TaskHandleResult::Result(
                     task_id,
-                    TaskWaiterResult::Error(CommandExecutionError(parse_command_error)),
+                    TaskResult::Error(CommandExecutionError(parse_command_error)),
                 ))
             }
             SchedulerControlMsg::TaskAbortCancelled => {
@@ -575,14 +573,14 @@ impl Scheduler {
 
                 let Ok(()) = task.session.rollback() else {
                     warn!("Could not rollback session; aborting task");
-                    return Some(TaskHandleResult::Notify(
+                    return Some(TaskHandleResult::Result(
                         task_id,
-                        TaskWaiterResult::Error(TaskAbortedError),
+                        TaskResult::Error(TaskAbortedError),
                     ));
                 };
-                Some(TaskHandleResult::Notify(
+                Some(TaskHandleResult::Result(
                     task_id,
-                    TaskWaiterResult::Error(TaskAbortedCancelled),
+                    TaskResult::Error(TaskAbortedCancelled),
                 ))
             }
             SchedulerControlMsg::TaskAbortLimitsReached(limit_reason) => {
@@ -610,9 +608,9 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                Some(TaskHandleResult::Notify(
+                Some(TaskHandleResult::Result(
                     task_id,
-                    TaskWaiterResult::Error(TaskAbortedLimit(limit_reason)),
+                    TaskResult::Error(TaskAbortedLimit(limit_reason)),
                 ))
             }
             SchedulerControlMsg::TaskException(exception) => {
@@ -641,9 +639,9 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                Some(TaskHandleResult::Notify(
+                Some(TaskHandleResult::Result(
                     task_id,
-                    TaskWaiterResult::Error(TaskAbortedException(exception)),
+                    TaskResult::Error(TaskAbortedException(exception)),
                 ))
             }
             SchedulerControlMsg::TaskRequestFork(fork_request, reply) => {
@@ -657,11 +655,11 @@ impl Scheduler {
                     warn!(task_id, "Task not found for fork request");
                     return None;
                 };
-                Some(TaskHandleResult::Fork(ForkRequest {
+                Some(TaskHandleResult::Fork {
                     fork_request,
                     reply,
                     session: task.session.clone(),
-                }))
+                })
             }
             SchedulerControlMsg::TaskSuspend(resume_time) => {
                 trace!(task_id, "Handling task suspension until {:?}", resume_time);
@@ -677,9 +675,9 @@ impl Scheduler {
                 // Commit the session.
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return Some(TaskHandleResult::Notify(
+                    return Some(TaskHandleResult::Result(
                         task_id,
-                        TaskWaiterResult::Error(TaskAbortedError),
+                        TaskResult::Error(TaskAbortedError),
                     ));
                 };
                 task.suspended = true;
@@ -704,17 +702,17 @@ impl Scheduler {
                     // flushed up to the prompt point.
                     let Ok(()) = task.session.commit() else {
                         warn!("Could not commit session; aborting task");
-                        return Some(TaskHandleResult::Notify(
+                        return Some(TaskHandleResult::Result(
                             task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
+                            TaskResult::Error(TaskAbortedError),
                         ));
                     };
 
                     let Ok(()) = task.session.request_input(task.player, input_request_id) else {
                         warn!("Could not request input from session; aborting task");
-                        return Some(TaskHandleResult::Notify(
+                        return Some(TaskHandleResult::Result(
                             task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
+                            TaskResult::Error(TaskAbortedError),
                         ));
                     };
                     task.waiting_input = Some(input_request_id);
@@ -734,25 +732,25 @@ impl Scheduler {
                 result_sender,
             } => {
                 // Task is asking to kill another task.
-                Some(TaskHandleResult::Kill(KillRequest {
+                Some(TaskHandleResult::Kill {
                     requesting_task_id: task_id,
                     victim_task_id,
                     sender_permissions,
                     result_sender,
-                }))
+                })
             }
             SchedulerControlMsg::ResumeTask {
                 queued_task_id,
                 sender_permissions,
                 return_value,
                 result_sender,
-            } => Some(TaskHandleResult::Resume(ResumeRequest {
+            } => Some(TaskHandleResult::Resume {
                 requesting_task_id: task_id,
                 queued_task_id,
                 sender_permissions,
                 return_value,
                 result_sender,
-            })),
+            }),
             SchedulerControlMsg::BootPlayer {
                 player,
                 sender_permissions: _,
@@ -769,9 +767,9 @@ impl Scheduler {
                 };
                 let Ok(()) = task.session.send_event(player, event) else {
                     warn!("Could not notify player; aborting task");
-                    return Some(TaskHandleResult::Notify(
+                    return Some(TaskHandleResult::Result(
                         task_id,
-                        TaskWaiterResult::Error(TaskAbortedError),
+                        TaskResult::Error(TaskAbortedError),
                     ));
                 };
                 None
@@ -788,15 +786,15 @@ impl Scheduler {
                     return None;
                 };
                 match task.session.shutdown(msg) {
-                    Ok(_) => Some(TaskHandleResult::Notify(
+                    Ok(_) => Some(TaskHandleResult::Result(
                         task_id,
-                        TaskWaiterResult::Success(result_mst),
+                        TaskResult::Success(result_mst),
                     )),
                     Err(e) => {
                         warn!(?e, "Could not notify player; aborting task");
-                        Some(TaskHandleResult::Notify(
+                        Some(TaskHandleResult::Result(
                             task_id,
-                            TaskWaiterResult::Error(TaskAbortedError),
+                            TaskResult::Error(TaskAbortedError),
                         ))
                     }
                 }
@@ -892,18 +890,44 @@ impl Scheduler {
     fn process_task_action(&self, task_action: TaskHandleResult) {
         let mut to_remove = vec![];
         match task_action {
-            TaskHandleResult::Notify(task_id, result) => self.process_notification(task_id, result),
-            TaskHandleResult::Fork(fork_request) => {
-                self.process_fork_request(fork_request);
+            TaskHandleResult::Result(task_id, result) => self.process_notification(task_id, result),
+            TaskHandleResult::Fork {
+                fork_request,
+                reply,
+                session,
+            } => {
+                self.process_fork_request(fork_request, reply, session);
             }
             TaskHandleResult::Describe(task_id, reply) => {
                 to_remove.extend(self.process_describe_request(task_id, reply))
             }
-            TaskHandleResult::Kill(kill_request) => {
-                to_remove.extend(self.process_kill_request(kill_request))
+            TaskHandleResult::Kill {
+                requesting_task_id,
+                victim_task_id,
+                sender_permissions,
+                result_sender,
+            } => {
+                to_remove.extend(self.process_kill_request(
+                    requesting_task_id,
+                    victim_task_id,
+                    sender_permissions,
+                    result_sender,
+                ));
             }
-            TaskHandleResult::Resume(resume_request) => {
-                to_remove.extend(self.process_resume_request(resume_request))
+            TaskHandleResult::Resume {
+                requesting_task_id,
+                queued_task_id,
+                sender_permissions,
+                return_value,
+                result_sender,
+            } => {
+                to_remove.extend(self.process_resume_request(
+                    requesting_task_id,
+                    queued_task_id,
+                    sender_permissions,
+                    return_value,
+                    result_sender,
+                ));
             }
             TaskHandleResult::Disconnect(task_id, player) => {
                 self.process_disconnect(task_id, player);
@@ -915,7 +939,7 @@ impl Scheduler {
         self.process_task_removals(&to_remove);
     }
 
-    fn process_notification(&self, task_id: TaskId, result: TaskWaiterResult) {
+    fn process_notification(&self, task_id: TaskId, result: TaskResult) {
         let mut tasks = self.tasks.lock().unwrap();
         let Some(task_control) = tasks.remove(&task_id) else {
             // Missing task, must have ended already. This is odd though? So we'll warn.
@@ -966,11 +990,9 @@ impl Scheduler {
 
     fn process_fork_request(
         &self,
-        ForkRequest {
-            fork_request,
-            reply,
-            session,
-        }: ForkRequest,
+        fork_request: Fork,
+        reply: oneshot::Sender<TaskId>,
+        session: Arc<dyn Session>,
     ) -> Vec<TaskId> {
         let mut to_remove = vec![];
         // Fork the session.
@@ -1050,12 +1072,10 @@ impl Scheduler {
 
     fn process_kill_request(
         &self,
-        KillRequest {
-            requesting_task_id,
-            victim_task_id,
-            sender_permissions,
-            result_sender,
-        }: KillRequest,
+        requesting_task_id: TaskId,
+        victim_task_id: TaskId,
+        sender_permissions: Perms,
+        result_sender: oneshot::Sender<Var>,
     ) -> Vec<TaskId> {
         let mut to_remove = vec![];
 
@@ -1113,13 +1133,11 @@ impl Scheduler {
 
     fn process_resume_request(
         &self,
-        ResumeRequest {
-            requesting_task_id,
-            queued_task_id,
-            sender_permissions,
-            return_value,
-            result_sender,
-        }: ResumeRequest,
+        requesting_task_id: TaskId,
+        queued_task_id: TaskId,
+        sender_permissions: Perms,
+        return_value: Var,
+        result_sender: oneshot::Sender<Var>,
     ) -> Option<TaskId> {
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
         // request.

@@ -31,7 +31,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
 
-use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
+use moor_kernel::tasks::scheduler::{Scheduler, SchedulerError, TaskResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::TaskHandle;
@@ -478,7 +478,7 @@ impl RpcServer {
         };
         let receiver = task_handle.into_receiver();
         let player = match receiver.recv() {
-            Ok(TaskWaiterResult::Success(v)) => {
+            Ok(TaskResult::Success(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
                 // client id to use the player objid and then return a result to the client.
                 // with its new player objid and login result.
@@ -490,7 +490,7 @@ impl RpcServer {
                     }
                 }
             }
-            Ok(TaskWaiterResult::Error(e)) => {
+            Ok(TaskResult::Error(e)) => {
                 error!(error = ?e, "Error waiting for login results");
 
                 return Err(RpcRequestError::LoginTaskFailed);
@@ -670,11 +670,11 @@ impl RpcServer {
             "Subscribed to command task results"
         );
         match task_handle.into_receiver().recv() {
-            Ok(TaskWaiterResult::Success(value)) => Ok(value),
-            Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
+            Ok(TaskResult::Success(value)) => Ok(value),
+            Ok(TaskResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
             }
-            Ok(TaskWaiterResult::Error(e)) => Err(RpcRequestError::InternalError(e.to_string())),
+            Ok(TaskResult::Error(e)) => Err(RpcRequestError::InternalError(e.to_string())),
             Err(e) => Err(RpcRequestError::InternalError(e.to_string())),
         }
     }
@@ -733,11 +733,11 @@ impl RpcServer {
             }
         };
         match task_handle.into_receiver().recv() {
-            Ok(TaskWaiterResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
-            Ok(TaskWaiterResult::Error(SchedulerError::CommandExecutionError(e))) => {
+            Ok(TaskResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
+            Ok(TaskResult::Error(SchedulerError::CommandExecutionError(e))) => {
                 Err(RpcRequestError::CommandError(e))
             }
-            Ok(TaskWaiterResult::Error(e)) => {
+            Ok(TaskResult::Error(e)) => {
                 error!(error = ?e, "Error processing increment");
 
                 Err(RpcRequestError::InternalError(e.to_string()))

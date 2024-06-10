@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::scheduler::TaskWaiterResult;
+use crate::tasks::scheduler::TaskResult;
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::cell::Cell;
@@ -31,14 +31,14 @@ pub mod vm_host;
 pub type TaskId = usize;
 
 /// Just a handle to a task, with a receiver for the result.
-pub struct TaskHandle(TaskId, oneshot::Receiver<TaskWaiterResult>);
+pub struct TaskHandle(TaskId, oneshot::Receiver<TaskResult>);
 impl TaskHandle {
     pub fn task_id(&self) -> TaskId {
         self.0
     }
 
     /// Dissolve the handle into a receiver for the result.
-    pub fn into_receiver(self) -> oneshot::Receiver<TaskWaiterResult> {
+    pub fn into_receiver(self) -> oneshot::Receiver<TaskResult> {
         self.1
     }
 }
@@ -188,7 +188,7 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use super::scheduler::{Scheduler, SchedulerError, TaskWaiterResult};
+    use super::scheduler::{Scheduler, SchedulerError, TaskResult};
     use super::TaskHandle;
     use crate::tasks::scheduler_test_utils::SchedulerError::{
         CommandExecutionError, TaskAbortedException,
@@ -214,14 +214,14 @@ pub mod scheduler_test_utils {
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
             // `moot` tests can match against them.
-            TaskWaiterResult::Error(TaskAbortedException(UncaughtException { code, .. })) => {
+            TaskResult::Error(TaskAbortedException(UncaughtException { code, .. })) => {
                 Ok(code.into())
             }
-            TaskWaiterResult::Error(CommandExecutionError(CommandError::NoCommandMatch)) => {
+            TaskResult::Error(CommandExecutionError(CommandError::NoCommandMatch)) => {
                 Ok(E_VERBNF.into())
             }
-            TaskWaiterResult::Error(err) => Err(err),
-            TaskWaiterResult::Success(var) => Ok(var),
+            TaskResult::Error(err) => Err(err),
+            TaskResult::Success(var) => Ok(var),
         }
     }
 
