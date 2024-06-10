@@ -16,8 +16,6 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr::{null, null_mut};
 
-use tracing::info;
-
 use crate::bindings::create_config::{CreateConfig, DropConfig};
 use crate::bindings::cursor::Cursor;
 use crate::bindings::session_config::{CheckpointConfig, Isolation, TransactionConfig};
@@ -143,7 +141,6 @@ impl Session {
     // A transaction must be in progress when this method is called.
     // All cursors are reset.
     pub fn rollback_transaction(&self) -> Result<(), Error> {
-        info!("Rolling back transaction");
         let result = unsafe {
             let wt_session = *self.session;
             let rollback_function = wt_session.rollback_transaction.unwrap();
