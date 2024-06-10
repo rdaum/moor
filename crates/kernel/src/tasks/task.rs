@@ -520,11 +520,7 @@ impl Task {
             }
             TaskControlMsg::ResumeReceiveInput(state_source, input) => {
                 // We're back.
-                debug!(
-                    task_id = self.task_id,
-                    ?input,
-                    "Resuming task, with new transaction and input"
-                );
+                trace!(task_id = self.task_id, ?input, "Resuming task, with input");
                 assert!(!self.vm_host.is_running());
                 self.world_state = state_source
                     .new_world_state()
