@@ -32,7 +32,7 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
-    use std::rc::Rc;
+    
     use std::sync::Arc;
     use text_diff::assert_diff;
 
@@ -42,15 +42,15 @@ mod test {
         File::open(minimal_db.clone()).unwrap()
     }
 
-    fn load_textdump_file(tx: Rc<dyn LoaderInterface>, path: &str) {
-        textdump_load(tx.clone(), PathBuf::from(path)).expect("Could not load textdump");
+    fn load_textdump_file(tx: &mut dyn LoaderInterface, path: &str) {
+        textdump_load(tx, PathBuf::from(path)).expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
 
     fn write_textdump(db: Arc<WireTigerWorldState>, version: &str) -> String {
-        let tx = db.clone().loader_client().unwrap();
+        let mut tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
-        let textdump = make_textdump(tx.clone(), Some(version));
+        let textdump = make_textdump(tx.as_ref(), Some(version));
 
         let mut writer = moor_kernel::textdump::TextdumpWriter::new(&mut output);
         writer
@@ -177,8 +177,8 @@ mod test {
 
         let (db, _) = WireTigerWorldState::open(None);
         let db = Arc::new(db);
-        let tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.clone(), minimal_db).unwrap();
+        let mut tx = db.clone().loader_client().unwrap();
+        textdump_load(tx.as_mut(), minimal_db).unwrap();
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
         // Check a few things in a new transaction.
@@ -217,7 +217,7 @@ mod test {
         let (db, _) = WireTigerWorldState::open(None);
         let db = Arc::new(db);
         load_textdump_file(
-            db.clone().loader_client().unwrap(),
+            db.clone().loader_client().unwrap().as_mut(),
             minimal_db.to_str().unwrap(),
         );
 
@@ -241,7 +241,7 @@ mod test {
         let (db1, _) = WireTigerWorldState::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
-            db1.clone().loader_client().unwrap(),
+            db1.clone().loader_client().unwrap().as_mut(),
             minimal_db.to_str().unwrap(),
         );
     }
@@ -258,7 +258,7 @@ mod test {
         let (db1, _) = WireTigerWorldState::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
-            db1.clone().loader_client().unwrap(),
+            db1.clone().loader_client().unwrap().as_mut(),
             minimal_db.to_str().unwrap(),
         );
 
@@ -268,8 +268,8 @@ mod test {
         let (db2, _) = RelBoxWorldState::open(None, 1 << 34);
         let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
-        let lc = db2.clone().loader_client().unwrap();
-        let _ = read_textdump(lc.clone(), buffered_string_reader).unwrap();
+        let mut lc = db2.clone().loader_client().unwrap();
+        let _ = read_textdump(lc.as_mut(), buffered_string_reader).unwrap();
         assert_eq!(lc.commit().unwrap(), CommitResult::Success);
 
         // Now go through the properties and verbs of all the objects on db1, and verify that

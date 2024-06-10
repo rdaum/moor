@@ -201,8 +201,8 @@ pub trait WorldStateTransaction {
     fn db_usage(&self) -> Result<usize, WorldStateError>;
 
     /// Attempt to commit the transaction, returning the result of the commit.
-    fn commit(&self) -> Result<CommitResult, WorldStateError>;
+    fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
 
     /// Throw away all local mutations.
-    fn rollback(&self) -> Result<(), WorldStateError>;
+    fn rollback(&mut self) -> Result<(), WorldStateError>;
 }

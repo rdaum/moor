@@ -41,7 +41,7 @@ mod test {
         db: Arc<RelBox>,
     ) -> RelationalWorldStateTransaction<RelboxTransaction<WorldStateTable>> {
         let tx = RelboxTransaction::new(db.clone().start_tx());
-        RelationalWorldStateTransaction { tx }
+        RelationalWorldStateTransaction { tx: Some(tx) }
     }
 
     #[test]
@@ -51,7 +51,7 @@ mod test {
 
         let a = {
             let db = test_db(tmpdir.path().into());
-            let tx = begin_tx(db.clone());
+            let mut tx = begin_tx(db.clone());
 
             let a = tx
                 .create_object(
@@ -93,7 +93,7 @@ mod test {
                 .next()
                 .is_some());
 
-            let tx = begin_tx(db.clone());
+            let mut tx = begin_tx(db.clone());
 
             let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
             assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);

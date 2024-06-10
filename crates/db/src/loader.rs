@@ -70,7 +70,7 @@ pub trait LoaderInterface {
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
 
-    fn commit(&self) -> Result<CommitResult, WorldStateError>;
+    fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
 
     // For writing textdumps...
 

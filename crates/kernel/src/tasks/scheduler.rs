@@ -798,7 +798,7 @@ impl Scheduler {
 
                         info!("Creating textdump...");
                         let textdump = make_textdump(
-                            loader_client,
+                            loader_client.as_ref(),
                             // just to be compatible with LambdaMOO import for now, hopefully.
                             Some("** LambdaMOO Database, Format Version 4 **"),
                         );

@@ -13,7 +13,6 @@
 //
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use strum::{EnumCount, IntoEnumIterator};
@@ -56,7 +55,7 @@ impl WorldStateSource for RelBoxWorldState {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.db.clone().start_tx();
         let tx = RelboxTransaction::new(tx);
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx });
+        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 
@@ -67,11 +66,11 @@ impl WorldStateSource for RelBoxWorldState {
 }
 
 impl Database for RelBoxWorldState {
-    fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError> {
+    fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.clone().start_tx();
         let tx = RelboxTransaction::new(tx);
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx });
-        Ok(Rc::new(DbTxWorldState { tx: rel_tx }))
+        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
+        Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 
     fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
@@ -110,7 +109,7 @@ mod tests {
         db: &Arc<RelBox>,
     ) -> RelationalWorldStateTransaction<RelboxTransaction<WorldStateTable>> {
         let tx = RelboxTransaction::new(db.clone().start_tx());
-        RelationalWorldStateTransaction { tx }
+        RelationalWorldStateTransaction { tx: Some(tx) }
     }
 
     #[test]

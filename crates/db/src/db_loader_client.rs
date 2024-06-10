@@ -104,7 +104,7 @@ impl LoaderInterface for DbTxWorldState {
         Ok(())
     }
 
-    fn commit(&self) -> Result<CommitResult, WorldStateError> {
+    fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
         let cr = self.tx.commit()?;
         Ok(cr)
     }
