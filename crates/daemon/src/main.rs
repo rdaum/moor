@@ -249,11 +249,11 @@ fn main() -> Result<(), Report> {
         } else {
             info!("Loading textdump...");
             let start = std::time::Instant::now();
-            let loader_interface = db_source
+            let mut loader_interface = db_source
                 .clone()
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(loader_interface.clone(), textdump).unwrap();
+            textdump_load(loader_interface.as_ref(), textdump).unwrap();
             let duration = start.elapsed();
             info!("Loaded textdump in {:?}", duration);
             loader_interface

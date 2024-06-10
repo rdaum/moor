@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::rc::Rc;
 use std::sync::Arc;
 
 use moor_values::model::WorldStateError;
@@ -36,7 +35,7 @@ pub use worldstate_tables::{WorldStateSequence, WorldStateTable};
 pub use worldstate_tests::*;
 
 pub trait Database {
-    fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError>;
+    fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
     fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError>;
 }
 

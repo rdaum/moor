@@ -13,7 +13,6 @@
 //
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::wtrel::db::WiredTigerRelDb;
@@ -84,7 +83,7 @@ impl WireTigerWorldState {
 impl WorldStateSource for WireTigerWorldState {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.db.start_tx();
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx });
+        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 
@@ -95,10 +94,10 @@ impl WorldStateSource for WireTigerWorldState {
 }
 
 impl Database for WireTigerWorldState {
-    fn loader_client(self: Arc<Self>) -> Result<Rc<dyn LoaderInterface>, WorldStateError> {
+    fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.start_tx();
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx });
-        Ok(Rc::new(DbTxWorldState { tx: rel_tx }))
+        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
+        Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 
     fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
@@ -133,7 +132,7 @@ mod tests {
         db: &WireTigerWorldState,
     ) -> RelationalWorldStateTransaction<WiredTigerRelTransaction<WorldStateTable>> {
         RelationalWorldStateTransaction {
-            tx: db.db.start_tx(),
+            tx: Some(db.db.start_tx()),
         }
     }
 
