@@ -27,7 +27,7 @@ use tempfile::TempDir;
 impl WiredTigerRelation for WorldStateTable {}
 
 /// An implementation of `WorldState` / `WorldStateSource` that uses the relbox as its backing
-pub struct WireTigerWorldState {
+pub struct WiredTigerWorldState {
     db: Arc<WiredTigerRelDb<WorldStateTable>>,
     // If this is a temporary database, since it seems WiredTiger wants a path no matter what,
     // we'll create a temporary directory and use that as the path.
@@ -35,7 +35,7 @@ pub struct WireTigerWorldState {
     _tmpdir: Option<TempDir>,
 }
 
-impl WireTigerWorldState {
+impl WiredTigerWorldState {
     pub fn open(path: Option<&PathBuf>) -> (Self, bool) {
         let tmpdir = match path {
             Some(_path) => None,
@@ -80,7 +80,7 @@ impl WireTigerWorldState {
     }
 }
 
-impl WorldStateSource for WireTigerWorldState {
+impl WorldStateSource for WiredTigerWorldState {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.db.start_tx();
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
@@ -93,7 +93,7 @@ impl WorldStateSource for WireTigerWorldState {
     }
 }
 
-impl Database for WireTigerWorldState {
+impl Database for WiredTigerWorldState {
     fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.start_tx();
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
@@ -119,17 +119,17 @@ mod tests {
         perform_test_verb_resolve_wildcard, RelationalWorldStateTransaction, WorldStateTable,
     };
 
-    use crate::worldstate::wt_worldstate::WireTigerWorldState;
+    use crate::worldstate::wt_worldstate::WiredTigerWorldState;
 
-    fn test_db() -> WireTigerWorldState {
-        let db = WireTigerWorldState::open(None);
+    fn test_db() -> WiredTigerWorldState {
+        let db = WiredTigerWorldState::open(None);
         db.0.db.create_tables();
         db.0.db.load_sequences();
 
         db.0
     }
     pub fn begin_tx(
-        db: &WireTigerWorldState,
+        db: &WiredTigerWorldState,
     ) -> RelationalWorldStateTransaction<WiredTigerRelTransaction<WorldStateTable>> {
         RelationalWorldStateTransaction {
             tx: Some(db.db.start_tx()),

@@ -18,7 +18,7 @@ mod test {
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
     use moor_db_relbox::RelBoxWorldState;
-    use moor_db_wiredtiger::WireTigerWorldState;
+    use moor_db_wiredtiger::WiredTigerWorldState;
     use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::VerbFlag;
@@ -32,7 +32,7 @@ mod test {
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
-    
+
     use std::sync::Arc;
     use text_diff::assert_diff;
 
@@ -47,7 +47,7 @@ mod test {
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
 
-    fn write_textdump(db: Arc<WireTigerWorldState>, version: &str) -> String {
+    fn write_textdump(db: Arc<WiredTigerWorldState>, version: &str) -> String {
         let mut tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
         let textdump = make_textdump(tx.as_ref(), Some(version));
@@ -175,7 +175,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = WireTigerWorldState::open(None);
+        let (db, _) = WiredTigerWorldState::open(None);
         let db = Arc::new(db);
         let mut tx = db.clone().loader_client().unwrap();
         textdump_load(tx.as_mut(), minimal_db).unwrap();
@@ -214,7 +214,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = WireTigerWorldState::open(None);
+        let (db, _) = WiredTigerWorldState::open(None);
         let db = Arc::new(db);
         load_textdump_file(
             db.clone().loader_client().unwrap().as_mut(),
@@ -238,7 +238,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
 
-        let (db1, _) = WireTigerWorldState::open(None);
+        let (db1, _) = WiredTigerWorldState::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap().as_mut(),
@@ -255,7 +255,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
 
-        let (db1, _) = WireTigerWorldState::open(None);
+        let (db1, _) = WiredTigerWorldState::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap().as_mut(),
