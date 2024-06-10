@@ -143,7 +143,8 @@ impl MootState {
                 } else if let Some(new_player) = line.strip_prefix('@') {
                     Self::execute_test(&ctx, &command, command_kind, None, line_no)?;
                     Ok(MootState::from(ctx.with_player(new_player)?))
-                } else if line.starts_with([';', '%']) || line.is_empty() {
+                } else if line.starts_with([';', '%']) || line.is_empty() || line.starts_with("//")
+                {
                     Self::execute_test(&ctx, &command, command_kind, None, line_no)?;
                     MootState::from(ctx).process_line(new_line_no, line)
                 } else {
@@ -287,7 +288,7 @@ fn init_logging() {
 }
 
 fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
-    init_logging();
+    //init_logging();
     if path.is_dir() {
         return;
     }
