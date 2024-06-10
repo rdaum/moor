@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -19,7 +20,6 @@ use std::time::{Duration, SystemTime};
 
 use bincode::{Decode, Encode};
 use crossbeam_channel::Sender;
-use dashmap::DashMap;
 
 use thiserror::Error;
 use tracing::{error, info, instrument, trace, warn};
@@ -67,8 +67,8 @@ pub struct Scheduler {
     running: Arc<AtomicBool>,
     database: Arc<dyn Database + Send + Sync>,
     next_task_id: AtomicUsize,
-    tasks: DashMap<TaskId, TaskControl>,
-    input_requests: DashMap<Uuid, TaskId>,
+    tasks: Mutex<HashMap<TaskId, TaskControl>>,
+    input_requests: Mutex<HashMap<Uuid, TaskId>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode)]
@@ -164,7 +164,7 @@ impl Scheduler {
             running: Arc::new(AtomicBool::new(false)),
             database,
             next_task_id: Default::default(),
-            tasks: DashMap::new(),
+            tasks: Default::default(),
             input_requests: Default::default(),
             config,
             control_sender,
@@ -217,15 +217,18 @@ impl Scheduler {
     ) -> Result<(), SchedulerError> {
         // Validate that the given input request is valid, and if so, resume the task, sending it
         // the given input, clearing the input request out.
+        trace!(?input_request_id, ?input, "Received input for task");
 
-        let Some(task_ref) = self.input_requests.get(&input_request_id) else {
+        let mut input_requests = self.input_requests.lock().unwrap();
+        let Some(task_id) = input_requests.get(&input_request_id) else {
             return Err(InputRequestNotFound(input_request_id.as_u128()));
         };
+        let task_id = *task_id;
 
-        let (_uuid, task_id) = (task_ref.key(), task_ref.value());
-        let Some(mut task) = self.tasks.get_mut(task_id) else {
+        let mut tasks = self.tasks.lock().unwrap();
+        let Some(task) = tasks.get_mut(&task_id) else {
             warn!(?task_id, ?input_request_id, "Input received for dead task");
-            return Err(TaskNotFound(*task_id));
+            return Err(TaskNotFound(task_id));
         };
 
         // If the player doesn't match, we'll pretend we didn't even see it.
@@ -236,18 +239,18 @@ impl Scheduler {
                 ?player,
                 "Task input request received for wrong player"
             );
-            return Err(TaskNotFound(*task_id));
+            return Err(TaskNotFound(task_id));
         }
 
         // Now we can resume the task with the given input
         let tcs = task.task_control_sender.clone();
+        task.waiting_input = None;
         tcs.send(TaskControlMsg::ResumeReceiveInput(
             task.state_source.clone(),
             input,
         ))
         .map_err(|_| CouldNotStartTask)?;
-        task.waiting_input = None;
-        self.input_requests.remove(&input_request_id);
+        input_requests.remove(&input_request_id);
 
         Ok(())
     }
@@ -360,14 +363,14 @@ impl Scheduler {
 
     pub fn abort_player_tasks(&self, player: Objid) -> Result<(), SchedulerError> {
         let mut to_abort = Vec::new();
-        for t in self.tasks.iter() {
-            let (task_id, task_ref) = (t.key(), t.value());
+        let mut tasks = self.tasks.lock().unwrap();
+        for (task_id, task_ref) in tasks.iter() {
             if task_ref.player == player {
                 to_abort.push(*task_id);
             }
         }
         for task_id in to_abort {
-            let task = self.tasks.get_mut(&task_id).expect("Corrupt task list");
+            let task = tasks.get_mut(&task_id).expect("Corrupt task list");
             let tcs = task.task_control_sender.clone();
             if let Err(e) = tcs.send(TaskControlMsg::Abort) {
                 warn!(task_id, error = ?e, "Could not send abort for task. Dead?");
@@ -381,8 +384,8 @@ impl Scheduler {
     /// Request information on all tasks known to the scheduler.
     pub fn tasks(&self) -> Result<Vec<TaskDescription>, SchedulerError> {
         let mut tasks = Vec::new();
-        for t in self.tasks.iter() {
-            let (task_id, task) = (t.key(), t.value());
+        let task_lock = self.tasks.lock().unwrap();
+        for (task_id, task) in task_lock.iter() {
             trace!(task_id, "Requesting task description");
             let (t_send, t_reply) = oneshot::channel();
             let tcs = task.task_control_sender.clone();
@@ -406,19 +409,24 @@ impl Scheduler {
     /// Stop the scheduler run loop.
     pub fn stop(&self) -> Result<(), SchedulerError> {
         warn!("Issuing clean shutdown...");
-        // Send shut down to all the tasks.
-        for t in self.tasks.iter() {
-            let task = t.value();
-            let tcs = task.task_control_sender.clone();
-            if let Err(e) = tcs.send(TaskControlMsg::Abort) {
-                warn!(task_id = task.task_id, error = ?e, "Could not send abort for task. Already dead?");
-                continue;
+        {
+            // Send shut down to all the tasks.
+            let tasks = self.tasks.lock().unwrap();
+            for task in tasks.values() {
+                let tcs = task.task_control_sender.clone();
+                if let Err(e) = tcs.send(TaskControlMsg::Abort) {
+                    warn!(task_id = task.task_id, error = ?e, "Could not send abort for task. Already dead?");
+                    continue;
+                }
             }
         }
         warn!("Waiting for tasks to finish...");
 
         // Then spin until they're all done.
-        while !self.tasks.is_empty() {
+        loop {
+            if self.tasks.lock().unwrap().is_empty() {
+                break;
+            }
             yield_now();
         }
 
@@ -429,7 +437,8 @@ impl Scheduler {
     }
 
     pub fn abort_task(&self, id: TaskId) -> Result<(), SchedulerError> {
-        let task = self.tasks.get_mut(&id).ok_or(TaskNotFound(id))?;
+        let mut tasks = self.tasks.lock().unwrap();
+        let task = tasks.get_mut(&id).ok_or(TaskNotFound(id))?;
         let tcs = task.task_control_sender.clone();
         if let Err(e) = tcs.send(TaskControlMsg::Abort) {
             error!(error = ?e, "Could not send abort message to task on its channel.  Already dead?");
@@ -455,25 +464,27 @@ impl Scheduler {
             // Or tasks that need pruning.
             let mut to_wake = Vec::new();
             let mut to_prune = Vec::new();
-            for t in self.tasks.iter() {
-                let (task_id, task) = (t.key(), t.value());
-                if !task.task_control_sender.is_ready() {
-                    warn!(
-                        task_id,
-                        "Task is present but its channel is invalid.  Pruning."
-                    );
-                    to_prune.push(*task_id);
-                    continue;
-                }
+            {
+                let tasks = self.tasks.lock().unwrap();
+                for (task_id, task) in tasks.iter() {
+                    if !task.task_control_sender.is_ready() {
+                        warn!(
+                            task_id,
+                            "Task is present but its channel is invalid.  Pruning."
+                        );
+                        to_prune.push(*task_id);
+                        continue;
+                    }
 
-                if !task.suspended {
-                    continue;
-                }
-                let Some(delay) = task.resume_time else {
-                    continue;
-                };
-                if delay <= SystemTime::now() {
-                    to_wake.push(*task_id);
+                    if !task.suspended {
+                        continue;
+                    }
+                    let Some(delay) = task.resume_time else {
+                        continue;
+                    };
+                    if delay <= SystemTime::now() {
+                        to_wake.push(*task_id);
+                    }
                 }
             }
             if !to_wake.is_empty() {
@@ -502,7 +513,8 @@ impl Scheduler {
         match msg {
             SchedulerControlMsg::TaskSuccess(value) => {
                 // Commit the session.
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for success");
                     return None;
                 };
@@ -549,7 +561,8 @@ impl Scheduler {
                 warn!(?task_id, "Task cancelled");
 
                 // Rollback the session.
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return None;
                 };
@@ -585,7 +598,8 @@ impl Scheduler {
                 };
 
                 // Commit the session.
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return None;
                 };
@@ -604,7 +618,8 @@ impl Scheduler {
             SchedulerControlMsg::TaskException(exception) => {
                 warn!(?task_id, finally_reason = ?exception, "Task threw exception");
 
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return None;
                 };
@@ -637,7 +652,8 @@ impl Scheduler {
                 // Task has requested a fork. Dispatch it and reply with the new task id.
                 // Gotta dump this out til we exit the loop tho, since self.tasks is already
                 // borrowed here.
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for fork request");
                     return None;
                 };
@@ -652,7 +668,8 @@ impl Scheduler {
                 // Task is suspended. The resume time (if any) is the system time at which
                 // the scheduler should try to wake us up.
 
-                let Some(mut task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for suspend request");
                     return None;
                 };
@@ -678,10 +695,21 @@ impl Scheduler {
 
                 let input_request_id = Uuid::new_v4();
                 {
-                    let Some(mut task) = self.tasks.get_mut(&task_id) else {
+                    let mut tasks = self.tasks.lock().unwrap();
+                    let Some(task) = tasks.get_mut(&task_id) else {
                         warn!(task_id, "Task not found for input request");
                         return None;
                     };
+                    // Commit the session (not DB transaction) to make sure current output is
+                    // flushed up to the prompt point.
+                    let Ok(()) = task.session.commit() else {
+                        warn!("Could not commit session; aborting task");
+                        return Some(TaskHandleResult::Notify(
+                            task_id,
+                            TaskWaiterResult::Error(TaskAbortedError),
+                        ));
+                    };
+
                     let Ok(()) = task.session.request_input(task.player, input_request_id) else {
                         warn!("Could not request input from session; aborting task");
                         return Some(TaskHandleResult::Notify(
@@ -691,7 +719,8 @@ impl Scheduler {
                     };
                     task.waiting_input = Some(input_request_id);
                 }
-                self.input_requests.insert(input_request_id, task_id);
+                let mut input_requests = self.input_requests.lock().unwrap();
+                input_requests.insert(input_request_id, task_id);
                 trace!(?task_id, "Task suspended waiting for input");
                 None
             }
@@ -733,8 +762,8 @@ impl Scheduler {
             }
             SchedulerControlMsg::Notify { player, event } => {
                 // Task is asking to notify a player.
-
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
                     return None;
                 };
@@ -753,7 +782,8 @@ impl Scheduler {
                     Ok(_) => v_string("Scheduler stopping.".to_string()),
                     Err(e) => v_string(format!("Shutdown failed: {e}")),
                 };
-                let Some(task) = self.tasks.get_mut(&task_id) else {
+                let mut tasks = self.tasks.lock().unwrap();
+                let Some(task) = tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
                     return None;
                 };
@@ -844,7 +874,8 @@ impl Scheduler {
         )?;
 
         let task_id = task_handle.task_id();
-        let Some(mut task_ref) = self.tasks.get_mut(&task_id) else {
+        let mut tasks = self.tasks.lock().unwrap();
+        let Some(task_ref) = tasks.get_mut(&task_id) else {
             return Err(TaskNotFound(task_id));
         };
 
@@ -885,7 +916,8 @@ impl Scheduler {
     }
 
     fn process_notification(&self, task_id: TaskId, result: TaskWaiterResult) {
-        let Some((task_id, task_control)) = self.tasks.remove(&task_id) else {
+        let mut tasks = self.tasks.lock().unwrap();
+        let Some(task_control) = tasks.remove(&task_id) else {
             // Missing task, must have ended already. This is odd though? So we'll warn.
             warn!(task_id, "Task not found for notification, ignoring");
             return;
@@ -912,8 +944,9 @@ impl Scheduler {
 
         trace!(?to_wake, "Waking up tasks...");
 
+        let mut tasks = self.tasks.lock().unwrap();
         for task_id in to_wake {
-            let mut task = self.tasks.get_mut(task_id).unwrap();
+            let task = tasks.get_mut(task_id).unwrap();
             task.suspended = false;
 
             let world_state_source = self
@@ -973,8 +1006,8 @@ impl Scheduler {
             task = requesting_task_id,
             "Task requesting task descriptions"
         );
-        for t_r in self.tasks.iter() {
-            let (task_id, task) = (t_r.key(), t_r.value());
+        let tasks_lock = self.tasks.lock().unwrap();
+        for (task_id, task) in tasks_lock.iter() {
             // Tasks not in suspended state shouldn't be added.
             if !task.suspended {
                 continue;
@@ -1037,7 +1070,8 @@ impl Scheduler {
             return vec![];
         }
 
-        let victim_task = match self.tasks.get(&victim_task_id) {
+        let tasks = self.tasks.lock().unwrap();
+        let victim_task = match tasks.get(&victim_task_id) {
             Some(victim_task) => victim_task,
             None => {
                 result_sender
@@ -1098,7 +1132,8 @@ impl Scheduler {
         }
 
         // Task does not exist.
-        let mut queued_task = match self.tasks.get_mut(&queued_task_id) {
+        let mut tasks = self.tasks.lock().unwrap();
+        let queued_task = match tasks.get_mut(&queued_task_id) {
             Some(queued_task) => queued_task,
             None => {
                 result_sender
@@ -1153,7 +1188,8 @@ impl Scheduler {
     }
 
     fn process_retry_request(&self, task_id: TaskId) -> Option<TaskId> {
-        let Some(mut task) = self.tasks.get_mut(&task_id) else {
+        let mut tasks = self.tasks.lock().unwrap();
+        let Some(task) = tasks.get_mut(&task_id) else {
             warn!(task = task_id, "Retrying task not found");
             return None;
         };
@@ -1177,7 +1213,8 @@ impl Scheduler {
     }
 
     fn process_disconnect(&self, disconnect_task_id: TaskId, player: Objid) {
-        let Some(task) = self.tasks.get_mut(&disconnect_task_id) else {
+        let mut tasks = self.tasks.lock().unwrap();
+        let Some(task) = tasks.get_mut(&disconnect_task_id) else {
             warn!(task = disconnect_task_id, "Disconnecting task not found");
             return;
         };
@@ -1190,8 +1227,8 @@ impl Scheduler {
 
         // Then abort all of their still-living forked tasks (that weren't the disconnect
         // task, we need to let that run to completion for sanity's sake.)
-        for t in self.tasks.iter() {
-            let (task_id, task) = (t.key(), t.value());
+        let tasks = self.tasks.lock().unwrap();
+        for (task_id, task) in tasks.iter() {
             if *task_id == disconnect_task_id {
                 continue;
             }
@@ -1212,9 +1249,10 @@ impl Scheduler {
     }
 
     fn process_task_removals(&self, to_remove: &[TaskId]) {
+        let mut tasks = self.tasks.lock().unwrap();
         for task_id in to_remove {
             trace!(task = task_id, "Task removed");
-            self.tasks.remove(task_id);
+            tasks.remove(task_id);
         }
     }
 
@@ -1258,7 +1296,8 @@ impl Scheduler {
             resume_time: None,
             result_sender: Mutex::new(Some(sender)),
         };
-        self.tasks.insert(task_id, task_control);
+        let mut tasks = self.tasks.lock().unwrap();
+        tasks.insert(task_id, task_control);
 
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
 

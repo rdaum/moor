@@ -1704,7 +1704,6 @@ dependencies = [
  "criterion",
  "crossbeam-channel",
  "crypt-sys",
- "dashmap",
  "decorum",
  "eyre",
  "iana-time-zone",

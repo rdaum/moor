@@ -33,7 +33,7 @@ use moor_values::var::Var;
 use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
@@ -360,12 +360,13 @@ impl VmHost {
 
     /// Resume what you were doing after suspension.
     pub fn resume_execution(&mut self, value: Var) {
-        // coming back from suspend, we need a return value to feed back to `bf_suspend`
+        // coming back from any suspend, we need a return value to feed back to `bf_suspend` or
+        // `bf_read()`
         self.vm_exec_state.top_mut().frame.push(value);
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
         self.running = true;
-        trace!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
+        debug!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
     }
 
     pub fn is_running(&self) -> bool {
