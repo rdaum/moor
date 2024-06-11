@@ -293,14 +293,14 @@ impl Activation {
                 command
                     .dobjstr
                     .as_ref()
-                    .map_or_else(|| v_empty_str(), |s| v_string(s.clone())),
+                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
             frame.set_gvar(
                 GlobalName::prepstr,
                 command
                     .prepstr
                     .as_ref()
-                    .map_or_else(|| v_empty_str(), |s| v_string(s.clone())),
+                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
             frame.set_gvar(GlobalName::iobj, v_objid(command.iobj.unwrap_or(NOTHING)));
             frame.set_gvar(
@@ -308,7 +308,7 @@ impl Activation {
                 command
                     .iobjstr
                     .as_ref()
-                    .map_or_else(|| v_empty_str(), |s| v_string(s.clone())),
+                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
         } else {
             frame.set_gvar(

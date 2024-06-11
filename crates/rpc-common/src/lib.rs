@@ -13,7 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_values::model::{CommandError, NarrativeEvent, WorldStateError};
+use moor_values::model::{CommandError, NarrativeEvent, VerbProgramError, WorldStateError};
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
@@ -59,6 +59,8 @@ pub enum RpcRequest {
     Attach(AuthToken, Option<ConnectType>, String),
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, String),
+    /// Attempt to program the object with the given verb code
+    Program(ClientToken, AuthToken, String, String, Vec<String>),
     /// Respond to a request for input.
     RequestedInput(ClientToken, AuthToken, u128, String),
     /// Send an "out of band" command to be executed.
@@ -79,7 +81,7 @@ pub enum ConnectType {
     Created,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub enum RpcResult {
     Success(RpcResponse),
     Failure(RpcRequestError),
@@ -96,10 +98,12 @@ pub enum RpcResponse {
     EvalResult(Var),
     ThanksPong(SystemTime),
     Disconnected,
+    /// Verb was successfully programmed
+    ProgramSuccess(Objid, String),
 }
 
 /// Errors at the call/request level.
-#[derive(Debug, Eq, PartialEq, Error, Clone, Decode, Encode)]
+#[derive(Debug, PartialEq, Error, Clone, Decode, Encode)]
 pub enum RpcRequestError {
     #[error("Already connected")]
     AlreadyConnected,
@@ -121,6 +125,8 @@ pub enum RpcRequestError {
     PermissionDenied,
     #[error("Internal error: {0}")]
     InternalError(String),
+    #[error("Attempt to program failed: {0:?}")]
+    VerbProgramFailed(VerbProgramError),
 }
 
 /// Events which occur over the pubsub channel, per client.

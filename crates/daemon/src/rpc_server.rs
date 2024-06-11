@@ -337,6 +337,35 @@ impl RpcServer {
 
                 make_response(Ok(RpcResponse::Disconnected))
             }
+            RpcRequest::Program(token, auth_token, object, verb, code) => {
+                let Some(connection) = self.connections.connection_object_for_client(client_id)
+                else {
+                    return make_response(Err(RpcRequestError::NoConnection));
+                };
+
+                let Ok(_) = self.validate_client_token(token, client_id) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Client token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
+                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
+                    warn!(
+                        ?client_id,
+                        ?connection,
+                        "Auth token validation failed for request"
+                    );
+                    return make_response(Err(RpcRequestError::PermissionDenied));
+                };
+
+                make_response(
+                    self.clone()
+                        .program_verb(client_id, connection, object, verb, code),
+                )
+            }
         }
     }
 
@@ -744,6 +773,35 @@ impl RpcServer {
             }
             Err(e) => {
                 error!(error = ?e, "Error processing eval");
+
+                Err(RpcRequestError::InternalError(e.to_string()))
+            }
+        }
+    }
+
+    fn program_verb(
+        self: Arc<Self>,
+        client_id: Uuid,
+        connection: Objid,
+        object: String,
+        verb: String,
+        code: Vec<String>,
+    ) -> Result<RpcResponse, RpcRequestError> {
+        if self.clone().new_session(client_id, connection).is_err() {
+            return Err(RpcRequestError::CreateSessionFailed);
+        };
+
+        match self
+            .clone()
+            .scheduler
+            .program_verb(connection, connection, object, verb, code)
+        {
+            Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb)),
+            Err(SchedulerError::VerbProgramFailed(e)) => {
+                Err(RpcRequestError::VerbProgramFailed(e))
+            }
+            Err(e) => {
+                error!(error = ?e, "Error processing increment");
 
                 Err(RpcRequestError::InternalError(e.to_string()))
             }
