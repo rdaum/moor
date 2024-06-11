@@ -1,12 +1,12 @@
 use crate::worldstate_transaction::WorldStateTransaction;
 use crate::{
-    BytesHolder, RelationalError, RelationalTransaction, StringHolder, UUIDHolder,
-    WorldStateSequence, WorldStateTable,
+    BytesHolder, RelationalTransaction, StringHolder, UUIDHolder, WorldStateSequence,
+    WorldStateTable,
 };
 use moor_values::model::{
     BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs,
-    PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
-    WorldStateError,
+    PropFlag, PropPerms, RelationalError, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs,
+    VerbFlag, WorldStateError,
 };
 use moor_values::util::BitEnum;
 use moor_values::var::{v_none, Objid, Var};
@@ -17,7 +17,7 @@ use uuid::Uuid;
 fn err_map(e: RelationalError) -> WorldStateError {
     match e {
         RelationalError::ConflictRetry => WorldStateError::RollbackRetry,
-        _ => WorldStateError::DatabaseError(format!("{:?}", e)),
+        _ => WorldStateError::DatabaseError(e),
     }
 }
 

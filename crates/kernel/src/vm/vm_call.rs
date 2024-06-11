@@ -144,7 +144,7 @@ impl VM {
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::RollbackRestart;
             }
-            Err(e) => return self.raise_error(vm_state, e.to_error_code()),
+            Err(e) => return self.raise_error(vm_state, e.to_error_code().unwrap()),
         };
         let verb = vm_state.top().verb_name.to_string();
 
@@ -156,7 +156,7 @@ impl VM {
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::RollbackRestart;
             }
-            Err(e) => return self.raise_error(vm_state, e.to_error_code()),
+            Err(e) => return self.raise_error(vm_state, e.to_error_code().unwrap()),
         };
 
         let caller = vm_state.caller();

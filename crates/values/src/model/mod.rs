@@ -53,6 +53,16 @@ pub enum CommitResult {
     ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx
 }
 
+#[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
+pub enum RelationalError {
+    #[error("ConflictRetry")]
+    ConflictRetry,
+    #[error("Duplicate: {0}")]
+    Duplicate(String),
+    #[error("NotFound")]
+    NotFound,
+}
+
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
 pub enum WorldStateError {
@@ -98,7 +108,7 @@ pub enum WorldStateError {
 
     // Catch-alls for system level object DB errors.
     #[error("DB communications/internal error: {0}")]
-    DatabaseError(String),
+    DatabaseError(#[from] RelationalError),
 
     /// A rollback was requested, and the caller should retry the operation.
     #[error("Rollback requested, retry operation")]
@@ -107,23 +117,21 @@ pub enum WorldStateError {
 
 /// Translations from WorldStateError to MOO error codes.
 impl WorldStateError {
-    pub fn to_error_code(&self) -> Error {
+    pub fn to_error_code(self) -> Result<Error, Self> {
         match self {
-            Self::ObjectNotFound(_) => Error::E_INVIND,
-            Self::ObjectPermissionDenied => Error::E_PERM,
-            Self::RecursiveMove(_, _) => Error::E_RECMOVE,
-            Self::VerbNotFound(_, _) => Error::E_VERBNF,
-            Self::VerbPermissionDenied => Error::E_PERM,
-            Self::InvalidVerb(_) => Error::E_VERBNF,
-            Self::DuplicateVerb(_, _) => Error::E_INVARG,
-            Self::PropertyNotFound(_, _) => Error::E_PROPNF,
-            Self::PropertyPermissionDenied => Error::E_PERM,
-            Self::PropertyDefinitionNotFound(_, _) => Error::E_PROPNF,
-            Self::DuplicatePropertyDefinition(_, _) => Error::E_INVARG,
-            Self::PropertyTypeMismatch => Error::E_TYPE,
-            _ => {
-                panic!("Unhandled error code: {:?}", self);
-            }
+            Self::ObjectNotFound(_) => Ok(Error::E_INVIND),
+            Self::ObjectPermissionDenied => Ok(Error::E_PERM),
+            Self::RecursiveMove(_, _) => Ok(Error::E_RECMOVE),
+            Self::VerbNotFound(_, _) => Ok(Error::E_VERBNF),
+            Self::VerbPermissionDenied => Ok(Error::E_PERM),
+            Self::InvalidVerb(_) => Ok(Error::E_VERBNF),
+            Self::DuplicateVerb(_, _) => Ok(Error::E_INVARG),
+            Self::PropertyNotFound(_, _) => Ok(Error::E_PROPNF),
+            Self::PropertyPermissionDenied => Ok(Error::E_PERM),
+            Self::PropertyDefinitionNotFound(_, _) => Ok(Error::E_PROPNF),
+            Self::DuplicatePropertyDefinition(_, _) => Ok(Error::E_INVARG),
+            Self::PropertyTypeMismatch => Ok(Error::E_TYPE),
+            _ => Err(self),
         }
     }
 }
@@ -136,9 +144,11 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn is_empty(&self) -> bool;
 }
 
-impl From<WorldStateError> for Error {
-    fn from(val: WorldStateError) -> Self {
-        val.to_error_code()
+impl TryFrom<WorldStateError> for Error {
+    type Error = WorldStateError;
+
+    fn try_from(value: WorldStateError) -> Result<Self, Self::Error> {
+        value.to_error_code()
     }
 }
 

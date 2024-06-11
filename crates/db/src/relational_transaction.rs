@@ -12,31 +12,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::model::{CommitResult, ValSet};
+use moor_values::model::{CommitResult, RelationalError, ValSet};
 use moor_values::AsByteBuffer;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 
 pub type Result<T> = std::result::Result<T, RelationalError>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RelationalError {
-    ConflictRetry,
-    Duplicate(String),
-    NotFound,
-}
-
-impl Display for RelationalError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RelationalError::ConflictRetry => write!(f, "ConflictRetry"),
-            RelationalError::Duplicate(s) => write!(f, "Duplicate: {}", s),
-            RelationalError::NotFound => write!(f, "NotFound"),
-        }
-    }
-}
-
-impl Error for RelationalError {}
 
 /// Traits defining a generic quasi binary-relational database transaction.
 pub trait RelationalTransaction<Relation> {

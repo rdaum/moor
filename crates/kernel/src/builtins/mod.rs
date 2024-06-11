@@ -116,9 +116,29 @@ macro_rules! bf_declare {
     };
 }
 
-pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
-    match err {
-        WorldStateError::RollbackRetry => BfErr::Rollback,
-        _ => BfErr::Code(err.into()),
+impl TryFrom<WorldStateError> for BfErr {
+    type Error = WorldStateError;
+
+    fn try_from(value: WorldStateError) -> Result<Self, Self::Error> {
+        if value == WorldStateError::RollbackRetry {
+            Ok(BfErr::Rollback)
+        } else {
+            match value.to_error_code() {
+                Ok(code) => Ok(BfErr::Code(code)),
+                Err(err) => Err(err),
+            }
+        }
     }
+}
+
+// Dunno, this may come in handy, maybe it'll always be dead code and it should go away
+pub(crate) fn world_state_bf_err_or_else<F>(fallback: F) -> impl FnOnce(WorldStateError) -> BfErr
+where
+    F: FnOnce(WorldStateError) -> BfErr,
+{
+    |err| err.try_into().unwrap_or_else(fallback)
+}
+
+pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
+    err.try_into().unwrap()
 }

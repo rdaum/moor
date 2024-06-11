@@ -279,7 +279,7 @@ fn init_logging() {
             .with_file(true)
             .with_line_number(true)
             .with_thread_names(true)
-            .with_max_level(tracing::Level::WARN)
+            .with_max_level(tracing::Level::ERROR)
             .with_test_writer()
             .finish();
         tracing::subscriber::set_global_default(main_subscriber)
@@ -288,7 +288,7 @@ fn init_logging() {
 }
 
 fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
-    //init_logging();
+    init_logging();
     if path.is_dir() {
         return;
     }
@@ -326,5 +326,5 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_wiredtiger(&testsuite_dir().join("moot/single.moot"));
+    test_relbox(&testsuite_dir().join("moot/recycle.moot"));
 }

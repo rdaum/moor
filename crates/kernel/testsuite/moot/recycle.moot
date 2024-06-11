@@ -15,27 +15,26 @@ E_TYPE
 E_TYPE
 ; recycle({});
 E_TYPE
-// TODO disabled: should return nothing, raises E_INVIND
-// ; recycle($nothing);
-// TODO disabled: should return nothing, instead ONLY RELBOX panics with DatabaseError("Tuple not found") at crates/values/src/model/mod.rs:124:17
+; recycle($nothing);
+E_INVARG
+// TODO disabled: should return nothing, instead ONLY RELBOX panics with DatabaseError("NotFound")
 // ; recycle(create($nothing));
 
 // test_that_the_first_argument_must_be_valid
 @programmer
 // TODO disabled: should raise E_INVARG, instead
 //      relbox: panics with DatabaseError("Tuple not found") at crates/values/src/model/mod.rs:124:17
-//      wiretiger: raises E_INVIND
-// ; $object = create($nothing); recycle($object); recycle($object);
-// E_INVARG
+; $object = create($nothing); recycle($object); recycle($object);
+E_INVARG
 
 // test_that_a_wizard_can_recycle_anything
-@wizard
-; $tmp1 = create($nothing); $tmp1.w = 0;
-; $tmp2 = create($nothing); $tmp2.w = 1;
-; add_property($tmp2, "x", 0, {player, "r"});
-; $tmp2.x = create($nothing); $tmp2.x.w = 0;
-; recycle($tmp2.x);
-; recycle($tmp2);
+//@wizard
+//; $tmp1 = create($nothing); $tmp1.w = 0;
+//; $tmp2 = create($nothing); $tmp2.w = 1;
+//; add_property($tmp2, "x", 0, {player, "r"});
+//; $tmp2.x = create($nothing); $tmp2.x.w = 0;
+//; recycle($tmp2.x);
+//; recycle($tmp2);
 // TODO disabled: should raise E_INVARG, instead
 //      relbox: panics with DatabaseError("Tuple not found") at crates/values/src/model/mod.rs:124:17
 //      wiretiger: doesn't raise

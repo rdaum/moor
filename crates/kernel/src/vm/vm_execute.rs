@@ -612,7 +612,7 @@ impl VM {
                         }
                         Err(e) => {
                             debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                            return self.push_error(state, e.to_error_code());
+                            return self.push_error(state, e.to_error_code().unwrap());
                         }
                     };
                 }
@@ -637,7 +637,7 @@ impl VM {
                         }
                         Err(e) => {
                             debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                            return self.push_error(state, e.to_error_code());
+                            return self.push_error(state, e.to_error_code().unwrap());
                         }
                     };
                 }
@@ -666,7 +666,7 @@ impl VM {
                             return ExecutionResult::RollbackRestart
                         }
                         Err(e) => {
-                            return self.push_error(state, e.to_error_code());
+                            return self.push_error(state, e.to_error_code().unwrap());
                         }
                     }
                 }

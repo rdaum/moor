@@ -14,9 +14,10 @@
 
 use bytes::Bytes;
 use daumtils::SliceRef;
-use moor_db::{RelationalError, RelationalTransaction};
-use moor_values::model::{CommitResult, ValSet};
-use moor_values::{AsByteBuffer, EncodingError};
+use moor_db::RelationalTransaction;
+use moor_values::model::{CommitResult, RelationalError, ValSet};
+use moor_values::AsByteBuffer;
+use moor_values::EncodingError;
 use relbox::{RelationError, Transaction};
 use std::fmt::Debug;
 

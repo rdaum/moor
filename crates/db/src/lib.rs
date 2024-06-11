@@ -32,7 +32,7 @@ pub mod worldstate_transaction;
 
 mod worldstate_tests;
 
-pub use relational_transaction::{RelationalError, RelationalTransaction};
+pub use relational_transaction::RelationalTransaction;
 pub use relational_worldstate::RelationalWorldStateTransaction;
 pub use worldstate_tables::{WorldStateSequence, WorldStateTable};
 pub use worldstate_tests::*;

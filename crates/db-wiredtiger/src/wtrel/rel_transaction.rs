@@ -16,8 +16,8 @@ use std::fmt::Debug;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 
-use moor_db::{RelationalError, RelationalTransaction};
-use moor_values::model::{CommitResult, ValSet};
+use moor_db::RelationalTransaction;
+use moor_values::model::{CommitResult, RelationalError, ValSet};
 use moor_values::AsByteBuffer;
 
 use crate::bindings::FormatType::RawByte;

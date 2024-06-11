@@ -14,6 +14,7 @@
 
 use std::sync::Arc;
 
+use moor_values::model::RelationalError;
 use tracing::{debug, error, trace};
 
 use moor_compiler::offset_for_builtin;
@@ -198,6 +199,15 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+    if matches!(
+        bf_args.world_state.valid(*obj),
+        Ok(false)
+            | Err(WorldStateError::DatabaseError(
+                RelationalError::NotFound { .. }
+            ))
+    ) {
+        return Err(BfErr::Code(E_INVARG));
+    }
 
     // Before actually recycling the object, we need to move all its contents to #-1. While
     // `recycle_object` will actually do this, we need to make sure :exitfunc is called on each
