@@ -22,7 +22,7 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use moor_compiler::compile;
-use moor_db_relbox::RelBoxWorldState;
+use moor_db_wiredtiger::WiredTigerDB;
 use moor_kernel::tasks::scheduler::AbortLimitReason;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::vm_host::{VMHostResponse, VmHost};
@@ -35,8 +35,8 @@ use moor_values::util::BitEnum;
 use moor_values::var::Var;
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
-fn create_worldstate() -> RelBoxWorldState {
-    let (ws_source, _) = RelBoxWorldState::open(None, 1 << 24);
+fn create_worldstate() -> WiredTigerDB {
+    let (ws_source, _) = WiredTigerDB::open(None);
     let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
         .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
@@ -83,7 +83,7 @@ pub fn prepare_call_verb(
 }
 
 fn prepare_vm_execution(
-    ws_source: &mut RelBoxWorldState,
+    ws_source: &mut dyn WorldStateSource,
     program: &str,
     max_ticks: usize,
 ) -> VmHost {
