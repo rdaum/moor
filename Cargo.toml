@@ -7,7 +7,6 @@ members = [
     "crates/kernel",
     "crates/db",
     "crates/db-wiredtiger",
-    "crates/relbox",
     "crates/db-relbox",
     "crates/rpc-common",
     "crates/rpc-sync-client",
@@ -90,6 +89,7 @@ cmake = "0.1"
 criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
 dashmap = "5.5"
+daumtils = { git = "https://github.com/rdaum/daumtils.git" }
 decorum = "0.3"                                             # For ordering & comparing our floats
 enum-primitive-derive = "0.3"
 fast-counter = "1.0"
@@ -136,6 +136,7 @@ io-uring = "0.6"
 libc = "0.2"
 okaywal = "0.3"
 text_io = "0.1"          # Used for reading text dumps.
+relbox = { git = "https://github.com/rdaum/Relbox.git" }
 
 # Dev dependencies
 tempfile = "3.10"

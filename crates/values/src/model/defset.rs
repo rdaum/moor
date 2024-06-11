@@ -14,9 +14,9 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
-use crate::util::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
+use daumtils::SliceRef;
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};

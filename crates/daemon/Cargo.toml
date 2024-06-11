@@ -12,7 +12,7 @@ keywords.workspace = true
 readme.workspace = true
 
 [dependencies]
-relbox = { path = "../relbox", optional = true }
+relbox = { workspace = true, optional = true }
 moor-db-relbox = { path = "../db-relbox", optional = true }
 
 moor-db = { path = "../db" }
@@ -28,6 +28,7 @@ strum.workspace = true
 
 # General.
 bincode.workspace = true
+daumtils.workspace = true
 signal-hook.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true

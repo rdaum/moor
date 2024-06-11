@@ -14,10 +14,10 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
-use crate::util::SliceRef;
 use crate::var::Objid;
 use crate::AsByteBuffer;
 use bytes::BufMut;
+use daumtils::SliceRef;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::collections::HashSet;

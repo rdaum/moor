@@ -15,6 +15,7 @@ readme.workspace = true
 binary-layout.workspace = true
 bincode.workspace = true
 bytes.workspace = true
+daumtils.workspace = true
 decorum.workspace = true
 enum-primitive-derive.workspace = true
 itertools.workspace = true

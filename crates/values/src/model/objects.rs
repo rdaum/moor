@@ -17,9 +17,10 @@ use std::fmt::{Display, Formatter};
 
 use crate::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
 use bincode::{Decode, Encode};
+use daumtils::SliceRef;
 use enum_primitive_derive::Primitive;
 
-use crate::util::{BitEnum, SliceRef};
+use crate::util::BitEnum;
 use crate::var::Objid;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]

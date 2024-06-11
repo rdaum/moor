@@ -14,9 +14,9 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::verbdef::VerbDef;
-use crate::util::SliceRef;
 use crate::AsByteBuffer;
 use bytes::BufMut;
+use daumtils::SliceRef;
 use std::convert::TryInto;
 
 /// The binding of both a `VerbDef` and the binary (program) associated with it.

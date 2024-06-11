@@ -14,6 +14,7 @@
 
 #[cfg(test)]
 mod test {
+    use daumtils::SliceRef;
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
@@ -24,7 +25,6 @@ mod test {
     use moor_values::model::WorldStateSource;
     use moor_values::model::{CommitResult, ValSet};
     use moor_values::model::{HasUuid, Named};
-    use moor_values::util::SliceRef;
     use moor_values::var::Objid;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
     use std::collections::BTreeSet;
