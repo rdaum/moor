@@ -14,6 +14,7 @@
 
 use bincode::{Decode, Encode};
 use std::time::SystemTime;
+use strum::Display;
 
 use crate::AsByteBuffer;
 use thiserror::Error;
@@ -200,4 +201,11 @@ pub enum CommandError {
     DatabaseError(#[source] WorldStateError),
     #[error("Permission denied")]
     PermissionDenied,
+}
+
+#[derive(Debug, Clone, Error, Decode, Encode, PartialEq, Display)]
+pub enum VerbProgramError {
+    NoVerbToProgram,
+    CompilationError(Vec<String>),
+    DatabaseError,
 }

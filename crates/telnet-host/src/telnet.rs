@@ -28,7 +28,7 @@ use tokio_util::codec::{Framed, LinesCodec};
 use tracing::{debug, error, info, trace};
 use uuid::Uuid;
 
-use moor_values::model::CommandError;
+use moor_values::model::{CommandError, VerbProgramError};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use rpc_async_client::pubsub_client::{broadcast_recv, narrative_recv};
@@ -49,6 +49,17 @@ pub(crate) struct TelnetConnection {
     client_token: ClientToken,
     write: SplitSink<Framed<TcpStream, LinesCodec>, String>,
     read: SplitStream<Framed<TcpStream, LinesCodec>>,
+}
+
+/// The input modes the telnet session can be in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum LineMode {
+    /// Typical command input mode.
+    Input,
+    /// Waiting for a reply to a prompt.
+    WaitingReply(u128),
+    /// Spooling up .program input.
+    SpoolingProgram(String, String),
 }
 
 impl TelnetConnection {
@@ -165,7 +176,8 @@ impl TelnetConnection {
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
     ) -> Result<(), eyre::Error> {
-        let mut expecting_input_reply = None;
+        let mut line_mode = LineMode::Input;
+        let mut program_input = vec![];
         loop {
             select! {
                 line = self.read.next() => {
@@ -175,18 +187,71 @@ impl TelnetConnection {
                     };
                     let line = line.unwrap();
 
-                    // Are we expecting to respond to prompt input? If so, send this through to that.
-                    let response = match expecting_input_reply.take() {
-                        Some(input_reply_id) => {
-                            rpc_client.make_rpc_call(self.client_id, RpcRequest::RequestedInput(self.client_token.clone(), auth_token.clone(), input_reply_id, line)).await?
-                        }
-                        None => {
+                    let response = match line_mode.clone() {
+                        LineMode::Input => {
+                            // If the line is .program <verb> ... then we need to start spooling up a program.
+                            // But we do need to do some very basic parsing to get the target and verb and reject complete nonsense.
+                            // Note that LambdaMOO is more fussy and the server validates the object and verb etc. before accepting the program.
+                            if line.starts_with(".program") {
+                                let words = parse_into_words(&line);
+                                let usage_msg = "Usage: .program <target>:<verb>";
+                                if words.len() != 2 {
+                                    self.write.send(usage_msg.to_string()).await?;
+                                    continue
+                                }
+                                let verb_spec = words[1].split(':').collect::<Vec<_>>();
+                                if verb_spec.len() != 2 {
+                                    self.write.send(usage_msg.to_string()).await?;
+                                    continue
+                                }
+                                let target = verb_spec[0].to_string();
+                                let verb = verb_spec[1].to_string();
+
+                                // verb must be a valid identifier
+                                if !verb.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                                    self.write.send("You must specify a verb; use the format object:verb.".to_string()).await?;
+                                    continue
+                                }
+
+                                // target should be a valid object #number, $objref, ident, or
+                                //  a string inside quotes
+                                if !target.starts_with('$') && !target.starts_with('#') && !target.starts_with('"') && !target.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                                    self.write.send("You must specify a target; use the format object:verb.".to_string()).await?;
+                                    continue
+                                }
+
+                                self.write.send(format!("Now programming {}. Use \".\" to end.", words[1])).await?;
+
+                                line_mode = LineMode::SpoolingProgram(target, verb);
+                                continue
+                            }
+
                             // If the line begins with the out of band prefix, then send it that way,
                             // instead. And really just fire and forget.
                             if line.starts_with(OUT_OF_BAND_PREFIX) {
                                 rpc_client.make_rpc_call(self.client_id, RpcRequest::OutOfBand(self.client_token.clone(), auth_token.clone(), line)).await?
                             } else {
                                 rpc_client.make_rpc_call(self.client_id, RpcRequest::Command(self.client_token.clone(), auth_token.clone(), line)).await?
+                            }
+                        },
+                        // Are we expecting to respond to prompt input? If so, send this through to that, and switch the mode back to input
+                        LineMode::WaitingReply(ref input_reply_id) => {
+                            line_mode = LineMode::Input;
+                            rpc_client.make_rpc_call(self.client_id, RpcRequest::RequestedInput(self.client_token.clone(), auth_token.clone(), *input_reply_id, line)).await?
+
+                        }
+                        LineMode::SpoolingProgram(target, verb) => {
+                            // If the line is "." that means we're done, and we can send the program off and switch modes back.
+                            if line == "." {
+                                line_mode = LineMode::Input;
+
+                                // Clear the program input, and send it off.
+                                let code = std::mem::take(&mut program_input);
+                                rpc_client.make_rpc_call(self.client_id, RpcRequest::Program(self.client_token.clone(), auth_token.clone(), target, verb, code)).await?
+                            } else {
+                                // Otherwise, we're still spooling up the program, so just keep spooling.
+                                program_input.push(line);
+                                continue
                             }
                         }
                     };
@@ -208,8 +273,21 @@ impl TelnetConnection {
                         RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
                             self.write.send("You can't do that.".to_string()).await?;
                         }
+                        RpcResult::Failure(RpcRequestError::VerbProgramFailed(VerbProgramError::CompilationError(lines))) => {
+                            for line in lines {
+                                self.write.send(line).await?;
+                            }
+                            self.write.send("Verb not programmed.".to_string()).await?;
+                        }
+                        RpcResult::Failure(RpcRequestError::VerbProgramFailed(_)) => {
+                            self.write.send("That object does not have that verb definition.".to_string()).await?;
+                        }
                         RpcResult::Failure(e) => {
                             error!("Unhandled RPC error: {:?}", e);
+                            continue;
+                        }
+                        RpcResult::Success(RpcResponse::ProgramSuccess(o, verb)) => {
+                            self.write.send(format!("0 error(s).\nVerb {} programmed on object {}", verb, o)).await?;
                             continue;
                         }
                         RpcResult::Success(s) => {
@@ -239,7 +317,7 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::RequestInput(request_id) => {
                             // Server is requesting that the next line of input get sent through as a response to this request.
-                            expecting_input_reply = Some(request_id);
+                            line_mode = LineMode::WaitingReply(request_id);
                         }
                         ConnectionEvent::Disconnect() => {
                             self.write.send("** Disconnected **".to_string()).await.expect("Unable to send disconnect message to client");

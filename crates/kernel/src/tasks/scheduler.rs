@@ -33,20 +33,23 @@ use std::thread::yield_now;
 use moor_compiler::compile;
 use moor_compiler::CompileError;
 use moor_db::Database;
-use moor_values::model::CommandError;
-use moor_values::model::Perms;
-use moor_values::model::WorldStateSource;
+use moor_values::model::{BinaryType, CommandError, HasUuid, VerbAttrs};
+use moor_values::model::{CommitResult, Perms};
+use moor_values::model::{VerbProgramError, WorldStateSource};
 use moor_values::var::Error::{E_INVARG, E_PERM};
 use moor_values::var::{v_err, v_int, v_none, v_string, Var};
 use moor_values::var::{Objid, Variant};
-use moor_values::SYSTEM_OBJECT;
+use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use SchedulerError::{
-    CommandExecutionError, CouldNotStartTask, EvalCompilationError, InputRequestNotFound,
+    CommandExecutionError, CompilationError, CouldNotStartTask, InputRequestNotFound,
     TaskAbortedCancelled, TaskAbortedError, TaskAbortedException, TaskAbortedLimit,
 };
 
 use crate::config::Config;
-use crate::tasks::scheduler::SchedulerError::TaskNotFound;
+use crate::matching::match_env::MatchEnvironmentParseMatcher;
+use crate::matching::ws_match_env::WsMatchEnv;
+use crate::tasks::command_parse::ParseMatcher;
+use crate::tasks::scheduler::SchedulerError::{TaskNotFound, VerbProgramFailed};
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskControlMsg, TaskStart};
@@ -56,6 +59,9 @@ use crate::vm::Fork;
 use crate::vm::UncaughtException;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
+
+/// Number of times to retry a program compilation transaction in case of conflict, before giving up.
+const NUM_VERB_PROGRAM_ATTEMPTS: usize = 5;
 
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
@@ -93,8 +99,8 @@ pub enum SchedulerError {
     InputRequestNotFound(u128),
     #[error("Could not start task (internal error)")]
     CouldNotStartTask,
-    #[error("Eval compilation error")]
-    EvalCompilationError(#[source] CompileError),
+    #[error("Compilation error")]
+    CompilationError(#[source] CompileError),
     #[error("Could not start command")]
     CommandExecutionError(#[source] CommandError),
     #[error("Task aborted due to limit: {0:?}")]
@@ -105,6 +111,8 @@ pub enum SchedulerError {
     TaskAbortedException(#[source] UncaughtException),
     #[error("Task aborted due to cancellation.")]
     TaskAbortedCancelled,
+    #[error("Unable to program verb {0}")]
+    VerbProgramFailed(VerbProgramError),
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -328,7 +336,7 @@ impl Scheduler {
         // Compile the text into a verb.
         let binary = match compile(code.as_str()) {
             Ok(b) => b,
-            Err(e) => return Err(EvalCompilationError(e)),
+            Err(e) => return Err(CompilationError(e)),
         };
 
         let task_start = TaskStart::StartEval {
@@ -345,6 +353,73 @@ impl Scheduler {
             perms,
             false,
         )
+    }
+
+    /// Start a transaction, match the object name and verb name, and if it exists and the
+    /// permissions are correct, program the verb with the given code.
+    pub fn program_verb(
+        &self,
+        player: Objid,
+        perms: Objid,
+        object_name: String,
+        verb_name: String,
+        code: Vec<String>,
+    ) -> Result<(Objid, String), SchedulerError> {
+        let db = self.database.clone().world_state_source().unwrap();
+        for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
+            let mut tx = db.new_world_state().unwrap();
+
+            let match_env = WsMatchEnv {
+                ws: tx.as_mut(),
+                perms,
+            };
+            let matcher = MatchEnvironmentParseMatcher {
+                env: match_env,
+                player,
+            };
+            let Ok(Some(o)) = matcher.match_object(&object_name) else {
+                let _ = tx.rollback();
+                return Err(CommandExecutionError(CommandError::NoObjectMatch));
+            };
+
+            let vi = tx
+                .find_method_verb_on(perms, o, &verb_name)
+                .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
+
+            if vi.verbdef().location() != o {
+                let _ = tx.rollback();
+                return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
+            }
+
+            let program = compile(code.join("\n").as_str()).map_err(|e| {
+                VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
+            })?;
+
+            // Now we have a program, we need to encode it.
+            let binary = program
+                .with_byte_buffer(|d| Vec::from(d))
+                .expect("Failed to encode program byte stream");
+            // Now we can update the verb.
+            let update_attrs = VerbAttrs {
+                definer: None,
+                owner: None,
+                names: None,
+                flags: None,
+                args_spec: None,
+                binary_type: Some(BinaryType::LambdaMoo18X),
+                binary: Some(binary),
+            };
+            tx.update_verb_with_id(perms, o, vi.verbdef().uuid(), update_attrs)
+                .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
+
+            let commit_result = tx.commit().unwrap();
+            if commit_result == CommitResult::Success {
+                return Ok((o, verb_name));
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        error!("Could not commit transaction after {NUM_VERB_PROGRAM_ATTEMPTS} tries.");
+        Err(VerbProgramFailed(VerbProgramError::DatabaseError))
     }
 
     pub fn submit_shutdown(
