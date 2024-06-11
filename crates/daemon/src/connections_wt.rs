@@ -27,10 +27,10 @@ use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
 use tracing::{error, warn};
 use uuid::Uuid;
 
+use daumtils::SliceRef;
 use moor_db_wiredtiger::{WiredTigerRelDb, WiredTigerRelTransaction, WiredTigerRelation};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::model::{CommitResult, ValSet};
-use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
 use rpc_common::RpcRequestError;

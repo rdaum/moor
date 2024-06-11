@@ -12,10 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::util::SliceRef;
 use bincode::enc::write::Writer;
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
+use daumtils::SliceRef;
 use lazy_static::lazy_static;
 
 #[derive(Debug, thiserror::Error)]

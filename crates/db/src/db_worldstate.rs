@@ -14,6 +14,7 @@
 
 use uuid::Uuid;
 
+use daumtils::SliceRef;
 use moor_values::model::HasUuid;
 use moor_values::model::ObjSet;
 use moor_values::model::Perms;
@@ -28,7 +29,6 @@ use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
-use moor_values::util::SliceRef;
 use moor_values::var::Variant;
 use moor_values::var::{v_int, v_objid, Var};
 use moor_values::var::{v_listv, Objid};
@@ -57,7 +57,10 @@ impl DbTxWorldState {
         perms.check_verb_allows(verbdef.owner(), verbdef.flags(), VerbFlag::Write)?;
 
         // If the verb code is being altered, a programmer or wizard bit is required.
-        if verb_attrs.binary.is_some() && !perms.check_is_wizard()? && !perms.flags.contains(ObjFlag::Programmer) {
+        if verb_attrs.binary.is_some()
+            && !perms.check_is_wizard()?
+            && !perms.flags.contains(ObjFlag::Programmer)
+        {
             return Err(WorldStateError::VerbPermissionDenied);
         }
 

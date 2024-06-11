@@ -16,7 +16,7 @@
 
 use std::rc::Rc;
 
-use moor_values::util::SliceRef;
+use daumtils::SliceRef;
 use moor_values::AsByteBuffer;
 
 use crate::bindings::FormatType::RawByte;

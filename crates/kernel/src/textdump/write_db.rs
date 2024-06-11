@@ -14,13 +14,13 @@
 
 use std::collections::BTreeMap;
 
+use daumtils::SliceRef;
 use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
 use moor_values::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
-use moor_values::util::SliceRef;
 use moor_values::var::v_none;
 use moor_values::var::Objid;
 use moor_values::{AsByteBuffer, NOTHING};

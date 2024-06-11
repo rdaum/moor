@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use daumtils::{BitArray, Bitset16, SliceRef};
 use moor_values::var::v_empty_str;
 use moor_values::NOTHING;
 use uuid::Uuid;
@@ -21,7 +22,7 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::util::{BitArray, BitEnum, Bitset16, SliceRef};
+use moor_values::util::BitEnum;
 use moor_values::var::Error::E_VARNF;
 use moor_values::var::Objid;
 use moor_values::var::{v_empty_list, v_int, v_none, v_objid, v_str, v_string, Var, VarType};

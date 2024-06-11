@@ -18,12 +18,11 @@ tempfile.workspace = true
 moor-values = { path = "../values" }
 moor-db = { path = "../db" }
 
-relbox = { path = "../relbox" }
+relbox.workspace = true
 
 ## General usefulness
 strum.workspace = true
 uuid.workspace = true
-
 
 ## Logging & tracing
 tracing.workspace = true

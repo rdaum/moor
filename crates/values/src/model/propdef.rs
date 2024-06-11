@@ -14,11 +14,11 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
-use crate::util::SliceRef;
 use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
 use bytes::{Buf, BufMut};
+use daumtils::SliceRef;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -143,9 +143,9 @@ mod tests {
     use crate::model::defset::HasUuid;
     use crate::model::propdef::{PropDef, PropDefs};
     use crate::model::ValSet;
-    use crate::util::SliceRef;
     use crate::var::Objid;
     use crate::AsByteBuffer;
+    use daumtils::SliceRef;
     use uuid::Uuid;
 
     #[test]
