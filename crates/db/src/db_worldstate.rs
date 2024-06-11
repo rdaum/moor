@@ -45,6 +45,25 @@ impl DbTxWorldState {
         let flags = self.flags_of(who)?;
         Ok(Perms { who, flags })
     }
+
+    fn do_update_verb(
+        &self,
+        obj: Objid,
+        perms: Objid,
+        verbdef: &VerbDef,
+        verb_attrs: VerbAttrs,
+    ) -> Result<(), WorldStateError> {
+        let perms = self.perms(perms)?;
+        perms.check_verb_allows(verbdef.owner(), verbdef.flags(), VerbFlag::Write)?;
+
+        // If the verb code is being altered, a programmer or wizard bit is required.
+        if verb_attrs.binary.is_some() && !perms.check_is_wizard()? && !perms.flags.contains(ObjFlag::Programmer) {
+            return Err(WorldStateError::VerbPermissionDenied);
+        }
+
+        self.tx.update_verb(obj, verbdef.uuid(), verb_attrs)?;
+        Ok(())
+    }
 }
 
 impl WorldState for DbTxWorldState {
@@ -493,10 +512,7 @@ impl WorldState for DbTxWorldState {
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
         let vh = self.tx.get_verb_by_name(obj, vname.to_string())?;
-        self.perms(perms)?
-            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
-        self.tx.update_verb(obj, vh.uuid(), verb_attrs)?;
-        Ok(())
+        self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
     fn update_verb_at_index(
@@ -507,10 +523,7 @@ impl WorldState for DbTxWorldState {
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
         let vh = self.tx.get_verb_by_index(obj, vidx)?;
-        self.perms(perms)?
-            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
-        self.tx.update_verb(obj, vh.uuid(), verb_attrs)?;
-        Ok(())
+        self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
     fn update_verb_with_id(
@@ -524,10 +537,7 @@ impl WorldState for DbTxWorldState {
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj, uuid.to_string()))?;
-        self.perms(perms)?
-            .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Write)?;
-        self.tx.update_verb(obj, vh.uuid(), verb_attrs)?;
-        Ok(())
+        self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
     #[tracing::instrument(skip(self))]
