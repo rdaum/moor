@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Once},
 };
 
-use common::{create_relbox_db, create_wiredtiger_db, testsuite_dir, NONPROGRAMMER, PROGRAMMER};
+use common::{create_wiredtiger_db, testsuite_dir, NONPROGRAMMER, PROGRAMMER};
 use eyre::Context;
 use moor_db::Database;
 use moor_kernel::{
@@ -25,6 +25,9 @@ use moor_values::var::{v_none, Objid};
 use pretty_assertions::assert_eq;
 
 use crate::common::WIZARD;
+
+#[cfg(feature = "relbox")]
+use common::create_relbox_db;
 
 #[derive(Clone, Copy, Debug)]
 enum CommandKind {
@@ -252,16 +255,17 @@ impl MootState {
     }
 }
 
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as relbox => test_relbox }
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
-
+#[cfg(feature = "relbox")]
 fn test_relbox(path: &Path) {
     test(create_relbox_db(), path);
 }
+#[cfg(feature = "relbox")]
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as relbox => test_relbox }
 
 fn test_wiredtiger(path: &Path) {
     test(create_wiredtiger_db(), path);
 }
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
 
 #[allow(dead_code)]
 static LOGGING_INIT: Once = Once::new();
@@ -321,5 +325,5 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_relbox(&testsuite_dir().join("moot/single.moot"));
+    test_wiredtiger(&testsuite_dir().join("moot/single.moot"));
 }

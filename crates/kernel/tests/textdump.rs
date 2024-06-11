@@ -17,7 +17,6 @@ mod test {
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
-    use moor_db_relbox::RelBoxWorldState;
     use moor_db_wiredtiger::WiredTigerWorldState;
     use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
     use moor_values::model::VerbArgsSpec;
@@ -265,7 +264,7 @@ mod test {
         let textdump = write_textdump(db1.clone(), "** LambdaMOO Database, Format Version 4 **");
 
         // Now load that same core back in to a new DB, and hope we don't blow up anywhere.
-        let (db2, _) = RelBoxWorldState::open(None, 1 << 34);
+        let (db2, _) = WiredTigerWorldState::open(None);
         let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
         let mut lc = db2.clone().loader_client().unwrap();

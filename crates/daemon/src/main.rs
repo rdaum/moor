@@ -22,7 +22,6 @@ use ed25519_dalek::SigningKey;
 use eyre::Report;
 
 use moor_db::DatabaseFlavour;
-use moor_db_relbox::RelBoxDatabaseBuilder;
 use pem::Pem;
 use rand::rngs::OsRng;
 use rusty_paseto::core::Key;
@@ -35,7 +34,12 @@ use moor_kernel::textdump::textdump_load;
 
 use crate::rpc_server::zmq_loop;
 
+#[cfg(feature = "relbox")]
+use moor_db_relbox::RelBoxDatabaseBuilder;
+
 mod connections;
+
+#[cfg(feature = "relbox")]
 mod connections_rb;
 mod connections_wt;
 mod rpc_server;
@@ -231,6 +235,7 @@ fn main() -> Result<(), Report> {
             info!(path = ?args.db, "Opened database");
             (db_source, freshly_made)
         }
+        #[cfg(feature = "relbox")]
         DatabaseFlavour::RelBox => {
             let db_source_builder = RelBoxDatabaseBuilder::new()
                 .with_path(args.db.clone())

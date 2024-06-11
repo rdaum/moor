@@ -51,9 +51,11 @@ use rpc_common::{
 };
 
 use crate::connections::ConnectionsDB;
-use crate::connections_rb::ConnectionsRb;
 use crate::connections_wt::ConnectionsWT;
 use crate::rpc_session::RpcSession;
+
+#[cfg(feature = "relbox")]
+use crate::connections_rb::ConnectionsRb;
 
 pub struct RpcServer {
     keypair: Key<64>,
@@ -93,6 +95,7 @@ impl RpcServer {
             .expect("Unable to bind ZMQ PUB socket");
         let connections: Arc<dyn ConnectionsDB + Send + Sync> = match db_flavor {
             DatabaseFlavour::WiredTiger => Arc::new(ConnectionsWT::new(Some(connections_db_path))),
+            #[cfg(feature = "relbox")]
             DatabaseFlavour::RelBox => Arc::new(ConnectionsRb::new(Some(connections_db_path))),
         };
         info!(

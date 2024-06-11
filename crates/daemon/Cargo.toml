@@ -12,9 +12,10 @@ keywords.workspace = true
 readme.workspace = true
 
 [dependencies]
-relbox = { path = "../relbox" }
+relbox = { path = "../relbox", optional = true }
+moor-db-relbox = { path = "../db-relbox", optional = true }
+
 moor-db = { path = "../db" }
-moor-db-relbox = { path = "../db-relbox" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
@@ -46,3 +47,6 @@ ed25519-dalek.workspace = true
 pem.workspace = true
 rand.workspace = true
 rusty_paseto.workspace = true
+
+[features]
+relbox = ["dep:moor-db-relbox", "dep:relbox", "moor-db/relbox"]

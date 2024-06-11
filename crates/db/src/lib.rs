@@ -47,6 +47,7 @@ pub enum DatabaseFlavour {
     WiredTiger,
     /// In-house in-memory MVCC transactional store based on copy-on-write hashes and trees and
     /// custom buffer pool management. Consider experimental.
+    #[cfg(feature = "relbox")]
     RelBox,
 }
 
@@ -54,6 +55,7 @@ impl From<&str> for DatabaseFlavour {
     fn from(s: &str) -> Self {
         match s {
             "wiredtiger" => DatabaseFlavour::WiredTiger,
+            #[cfg(feature = "relbox")]
             "relbox" => DatabaseFlavour::RelBox,
             _ => panic!("Unknown database flavour: {}", s),
         }

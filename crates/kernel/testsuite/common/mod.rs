@@ -15,7 +15,7 @@
 use moor_compiler::compile;
 use moor_compiler::Program;
 use moor_db::Database;
-use moor_db_relbox::RelBoxWorldState;
+
 use moor_db_wiredtiger::WiredTigerWorldState;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
@@ -33,6 +33,9 @@ use pretty_assertions::assert_eq;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
+
+#[cfg(feature = "relbox")]
+use moor_db_relbox::RelBoxWorldState;
 
 #[allow(dead_code)]
 pub const WIZARD: Objid = Objid(3);
@@ -53,6 +56,7 @@ pub fn load_textdump(db: Arc<dyn Database>) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
+#[cfg(feature = "relbox")]
 pub fn create_relbox_db() -> Arc<dyn Database + Send + Sync> {
     let (db, _) = RelBoxWorldState::open(None, 1 << 30);
     let db = Arc::new(db);

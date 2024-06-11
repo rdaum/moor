@@ -17,6 +17,20 @@ members = [
     "crates/web-host",
     "crates/console-host",
 ]
+default-members = [
+    "crates/values",
+    "crates/compiler",
+    "crates/kernel",
+    "crates/db",
+    "crates/db-wiredtiger",
+    "crates/rpc-common",
+    "crates/rpc-sync-client",
+    "crates/rpc-async-client",
+    "crates/daemon",
+    "crates/telnet-host",
+    "crates/web-host",
+    "crates/console-host",
+]
 
 [workspace.package]
 edition = "2021"
