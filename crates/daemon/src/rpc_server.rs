@@ -797,9 +797,7 @@ impl RpcServer {
             .program_verb(connection, connection, object, verb, code)
         {
             Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb)),
-            Err(SchedulerError::VerbProgramFailed(e)) => {
-                Err(RpcRequestError::VerbProgramFailed(e))
-            }
+            Err(SchedulerError::VerbProgramFailed(e)) => Err(RpcRequestError::VerbProgramFailed(e)),
             Err(e) => {
                 error!(error = ?e, "Error processing increment");
 
