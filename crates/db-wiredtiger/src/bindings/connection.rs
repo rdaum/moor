@@ -16,6 +16,7 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr::null;
+use std::sync::Arc;
 
 use tracing::info;
 
@@ -34,7 +35,7 @@ unsafe impl Sync for Connection {}
 
 #[allow(dead_code)]
 impl Connection {
-    pub fn open(path: &Path, options: OpenConfig) -> Result<Self, Error> {
+    pub fn open(path: &Path, options: OpenConfig) -> Result<Arc<Self>, Error> {
         let options_string = options.as_option_string();
         let mut connection: *mut WT_CONNECTION = null::<WT_CONNECTION>() as _;
         let event_handler: *mut WT_EVENT_HANDLER = null::<WT_EVENT_HANDLER>() as _;
@@ -52,11 +53,11 @@ impl Connection {
                 return Err(Error::from_errorcode(result));
             }
         }
-        Ok(Connection { connection })
+        Ok(Arc::new(Connection { connection }))
     }
 
     /// Open a session.
-    pub fn open_session(&self, config: SessionConfig) -> Result<session::Session, u8> {
+    pub fn open_session(self: Arc<Self>, config: SessionConfig) -> Result<session::Session, u8> {
         let mut session: *mut bindings::wiredtiger::WT_SESSION =
             null::<bindings::wiredtiger::WT_SESSION>() as _;
         let config_str = config.as_config_string();
@@ -73,7 +74,10 @@ impl Connection {
         if result != 0 {
             return Err(result as u8);
         }
-        Ok(session::Session { session })
+        Ok(session::Session {
+            session,
+            _connection: self.clone(),
+        })
     }
 
     pub fn close(&self) -> Result<(), Error> {

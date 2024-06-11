@@ -372,6 +372,7 @@ mod tests {
 
         {
             let session = connection
+                .clone()
                 .open_session(session_config::SessionConfig::new())
                 .unwrap();
 
@@ -416,6 +417,7 @@ mod tests {
 
         // Now do so in a new session.
         let session = connection
+            .clone()
             .open_session(session_config::SessionConfig::new())
             .unwrap();
         session.begin_transaction(None).unwrap();
@@ -444,6 +446,7 @@ mod tests {
         let entity = DataSource::Table("test_table".to_string());
 
         let session = connection
+            .clone()
             .open_session(session_config::SessionConfig::new())
             .unwrap();
 
@@ -463,6 +466,7 @@ mod tests {
         session.commit().unwrap();
 
         let session = connection
+            .clone()
             .open_session(session_config::SessionConfig::new())
             .unwrap();
         session.begin_transaction(None).unwrap();
@@ -507,6 +511,7 @@ mod tests {
         // Now insert them in a transaction
         {
             let session = connection
+                .clone()
                 .open_session(session_config::SessionConfig::new())
                 .unwrap();
             session.begin_transaction(None).unwrap();
@@ -528,6 +533,7 @@ mod tests {
 
         // Now iterate over them
         let session = connection
+            .clone()
             .open_session(session_config::SessionConfig::new())
             .unwrap();
         session.begin_transaction(None).unwrap();

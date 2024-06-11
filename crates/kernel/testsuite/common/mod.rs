@@ -16,7 +16,7 @@ use moor_compiler::compile;
 use moor_compiler::Program;
 use moor_db::Database;
 
-use moor_db_wiredtiger::WiredTigerWorldState;
+use moor_db_wiredtiger::WiredTigerDB;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils;
@@ -65,7 +65,7 @@ pub fn create_relbox_db() -> Arc<dyn Database + Send + Sync> {
 }
 
 pub fn create_wiredtiger_db() -> Arc<dyn Database + Send + Sync> {
-    let (db, _) = WiredTigerWorldState::open(None);
+    let (db, _) = WiredTigerDB::open(None);
     let db = Arc::new(db);
     load_textdump(db.clone());
     db

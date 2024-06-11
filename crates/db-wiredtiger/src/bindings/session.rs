@@ -15,17 +15,21 @@
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::ptr::{null, null_mut};
+use std::sync::Arc;
 
 use crate::bindings::create_config::{CreateConfig, DropConfig};
 use crate::bindings::cursor::Cursor;
 use crate::bindings::session_config::{CheckpointConfig, Isolation, TransactionConfig};
 use crate::bindings::{
     cursor_config, get_error, wiredtiger::WT_CURSOR, wiredtiger::WT_EVENT_HANDLER,
-    wiredtiger::WT_SESSION, DataSource, Error, PosixError,
+    wiredtiger::WT_SESSION, Connection, DataSource, Error, PosixError,
 };
 
 pub struct Session {
     pub session: *mut WT_SESSION,
+    // We need to hold a reference count back to the connection or it can get dropped while we're
+    // still live.
+    pub(crate) _connection: Arc<Connection>,
 }
 
 #[allow(dead_code)]
@@ -287,6 +291,7 @@ mod tests {
         let options = OpenConfig::new().create(true).exclusive(true);
         let connection = Connection::open(Path::new(tmpdirpath), options).unwrap();
         let session = connection
+            .clone()
             .open_session(session_config::SessionConfig::new())
             .unwrap();
 
@@ -297,6 +302,7 @@ mod tests {
 
         // Now try with isolation level set
         let session = connection
+            .clone()
             .open_session(session_config::SessionConfig::new())
             .unwrap();
         let config = session_config::TransactionConfig::new().isolation(Isolation::ReadCommitted);

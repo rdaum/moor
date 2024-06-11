@@ -39,7 +39,7 @@ mod tests {
     use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
-    use moor_db_wiredtiger::WiredTigerWorldState;
+    use moor_db_wiredtiger::WiredTigerDB;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -54,8 +54,8 @@ mod tests {
     }
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
-    fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> WiredTigerWorldState {
-        let (state, _) = WiredTigerWorldState::open(None);
+    fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> WiredTigerDB {
+        let (state, _) = WiredTigerDB::open(None);
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
@@ -97,7 +97,7 @@ mod tests {
         state
     }
 
-    fn test_db_with_verb(verb_name: &str, program: &Program) -> WiredTigerWorldState {
+    fn test_db_with_verb(verb_name: &str, program: &Program) -> WiredTigerDB {
         test_db_with_verbs(&[(verb_name, program)])
     }
 
@@ -368,9 +368,8 @@ mod tests {
 
     fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
         let binary = compile(program).unwrap();
-        test_db_with_verb("test", &binary)
-            .new_world_state()
-            .unwrap()
+        let db = test_db_with_verb("test", &binary);
+        db.new_world_state().unwrap()
     }
 
     #[test]

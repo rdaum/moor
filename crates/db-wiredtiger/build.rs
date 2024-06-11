@@ -37,6 +37,8 @@ fn main() {
     println!("cargo:include={}/include", include_dir.display());
     println!("cargo:rustc-link-search=native={}", build.display());
     println!("cargo:rustc-link-lib=static=wiredtiger");
+    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-changed=build.rs");
 
     // Link to the generated wiredtiger library
     println!("cargo:rustc-link-lib=wiredtiger");

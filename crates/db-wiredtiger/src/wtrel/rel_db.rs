@@ -32,7 +32,7 @@ where
     TableType: WiredTigerRelation,
     TableType: Copy,
 {
-    connection: Connection,
+    connection: Arc<Connection>,
     sequence_table: TableType,
 
     /// The current value of sequences. Which are loaded on startup, and periodically flushed to
@@ -81,6 +81,7 @@ where
     pub fn create_tables(&self) {
         let session = self
             .connection
+            .clone()
             .open_session(SessionConfig::new().isolation(Isolation::Snapshot))
             .unwrap();
         session.begin_transaction(None).unwrap();
@@ -90,7 +91,11 @@ where
 
     pub fn start_tx(&self) -> WiredTigerRelTransaction<TableType> {
         let session_config = SessionConfig::new().isolation(Isolation::Snapshot);
-        let session = self.connection.open_session(session_config).unwrap();
+        let session = self
+            .connection
+            .clone()
+            .open_session(session_config)
+            .unwrap();
         let tx_config = TransactionConfig::new();
         session.begin_transaction(Some(tx_config)).unwrap();
         WiredTigerRelTransaction::new(session, self.sequences.clone())
@@ -99,6 +104,7 @@ where
     pub fn load_sequences(&self) {
         let session = self
             .connection
+            .clone()
             .open_session(SessionConfig::new().isolation(Isolation::Snapshot))
             .unwrap();
 
@@ -134,7 +140,11 @@ where
     pub fn sync_sequences(&self) {
         debug!("Syncing sequences...");
         let session_config = SessionConfig::new().isolation(Isolation::Snapshot);
-        let session = self.connection.open_session(session_config).unwrap();
+        let session = self
+            .connection
+            .clone()
+            .open_session(session_config)
+            .unwrap();
         let tx_config = TransactionConfig::new();
         session.begin_transaction(Some(tx_config)).unwrap();
         let cursor = session
