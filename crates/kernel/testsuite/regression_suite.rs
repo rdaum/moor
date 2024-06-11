@@ -13,8 +13,12 @@
 //
 
 mod common;
-use common::{create_relbox_db, create_wiredtiger_db, AssertRunAsVerb};
+use common::{create_wiredtiger_db, AssertRunAsVerb};
 
+#[cfg(feature = "relbox")]
+use crate::common::create_relbox_db;
+
+#[cfg(feature = "relbox")]
 #[test]
 fn test_testhelper_verb_redefinition_relbox() {
     let db = create_relbox_db();

@@ -10,9 +10,9 @@ rust-version.workspace = true
 categories.workspace = true
 keywords.workspace = true
 readme.workspace = true
+resolver = "2"
 
 [dev-dependencies]
-moor-db-relbox = { path = "../db-relbox" }
 moor-db-wiredtiger = { path = "../db-wiredtiger" }
 
 criterion.workspace = true
@@ -47,6 +47,9 @@ moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-values = { path = "../values" }
 
+## Should be dev-dependencies, but cargo won't allow optional dev-deps
+moor-db-relbox = { path = "../db-relbox", optional = true }
+
 ## General usefulness
 chrono.workspace = true
 crossbeam-channel.workspace = true
@@ -77,3 +80,6 @@ tracing.workspace = true
 
 # For the DB layer.
 bincode.workspace = true
+
+[features]
+relbox = ["dep:moor-db-relbox"]
