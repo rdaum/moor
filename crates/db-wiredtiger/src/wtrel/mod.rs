@@ -22,7 +22,7 @@ use moor_values::AsByteBuffer;
 use crate::bindings::FormatType::RawByte;
 use crate::bindings::{Datum, Pack, Session, Unpack};
 
-pub mod db;
+pub mod rel_db;
 pub mod rel_transaction;
 pub mod relation;
 

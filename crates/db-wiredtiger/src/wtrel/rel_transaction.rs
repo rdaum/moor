@@ -22,7 +22,7 @@ use moor_values::AsByteBuffer;
 
 use crate::bindings::FormatType::RawByte;
 use crate::bindings::{CursorConfig, Datum, Error, Pack, Session};
-use crate::wtrel::db::MAX_NUM_SEQUENCES;
+use crate::wtrel::rel_db::MAX_NUM_SEQUENCES;
 use crate::wtrel::relation::WiredTigerRelation;
 use crate::wtrel::{from_datum, to_datum};
 
@@ -588,7 +588,7 @@ mod tests {
     use moor_values::var::Objid;
     use TestRelation::{CompositeToOne, OneToOne, OneToOneSecondaryIndexed, Sequences};
 
-    use crate::wtrel::db::WiredTigerRelDb;
+    use crate::wtrel::rel_db::WiredTigerRelDb;
 
     use crate::wtrel::relation::WiredTigerRelation;
 

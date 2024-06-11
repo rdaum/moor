@@ -17,8 +17,8 @@ use std::sync::Arc;
 pub use crate::wtrel::relation::WiredTigerRelation;
 use moor_db::Database;
 
-pub use crate::worldstate::wt_worldstate::WiredTigerWorldState;
-pub use crate::wtrel::db::WiredTigerRelDb;
+pub use crate::worldstate::wt_worldstate::WiredTigerDB;
+pub use crate::wtrel::rel_db::WiredTigerRelDb;
 pub use crate::wtrel::rel_transaction::WiredTigerRelTransaction;
 
 #[allow(dead_code, unused_imports)]
@@ -43,7 +43,7 @@ impl WiredTigerDatabaseBuilder {
     /// Returns a new database instance. The second value in the result tuple is true if the
     /// database was newly created, and false if it was already present.
     pub fn open_db(&self) -> Result<(Arc<dyn Database + Send + Sync>, bool), String> {
-        let (db, fresh) = WiredTigerWorldState::open(self.path.as_ref());
+        let (db, fresh) = WiredTigerDB::open(self.path.as_ref());
         Ok((Arc::new(db), fresh))
     }
 }
