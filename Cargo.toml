@@ -82,6 +82,7 @@ tracing-test = "0.2"
 arc-swap = "1.7"
 atomic-wait = "1.1"
 binary-layout = "4.0"
+bincode = "2.0.0-rc.3"
 bindgen = "0.69"
 bytes = "1.6"
 chrono = "0.4"
@@ -129,7 +130,6 @@ paste = "1.0"
 
 # For the DB & values layer.
 crossbeam-queue = "0.3"
-bincode = "2.0.0-rc.3"   # For serializing/deserializing values
 hi_sparse_bitset = "0.6" # For buffer pool allocator in the DB
 im = "15.1"              # Immutable data structures
 io-uring = "0.6"

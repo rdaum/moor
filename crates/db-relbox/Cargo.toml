@@ -21,6 +21,7 @@ moor-db = { path = "../db" }
 relbox.workspace = true
 
 ## General usefulness
+daumtils.workspace = true
 strum.workspace = true
 uuid.workspace = true
 

@@ -12,9 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use daumtils::SliceRef;
 use moor_db::{RelationalError, RelationalTransaction};
 use moor_values::model::{CommitResult, ValSet};
-use moor_values::AsByteBuffer;
+use moor_values::{AsByteBuffer, EncodingError};
 use relbox::{RelationError, Transaction};
 use std::fmt::Debug;
 
@@ -37,6 +38,52 @@ fn err_map(e: RelationError) -> RelationalError {
     match e {
         RelationError::TupleNotFound => RelationalError::NotFound,
         _ => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Composite<DomainA: AsByteBuffer, DomainB: AsByteBuffer> {
+    bytes: SliceRef,
+    _phantom: std::marker::PhantomData<(DomainA, DomainB)>,
+}
+
+impl<DomainA: AsByteBuffer, DomainB: AsByteBuffer> Composite<DomainA, DomainB> {
+    fn new(domain_a: DomainA, domain_b: DomainB) -> Self {
+        let (a_bytes, b_bytes) = (
+            domain_a.as_sliceref().unwrap(),
+            domain_b.as_sliceref().unwrap(),
+        );
+        let mut bytes =
+            Vec::with_capacity(a_bytes.len() + b_bytes.len() + std::mem::size_of::<usize>());
+        bytes.extend_from_slice(&a_bytes.len().to_le_bytes());
+        bytes.extend_from_slice(a_bytes.as_slice());
+        bytes.extend_from_slice(b_bytes.as_slice());
+        let bytes = SliceRef::from_vec(bytes);
+        Self {
+            bytes,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn domain_a(&self) -> DomainA {
+        let bytes = self.bytes.as_slice();
+        let len = usize::from_le_bytes(bytes[..std::mem::size_of::<usize>()].try_into().unwrap());
+        let sr = self.bytes.slice(std::mem::size_of::<usize>()..len);
+        DomainA::from_sliceref(sr).expect("Failed to convert domain")
+    }
+
+    #[allow(dead_code)]
+    fn domain_b(&self) -> DomainB {
+        let bytes = self.bytes.as_slice();
+
+        let len = usize::from_le_bytes(bytes[..std::mem::size_of::<usize>()].try_into().unwrap());
+        let sr = self.bytes.slice(len + std::mem::size_of::<usize>()..);
+        DomainB::from_sliceref(sr).expect("Failed to convert domain")
+    }
+
+    fn as_sliceref(&self) -> std::result::Result<SliceRef, EncodingError> {
+        Ok(self.bytes.clone())
     }
 }
 
@@ -89,8 +136,7 @@ where
         domain_a: DomainA,
         domain_b: DomainB,
     ) -> Result<()> {
-        let mut composite = domain_a.make_copy_as_vec().unwrap();
-        composite.extend_from_slice(&domain_b.make_copy_as_vec().unwrap());
+        let composite = Composite::new(domain_a, domain_b);
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .remove_by_domain(composite.as_sliceref().unwrap())
@@ -297,8 +343,7 @@ where
         domain_a: DomainA,
         domain_b: DomainB,
     ) -> Result<Option<Codomain>> {
-        let mut composite = domain_a.make_copy_as_vec().unwrap();
-        composite.extend_from_slice(&domain_b.make_copy_as_vec().unwrap());
+        let composite = Composite::new(domain_a, domain_b);
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
@@ -323,8 +368,7 @@ where
         domain_a: DomainA,
         domain_b: DomainB,
     ) -> Result<Option<usize>> {
-        let mut composite = domain_a.make_copy_as_vec().unwrap();
-        composite.extend_from_slice(&domain_b.make_copy_as_vec().unwrap());
+        let composite = Composite::new(domain_a, domain_b);
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
@@ -347,8 +391,7 @@ where
         domain_b: DomainB,
         codomain: Codomain,
     ) -> Result<()> {
-        let mut composite = domain_a.make_copy_as_vec().unwrap();
-        composite.extend_from_slice(&domain_b.make_copy_as_vec().unwrap());
+        let composite = Composite::new(domain_a, domain_b);
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .insert_tuple(
@@ -367,8 +410,7 @@ where
         domain_a: DomainA,
         domain_b: DomainB,
     ) -> Result<()> {
-        let mut composite = domain_a.make_copy_as_vec().unwrap();
-        composite.extend_from_slice(&domain_b.make_copy_as_vec().unwrap());
+        let composite = Composite::new(domain_a, domain_b);
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .remove_by_domain(composite.as_sliceref().unwrap())
@@ -386,8 +428,7 @@ where
         domain_b: DomainB,
         value: Codomain,
     ) -> Result<()> {
-        let mut composite = domain_a.make_copy_as_vec().unwrap();
-        composite.extend_from_slice(&domain_b.make_copy_as_vec().unwrap());
+        let composite = Composite::new(domain_a, domain_b);
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .upsert_by_domain(

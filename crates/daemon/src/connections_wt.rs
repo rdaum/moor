@@ -22,7 +22,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use eyre::Error;
-use moor_db::{RelationalError, RelationalTransaction};
+use moor_db::{RelationalError, RelationalTransaction, StringHolder, SystemTimeHolder};
 use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -131,9 +131,9 @@ impl ConnectionsWT {
         let mut times = Vec::new();
         for client in clients.iter() {
             if let Some(last_activity) =
-                tx.seek_unique_by_domain::<ClientId, SystemTime>(ClientActivity, client)?
+                tx.seek_unique_by_domain::<ClientId, SystemTimeHolder>(ClientActivity, client)?
             {
-                times.push((client, last_activity));
+                times.push((client, last_activity.0));
             } else {
                 warn!(
                     ?client,
@@ -295,11 +295,12 @@ impl ConnectionsDB for ConnectionsWT {
 
             // Insert the initial tuples for the connection.
             let client_id = ClientId(client_id);
+            let now = SystemTimeHolder(SystemTime::now());
             tx.insert_tuple(ClientConnection, client_id, connection_oid)?;
-            tx.insert_tuple(ClientActivity, client_id, SystemTime::now())?;
-            tx.insert_tuple(ClientConnectTime, client_id, SystemTime::now())?;
-            tx.insert_tuple(ClientPingTime, client_id, SystemTime::now())?;
-            tx.insert_tuple(ClientName, client_id, hostname.clone())?;
+            tx.insert_tuple(ClientActivity, client_id, now.clone())?;
+            tx.insert_tuple(ClientConnectTime, client_id, now.clone())?;
+            tx.insert_tuple(ClientPingTime, client_id, now)?;
+            tx.insert_tuple(ClientName, client_id, StringHolder(hostname.clone()))?;
 
             Ok(connection_oid)
         })
@@ -309,7 +310,11 @@ impl ConnectionsDB for ConnectionsWT {
     fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {
         Ok(retry_tx_action(&self.db, |tx| {
             let client_id = ClientId(client_id);
-            tx.upsert(ClientActivity, client_id, SystemTime::now())?;
+            tx.upsert(
+                ClientActivity,
+                client_id,
+                SystemTimeHolder(SystemTime::now()),
+            )?;
             Ok(())
         })?)
     }
@@ -317,7 +322,11 @@ impl ConnectionsDB for ConnectionsWT {
     fn notify_is_alive(&self, client_id: Uuid, _connection: Objid) -> Result<(), Error> {
         Ok(retry_tx_action(&self.db, |tx| {
             let client_id = ClientId(client_id);
-            tx.upsert(ClientPingTime, client_id, SystemTime::now())?;
+            tx.upsert(
+                ClientPingTime,
+                client_id,
+                SystemTimeHolder(SystemTime::now()),
+            )?;
             Ok(())
         })?)
     }
@@ -331,10 +340,10 @@ impl ConnectionsDB for ConnectionsWT {
             // If the difference is greater than the timeout duration, then we need to remove the
             // connection from all the relations.
 
-            let expired = tx
-                .scan_with_predicate::<_, ClientId, SystemTime>(ClientPingTime, |_, ping| {
-                    *ping < timeout_threshold
-                })?;
+            let expired = tx.scan_with_predicate::<_, ClientId, SystemTimeHolder>(
+                ClientPingTime,
+                |_, ping| ping.0 < timeout_threshold,
+            )?;
 
             for expired_ping in expired.iter() {
                 let client_id = expired_ping.0;
@@ -373,14 +382,15 @@ impl ConnectionsDB for ConnectionsWT {
                 return Err(RelationalError::NotFound);
             };
             let client_id = most_recent.0;
-            let Some(name) = tx.seek_unique_by_domain::<ClientId, String>(ClientName, client_id)?
+            let Some(name) =
+                tx.seek_unique_by_domain::<ClientId, StringHolder>(ClientName, client_id)?
             else {
                 return Err(RelationalError::NotFound);
             };
             Ok(name)
         });
         match result {
-            Ok(name) => Ok(name),
+            Ok(name) => Ok(name.0),
             Err(RelationalError::NotFound) => {
                 Err(SessionError::NoConnectionForPlayer(connection_obj))
             }
@@ -400,9 +410,11 @@ impl ConnectionsDB for ConnectionsWT {
 
             let mut times: Vec<(ClientId, SystemTime)> = vec![];
             for client in clients.iter() {
-                if let Some(connect_time) = tx.seek_unique_by_domain(ClientConnectTime, client)? {
+                if let Some(connect_time) =
+                    tx.seek_unique_by_domain::<_, SystemTimeHolder>(ClientConnectTime, client)?
+                {
                     {
-                        times.push((client, connect_time));
+                        times.push((client, connect_time.0));
                     }
                 }
             }

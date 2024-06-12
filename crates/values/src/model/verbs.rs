@@ -116,7 +116,7 @@ impl LayoutAs<u8> for BinaryType {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
     pub owner: Option<Objid>,

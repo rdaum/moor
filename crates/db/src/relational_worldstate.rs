@@ -1,5 +1,8 @@
 use crate::worldstate_transaction::WorldStateTransaction;
-use crate::{RelationalError, RelationalTransaction, WorldStateSequence, WorldStateTable};
+use crate::{
+    BytesHolder, RelationalError, RelationalTransaction, StringHolder, UUIDHolder,
+    WorldStateSequence, WorldStateTable,
+};
 use moor_values::model::{
     BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs,
     PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
@@ -136,19 +139,21 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     }
 
     fn get_object_name(&self, obj: Objid) -> Result<String, WorldStateError> {
-        self.tx
+        let sh: StringHolder = self
+            .tx
             .as_ref()
             .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectName, obj)
             .map_err(err_map)?
-            .ok_or(WorldStateError::ObjectNotFound(obj))
+            .ok_or(WorldStateError::ObjectNotFound(obj))?;
+        Ok(sh.0)
     }
 
     fn set_object_name(&self, obj: Objid, name: String) -> Result<(), WorldStateError> {
         self.tx
             .as_ref()
             .unwrap()
-            .upsert(WorldStateTable::ObjectName, obj, name)
+            .upsert(WorldStateTable::ObjectName, obj, StringHolder(name))
             .map_err(err_map)
     }
 
@@ -177,7 +182,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         self.tx
             .as_ref()
             .unwrap()
-            .upsert(WorldStateTable::ObjectName, id, name)
+            .upsert(WorldStateTable::ObjectName, id, StringHolder(name))
             .expect("Unable to insert initial name");
 
         // We use our own setters for these, since there's biz-logic attached here...
@@ -250,7 +255,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .delete_composite_if_exists(
                     WorldStateTable::ObjectPropertyValue,
                     obj,
-                    p.uuid().to_bytes_le(),
+                    UUIDHolder(p.uuid()),
                 )
                 .unwrap_or(());
         }
@@ -311,7 +316,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                         .delete_composite_if_exists(
                             WorldStateTable::ObjectPropertyValue,
                             o,
-                            p.uuid().to_bytes_le(),
+                            UUIDHolder(p.uuid()),
                         )
                         .expect("Unable to delete property");
                 }
@@ -348,7 +353,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                             .delete_composite_if_exists(
                                 WorldStateTable::ObjectPropertyValue,
                                 c,
-                                p.uuid().to_bytes_le(),
+                                UUIDHolder(p.uuid()),
                             )
                             .expect("Unable to delete property");
                     }
@@ -408,7 +413,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                             .seek_by_unique_composite_domain::<_, _, PropPerms>(
                                 WorldStateTable::ObjectPropertyPermissions,
                                 a,
-                                p.uuid().to_bytes_le(),
+                                UUIDHolder(p.uuid()),
                             )
                             .map_err(err_map)?
                             .expect("Unable to get property permissions");
@@ -428,7 +433,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     .upsert_composite(
                         WorldStateTable::ObjectPropertyPermissions,
                         c,
-                        p.uuid().to_bytes_le(),
+                        UUIDHolder(p.uuid()),
                         propperms.clone(),
                     )
                     .expect("Unable to update property permissions");
@@ -523,7 +528,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     .tuple_size_by_composite_domain(
                         WorldStateTable::VerbProgram,
                         obj,
-                        v.uuid().to_bytes_le(),
+                        UUIDHolder(v.uuid()),
                     )
                     .map_err(err_map)?
                     .unwrap_or(0);
@@ -552,7 +557,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     .tuple_size_by_composite_domain(
                         WorldStateTable::ObjectPropertyValue,
                         obj,
-                        p.uuid().to_bytes_le(),
+                        UUIDHolder(p.uuid()),
                     )
                     .map_err(err_map)?
                     .unwrap_or(0);
@@ -625,12 +630,14 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     }
 
     fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError> {
-        self.tx
+        let bh: BytesHolder = self
+            .tx
             .as_ref()
             .unwrap()
-            .seek_by_unique_composite_domain(WorldStateTable::VerbProgram, obj, uuid.to_bytes_le())
+            .seek_by_unique_composite_domain(WorldStateTable::VerbProgram, obj, UUIDHolder(uuid))
             .map_err(err_map)?
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", uuid)))
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", uuid)))?;
+        Ok(bh.0)
     }
 
     fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError> {
@@ -755,8 +762,8 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .upsert_composite(
                     WorldStateTable::VerbProgram,
                     obj,
-                    uuid.to_bytes_le(),
-                    verb_attrs.binary.unwrap(),
+                    UUIDHolder(uuid),
+                    BytesHolder(verb_attrs.binary.unwrap()),
                 )
                 .map_err(err_map)?;
         }
@@ -806,8 +813,8 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .upsert_composite(
                 WorldStateTable::VerbProgram,
                 oid,
-                uuid.to_bytes_le(),
-                binary,
+                UUIDHolder(uuid),
+                BytesHolder(binary),
             )
             .map_err(err_map)?;
 
@@ -836,7 +843,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         self.tx
             .as_ref()
             .unwrap()
-            .remove_by_composite_domain(WorldStateTable::VerbProgram, location, uuid.to_bytes_le())
+            .remove_by_composite_domain(WorldStateTable::VerbProgram, location, UUIDHolder(uuid))
             .map_err(err_map)?;
 
         Ok(())
@@ -859,7 +866,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .upsert_composite(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
-                uuid.to_bytes_le(),
+                UUIDHolder(uuid),
                 value,
             )
             .map_err(err_map)
@@ -932,7 +939,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .upsert_composite(
                     WorldStateTable::ObjectPropertyValue,
                     location,
-                    u.to_bytes_le(),
+                    UUIDHolder(u),
                     value,
                 )
                 .expect("Unable to set property value");
@@ -947,7 +954,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .upsert_composite(
                     WorldStateTable::ObjectPropertyPermissions,
                     location,
-                    u.to_bytes_le(),
+                    UUIDHolder(u),
                     PropPerms::new(owner, perms),
                 )
                 .expect("Unable to set property owner");
@@ -1000,7 +1007,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .seek_by_unique_composite_domain(
                     WorldStateTable::ObjectPropertyPermissions,
                     obj,
-                    uuid.to_bytes_le(),
+                    UUIDHolder(uuid),
                 )
                 .unwrap()
                 .expect("Unable to get property permissions for update. Integrity error");
@@ -1019,7 +1026,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .upsert_composite(
                     WorldStateTable::ObjectPropertyPermissions,
                     obj,
-                    uuid.to_bytes_le(),
+                    UUIDHolder(uuid),
                     perms,
                 )
                 .map_err(err_map)?;
@@ -1032,11 +1039,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         self.tx
             .as_ref()
             .unwrap()
-            .delete_composite_if_exists(
-                WorldStateTable::ObjectPropertyValue,
-                obj,
-                uuid.to_bytes_le(),
-            )
+            .delete_composite_if_exists(WorldStateTable::ObjectPropertyValue, obj, UUIDHolder(uuid))
             .unwrap_or(());
         Ok(())
     }
@@ -1079,7 +1082,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .seek_by_unique_composite_domain(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
-                uuid.to_bytes_le(),
+                UUIDHolder(uuid),
             )
             .map_err(err_map)?;
         let perms = self.retrieve_property_permissions(obj, uuid)?;
@@ -1097,7 +1100,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .seek_by_unique_composite_domain::<_, _, PropPerms>(
                 WorldStateTable::ObjectPropertyPermissions,
                 obj,
-                uuid.to_bytes_le(),
+                UUIDHolder(uuid),
             )
             .map_err(err_map)?
             .ok_or(WorldStateError::PropertyNotFound(obj, format!("{}", uuid)))
@@ -1143,7 +1146,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .seek_by_unique_composite_domain::<_, _, PropPerms>(
                 WorldStateTable::ObjectPropertyPermissions,
                 obj,
-                propdef.uuid().to_bytes_le(),
+                UUIDHolder(propdef.uuid()),
             )
             .map_err(err_map)?
             .expect("Unable to get property permissions, coherence problem");
@@ -1155,7 +1158,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .seek_by_unique_composite_domain::<_, _, Var>(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
-                propdef.uuid().to_bytes_le(),
+                UUIDHolder(propdef.uuid()),
             )
             .map_err(err_map)?
         {
@@ -1184,7 +1187,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                         .seek_by_unique_composite_domain(
                             WorldStateTable::ObjectPropertyValue,
                             search_obj,
-                            propdef.uuid().to_bytes_le(),
+                            UUIDHolder(propdef.uuid()),
                         )
                         .map_err(err_map)?;
                     if let Some(value) = value {
