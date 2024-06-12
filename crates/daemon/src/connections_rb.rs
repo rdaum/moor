@@ -394,12 +394,8 @@ impl ConnectionsDB for ConnectionsRb {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_unique_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            ) {
+            .seek_unique_by_domain(SliceRef::from_bytes(client_id.as_bytes()))
+        {
             Ok(connection) => {
                 Some(Objid::from_sliceref(connection.codomain()).expect("Invalid connection"))
             }
@@ -413,44 +409,19 @@ impl ConnectionsDB for ConnectionsRb {
         let tx = self.tb.clone().start_tx();
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .remove_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            );
+            .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientActivity as usize))
-            .remove_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            );
+            .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
-            .remove_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            );
+            .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientPingTime as usize))
-            .remove_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            );
+            .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientName as usize))
-            .remove_by_domain(
-                client_id
-                    .as_bytes()
-                    .as_sliceref()
-                    .expect("Invalid client id"),
-            );
+            .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));
 
         tx.commit()?;
         Ok(())

@@ -14,8 +14,10 @@
 
 use crate::encode::{DecodingError, EncodingError};
 
+use crate::AsByteBuffer;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
+use daumtils::SliceRef;
 use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
@@ -52,36 +54,36 @@ impl Objid {
     }
 }
 
-// impl AsByteBuffer for Objid {
-//     fn size_bytes(&self) -> usize {
-//         8
-//     }
-//
-//     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, f: F) -> Result<R, EncodingError> {
-//         Ok(f(&self.0.to_le_bytes()))
-//     }
-//
-//     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-//         Ok(self.0.to_le_bytes().to_vec())
-//     }
-//
-//     fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
-//     where
-//         Self: Sized,
-//     {
-//         let bytes = bytes.as_slice();
-//         if bytes.len() != 8 {
-//             return Err(DecodingError::CouldNotDecode(format!(
-//                 "Expected 8 bytes, got {}",
-//                 bytes.len()
-//             )));
-//         }
-//         let mut buf = [0u8; 8];
-//         buf.copy_from_slice(bytes);
-//         Ok(Self(i64::from_le_bytes(buf)))
-//     }
-//
-//     fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-//         Ok(SliceRef::from_vec(self.make_copy_as_vec()?))
-//     }
-// }
+impl AsByteBuffer for Objid {
+    fn size_bytes(&self) -> usize {
+        8
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(&self.0.to_le_bytes()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.to_le_bytes().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    where
+        Self: Sized,
+    {
+        let bytes = bytes.as_slice();
+        if bytes.len() != 8 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 8 bytes, got {}",
+                bytes.len()
+            )));
+        }
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(bytes);
+        Ok(Self(i64::from_le_bytes(buf)))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_vec(self.make_copy_as_vec()?))
+    }
+}

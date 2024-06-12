@@ -15,7 +15,10 @@
 use crate::util::BitEnum;
 use crate::var::Objid;
 use crate::var::Var;
+use crate::{AsByteBuffer, DecodingError, EncodingError};
+use binary_layout::binary_layout;
 use bincode::{Decode, Encode};
+use daumtils::SliceRef;
 use enum_primitive_derive::Primitive;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
@@ -62,38 +65,67 @@ impl Default for PropAttrs {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
-pub struct PropPerms {
-    owner: Objid,
-    flags: BitEnum<PropFlag>,
-}
+binary_layout!(prop_perms_buf, LittleEndian, {
+    owner: Objid as i64,
+    flags: BitEnum<PropFlag> as u16,
+});
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropPerms(SliceRef);
 
 impl PropPerms {
     #[must_use]
     pub fn new(owner: Objid, flags: BitEnum<PropFlag>) -> Self {
-        Self { owner, flags }
+        let mut buf = vec![0; prop_perms_buf::SIZE.unwrap()];
+        let mut view = prop_perms_buf::View::new(&mut buf);
+        view.owner_mut()
+            .try_write(owner)
+            .expect("Failed to encode owner");
+        view.flags_mut()
+            .try_write(flags)
+            .expect("Failed to encode flags");
+        Self(SliceRef::from_vec(buf))
     }
+
     #[must_use]
     pub fn owner(&self) -> Objid {
-        self.owner
+        let view = prop_perms_buf::View::new(self.0.as_slice());
+        view.owner().try_read().expect("Failed to decode owner")
     }
 
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        self.flags
+        let view = prop_perms_buf::View::new(self.0.as_slice());
+        view.flags().try_read().expect("Failed to decode flags")
     }
 
     pub fn with_owner(self, owner: Objid) -> Self {
-        Self {
-            owner,
-            flags: self.flags,
-        }
+        Self::new(owner, self.flags())
     }
 
     pub fn with_flags(self, flags: BitEnum<PropFlag>) -> Self {
-        Self {
-            owner: self.owner,
-            flags,
-        }
+        Self::new(self.owner(), flags)
+    }
+}
+
+impl AsByteBuffer for PropPerms {
+    fn size_bytes(&self) -> usize {
+        self.0.len()
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_slice().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        Ok(Self(bytes))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.0.clone())
     }
 }

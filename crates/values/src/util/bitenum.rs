@@ -18,7 +18,9 @@ use std::ops::{BitOr, BitOrAssign};
 
 use crate::encode::{DecodingError, EncodingError};
 
+use crate::AsByteBuffer;
 use bincode::{Decode, Encode};
+use daumtils::SliceRef;
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
 
@@ -136,5 +138,42 @@ impl<T: ToPrimitive> BitOr<T> for BitEnum<T> {
 impl<T: ToPrimitive> From<T> for BitEnum<T> {
     fn from(value: T) -> Self {
         Self::new_with(value)
+    }
+}
+
+impl<T: ToPrimitive> AsByteBuffer for BitEnum<T> {
+    fn size_bytes(&self) -> usize {
+        2
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(&self.value.to_le_bytes()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.value.to_le_bytes().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    where
+        Self: Sized,
+    {
+        let bytes = bytes.as_slice();
+        if bytes.len() != 2 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 2 bytes, got {}",
+                bytes.len()
+            )));
+        }
+        let mut buf = [0u8; 2];
+        buf.copy_from_slice(bytes);
+        Ok(Self {
+            value: u16::from_le_bytes(buf),
+            phantom: PhantomData,
+        })
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_vec(self.value.to_le_bytes().to_vec()))
     }
 }

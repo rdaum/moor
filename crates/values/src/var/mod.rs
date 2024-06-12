@@ -19,10 +19,13 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+use crate::encode::{CountingWriter, BINCODE_CONFIG};
+use crate::{AsByteBuffer, DecodingError, EncodingError};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use daumtils::SliceRef;
 use decorum::R64;
 use lazy_static::lazy_static;
 use strum::FromRepr;
@@ -112,6 +115,55 @@ impl<'de> BorrowDecode<'de> for Var {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let inner = Variant::borrow_decode(decoder)?;
         Ok(Self::new(inner))
+    }
+}
+
+// For now the byte buffer repr of a Var is its Bincode encoding, but this will likely change in
+// the future.
+impl AsByteBuffer for Var {
+    fn size_bytes(&self) -> usize
+    where
+        Self: Encode,
+    {
+        // For now be careful with this as we have to bincode the whole thing in order to calculate
+        // this. In the long run with a zero-copy implementation we can just return the size of the
+        // underlying bytes.
+        let mut cw = CountingWriter { count: 0 };
+        bincode::encode_into_writer(self, &mut cw, *BINCODE_CONFIG)
+            .expect("bincode to bytes for counting size");
+        cw.count
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError>
+    where
+        Self: Sized + Encode,
+    {
+        let v = bincode::encode_to_vec(self, *BINCODE_CONFIG)
+            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))?;
+        Ok(f(&v[..]))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>
+    where
+        Self: Sized + Encode,
+    {
+        bincode::encode_to_vec(self, *BINCODE_CONFIG)
+            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    where
+        Self: Sized + Decode,
+    {
+        Ok(
+            bincode::decode_from_slice(bytes.as_slice(), *BINCODE_CONFIG)
+                .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?
+                .0,
+        )
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_vec(self.make_copy_as_vec()?))
     }
 }
 

@@ -12,7 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use daumtils::SliceRef;
+use moor_values::{AsByteBuffer, DecodingError, EncodingError};
 use std::sync::Arc;
+use uuid::Uuid;
 
 use moor_values::model::WorldStateError;
 use moor_values::model::WorldStateSource;
@@ -59,5 +62,133 @@ impl From<&str> for DatabaseFlavour {
             "relbox" => DatabaseFlavour::RelBox,
             _ => panic!("Unknown database flavour: {}", s),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StringHolder(pub String);
+
+impl AsByteBuffer for StringHolder {
+    fn size_bytes(&self) -> usize {
+        self.0.len()
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_bytes()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_bytes().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        Ok(Self(
+            String::from_utf8(bytes.as_slice().to_vec()).expect("Invalid UTF-8"),
+        ))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_vec(self.0.as_bytes().to_vec()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UUIDHolder(Uuid);
+
+impl AsByteBuffer for UUIDHolder {
+    fn size_bytes(&self) -> usize {
+        16
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(&self.0.as_bytes()[..]))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_bytes().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        let bytes = bytes.as_slice();
+        if bytes.len() != 16 {
+            return Err(DecodingError::CouldNotDecode(format!(
+                "Expected 16 bytes, got {}",
+                bytes.len()
+            )));
+        }
+        let mut uuid_bytes = [0u8; 16];
+        uuid_bytes.copy_from_slice(bytes);
+        Ok(Self(Uuid::from_bytes(uuid_bytes)))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_vec(self.0.as_bytes().to_vec()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BytesHolder(Vec<u8>);
+
+impl AsByteBuffer for BytesHolder {
+    fn size_bytes(&self) -> usize {
+        self.0.len()
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.clone())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        Ok(Self(bytes.as_slice().to_vec()))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_vec(self.0.clone()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemTimeHolder(pub std::time::SystemTime);
+
+impl AsByteBuffer for SystemTimeHolder {
+    fn size_bytes(&self) -> usize {
+        16
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
+            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
+        })?;
+        let micros = dur.as_micros();
+        Ok(f(&micros.to_le_bytes()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
+            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
+        })?;
+        let micros = dur.as_micros();
+        Ok(micros.to_le_bytes().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+        let bytes = bytes.as_slice();
+        let micros = u128::from_le_bytes(bytes.try_into().map_err(|_| {
+            DecodingError::CouldNotDecode("Expected 16 bytes for SystemTime".to_string())
+        })?);
+        let dur = std::time::Duration::from_micros(micros as u64);
+        Ok(Self(std::time::UNIX_EPOCH + dur))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
+            EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
+        })?;
+        let micros = dur.as_micros();
+        Ok(SliceRef::from_vec(micros.to_le_bytes().to_vec()))
     }
 }

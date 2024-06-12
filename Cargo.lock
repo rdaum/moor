@@ -1737,6 +1737,7 @@ name = "moor-compiler"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "daumtils",
  "itertools 0.13.0",
  "lazy_static",
  "moor-values",
@@ -1819,6 +1820,7 @@ dependencies = [
 name = "moor-db-relbox"
 version = "0.1.0"
 dependencies = [
+ "daumtils",
  "moor-db",
  "moor-values",
  "relbox",
