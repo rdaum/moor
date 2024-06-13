@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::ffi::{CStr, CString};
+use md5::Digest;
 use std::sync::Arc;
 
 use rand::distributions::Alphanumeric;
@@ -193,14 +193,8 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
-        let text_c_cstring = CString::new(text.as_str()).unwrap();
-        let salt_c_cstring = CString::new(salt.as_str()).unwrap();
-        let crypted = unsafe { crypt_sys::crypt(text_c_cstring.as_ptr(), salt_c_cstring.as_ptr()) };
-        if crypted.is_null() {
-            return Err(BfErr::Code(E_INVARG));
-        }
-        let crypted = unsafe { CStr::from_ptr(crypted) };
-        Ok(Ret(v_string(crypted.to_str().unwrap().to_string())))
+        let crypted = pwhash::unix::crypt(text.as_str(), salt.as_str()).unwrap();
+        Ok(Ret(v_string(crypted)))
     } else {
         Err(BfErr::Code(E_TYPE))
     }
@@ -213,7 +207,7 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
-            let hash_digest = md5::compute(s.as_str().as_bytes());
+            let hash_digest = md5::Md5::digest(s.as_str().as_bytes());
             Ok(Ret(v_str(format!("{:x}", hash_digest).as_str())))
         }
         _ => Err(BfErr::Code(E_INVARG)),
