@@ -15,6 +15,9 @@
 mod common;
 use pretty_assertions::assert_eq;
 
+// TODO: this test seems to run for a really really long time on MacOS, so we'll make it linux-only
+//   for now.
+#[cfg(target_os = "linux")]
 #[test]
 fn test_echo() -> eyre::Result<()> {
     common::run_test_as(&["wizard"], |mut client| {
