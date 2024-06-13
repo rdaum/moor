@@ -110,9 +110,9 @@ yoke-derive = "0.7.3"
 
 ## Required for MOO builtins.
 chrono-tz = "0.9.0"
-crypt-sys = "0.1.0"
+pwhash = { version = "1.0.0", default-features = false }
 iana-time-zone = "0.1.60"
-md5 = "0.7"                                            # For MOO's "string_hash"
+md-5 = "0.9.1"                                            # For MOO's "string_hash"
 onig = { version = "6.4.0", default-features = false }
 rand = "0.8"
 
