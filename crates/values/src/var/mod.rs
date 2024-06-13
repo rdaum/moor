@@ -84,7 +84,7 @@ pub struct Var {
 
 impl Var {
     #[must_use]
-    pub(crate) fn new(value: Variant) -> Self {
+    pub fn new(value: Variant) -> Self {
         Self { value }
     }
 
@@ -209,12 +209,12 @@ pub fn v_err(e: Error) -> Var {
 
 #[must_use]
 pub fn v_list(l: &[Var]) -> Var {
-    Var::new(Variant::List(List::from_vec(l.to_vec())))
+    Var::new(Variant::List(List::from_slice(l)))
 }
 
 #[must_use]
 pub fn v_listv(l: Vec<Var>) -> Var {
-    Var::new(Variant::List(List::from_vec(l)))
+    Var::new(Variant::List(List::from_slice(&l)))
 }
 
 #[must_use]

@@ -37,7 +37,7 @@ use moor_values::model::{BinaryType, CommandError, HasUuid, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
 use moor_values::model::{VerbProgramError, WorldStateSource};
 use moor_values::var::Error::{E_INVARG, E_PERM};
-use moor_values::var::{v_err, v_int, v_none, v_string, Var};
+use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
 use moor_values::var::{Objid, Variant};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use SchedulerError::{
@@ -281,7 +281,7 @@ impl Scheduler {
             player,
             vloc,
             verb,
-            args,
+            args: List::from_slice(&args),
             argstr,
         };
 
@@ -309,7 +309,7 @@ impl Scheduler {
             player,
             vloc: SYSTEM_OBJECT,
             verb: "do_out_of_band_command".to_string(),
-            args,
+            args: List::from_slice(&args),
             argstr,
         };
 

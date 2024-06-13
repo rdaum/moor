@@ -272,7 +272,7 @@ impl VM {
                     // Track iteration count for range; set id to current list element for the count,
                     // then increment the count, rewind the program counter to the top of the loop, and
                     // continue.
-                    f.set_env(id, l[count].clone());
+                    f.set_env(id, l.get(count).unwrap().clone());
                     f.poke(0, v_int((count + 1) as i64));
                 }
                 Op::ForRange { end_label, id } => {
@@ -385,7 +385,7 @@ impl VM {
                         return self.push_error(state, E_TYPE);
                     };
 
-                    let new_list = list.append(tail);
+                    let new_list = list.append(&tail);
                     f.poke(0, new_list);
                 }
                 Op::IndexSet => {
@@ -698,7 +698,7 @@ impl VM {
                     let Variant::List(args) = args.variant() else {
                         return self.push_error(state, E_TYPE);
                     };
-                    return self.prepare_pass_verb(state, world_state, &args[..]);
+                    return self.prepare_pass_verb(state, world_state, args);
                 }
                 Op::CallVerb => {
                     let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
@@ -713,7 +713,7 @@ impl VM {
                         world_state,
                         *obj,
                         verb.as_str(),
-                        &args[..],
+                        args.clone(),
                     );
                 }
                 Op::Return => {
@@ -735,7 +735,7 @@ impl VM {
                     return self.call_builtin_function(
                         state,
                         id.0 as usize,
-                        &args[..],
+                        args.clone(),
                         exec_params,
                         world_state,
                         session,

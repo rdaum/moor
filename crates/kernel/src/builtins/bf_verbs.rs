@@ -141,7 +141,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     if info.len() != 3 {
         return Err(E_INVARG);
     }
-    match (info[0].variant(), info[1].variant(), info[2].variant()) {
+    match (info.get(0).unwrap().variant(), info.get(1).unwrap().variant(), info.get(2).unwrap().variant()) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
             let mut perms = BitEnum::new();
             for c in perms_str.as_str().chars() {
@@ -265,9 +265,9 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
         return Err(E_ARGS);
     }
     match (
-        verbinfo[0].variant(),
-        verbinfo[1].variant(),
-        verbinfo[2].variant(),
+        verbinfo.get(0).unwrap().variant(),
+        verbinfo.get(1).unwrap().variant(),
+        verbinfo.get(2).unwrap().variant(),
     ) {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
             let (Some(dobj), Some(prep), Some(iobj)) = (

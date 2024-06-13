@@ -53,7 +53,7 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
         Variant::List(l) => {
             let mut v = Vec::new();
             for e in l.iter() {
-                v.push(var_as_json(e));
+                v.push(var_as_json(&e));
             }
             serde_json::Value::Array(v)
         }

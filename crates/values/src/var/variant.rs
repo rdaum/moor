@@ -12,8 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
-
 use crate::var::error::Error;
 use crate::var::list::List;
 use crate::var::objid::Objid;

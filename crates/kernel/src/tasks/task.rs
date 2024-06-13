@@ -24,8 +24,8 @@ use moor_values::model::VerbInfo;
 use moor_values::model::{CommandError, CommitResult, WorldStateError};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::parse_into_words;
-use moor_values::var::Objid;
 use moor_values::var::{v_int, v_string};
+use moor_values::var::{List, Objid};
 use moor_values::NOTHING;
 
 use crate::matching::match_env::MatchEnvironmentParseMatcher;
@@ -686,7 +686,7 @@ impl Task {
             location: target,
             this: target,
             player,
-            args: parsed_command.args.clone(),
+            args: List::from_slice(&parsed_command.args),
             argstr: parsed_command.argstr.clone(),
             caller: player,
         };
