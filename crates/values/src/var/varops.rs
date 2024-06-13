@@ -90,7 +90,7 @@ impl Var {
             return v_err(E_TYPE);
         };
 
-        match l.iter().position(|x| x == v) {
+        match l.iter().position(|x| x == *v) {
             None => v_int(0),
             Some(i) => v_int(i as i64 + 1),
         }
@@ -187,7 +187,8 @@ impl Var {
                 }
                 let mut res = Vec::with_capacity((to - from + 1) as usize);
                 for i in from..=to {
-                    res.push(l[(i - 1) as usize].clone());
+                    let v = l.get((i - 1) as usize).unwrap();
+                    res.push(v);
                 }
                 Ok(v_listv(res))
             }
@@ -234,8 +235,10 @@ impl Var {
             }
             (Variant::List(base_list), Variant::List(value_list)) => {
                 let mut ans: Vec<Self> = Vec::with_capacity(newsize as usize);
+
+                let base_list = base_list.iter().collect::<Vec<Self>>();
                 ans.extend_from_slice(&base_list[..from - 1]);
-                ans.extend(value_list.iter().cloned());
+                ans.extend(value_list.iter());
                 ans.extend_from_slice(&base_list[to..]);
                 v_listv(ans)
             }

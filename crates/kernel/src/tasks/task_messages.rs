@@ -22,8 +22,8 @@ use moor_compiler::Program;
 
 use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::model::{Perms, WorldStateSource};
-use moor_values::var::Objid;
 use moor_values::var::Var;
+use moor_values::var::{List, Objid};
 use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ pub enum TaskStart {
         player: Objid,
         vloc: Objid,
         verb: String,
-        args: Vec<Var>,
+        args: List,
         argstr: String,
     },
     /// The scheduler is telling the task to run a task that was forked from another task.

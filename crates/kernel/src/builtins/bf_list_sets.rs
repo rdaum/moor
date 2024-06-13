@@ -78,7 +78,7 @@ fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let value = bf_args.args[1].clone();
     let list = &mut bf_args.args[0];
-    let Variant::List(mut list) = list.variant_mut().clone() else {
+    let Variant::List(list) = list.variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
     let new_list = if bf_args.args.len() == 2 {
@@ -392,20 +392,26 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     }
 
-    let (Variant::List(subs), Variant::Str(source)) = (subs[2].variant(), subs[3].variant()) else {
+    let (Some(a), Some(b)) = (subs.get(2), subs.get(3)) else {
+        return Err(BfErr::Code(E_INVARG));
+    };
+    let (Variant::List(subs), Variant::Str(source)) = (a.variant(), b.variant()) else {
         return Err(BfErr::Code(E_INVARG));
     };
 
     // Turn psubs into a Vec<(isize, isize)>. Raising errors on the way if they're not
     let mut mysubs = Vec::new();
-    for sub in &subs[..] {
+    for sub in subs.iter() {
         let Variant::List(sub) = sub.variant() else {
             return Err(BfErr::Code(E_INVARG));
         };
         if sub.len() != 2 {
             return Err(BfErr::Code(E_INVARG));
         }
-        let (Variant::Int(start), Variant::Int(end)) = (sub[0].variant(), sub[1].variant()) else {
+        let (Some(start), Some(end)) = (sub.get(0), sub.get(1)) else {
+            return Err(BfErr::Code(E_INVARG));
+        };
+        let (Variant::Int(start), Variant::Int(end)) = (start.variant(), end.variant()) else {
             return Err(BfErr::Code(E_INVARG));
         };
         mysubs.push((*start as isize, *end as isize));

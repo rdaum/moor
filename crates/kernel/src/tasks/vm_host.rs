@@ -28,8 +28,8 @@ use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
-use moor_values::var::Objid;
 use moor_values::var::Var;
+use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -309,7 +309,7 @@ impl VmHost {
                     result = self.vm.call_builtin_function(
                         &mut self.vm_exec_state,
                         bf_offset,
-                        &args,
+                        List::from_slice(&args),
                         &exec_params,
                         world_state,
                         self.sessions.clone(),
@@ -418,7 +418,7 @@ impl VmHost {
     pub fn reset_time(&mut self) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
     }
-    pub fn args(&self) -> Vec<Var> {
+    pub fn args(&self) -> List {
         self.vm_exec_state.top().args.clone()
     }
 }

@@ -17,10 +17,10 @@ use std::sync::Arc;
 use moor_compiler::offset_for_builtin;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::v_empty_list;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string, Var};
+use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string};
+use moor_values::var::{v_empty_list, List};
 
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;
@@ -68,18 +68,22 @@ enum InfoParseResult {
     Success(PropAttrs),
 }
 
-fn info_to_prop_attrs(info: &[Var]) -> InfoParseResult {
+fn info_to_prop_attrs(info: &List) -> InfoParseResult {
     if info.len() < 2 || info.len() > 3 {
         return InfoParseResult::Fail(E_ARGS);
     }
-    let Variant::Obj(owner) = info[0].variant() else {
+
+    let owner = info.get(0).unwrap();
+    let Variant::Obj(owner) = owner.variant() else {
         return InfoParseResult::Fail(E_TYPE);
     };
-    let Variant::Str(perms) = info[1].variant() else {
+    let perms = info.get(1).unwrap();
+    let Variant::Str(perms) = perms.variant() else {
         return InfoParseResult::Fail(E_TYPE);
     };
     let name = if info.len() == 3 {
-        let Variant::Str(name) = info[2].variant() else {
+        let name = info.get(2).unwrap();
+        let Variant::Str(name) = name.variant() else {
             return InfoParseResult::Fail(E_TYPE);
         };
         Some(name.to_string())
@@ -120,7 +124,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
 
-    let attrs = match info_to_prop_attrs(&info[..]) {
+    let attrs = match info_to_prop_attrs(info) {
         InfoParseResult::Fail(e) => {
             return Err(Code(e));
         }
@@ -186,7 +190,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_ARGS));
     };
 
-    let attrs = match info_to_prop_attrs(&info[..]) {
+    let attrs = match info_to_prop_attrs(info) {
         InfoParseResult::Fail(e) => {
             return Err(Code(e));
         }

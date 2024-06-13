@@ -17,9 +17,9 @@ use tracing::{debug, trace};
 
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
+use moor_values::var::v_int;
 use moor_values::var::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
-use moor_values::var::Objid;
-use moor_values::var::{v_int, Var};
+use moor_values::var::{List, Objid};
 
 use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
 use crate::builtins::{BfCallState, BfErr, BfRet};
@@ -34,7 +34,7 @@ use moor_compiler::Program;
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_values::model::VerbInfo;
 
-pub(crate) fn args_literal(args: &[Var]) -> String {
+pub(crate) fn args_literal(args: &List) -> String {
     args.iter()
         .map(|v| v.to_literal())
         .collect::<Vec<String>>()
@@ -68,14 +68,14 @@ impl VM {
         world_state: &mut dyn WorldState,
         this: Objid,
         verb_name: &str,
-        args: &[Var],
+        args: List,
     ) -> ExecutionResult {
         let call = VerbCall {
             verb_name: verb_name.to_string(),
             location: this,
             this,
             player: vm_state.top().player,
-            args: args.to_vec(),
+            args,
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
             argstr: "".to_string(),
@@ -133,7 +133,7 @@ impl VM {
         &self,
         vm_state: &mut VMExecState,
         world_state: &mut dyn WorldState,
-        args: &[Var],
+        args: &List,
     ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = vm_state.top().verb_definer();
@@ -165,7 +165,7 @@ impl VM {
             location: parent,
             this: vm_state.top().this,
             player: vm_state.top().player,
-            args: args.to_vec(),
+            args: args.clone(),
             argstr: "".to_string(),
             caller,
         };
@@ -237,7 +237,7 @@ impl VM {
         &self,
         vm_state: &mut VMExecState,
         bf_func_num: usize,
-        args: &[Var],
+        args: List,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
@@ -250,10 +250,9 @@ impl VM {
         debug!(
             "Calling builtin: {}({}) caller_perms: {}",
             BUILTIN_DESCRIPTORS[bf_func_num].name,
-            args_literal(args),
+            args_literal(&args),
             vm_state.top().permissions
         );
-        let args = args.to_vec();
 
         // Push an activation frame for the builtin function.
         let flags = vm_state.top().verb_info.verbdef().flags();
@@ -271,7 +270,8 @@ impl VM {
             name: BUILTIN_DESCRIPTORS[bf_func_num].name.clone(),
             world_state,
             session: session.clone(),
-            args,
+            // TODO: avoid copy here by using List inside BfCallState
+            args: args.iter().collect(),
             scheduler_sender: exec_args.scheduler_sender.clone(),
         };
 
@@ -319,7 +319,8 @@ impl VM {
             name: verb_name,
             world_state,
             session: sessions,
-            args,
+            // TODO: avoid copy here by using List inside BfCallState
+            args: args.iter().collect(),
             scheduler_sender: exec_args.scheduler_sender.clone(),
         };
 

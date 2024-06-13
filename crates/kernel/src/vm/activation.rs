@@ -13,7 +13,7 @@
 //
 
 use daumtils::{BitArray, Bitset16, SliceRef};
-use moor_values::var::v_empty_str;
+use moor_values::var::{v_empty_str, List, Variant};
 use moor_values::NOTHING;
 use uuid::Uuid;
 
@@ -23,10 +23,10 @@ use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
+use moor_values::var::Error;
 use moor_values::var::Error::E_VARNF;
 use moor_values::var::Objid;
 use moor_values::var::{v_empty_list, v_int, v_none, v_objid, v_str, v_string, Var, VarType};
-use moor_values::var::{v_listv, Error};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::VerbExecutionRequest;
@@ -102,7 +102,7 @@ pub(crate) struct Activation {
     /// The object that is the 'player' role; that is, the active user of this task.
     pub(crate) player: Objid,
     /// The arguments to the verb or bf being called.
-    pub(crate) args: Vec<Var>,
+    pub(crate) args: List,
     /// The name of the verb that is currently being executed.
     pub(crate) verb_name: String,
     /// The extended information about the verb that is currently being executed.
@@ -282,7 +282,7 @@ impl Activation {
         );
         frame.set_gvar(
             GlobalName::args,
-            v_listv(verb_call_request.call.args.clone()),
+            Var::new(Variant::List(verb_call_request.call.args.clone())),
         );
 
         // From the command, if any...
@@ -387,14 +387,14 @@ impl Activation {
             bf_index: None,
             bf_trampoline: None,
             bf_trampoline_arg: None,
-            args: vec![],
+            args: List::new(),
             permissions,
         }
     }
     pub fn for_bf_call(
         bf_index: usize,
         bf_name: &str,
-        args: Vec<Var>,
+        args: List,
         _verb_flags: BitEnum<VerbFlag>,
         player: Objid,
     ) -> Self {

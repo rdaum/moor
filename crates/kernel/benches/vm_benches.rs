@@ -32,7 +32,7 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::BitEnum;
-use moor_values::var::Var;
+use moor_values::var::{List};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 fn create_worldstate() -> WiredTigerDB {
@@ -49,7 +49,7 @@ pub fn prepare_call_verb(
     world_state: &mut dyn WorldState,
     session: Arc<dyn Session>,
     verb_name: &str,
-    args: Vec<Var>,
+    args: List,
     max_ticks: usize,
 ) -> VmHost {
     let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
@@ -101,7 +101,7 @@ fn prepare_vm_execution(
     )
     .unwrap();
     let session = Arc::new(NoopClientSession::new());
-    let vm_host = prepare_call_verb(tx.as_mut(), session, "test", vec![], max_ticks);
+    let vm_host = prepare_call_verb(tx.as_mut(), session, "test", List::new(), max_ticks);
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     vm_host
 }

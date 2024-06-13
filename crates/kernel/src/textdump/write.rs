@@ -61,7 +61,7 @@ impl<W: io::Write> TextdumpWriter<W> {
             Variant::List(l) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_LIST as i64, l.len())?;
                 for v in l.iter() {
-                    self.write_var(v, false)?;
+                    self.write_var(&v, false)?;
                 }
             }
             Variant::None => {

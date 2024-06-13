@@ -23,8 +23,8 @@ use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::var::v_listv;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_NACC, E_TYPE};
-use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_none, v_objid, v_str};
+use moor_values::var::{List, Variant};
 use moor_values::NOTHING;
 
 use crate::bf_declare;
@@ -160,7 +160,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     location: new_obj,
                     this: new_obj,
                     player: bf_args.exec_state.top().player,
-                    args: vec![],
+                    args: List::new(),
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this,
                 },
@@ -248,7 +248,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: *obj,
                                 this: *obj,
                                 player: bf_args.exec_state.top().player,
-                                args: vec![],
+                                args: List::new(),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -311,7 +311,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             location: *head_obj,
                             this: *head_obj,
                             player: bf_args.exec_state.top().player,
-                            args: vec![v_objid(*obj)],
+                            args: List::from_slice(&[v_objid(*obj)]),
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this,
                         },
@@ -411,7 +411,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: *whereto,
                                 this: *whereto,
                                 player: bf_args.exec_state.top().player,
-                                args: vec![v_objid(*what)],
+                                args: List::from_slice(&[v_objid(*what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -487,7 +487,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: original_location,
                                 this: original_location,
                                 player: bf_args.exec_state.top().player,
-                                args: vec![v_objid(*what)],
+                                args: List::from_slice(&[v_objid(*what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -531,7 +531,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: *whereto,
                                 this: *whereto,
                                 player: bf_args.exec_state.top().player,
-                                args: vec![v_objid(*what)],
+                                args: List::from_slice(&[v_objid(*what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },

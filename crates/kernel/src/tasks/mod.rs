@@ -13,8 +13,7 @@
 //
 
 use crate::tasks::scheduler::TaskResult;
-use moor_values::var::Objid;
-use moor_values::var::Var;
+use moor_values::var::{List, Objid};
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::sync::MutexGuard;
@@ -53,7 +52,7 @@ pub struct VerbCall {
     pub location: Objid,
     pub this: Objid,
     pub player: Objid,
-    pub args: Vec<Var>,
+    pub args: List,
     pub argstr: String,
     pub caller: Objid,
 }
@@ -78,7 +77,7 @@ pub mod vm_test_utils {
     use crate::vm::VmExecParams;
     use moor_compiler::Program;
     use moor_values::model::WorldState;
-    use moor_values::var::{Objid, Var};
+    use moor_values::var::{List, Objid, Var};
     use moor_values::SYSTEM_OBJECT;
     use std::sync::Arc;
     use std::time::Duration;
@@ -160,7 +159,7 @@ pub mod vm_test_utils {
                     location: SYSTEM_OBJECT,
                     this: SYSTEM_OBJECT,
                     player: SYSTEM_OBJECT,
-                    args,
+                    args: List::from_slice(&args),
                     argstr: "".to_string(),
                     caller: SYSTEM_OBJECT,
                 },
