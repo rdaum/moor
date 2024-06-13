@@ -19,7 +19,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-use crate::encode::{CountingWriter, BINCODE_CONFIG};
+use crate::encode::BINCODE_CONFIG;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
@@ -99,71 +99,140 @@ impl Var {
 
 impl Encode for Var {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let inner = self.variant();
-        inner.encode(encoder)
+        // Use our own encoded form.
+        let encoded = encode(self);
+        bincode::encode_into_writer(encoded.as_slice(), encoder.writer(), BINCODE_CONFIG.clone())?;
+        Ok(())
     }
 }
 
 impl Decode for Var {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let inner = Variant::decode(decoder)?;
-        Ok(Self::new(inner))
+        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
+        Ok(decode(SliceRef::from_vec(slc)))
     }
 }
 
 impl<'de> BorrowDecode<'de> for Var {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let inner = Variant::borrow_decode(decoder)?;
-        Ok(Self::new(inner))
+        let slc = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
+        Ok(decode(SliceRef::from_vec(slc)))
+    }
+}
+
+fn encoded_size(v: &Var) -> usize {
+    match v.variant() {
+        Variant::None => 1,
+        Variant::Str(s) => 1 + s.as_sliceref().unwrap().len(),
+        Variant::Obj(o) => 1 + o.as_sliceref().unwrap().as_slice().len(),
+        Variant::Int(_) => 9,
+        Variant::Float(_) => 9,
+        Variant::Err(_) => 2,
+        Variant::List(l) => 1 + l.as_sliceref().unwrap().as_slice().len(),
+    }
+}
+
+fn encode(v: &Var) -> SliceRef {
+    let mut buffer = vec![];
+    // Push the type first.
+    buffer.push(v.type_id() as u8);
+    match v.variant() {
+        Variant::None => {
+            // Nothing to do.
+        }
+        Variant::Str(s) => {
+            buffer.extend_from_slice(s.as_sliceref().unwrap().as_slice());
+        }
+        Variant::Obj(o) => {
+            buffer.extend_from_slice(o.as_sliceref().unwrap().as_slice());
+        }
+        Variant::Int(i) => {
+            buffer.extend_from_slice(&i.to_le_bytes());
+        }
+        Variant::Float(f) => {
+            buffer.extend_from_slice(&f.to_le_bytes());
+        }
+        Variant::Err(e) => {
+            buffer.extend_from_slice(&[*e as u8]);
+        }
+        Variant::List(l) => {
+            buffer.extend_from_slice(l.as_sliceref().unwrap().as_slice());
+        }
+    }
+    SliceRef::from_vec(buffer)
+}
+
+fn decode(s: SliceRef) -> Var {
+    let type_id = s.as_slice()[0];
+    let type_id = VarType::from_repr(type_id).expect("Invalid type id");
+    let bytes = s.slice(1..);
+    match type_id {
+        VarType::TYPE_NONE => VAR_NONE.clone(),
+        VarType::TYPE_STR => {
+            let s = Str::from_sliceref(bytes).unwrap();
+            Var::new(Variant::Str(s))
+        }
+        VarType::TYPE_OBJ => {
+            let o = Objid::from_sliceref(bytes).unwrap();
+            Var::new(Variant::Obj(o))
+        }
+        VarType::TYPE_INT => {
+            let mut i_bytes = [0; 8];
+            i_bytes.copy_from_slice(bytes.as_slice());
+            let i = i64::from_le_bytes(i_bytes);
+            Var::new(Variant::Int(i))
+        }
+        VarType::TYPE_FLOAT => {
+            let mut f_bytes = [0; 8];
+            f_bytes.copy_from_slice(bytes.as_slice());
+            let f = f64::from_le_bytes(f_bytes);
+            Var::new(Variant::Float(f))
+        }
+        VarType::TYPE_ERR => {
+            let e = Error::from_repr(bytes.as_slice()[0]).unwrap();
+            Var::new(Variant::Err(e))
+        }
+        VarType::TYPE_LIST => {
+            let l = List::from_sliceref(bytes).unwrap();
+            Var::new(Variant::List(l))
+        }
+        _ => panic!("Invalid type id: {:?}", type_id),
     }
 }
 
 // For now the byte buffer repr of a Var is its Bincode encoding, but this will likely change in
 // the future.
 impl AsByteBuffer for Var {
-    fn size_bytes(&self) -> usize
-    where
-        Self: Encode,
-    {
-        // For now be careful with this as we have to bincode the whole thing in order to calculate
-        // this. In the long run with a zero-copy implementation we can just return the size of the
-        // underlying bytes.
-        let mut cw = CountingWriter { count: 0 };
-        bincode::encode_into_writer(self, &mut cw, *BINCODE_CONFIG)
-            .expect("bincode to bytes for counting size");
-        cw.count
+    fn size_bytes(&self) -> usize {
+        encoded_size(self)
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError>
     where
-        Self: Sized + Encode,
+        Self: Sized,
     {
-        let v = bincode::encode_to_vec(self, *BINCODE_CONFIG)
-            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))?;
-        Ok(f(&v[..]))
+        let encoded = encode(self);
+        Ok(f(encoded.as_slice()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>
     where
-        Self: Sized + Encode,
+        Self: Sized,
     {
-        bincode::encode_to_vec(self, *BINCODE_CONFIG)
-            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
+        let encoded = encode(self);
+        Ok(encoded.as_slice().to_vec())
     }
 
     fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
     where
-        Self: Sized + Decode,
+        Self: Sized,
     {
-        Ok(
-            bincode::decode_from_slice(bytes.as_slice(), *BINCODE_CONFIG)
-                .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?
-                .0,
-        )
+        Ok(decode(bytes))
     }
 
     fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.make_copy_as_vec()?))
+        let encoded = encode(self);
+        Ok(encoded)
     }
 }
 

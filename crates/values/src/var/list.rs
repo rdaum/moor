@@ -16,7 +16,7 @@ use std::cmp::min;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 
-use crate::AsByteBuffer;
+use crate::{AsByteBuffer, DecodingError, EncodingError};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -491,6 +491,31 @@ impl From<List> for Vec<Var> {
             result.push(value.get(i).unwrap());
         }
         result
+    }
+}
+
+impl AsByteBuffer for List {
+    fn size_bytes(&self) -> usize {
+        self.0.len()
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        Ok(f(self.0.as_slice()))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        Ok(self.0.as_slice().to_vec())
+    }
+
+    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    where
+        Self: Sized,
+    {
+        Ok(Self(bytes))
+    }
+
+    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+        Ok(self.0.clone())
     }
 }
 
