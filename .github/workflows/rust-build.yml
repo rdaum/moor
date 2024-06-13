@@ -9,10 +9,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_default:
-
+  build_default_linux:
     runs-on: ubuntu-latest
-
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -25,11 +23,8 @@ jobs:
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
-
-  build_all:
-
+  build_all_linux:
     runs-on: ubuntu-latest
-
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -42,6 +37,20 @@ jobs:
         run: cargo build --verbose --all-features --all-targets
       - name: Run tests
         run: cargo test --verbose --all-features --all-targets
+
+  # Build "all" features not a thing on MacOS since Relbox won't compile and run on it.
+  build_default_macos:
+    runs-on: macos-latest
+    steps:
+      - name: Get CMake
+        uses: symbitic/install-cmake@master
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
 
   clippy_check:
     runs-on: ubuntu-latest
