@@ -397,7 +397,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Decode.
-    let program = Program::from_sliceref(verb_info.binary()).map_err(|_| {
+    let program = Program::from_bytes(verb_info.binary()).map_err(|_| {
         error!(object=?bf_args.args[0], verb=?bf_args.args[1], "verb_code: verb program could not be decoded");
         BfErr::Code(E_INVARG)
     })?;
@@ -639,7 +639,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Ok(Ret(v_empty_list()));
     }
 
-    let program = Program::from_sliceref(verb_info.binary()).map_err(|_| {
+    let program = Program::from_bytes(verb_info.binary()).map_err(|_| {
         error!(object=?bf_args.args[0], verb=?bf_args.args[1], "disassemble: verb program could not be decoded");
         BfErr::Code(E_INVARG)
     })?;

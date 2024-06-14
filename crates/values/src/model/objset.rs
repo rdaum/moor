@@ -17,7 +17,7 @@ use crate::model::ValSet;
 use crate::var::Objid;
 use crate::AsByteBuffer;
 use bytes::BufMut;
-use daumtils::SliceRef;
+use bytes::Bytes;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
@@ -25,13 +25,13 @@ use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
 
 lazy_static! {
-    static ref EMPTY_OBJSET: ObjSet = ObjSet(SliceRef::empty());
+    static ref EMPTY_OBJSET: ObjSet = ObjSet(Bytes::new());
 }
 
 /// When we want to refer to a set of object ids, use this type.
 /// Note that equality is defined as "same bytes" buffer for efficiency reasons.
 #[derive(Clone, Eq, PartialEq)]
-pub struct ObjSet(SliceRef);
+pub struct ObjSet(Bytes);
 
 impl AsByteBuffer for ObjSet {
     fn size_bytes(&self) -> usize {
@@ -39,19 +39,19 @@ impl AsByteBuffer for ObjSet {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_slice().to_vec())
+        Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
         // TODO: Validate object ids on decode of ObjSet
         Ok(Self(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.0.clone())
     }
 }
@@ -74,7 +74,7 @@ impl Debug for ObjSet {
 
 pub struct ObjSetIter {
     position: usize,
-    buffer: SliceRef,
+    buffer: Bytes,
 }
 
 impl Iterator for ObjSetIter {
@@ -89,7 +89,7 @@ impl Iterator for ObjSetIter {
         }
 
         let oid = i64::from_le_bytes(
-            self.buffer.as_slice()[self.position..self.position + 8]
+            self.buffer[self.position..self.position + 8]
                 .try_into()
                 .unwrap(),
         );
@@ -111,7 +111,7 @@ impl FromIterator<Objid> for ObjSet {
         if total == 0 {
             return EMPTY_OBJSET.clone();
         }
-        Self(SliceRef::from_vec(v))
+        Self(Bytes::from(v))
     }
 }
 
@@ -123,9 +123,9 @@ impl ObjSet {
         }
         // Note, we're stupid and don't check for dupes. It's called a 'set' but it ain't.
         let _capacity = self.len();
-        let mut new_buf = self.0.as_slice().to_vec();
+        let mut new_buf = self.0.as_ref().to_vec();
         new_buf.put_i64_le(oid.0);
-        Self(SliceRef::from_vec(new_buf))
+        Self(Bytes::from(new_buf))
     }
     #[must_use]
     pub fn with_removed(&self, oid: Objid) -> Self {
@@ -144,7 +144,7 @@ impl ObjSet {
         if !found {
             return self.clone();
         }
-        Self(SliceRef::from_vec(new_buf))
+        Self(Bytes::from(new_buf))
     }
     #[must_use]
     pub fn with_all_removed(&self, oids: &[Objid]) -> Self {
@@ -163,7 +163,7 @@ impl ObjSet {
         if !found {
             return self.clone();
         }
-        Self(SliceRef::from_vec(new_buf))
+        Self(Bytes::from(new_buf))
     }
     #[must_use]
     pub fn contains(&self, oid: Objid) -> bool {
@@ -185,9 +185,9 @@ impl ObjSet {
         }
         let new_len = other.len() + self.len();
         let mut new_buf = Vec::with_capacity(std::mem::size_of::<Objid>() * new_len);
-        new_buf.put_slice(self.0.as_slice());
-        new_buf.put_slice(other.0.as_slice());
-        Self(SliceRef::from_vec(new_buf))
+        new_buf.put_slice(self.0.as_ref());
+        new_buf.put_slice(other.0.as_ref());
+        Self(Bytes::from(new_buf))
     }
 
     #[must_use]
@@ -199,11 +199,11 @@ impl ObjSet {
         let mut new_buf = Vec::with_capacity(
             std::mem::size_of::<u32>() + (std::mem::size_of::<Objid>() * new_len),
         );
-        new_buf.put_slice(self.0.as_slice());
+        new_buf.put_slice(self.0.as_ref());
         for i in values {
             new_buf.put_i64_le(i.0);
         }
-        Self(SliceRef::from_vec(new_buf))
+        Self(Bytes::from(new_buf))
     }
 }
 
@@ -222,7 +222,7 @@ impl ValSet<Objid> for ObjSet {
         for i in oids {
             v.put_i64_le(i.0);
         }
-        Self(SliceRef::from_vec(v))
+        Self(Bytes::from(v))
     }
     fn iter(&self) -> impl Iterator<Item = Objid> {
         ObjSetIter {

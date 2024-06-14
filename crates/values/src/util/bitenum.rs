@@ -20,7 +20,7 @@ use crate::encode::{DecodingError, EncodingError};
 
 use crate::AsByteBuffer;
 use bincode::{Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
 
@@ -154,11 +154,11 @@ impl<T: ToPrimitive> AsByteBuffer for BitEnum<T> {
         Ok(self.value.to_le_bytes().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
-        let bytes = bytes.as_slice();
+        let bytes = bytes.as_ref();
         if bytes.len() != 2 {
             return Err(DecodingError::CouldNotDecode(format!(
                 "Expected 2 bytes, got {}",
@@ -173,7 +173,7 @@ impl<T: ToPrimitive> AsByteBuffer for BitEnum<T> {
         })
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.value.to_le_bytes().to_vec()))
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.value.to_le_bytes().to_vec()))
     }
 }

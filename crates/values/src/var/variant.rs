@@ -16,8 +16,6 @@ use crate::var::error::Error;
 use crate::var::list::List;
 use crate::var::objid::Objid;
 use crate::var::string::Str;
-use crate::{AsByteBuffer, DecodingError, EncodingError};
-use daumtils::SliceRef;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use super::Var;

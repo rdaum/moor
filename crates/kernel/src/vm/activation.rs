@@ -12,7 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use daumtils::{BitArray, Bitset16, SliceRef};
+use bytes::Bytes;
+use daumtils::{BitArray, Bitset16};
 use moor_values::var::{v_empty_str, List, Variant};
 use moor_values::NOTHING;
 use uuid::Uuid;
@@ -353,7 +354,7 @@ impl Activation {
                 BinaryType::None,
                 VerbArgsSpec::this_none_this(),
             ),
-            SliceRef::empty(),
+            Bytes::new(),
         );
 
         let mut frame = Frame {
@@ -409,7 +410,7 @@ impl Activation {
                 BinaryType::None,
                 VerbArgsSpec::this_none_this(),
             ),
-            SliceRef::empty(),
+            Bytes::new(),
         );
 
         // Frame doesn't really matter.

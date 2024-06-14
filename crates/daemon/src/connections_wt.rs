@@ -27,7 +27,7 @@ use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use daumtils::SliceRef;
+use bytes::Bytes;
 use moor_db_wiredtiger::{WiredTigerRelDb, WiredTigerRelTransaction, WiredTigerRelation};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::model::{CommitResult, ValSet};
@@ -199,21 +199,21 @@ impl AsByteBuffer for ClientId {
         Ok(self.0.as_bytes().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
-        let bytes = bytes.as_slice();
+        let bytes = bytes.as_ref();
         assert_eq!(bytes.len(), 16, "Decode client id: Invalid UUID length");
         let mut uuid_bytes = [0u8; 16];
         uuid_bytes.copy_from_slice(bytes);
         Ok(ClientId(Uuid::from_bytes(uuid_bytes)))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         let buf = self.0.as_bytes();
         assert_eq!(buf.len(), 16, "Encode client id: Invalid UUID length");
-        Ok(SliceRef::from_bytes(buf))
+        Ok(Bytes::copy_from_slice(buf))
     }
 }
 impl Display for ClientId {

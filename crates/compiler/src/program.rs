@@ -15,7 +15,7 @@
 use crate::labels::{JumpLabel, Label, Name, Names};
 use crate::opcode::Op;
 use bincode::{Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use moor_values::var::Var;
 use moor_values::{AsByteBuffer, CountingWriter, DecodingError, EncodingError, BINCODE_CONFIG};
@@ -143,18 +143,16 @@ impl AsByteBuffer for Program {
             .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized + Decode,
     {
-        Ok(
-            bincode::decode_from_slice(bytes.as_slice(), *BINCODE_CONFIG)
-                .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?
-                .0,
-        )
+        Ok(bincode::decode_from_slice(bytes.as_ref(), *BINCODE_CONFIG)
+            .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?
+            .0)
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.make_copy_as_vec()?))
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.make_copy_as_vec()?))
     }
 }

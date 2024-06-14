@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use daumtils::SliceRef;
+use bytes::Bytes;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -81,14 +81,14 @@ impl AsByteBuffer for StringHolder {
         Ok(self.0.as_bytes().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
         Ok(Self(
-            String::from_utf8(bytes.as_slice().to_vec()).expect("Invalid UTF-8"),
+            String::from_utf8(bytes.to_vec()).expect("Invalid UTF-8"),
         ))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.0.as_bytes().to_vec()))
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.0.as_bytes().to_vec()))
     }
 }
 
@@ -108,8 +108,8 @@ impl AsByteBuffer for UUIDHolder {
         Ok(self.0.as_bytes().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
-        let bytes = bytes.as_slice();
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+        let bytes = bytes.as_ref();
         if bytes.len() != 16 {
             return Err(DecodingError::CouldNotDecode(format!(
                 "Expected 16 bytes, got {}",
@@ -121,8 +121,8 @@ impl AsByteBuffer for UUIDHolder {
         Ok(Self(Uuid::from_bytes(uuid_bytes)))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.0.as_bytes().to_vec()))
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.0.as_bytes().to_vec()))
     }
 }
 
@@ -135,19 +135,19 @@ impl AsByteBuffer for BytesHolder {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
         Ok(self.0.clone())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
-        Ok(Self(bytes.as_slice().to_vec()))
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+        Ok(Self(bytes.to_vec()))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.0.clone()))
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.0.clone()))
     }
 }
 
@@ -175,8 +175,8 @@ impl AsByteBuffer for SystemTimeHolder {
         Ok(micros.to_le_bytes().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
-        let bytes = bytes.as_slice();
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+        let bytes = bytes.as_ref();
         let micros = u128::from_le_bytes(bytes.try_into().map_err(|_| {
             DecodingError::CouldNotDecode("Expected 16 bytes for SystemTime".to_string())
         })?);
@@ -184,11 +184,11 @@ impl AsByteBuffer for SystemTimeHolder {
         Ok(Self(std::time::UNIX_EPOCH + dur))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
             EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
         })?;
         let micros = dur.as_micros();
-        Ok(SliceRef::from_vec(micros.to_le_bytes().to_vec()))
+        Ok(Bytes::from(micros.to_le_bytes().to_vec()))
     }
 }

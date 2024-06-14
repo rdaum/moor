@@ -14,7 +14,7 @@
 
 use bincode::enc::write::Writer;
 use bincode::error::EncodeError;
-use daumtils::SliceRef;
+use bytes::Bytes;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -55,11 +55,11 @@ pub trait AsByteBuffer {
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>;
     /// Create a value from the given bytes.
     /// Either takes ownership or moves.
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized;
-    /// As a sliceref...
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError>;
+    /// As a Bytes...
+    fn as_bytes(&self) -> Result<Bytes, EncodingError>;
 }
 
 pub struct CountingWriter {

@@ -22,11 +22,11 @@ use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
 use bytes::BufMut;
-use daumtils::SliceRef;
+use bytes::Bytes;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VerbDef(SliceRef);
+pub struct VerbDef(Bytes);
 
 binary_layout!(verbdef, LittleEndian, {
     data_version: u8,
@@ -41,7 +41,7 @@ binary_layout!(verbdef, LittleEndian, {
 });
 
 impl VerbDef {
-    fn from_bytes(bytes: SliceRef) -> Self {
+    fn from_bytes(bytes: Bytes) -> Self {
         Self(bytes)
     }
 
@@ -94,11 +94,11 @@ impl VerbDef {
             names_buf.put_slice(name.as_bytes());
         }
 
-        Self(SliceRef::from_vec(buffer))
+        Self(Bytes::from(buffer))
     }
 
     fn get_header_view(&self) -> verbdef::View<&[u8]> {
-        let view = verbdef::View::new(self.0.as_slice());
+        let view = verbdef::View::new(self.0.as_ref());
         assert_eq!(
             view.data_version().read(),
             DATA_LAYOUT_VERSION,
@@ -153,7 +153,7 @@ impl Named for VerbDef {
         let view = self.get_header_view();
         let num_names = view.num_names().read() as usize;
         let offset = verbdef::names::OFFSET;
-        let slice = &self.0.as_slice()[offset..];
+        let slice = &self.0.as_ref()[offset..];
         let mut position = 0;
         let mut names = Vec::with_capacity(num_names);
         for _ in 0..num_names {
@@ -180,19 +180,19 @@ impl AsByteBuffer for VerbDef {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_slice().to_vec())
+        Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
         // TODO: Validate VerbDef on decode
         Ok(Self::from_bytes(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.0.clone())
     }
 }
@@ -209,7 +209,7 @@ mod tests {
     use crate::util::BitEnum;
     use crate::var::Objid;
     use crate::AsByteBuffer;
-    use daumtils::SliceRef;
+    use bytes::Bytes;
 
     #[test]
     fn test_bitflags() {
@@ -241,7 +241,7 @@ mod tests {
         );
 
         let bytes = vd.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes)).unwrap();
+        let vd2 = VerbDef::from_bytes(Bytes::from(bytes));
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());
@@ -283,7 +283,7 @@ mod tests {
 
         let vds = VerbDefs::from_items(&[vd1, vd2]);
         let bytes = vds.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let vds2 = VerbDefs::from_sliceref(SliceRef::from_vec(bytes)).unwrap();
+        let vds2 = VerbDefs::from_bytes(Bytes::from(bytes)).unwrap();
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
         assert_eq!(rvd1.uuid(), vd1_id);
@@ -326,7 +326,7 @@ mod tests {
         );
 
         let bytes = vd1.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let vd2 = VerbDef::from_sliceref(SliceRef::from_vec(bytes)).unwrap();
+        let vd2 = VerbDef::from_bytes(Bytes::from(bytes));
         assert_eq!(vd1, vd2);
         assert_eq!(vd1.names(), Vec::<String>::new());
     }

@@ -21,29 +21,25 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 
 use crate::var::variant::Variant;
 use crate::var::{v_empty_list, Var};
 
 #[derive(Clone, Debug)]
-pub struct List(SliceRef);
+pub struct List(Bytes);
 
 fn offsets_end_pos(buf: &[u8]) -> usize {
-    unsafe {
-        let ptr = buf.as_ptr() as *const u32;
-        *ptr as usize
-    }
+    u32::from_le_bytes(buf[0..4].try_into().unwrap()) as usize
 }
 
 fn offset_at(buf: &[u8], index: usize) -> usize {
-    let ptr = buf.as_ptr() as *const u32;
-    unsafe { *ptr.add(index + 1) as usize }
+    u32::from_le_bytes(buf[4 + index * 4..4 + (index + 1) * 4].try_into().unwrap()) as usize
 }
 
 impl List {
     pub fn new() -> Self {
-        Self(SliceRef::from_vec(Vec::new()))
+        Self(Bytes::from(Vec::new()))
     }
 
     pub fn len(&self) -> usize {
@@ -52,7 +48,7 @@ impl List {
             return 0;
         }
 
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let offsets_end = offsets_end_pos(slc);
         let offsets_len = offsets_end - 4;
         // The offsets table is 4 bytes per offset.
@@ -73,7 +69,7 @@ impl List {
             return None;
         }
 
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let offsets_end = offsets_end_pos(slc);
 
         // The offsets table is 4 bytes per offset.
@@ -84,7 +80,7 @@ impl List {
         // If this is the last item, we can just slice to the end of the data section.
         if index == len - 1 {
             let slice_ref = data_section.slice(data_offset..);
-            return Some(Var::from_sliceref(slice_ref).expect("could not decode var"));
+            return Some(Var::from_bytes(slice_ref).expect("could not decode var"));
         }
 
         // Otherwise, we need to slice from this offset to the next offset.
@@ -92,7 +88,7 @@ impl List {
 
         // Note that the offsets are relative to the start of the data section.
         let data = data_section.slice(data_offset..next_offset);
-        Var::from_sliceref(data.clone()).ok()
+        Var::from_bytes(data.clone()).ok()
     }
 
     pub fn from_slice(vec: &[Var]) -> List {
@@ -102,8 +98,8 @@ impl List {
         let mut offsets = Vec::with_capacity(vec.len() * 4);
         for v in vec.iter() {
             offsets.extend_from_slice(&relative_offset.to_le_bytes());
-            let vsr = v.as_sliceref().unwrap();
-            let bytes = vsr.as_slice();
+            let vsr = v.as_bytes().unwrap();
+            let bytes = vsr.as_ref();
             data.extend_from_slice(bytes);
             relative_offset += bytes.len() as u32;
         }
@@ -113,14 +109,14 @@ impl List {
         result.extend_from_slice(&offsets);
         result.extend_from_slice(&data);
 
-        Self(SliceRef::from_vec(result))
+        Self(Bytes::from(result))
     }
 
     // expensive because we need to extend both buffer length and the offsets length...
     pub fn push(&self, v: Var) -> Var {
         let len = self.len();
 
-        let data_sr = v.as_sliceref().unwrap();
+        let data_sr = v.as_bytes().unwrap();
 
         // Special case if we're empty.
         if len == 0 {
@@ -131,12 +127,12 @@ impl List {
             let mut result = Vec::with_capacity(4 + new_offsets.len() + data_sr.len());
             result.extend_from_slice(&8u32.to_le_bytes());
             result.extend_from_slice(&new_offsets);
-            result.extend_from_slice(data_sr.as_slice());
+            result.extend_from_slice(data_sr.as_ref());
 
-            return Var::new(Variant::List(Self(SliceRef::from_vec(result))));
+            return Var::new(Variant::List(Self(Bytes::from(result))));
         }
 
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let offsets_end = offsets_end_pos(slc);
 
         let existing_offset_table = &slc[4..offsets_end];
@@ -152,7 +148,7 @@ impl List {
         // Add the new data to the data section.
         let mut new_data = Vec::with_capacity(existing_data.len() + data_sr.len());
         new_data.extend_from_slice(existing_data);
-        new_data.extend_from_slice(data_sr.as_slice());
+        new_data.extend_from_slice(data_sr.as_ref());
 
         // Update offsets end
         let new_offsets_end = new_offsets.len() as u32 + 4;
@@ -163,7 +159,7 @@ impl List {
         result.extend_from_slice(&new_offsets);
         result.extend_from_slice(&new_data);
 
-        Var::new(Variant::List(Self(SliceRef::from_vec(result))))
+        Var::new(Variant::List(Self(Bytes::from(result))))
     }
 
     pub fn pop_front(&self) -> (Var, Var) {
@@ -176,7 +172,7 @@ impl List {
             return (self.get(0).unwrap(), v_empty_list());
         }
 
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let offsets_end = offsets_end_pos(slc);
 
         // Get the offset table
@@ -201,11 +197,11 @@ impl List {
         let mut result = Vec::with_capacity(4 + new_offsets.len() + data.len());
         result.extend_from_slice(&(new_offsets.len() as u32 + 4).to_le_bytes());
         result.extend_from_slice(&new_offsets);
-        result.extend_from_slice(data_section.slice(next_offset..).as_slice());
+        result.extend_from_slice(data_section.slice(next_offset..).as_ref());
 
         (
-            Var::from_sliceref(data).unwrap(),
-            Var::new(Variant::List(Self(SliceRef::from_vec(result)))),
+            Var::from_bytes(data).unwrap(),
+            Var::new(Variant::List(Self(Bytes::from(result)))),
         )
     }
 
@@ -221,8 +217,8 @@ impl List {
         }
 
         // Find the starts of the two data sections
-        let slc = self.0.as_slice();
-        let oth_slc = other.0.as_slice();
+        let slc = self.0.as_ref();
+        let oth_slc = other.0.as_ref();
 
         let data_start_self = offsets_end_pos(slc);
         let data_start_other = offsets_end_pos(oth_slc);
@@ -253,7 +249,7 @@ impl List {
         result.extend_from_slice(data_self);
         result.extend_from_slice(data_other);
 
-        Var::new(Variant::List(Self(SliceRef::from_vec(result))))
+        Var::new(Variant::List(Self(Bytes::from(result))))
     }
 
     pub fn remove_at(&self, index: usize) -> Var {
@@ -267,7 +263,7 @@ impl List {
         }
 
         // This will involve rebuilding both the offsets and data sections.
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let old_data_start = offsets_end_pos(slc);
 
         let old_data = &slc[old_data_start..];
@@ -308,7 +304,7 @@ impl List {
         result.extend_from_slice(&(new_offsets.len() as u32 + 4).to_le_bytes());
         result.extend_from_slice(&new_offsets);
         result.extend_from_slice(&new_data);
-        Var::new(Variant::List(Self(SliceRef::from_vec(result))))
+        Var::new(Variant::List(Self(Bytes::from(result))))
     }
 
     /// Remove the first found instance of the given value from the list.
@@ -327,7 +323,7 @@ impl List {
         }
 
         // This will involve rebuilding both the offsets and data sections.
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let old_data_start = offsets_end_pos(slc);
 
         let old_data = &self.0.slice(old_data_start..);
@@ -346,14 +342,14 @@ impl List {
                 let next_offset = offset_at(slc, i + 1);
                 old_data.slice(offset..next_offset)
             };
-            let v = Var::from_sliceref(data.clone()).unwrap();
+            let v = Var::from_bytes(data.clone()).unwrap();
             if !found && v.eq(value) {
                 found = true;
                 continue;
             }
 
             let new_offset = new_data.len() as u32;
-            new_data.extend_from_slice(data.as_slice());
+            new_data.extend_from_slice(data.as_ref());
             new_offsets.extend_from_slice(&new_offset.to_le_bytes());
         }
 
@@ -361,7 +357,7 @@ impl List {
         result.extend_from_slice(&(new_offsets.len() as u32 + 4).to_le_bytes());
         result.extend_from_slice(&new_offsets);
         result.extend_from_slice(&new_data);
-        Var::new(Variant::List(Self(SliceRef::from_vec(result))))
+        Var::new(Variant::List(Self(Bytes::from(result))))
     }
 
     pub fn insert(&self, index: isize, value: Var) -> Var {
@@ -383,19 +379,19 @@ impl List {
 
         // Accumulate up to the insertion point, building the new offsets and data sections.
         // Then add the new item, and then add the rest of the items.
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let old_data_start = offsets_end_pos(slc);
         let old_data = &slc[old_data_start..];
         let old_offsets = &slc[4..old_data_start];
 
         let mut new_offsets = Vec::with_capacity(old_offsets.len() + 4);
-        let mut new_data = Vec::with_capacity(old_data.len() + value.as_sliceref().unwrap().len());
+        let mut new_data = Vec::with_capacity(old_data.len() + value.as_bytes().unwrap().len());
 
         for i in 0..self.len() {
             if i == index {
                 let new_offset = new_data.len() as u32;
                 new_offsets.extend_from_slice(&new_offset.to_le_bytes());
-                new_data.extend_from_slice(value.as_sliceref().unwrap().as_slice());
+                new_data.extend_from_slice(value.as_bytes().unwrap().as_ref());
             }
             let offset = offset_at(slc, i);
             let length = if i == self.len() - 1 {
@@ -413,7 +409,7 @@ impl List {
         result.extend_from_slice(&(new_offsets.len() as u32 + 4).to_le_bytes());
         result.extend_from_slice(&new_offsets);
         result.extend_from_slice(&new_data);
-        Var::new(Variant::List(Self(SliceRef::from_vec(result))))
+        Var::new(Variant::List(Self(Bytes::from(result))))
     }
 
     pub fn set(&self, index: usize, value: Var) -> Var {
@@ -423,7 +419,7 @@ impl List {
         }
 
         // This will involve rebuilding both the offsets and data sections.
-        let slc = self.0.as_slice();
+        let slc = self.0.as_ref();
         let old_data_start = offsets_end_pos(slc);
 
         let old_data = &self.0.slice(old_data_start..);
@@ -444,11 +440,11 @@ impl List {
             if i == index {
                 let new_offset = new_data.len() as u32;
                 new_offsets.extend_from_slice(&new_offset.to_le_bytes());
-                new_data.extend_from_slice(value.as_sliceref().unwrap().as_slice());
+                new_data.extend_from_slice(value.as_bytes().unwrap().as_ref());
             } else {
                 let new_offset = new_data.len() as u32;
                 new_offsets.extend_from_slice(&new_offset.to_le_bytes());
-                new_data.extend_from_slice(data.as_slice());
+                new_data.extend_from_slice(data.as_ref());
             }
         }
 
@@ -456,7 +452,7 @@ impl List {
         result.extend_from_slice(&(new_offsets.len() as u32 + 4).to_le_bytes());
         result.extend_from_slice(&new_offsets);
         result.extend_from_slice(&new_data);
-        Var::new(Variant::List(Self(SliceRef::from_vec(result))))
+        Var::new(Variant::List(Self(Bytes::from(result))))
     }
 
     // Case insensitive
@@ -500,21 +496,21 @@ impl AsByteBuffer for List {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_slice().to_vec())
+        Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
         Ok(Self(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.0.clone())
     }
 }
@@ -542,21 +538,21 @@ impl Display for List {
 
 impl Encode for List {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.0.as_slice().encode(encoder)
+        self.0.as_ref().encode(encoder)
     }
 }
 
 impl Decode for List {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec = Vec::<u8>::decode(decoder)?;
-        Ok(Self(SliceRef::from_vec(vec)))
+        Ok(Self(Bytes::from(vec)))
     }
 }
 
 impl<'de> BorrowDecode<'de> for List {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec = Vec::<u8>::borrow_decode(decoder)?;
-        Ok(Self(SliceRef::from_vec(vec)))
+        Ok(Self(Bytes::from(vec)))
     }
 }
 

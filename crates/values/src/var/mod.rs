@@ -25,7 +25,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 use decorum::R64;
 use lazy_static::lazy_static;
 use strum::FromRepr;
@@ -101,7 +101,7 @@ impl Encode for Var {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Use our own encoded form.
         let encoded = encode(self);
-        bincode::encode_into_writer(encoded.as_slice(), encoder.writer(), BINCODE_CONFIG.clone())?;
+        bincode::encode_into_writer(encoded.as_ref(), encoder.writer(), BINCODE_CONFIG.clone())?;
         Ok(())
     }
 }
@@ -109,30 +109,30 @@ impl Encode for Var {
 impl Decode for Var {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
-        Ok(decode(SliceRef::from_vec(slc)))
+        Ok(decode(Bytes::from(slc)))
     }
 }
 
 impl<'de> BorrowDecode<'de> for Var {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let slc = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
-        Ok(decode(SliceRef::from_vec(slc)))
+        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
+        Ok(decode(Bytes::from(slc)))
     }
 }
 
 fn encoded_size(v: &Var) -> usize {
     match v.variant() {
         Variant::None => 1,
-        Variant::Str(s) => 1 + s.as_sliceref().unwrap().len(),
-        Variant::Obj(o) => 1 + o.as_sliceref().unwrap().as_slice().len(),
+        Variant::Str(s) => 1 + s.as_bytes().unwrap().len(),
+        Variant::Obj(o) => 1 + o.as_bytes().unwrap().len(),
         Variant::Int(_) => 9,
         Variant::Float(_) => 9,
         Variant::Err(_) => 2,
-        Variant::List(l) => 1 + l.as_sliceref().unwrap().as_slice().len(),
+        Variant::List(l) => 1 + l.as_bytes().unwrap().len(),
     }
 }
 
-fn encode(v: &Var) -> SliceRef {
+fn encode(v: &Var) -> Bytes {
     let mut buffer = vec![];
     // Push the type first.
     buffer.push(v.type_id() as u8);
@@ -141,10 +141,10 @@ fn encode(v: &Var) -> SliceRef {
             // Nothing to do.
         }
         Variant::Str(s) => {
-            buffer.extend_from_slice(s.as_sliceref().unwrap().as_slice());
+            buffer.extend_from_slice(s.as_bytes().unwrap().as_ref());
         }
         Variant::Obj(o) => {
-            buffer.extend_from_slice(o.as_sliceref().unwrap().as_slice());
+            buffer.extend_from_slice(o.as_bytes().unwrap().as_ref());
         }
         Variant::Int(i) => {
             buffer.extend_from_slice(&i.to_le_bytes());
@@ -156,44 +156,44 @@ fn encode(v: &Var) -> SliceRef {
             buffer.extend_from_slice(&[*e as u8]);
         }
         Variant::List(l) => {
-            buffer.extend_from_slice(l.as_sliceref().unwrap().as_slice());
+            buffer.extend_from_slice(l.as_bytes().unwrap().as_ref());
         }
     }
-    SliceRef::from_vec(buffer)
+    Bytes::from(buffer)
 }
 
-fn decode(s: SliceRef) -> Var {
-    let type_id = s.as_slice()[0];
+fn decode(s: Bytes) -> Var {
+    let type_id = s.as_ref()[0];
     let type_id = VarType::from_repr(type_id).expect("Invalid type id");
     let bytes = s.slice(1..);
     match type_id {
         VarType::TYPE_NONE => VAR_NONE.clone(),
         VarType::TYPE_STR => {
-            let s = Str::from_sliceref(bytes).unwrap();
+            let s = Str::from_bytes(bytes).unwrap();
             Var::new(Variant::Str(s))
         }
         VarType::TYPE_OBJ => {
-            let o = Objid::from_sliceref(bytes).unwrap();
+            let o = Objid::from_bytes(bytes).unwrap();
             Var::new(Variant::Obj(o))
         }
         VarType::TYPE_INT => {
             let mut i_bytes = [0; 8];
-            i_bytes.copy_from_slice(bytes.as_slice());
+            i_bytes.copy_from_slice(bytes.as_ref());
             let i = i64::from_le_bytes(i_bytes);
             Var::new(Variant::Int(i))
         }
         VarType::TYPE_FLOAT => {
             let mut f_bytes = [0; 8];
-            f_bytes.copy_from_slice(bytes.as_slice());
+            f_bytes.copy_from_slice(bytes.as_ref());
             let f = f64::from_le_bytes(f_bytes);
             Var::new(Variant::Float(f))
         }
         VarType::TYPE_ERR => {
-            let e = Error::from_repr(bytes.as_slice()[0]).unwrap();
+            let e = Error::from_repr(bytes.as_ref()[0]).unwrap();
             Var::new(Variant::Err(e))
         }
         VarType::TYPE_LIST => {
-            let l = List::from_sliceref(bytes).unwrap();
+            let l = List::from_bytes(bytes).unwrap();
             Var::new(Variant::List(l))
         }
         _ => panic!("Invalid type id: {:?}", type_id),
@@ -212,7 +212,7 @@ impl AsByteBuffer for Var {
         Self: Sized,
     {
         let encoded = encode(self);
-        Ok(f(encoded.as_slice()))
+        Ok(f(encoded.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>
@@ -220,17 +220,17 @@ impl AsByteBuffer for Var {
         Self: Sized,
     {
         let encoded = encode(self);
-        Ok(encoded.as_slice().to_vec())
+        Ok(encoded.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
         Ok(decode(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         let encoded = encode(self);
         Ok(encoded)
     }

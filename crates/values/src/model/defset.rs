@@ -16,7 +16,7 @@ use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
 use crate::AsByteBuffer;
 use bytes::BufMut;
-use daumtils::SliceRef;
+use bytes::Bytes;
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
@@ -35,7 +35,7 @@ pub trait Named {
 /// Immutable, and can be iterated over in sequence, or searched by name.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Defs<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> {
-    bytes: SliceRef,
+    bytes: Bytes,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -58,7 +58,7 @@ impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Debug for Defs
 }
 pub struct DefsIter<T: AsByteBuffer> {
     position: usize,
-    buffer: SliceRef,
+    buffer: Bytes,
     _phantom: std::marker::PhantomData<T>,
 }
 impl<T: AsByteBuffer> Iterator for DefsIter<T> {
@@ -70,7 +70,7 @@ impl<T: AsByteBuffer> Iterator for DefsIter<T> {
         }
         // Read length prefix
         let len = u32::from_le_bytes(
-            self.buffer.as_slice()[self.position..self.position + 4]
+            self.buffer[self.position..self.position + 4]
                 .try_into()
                 .unwrap(),
         ) as usize;
@@ -79,7 +79,7 @@ impl<T: AsByteBuffer> Iterator for DefsIter<T> {
         let item_slice = self.buffer.slice(self.position..self.position + len);
         self.position += len;
         // Build the item from the bytes.
-        Some(T::from_sliceref(item_slice).expect("Failed to decode defs item"))
+        Some(T::from_bytes(item_slice).expect("Failed to decode defs item"))
     }
 }
 
@@ -87,7 +87,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
     #[must_use]
     fn empty() -> Self {
         Self {
-            bytes: SliceRef::empty(),
+            bytes: Bytes::default(),
             _phantom: Default::default(),
         }
     }
@@ -102,7 +102,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
             .expect("Failed to encode item");
         }
         Self {
-            bytes: SliceRef::from_bytes(&bytes),
+            bytes: bytes.into(),
             _phantom: Default::default(),
         }
     }
@@ -136,7 +136,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> FromIterator<T> for Defs<T> {
             .expect("Failed to encode item");
         }
         Self {
-            bytes: SliceRef::from_bytes(&bytes),
+            bytes: bytes.into(),
             _phantom: Default::default(),
         }
     }
@@ -178,7 +178,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             })
             .expect("Failed to encode item");
         }
-        Some(Self::from_sliceref(SliceRef::from_bytes(&buf)).unwrap())
+        Some(Self::from_bytes(Bytes::from(buf)).unwrap())
     }
 
     #[must_use]
@@ -193,61 +193,61 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             })
             .expect("Failed to encode item");
         }
-        Self::from_sliceref(SliceRef::from_bytes(&buf)).unwrap()
+        Self::from_bytes(Bytes::from(buf)).unwrap()
     }
 
     // TODO Add builder patterns for these that construct in-place, building the buffer right in us.
     pub fn with_added(&self, v: T) -> Self {
-        let mut new_buf = self.bytes.as_slice().to_vec();
+        let mut buf = self.bytes.to_vec();
         v.with_byte_buffer(|bytes| {
             // Write the length prefix.
-            new_buf.put_u32_le(bytes.len() as u32);
+            buf.put_u32_le(bytes.len() as u32);
             // Write the bytes for the item.
-            new_buf.put_slice(bytes);
+            buf.put_slice(bytes);
         })
         .expect("Failed to encode item");
-        Self::from_sliceref(SliceRef::from_bytes(&new_buf)).unwrap()
+        Self::from_bytes(Bytes::from(buf)).unwrap()
     }
     pub fn with_all_added(&self, v: &[T]) -> Self {
-        let mut new_buf = self.bytes.as_slice().to_vec();
+        let mut buf = self.bytes.to_vec();
         for v in v {
             v.with_byte_buffer(|bytes| {
                 // Write the length prefix.
-                new_buf.put_u32_le(bytes.len() as u32);
+                buf.put_u32_le(bytes.len() as u32);
                 // Write the bytes for the item.
-                new_buf.put_slice(bytes);
+                buf.put_slice(bytes);
             })
             .expect("Failed to encode item");
         }
-        Self::from_sliceref(SliceRef::from_bytes(&new_buf)).unwrap()
+        Self::from_bytes(Bytes::from(buf)).unwrap()
     }
     pub fn with_updated<F: Fn(&T) -> T>(&self, uuid: Uuid, f: F) -> Option<Self> {
         if !self.contains(uuid) {
             return None;
         }
         // Copy until we find the uuid, then build the updated item, then copy the rest.
-        let mut new_buf = Vec::new();
+        let mut buf = Vec::new();
         for v in self.iter() {
             if v.uuid() == uuid {
                 f(&v)
                     .with_byte_buffer(|bytes| {
                         // Write the length prefix.
-                        new_buf.put_u32_le(bytes.len() as u32);
+                        buf.put_u32_le(bytes.len() as u32);
                         // Write the bytes for the item.
-                        new_buf.put_slice(bytes);
+                        buf.put_slice(bytes);
                     })
                     .expect("Failed to encode item");
             } else {
                 v.with_byte_buffer(|bytes| {
                     // Write the length prefix.
-                    new_buf.put_u32_le(bytes.len() as u32);
+                    buf.put_u32_le(bytes.len() as u32);
                     // Write the bytes for the item.
-                    new_buf.put_slice(bytes);
+                    buf.put_slice(bytes);
                 })
                 .expect("Failed to encode item");
             };
         }
-        Some(Self::from_sliceref(SliceRef::from_bytes(&new_buf)).unwrap())
+        Some(Self::from_bytes(Bytes::from(buf)).unwrap())
     }
 }
 
@@ -257,21 +257,21 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> AsByteBuffer for Defs<T> {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.bytes.as_slice()))
+        Ok(f(self.bytes.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.bytes.as_slice().to_vec())
+        Ok(self.bytes.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
         Ok(Self {
             bytes,
             _phantom: Default::default(),
         })
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.bytes.clone())
     }
 }
