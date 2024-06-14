@@ -17,7 +17,7 @@ use crate::encode::{DecodingError, EncodingError};
 use crate::AsByteBuffer;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
@@ -67,11 +67,11 @@ impl AsByteBuffer for Objid {
         Ok(self.0.to_le_bytes().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
-        let bytes = bytes.as_slice();
+        let bytes = bytes.as_ref();
         if bytes.len() != 8 {
             return Err(DecodingError::CouldNotDecode(format!(
                 "Expected 8 bytes, got {}",
@@ -83,7 +83,7 @@ impl AsByteBuffer for Objid {
         Ok(Self(i64::from_le_bytes(buf)))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
-        Ok(SliceRef::from_vec(self.make_copy_as_vec()?))
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.make_copy_as_vec()?))
     }
 }

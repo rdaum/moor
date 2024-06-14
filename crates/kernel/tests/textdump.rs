@@ -14,7 +14,7 @@
 
 #[cfg(test)]
 mod test {
-    use daumtils::SliceRef;
+    use bytes::Bytes;
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
@@ -367,11 +367,11 @@ mod test {
                 let binary2 = tx2.get_verb_binary(o, v2.uuid()).unwrap();
 
                 let program1 = moor_compiler::program_to_tree(
-                    &Program::from_sliceref(SliceRef::from_vec(binary1)).unwrap(),
+                    &Program::from_bytes(Bytes::from(binary1)).unwrap(),
                 )
                 .unwrap();
                 let program2 = moor_compiler::program_to_tree(
-                    &Program::from_sliceref(SliceRef::from_vec(binary2)).unwrap(),
+                    &Program::from_bytes(Bytes::from(binary2)).unwrap(),
                 )
                 .unwrap();
 

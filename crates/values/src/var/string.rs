@@ -22,16 +22,16 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 
 use crate::var::error::Error;
-use crate::var::{v_err, v_str, v_string, List, Var};
+use crate::var::{v_err, v_str, v_string, Var};
 
 #[derive(Clone, Debug)]
-pub struct Str(SliceRef);
+pub struct Str(Bytes);
 
-fn transmutey(src: &SliceRef) -> &str {
-    let s = src.as_slice();
+fn transmutey(src: &Bytes) -> &str {
+    let s = src.as_ref();
     unsafe { std::mem::transmute(s) }
 }
 
@@ -39,7 +39,7 @@ impl Str {
     #[must_use]
     pub fn from_string(s: String) -> Self {
         let s = s.into_bytes();
-        let sr = SliceRef::from_vec(s);
+        let sr = Bytes::from(s);
         Self(sr)
     }
 
@@ -70,27 +70,27 @@ impl Str {
 
     #[must_use]
     pub fn append(&self, other: &Self) -> Var {
-        v_string(format!("{}{}", self.0, other.0))
+        v_string(format!("{}{}", transmutey(&self.0), transmutey(&other.0)))
     }
 
     #[must_use]
     pub fn append_str(&self, other: &str) -> Var {
-        v_string(format!("{}{}", self.0, other))
+        v_string(format!("{}{}", transmutey(&self.0), other))
     }
 
     #[must_use]
     pub fn append_string(&self, other: String) -> Var {
-        v_string(format!("{}{}", self.0, other))
+        v_string(format!("{}{}", transmutey(&self.0), other))
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.0.len()
+        transmutey(&self.0).len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        transmutey(&self.0).is_empty()
     }
 
     #[must_use]
@@ -135,7 +135,7 @@ impl FromStr for Str {
 
 impl Display for Str {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.0))
+        f.write_fmt(format_args!("{}", transmutey(&self.0)))
     }
 }
 
@@ -180,21 +180,21 @@ impl AsByteBuffer for Str {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_slice().to_vec())
+        Ok(self.0.to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
         Ok(Self(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.0.clone())
     }
 }

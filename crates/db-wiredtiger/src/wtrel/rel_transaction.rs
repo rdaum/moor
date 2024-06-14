@@ -62,15 +62,15 @@ where
         o: &DomainA,
         u: &DomainB,
     ) -> Datum {
-        let (a, b) = (o.as_sliceref().unwrap(), u.as_sliceref().unwrap());
+        let (a, b) = (o.as_bytes().unwrap(), u.as_bytes().unwrap());
 
         let mut pack = Pack::new(
             &self.session,
             &[RawByte(Some(a.len())), RawByte(Some(b.len()))],
             a.len() + b.len(),
         );
-        pack.push_item(a.as_slice());
-        pack.push_item(b.as_slice());
+        pack.push_item(a.as_ref());
+        pack.push_item(b.as_ref());
         pack.pack()
     }
 }

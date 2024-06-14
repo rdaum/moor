@@ -24,6 +24,7 @@ use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty, IntoEnumIterat
 use tracing::{error, warn};
 use uuid::Uuid;
 
+use bytes::Bytes;
 use daumtils::SliceRef;
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::var::Objid;
@@ -105,11 +106,11 @@ impl ConnectionsRb {
     ) -> Result<Vec<(SliceRef, SystemTime)>, SessionError> {
         let clients = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(
+            .seek_by_codomain(SliceRef::from_byte_source(
                 connection_obj
-                    .as_sliceref()
+                    .as_bytes()
                     .expect("Invalid connection object"),
-            )
+            ))
             .expect("Unable to seek client connection");
 
         // Seek the most recent activity for the connection, so pull in the activity relation for
@@ -137,7 +138,7 @@ impl ConnectionsRb {
     }
 }
 
-fn sliceref_as_time(slc: SliceRef) -> SystemTime {
+fn bytes_as_time(slc: SliceRef) -> SystemTime {
     let epoch_time_millis: u128 = u128::from_le_bytes(slc.as_slice().try_into().unwrap());
     SystemTime::UNIX_EPOCH + Duration::from_millis(epoch_time_millis as u64)
 }
@@ -161,11 +162,11 @@ impl ConnectionsDB for ConnectionsRb {
         let tx = self.tb.clone().start_tx();
         let client_ids = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(
+            .seek_by_codomain(SliceRef::from_byte_source(
                 from_connection
-                    .as_sliceref()
+                    .as_bytes()
                     .expect("Invalid connection object"),
-            )
+            ))
             .expect("Unable to seek client connection");
         if client_ids.is_empty() {
             error!(?from_connection, ?to_player, "No client ids for connection");
@@ -176,7 +177,9 @@ impl ConnectionsDB for ConnectionsRb {
                 .relation(RelationId(ConnectionRelation::ClientConnection as usize))
                 .update_by_domain(
                     client_id.domain().clone(),
-                    to_player.as_sliceref().expect("Invalid player object"),
+                    SliceRef::from_byte_source(
+                        to_player.as_bytes().expect("Invalid player object"),
+                    ),
                 );
         }
         tx.commit()?;
@@ -206,9 +209,12 @@ impl ConnectionsDB for ConnectionsRb {
         tx.relation(RelationId(ConnectionRelation::ClientConnection as usize))
             .insert_tuple(
                 client_id.clone(),
-                connection_oid
-                    .as_sliceref()
-                    .expect("Invalid connection object"),
+                SliceRef::from_bytes(
+                    connection_oid
+                        .as_bytes()
+                        .expect("Invalid connection object")
+                        .as_ref(),
+                ),
             )
             .expect("Unable to insert client connection");
         tx.relation(RelationId(ConnectionRelation::ClientActivity as usize))
@@ -266,7 +272,7 @@ impl ConnectionsDB for ConnectionsRb {
             tx.relation(RelationId(ConnectionRelation::ClientPingTime as usize));
         let expired = last_ping_relation
             .predicate_scan(&|ping| {
-                let last_ping_time = sliceref_as_time(ping.codomain());
+                let last_ping_time = bytes_as_time(ping.codomain());
                 last_ping_time < timeout_threshold
             })
             .expect("Unable to scan last ping relation");
@@ -328,7 +334,9 @@ impl ConnectionsDB for ConnectionsRb {
         // subtract that from the current time.
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(player.as_sliceref().expect("Invalid player object"))
+            .seek_by_codomain(SliceRef::from_byte_source(
+                player.as_bytes().expect("Invalid player object"),
+            ))
         else {
             return Err(SessionError::NoConnectionForPlayer(player));
         };
@@ -339,7 +347,7 @@ impl ConnectionsDB for ConnectionsRb {
                 .relation(RelationId(ConnectionRelation::ClientConnectTime as usize))
                 .seek_unique_by_domain(client.domain())
             {
-                let time = sliceref_as_time(connect_time.codomain());
+                let time = bytes_as_time(connect_time.codomain());
                 times.push((client.domain(), time));
             }
         }
@@ -357,7 +365,9 @@ impl ConnectionsDB for ConnectionsRb {
         let tx = self.tb.clone().start_tx();
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_by_codomain(player.as_sliceref().expect("Invalid player object"))
+            .seek_by_codomain(SliceRef::from_byte_source(
+                player.as_bytes().expect("Invalid player object"),
+            ))
         else {
             return Ok(vec![]);
         };
@@ -382,7 +392,8 @@ impl ConnectionsDB for ConnectionsRb {
             .expect("Unable to scan client connection relation");
 
         for client in clients {
-            let connection = Objid::from_sliceref(client.codomain()).expect("Invalid connection");
+            let connection = Objid::from_bytes(Bytes::from(client.codomain().as_slice().to_vec()))
+                .expect("Invalid connection");
             connections.insert(connection);
         }
 
@@ -394,10 +405,11 @@ impl ConnectionsDB for ConnectionsRb {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .seek_unique_by_domain(SliceRef::from_bytes(client_id.as_bytes()))
+            .seek_unique_by_domain(SliceRef::from_bytes(&client_id.as_bytes()[..]))
         {
             Ok(connection) => {
-                Some(Objid::from_sliceref(connection.codomain()).expect("Invalid connection"))
+                let bytes = Bytes::from(connection.codomain().as_slice().to_vec());
+                Some(Objid::from_bytes(bytes).expect("Invalid connection"))
             }
             Err(_) => None,
         };
@@ -409,7 +421,7 @@ impl ConnectionsDB for ConnectionsRb {
         let tx = self.tb.clone().start_tx();
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
-            .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));
+            .remove_by_domain(SliceRef::from_bytes(&client_id.as_bytes()[..]));
         let _ = tx
             .relation(RelationId(ConnectionRelation::ClientActivity as usize))
             .remove_by_domain(SliceRef::from_bytes(client_id.as_bytes()));

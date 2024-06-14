@@ -24,6 +24,7 @@ moor-values = { path = "../values" }
 
 ## General usefulness
 bincode.workspace = true
+bytes.workspace = true
 daumtils.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true

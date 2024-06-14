@@ -18,7 +18,7 @@ use crate::var::Var;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 use binary_layout::binary_layout;
 use bincode::{Decode, Encode};
-use daumtils::SliceRef;
+use bytes::Bytes;
 use enum_primitive_derive::Primitive;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
@@ -71,7 +71,7 @@ binary_layout!(prop_perms_buf, LittleEndian, {
 });
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PropPerms(SliceRef);
+pub struct PropPerms(Bytes);
 
 impl PropPerms {
     #[must_use]
@@ -84,18 +84,18 @@ impl PropPerms {
         view.flags_mut()
             .try_write(flags)
             .expect("Failed to encode flags");
-        Self(SliceRef::from_vec(buf))
+        Self(Bytes::from(buf))
     }
 
     #[must_use]
     pub fn owner(&self) -> Objid {
-        let view = prop_perms_buf::View::new(self.0.as_slice());
+        let view = prop_perms_buf::View::new(self.0.as_ref());
         view.owner().try_read().expect("Failed to decode owner")
     }
 
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        let view = prop_perms_buf::View::new(self.0.as_slice());
+        let view = prop_perms_buf::View::new(self.0.as_ref());
         view.flags().try_read().expect("Failed to decode flags")
     }
 
@@ -114,18 +114,18 @@ impl AsByteBuffer for PropPerms {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_slice().to_vec())
+        Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
         Ok(Self(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.0.clone())
     }
 }

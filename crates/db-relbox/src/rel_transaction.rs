@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bytes::Bytes;
 use daumtils::SliceRef;
 use moor_db::{RelationalError, RelationalTransaction};
 use moor_values::model::{CommitResult, ValSet};
@@ -43,22 +44,19 @@ fn err_map(e: RelationError) -> RelationalError {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Composite<DomainA: AsByteBuffer, DomainB: AsByteBuffer> {
-    bytes: SliceRef,
+    bytes: Bytes,
     _phantom: std::marker::PhantomData<(DomainA, DomainB)>,
 }
 
 impl<DomainA: AsByteBuffer, DomainB: AsByteBuffer> Composite<DomainA, DomainB> {
     fn new(domain_a: DomainA, domain_b: DomainB) -> Self {
-        let (a_bytes, b_bytes) = (
-            domain_a.as_sliceref().unwrap(),
-            domain_b.as_sliceref().unwrap(),
-        );
+        let (a_bytes, b_bytes) = (domain_a.as_bytes().unwrap(), domain_b.as_bytes().unwrap());
         let mut bytes =
             Vec::with_capacity(a_bytes.len() + b_bytes.len() + std::mem::size_of::<usize>());
         bytes.extend_from_slice(&a_bytes.len().to_le_bytes());
-        bytes.extend_from_slice(a_bytes.as_slice());
-        bytes.extend_from_slice(b_bytes.as_slice());
-        let bytes = SliceRef::from_vec(bytes);
+        bytes.extend_from_slice(a_bytes.as_ref());
+        bytes.extend_from_slice(b_bytes.as_ref());
+        let bytes = Bytes::from(bytes);
         Self {
             bytes,
             _phantom: std::marker::PhantomData,
@@ -67,23 +65,23 @@ impl<DomainA: AsByteBuffer, DomainB: AsByteBuffer> Composite<DomainA, DomainB> {
 
     #[allow(dead_code)]
     fn domain_a(&self) -> DomainA {
-        let bytes = self.bytes.as_slice();
+        let bytes = self.bytes.as_ref();
         let len = usize::from_le_bytes(bytes[..std::mem::size_of::<usize>()].try_into().unwrap());
         let sr = self.bytes.slice(std::mem::size_of::<usize>()..len);
-        DomainA::from_sliceref(sr).expect("Failed to convert domain")
+        DomainA::from_bytes(sr).expect("Failed to convert domain")
     }
 
     #[allow(dead_code)]
     fn domain_b(&self) -> DomainB {
-        let bytes = self.bytes.as_slice();
+        let bytes = self.bytes.as_ref();
 
         let len = usize::from_le_bytes(bytes[..std::mem::size_of::<usize>()].try_into().unwrap());
         let sr = self.bytes.slice(len + std::mem::size_of::<usize>()..);
-        DomainB::from_sliceref(sr).expect("Failed to convert domain")
+        DomainB::from_bytes(sr).expect("Failed to convert domain")
     }
 
-    fn as_sliceref(&self) -> std::result::Result<SliceRef, EncodingError> {
-        Ok(self.bytes.clone())
+    fn as_bytes(&self) -> std::result::Result<SliceRef, EncodingError> {
+        Ok(SliceRef::from_bytes(self.bytes.as_ref()))
     }
 }
 
@@ -123,7 +121,7 @@ where
     ) -> Result<()> {
         self.tx
             .relation(relbox::RelationId(rel.into()))
-            .remove_by_domain(domain.as_sliceref().unwrap())
+            .remove_by_domain(SliceRef::from_byte_source(domain.as_bytes().unwrap()))
             .map_err(err_map)
     }
 
@@ -139,7 +137,7 @@ where
         let composite = Composite::new(domain_a, domain_b);
         self.tx
             .relation(relbox::RelationId(rel.into()))
-            .remove_by_domain(composite.as_sliceref().unwrap())
+            .remove_by_domain(composite.as_bytes().unwrap())
             .map_err(err_map)
     }
 
@@ -163,8 +161,8 @@ where
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .upsert_by_domain(
-                domain.as_sliceref().unwrap(),
-                codomain.as_sliceref().unwrap(),
+                SliceRef::from_bytes(domain.as_bytes().unwrap().as_ref()),
+                SliceRef::from_bytes(codomain.as_bytes().unwrap().as_ref()),
             )
             .map_err(err_map)
     }
@@ -181,8 +179,8 @@ where
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .insert_tuple(
-                domain.as_sliceref().unwrap(),
-                codomain.as_sliceref().unwrap(),
+                SliceRef::from_bytes(domain.as_bytes().unwrap().as_ref()),
+                SliceRef::from_bytes(codomain.as_bytes().unwrap().as_ref()),
             )
             .map_err(err_map)
     }
@@ -201,9 +199,12 @@ where
             .tx
             .relation(relbox::RelationId(rel.into()))
             .predicate_scan(&|t| {
-                let domain = Domain::from_sliceref(t.domain()).expect("Failed to convert domain");
+                let domain_bytes = Bytes::from(t.domain().as_slice().to_vec());
+                let domain = Domain::from_bytes(Bytes::from(domain_bytes))
+                    .expect("Failed to convert domain");
+                let codomain_bytes = Bytes::from(t.codomain().as_slice().to_vec());
                 let codomain =
-                    Codomain::from_sliceref(t.codomain()).expect("Failed to convert codomain");
+                    Codomain::from_bytes(codomain_bytes).expect("Failed to convert codomain");
                 pred(&domain, &codomain)
             })
             .map_err(err_map)?;
@@ -211,8 +212,10 @@ where
             .iter()
             .map(|tr| {
                 (
-                    Domain::from_sliceref(tr.domain()).expect("Failed to convert domain"),
-                    Codomain::from_sliceref(tr.codomain()).expect("Failed to convert codomain"),
+                    Domain::from_bytes(Bytes::from(tr.domain().as_slice().to_vec()))
+                        .expect("Failed to convert domain"),
+                    Codomain::from_bytes(Bytes::from(tr.codomain().as_slice().to_vec()))
+                        .expect("Failed to convert codomain"),
                 )
             })
             .collect())
@@ -229,12 +232,13 @@ where
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_unique_by_domain(domain.as_sliceref().unwrap())
-            .map(|t| Codomain::from_sliceref(t.codomain()).expect("Failed to convert codomain"))
-        {
+            .seek_unique_by_domain(SliceRef::from_byte_source(domain.as_bytes().unwrap()))
+            .map(|t| {
+                Codomain::from_bytes(Bytes::from(t.codomain().as_slice().to_vec()))
+                    .expect("Failed to convert codomain")
+            }) {
             Ok(o) => Ok(Some(
-                Codomain::from_sliceref(o.as_sliceref().unwrap())
-                    .expect("Failed to convert domain"),
+                Codomain::from_bytes(o.as_bytes().unwrap()).expect("Failed to convert domain"),
             )),
             Err(RelationError::TupleNotFound) => Ok(None),
             Err(e) => Err(err_map(e)),
@@ -249,7 +253,7 @@ where
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_unique_by_domain(domain.as_sliceref().unwrap())
+            .seek_unique_by_domain(SliceRef::from_byte_source(domain.as_bytes().unwrap()))
         {
             Ok(o) => Ok(Some(o.slot_buffer().len())),
             Err(RelationError::TupleNotFound) => Ok(None),
@@ -265,7 +269,7 @@ where
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_by_codomain(codomain.as_sliceref().unwrap())
+            .seek_by_codomain(SliceRef::from_byte_source(codomain.as_bytes().unwrap()))
         {
             Ok(o) => {
                 if o.is_empty() {
@@ -295,7 +299,7 @@ where
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_by_codomain(codomain.as_sliceref().unwrap())
+            .seek_by_codomain(SliceRef::from_byte_source(codomain.as_bytes().unwrap()))
         {
             Ok(o) => {
                 if o.is_empty() {
@@ -307,7 +311,10 @@ where
                     ));
                 }
                 let o = o.into_iter().next().unwrap();
-                Ok(Domain::from_sliceref(o.domain()).expect("Failed to convert domain"))
+                Ok(
+                    Domain::from_bytes(Bytes::from(o.domain().as_slice().to_vec()))
+                        .expect("Failed to convert domain"),
+                )
             }
             Err(RelationError::TupleNotFound) => Err(RelationalError::NotFound),
             Err(e) => Err(err_map(e)),
@@ -326,10 +333,11 @@ where
         let results = self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_by_codomain(codomain.as_sliceref().unwrap())
+            .seek_by_codomain(SliceRef::from_byte_source(codomain.as_bytes().unwrap()))
             .map_err(err_map)?;
         Ok(ResultSet::from_iter(results.iter().map(|tr| {
-            Domain::from_sliceref(tr.domain()).expect("Failed to convert domain")
+            Domain::from_bytes(Bytes::from(tr.domain().as_slice().to_vec()))
+                .expect("Failed to convert domain")
         })))
     }
 
@@ -347,12 +355,13 @@ where
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_unique_by_domain(composite.as_sliceref().unwrap())
-            .map(|t| Codomain::from_sliceref(t.codomain()).expect("Failed to convert codomain"))
-        {
+            .seek_unique_by_domain(composite.as_bytes().unwrap())
+            .map(|t| {
+                Codomain::from_bytes(Bytes::from(t.codomain().as_slice().to_vec()))
+                    .expect("Failed to convert codomain")
+            }) {
             Ok(o) => Ok(Some(
-                Codomain::from_sliceref(o.as_sliceref().unwrap())
-                    .expect("Failed to convert domain"),
+                Codomain::from_bytes(o.as_bytes().unwrap()).expect("Failed to convert domain"),
             )),
             Err(RelationError::TupleNotFound) => Ok(None),
             Err(e) => Err(err_map(e)),
@@ -372,7 +381,7 @@ where
         match self
             .tx
             .relation(relbox::RelationId(rel.into()))
-            .seek_unique_by_domain(composite.as_sliceref().unwrap())
+            .seek_unique_by_domain(composite.as_bytes().unwrap())
         {
             Ok(o) => Ok(Some(o.slot_buffer().len())),
             Err(RelationError::TupleNotFound) => Ok(None),
@@ -395,8 +404,8 @@ where
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .insert_tuple(
-                composite.as_sliceref().unwrap(),
-                codomain.as_sliceref().unwrap(),
+                composite.as_bytes().unwrap(),
+                SliceRef::from_bytes(codomain.as_bytes().unwrap().as_ref()),
             )
             .map_err(err_map)
     }
@@ -413,7 +422,7 @@ where
         let composite = Composite::new(domain_a, domain_b);
         self.tx
             .relation(relbox::RelationId(rel.into()))
-            .remove_by_domain(composite.as_sliceref().unwrap())
+            .remove_by_domain(composite.as_bytes().unwrap())
             .map_err(err_map)
     }
 
@@ -432,8 +441,8 @@ where
         self.tx
             .relation(relbox::RelationId(rel.into()))
             .upsert_by_domain(
-                composite.as_sliceref().unwrap(),
-                value.as_sliceref().unwrap(),
+                composite.as_bytes().unwrap(),
+                SliceRef::from_bytes(value.as_bytes().unwrap().as_ref()),
             )
             .map_err(err_map)
     }
@@ -445,7 +454,7 @@ where
     ) -> Result<()> {
         self.tx
             .relation(relbox::RelationId(rel.into()))
-            .remove_by_domain(domain.as_sliceref().unwrap())
+            .remove_by_domain(SliceRef::from_bytes(domain.as_bytes().unwrap().as_ref()))
             .map_err(err_map)
     }
 }

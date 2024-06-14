@@ -16,7 +16,7 @@
 
 use std::rc::Rc;
 
-use daumtils::SliceRef;
+use bytes::Bytes;
 use moor_values::AsByteBuffer;
 
 use crate::bindings::FormatType::RawByte;
@@ -26,7 +26,7 @@ pub mod rel_db;
 pub mod rel_transaction;
 pub mod relation;
 
-// TODO: find ways of avoiding copies by using SliceRef / ByteSource
+// TODO: find ways of avoiding copies by using Bytes / ByteSource
 fn to_datum<V: AsByteBuffer>(session: &Session, v: &V) -> Datum {
     v.with_byte_buffer(|bytes| {
         let mut pack = Pack::new(session, &[RawByte(None)], bytes.len());
@@ -39,5 +39,5 @@ fn to_datum<V: AsByteBuffer>(session: &Session, v: &V) -> Datum {
 fn from_datum<V: AsByteBuffer>(session: &Session, d: Rc<Datum>) -> V {
     let mut unpack = Unpack::new(session, &[RawByte(None)], d);
     let bytes = unpack.unpack_item();
-    V::from_sliceref(SliceRef::from_vec(bytes)).unwrap()
+    V::from_bytes(Bytes::from(bytes)).unwrap()
 }

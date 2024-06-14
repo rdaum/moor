@@ -110,12 +110,12 @@ impl Unpack {
             .collect::<Vec<_>>()
             .join("");
         let format = CString::new(format).unwrap();
-        let data = datum.as_slice();
+        let data = datum.as_ref();
         let err = unsafe {
             wiredtiger_unpack_start(
                 session.session,
                 format.as_ptr(),
-                data.as_ptr() as _,
+                data.as_slice().as_ptr() as _,
                 data.len(),
                 &mut stream as _,
             )

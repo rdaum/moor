@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use daumtils::SliceRef;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -43,7 +44,9 @@ impl RelBoxWorldState {
         let fresh_db = {
             let canonical = db.copy_canonical();
             canonical[WorldStateTable::ObjectParent as usize]
-                .seek_by_domain(SYSTEM_OBJECT.as_sliceref().unwrap())
+                .seek_by_domain(SliceRef::from_byte_source(
+                    SYSTEM_OBJECT.as_bytes().unwrap(),
+                ))
                 .expect("Could not seek for freshness check on DB")
                 .is_empty()
         };

@@ -17,12 +17,12 @@ use crate::model::defset::{Defs, HasUuid, Named};
 use crate::var::Objid;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
+use bytes::Bytes;
 use bytes::{Buf, BufMut};
-use daumtils::SliceRef;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct PropDef(SliceRef);
+pub struct PropDef(Bytes);
 
 binary_layout!(propdef, LittleEndian, {
     data_version: u8,
@@ -33,7 +33,7 @@ binary_layout!(propdef, LittleEndian, {
 });
 
 impl PropDef {
-    fn from_bytes(bytes: SliceRef) -> Self {
+    fn from_bytes(bytes: Bytes) -> Self {
         Self(bytes)
     }
 
@@ -57,11 +57,11 @@ impl PropDef {
         name_buf.put_u8(name.len() as u8);
         name_buf.put_slice(name.as_bytes());
 
-        Self(SliceRef::from_vec(buf))
+        Self(Bytes::from(buf))
     }
 
     fn get_layout_view(&self) -> propdef::View<&[u8]> {
-        let view = propdef::View::new(self.0.as_slice());
+        let view = propdef::View::new(self.0.as_ref());
         assert_eq!(
             view.data_version().read(),
             DATA_LAYOUT_VERSION,
@@ -89,7 +89,7 @@ impl PropDef {
     #[must_use]
     pub fn name(&self) -> &str {
         let names_offset = propdef::name::OFFSET;
-        let mut names_buf = &self.0.as_slice()[names_offset..];
+        let mut names_buf = &self.0.as_ref()[names_offset..];
         let name_len = names_buf.get_u8() as usize;
         let name_slice = names_buf.get(..name_len).unwrap();
         return std::str::from_utf8(name_slice).unwrap();
@@ -102,19 +102,19 @@ impl AsByteBuffer for PropDef {
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_slice()))
+        Ok(f(self.0.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_slice().to_vec())
+        Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_sliceref(bytes: SliceRef) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
         // TODO: Validate propdef on decode
         Ok(Self::from_bytes(bytes))
     }
 
-    fn as_sliceref(&self) -> Result<SliceRef, EncodingError> {
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
         Ok(self.0.clone())
     }
 }
@@ -131,7 +131,7 @@ impl Named for PropDef {
 
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
-        let view = propdef::View::new(self.0.as_slice());
+        let view = propdef::View::new(self.0.as_ref());
         Uuid::from_bytes(*view.uuid())
     }
 }
@@ -145,7 +145,7 @@ mod tests {
     use crate::model::ValSet;
     use crate::var::Objid;
     use crate::AsByteBuffer;
-    use daumtils::SliceRef;
+    use bytes::Bytes;
     use uuid::Uuid;
 
     #[test]
@@ -166,7 +166,7 @@ mod tests {
         let test_pd = PropDef::new(uuid, Objid(1), Objid(2), "test");
 
         let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let re_pd = PropDef::from_sliceref(SliceRef::from_bytes(&bytes)).unwrap();
+        let re_pd = PropDef::from_bytes(bytes.into());
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
         assert_eq!(re_pd.location(), Objid(2));
@@ -184,7 +184,7 @@ mod tests {
         assert_eq!(pd1.uuid(), test_pd1.uuid());
 
         let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let pds2 = PropDefs::from_sliceref(SliceRef::from_vec(byte_vec)).unwrap();
+        let pds2 = PropDefs::from_bytes(Bytes::from(byte_vec)).unwrap();
         let pd2 = pds2.find_first_named("test2").unwrap();
         assert_eq!(pd2.uuid(), test_pd2.uuid());
 

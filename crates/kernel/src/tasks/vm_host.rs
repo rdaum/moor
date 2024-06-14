@@ -21,8 +21,8 @@ use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
+use bytes::Bytes;
 use crossbeam_channel::Sender;
-use daumtils::SliceRef;
 use moor_compiler::Program;
 use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
@@ -115,7 +115,7 @@ impl VmHost {
         command: ParsedCommand,
         permissions: Objid,
     ) {
-        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary().as_slice());
+        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary());
         let call_request = VerbExecutionRequest {
             permissions,
             resolved_verb: vi,
@@ -135,10 +135,7 @@ impl VmHost {
         verb_info: VerbInfo,
         verb_call: VerbCall,
     ) {
-        let binary = Self::decode_program(
-            verb_info.verbdef().binary_type(),
-            verb_info.binary().as_slice(),
-        );
+        let binary = Self::decode_program(verb_info.verbdef().binary_type(), verb_info.binary());
 
         let call_request = VerbExecutionRequest {
             permissions: perms,
@@ -267,7 +264,7 @@ impl VmHost {
 
                     let program = Self::decode_program(
                         resolved_verb.verbdef().binary_type(),
-                        resolved_verb.binary().as_slice(),
+                        resolved_verb.binary(),
                     );
 
                     let call_request = VerbExecutionRequest {
@@ -378,10 +375,11 @@ impl VmHost {
         self.running = false;
     }
 
-    pub fn decode_program(binary_type: BinaryType, binary_bytes: &[u8]) -> Program {
+    pub fn decode_program(binary_type: BinaryType, binary_bytes: Bytes) -> Program {
         match binary_type {
-            BinaryType::LambdaMoo18X => Program::from_sliceref(SliceRef::from_bytes(binary_bytes))
-                .expect("Could not decode MOO program"),
+            BinaryType::LambdaMoo18X => {
+                Program::from_bytes(binary_bytes).expect("Could not decode MOO program")
+            }
             _ => panic!("Unsupported binary type {:?}", binary_type),
         }
     }
