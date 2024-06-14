@@ -12,11 +12,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::fmt::{Display, Formatter, Result as FmtResult};
+
 use crate::var::error::Error;
 use crate::var::list::List;
 use crate::var::objid::Objid;
 use crate::var::string::Str;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use super::Var;
 

@@ -12,13 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::encode::{DecodingError, EncodingError};
+use std::fmt::{Debug, Display, Formatter};
 
-use crate::AsByteBuffer;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use bytes::Bytes;
-use std::fmt::{Debug, Display, Formatter};
+
+use crate::encode::{DecodingError, EncodingError};
+use crate::AsByteBuffer;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
 pub struct Objid(pub i64);

@@ -14,6 +14,7 @@
 
 use bincode::enc::write::Writer;
 use bincode::error::EncodeError;
+use bincode::{Decode, Encode};
 use bytes::Bytes;
 use lazy_static::lazy_static;
 
@@ -69,5 +70,53 @@ impl Writer for CountingWriter {
     fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
         self.count += bytes.len();
         Ok(())
+    }
+}
+
+pub trait BincodeAsByteBufferExt {}
+
+/// Implementation of `AsByteBuffer` for all types that are binpackable.
+impl<T: Encode + Decode + Sized + BincodeAsByteBufferExt> AsByteBuffer for T {
+    fn size_bytes(&self) -> usize
+    where
+        Self: Encode,
+    {
+        // For now be careful with this as we have to bincode the whole thing in order to calculate
+        // this. In the long run with a zero-copy implementation we can just return the size of the
+        // underlying bytes.
+        let mut cw = CountingWriter { count: 0 };
+        bincode::encode_into_writer(self, &mut cw, *BINCODE_CONFIG)
+            .expect("bincode to bytes for counting size");
+        cw.count
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError>
+    where
+        Self: Sized + Encode,
+    {
+        let v = bincode::encode_to_vec(self, *BINCODE_CONFIG)
+            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))?;
+        Ok(f(&v[..]))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>
+    where
+        Self: Sized + Encode,
+    {
+        bincode::encode_to_vec(self, *BINCODE_CONFIG)
+            .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
+    }
+
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    where
+        Self: Sized,
+    {
+        Ok(bincode::decode_from_slice(bytes.as_ref(), *BINCODE_CONFIG)
+            .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?
+            .0)
+    }
+
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        Ok(Bytes::from(self.make_copy_as_vec()?))
     }
 }

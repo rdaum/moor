@@ -12,14 +12,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::ops::{Div, Mul, Neg, Sub};
+
+use num_traits::Zero;
+use paste::paste;
+
 use crate::var::error::Error;
 use crate::var::error::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::variant::Variant;
 use crate::var::{v_empty_list, v_empty_str, v_listv, Var};
 use crate::var::{v_err, v_float, v_int};
-use num_traits::Zero;
-use paste::paste;
-use std::ops::{Div, Mul, Neg, Sub};
 
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {

@@ -15,9 +15,10 @@
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::ops::Range;
+use std::str;
 use std::str::FromStr;
+use str::from_utf8;
 
-use crate::{AsByteBuffer, DecodingError, EncodingError};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -26,14 +27,10 @@ use bytes::Bytes;
 
 use crate::var::error::Error;
 use crate::var::{v_err, v_str, v_string, Var};
+use crate::{AsByteBuffer, DecodingError, EncodingError};
 
 #[derive(Clone, Debug)]
 pub struct Str(Bytes);
-
-fn transmutey(src: &Bytes) -> &str {
-    let s = src.as_ref();
-    unsafe { std::mem::transmute(s) }
-}
 
 impl Str {
     #[must_use]
@@ -44,7 +41,7 @@ impl Str {
     }
 
     pub fn get(&self, offset: usize) -> Option<Var> {
-        let s = transmutey(&self.0);
+        let s = from_utf8(&self.0).unwrap();
         let r = s.get(offset..offset + 1);
         r.map(v_str)
     }
@@ -57,50 +54,54 @@ impl Str {
         if offset >= self.0.len() {
             return v_err(Error::E_RANGE);
         }
-        let mut s = transmutey(&self.0).to_string();
+        let mut s = from_utf8(&self.0).unwrap().to_string();
         s.replace_range(offset..=offset, r.as_str());
         v_string(s)
     }
 
     pub fn get_range(&self, range: Range<usize>) -> Option<Var> {
-        let s = transmutey(&self.0);
+        let s = from_utf8(&self.0).unwrap();
         let r = s.get(range);
         r.map(v_str)
     }
 
     #[must_use]
     pub fn append(&self, other: &Self) -> Var {
-        v_string(format!("{}{}", transmutey(&self.0), transmutey(&other.0)))
+        v_string(format!(
+            "{}{}",
+            from_utf8(&self.0).unwrap(),
+            from_utf8(&other.0).unwrap()
+        ))
     }
 
     #[must_use]
     pub fn append_str(&self, other: &str) -> Var {
-        v_string(format!("{}{}", transmutey(&self.0), other))
+        v_string(format!("{}{}", from_utf8(&self.0).unwrap(), other))
     }
 
     #[must_use]
     pub fn append_string(&self, other: String) -> Var {
-        v_string(format!("{}{}", transmutey(&self.0), other))
+        v_string(format!("{}{}", from_utf8(&self.0).unwrap(), other))
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        transmutey(&self.0).len()
+        from_utf8(&self.0).unwrap().len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        transmutey(&self.0).is_empty()
+        from_utf8(&self.0).unwrap().is_empty()
     }
 
     #[must_use]
     pub fn as_str(&self) -> &str {
-        transmutey(&self.0)
+        from_utf8(&self.0).unwrap()
     }
 
     #[must_use]
     pub fn substring(&self, range: Range<usize>) -> Self {
-        let s = transmutey(&self.0);
+        let s = from_utf8(&self.0).unwrap();
         let s = s.get(range).unwrap_or("");
         Self::from_string(s.to_string())
     }
@@ -110,8 +111,8 @@ impl Str {
 // bf_is_member and bf_strcmp.
 impl PartialEq for Str {
     fn eq(&self, other: &Self) -> bool {
-        let s = transmutey(&self.0);
-        let o = transmutey(&other.0);
+        let s = from_utf8(&self.0).unwrap();
+        let o = from_utf8(&other.0).unwrap();
         s.eq_ignore_ascii_case(o)
     }
 }
@@ -119,7 +120,7 @@ impl Eq for Str {}
 
 impl Hash for Str {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let s = transmutey(&self.0);
+        let s = from_utf8(&self.0).unwrap();
         s.to_lowercase().hash(state)
     }
 }
@@ -135,7 +136,7 @@ impl FromStr for Str {
 
 impl Display for Str {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", transmutey(&self.0)))
+        f.write_fmt(format_args!("{}", from_utf8(&self.0).unwrap()))
     }
 }
 
@@ -162,8 +163,8 @@ impl<'de> BorrowDecode<'de> for Str {
 
 impl Ord for Str {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let s = transmutey(&self.0);
-        let o = transmutey(&other.0);
+        let s = from_utf8(&self.0).unwrap();
+        let o = from_utf8(&other.0).unwrap();
         s.to_lowercase().cmp(&o.to_lowercase())
     }
 }
