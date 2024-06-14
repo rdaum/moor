@@ -26,3 +26,8 @@ thiserror.workspace = true
 uuid.workspace = true
 yoke.workspace = true
 paste.workspace = true
+
+[features]
+# If List and String are backed by Bytes instead of Arc<Vec<Var>> and Arc<String> respectively.
+list_impl_buffer = []
+default = []

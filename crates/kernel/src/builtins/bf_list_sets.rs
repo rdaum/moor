@@ -78,7 +78,7 @@ fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let value = bf_args.args[1].clone();
     let list = &mut bf_args.args[0];
-    let Variant::List(list) = list.variant().clone() else {
+    let Variant::List(mut list) = list.variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
     let new_list = if bf_args.args.len() == 2 {

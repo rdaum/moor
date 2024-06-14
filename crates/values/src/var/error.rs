@@ -12,13 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::LayoutAs;
 use std::fmt::{Display, Formatter};
 
-use crate::encode::{DecodingError, EncodingError};
+use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use strum::FromRepr;
 
+use crate::encode::{DecodingError, EncodingError};
 use crate::var::{v_none, Var};
 
 #[repr(u8)]

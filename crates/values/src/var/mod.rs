@@ -19,8 +19,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-use crate::encode::BINCODE_CONFIG;
-use crate::{AsByteBuffer, DecodingError, EncodingError};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -30,16 +28,21 @@ use decorum::R64;
 use lazy_static::lazy_static;
 use strum::FromRepr;
 
+use crate::encode::BINCODE_CONFIG;
 use crate::util::quote_str;
-
 pub use crate::var::error::{Error, ErrorPack};
 pub use crate::var::list::List;
 pub use crate::var::objid::Objid;
 pub use crate::var::string::Str;
 pub use crate::var::variant::Variant;
+use crate::{AsByteBuffer, DecodingError, EncodingError};
 
 mod error;
 mod list;
+#[allow(dead_code)]
+mod list_impl_buffer;
+#[allow(dead_code)]
+mod list_impl_vector;
 mod objid;
 mod string;
 mod variant;
@@ -101,21 +104,21 @@ impl Encode for Var {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Use our own encoded form.
         let encoded = encode(self);
-        bincode::encode_into_writer(encoded.as_ref(), encoder.writer(), BINCODE_CONFIG.clone())?;
+        bincode::encode_into_writer(encoded.as_ref(), encoder.writer(), *BINCODE_CONFIG)?;
         Ok(())
     }
 }
 
 impl Decode for Var {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
+        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), *BINCODE_CONFIG)?;
         Ok(decode(Bytes::from(slc)))
     }
 }
 
 impl<'de> BorrowDecode<'de> for Var {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), BINCODE_CONFIG.clone())?;
+        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), *BINCODE_CONFIG)?;
         Ok(decode(Bytes::from(slc)))
     }
 }
@@ -163,6 +166,7 @@ fn encode(v: &Var) -> Bytes {
 }
 
 fn decode(s: Bytes) -> Var {
+    assert!(!s.is_empty());
     let type_id = s.as_ref()[0];
     let type_id = VarType::from_repr(type_id).expect("Invalid type id");
     let bytes = s.slice(1..);

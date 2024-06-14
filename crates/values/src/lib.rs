@@ -14,7 +14,10 @@
 
 extern crate core;
 
-pub use encode::{AsByteBuffer, CountingWriter, DecodingError, EncodingError, BINCODE_CONFIG};
+pub use encode::{
+    AsByteBuffer, BincodeAsByteBufferExt, CountingWriter, DecodingError, EncodingError,
+    BINCODE_CONFIG,
+};
 
 use crate::var::Objid;
 
