@@ -23,7 +23,7 @@ use std::time::{Duration, SystemTime};
 
 use eyre::Error;
 use moor_db::RelationalTransaction;
-use moor_db::{RelationalError, RelationalTransaction, StringHolder, SystemTimeHolder};
+use moor_db::{StringHolder, SystemTimeHolder};
 use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -32,8 +32,6 @@ use bytes::Bytes;
 use moor_db_wiredtiger::{WiredTigerRelDb, WiredTigerRelTransaction, WiredTigerRelation};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::model::{CommitResult, RelationalError, ValSet};
-use moor_values::model::{CommitResult, ValSet};
-use moor_values::util::SliceRef;
 use moor_values::var::Objid;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
 use rpc_common::RpcRequestError;
