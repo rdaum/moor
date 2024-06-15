@@ -326,5 +326,5 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_relbox(&testsuite_dir().join("moot/recycle.moot"));
+    test_wiredtiger(&testsuite_dir().join("moot/recycle.moot"));
 }
