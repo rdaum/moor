@@ -141,7 +141,11 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     if info.len() != 3 {
         return Err(E_INVARG);
     }
-    match (info.get(0).unwrap().variant(), info.get(1).unwrap().variant(), info.get(2).unwrap().variant()) {
+    match (
+        info.get(0).unwrap().variant(),
+        info.get(1).unwrap().variant(),
+        info.get(2).unwrap().variant(),
+    ) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
             let mut perms = BitEnum::new();
             for c in perms_str.as_str().chars() {

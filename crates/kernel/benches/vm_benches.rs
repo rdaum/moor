@@ -32,7 +32,7 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::BitEnum;
-use moor_values::var::{List};
+use moor_values::var::List;
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 fn create_worldstate() -> WiredTigerDB {
