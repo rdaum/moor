@@ -90,9 +90,9 @@ mod tests {
     use moor_db::{
         perform_reparent_props, perform_test_create_object, perform_test_create_object_fixed_id,
         perform_test_descendants, perform_test_location_contents, perform_test_object_move_commits,
-        perform_test_parent_children, perform_test_regression_properties,
-        perform_test_rename_property, perform_test_simple_property,
-        perform_test_transitive_property_resolution,
+        perform_test_parent_children, perform_test_recycle_object,
+        perform_test_regression_properties, perform_test_rename_property,
+        perform_test_simple_property, perform_test_transitive_property_resolution,
         perform_test_transitive_property_resolution_clear_property, perform_test_verb_add_update,
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
         perform_test_verb_resolve_wildcard, RelationalWorldStateTransaction, WorldStateSequence,
@@ -211,5 +211,11 @@ mod tests {
     fn test_reparent() {
         let db = test_db();
         perform_reparent_props(|| begin_tx(&db));
+    }
+
+    #[test]
+    fn test_recycle_object() {
+        let db = test_db();
+        perform_test_recycle_object(|| begin_tx(&db));
     }
 }

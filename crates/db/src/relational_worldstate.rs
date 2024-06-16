@@ -240,11 +240,13 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             WorldStateTable::ObjectVerbs,
         ];
         for rel in oid_relations.iter() {
-            self.tx
-                .as_ref()
-                .unwrap()
-                .remove_by_domain(*rel, obj)
-                .map_err(err_map)?;
+            // It's ok to get NotFound here, since we're deleting anyways.
+            // In particular for ObjectParent, we may not have a tuple.
+            match self.tx.as_ref().unwrap().remove_by_domain(*rel, obj) {
+                Ok(_) => {}
+                Err(RelationalError::NotFound) => {}
+                Err(e) => return Err(err_map(e)),
+            }
         }
 
         let propdefs = self.get_properties(obj)?;
@@ -260,11 +262,17 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .unwrap_or(());
         }
 
-        self.tx
+        // We may or may not have propdefs yet...
+        match self
+            .tx
             .as_ref()
             .unwrap()
             .remove_by_domain(WorldStateTable::ObjectPropDefs, obj)
-            .expect("Unable to delete propdefs");
+        {
+            Ok(_) => {}
+            Err(RelationalError::NotFound) => {}
+            Err(e) => return Err(err_map(e)),
+        }
 
         Ok(())
     }

@@ -146,9 +146,6 @@ where
 
         let domain_datum = to_datum(&self.session, &domain);
         cursor.set_key(domain_datum).map_err(err_map)?;
-        if let Err(Error::NotFound) = cursor.search() {
-            return Ok(());
-        }
         cursor.remove().map_err(err_map)?;
         Ok(())
     }
