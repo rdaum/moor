@@ -131,14 +131,6 @@ impl TryFrom<WorldStateError> for BfErr {
     }
 }
 
-// Dunno, this may come in handy, maybe it'll always be dead code and it should go away
-pub(crate) fn world_state_bf_err_or_else<F>(fallback: F) -> impl FnOnce(WorldStateError) -> BfErr
-where
-    F: FnOnce(WorldStateError) -> BfErr,
-{
-    |err| err.try_into().unwrap_or_else(fallback)
-}
-
 pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
     err.try_into().unwrap()
 }

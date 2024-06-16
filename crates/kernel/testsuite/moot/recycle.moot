@@ -1,3 +1,8 @@
+@programmer
+; $tmp2 = create($nothing);
+; add_property($tmp2, "x", 0, {player, "r"});
+
+
 // Adapted from https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_recycle.rb
 
 // test_that_the_first_argument_is_required 
@@ -17,26 +22,37 @@ E_TYPE
 E_TYPE
 ; recycle($nothing);
 E_INVARG
-// TODO disabled: should return nothing, instead ONLY RELBOX panics with DatabaseError("NotFound")
-// ; recycle(create($nothing));
+; recycle(create($nothing));
 
 // test_that_the_first_argument_must_be_valid
 @programmer
-// TODO disabled: should raise E_INVARG, instead
-//      relbox: panics with DatabaseError("Tuple not found") at crates/values/src/model/mod.rs:124:17
 ; $object = create($nothing); recycle($object); recycle($object);
 E_INVARG
 
 // test_that_a_wizard_can_recycle_anything
-//@wizard
-//; $tmp1 = create($nothing); $tmp1.w = 0;
-//; $tmp2 = create($nothing); $tmp2.w = 1;
-//; add_property($tmp2, "x", 0, {player, "r"});
-//; $tmp2.x = create($nothing); $tmp2.x.w = 0;
-//; recycle($tmp2.x);
-//; recycle($tmp2);
-// TODO disabled: should raise E_INVARG, instead
-//      relbox: panics with DatabaseError("Tuple not found") at crates/values/src/model/mod.rs:124:17
-//      wiretiger: doesn't raise
-// ; recycle($tmp1);
-// E_INVARG
+@wizard
+; $tmp1 = create($nothing); $tmp1.w = 0;
+; $tmp2 = create($nothing); $tmp2.w = 1;
+; add_property($tmp2, "x", 0, {player, "r"});
+; $tmp2.x = create($nothing); $tmp2.x.w = 0;
+; recycle($tmp2.x);
+; recycle($tmp2);
+; recycle($tmp1);
+
+// test_that_a_programmer_can_only_recycle_things_it_controls
+@programmer
+; $tmp1 = create($nothing);
+; $tmp2 = create($nothing);
+; $tmp1.w = 0;
+; $tmp2.w = 1;
+; add_property($tmp2, "x", 0, {player, "r"});
+; $tmp2.x = create($nothing); $tmp2.x.w = 0;
+; add_property($tmp2, "y", 0, {player, "r"});
+; $tmp2.y = create($nothing);
+; recycle($tmp2.y);
+; recycle($tmp2.x);
+E_PERM
+; recycle($tmp2);
+E_PERM
+; recycle($tmp1);
+E_PERM
