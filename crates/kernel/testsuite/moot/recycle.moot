@@ -1,8 +1,3 @@
-@programmer
-; $tmp2 = create($nothing);
-; add_property($tmp2, "x", 0, {player, "r"});
-
-
 // Adapted from https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_recycle.rb
 
 // test_that_the_first_argument_is_required 

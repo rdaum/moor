@@ -125,7 +125,7 @@ impl VMExecState {
     /// Return the permissions of the caller of the current activation.
     pub(crate) fn caller_perms(&self) -> Objid {
         // Filter out builtins.
-        let mut stack_iter = self.stack.iter().rev().filter(|a| a.bf_index.is_none());
+        let mut stack_iter = self.stack.iter().rev();
         // caller is the frame just before us.
         stack_iter.next();
         stack_iter.next().map(|a| a.permissions).unwrap_or(NOTHING)
