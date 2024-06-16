@@ -946,3 +946,114 @@ where
     assert_eq!(perms.owner(), NOTHING);
     assert!(is_clear);
 }
+
+pub fn perform_test_recycle_object<F, TX>(begin_tx: F)
+where
+    F: Fn() -> RelationalWorldStateTransaction<TX>,
+    TX: RelationalTransaction<WorldStateTable>,
+{
+    // Simple: property-less, #-1 located, #-1 parented object.
+    let tx = begin_tx();
+    let tobj = tx
+        .create_object(
+            None,
+            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+        )
+        .unwrap();
+
+    tx.recycle_object(tobj).expect("Unable to recycle object");
+
+    // Verify it's gone.
+    let result = tx.get_object_name(tobj);
+    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(tobj));
+
+    // Create two new objects and root the second off the first.
+    let a = tx
+        .create_object(
+            None,
+            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+        )
+        .unwrap();
+    let b = tx
+        .create_object(
+            None,
+            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+        )
+        .unwrap();
+
+    // Recycle the child, and verify it's gone.
+    tx.recycle_object(b).expect("Unable to recycle object");
+    let result = tx.get_object_name(b);
+    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(b));
+
+    // Verify that children list is empty for the parent.
+    assert!(tx.get_object_children(a).unwrap().is_empty());
+
+    // Create another one, add a property to the root, and then verify we can recycle the child.
+    let c = tx
+        .create_object(
+            None,
+            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
+        )
+        .unwrap();
+    tx.define_property(
+        a,
+        a,
+        "test".into(),
+        NOTHING,
+        BitEnum::new(),
+        Some(v_str("test_value")),
+    )
+    .unwrap();
+
+    // Verify root's children list contains our object.
+    assert!(tx
+        .get_object_children(a)
+        .unwrap()
+        .is_same(ObjSet::from_items(&[c])));
+
+    tx.recycle_object(c).expect("Unable to recycle object");
+    let result = tx.get_object_name(c);
+    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(c));
+
+    // Verify the property is still there.
+    let (prop, v, perms, _) = tx.resolve_property(a, "test".into()).unwrap();
+    assert_eq!(prop.name(), "test");
+    assert_eq!(v, v_str("test_value"));
+    assert_eq!(perms.owner(), NOTHING);
+
+    // Create another, add a property, then recycle the root.
+    let d = tx
+        .create_object(
+            None,
+            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test4"),
+        )
+        .unwrap();
+    tx.define_property(
+        a,
+        a,
+        "test2".into(),
+        NOTHING,
+        BitEnum::new(),
+        Some(v_str("test_value2")),
+    )
+    .unwrap();
+
+    tx.recycle_object(a).expect("Unable to recycle object");
+    let result = tx.get_object_name(a);
+    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(a));
+
+    // Verify the child object is still there despite its parent being destroyed.
+    let result = tx.get_object_name(d);
+    assert_eq!(result.unwrap(), "test4");
+
+    // Verify the object's parent is now NOTHING.
+    assert_eq!(tx.get_object_parent(d).unwrap(), NOTHING);
+
+    // We should not have the property, it came from our parent.
+    let result = tx.resolve_property(d, "test2".into());
+    assert_eq!(
+        result.err().unwrap(),
+        WorldStateError::PropertyNotFound(d, "test2".into())
+    );
+}
