@@ -336,7 +336,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     .world_state
                     .recycle_object(bf_args.task_perms_who(), *obj)
                     .map_err(world_state_bf_err)?;
-                return Ok(Ret(v_none()));
+                return Ok(Ret(v_int(0)));
             }
             Some(unknown) => {
                 panic!("Invalid trampoline for bf_recycle {}", unknown)
