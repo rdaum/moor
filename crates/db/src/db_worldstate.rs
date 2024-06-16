@@ -80,6 +80,22 @@ impl WorldState for DbTxWorldState {
     }
 
     #[tracing::instrument(skip(self))]
+    fn controls(&self, who: Objid, what: Objid) -> Result<bool, WorldStateError> {
+        let flags = self.flags_of(who)?;
+        if flags.contains(ObjFlag::Wizard) {
+            return Ok(true);
+        }
+        if who == what {
+            return Ok(true);
+        }
+        let owner = self.owner_of(what)?;
+        if owner == who {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    #[tracing::instrument(skip(self))]
     fn flags_of(&self, obj: Objid) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         self.tx.get_object_flags(obj)
     }

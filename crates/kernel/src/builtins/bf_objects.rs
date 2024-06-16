@@ -22,7 +22,7 @@ use moor_values::model::WorldStateError;
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::var::v_listv;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_NACC, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
 use moor_values::var::{v_bool, v_int, v_none, v_objid, v_str};
 use moor_values::var::{List, Variant};
 use moor_values::NOTHING;
@@ -198,6 +198,15 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+
+    // Check if the given task perms can control the object before continuing.
+    if !bf_args
+        .world_state
+        .controls(bf_args.task_perms_who(), *obj)
+        .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::Code(E_PERM));
+    }
 
     // Before actually recycling the object, we need to move all its contents to #-1. While
     // `recycle_object` will actually do this, we need to make sure :exitfunc is called on each

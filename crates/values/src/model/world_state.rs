@@ -45,6 +45,10 @@ pub trait WorldState {
     /// Get the owner of an object
     fn owner_of(&self, obj: Objid) -> Result<Objid, WorldStateError>;
 
+    /// Return whether the given object is controlled by the given player.
+    /// (Either who is wizard, or is owner of what).
+    fn controls(&self, who: Objid, what: Objid) -> Result<bool, WorldStateError>;
+
     /// Flags of an object.
     /// Note this call does not take a permission context, because it is used to *determine*
     /// permissions. It is the caller's responsibility to ensure that the program is using this
