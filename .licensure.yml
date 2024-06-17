@@ -28,6 +28,7 @@ comments:
 
 excludes:
   - \.gitignore
+  - \.gitmodules
   - .*lock
   - \.git/.*
   - \.idea/.*
