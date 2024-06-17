@@ -33,8 +33,10 @@ excludes:
   - \.git/.*
   - \.idea/.*
   - \.cargo/.*
+  - crates/db-wiredtiger/third-party/*
   - target/.*
   - README.*
   - LICENSE.*
   - Dockerfile
-  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html)
+  - core
+  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot)
