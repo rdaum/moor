@@ -22,6 +22,7 @@ use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_kernel::textdump::textdump_load;
+use moor_moot::test_db_path;
 use moor_values::model::CommitResult;
 use moor_values::model::Named;
 use moor_values::model::VerbArgsSpec;
@@ -38,21 +39,16 @@ use uuid::Uuid;
 use moor_db_relbox::RelBoxWorldState;
 
 #[allow(dead_code)]
-pub const WIZARD: Objid = Objid(3);
-#[allow(dead_code)]
-pub const PROGRAMMER: Objid = Objid(4);
-#[allow(dead_code)]
-pub const NONPROGRAMMER: Objid = Objid(5);
-
 pub fn testsuite_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     Path::new(manifest_dir).join("testsuite")
 }
 
 /// Create a minimal Db to support the test harness.
+#[allow(dead_code)]
 pub fn load_textdump(db: Arc<dyn Database>) {
     let mut tx = db.loader_client().unwrap();
-    textdump_load(tx.as_ref(), testsuite_dir().join("Test.db")).expect("Could not load textdump");
+    textdump_load(tx.as_ref(), test_db_path()).expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 

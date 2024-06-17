@@ -24,7 +24,7 @@ use std::{
     sync::{Arc, Once},
 };
 
-use common::{create_wiredtiger_db, testsuite_dir, NONPROGRAMMER, PROGRAMMER};
+use common::{create_wiredtiger_db, testsuite_dir};
 use eyre::Context;
 use moor_db::Database;
 use moor_kernel::{
@@ -35,33 +35,11 @@ use moor_kernel::{
         sessions::{NoopClientSession, Session},
     },
 };
+use moor_moot::{MootRunner, MootState, WIZARD};
 use moor_values::var::{v_none, Objid, Var};
-use pretty_assertions::assert_eq;
-
-use crate::common::WIZARD;
 
 #[cfg(feature = "relbox")]
 use common::create_relbox_db;
-
-#[derive(Clone, Copy, Debug)]
-enum CommandKind {
-    Eval,
-    Command,
-}
-impl From<char> for CommandKind {
-    fn from(c: char) -> Self {
-        match c {
-            ';' => CommandKind::Eval,
-            '%' => CommandKind::Command,
-            _ => panic!("Unknown command kind: {}", c),
-        }
-    }
-}
-
-trait MootRunner {
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError>;
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError>;
-}
 
 #[derive(Clone)]
 struct SchedulerMootRunner {
@@ -74,6 +52,9 @@ impl SchedulerMootRunner {
     }
 }
 impl MootRunner for SchedulerMootRunner {
+    type Value = Var;
+    type Error = SchedulerError;
+
     fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
         scheduler_test_utils::call_eval(
             self.scheduler.clone(),
@@ -91,199 +72,9 @@ impl MootRunner for SchedulerMootRunner {
             command.as_ref(),
         )
     }
-}
 
-enum MootState<R: MootRunner> {
-    Ready {
-        runner: R,
-        player: Objid,
-    },
-    ReadingCommand {
-        runner: R,
-        player: Objid,
-        line_no: usize,
-        command: String,
-        command_kind: CommandKind,
-    },
-    ReadingExpectation {
-        runner: R,
-        player: Objid,
-        line_no: usize,
-        command: String,
-        command_kind: CommandKind,
-        expectation: String,
-    },
-}
-impl<R: MootRunner> MootState<R> {
-    fn new(runner: R, player: Objid) -> Self {
-        MootState::Ready { runner, player }
-    }
-
-    fn into_runner(self) -> R {
-        match self {
-            MootState::Ready { runner, .. } => runner,
-            MootState::ReadingCommand { runner, .. } => runner,
-            MootState::ReadingExpectation { runner, .. } => runner,
-        }
-    }
-
-    // Could implement this with `nom` I guess, but this seems simple enough, and it's probably easier to read.
-    fn process_line(self, new_line_no: usize, line: &str) -> eyre::Result<Self> {
-        let line = line.trim_end_matches('\n');
-        match self {
-            MootState::Ready { runner, player } => {
-                if line.starts_with([';', '%']) {
-                    Ok(MootState::ReadingCommand {
-                        runner,
-                        player,
-                        line_no: new_line_no,
-                        command: line[1..].trim_start().to_string(),
-                        command_kind: line.chars().next().unwrap().into(),
-                    })
-                } else if let Some(new_player) = line.strip_prefix('@') {
-                    Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.is_empty() || line.starts_with("//") {
-                    Ok(MootState::new(runner, player))
-                } else {
-                    Err(eyre::eyre!(
-                        "Expected a command (starting `;`), a comment (starting `//`), a player switch (starting `@`), a command (starting `%`), or an empty line"
-                    ))
-                }
-            }
-            MootState::ReadingCommand {
-                mut runner,
-                player,
-                line_no,
-                mut command,
-                command_kind,
-            } => {
-                if let Some(rest) = line.strip_prefix('>') {
-                    command.push_str(rest);
-                    Ok(MootState::ReadingCommand {
-                        runner,
-                        player,
-                        line_no,
-                        command,
-                        command_kind,
-                    })
-                } else if let Some(new_player) = line.strip_prefix('@') {
-                    Self::execute_test(&mut runner, player, &command, command_kind, None, line_no)?;
-                    Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.starts_with([';', '%']) || line.is_empty() {
-                    Self::execute_test(&mut runner, player, &command, command_kind, None, line_no)?;
-                    MootState::new(runner, player).process_line(new_line_no, line)
-                } else {
-                    let line = line.strip_prefix('<').unwrap_or(line);
-                    Ok(MootState::ReadingExpectation {
-                        runner,
-                        player,
-                        line_no,
-                        command,
-                        command_kind,
-                        expectation: line.to_string(),
-                    })
-                }
-            }
-            MootState::ReadingExpectation {
-                mut runner,
-                player,
-                line_no,
-                command,
-                command_kind,
-                mut expectation,
-            } => {
-                if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%']) {
-                    Self::execute_test(
-                        &mut runner,
-                        player,
-                        &command,
-                        command_kind,
-                        Some(&expectation),
-                        line_no,
-                    )?;
-                }
-                if line.is_empty() || line.starts_with("//") {
-                    Ok(MootState::new(runner, player))
-                } else if let Some(new_player) = line.strip_prefix('@') {
-                    Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.starts_with([';', '%']) {
-                    MootState::new(runner, player).process_line(new_line_no, line)
-                } else {
-                    expectation.push('\n');
-                    let line = line.strip_prefix('<').unwrap_or(line);
-                    expectation.push_str(line);
-                    Ok(MootState::ReadingExpectation {
-                        runner,
-                        player,
-                        line_no,
-                        command,
-                        command_kind,
-                        expectation,
-                    })
-                }
-            }
-        }
-    }
-
-    fn finalize(self) -> eyre::Result<()> {
-        match self {
-            MootState::Ready { .. } => Ok(()),
-            MootState::ReadingCommand {
-                mut runner,
-                player,
-                command,
-                line_no,
-                command_kind,
-            } => Self::execute_test(&mut runner, player, &command, command_kind, None, line_no),
-            MootState::ReadingExpectation {
-                mut runner,
-                player,
-                line_no,
-                command,
-                command_kind,
-                expectation,
-            } => Self::execute_test(
-                &mut runner,
-                player,
-                &command,
-                command_kind,
-                Some(&expectation),
-                line_no,
-            ),
-        }
-    }
-
-    fn player(s: &str) -> eyre::Result<Objid> {
-        match s {
-            "wizard" => Ok(WIZARD),
-            "programmer" => Ok(PROGRAMMER),
-            "nonprogrammer" => Ok(NONPROGRAMMER),
-            _ => Err(eyre::eyre!("Unknown player: {s}")),
-        }
-    }
-
-    fn execute_test(
-        runner: &mut R,
-        player: Objid,
-        command: &str,
-        command_kind: CommandKind,
-        expectation: Option<&str>,
-        line_no: usize,
-    ) -> eyre::Result<()> {
-        let expected = if let Some(expectation) = expectation {
-            runner
-                .eval(WIZARD, format!("return {expectation};"))
-                .context(format!("Failed to compile expected output: {expectation}"))?
-        } else {
-            v_none()
-        };
-
-        let actual = match command_kind {
-            CommandKind::Eval => runner.eval(player, command),
-            CommandKind::Command => runner.command(player, command),
-        }?;
-        assert_eq!(actual, expected, "Line {line_no}: {command}");
-        Ok(())
+    fn none(&self) -> Var {
+        v_none()
     }
 }
 

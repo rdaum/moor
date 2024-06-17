@@ -15,4 +15,8 @@ Globals:
 
 Verbs:
 
-- `#2:eval`: `notify(player, toliteral(eval(("return " + argstr) + ";")[2]));`
+- `#2:do_login_command`: `connect $EXPR` logs in with the player as the object `eval($EXPR)`
+- `#2:eval`:
+  - prefixes output with a line containing `-=!-^-!=-`
+  - when an exception is thrown, returns the error value instead of a nice stack trace
+  - suffixes output with a line containing `-=!-v-!=-`

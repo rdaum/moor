@@ -46,6 +46,7 @@ harness = false
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-values = { path = "../values" }
+moor-moot = { path = "../moot" }
 
 ## Should be dev-dependencies, but cargo won't allow optional dev-deps
 moor-db-relbox = { path = "../db-relbox", optional = true }
