@@ -15,6 +15,7 @@ members = [
     "crates/telnet-host",
     "crates/web-host",
     "crates/console-host",
+    "crates/moot",
 ]
 default-members = [
     "crates/values",
@@ -29,6 +30,7 @@ default-members = [
     "crates/telnet-host",
     "crates/web-host",
     "crates/console-host",
+    "crates/moot",
 ]
 
 [workspace.package]
@@ -40,8 +42,20 @@ authors = [
 repository = "https://github.com/rdaum/moor.git"
 license = "GPL-3"
 rust-version = "1.78.0"
-categories = ["game", "virtual-world", "mud", "database", "programming-language"]
-keywords = ["mud", "programming-language", "virtual-world", "game", "virtual-machine"]
+categories = [
+    "game",
+    "virtual-world",
+    "mud",
+    "database",
+    "programming-language",
+]
+keywords = [
+    "mud",
+    "programming-language",
+    "virtual-world",
+    "game",
+    "virtual-machine",
+]
 readme = "README.md"
 
 [workspace.dependencies]
@@ -91,7 +105,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
 dashmap = "5.5"
 daumtils = { git = "https://github.com/rdaum/daumtils.git", version = "0.2.0" }
-decorum = "0.3"                                             # For ordering & comparing our floats
+decorum = "0.3"                                                                 # For ordering & comparing our floats
 enum-primitive-derive = "0.3"
 fast-counter = "1.0"
 human_bytes = "0.4"
@@ -112,7 +126,7 @@ yoke-derive = "0.7.3"
 chrono-tz = "0.9.0"
 pwhash = { version = "1.0.0", default-features = false }
 iana-time-zone = "0.1.60"
-md-5 = "0.9.1"                                            # For MOO's "string_hash"
+md-5 = "0.9.1"                                           # For MOO's "string_hash"
 onig = { version = "6.4.0", default-features = false }
 rand = "0.8"
 
@@ -130,12 +144,12 @@ paste = "1.0"
 
 # For the DB & values layer.
 crossbeam-queue = "0.3"
-hi_sparse_bitset = "0.6" # For buffer pool allocator in the DB
-im = "15.1"              # Immutable data structures
+hi_sparse_bitset = "0.6"                                                    # For buffer pool allocator in the DB
+im = "15.1"                                                                 # Immutable data structures
 io-uring = "0.6"
 libc = "0.2"
 okaywal = "0.3"
-text_io = "0.1"          # Used for reading text dumps.
+text_io = "0.1"                                                             # Used for reading text dumps.
 relbox = { git = "https://github.com/rdaum/Relbox.git", version = "0.2.0" }
 
 # Dev dependencies

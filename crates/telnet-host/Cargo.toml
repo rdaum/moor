@@ -15,6 +15,7 @@ readme.workspace = true
 moor-values = { path = "../values" }
 rpc-async-client = { path = "../rpc-async-client" }
 rpc-common = { path = "../rpc-common" }
+moor-moot = { path = "../moot" }
 
 ## Command line arguments parsing.
 clap.workspace = true

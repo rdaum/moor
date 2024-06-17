@@ -129,10 +129,20 @@ nonprogrammer
 0
 0
 #0:0
-return #3;
+if (length(args) >= 2)
+    return eval("return " + args[2] + ";")[2];
+else
+    return player;
+endif
 .
 #2:0
-notify(player, toliteral(eval(("return " + argstr) + ";")[2]));
+notify(player, "-=!-^-!=-");
+try
+    notify(player, toliteral(eval(argstr + ";")[2]));
+except err (ANY)
+    notify(player, toliteral(err[1]));
+endtry
+notify(player, "-=!-v-!=-");
 .
 0 clocks
 0 queued tasks

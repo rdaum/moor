@@ -1900,6 +1900,7 @@ dependencies = [
  "moor-db",
  "moor-db-relbox",
  "moor-db-wiredtiger",
+ "moor-moot",
  "moor-values",
  "oneshot",
  "onig",
@@ -1922,6 +1923,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-moot"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "moor-values",
+ "pretty_assertions",
+]
+
+[[package]]
 name = "moor-telnet-host"
 version = "0.1.0"
 dependencies = [
@@ -1931,6 +1941,7 @@ dependencies = [
  "escargot",
  "eyre",
  "futures-util",
+ "moor-moot",
  "moor-values",
  "pretty_assertions",
  "rpc-async-client",
