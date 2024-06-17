@@ -30,12 +30,12 @@ use moor_db::Database;
 use moor_kernel::{
     config::Config,
     tasks::{
-        scheduler::Scheduler,
+        scheduler::{Scheduler, SchedulerError},
         scheduler_test_utils,
         sessions::{NoopClientSession, Session},
     },
 };
-use moor_values::var::{v_none, Objid};
+use moor_values::var::{v_none, Objid, Var};
 use pretty_assertions::assert_eq;
 
 use crate::common::WIZARD;
@@ -58,61 +58,72 @@ impl From<char> for CommandKind {
     }
 }
 
-#[derive(Clone)]
-struct MootContext {
-    scheduler: Arc<Scheduler>,
-    session: Arc<dyn Session>,
-    player: Objid,
+trait MootRunner {
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError>;
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError>;
 }
 
-impl MootContext {
-    fn with_player(self, player: &str) -> eyre::Result<Self> {
-        Ok(MootContext {
-            player: MootState::player(player)?,
-            ..self
-        })
+#[derive(Clone)]
+struct SchedulerMootRunner {
+    scheduler: Arc<Scheduler>,
+    session: Arc<dyn Session>,
+}
+impl SchedulerMootRunner {
+    fn new(scheduler: Arc<Scheduler>, session: Arc<dyn Session>) -> Self {
+        Self { scheduler, session }
+    }
+}
+impl MootRunner for SchedulerMootRunner {
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
+        scheduler_test_utils::call_eval(
+            self.scheduler.clone(),
+            self.session.clone(),
+            player,
+            command.into(),
+        )
+    }
+
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
+        scheduler_test_utils::call_command(
+            self.scheduler.clone(),
+            self.session.clone(),
+            player,
+            command.as_ref(),
+        )
     }
 }
 
-enum MootState {
+enum MootState<R: MootRunner> {
     Ready {
-        ctx: MootContext,
+        runner: R,
+        player: Objid,
     },
     ReadingCommand {
-        ctx: MootContext,
+        runner: R,
+        player: Objid,
         line_no: usize,
         command: String,
         command_kind: CommandKind,
     },
     ReadingExpectation {
-        ctx: MootContext,
+        runner: R,
+        player: Objid,
         line_no: usize,
         command: String,
         command_kind: CommandKind,
         expectation: String,
     },
 }
-impl From<MootContext> for MootState {
-    fn from(ctx: MootContext) -> Self {
-        MootState::Ready { ctx }
-    }
-}
-impl MootState {
-    fn new(scheduler: Arc<Scheduler>, session: Arc<dyn Session>, player: Objid) -> Self {
-        MootState::Ready {
-            ctx: MootContext {
-                scheduler,
-                session,
-                player,
-            },
-        }
+impl<R: MootRunner> MootState<R> {
+    fn new(runner: R, player: Objid) -> Self {
+        MootState::Ready { runner, player }
     }
 
-    fn into_context(self) -> MootContext {
+    fn into_runner(self) -> R {
         match self {
-            MootState::Ready { ctx } => ctx,
-            MootState::ReadingCommand { ctx, .. } => ctx,
-            MootState::ReadingExpectation { ctx, .. } => ctx,
+            MootState::Ready { runner, .. } => runner,
+            MootState::ReadingCommand { runner, .. } => runner,
+            MootState::ReadingExpectation { runner, .. } => runner,
         }
     }
 
@@ -120,20 +131,19 @@ impl MootState {
     fn process_line(self, new_line_no: usize, line: &str) -> eyre::Result<Self> {
         let line = line.trim_end_matches('\n');
         match self {
-            MootState::Ready { .. } => {
+            MootState::Ready { runner, player } => {
                 if line.starts_with([';', '%']) {
                     Ok(MootState::ReadingCommand {
-                        ctx: self.into_context(),
+                        runner,
+                        player,
                         line_no: new_line_no,
                         command: line[1..].trim_start().to_string(),
                         command_kind: line.chars().next().unwrap().into(),
                     })
                 } else if let Some(new_player) = line.strip_prefix('@') {
-                    Ok(MootState::from(
-                        self.into_context().with_player(new_player)?,
-                    ))
+                    Ok(MootState::new(runner, Self::player(new_player)?))
                 } else if line.is_empty() || line.starts_with("//") {
-                    Ok(self)
+                    Ok(MootState::new(runner, player))
                 } else {
                     Err(eyre::eyre!(
                         "Expected a command (starting `;`), a comment (starting `//`), a player switch (starting `@`), a command (starting `%`), or an empty line"
@@ -141,7 +151,8 @@ impl MootState {
                 }
             }
             MootState::ReadingCommand {
-                ctx,
+                mut runner,
+                player,
                 line_no,
                 mut command,
                 command_kind,
@@ -149,21 +160,23 @@ impl MootState {
                 if let Some(rest) = line.strip_prefix('>') {
                     command.push_str(rest);
                     Ok(MootState::ReadingCommand {
-                        ctx,
+                        runner,
+                        player,
                         line_no,
                         command,
                         command_kind,
                     })
                 } else if let Some(new_player) = line.strip_prefix('@') {
-                    Self::execute_test(&ctx, &command, command_kind, None, line_no)?;
-                    Ok(MootState::from(ctx.with_player(new_player)?))
+                    Self::execute_test(&mut runner, player, &command, command_kind, None, line_no)?;
+                    Ok(MootState::new(runner, Self::player(new_player)?))
                 } else if line.starts_with([';', '%']) || line.is_empty() {
-                    Self::execute_test(&ctx, &command, command_kind, None, line_no)?;
-                    MootState::from(ctx).process_line(new_line_no, line)
+                    Self::execute_test(&mut runner, player, &command, command_kind, None, line_no)?;
+                    MootState::new(runner, player).process_line(new_line_no, line)
                 } else {
                     let line = line.strip_prefix('<').unwrap_or(line);
                     Ok(MootState::ReadingExpectation {
-                        ctx,
+                        runner,
+                        player,
                         line_no,
                         command,
                         command_kind,
@@ -172,27 +185,36 @@ impl MootState {
                 }
             }
             MootState::ReadingExpectation {
-                ctx,
+                mut runner,
+                player,
                 line_no,
                 command,
                 command_kind,
                 mut expectation,
             } => {
                 if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%']) {
-                    Self::execute_test(&ctx, &command, command_kind, Some(&expectation), line_no)?;
+                    Self::execute_test(
+                        &mut runner,
+                        player,
+                        &command,
+                        command_kind,
+                        Some(&expectation),
+                        line_no,
+                    )?;
                 }
                 if line.is_empty() || line.starts_with("//") {
-                    Ok(MootState::from(ctx))
+                    Ok(MootState::new(runner, player))
                 } else if let Some(new_player) = line.strip_prefix('@') {
-                    Ok(MootState::from(ctx.with_player(new_player)?))
+                    Ok(MootState::new(runner, Self::player(new_player)?))
                 } else if line.starts_with([';', '%']) {
-                    MootState::from(ctx).process_line(new_line_no, line)
+                    MootState::new(runner, player).process_line(new_line_no, line)
                 } else {
                     expectation.push('\n');
                     let line = line.strip_prefix('<').unwrap_or(line);
                     expectation.push_str(line);
                     Ok(MootState::ReadingExpectation {
-                        ctx,
+                        runner,
+                        player,
                         line_no,
                         command,
                         command_kind,
@@ -207,18 +229,27 @@ impl MootState {
         match self {
             MootState::Ready { .. } => Ok(()),
             MootState::ReadingCommand {
-                ctx,
-                line_no,
+                mut runner,
+                player,
                 command,
+                line_no,
                 command_kind,
-            } => Self::execute_test(&ctx, &command, command_kind, None, line_no),
+            } => Self::execute_test(&mut runner, player, &command, command_kind, None, line_no),
             MootState::ReadingExpectation {
-                ctx,
+                mut runner,
+                player,
                 line_no,
                 command,
                 command_kind,
                 expectation,
-            } => Self::execute_test(&ctx, &command, command_kind, Some(&expectation), line_no),
+            } => Self::execute_test(
+                &mut runner,
+                player,
+                &command,
+                command_kind,
+                Some(&expectation),
+                line_no,
+            ),
         }
     }
 
@@ -232,37 +263,24 @@ impl MootState {
     }
 
     fn execute_test(
-        ctx: &MootContext,
+        runner: &mut R,
+        player: Objid,
         command: &str,
         command_kind: CommandKind,
         expectation: Option<&str>,
         line_no: usize,
     ) -> eyre::Result<()> {
         let expected = if let Some(expectation) = expectation {
-            scheduler_test_utils::call_eval(
-                ctx.scheduler.clone(),
-                ctx.session.clone(),
-                WIZARD,
-                format!("return {expectation};"),
-            )
-            .context(format!("Failed to compile expected output: {expectation}"))?
+            runner
+                .eval(WIZARD, format!("return {expectation};"))
+                .context(format!("Failed to compile expected output: {expectation}"))?
         } else {
             v_none()
         };
 
         let actual = match command_kind {
-            CommandKind::Eval => scheduler_test_utils::call_eval(
-                ctx.scheduler.clone(),
-                ctx.session.clone(),
-                ctx.player,
-                command.into(),
-            ),
-            CommandKind::Command => scheduler_test_utils::call_command(
-                ctx.scheduler.clone(),
-                ctx.session.clone(),
-                ctx.player,
-                command,
-            ),
+            CommandKind::Eval => runner.eval(player, command),
+            CommandKind::Command => runner.command(player, command),
         }?;
         assert_eq!(actual, expected, "Line {line_no}: {command}");
         Ok(())
@@ -316,8 +334,7 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
         .unwrap();
 
     let mut state = MootState::new(
-        scheduler.clone(),
-        Arc::new(NoopClientSession::new()),
+        SchedulerMootRunner::new(scheduler.clone(), Arc::new(NoopClientSession::new())),
         WIZARD,
     );
     for (line_no, line) in f.lines().enumerate() {
