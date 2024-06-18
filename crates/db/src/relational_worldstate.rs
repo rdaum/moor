@@ -17,6 +17,7 @@ use crate::{
     BytesHolder, RelationalError, RelationalTransaction, StringHolder, UUIDHolder,
     WorldStateSequence, WorldStateTable,
 };
+use bytes::Bytes;
 use moor_values::model::{
     BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs,
     PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
@@ -651,7 +652,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .unwrap_or(VerbDefs::empty()))
     }
 
-    fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError> {
+    fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Bytes, WorldStateError> {
         let bh: BytesHolder = self
             .tx
             .as_ref()
@@ -659,7 +660,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .seek_by_unique_composite_domain(WorldStateTable::VerbProgram, obj, UUIDHolder(uuid))
             .map_err(err_map)?
             .ok_or_else(|| WorldStateError::VerbNotFound(obj, format!("{}", uuid)))?;
-        Ok(bh.0)
+        Ok(Bytes::from(bh.0))
     }
 
     fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError> {

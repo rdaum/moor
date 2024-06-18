@@ -366,14 +366,10 @@ mod test {
                 let binary1 = tx1.get_verb_binary(o, v1.uuid()).unwrap();
                 let binary2 = tx2.get_verb_binary(o, v2.uuid()).unwrap();
 
-                let program1 = moor_compiler::program_to_tree(
-                    &Program::from_bytes(Bytes::from(binary1)).unwrap(),
-                )
-                .unwrap();
-                let program2 = moor_compiler::program_to_tree(
-                    &Program::from_bytes(Bytes::from(binary2)).unwrap(),
-                )
-                .unwrap();
+                let program1 =
+                    moor_compiler::program_to_tree(&Program::from_bytes(binary1).unwrap()).unwrap();
+                let program2 =
+                    moor_compiler::program_to_tree(&Program::from_bytes(binary2).unwrap()).unwrap();
 
                 assert_eq!(
                     program1.names, program2.names,

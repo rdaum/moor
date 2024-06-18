@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bytes::Bytes;
 use uuid::Uuid;
 
 use moor_values::model::PropFlag;
@@ -95,8 +96,7 @@ pub trait WorldStateTransaction {
     fn get_verbs(&self, obj: Objid) -> Result<VerbDefs, WorldStateError>;
 
     /// Get the binary of the given verb.
-    // TODO: "binaries" returned from the db should be Bytess, not Vecs.
-    fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Vec<u8>, WorldStateError>;
+    fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Bytes, WorldStateError>;
 
     /// Find & get the verb with the given name on the given object.
     fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError>;
