@@ -14,7 +14,6 @@
 
 use std::collections::BTreeMap;
 
-use bytes::Bytes;
 use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
 use moor_values::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
@@ -179,8 +178,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
                 .get_verb_binary(*db_objid, verb.uuid())
                 .expect("Failed to get verb binary");
 
-            let program =
-                Program::from_bytes(Bytes::from(binary)).expect("Failed to parse verb binary");
+            let program = Program::from_bytes(binary).expect("Failed to parse verb binary");
             let program = if !program.main_vector.is_empty() {
                 let ast = moor_compiler::program_to_tree(&program)
                     .expect("Failed to decompile verb binary");

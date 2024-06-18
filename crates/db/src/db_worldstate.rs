@@ -597,7 +597,7 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
         let binary = self.tx.get_verb_binary(vh.location(), vh.uuid())?;
-        Ok(VerbInfo::new(vh, Bytes::from(binary)))
+        Ok(VerbInfo::new(vh, binary))
     }
 
     #[tracing::instrument(skip(self))]
@@ -612,7 +612,7 @@ impl WorldState for DbTxWorldState {
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
         let binary = self.tx.get_verb_binary(vh.location(), vh.uuid())?;
-        Ok(VerbInfo::new(vh, Bytes::from(binary)))
+        Ok(VerbInfo::new(vh, binary))
     }
 
     #[tracing::instrument(skip(self))]
@@ -664,7 +664,7 @@ impl WorldState for DbTxWorldState {
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
         let binary = self.tx.get_verb_binary(vh.location(), vh.uuid())?;
-        Ok(Some(VerbInfo::new(vh, Bytes::from(binary))))
+        Ok(Some(VerbInfo::new(vh, binary)))
     }
 
     #[tracing::instrument(skip(self))]
