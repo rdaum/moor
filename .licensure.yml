@@ -14,6 +14,12 @@ comments:
       comment_char: "//"
       trailing_lines: 1
   - columns: 80
+    extension: h
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
+  - columns: 80
     extension: pest
     commenter:
       type: line
