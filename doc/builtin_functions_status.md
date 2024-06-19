@@ -5,7 +5,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 ### Lists
 
 | Name       | Complete | Notes |
-|------------|----------|-------|
+| ---------- | -------- | ----- |
 | length     | &check;  |       |
 | setadd     | &check;  |       |
 | setremove  | &check;  |       |
@@ -21,20 +21,20 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Strings
 
-| Name       | Complete | Notes                                                                          |
-|------------|----------|--------------------------------------------------------------------------------|
-| tostr      | &check;  |                                                                                |
-| toliteral  | &check;  |                                                                                |
-| crypt      | &check;  | Pretty damned insecure, only here to support existing core password functions. |
-| index      | &check;  |                                                                                |
-| rindex     | &check;  |                                                                                |
-| strcmp     | &check;  |                                                                                |
-| strsub     | &check;  |                                                                                |
+| Name      | Complete | Notes                                                                          |
+| --------- | -------- | ------------------------------------------------------------------------------ |
+| tostr     | &check;  |                                                                                |
+| toliteral | &check;  |                                                                                |
+| crypt     | &check;  | Pretty damned insecure, only here to support existing core password functions. |
+| index     | &check;  |                                                                                |
+| rindex    | &check;  |                                                                                |
+| strcmp    | &check;  |                                                                                |
+| strsub    | &check;  |                                                                                |
 
 ### Numbers
 
 | Name     | Complete | Notes |
-|----------|----------|-------|
+| -------- | -------- | ----- |
 | toint    | &check;  |       |
 | tonum    | &check;  |       |
 | tofloat  | &check;  |       |
@@ -65,7 +65,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 ### Objects
 
 | Name            | Complete | Notes                              |
-|-----------------|----------|------------------------------------|
+| --------------- | -------- | ---------------------------------- |
 | toobj           | &check;  |                                    |
 | typeof          | &check;  |                                    |
 | create          | &check;  | Quota support not implemented yet. |
@@ -83,7 +83,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 ### Properties
 
 | Name              | Complete | Notes |
-|-------------------|----------|-------|
+| ----------------- | -------- | ----- |
 | properties        | &check;  |       |
 | property_info     | &check;  |       |
 | set_property_info | &check;  |       |
@@ -95,7 +95,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 ### Verbs
 
 | Name          | Complete | Notes |
-|---------------|----------|-------|
+| ------------- | -------- | ----- |
 | verbs         | &check;  |       |
 | verb_info     | &check;  |       |
 | set_verb_info | &check;  |       |
@@ -111,7 +111,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 ### Values / encoding
 
 | Name          | Complete | Notes                                                                                                        |
-|---------------|----------|--------------------------------------------------------------------------------------------------------------|
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
 | value_bytes   | &check;  | Encodes the value as it is currently stored in DB, and counts bytes. But I'd rather not keep this, long run. |
 | value_hash    |          |                                                                                                              |
 | string_hash   | &check;  |                                                                                                              |
@@ -123,7 +123,7 @@ The following is a table of the status of various builtin-functions, to keep an 
 ### Server
 
 | Name                | Complete | Notes                                                                    |
-|---------------------|----------|--------------------------------------------------------------------------|
+| ------------------- | -------- | ------------------------------------------------------------------------ |
 | server_version      | &check;  | Hardcoded value, should derive from bin crate                            |
 | renumber            |          |                                                                          |
 | reset_max_object    |          |                                                                          |
@@ -140,26 +140,24 @@ The following is a table of the status of various builtin-functions, to keep an 
 | server_log          | &check;  |                                                                          |
 | load_server_options |          |                                                                          |
 | function_info       | &check;  |                                                                          |
-| read                |          |                                                       |
-
+| read                |          |                                                                          |
 
 ### Tasks
 
-| Name              | Complete | Notes |
-|-------------------|----------|-------|
-| task_id           | &check;  |       |
-| queued_tasks      | &check;  |       |
-| kill_task         | &check;  |       |
-| resume            | &check;  |       |
-| queue_info        |          |       |
-| force_input       |          |       |
-| flush_input       |          |       |
-
+| Name         | Complete | Notes |
+| ------------ | -------- | ----- |
+| task_id      | &check;  |       |
+| queued_tasks | &check;  |       |
+| kill_task    | &check;  |       |
+| resume       | &check;  |       |
+| queue_info   |          |       |
+| force_input  |          |       |
+| flush_input  |          |       |
 
 ### Execution
 
 | Name           | Complete | Notes                                        |
-|----------------|----------|----------------------------------------------|
+| -------------- | -------- | -------------------------------------------- |
 | call_function  | &check;  |                                              |
 | raise          | &check;  | Does not support message / value parameters. |
 | suspend        | &check;  |                                              |
@@ -176,14 +174,14 @@ The following is a table of the status of various builtin-functions, to keep an 
 These will likely never be implemented. But should return, e.g. E_PERM or similar
 to the caller if attempted.
 
-| Name                    | Complete | Notes                                                 |
-|-------------------------|----------|-------------------------------------------------------|
-| set_connection_option   |          |                                                       |
-| connection_option       |          |                                                       |
-| connection_options      |          |                                                       |
-| open_network_connection |          |                                                       |
-| listen                  |          |                                                       |
-| unlisten                |          |                                                       |
-| listeners               | &check;  | Ehhh.. hardcoded, just to shut core login process up  |
-| output_delimiters       |          |                                                       |
-| buffered_output_length  |          |                                                       |
+| Name                    | Complete | Notes                                                |
+| ----------------------- | -------- | ---------------------------------------------------- |
+| set_connection_option   |          |                                                      |
+| connection_option       |          |                                                      |
+| connection_options      |          |                                                      |
+| open_network_connection |          |                                                      |
+| listen                  |          |                                                      |
+| unlisten                |          |                                                      |
+| listeners               | &check;  | Ehhh.. hardcoded, just to shut core login process up |
+| output_delimiters       |          |                                                      |
+| buffered_output_length  |          |                                                      |

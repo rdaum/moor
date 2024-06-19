@@ -11,11 +11,11 @@ The world is structured -- like other MUDs -- with some of the aspects of intera
 users can move around, interact with objects, and interact with each other using a text-based interface. The focus
 was primarily social interaction and creativity, and it was/is great.
 
-There were many LambdaMOO worlds, and the most famous in the 90s was LambdaMOO itself, which was a social experiment in 
+There were many LambdaMOO worlds, and the most famous in the 90s was LambdaMOO itself, which was a social experiment in
 shared virtual space. It is a text-based virtual world, where users can create objects, and program them in a prototype-based
 object-oriented language called "MOO".
 
-The LambdaMOO server is still in use today (as is the LambdaMOO MOO tiself), and there are many active worlds running 
+The LambdaMOO server is still in use today (as is the LambdaMOO MOO tiself), and there are many active worlds running
 on it, but the community these days is much smaller and less active than it was in the early/mid-90s.
 
 In its essence LambdaMOO is/was a live and interactive "social network" offering a somewhat richer social experience
