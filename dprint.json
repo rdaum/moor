@@ -1,0 +1,10 @@
+{
+  "toml": {
+    "lineWidth": 80,
+    "indentWidth": 4
+  },
+  "excludes": [],
+  "plugins": [
+    "https://plugins.dprint.dev/toml-0.6.2.wasm"
+  ]
+}

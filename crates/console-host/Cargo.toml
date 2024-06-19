@@ -1,15 +1,15 @@
 [package]
 name = "moor-console-host"
 version = "0.1.0"
-description = "A tool to connect to a local or remote moor daemon and interact with it via the TTY."
-edition.workspace = true
-repository.workspace = true
-license.workspace = true
 authors.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A tool to connect to a local or remote moor daemon and interact with it via the TTY."
 
 [dependencies]
 moor-values = { path = "../values" }
@@ -25,8 +25,8 @@ color-eyre.workspace = true
 eyre.workspace = true
 
 ## Logging & tracing
-tracing-subscriber.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 
 ## ZMQ / RPC
 uuid.workspace = true

@@ -1,15 +1,15 @@
 [package]
 name = "moor-web-host"
 version = "0.1.0"
-description = "A RESTful web front end for interacting with the moor system"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
 authors.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A RESTful web front end for interacting with the moor system"
 
 [dependencies]
 moor-values = { path = "../values" }
@@ -30,8 +30,8 @@ thiserror.workspace = true
 tokio.workspace = true
 
 ## Logging & tracing
-tracing-subscriber.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 
 ## ZMQ / RPC
 tmq.workspace = true

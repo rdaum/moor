@@ -1,16 +1,16 @@
 [package]
 name = "moor-kernel"
 version = "0.1.0"
-description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
 authors.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
 resolver = "2"
+rust-version.workspace = true
+description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
 
 [dev-dependencies]
 moor-db-wiredtiger = { path = "../db-wiredtiger" }
@@ -23,9 +23,9 @@ tempfile.workspace = true
 test-case.workspace = true
 test_each_file.workspace = true
 text-diff.workspace = true
-tracing-test.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-test.workspace = true
 unindent.workspace = true
 
 [[test]]
@@ -41,12 +41,11 @@ name = "vm_benches"
 harness = false
 
 [dependencies]
-
 ## Own
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
-moor-values = { path = "../values" }
 moor-moot = { path = "../moot" }
+moor-values = { path = "../values" }
 
 ## Should be dev-dependencies, but cargo won't allow optional dev-deps
 moor-db-relbox = { path = "../db-relbox", optional = true }

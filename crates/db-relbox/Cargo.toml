@@ -1,31 +1,30 @@
 [package]
 name = "moor-db-relbox"
 version = "0.1.0"
-description = "Database layer using RelBox"
-edition.workspace = true
 authors.workspace = true
-repository.workspace = true
-license.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Database layer using RelBox"
 
 [dev-dependencies]
 tempfile.workspace = true
 
 [dependencies]
-moor-values = { path = "../values" }
 moor-db = { path = "../db" }
+moor-values = { path = "../values" }
 
 relbox.workspace = true
 
 ## General usefulness
-daumtils.workspace = true
 bytes.workspace = true
+daumtils.workspace = true
 strum.workspace = true
 uuid.workspace = true
 
 ## Logging & tracing
 tracing.workspace = true
-

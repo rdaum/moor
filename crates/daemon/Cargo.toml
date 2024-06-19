@@ -1,25 +1,25 @@
 [package]
 name = "moor-daemon"
 version = "0.1.0"
-description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
 authors.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 
 [dependencies]
-relbox = { workspace = true, optional = true }
 moor-db-relbox = { path = "../db-relbox", optional = true }
+relbox = { workspace = true, optional = true }
 
 moor-db = { path = "../db" }
+moor-db-wiredtiger = { path = "../db-wiredtiger" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
-moor-db-wiredtiger = { path = "../db-wiredtiger" }
 
 ## Command line arguments parsing.
 clap.workspace = true
@@ -29,15 +29,15 @@ strum.workspace = true
 # General.
 bincode.workspace = true
 bytes.workspace = true
-daumtils.workspace = true
-signal-hook.workspace = true
 color-eyre.workspace = true
+daumtils.workspace = true
 eyre.workspace = true
+signal-hook.workspace = true
 tempfile.workspace = true
 
 ## Logging & tracing
-tracing-subscriber.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 
 ## RPC daemon support
 serde_json.workspace = true
