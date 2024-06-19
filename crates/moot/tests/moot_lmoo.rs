@@ -84,7 +84,7 @@ impl TelnetMootRunner {
     fn resolve_response(&mut self, response: String) -> Result<String, std::io::Error> {
         // Resolve the response; for example, the test assertion may be `$object`; resolve it to the object's specific number.
         self.client(WIZARD).command(format!(
-            "; {response}; \"TelnetMootRunner::resolve_response\";"
+            "; return {response}; \"TelnetMootRunner::resolve_response\";"
         ))
     }
 }
@@ -128,10 +128,13 @@ fn test_moo(path: &Path) {
 
     let mut state = MootState::new(TelnetMootRunner::new(), WIZARD);
     for (line_no, line) in f.lines().enumerate() {
+        let line = line.unwrap();
+        let line_no = line_no + 1;
         state = state
-            .process_line(line_no + 1, &line.unwrap())
-            .wrap_err(format!("line {}", line_no + 1))
+            .process_line(line_no, &line)
+            .wrap_err(format!("line {}", line_no))
             .unwrap();
+        //eprintln!("[{line_no}] {line} {state:?}");
     }
     state.finalize().unwrap();
 }

@@ -136,6 +136,7 @@ else
 endif
 .
 #2:0
+set_task_perms(player);
 notify(player, "-=!-^-!=-");
 try
     notify(player, toliteral(eval(argstr + ";")[2]));
