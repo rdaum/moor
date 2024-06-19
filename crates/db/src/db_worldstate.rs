@@ -14,7 +14,6 @@
 
 use uuid::Uuid;
 
-use bytes::Bytes;
 use moor_values::model::HasUuid;
 use moor_values::model::ObjSet;
 use moor_values::model::Perms;

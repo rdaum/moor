@@ -13,7 +13,7 @@
 //
 
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     net::TcpStream,
     path::PathBuf,
     process::Child,
@@ -140,7 +140,8 @@ impl<R: MootRunner> MootState<R> {
                 } else if let Some(new_player) = line.strip_prefix('@') {
                     Self::execute_test(&mut runner, player, &command, command_kind, None, line_no)?;
                     Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.starts_with([';', '%']) || line.is_empty() {
+                } else if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%'])
+                {
                     Self::execute_test(&mut runner, player, &command, command_kind, None, line_no)?;
                     MootState::new(runner, player).process_line(new_line_no, line)
                 } else {
@@ -309,10 +310,17 @@ impl MootClient {
     where
         S: AsRef<str>,
     {
-        eprintln!(">> {}", s.as_ref());
-        self.stream.write_all(s.as_ref().as_bytes())?;
-        self.stream.write_all(b"\n")?;
-        self.stream.flush()
+        eprintln!("{} >> {}", self.port(), s.as_ref());
+        let mut writer = BufWriter::new(&mut self.stream);
+        writer.write_all(s.as_ref().as_bytes())?;
+        writer.write_all(b"\n")
+    }
+
+    fn port(&self) -> u16 {
+        self.stream
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or_default()
     }
 
     pub fn command<S>(&mut self, s: S) -> Result<String, std::io::Error>
@@ -325,15 +333,16 @@ impl MootClient {
         let mut reader = BufReader::new(&self.stream);
 
         // Wait for prefix
+        let mut buf = String::new();
         loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line)? == 0 {
+            buf.clear();
+            if reader.read_line(&mut buf)? == 0 {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "EOF while waiting for prefix",
                 ));
             }
-            let line = line.trim_end_matches(['\r', '\n']);
+            let line = buf.trim_end_matches(['\r', '\n']);
             if line == "-=!-^-!=-" {
                 break;
             }
@@ -342,13 +351,13 @@ impl MootClient {
 
         // Read until suffix
         loop {
-            let mut line = String::new();
-            reader.read_line(&mut line)?;
-            let line = line.trim_end_matches(['\r', '\n']);
+            buf.clear();
+            reader.read_line(&mut buf)?;
+            let line = buf.trim_end_matches(['\r', '\n']);
             if line == "-=!-v-!=-" {
                 break;
             }
-            eprintln!("<< {line}");
+            eprintln!("{} << {line}", self.port());
             lines.push(line.to_string());
         }
         Ok(lines.join(""))
