@@ -1,21 +1,21 @@
 [package]
 name = "moor-telnet-host"
 version = "0.1.0"
-description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a moor daemon."
-edition.workspace = true
-repository.workspace = true
-license.workspace = true
 authors.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a moor daemon."
 
 [dependencies]
+moor-moot = { path = "../moot" }
 moor-values = { path = "../values" }
 rpc-async-client = { path = "../rpc-async-client" }
 rpc-common = { path = "../rpc-common" }
-moor-moot = { path = "../moot" }
 
 ## Command line arguments parsing.
 clap.workspace = true
@@ -27,12 +27,12 @@ eyre.workspace = true
 futures-util.workspace = true
 
 ## Asynchronous transaction processing & networking
-tokio-util.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 
 ## Logging & tracing
-tracing-subscriber.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 
 ## ZMQ / RPC
 tmq.workspace = true
@@ -40,6 +40,6 @@ uuid.workspace = true
 
 # Testing
 [dev-dependencies]
-pretty_assertions.workspace = true
 escargot.workspace = true
+pretty_assertions.workspace = true
 tempfile.workspace = true

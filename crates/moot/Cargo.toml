@@ -1,15 +1,15 @@
 [package]
 name = "moor-moot"
 version = "0.1.0"
-description = "Execute MOO interaction tests described in simple text files."
-edition.workspace = true
-repository.workspace = true
-license.workspace = true
 authors.workspace = true
-rust-version.workspace = true
 categories.workspace = true
+edition.workspace = true
 keywords.workspace = true
+license.workspace = true
 readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Execute MOO interaction tests described in simple text files."
 
 [dependencies]
 eyre.workspace = true
