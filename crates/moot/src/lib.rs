@@ -13,12 +13,14 @@
 //
 
 use std::{
+    collections::HashMap,
+    fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
     net::TcpStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Child,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use eyre::WrapErr;
@@ -360,6 +362,92 @@ impl MootClient {
             eprintln!("{} << {line}", self.port());
             lines.push(line.to_string());
         }
-        Ok(lines.join(""))
+        Ok(lines.join("\n"))
     }
+}
+
+pub struct TelnetMootRunner {
+    port: u16,
+    clients: HashMap<Objid, MootClient>,
+}
+impl TelnetMootRunner {
+    pub fn new(port: u16) -> Self {
+        Self {
+            port,
+            clients: HashMap::new(),
+        }
+    }
+
+    fn client(&mut self, player: Objid) -> &mut MootClient {
+        self.clients.entry(player).or_insert_with(|| {
+            let start = Instant::now();
+            loop {
+                if let Ok(mut client) = MootClient::new(self.port) {
+                    client
+                        .send_string(std::format!("connect {}", player))
+                        .unwrap();
+                    return client;
+                } else if start.elapsed() > Duration::from_secs(5) {
+                    panic!("Failed to connect to daemon");
+                } else {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+        })
+    }
+
+    fn resolve_response(&mut self, response: String) -> Result<String, std::io::Error> {
+        // Resolve the response; for example, the test assertion may be `$object`; resolve it to the object's specific number.
+        self.client(WIZARD).command(format!(
+            "; return {response}; \"TelnetMootRunner::resolve_response\";"
+        ))
+    }
+}
+impl MootRunner for TelnetMootRunner {
+    type Value = String;
+    type Error = std::io::Error;
+
+    fn eval<S: Into<String>>(
+        &mut self,
+        player: Objid,
+        command: S,
+    ) -> Result<String, std::io::Error> {
+        let response = self
+            .client(player)
+            .command(format!("; {} \"TelnetMootRunner::eval\";", command.into()))?;
+        self.resolve_response(response)
+    }
+
+    fn command<S: AsRef<str>>(
+        &mut self,
+        player: Objid,
+        command: S,
+    ) -> Result<String, std::io::Error> {
+        let response = self.client(player).command(command)?;
+        self.resolve_response(response)
+    }
+
+    fn none(&self) -> Self::Value {
+        "0".to_string()
+    }
+}
+
+pub fn execute_moot_test<R: MootRunner>(runner: R, path: &Path) {
+    let f = BufReader::new(
+        File::open(path)
+            .wrap_err(format!("{}", path.display()))
+            .unwrap(),
+    );
+
+    let mut state = MootState::new(runner, WIZARD);
+    for (line_no, line) in f.lines().enumerate() {
+        let line = line.unwrap();
+        let line_no = line_no + 1;
+        state = state
+            .process_line(line_no, &line)
+            .wrap_err(format!("line {}", line_no))
+            .unwrap();
+        //eprintln!("[{line_no}] {line} {state:?}");
+    }
+    state.finalize().unwrap();
 }
