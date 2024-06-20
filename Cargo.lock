@@ -1943,7 +1943,6 @@ dependencies = [
  "futures-util",
  "moor-moot",
  "moor-values",
- "pretty_assertions",
  "rpc-async-client",
  "rpc-common",
  "tempfile",

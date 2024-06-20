@@ -12,14 +12,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_moot::{test_db_path, ManagedChild};
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::OnceLock,
-    time::{Duration, Instant},
 };
-
-use moor_moot::{ManagedChild, MootClient};
 
 /// The current DB implementation reserves this much RAM. Default is 1TB, and
 /// we rely on `vm.overcommit_memory` to allow this to be allocated. Instead of
@@ -43,14 +41,11 @@ fn daemon_host_bin() -> &'static PathBuf {
 }
 
 fn start_daemon(workdir: &Path) -> ManagedChild {
-    let mut minimal_db = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    minimal_db.push("tests/Test.db");
-
     ManagedChild::new(
         "daemon",
         Command::new(daemon_host_bin())
             .arg("--textdump")
-            .arg(minimal_db)
+            .arg(test_db_path())
             .arg("--generate-keypair")
             .arg("--max-buffer-pool-bytes")
             .arg(MAX_BUFFER_POOL_BYTES.to_string())
@@ -89,25 +84,30 @@ fn start_telnet_host() -> ManagedChild {
     )
 }
 
-pub fn run_test_as<F>(connect_params: &[&str], f: F) -> eyre::Result<()>
-where
-    F: FnOnce(MootClient) -> eyre::Result<()>,
-{
-    let daemon_workdir = tempfile::TempDir::new()?;
+fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
+    use moor_moot::{execute_moot_test, TelnetMootRunner};
+
+    let daemon_workdir = tempfile::TempDir::new().expect("Failed to create temporary directory");
     let _daemon = start_daemon(daemon_workdir.path());
     let _telnet_host = start_telnet_host();
 
-    let start = Instant::now();
-    loop {
-        if let Ok(mut client) = MootClient::new(8080) {
-            client.send_string(format!("connect {}", connect_params.join(" ")))?;
-            f(client)?;
-            break;
-        } else if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to connect to daemon");
-        } else {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-    Ok(())
+    execute_moot_test(
+        TelnetMootRunner::new(8080),
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/moot")
+            .join(moot_file)
+            .with_extension("moot"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_echo() {
+    test_moot_with_telnet_host("echo");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_suspend_notify() {
+    test_moot_with_telnet_host("suspend_notify");
 }
