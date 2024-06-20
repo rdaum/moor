@@ -89,3 +89,8 @@ OBJ
 ; create($tmp2);
 ; return $tmp2.initialize_called;
 1
+
+// Test that the default owner is the caller
+@programmer
+; return create($nothing).owner;
+#4

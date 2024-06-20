@@ -204,7 +204,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             *location,
             *location,
             name.as_str(),
-            bf_args.caller_perms(),
+            attrs.owner.unwrap(),
             attrs.flags.unwrap(),
             Some(value),
         )
