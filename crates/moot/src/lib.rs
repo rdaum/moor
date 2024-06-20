@@ -19,6 +19,7 @@ use std::{
     net::TcpStream,
     path::{Path, PathBuf},
     process::Child,
+    sync::Once,
     thread,
     time::{Duration, Instant},
 };
@@ -35,6 +36,24 @@ pub const PROGRAMMER: Objid = Objid(4);
 #[allow(dead_code)]
 pub const NONPROGRAMMER: Objid = Objid(5);
 
+#[allow(dead_code)]
+static LOGGING_INIT: Once = Once::new();
+#[allow(dead_code)]
+fn init_logging() {
+    LOGGING_INIT.call_once(|| {
+        let main_subscriber = tracing_subscriber::fmt()
+            .compact()
+            .with_ansi(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_thread_names(true)
+            .with_max_level(tracing::Level::WARN)
+            .with_test_writer()
+            .finish();
+        tracing::subscriber::set_global_default(main_subscriber)
+            .expect("Unable to set configure logging");
+    });
+}
 /// Look up the path to Test.db from any crate under the `moor` workspace
 pub fn test_db_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../moot/Test.db")
@@ -433,6 +452,9 @@ impl MootRunner for TelnetMootRunner {
 }
 
 pub fn execute_moot_test<R: MootRunner>(runner: R, path: &Path) {
+    init_logging();
+    eprintln!("Test definition: {}", path.display());
+
     let f = BufReader::new(
         File::open(path)
             .wrap_err(format!("{}", path.display()))
