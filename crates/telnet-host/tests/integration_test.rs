@@ -13,6 +13,7 @@
 //
 
 use moor_moot::{test_db_path, ManagedChild};
+use serial_test::serial;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -84,6 +85,9 @@ fn start_telnet_host() -> ManagedChild {
     )
 }
 
+// These tests all listen on the same port, so we need to make sure
+// only one runs at a time.
+
 fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     use moor_moot::{execute_moot_test, TelnetMootRunner};
 
@@ -102,12 +106,14 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[serial(telnet_host)]
 fn test_echo() {
     test_moot_with_telnet_host("echo");
 }
 
 #[cfg(target_os = "linux")]
 #[test]
+#[serial(telnet_host)]
 fn test_suspend_notify() {
     test_moot_with_telnet_host("suspend_notify");
 }
