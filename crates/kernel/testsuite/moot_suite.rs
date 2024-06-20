@@ -17,15 +17,9 @@
 //! See example.moot for a full-fledged example
 
 mod common;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::Path,
-    sync::{Arc, Once},
-};
+use std::{path::Path, sync::Arc};
 
 use common::{create_wiredtiger_db, testsuite_dir};
-use eyre::Context;
 use moor_db::Database;
 use moor_kernel::{
     config::Config,
@@ -35,7 +29,7 @@ use moor_kernel::{
         sessions::{NoopClientSession, Session},
     },
 };
-use moor_moot::{MootRunner, MootState, WIZARD};
+use moor_moot::{execute_moot_test, MootRunner};
 use moor_values::var::{v_none, Objid, Var};
 
 #[cfg(feature = "relbox")]
@@ -95,33 +89,10 @@ fn test_wiredtiger(path: &Path) {
 }
 test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
 
-#[allow(dead_code)]
-static LOGGING_INIT: Once = Once::new();
-#[allow(dead_code)]
-fn init_logging() {
-    LOGGING_INIT.call_once(|| {
-        let main_subscriber = tracing_subscriber::fmt()
-            .compact()
-            .with_ansi(true)
-            .with_file(true)
-            .with_line_number(true)
-            .with_thread_names(true)
-            .with_max_level(tracing::Level::WARN)
-            .with_test_writer()
-            .finish();
-        tracing::subscriber::set_global_default(main_subscriber)
-            .expect("Unable to set configure logging");
-    });
-}
-
 fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
-    init_logging();
     if path.is_dir() {
         return;
     }
-    eprintln!("Test definition: {}", path.display());
-    let f = BufReader::new(File::open(path).unwrap());
-
     let scheduler = Arc::new(Scheduler::new(db, Config::default()));
     let loop_scheduler = scheduler.clone();
     let scheduler_loop_jh = std::thread::Builder::new()
@@ -129,17 +100,10 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
         .spawn(move || loop_scheduler.run())
         .unwrap();
 
-    let mut state = MootState::new(
+    execute_moot_test(
         SchedulerMootRunner::new(scheduler.clone(), Arc::new(NoopClientSession::new())),
-        WIZARD,
+        path,
     );
-    for (line_no, line) in f.lines().enumerate() {
-        state = state
-            .process_line(line_no + 1, &line.unwrap())
-            .context(format!("line {}", line_no + 1))
-            .unwrap();
-    }
-    state.finalize().unwrap();
 
     scheduler
         .submit_shutdown(0, Some("Test is done".to_string()))
