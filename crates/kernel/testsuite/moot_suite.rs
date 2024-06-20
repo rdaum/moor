@@ -56,21 +56,26 @@ impl MootRunner for SchedulerMootRunner {
     type Error = SchedulerError;
 
     fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
+        let command = command.into();
+        eprintln!("{player} >> ; {command}");
         scheduler_test_utils::call_eval(
             self.scheduler.clone(),
             self.session.clone(),
             player,
-            command.into(),
+            command,
         )
+        .inspect(|var| eprintln!("{player} << {var}"))
     }
 
     fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
+        eprintln!("{player} >> ; {}", command.as_ref());
         scheduler_test_utils::call_command(
             self.scheduler.clone(),
             self.session.clone(),
             player,
             command.as_ref(),
         )
+        .inspect(|var| eprintln!("{player} << {var}"))
     }
 
     fn none(&self) -> Var {

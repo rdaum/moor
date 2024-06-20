@@ -70,6 +70,7 @@ E_PERM
 >    "$object.recycle_called = $object.recycle_called + 1;"
 > });
 ; return $object.recycle_called;
+0
 
 // test_that_calling_recycle_on_a_recycled_object_fails
 @programmer

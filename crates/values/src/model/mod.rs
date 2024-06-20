@@ -126,6 +126,14 @@ impl WorldStateError {
             }
         }
     }
+
+    pub fn database_error_msg(&self) -> Option<&str> {
+        if let Self::DatabaseError(msg) = self {
+            Some(msg)
+        } else {
+            None
+        }
+    }
 }
 
 pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {

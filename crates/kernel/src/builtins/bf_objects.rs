@@ -199,6 +199,16 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
+    let valid = bf_args.world_state.valid(*obj);
+    if valid == Ok(false)
+        || valid
+            .err()
+            .map(|e| e.database_error_msg() == Some("NotFound"))
+            .unwrap_or_default()
+    {
+        return Err(BfErr::Code(E_INVARG));
+    }
+
     // Check if the given task perms can control the object before continuing.
     if !bf_args
         .world_state
