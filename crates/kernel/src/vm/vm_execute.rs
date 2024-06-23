@@ -673,14 +673,19 @@ impl VM {
                 Op::Fork { id, fv_offset } => {
                     // Delay time should be on stack
                     let time = f.pop();
-                    let Variant::Int(time) = time.variant() else {
-                        return self.push_error(state, E_TYPE);
+
+                    let time = match time.variant() {
+                        Variant::Int(time) => *time as f64,
+                        Variant::Float(time) => *time,
+                        _ => {
+                            return self.push_error(state, E_TYPE);
+                        }
                     };
 
-                    if *time < 0 {
+                    if time < 0.0 {
                         return self.push_error(state, E_INVARG);
                     }
-                    let delay = (*time != 0).then(|| Duration::from_secs(*time as u64));
+                    let delay = (time != 0.0).then(|| Duration::from_secs_f64(time));
                     let new_activation = a.clone();
                     let fork = Fork {
                         player: a.player,
