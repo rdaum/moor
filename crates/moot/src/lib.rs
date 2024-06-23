@@ -115,7 +115,7 @@ impl<R: MootRunner> MootState<R> {
     pub fn process_line(self, new_line_no: usize, line: &str) -> eyre::Result<Self> {
         let line = line.trim_end_matches('\n');
         match self {
-            MootState::Ready { runner, player } => {
+            MootState::Ready { mut runner, player } => {
                 if line.starts_with([';', '%']) {
                     Ok(MootState::ReadingCommand {
                         runner,
@@ -127,6 +127,9 @@ impl<R: MootRunner> MootState<R> {
                 } else if let Some(new_player) = line.strip_prefix('@') {
                     Ok(MootState::new(runner, Self::player(new_player)?))
                 } else if line.is_empty() || line.starts_with("//") {
+                    Ok(MootState::new(runner, player))
+                } else if let Some(expectation) = line.strip_prefix('=') {
+                    Self::assert_raw_line(&mut runner, player, Some(expectation), new_line_no)?;
                     Ok(MootState::new(runner, player))
                 } else {
                     Err(eyre::eyre!(
@@ -153,7 +156,9 @@ impl<R: MootRunner> MootState<R> {
                 } else if let Some(new_player) = line.strip_prefix('@') {
                     Self::execute_command(&mut runner, player, &command, command_kind, line_no)?;
                     Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%'])
+                } else if line.is_empty()
+                    || line.starts_with("//")
+                    || line.starts_with([';', '%', '='])
                 {
                     Self::execute_command(&mut runner, player, &command, command_kind, line_no)?;
                     MootState::new(runner, player).process_line(new_line_no, line)
@@ -174,14 +179,14 @@ impl<R: MootRunner> MootState<R> {
                 line_no,
                 mut expectation,
             } => {
-                if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%']) {
+                if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%', '=']) {
                     Self::assert_eval_result(&mut runner, player, Some(&expectation), line_no)?;
                 }
                 if line.is_empty() || line.starts_with("//") {
                     Ok(MootState::new(runner, player))
                 } else if let Some(new_player) = line.strip_prefix('@') {
                     Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.starts_with([';', '%']) {
+                } else if line.starts_with([';', '%', '=']) {
                     MootState::new(runner, player).process_line(new_line_no, line)
                 } else {
                     expectation.push('\n');
@@ -200,7 +205,9 @@ impl<R: MootRunner> MootState<R> {
 
     pub fn finalize(self) -> eyre::Result<()> {
         match self {
-            MootState::Ready { .. } => Ok(()),
+            MootState::Ready { mut runner, player } => {
+                Self::assert_raw_line(&mut runner, player, None, 0)
+            }
             MootState::ReadingCommand {
                 mut runner,
                 player,
@@ -267,6 +274,17 @@ impl<R: MootRunner> MootState<R> {
         };
 
         assert_eq!(actual, expected, "Line {line_no}");
+        Ok(())
+    }
+
+    fn assert_raw_line(
+        runner: &mut R,
+        player: Objid,
+        expectation: Option<&str>,
+        line_no: usize,
+    ) -> eyre::Result<()> {
+        let actual = runner.read_line(player)?;
+        assert_eq!(actual.as_deref(), expectation, "Line {line_no}");
         Ok(())
     }
 }
@@ -336,10 +354,16 @@ impl MootClient {
 
     fn read_line(&self) -> Result<Option<String>, std::io::Error> {
         let mut buf = String::new();
-        if BufReader::new(&self.stream).read_line(&mut buf)? == 0 {
-            return Ok(None);
+        match BufReader::new(&self.stream).read_line(&mut buf) {
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(e),
+            Ok(0) => Ok(None),
+            Ok(_) => {
+                let line = buf.trim_end_matches(['\r', '\n']).to_string();
+                eprintln!("{} << {}", self.port(), line);
+                Ok(Some(line))
+            }
         }
-        Ok(Some(buf.trim_end_matches(['\r', '\n']).to_string()))
     }
 }
 
@@ -394,13 +418,13 @@ impl MootRunner for TelnetMootRunner {
     type Value = String;
     type Error = std::io::Error;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<(), std::io::Error> {
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<(), Self::Error> {
         self.client(player)
             .write_line(format!("; {} \"TelnetMootRunner::eval\";", command.into()))?;
         Ok(())
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<(), std::io::Error> {
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<(), Self::Error> {
         self.client(player).write_line(command)
     }
 
@@ -409,13 +433,19 @@ impl MootRunner for TelnetMootRunner {
     }
 
     fn read_line(&mut self, player: Objid) -> Result<Option<String>, Self::Error> {
-        self.client(player).read_line()
+        Ok(self.client(player).read_line().expect("Reading raw line"))
     }
 
     fn read_eval_result(&mut self, player: Objid) -> Result<Option<Self::Value>, Self::Error> {
-        let raw = self.client(player).read_line()?;
+        let raw = self
+            .client(player)
+            .read_line()
+            .expect("Reading raw eval response");
         if let Some(raw) = raw {
-            self.resolve_response(player, raw).map(Some)
+            Ok(self
+                .resolve_response(player, raw)
+                .map(Some)
+                .expect("Reading resolved eval response"))
         } else {
             Ok(None)
         }
