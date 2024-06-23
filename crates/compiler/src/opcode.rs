@@ -101,9 +101,6 @@ pub enum ScatterLabel {
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub struct ScatterArgs {
-    pub nargs: usize,
-    pub nreq: usize,
-    pub rest: usize,
     pub labels: Vec<ScatterLabel>,
     pub done: Label,
 }

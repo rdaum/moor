@@ -16,7 +16,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use tracing::error;
 
 use moor_values::var::Var;
@@ -215,19 +214,6 @@ impl CodegenState {
         right: &Expr,
     ) -> Result<(), CompileError> {
         self.generate_expr(right)?;
-        let nargs = scatter.len();
-        let nreq = scatter
-            .iter()
-            .filter(|s| s.kind == ScatterKind::Required)
-            .count();
-        let nrest = match scatter
-            .iter()
-            .positions(|s| s.kind == ScatterKind::Rest)
-            .last()
-        {
-            None => nargs + 1,
-            Some(rest) => rest + 1,
-        };
         let labels: Vec<(&ScatterItem, ScatterLabel)> = scatter
             .iter()
             .map(|s| {
@@ -248,9 +234,6 @@ impl CodegenState {
             .collect();
         let done = self.make_jump_label(None);
         self.emit(Op::Scatter(Box::new(ScatterArgs {
-            nargs,
-            nreq,
-            rest: nrest,
             labels: labels.iter().map(|(_, l)| l.clone()).collect(),
             done,
         })));
