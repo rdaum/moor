@@ -14,7 +14,6 @@
 
 #[cfg(test)]
 mod test {
-    use bytes::Bytes;
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
