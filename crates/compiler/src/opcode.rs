@@ -18,7 +18,7 @@ use moor_values::var::Objid;
 
 use crate::labels::{Label, Name, Offset};
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
     Add,
     And(Label),
@@ -48,6 +48,7 @@ pub enum Op {
     IfQues(Label),
     Imm(Label),
     ImmBigInt(i64),
+    ImmFloat(f64),
     ImmEmptyList,
     ImmErr(Error),
     ImmInt(i32),

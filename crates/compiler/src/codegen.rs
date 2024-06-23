@@ -320,6 +320,7 @@ impl CodegenState {
                         Ok(n) => self.emit(Op::ImmInt(n)),
                         Err(_) => self.emit(Op::ImmBigInt(*i)),
                     },
+                    Variant::Float(f) => self.emit(Op::ImmFloat(*f)),
                     Variant::Err(e) => {
                         self.emit(Op::ImmErr(*e));
                     }

@@ -30,9 +30,9 @@ use moor_values::model::{VerbInfo, WorldStateError};
 use moor_values::var::Error::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_MAXREC, E_RANGE, E_TYPE, E_VARNF,
 };
-use moor_values::var::Objid;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
+use moor_values::var::{v_float, Objid};
 use moor_values::var::{v_listv, Error};
 
 use crate::vm::activation::{Activation, HandlerType};
@@ -40,7 +40,7 @@ use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{VMExecState, VM};
 
 /// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Fork {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit
@@ -67,7 +67,7 @@ pub struct VmExecParams {
     pub scheduler_sender: Sender<(TaskId, SchedulerControlMsg)>,
     pub max_stack_depth: usize,
 }
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum ExecutionResult {
     /// Execution of this call stack is complete.
     Complete(Var),
@@ -329,6 +329,9 @@ impl VM {
                 }
                 Op::ImmBigInt(val) => {
                     f.push(v_int(*val));
+                }
+                Op::ImmFloat(val) => {
+                    f.push(v_float(*val));
                 }
                 Op::ImmInt(val) => {
                     f.push(v_int(*val as i64));

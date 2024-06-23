@@ -14,8 +14,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use moor_values::var::Variant;
 use moor_values::var::{v_err, v_int, v_none, v_objid, Var};
+use moor_values::var::{v_float, Variant};
 
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
@@ -834,6 +834,9 @@ impl Decompile {
             }
             Op::ImmBigInt(i) => {
                 self.push_expr(Expr::Value(v_int(i)));
+            }
+            Op::ImmFloat(f) => {
+                self.push_expr(Expr::Value(v_float(f)));
             }
             Op::ImmErr(e) => {
                 self.push_expr(Expr::Value(v_err(e)));
