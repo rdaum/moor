@@ -87,9 +87,9 @@ impl TelnetConnection {
         };
 
         let connect_message = match connect_type {
-            ConnectType::Connected => "** Connected **",
-            ConnectType::Reconnected => "** Reconnected **",
-            ConnectType::Created => "** Created **",
+            ConnectType::Connected => "*** Connected ***",
+            ConnectType::Reconnected => "*** Reconnected ***",
+            ConnectType::Created => "*** Created ***",
         };
         self.write.send(connect_message.to_string()).await?;
 

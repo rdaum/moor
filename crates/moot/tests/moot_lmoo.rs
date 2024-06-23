@@ -54,6 +54,7 @@ fn start_moo() -> ManagedChild {
         Command::new(moo_path())
             .arg(db_path())
             .arg("/dev/null")
+            .arg(moo_port().to_string())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -70,6 +71,7 @@ fn test_moo(path: &Path) {
 #[ignore = "Useful for debugging; just run a single test against 'real' MOO"]
 fn test_single() {
     test_moo(
-        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../kernel/testsuite/moot/recycle.moot"),
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../telnet-host/tests/moot/suspend_notify.moot"),
     );
 }
