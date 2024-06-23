@@ -27,7 +27,7 @@ lazy_static! {
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub struct Program {
     /// All the literals referenced in this program.
     pub literals: Vec<Var>,

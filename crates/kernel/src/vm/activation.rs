@@ -65,7 +65,7 @@ pub(crate) struct HandlerLabel {
 
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Frame {
     /// The program of the verb that is currently being executed.
     pub(crate) program: Program,
@@ -94,7 +94,7 @@ pub(crate) struct Frame {
 }
 
 /// Activation frame for the call stack.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Activation {
     /// Frame
     pub(crate) frame: Frame,

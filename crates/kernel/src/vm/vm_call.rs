@@ -42,7 +42,7 @@ pub(crate) fn args_literal(args: &List) -> String {
 }
 
 /// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VerbExecutionRequest {
     /// The applicable permissions.
     pub permissions: Objid,
