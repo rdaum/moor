@@ -39,41 +39,65 @@ use common::create_relbox_db;
 struct SchedulerMootRunner {
     scheduler: Arc<Scheduler>,
     session: Arc<dyn Session>,
+    eval_result: Option<Result<Var, SchedulerError>>,
 }
 impl SchedulerMootRunner {
     fn new(scheduler: Arc<Scheduler>, session: Arc<dyn Session>) -> Self {
-        Self { scheduler, session }
+        Self {
+            scheduler,
+            session,
+            eval_result: None,
+        }
     }
 }
 impl MootRunner for SchedulerMootRunner {
     type Value = Var;
     type Error = SchedulerError;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<(), SchedulerError> {
         let command = command.into();
         eprintln!("{player} >> ; {command}");
-        scheduler_test_utils::call_eval(
+        self.eval_result = Some(scheduler_test_utils::call_eval(
             self.scheduler.clone(),
             self.session.clone(),
             player,
             command,
-        )
-        .inspect(|var| eprintln!("{player} << {var}"))
+        ));
+        Ok(())
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<Var, SchedulerError> {
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<(), SchedulerError> {
         eprintln!("{player} >> ; {}", command.as_ref());
-        scheduler_test_utils::call_command(
+        self.eval_result = Some(scheduler_test_utils::call_command(
             self.scheduler.clone(),
             self.session.clone(),
             player,
             command.as_ref(),
-        )
-        .inspect(|var| eprintln!("{player} << {var}"))
+        ));
+        Ok(())
     }
 
     fn none(&self) -> Var {
         v_none()
+    }
+
+    fn read_line(&mut self, _player: Objid) -> Result<Option<String>, Self::Error> {
+        unimplemented!("Not supported on SchedulerMootRunner");
+    }
+
+    fn read_eval_result(
+        &mut self,
+        player: Objid,
+    ) -> Result<Option<moor_values::var::Var>, SchedulerError> {
+        self.eval_result
+            .take()
+            .inspect(|some| {
+                let _ = some
+                    .as_ref()
+                    .inspect(|var| eprintln!("{player} << {var}"))
+                    .inspect_err(|err| eprintln!("{player} << ERR: {err}"));
+            })
+            .transpose()
     }
 }
 

@@ -59,9 +59,9 @@ impl WebSocketConnection {
         let (mut ws_sender, mut ws_receiver) = stream.split();
 
         let connect_message = match connect_type {
-            ConnectType::Connected => "** Connected **",
-            ConnectType::Reconnected => "** Reconnected **",
-            ConnectType::Created => "** Created **",
+            ConnectType::Connected => "*** Connected ***",
+            ConnectType::Reconnected => "*** Reconnected ***",
+            ConnectType::Created => "*** Created ***",
         };
         Self::emit_event(
             &mut ws_sender,
