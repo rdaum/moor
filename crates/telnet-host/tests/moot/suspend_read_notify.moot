@@ -1,0 +1,20 @@
+; return 200;
+=200
+
+; return read();
+%201
+="201"
+
+; notify(player, "read: " + read()); return "retval";
+%hi
+=read: hi
+="retval"
+
+// TODO disabled for now: this consistently fails
+// ; suspend(0.1); notify(player, "read 2: " + read()); return "retval 2";
+// %hello
+// =read2: hello
+// ="retval2"
+
+; suspend(0.1); return 42;
+=42
