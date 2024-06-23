@@ -824,7 +824,24 @@ impl VM {
                     );
                 }
                 Op::Scatter(sa) => {
-                    let have_rest = sa.rest <= sa.nargs;
+                    // TODO: this could do with some attention. a lot of the complexity here has to
+                    //   do with translating fairly directly from the lambdamoo sources.
+                    let (nargs, rest, nreq) = {
+                        let mut nargs = 0;
+                        let mut rest = 0;
+                        let mut nreq = 0;
+                        for label in sa.labels.iter() {
+                            match label {
+                                ScatterLabel::Rest(_) => rest += 1,
+                                ScatterLabel::Required(_) => nreq += 1,
+                                ScatterLabel::Optional(_, _) => {}
+                            }
+                            nargs += 1;
+                        }
+                        (nargs, rest, nreq)
+                    };
+                    // TODO: ?
+                    let have_rest = rest <= nargs;
                     let rhs_values = {
                         let rhs = f.peek_top();
                         let Variant::List(rhs_values) = rhs.variant() else {
@@ -835,15 +852,13 @@ impl VM {
                     };
 
                     let len = rhs_values.len();
-                    if len < sa.nreq || !have_rest && len > sa.nargs {
+                    if len < nreq || !have_rest && len > nargs {
                         f.pop();
                         return self.push_error(state, E_ARGS);
                     }
-
-                    assert_eq!(sa.nargs, sa.labels.len());
-                    let mut nopt_avail = len - sa.nreq;
-                    let nrest = if have_rest && len >= sa.nargs {
-                        len - sa.nargs + 1
+                    let mut nopt_avail = len - nreq;
+                    let nrest = if have_rest && len >= nargs {
+                        len - nargs + 1
                     } else {
                         0
                     };

@@ -1010,9 +1010,6 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Box::new(ScatterArgs {
-                    nargs: 3,
-                    nreq: 3,
-                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
@@ -1049,9 +1046,6 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Box::new(ScatterArgs {
-                    nargs: 3,
-                    nreq: 2,
-                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(first),
                         ScatterLabel::Required(second),
@@ -1094,9 +1088,6 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Box::new(ScatterArgs {
-                    nargs: 4,
-                    nreq: 2,
-                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
@@ -1145,9 +1136,6 @@ mod tests {
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Box::new(ScatterArgs {
-                    nargs: 6,
-                    nreq: 2,
-                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Optional(b, None),
@@ -1224,9 +1212,6 @@ mod tests {
                 ImmInt(1),
                 Ref,
                 Scatter(Box::new(ScatterArgs {
-                    nargs: 4,
-                    nreq: 2,
-                    rest: 4,
                     labels: vec![
                         ScatterLabel::Required(a),
                         ScatterLabel::Required(b),
