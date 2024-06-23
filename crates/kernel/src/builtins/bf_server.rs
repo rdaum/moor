@@ -25,7 +25,7 @@ use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 use moor_values::model::ObjFlag;
 use moor_values::model::{NarrativeEvent, WorldStateError};
-use moor_values::var::Error::{E_ARGS, E_PERM, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_PERM, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 use moor_values::var::{v_listv, Error};
@@ -385,10 +385,15 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let seconds = if bf_args.args.is_empty() {
         None
     } else {
-        let Variant::Int(seconds) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+        let seconds = match bf_args.args[0].variant() {
+            Variant::Float(seconds) => *seconds,
+            Variant::Int(seconds) => *seconds as f64,
+            _ => return Err(BfErr::Code(E_TYPE)),
         };
-        Some(Duration::from_secs(*seconds as u64))
+        if seconds < 0.0 {
+            return Err(BfErr::Code(E_INVARG));
+        }
+        Some(Duration::from_secs_f64(seconds))
     };
 
     Ok(VmInstr(ExecutionResult::Suspend(seconds)))
