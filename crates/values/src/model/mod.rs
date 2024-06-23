@@ -25,7 +25,7 @@ pub use crate::model::objset::{ObjSet, ObjSetIter};
 pub use crate::model::permissions::Perms;
 pub use crate::model::propdef::{PropDef, PropDefs};
 pub use crate::model::props::{PropAttr, PropAttrs, PropFlag, PropPerms};
-pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec, PREP_LIST};
+pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec};
 pub use crate::model::verb_info::VerbInfo;
 pub use crate::model::verbdef::{VerbDef, VerbDefs};
 pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};

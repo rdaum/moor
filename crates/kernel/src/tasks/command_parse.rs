@@ -15,29 +15,12 @@
 use std::string::ToString;
 
 use bincode::{Decode, Encode};
-use lazy_static::lazy_static;
 
 use moor_values::model::WorldStateError;
-use moor_values::model::{PrepSpec, Preposition, PREP_LIST};
+use moor_values::model::{PrepSpec, Preposition};
 use moor_values::util;
 use moor_values::var::Objid;
 use moor_values::var::{v_str, Var};
-
-lazy_static! {
-    static ref PREPOSITIONS: Vec<Prep> = {
-        PREP_LIST
-            .iter()
-            .enumerate()
-            .map(|(id, phrase)| {
-                let phrases = phrase
-                    .split('/')
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<&str>>();
-                Prep { id, phrases }
-            })
-            .collect::<Vec<Prep>>()
-    };
-}
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ParsedCommand {
@@ -55,52 +38,46 @@ pub struct ParsedCommand {
     pub iobj: Option<Objid>,
 }
 
-#[derive(Clone)]
-pub struct Prep {
-    pub id: usize,
-    phrases: Vec<&'static str>,
-}
-
 /// Match a preposition for the form used by set_verb_args and friends, which means it must support
 /// numeric arguments for the preposition.
 pub fn parse_preposition_spec(repr: &str) -> Option<PrepSpec> {
     match repr {
         "any" => Some(PrepSpec::Any),
         "none" => Some(PrepSpec::None),
-        _ => find_preposition(repr)
-            .map(|p| PrepSpec::Other(Preposition::from_repr(p.id as u16).unwrap())),
+        _ => find_preposition(repr).map(|p| PrepSpec::Other(p)),
     }
 }
 
-pub fn find_preposition(prep: &str) -> Option<Prep> {
+pub fn find_preposition(prep: &str) -> Option<Preposition> {
     // If the string starts with a number (with or without # prefix), treat it as a preposition ID.
-    // Which is the offset into the PREPOSITIONS array.
-    if let Some(id) = prep.strip_prefix('#') {
-        if let Ok(id) = id.parse::<usize>() {
-            return PREPOSITIONS.get(id).cloned();
-        }
-    } else if let Ok(id) = prep.parse::<usize>() {
-        return PREPOSITIONS.get(id).cloned();
+    let numeric_offset = if prep.starts_with('#') { 1 } else { 0 };
+    if let Ok(id) = prep[numeric_offset..].parse::<u16>() {
+        return Preposition::from_repr(id);
     }
 
-    match_preposition(prep)
+    Preposition::parse(prep)
 }
 
 pub fn preposition_to_string(ps: &PrepSpec) -> &str {
     match ps {
         PrepSpec::Any => "any",
         PrepSpec::None => "none",
-        PrepSpec::Other(id) => PREP_LIST[*id as usize],
+        PrepSpec::Other(id) => id.to_string(),
     }
 }
 
-/// Match a preposition for the form used by the parser, where using a number is not correct.
-fn match_preposition(prep: &str) -> Option<Prep> {
-    // Otherwise, search for the preposition in the list of prepositions by string.
-    PREPOSITIONS
-        .iter()
-        .find(|p| p.phrases.iter().any(|t| t == &prep))
-        .cloned()
+// Seeks the first preposition in a list of words, returning the index of the preposition, the
+// preposition itself, and the preposition string, if any.
+fn seek_preposition(words: &[String]) -> (Option<(usize, String)>, PrepSpec) {
+    for (j, word) in words.iter().enumerate() {
+        if Preposition::parse(word.as_str()).is_some() {
+            return (
+                Some((j, word.clone())),
+                PrepSpec::Other(Preposition::parse(word).unwrap()),
+            );
+        }
+    }
+    (None, PrepSpec::None)
 }
 
 pub trait ParseMatcher {
@@ -152,23 +129,12 @@ where
 
     // Normal MOO command
     // Find preposition, if any
-    let (prep_index, prep, prepstr) = words
-        .iter()
-        .enumerate()
-        .find(|(_, word)| match_preposition(word).is_some())
-        .map_or((None, PrepSpec::None, None), |(j, word)| {
-            (
-                Some(j),
-                PrepSpec::Other(
-                    Preposition::from_repr(match_preposition(word).unwrap().id as u16).unwrap(),
-                ),
-                Some(word.to_string()),
-            )
-        });
+
+    let (prep_match, prep) = seek_preposition(&words);
 
     // Get direct object string
-    let dobjstr = match prep_index {
-        Some(j) => {
+    let dobjstr = match prep_match {
+        Some((j, _)) => {
             if j == 0 {
                 None
             } else {
@@ -191,7 +157,7 @@ where
     };
 
     // Get indirect object string
-    let iobjstr = prep_index.map(|j| words[j + 1..].join(" "));
+    let iobjstr = prep_match.as_ref().map(|(j, _)| words[j + 1..].join(" "));
 
     // Get indirect object object
     let iobj = match (prep, &iobjstr) {
@@ -211,7 +177,7 @@ where
         args,
         dobjstr,
         dobj,
-        prepstr,
+        prepstr: prep_match.map(|(_, p)| p.to_string()),
         prep,
         iobjstr,
         iobj,

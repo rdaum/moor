@@ -60,9 +60,8 @@ impl ArgSpec {
 }
 
 /// The set of prepositions that are valid for verbs, corresponding to the set of string constants
-/// in `PREP_LIST`, and for now at least much 1:1 with `LambdaMOO`'s built-in prepositions, and
-/// are referred to in the database.
-/// TODO: Refactor/rethink preposition list/enum.
+/// defined in LambdaMOO 1.8.1.
+/// TODO: Refactor/rethink preposition enum.
 ///   Long run a proper table with some sort of dynamic look up and a way to add new ones and
 ///   internationalize and so on.
 #[repr(u16)]
@@ -85,23 +84,47 @@ pub enum Preposition {
     OffOf = 14,
 }
 
-pub const PREP_LIST: [&str; 15] = [
-    "with/using",
-    "at/to",
-    "in front of",
-    "in/inside/into",
-    "on top of/on/onto/upon",
-    "out of/from inside/from",
-    "over",
-    "through",
-    "under/underneath/beneath",
-    "behind",
-    "beside",
-    "for/about",
-    "is",
-    "as",
-    "off/off of",
-];
+impl Preposition {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "with" | "using" => Some(Self::WithUsing),
+            "at" | "to" => Some(Self::AtTo),
+            "in front of" => Some(Self::InFrontOf),
+            "in" | "inside" | "into" => Some(Self::IntoIn),
+            "on top of" | "on" | "onto" | "upon" => Some(Self::OnTopOfOn),
+            "out of" | "from inside" | "from" => Some(Self::OutOf),
+            "over" => Some(Self::Over),
+            "through" => Some(Self::Through),
+            "under" | "underneath" | "beneath" => Some(Self::Under),
+            "behind" => Some(Self::Behind),
+            "beside" => Some(Self::Beside),
+            "for" | "about" => Some(Self::ForAbout),
+            "is" => Some(Self::Is),
+            "as" => Some(Self::As),
+            "off" | "off of" => Some(Self::OffOf),
+            _ => None,
+        }
+    }
+    pub fn to_string(&self) -> &str {
+        match self {
+            Self::WithUsing => "with/using",
+            Self::AtTo => "at/to",
+            Self::InFrontOf => "in front of",
+            Self::IntoIn => "in/inside/into",
+            Self::OnTopOfOn => "on top of/on/onto/upon",
+            Self::OutOf => "out of/from inside/from",
+            Self::Over => "over",
+            Self::Through => "through",
+            Self::Under => "under/underneath/beneath",
+            Self::Behind => "behind",
+            Self::Beside => "beside",
+            Self::ForAbout => "for/about",
+            Self::Is => "is",
+            Self::As => "as",
+            Self::OffOf => "off/off of",
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Encode, Decode)]
 pub enum PrepSpec {
