@@ -44,7 +44,7 @@ pub fn parse_preposition_spec(repr: &str) -> Option<PrepSpec> {
     match repr {
         "any" => Some(PrepSpec::Any),
         "none" => Some(PrepSpec::None),
-        _ => find_preposition(repr).map(|p| PrepSpec::Other(p)),
+        _ => find_preposition(repr).map(PrepSpec::Other),
     }
 }
 
