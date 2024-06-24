@@ -20,11 +20,12 @@ mod common;
 use std::{path::Path, sync::Arc};
 
 use common::{create_wiredtiger_db, testsuite_dir};
+use eyre::Context;
 use moor_db::Database;
 use moor_kernel::{
     config::Config,
     tasks::{
-        scheduler::{Scheduler, SchedulerError},
+        scheduler::Scheduler,
         scheduler_test_utils,
         sessions::{NoopClientSession, Session},
     },
@@ -39,7 +40,7 @@ use common::create_relbox_db;
 struct SchedulerMootRunner {
     scheduler: Arc<Scheduler>,
     session: Arc<dyn Session>,
-    eval_result: Option<Result<Var, SchedulerError>>,
+    eval_result: Option<Var>,
 }
 impl SchedulerMootRunner {
     fn new(scheduler: Arc<Scheduler>, session: Arc<dyn Session>) -> Self {
@@ -52,28 +53,40 @@ impl SchedulerMootRunner {
 }
 impl MootRunner for SchedulerMootRunner {
     type Value = Var;
-    type Error = SchedulerError;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<(), SchedulerError> {
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> eyre::Result<()> {
         let command = command.into();
         eprintln!("{player} >> ; {command}");
-        self.eval_result = Some(scheduler_test_utils::call_eval(
-            self.scheduler.clone(),
-            self.session.clone(),
-            player,
-            command,
-        ));
+        self.eval_result = Some(
+            scheduler_test_utils::call_eval(
+                self.scheduler.clone(),
+                self.session.clone(),
+                player,
+                command.clone(),
+            )
+            .wrap_err(format!(
+                "SchedulerMootRunner::eval({player}, {:?})",
+                command
+            ))?,
+        );
         Ok(())
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<(), SchedulerError> {
-        eprintln!("{player} >> ; {}", command.as_ref());
-        self.eval_result = Some(scheduler_test_utils::call_command(
-            self.scheduler.clone(),
-            self.session.clone(),
-            player,
-            command.as_ref(),
-        ));
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> eyre::Result<()> {
+        let command: &str = command.as_ref();
+        eprintln!("{player} >> ; {}", command);
+        self.eval_result = Some(
+            scheduler_test_utils::call_command(
+                self.scheduler.clone(),
+                self.session.clone(),
+                player,
+                command,
+            )
+            .wrap_err(format!(
+                "SchedulerMootRunner::command({player}, {:?})",
+                command
+            ))?,
+        );
         Ok(())
     }
 
@@ -81,23 +94,15 @@ impl MootRunner for SchedulerMootRunner {
         v_none()
     }
 
-    fn read_line(&mut self, _player: Objid) -> Result<Option<String>, Self::Error> {
+    fn read_line(&mut self, _player: Objid) -> eyre::Result<Option<String>> {
         unimplemented!("Not supported on SchedulerMootRunner");
     }
 
-    fn read_eval_result(
-        &mut self,
-        player: Objid,
-    ) -> Result<Option<moor_values::var::Var>, SchedulerError> {
-        self.eval_result
+    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<moor_values::var::Var>> {
+        Ok(self
+            .eval_result
             .take()
-            .inspect(|some| {
-                let _ = some
-                    .as_ref()
-                    .inspect(|var| eprintln!("{player} << {var}"))
-                    .inspect_err(|err| eprintln!("{player} << ERR: {err}"));
-            })
-            .transpose()
+            .inspect(|var| eprintln!("{player} << {var}")))
     }
 }
 
@@ -122,7 +127,7 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
         .spawn(move || loop_scheduler.run())
-        .unwrap();
+        .expect("Failed to spawn scheduler");
 
     execute_moot_test(
         SchedulerMootRunner::new(scheduler.clone(), Arc::new(NoopClientSession::new())),
@@ -131,8 +136,10 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
 
     scheduler
         .submit_shutdown(0, Some("Test is done".to_string()))
-        .unwrap();
-    scheduler_loop_jh.join().unwrap();
+        .expect("Failed to shut down scheduler");
+    scheduler_loop_jh
+        .join()
+        .expect("Failed to join() scheduler");
 }
 
 #[test]

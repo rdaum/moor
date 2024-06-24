@@ -24,7 +24,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use eyre::WrapErr;
+use eyre::{eyre, ContextCompat, WrapErr};
 use moor_values::var::Objid;
 
 use pretty_assertions::assert_eq;
@@ -51,7 +51,7 @@ fn init_logging() {
             .with_test_writer()
             .finish();
         tracing::subscriber::set_global_default(main_subscriber)
-            .expect("Unable to set configure logging");
+            .expect("Unable to configure logging");
     });
 }
 /// Look up the path to Test.db from any crate under the `moor` workspace
@@ -61,13 +61,12 @@ pub fn test_db_path() -> PathBuf {
 
 pub trait MootRunner {
     type Value: PartialEq + std::fmt::Debug;
-    type Error: std::error::Error + Send + Sync + 'static;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<(), Self::Error>;
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<(), Self::Error>;
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> eyre::Result<()>;
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> eyre::Result<()>;
 
-    fn read_line(&mut self, player: Objid) -> Result<Option<String>, Self::Error>;
-    fn read_eval_result(&mut self, player: Objid) -> Result<Option<Self::Value>, Self::Error>;
+    fn read_line(&mut self, player: Objid) -> eyre::Result<Option<String>>;
+    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<Self::Value>>;
 
     fn none(&self) -> Self::Value;
 }
@@ -258,17 +257,23 @@ impl<R: MootRunner> MootState<R> {
         expectation: Option<&str>,
         line_no: usize, // for the assertion message
     ) -> eyre::Result<()> {
+        let err_prefix = || format!("assert_eval_result({player}, {expectation:?}, {line_no})");
         let actual = runner
             .read_eval_result(player)?
-            .expect("No eval result received");
+            .ok_or_else(|| eyre!("{}/actual: got no eval result", err_prefix()))?;
 
         let expected = if let Some(expectation) = expectation {
             runner
                 .eval(player, format!("return {expectation};"))
-                .wrap_err(format!("Failed to compile expected output: {expectation}"))?;
+                .wrap_err_with(|| {
+                    format!(
+                        "{}/expected: Failed to compile expected output: {expectation}",
+                        err_prefix()
+                    )
+                })?;
             runner
                 .read_eval_result(player)?
-                .expect("No eval result received")
+                .wrap_err_with(|| format!("{}/expected: got no eval result", err_prefix()))?
         } else {
             runner.none()
         };
@@ -326,12 +331,14 @@ pub struct MootClient {
     stream: TcpStream,
 }
 impl MootClient {
-    pub fn new(port: u16) -> Result<Self, std::io::Error> {
-        TcpStream::connect(format!("localhost:{port}")).and_then(|stream| {
-            stream.set_read_timeout(Some(Duration::from_secs(1)))?;
-            stream.set_write_timeout(Some(Duration::from_secs(1)))?;
-            Ok(Self { stream })
-        })
+    pub fn new(port: u16) -> eyre::Result<Self> {
+        TcpStream::connect(format!("localhost:{port}"))
+            .and_then(|stream| {
+                stream.set_read_timeout(Some(Duration::from_secs(1)))?;
+                stream.set_write_timeout(Some(Duration::from_secs(1)))?;
+                Ok(Self { stream })
+            })
+            .wrap_err_with(|| format!("MootClient::new({port})"))
     }
 
     fn port(&self) -> u16 {
@@ -341,22 +348,26 @@ impl MootClient {
             .unwrap_or_default()
     }
 
-    pub fn write_line<S>(&mut self, s: S) -> Result<(), std::io::Error>
+    pub fn write_line<S>(&mut self, s: S) -> eyre::Result<()>
     where
         S: AsRef<str>,
     {
         eprintln!("{} >> {}", self.port(), s.as_ref());
+        let port = self.port();
         let mut writer = BufWriter::new(&mut self.stream);
-        writer.write_all(s.as_ref().as_bytes()).unwrap();
-        writer.write_all(b"\n").unwrap();
-        Ok(())
+        writer
+            .write_all(s.as_ref().as_bytes())
+            .and_then(|_| writer.write_all(b"\n"))
+            .wrap_err_with(|| format!("writing port={port}"))
     }
 
-    fn read_line(&self) -> Result<Option<String>, std::io::Error> {
+    fn read_line(&self) -> eyre::Result<Option<String>> {
         let mut buf = String::new();
         match BufReader::new(&self.stream).read_line(&mut buf) {
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e),
+            Err(e) => {
+                Err(e).wrap_err_with(|| format!("MootClient::read_line port={}", self.port()))
+            }
             Ok(0) => Ok(None),
             Ok(_) => {
                 let line = buf.trim_end_matches(['\r', '\n']).to_string();
@@ -401,51 +412,54 @@ impl TelnetMootRunner {
         })
     }
 
-    fn resolve_response(
-        &mut self,
-        player: Objid,
-        response: String,
-    ) -> Result<String, std::io::Error> {
+    fn resolve_response(&mut self, player: Objid, response: String) -> eyre::Result<String> {
         let client = self.client(player);
         // Resolve the response; for example, the test assertion may be `$object`; resolve it to the object's specific number.
         client.write_line(format!(
             "; return {response}; \"TelnetMootRunner::resolve_response\";"
         ))?;
-        client.read_line().map(Option::unwrap)
+        client
+            .read_line()
+            .wrap_err_with(|| format!("TelnetMoorRunner::resolve_response({player}, {response:?})"))
+            .and_then(|maybe_line| maybe_line.ok_or(eyre!("received no response from server")))
     }
 }
 impl MootRunner for TelnetMootRunner {
     type Value = String;
-    type Error = std::io::Error;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> Result<(), Self::Error> {
+    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> eyre::Result<()> {
+        let command: String = command.into();
         self.client(player)
-            .write_line(format!("; {} \"TelnetMootRunner::eval\";", command.into()))?;
-        Ok(())
+            .write_line(format!("; {} \"TelnetMootRunner::eval\";", command))
+            .with_context(|| format!("TelnetMootRunner::eval({player}, {:?})", command))
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> Result<(), Self::Error> {
-        self.client(player).write_line(command)
+    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> eyre::Result<()> {
+        let command: &str = command.as_ref();
+        self.client(player)
+            .write_line(command)
+            .with_context(|| format!("TelnetMootRunner::command({player}, {:?}", command))
     }
 
     fn none(&self) -> Self::Value {
         "0".to_string()
     }
 
-    fn read_line(&mut self, player: Objid) -> Result<Option<String>, Self::Error> {
-        Ok(self.client(player).read_line().expect("Reading raw line"))
+    fn read_line(&mut self, player: Objid) -> eyre::Result<Option<String>> {
+        self.client(player)
+            .read_line()
+            .with_context(|| format!("TelnetMootRunner::read_line({player})"))
     }
 
-    fn read_eval_result(&mut self, player: Objid) -> Result<Option<Self::Value>, Self::Error> {
+    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<Self::Value>> {
         let raw = self
             .client(player)
             .read_line()
-            .expect("Reading raw eval response");
+            .with_context(|| format!("TelnetMootRunner::read_eval_result({player}) / read raw"))?;
         if let Some(raw) = raw {
-            Ok(self
-                .resolve_response(player, raw)
+            self.resolve_response(player, raw)
                 .map(Some)
-                .expect("Reading resolved eval response"))
+                .with_context(|| format!("TelnetMootRunner::read_eval_result({player}) / resolve"))
         } else {
             Ok(None)
         }
@@ -468,9 +482,8 @@ pub fn execute_moot_test<R: MootRunner>(runner: R, path: &Path) {
         let line_no = line_no + 1;
         state = state
             .process_line(line_no, &line)
-            .wrap_err(format!("line {}", line_no))
-            .unwrap();
+            .unwrap_or_else(|_| panic!("{}:{line_no}", path.display()))
         //eprintln!("[{line_no}] {line}");
     }
-    state.finalize().unwrap();
+    state.finalize().expect("EOF");
 }
