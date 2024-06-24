@@ -25,7 +25,7 @@ use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 use moor_values::model::ObjFlag;
 use moor_values::model::{NarrativeEvent, WorldStateError};
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_PERM, E_TYPE};
+use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 use moor_values::var::{v_listv, Error};
@@ -38,11 +38,15 @@ use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // TODO: Remove bf_noop panic
-    //   right now we panic on unimplemented builtins, but we should just return an error and log,
-    //   this was done this way to support discovering which builtins are unimplemented, but
-    //   that's not really necessary anymore.
-    unimplemented!("BF is not implemented: {}", bf_args.name);
+    error!(
+        "Builtin function {} is not implemented, called with arguments: ({:?})",
+        bf_args.name, bf_args.args
+    );
+    Err(BfErr::Raise(
+        E_INVIND,
+        Some(format!("Builtin {} is not implemented", bf_args.name)),
+        Some(v_str(&bf_args.name)),
+    ))
 }
 bf_declare!(noop, bf_noop);
 
