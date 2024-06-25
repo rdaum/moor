@@ -14,9 +14,6 @@
 
 use crate::tasks::scheduler::TaskResult;
 use moor_values::var::{List, Objid};
-use std::cell::Cell;
-use std::marker::PhantomData;
-use std::sync::MutexGuard;
 use std::time::SystemTime;
 
 pub mod command_parse;
@@ -41,9 +38,6 @@ impl TaskHandle {
         self.1
     }
 }
-
-pub(crate) type PhantomUnsync = PhantomData<Cell<()>>;
-pub(crate) type PhantomUnsend = PhantomData<MutexGuard<'static, ()>>;
 
 /// The minimum set of information needed to make a *resolution* call for a verb.
 #[derive(Debug, Clone, Eq, PartialEq)]

@@ -13,7 +13,7 @@
 //
 
 use std::sync::Arc;
-use tracing::{debug, trace};
+use tracing::trace;
 
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
@@ -247,7 +247,7 @@ impl VM {
         }
         let bf = self.builtins[bf_func_num].clone();
 
-        debug!(
+        trace!(
             "Calling builtin: {}({}) caller_perms: {}",
             BUILTIN_DESCRIPTORS[bf_func_num].name,
             args_literal(&args),
