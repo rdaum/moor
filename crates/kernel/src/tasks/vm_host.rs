@@ -17,12 +17,13 @@ use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::SchedulerControlMsg;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
-use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskId, VerbCall};
+use crate::tasks::{TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
 use bytes::Bytes;
 use crossbeam_channel::Sender;
+use daumtils::PhantomUnsync;
 use moor_compiler::Program;
 use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
@@ -31,6 +32,7 @@ use moor_values::model::{BinaryType, ObjFlag};
 use moor_values::var::Var;
 use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, error, trace, warn};
@@ -73,10 +75,20 @@ pub struct VmHost {
     scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
     running: bool,
 
-    unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
+impl Debug for VmHost {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VmHost")
+            .field("task_id", &self.vm_exec_state.task_id)
+            .field("running", &self.running)
+            .field("max_stack_depth", &self.max_stack_depth)
+            .field("max_ticks", &self.max_ticks)
+            .field("max_time", &self.max_time)
+            .finish()
+    }
+}
 impl VmHost {
     pub fn new(
         task_id: TaskId,
@@ -99,7 +111,6 @@ impl VmHost {
             sessions,
             scheduler_control_sender,
             running: false,
-            unsend: Default::default(),
             unsync: Default::default(),
         }
     }
@@ -149,13 +160,13 @@ impl VmHost {
     }
 
     /// Start execution of a fork request in the hosted VM.
-    pub fn start_fork(&mut self, task_id: TaskId, fork_request: Fork, suspended: bool) {
+    pub fn start_fork(&mut self, task_id: TaskId, fork_request: &Fork, suspended: bool) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
         self.vm
-            .exec_fork_vector(&mut self.vm_exec_state, fork_request);
+            .exec_fork_vector(&mut self.vm_exec_state, fork_request.clone());
         self.running = !suspended;
     }
 
@@ -357,12 +368,17 @@ impl VmHost {
 
     /// Resume what you were doing after suspension.
     pub fn resume_execution(&mut self, value: Var) {
-        // coming back from any suspend, we need a return value to feed back to `bf_suspend` or
-        // `bf_read()`
-        self.vm_exec_state.top_mut().frame.push(value);
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.tick_count = 0;
         self.running = true;
+
+        // If there's no activations at all, that means we're a Fork, not returning to something.
+        if !self.vm_exec_state.stack.is_empty() {
+            // coming back from any suspend, we need a return value to feed back to `bf_suspend` or
+            // `bf_read()`
+            self.vm_exec_state.top_mut().frame.push(value);
+        }
+
         debug!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
     }
 

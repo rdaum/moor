@@ -71,7 +71,6 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
-
     bf_args
         .scheduler_sender
         .send((
@@ -81,7 +80,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 event,
             },
         ))
-        .expect("scheduler is not listening");
+        .ok();
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -444,7 +443,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::DescribeOtherTasks(send),
+            SchedulerControlMsg::RequestQueuedTasks(send),
         ))
         .expect("scheduler is not listening");
     let tasks = receive.recv().expect("scheduler is not listening");

@@ -12,8 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::{PhantomUnsend, PhantomUnsync, TaskId};
+use crate::tasks::TaskId;
 use crate::vm::activation::{Activation, Caller};
+use daumtils::PhantomUnsync;
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use moor_values::NOTHING;
@@ -41,7 +42,6 @@ pub struct VMExecState {
     /// The amount of time the task is allowed to run.
     pub(crate) maximum_time: Option<Duration>,
 
-    unsend: PhantomUnsend,
     unsync: PhantomUnsync,
 }
 
@@ -55,7 +55,6 @@ impl VMExecState {
             max_ticks,
             tick_slice: 0,
             maximum_time: None,
-            unsend: Default::default(),
             unsync: Default::default(),
         }
     }

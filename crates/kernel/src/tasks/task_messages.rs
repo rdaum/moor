@@ -16,15 +16,15 @@ use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::{TaskDescription, TaskId};
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
-use std::sync::Arc;
 
 use moor_compiler::Program;
 
+use crate::tasks::task::Task;
+use moor_values::model::Perms;
 use moor_values::model::{CommandError, NarrativeEvent};
-use moor_values::model::{Perms, WorldStateSource};
 use moor_values::var::Var;
 use moor_values::var::{List, Objid};
-use std::time::SystemTime;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub enum TaskStart {
@@ -52,26 +52,6 @@ pub enum TaskStart {
     StartEval { player: Objid, program: Program },
 }
 
-/// Messages sent to tasks from the scheduler to tell the task to do things.
-pub enum TaskControlMsg {
-    /// The scheduler is telling the task to restart itself in a new transaction.
-    Restart(Arc<dyn WorldStateSource>),
-    /// The scheduler is telling the task to resume execution. Use the given world state
-    /// (transaction) and permissions when doing so.
-    Resume(Arc<dyn WorldStateSource>, Var),
-    /// The scheduler is giving the task the input it requested from the client, and is asking it
-    /// to resume execution, using the given world state (transaction) to do so.
-    ResumeReceiveInput(Arc<dyn WorldStateSource>, String),
-    /// The scheduler is asking the task to describe itself.
-    /// TODO: Rethink task 'description' mechanism.
-    ///   Causes deadlock if the task _requesting_ the description is the task being
-    ///   described, so I need to rethink this. Right now this is prevented by the
-    ///   runtime, but it's not a good design.
-    Describe(oneshot::Sender<TaskDescription>),
-    /// The scheduler is telling the task to abort itself.
-    Abort,
-}
-
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
 #[derive(Debug)]
 pub enum SchedulerControlMsg {
@@ -79,7 +59,7 @@ pub enum SchedulerControlMsg {
     TaskSuccess(Var),
     /// The task hit an unresolvable transaction serialization conflict, and needs to be restarted
     /// in a new transaction.
-    TaskConflictRetry,
+    TaskConflictRetry(Task),
     /// A 'StartCommandVerb' type task failed to parse or match the command.
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.
@@ -93,11 +73,11 @@ pub enum SchedulerControlMsg {
     /// The task is letting us know that it has reached its abort limits.
     TaskAbortLimitsReached(AbortLimitReason),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
-    TaskSuspend(Option<SystemTime>),
+    TaskSuspend(Option<Instant>, Task),
     /// Tell the scheduler we're suspending until we get input from the client.
-    TaskRequestInput,
+    TaskRequestInput(Task),
     /// Task is requesting a list of all other tasks known to the scheduler.
-    DescribeOtherTasks(oneshot::Sender<Vec<TaskDescription>>),
+    RequestQueuedTasks(oneshot::Sender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,
