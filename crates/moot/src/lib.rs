@@ -295,7 +295,8 @@ impl<R: MootRunner> MootState<R> {
 }
 
 pub struct ManagedChild {
-    pub child: Child,
+    name: &'static str,
+    child: Child,
 }
 impl ManagedChild {
     pub fn new(name: &'static str, mut child: Child) -> Self {
@@ -318,11 +319,27 @@ impl ManagedChild {
                 eprintln!("[{name}]: {}", line.expect("Failed to read line"));
             }
         });
-        Self { child }
+        Self { name, child }
+    }
+
+    pub fn try_wait(&mut self) -> eyre::Result<Option<std::process::ExitStatus>> {
+        self.child
+            .try_wait()
+            .wrap_err(format!("failed to wait: {}", self.name))
+    }
+
+    pub fn assert_running(&mut self) -> eyre::Result<()> {
+        let status = self.try_wait()?;
+        if status.is_some() {
+            Err(eyre!("Unexpected exit: {}: {status:?}", self.name))
+        } else {
+            Ok(())
+        }
     }
 }
 impl Drop for ManagedChild {
     fn drop(&mut self) {
+        eprintln!("Killing {} (pid={})", self.name, self.child.id());
         self.child.kill().expect("Failed to kill child process");
     }
 }
@@ -466,7 +483,11 @@ impl MootRunner for TelnetMootRunner {
     }
 }
 
-pub fn execute_moot_test<R: MootRunner>(runner: R, path: &Path) {
+pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
+    runner: R,
+    path: &Path,
+    validate_state: F,
+) {
     init_logging();
     eprintln!("Test definition: {}", path.display());
 
@@ -478,6 +499,9 @@ pub fn execute_moot_test<R: MootRunner>(runner: R, path: &Path) {
 
     let mut state = MootState::new(runner, WIZARD);
     for (line_no, line) in f.lines().enumerate() {
+        validate_state()
+            .unwrap_or_else(|e| panic!("Invalid state before processing line {line_no}: {e:?}"));
+
         let line = line.unwrap();
         let line_no = line_no + 1;
         state = state

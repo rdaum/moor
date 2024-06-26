@@ -22,6 +22,7 @@ use std::{
     env,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{Arc, Mutex},
 };
 
 use moor_moot::{execute_moot_test, test_db_path, ManagedChild, TelnetMootRunner};
@@ -63,8 +64,13 @@ fn start_moo() -> ManagedChild {
 }
 
 fn test_moo(path: &Path) {
-    let mut _moo = start_moo();
-    execute_moot_test(TelnetMootRunner::new(moo_port()), path)
+    let moo = Arc::new(Mutex::new(start_moo()));
+    let moo_clone = moo.clone();
+    let validate_state = move || moo_clone.lock().unwrap().assert_running();
+
+    execute_moot_test(TelnetMootRunner::new(moo_port()), path, validate_state);
+
+    drop(moo);
 }
 
 #[test]

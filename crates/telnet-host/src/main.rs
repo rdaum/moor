@@ -86,7 +86,8 @@ async fn main() -> Result<(), eyre::Error> {
 
     info!("Host started.");
     select! {
-        _ = listen_loop => {
+        msg = listen_loop => {
+            msg?;
             info!("ZMQ client loop exited, stopping...");
         }
         _ = hup_signal.recv() => {

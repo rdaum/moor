@@ -132,6 +132,7 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
     execute_moot_test(
         SchedulerMootRunner::new(scheduler.clone(), Arc::new(NoopClientSession::new())),
         path,
+        || Ok(()),
     );
 
     scheduler
