@@ -17,7 +17,7 @@ use serial_test::serial;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::OnceLock,
+    sync::{Arc, Mutex, OnceLock},
 };
 
 /// The current DB implementation reserves this much RAM. Default is 1TB, and
@@ -92,8 +92,15 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     use moor_moot::{execute_moot_test, TelnetMootRunner};
 
     let daemon_workdir = tempfile::TempDir::new().expect("Failed to create temporary directory");
-    let _daemon = start_daemon(daemon_workdir.path());
-    let _telnet_host = start_telnet_host();
+    let daemon = Arc::new(Mutex::new(start_daemon(daemon_workdir.path())));
+    let telnet_host = Arc::new(Mutex::new(start_telnet_host()));
+
+    let daemon_clone = daemon.clone();
+    let telnet_host_clone = telnet_host.clone();
+    let validate_state = move || {
+        daemon_clone.lock().unwrap().assert_running()?;
+        telnet_host_clone.lock().unwrap().assert_running()
+    };
 
     execute_moot_test(
         TelnetMootRunner::new(8080),
@@ -101,7 +108,11 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
             .join("tests/moot")
             .join(moot_file)
             .with_extension("moot"),
+        validate_state,
     );
+
+    drop(daemon);
+    drop(telnet_host);
 }
 
 #[cfg(target_os = "linux")]
