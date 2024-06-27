@@ -767,7 +767,6 @@ mod tests {
         // Now we can simulate resumption...
         resume_task.vm_host.resume_execution(v_int(0));
 
-        // Now we can simulate resumption...
         let tx = db.new_world_state().unwrap();
         Task::run_task_loop(resume_task, control_sender, tx);
         let (task_id, msg) = control_receiver.recv().unwrap();
