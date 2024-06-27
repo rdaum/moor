@@ -80,7 +80,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 event,
             },
         ))
-        .ok();
+        .expect("Unable to contact scheduler for Notify");
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
