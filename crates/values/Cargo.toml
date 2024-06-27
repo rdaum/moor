@@ -25,7 +25,6 @@ paste.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-yoke.workspace = true
 
 [features]
 # If List and String are backed by Bytes instead of Arc<Vec<Var>> and Arc<String> respectively.

@@ -88,8 +88,6 @@ tracing-subscriber = "0.3"
 tracing-test = "0.2"
 
 # General usefulness
-arc-swap = "1.7"
-atomic-wait = "1.1"
 binary-layout = "4.0"
 bincode = "2.0.0-rc.3"
 bindgen = "0.69"
@@ -98,12 +96,9 @@ chrono = "0.4"
 cmake = "0.1"
 criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
-dashmap = "5.5"
 daumtils = { git = "https://github.com/rdaum/daumtils.git", version = "0.2.0" }
 decorum = "0.3" # For ordering & comparing our floats
 enum-primitive-derive = "0.3"
-fast-counter = "1.0"
-human_bytes = "0.4"
 inventory = "0.3.15"
 itertools = "0.13.0"
 lazy_static = "1.4.0"
@@ -114,8 +109,6 @@ rustyline = "14.0.0"
 strum = { version = "0.26.2", features = ["derive"] }
 text-diff = "0.4.0"
 uuid = { version = "1.8.0", features = ["v4"] }
-yoke = "0.7.3"
-yoke-derive = "0.7.3"
 
 ## Required for MOO builtins.
 chrono-tz = "0.9.0"
@@ -138,12 +131,7 @@ thiserror = "1.0"
 paste = "1.0"
 
 # For the DB & values layer.
-crossbeam-queue = "0.3"
-hi_sparse_bitset = "0.6" # For buffer pool allocator in the DB
-im = "15.1" # Immutable data structures
-io-uring = "0.6"
 libc = "0.2"
-okaywal = "0.3"
 relbox = { git = "https://github.com/rdaum/Relbox.git", version = "0.2.0" }
 text_io = "0.1" # Used for reading text dumps.
 
