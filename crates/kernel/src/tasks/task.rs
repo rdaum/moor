@@ -47,7 +47,7 @@ use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedComman
 use crate::tasks::sessions::Session;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskStart};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
-use crate::tasks::{TaskId, VerbCall};
+use crate::tasks::{ServerOptions, TaskId, VerbCall};
 
 #[derive(Debug)]
 pub struct Task {
@@ -65,67 +65,6 @@ pub struct Task {
     pub(crate) kill_switch: Arc<AtomicBool>,
 }
 
-// TODO Propagate default ticks, seconds values from global config / args properly.
-//   Note these can be overridden in-core as well, server_options, will need caching, etc.
-const DEFAULT_FG_TICKS: usize = 60_000;
-const DEFAULT_BG_TICKS: usize = 30_000;
-const DEFAULT_FG_SECONDS: u64 = 5;
-const DEFAULT_BG_SECONDS: u64 = 3;
-const DEFAULT_MAX_STACK_DEPTH: usize = 50;
-
-fn max_vm_values(is_background: bool) -> (usize, u64, usize) {
-    let (max_ticks, max_seconds, max_stack_depth) = if is_background {
-        (
-            DEFAULT_BG_TICKS,
-            DEFAULT_BG_SECONDS,
-            DEFAULT_MAX_STACK_DEPTH,
-        )
-    } else {
-        (
-            DEFAULT_FG_TICKS,
-            DEFAULT_FG_SECONDS,
-            DEFAULT_MAX_STACK_DEPTH,
-        )
-    };
-
-    //
-    // // Look up fg_ticks, fg_seconds, and max_stack_depth on $server_options.
-    // // These are optional properties, and if they are not set, we use the defaults.
-    // let wizperms = PermissionsContext::root_for(Objid(2), BitEnum::new_with(ObjFlag::Wizard));
-    // if let Ok(server_options) = ws
-    //     .retrieve_property(wizperms.clone(), Objid(0), "server_options")
-    //
-    // {
-    //     if let Variant::Obj(server_options) = server_options.variant() {
-    //         if let Ok(v) = ws
-    //             .retrieve_property(wizperms.clone(), *server_options, "fg_ticks")
-    //
-    //         {
-    //             if let Variant::Int(v) = v.variant() {
-    //                 max_ticks = *v as usize;
-    //             }
-    //         }
-    //         if let Ok(v) = ws
-    //             .retrieve_property(wizperms.clone(), *server_options, "fg_seconds")
-    //
-    //         {
-    //             if let Variant::Int(v) = v.variant() {
-    //                 max_seconds = *v as u64;
-    //             }
-    //         }
-    //         if let Ok(v) = ws
-    //             .retrieve_property(wizperms, *server_options, "max_stack_depth")
-    //
-    //         {
-    //             if let Variant::Int(v) = v.variant() {
-    //                 max_stack_depth = *v as usize;
-    //             }
-    //         }
-    //     }
-    // }
-    (max_ticks, max_seconds, max_stack_depth)
-}
-
 impl Task {
     // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
     #[allow(clippy::too_many_arguments)]
@@ -135,13 +74,14 @@ impl Task {
         task_start: Arc<TaskStart>,
         perms: Objid,
         is_background: bool,
+        server_options: &ServerOptions,
         session: Arc<dyn Session>,
         control_sender: &Sender<(TaskId, SchedulerControlMsg)>,
         kill_switch: Arc<AtomicBool>,
     ) -> Self {
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
         // the DB or from default constants.
-        let (max_ticks, max_seconds, max_stack_depth) = max_vm_values(is_background);
+        let (max_seconds, max_ticks, max_stack_depth) = server_options.max_vm_values(is_background);
 
         let scheduler_control_sender = control_sender.clone();
         let vm_host = VmHost::new(
@@ -626,7 +566,7 @@ mod tests {
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::task::Task;
     use crate::tasks::task_messages::{SchedulerControlMsg, TaskStart};
-    use crate::tasks::TaskId;
+    use crate::tasks::{ServerOptions, TaskId};
     use crossbeam_channel::{unbounded, Receiver, Sender};
     use moor_compiler::compile;
     use moor_db_wiredtiger::WiredTigerDB;
@@ -657,12 +597,20 @@ mod tests {
         let noop_session = Arc::new(NoopClientSession::new());
         let (control_sender, control_receiver) = unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
+        let server_options = ServerOptions {
+            bg_seconds: 5,
+            bg_ticks: 50000,
+            fg_seconds: 5,
+            fg_ticks: 50000,
+            max_stack_depth: 5,
+        };
         let mut task = Task::new(
             1,
             SYSTEM_OBJECT,
             task_start.clone(),
             SYSTEM_OBJECT,
             false,
+            &server_options,
             noop_session.clone(),
             &control_sender,
             kill_switch.clone(),

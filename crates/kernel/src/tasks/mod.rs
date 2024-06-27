@@ -13,6 +13,7 @@
 //
 
 use crate::tasks::scheduler::TaskResult;
+use bincode::{Decode, Encode};
 use moor_values::var::{List, Objid};
 use std::time::SystemTime;
 
@@ -25,6 +26,12 @@ pub mod task_messages;
 pub mod vm_host;
 
 pub type TaskId = usize;
+
+pub const DEFAULT_FG_TICKS: usize = 60_000;
+pub const DEFAULT_BG_TICKS: usize = 30_000;
+pub const DEFAULT_FG_SECONDS: u64 = 5;
+pub const DEFAULT_BG_SECONDS: u64 = 3;
+pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 /// Just a handle to a task, with a receiver for the result.
 pub struct TaskHandle(TaskId, oneshot::Receiver<TaskResult>);
@@ -61,6 +68,32 @@ pub struct TaskDescription {
     pub verb_definer: Objid,
     pub line_number: usize,
     pub this: Objid,
+}
+
+/// The set of options that can be configured for the server via core $server_options.
+/// bf_load_server_options refreshes the server options from the database.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ServerOptions {
+    /// The number of seconds allotted to background tasks.
+    pub bg_seconds: u64,
+    /// The number of ticks allotted to background tasks.
+    pub bg_ticks: usize,
+    /// The number of seconds allotted to foreground tasks.
+    pub fg_seconds: u64,
+    /// The number of ticks allotted to foreground tasks.
+    pub fg_ticks: usize,
+    /// The maximum number of levels of nested verb calls.
+    pub max_stack_depth: usize,
+}
+
+impl ServerOptions {
+    pub fn max_vm_values(&self, is_background: bool) -> (u64, usize, usize) {
+        if is_background {
+            (self.bg_seconds, self.bg_ticks, self.max_stack_depth)
+        } else {
+            (self.fg_seconds, self.fg_ticks, self.max_stack_depth)
+        }
+    }
 }
 
 pub mod vm_test_utils {
