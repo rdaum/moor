@@ -925,6 +925,9 @@ impl Scheduler {
                     error!(?e, "Could not start textdump thread");
                 }
             }
+            SchedulerControlMsg::RefreshServerOptions { .. } => {
+                self.reload_server_options();
+            }
         }
     }
 

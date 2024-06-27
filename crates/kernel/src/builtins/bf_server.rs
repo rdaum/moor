@@ -926,6 +926,37 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(db_disk_size, db_disk_size);
 
+/* Function: none load_server_options ()
+
+   This causes the server to consult the current values of properties on $server_options, updating
+   the corresponding server option settings (see section Server Options Set in the Database)
+   accordingly. If the programmer is not a wizard, then E_PERM is raised.
+*/
+fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    bf_args
+        .scheduler_sender
+        .send((
+            bf_args.exec_state.task_id,
+            SchedulerControlMsg::RefreshServerOptions {
+                player: bf_args.exec_state.top().player,
+            },
+        ))
+        .expect("scheduler is not listening");
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(load_server_options, load_server_options);
+
 impl VM {
     pub(crate) fn register_bf_server(&mut self) {
         self.builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
@@ -959,5 +990,6 @@ impl VM {
         self.builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
         self.builtins[offset_for_builtin("memory_usage")] = Arc::new(BfMemoryUsage {});
         self.builtins[offset_for_builtin("db_disk_size")] = Arc::new(BfDbDiskSize {});
+        self.builtins[offset_for_builtin("load_server_options")] = Arc::new(BfLoadServerOptions {});
     }
 }
