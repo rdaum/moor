@@ -27,7 +27,7 @@ use crossbeam_channel::Sender;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use tracing::{error, trace, warn};
 
@@ -55,11 +55,6 @@ pub struct Task {
     pub(crate) task_id: TaskId,
     /// What I was asked to do.
     pub(crate) task_start: Arc<TaskStart>,
-    /// When this task will begin execution.
-    /// For currently execution tasks this is when the task actually began running.
-    /// For tasks in suspension, this is when they will wake up.
-    /// If the task is in indefinite suspension, this is None.
-    pub(crate) scheduled_start_time: Option<SystemTime>,
     /// The player on behalf of whom this task is running. Who owns this task.
     pub(crate) player: Objid,
     /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
@@ -162,7 +157,6 @@ impl Task {
             task_id,
             player,
             task_start,
-            scheduled_start_time: None,
             vm_host,
             perms,
             kill_switch,
@@ -272,7 +266,6 @@ impl Task {
                     .start_fork(self.task_id, fork_request, *suspended);
             }
             TaskStart::StartEval { player, program } => {
-                self.scheduled_start_time = None;
                 self.vm_host
                     .start_eval(self.task_id, *player, program.clone(), world_state);
             }
