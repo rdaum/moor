@@ -29,7 +29,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
-use tracing::{debug, error, trace, warn};
+use tracing::{error, trace, warn};
 
 use moor_values::model::CommandError::PermissionDenied;
 use moor_values::model::VerbInfo;
@@ -174,8 +174,6 @@ impl Task {
         control_sender: Sender<(TaskId, SchedulerControlMsg)>,
         mut world_state: Box<dyn WorldState>,
     ) {
-        let task_id = task.task_id;
-        debug!(task_id, "Task started");
         while task.vm_host.is_running() {
             // Check kill switch.
             if task.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
@@ -192,7 +190,6 @@ impl Task {
                 break;
             }
         }
-        debug!(task_id, "Task finished");
     }
 
     /// Set the task up to start executing, based on the task start configuration.
@@ -237,7 +234,7 @@ impl Task {
                     verb_call.verb_name.as_str(),
                 ) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
-                        debug!(task_id = ?self.task_id, this = ?verb_call.this,
+                        trace!(task_id = ?self.task_id, this = ?verb_call.this,
                               verb = verb_call.verb_name, "Verb not found");
                         control_sender
                             .send((
@@ -640,7 +637,7 @@ mod tests {
     use crossbeam_channel::{unbounded, Receiver, Sender};
     use moor_compiler::compile;
     use moor_db_wiredtiger::WiredTigerDB;
-    use moor_values::model::{WorldState, WorldStateSource};
+    use moor_values::model::{Event, WorldState, WorldStateSource};
     use moor_values::util::BitEnum;
     use moor_values::var::Error::E_DIV;
     use moor_values::var::{v_int, v_str};
@@ -728,6 +725,33 @@ mod tests {
             panic!("Expected TaskException, got {:?}", msg);
         };
         assert_eq!(exception.code, E_DIV);
+    }
+
+    // notify() will dispatch to the scheduler
+    #[test]
+    fn test_notify_invocation() {
+        let (_kill_switch, task, _db, tx, control_sender, control_receiver) =
+            setup_test_env(r#"notify(#0, "12345"); return 123;"#);
+
+        Task::run_task_loop(task, control_sender, tx);
+
+        // Scheduler should have received a TaskException message.
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let SchedulerControlMsg::Notify { player, event } = msg else {
+            panic!("Expected Notify, got {:?}", msg);
+        };
+        assert_eq!(player, SYSTEM_OBJECT);
+        assert_eq!(event.author(), SYSTEM_OBJECT);
+        assert_eq!(event.event, Event::TextNotify("12345".to_string()));
+
+        // Also scheduler should have received a TaskSuccess message.
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let SchedulerControlMsg::TaskSuccess(result) = msg else {
+            panic!("Expected TaskSuccess, got {:?}", msg);
+        };
+        assert_eq!(result, v_int(123));
     }
 
     /// Trigger a task-suspend-resume
