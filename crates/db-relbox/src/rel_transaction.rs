@@ -200,8 +200,7 @@ where
             .relation(relbox::RelationId(rel.into()))
             .predicate_scan(&|t| {
                 let domain_bytes = Bytes::from(t.domain().as_slice().to_vec());
-                let domain = Domain::from_bytes(Bytes::from(domain_bytes))
-                    .expect("Failed to convert domain");
+                let domain = Domain::from_bytes(domain_bytes).expect("Failed to convert domain");
                 let codomain_bytes = Bytes::from(t.codomain().as_slice().to_vec());
                 let codomain =
                     Codomain::from_bytes(codomain_bytes).expect("Failed to convert codomain");
