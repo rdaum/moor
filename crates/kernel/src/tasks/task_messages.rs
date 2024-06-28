@@ -102,6 +102,8 @@ pub enum SchedulerControlMsg {
         player: Objid,
         event: NarrativeEvent,
     },
+    /// Request that the server refresh its set of information off $server_options
+    RefreshServerOptions { player: Objid },
     /// Task requesting shutdown
     Shutdown(Option<String>),
 }

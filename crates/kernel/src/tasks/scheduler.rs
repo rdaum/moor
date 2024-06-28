@@ -25,6 +25,7 @@ use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
+use arc_swap::ArcSwap;
 use crossbeam_channel::Receiver;
 use std::sync::Mutex;
 use std::thread::yield_now;
@@ -32,9 +33,9 @@ use std::thread::yield_now;
 use moor_compiler::compile;
 use moor_compiler::CompileError;
 use moor_db::Database;
-use moor_values::model::VerbProgramError;
 use moor_values::model::{BinaryType, CommandError, HasUuid, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
+use moor_values::model::{VerbProgramError, WorldState};
 use moor_values::var::Error::{E_INVARG, E_PERM};
 use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
 use moor_values::var::{Objid, Variant};
@@ -52,7 +53,10 @@ use crate::tasks::scheduler::SchedulerError::{TaskNotFound, VerbProgramFailed};
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
 use crate::tasks::task_messages::{SchedulerControlMsg, TaskStart};
-use crate::tasks::{TaskDescription, TaskHandle, TaskId};
+use crate::tasks::{
+    ServerOptions, TaskDescription, TaskHandle, TaskId, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS,
+    DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
+};
 use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
 use crate::vm::UncaughtException;
@@ -72,6 +76,8 @@ pub struct Scheduler {
     running: Arc<AtomicBool>,
     database: Arc<dyn Database + Send + Sync>,
     next_task_id: AtomicUsize,
+
+    server_options: ArcSwap<ServerOptions>,
 
     /// The internal task queue which holds our suspended tasks, and control records for actively
     /// running tasks.
@@ -160,6 +166,19 @@ pub enum SchedulerError {
     VerbProgramFailed(VerbProgramError),
 }
 
+fn load_int_sysprop(server_options_obj: Objid, name: &str, tx: &dyn WorldState) -> Option<u64> {
+    let Ok(value) = tx.retrieve_property(SYSTEM_OBJECT, server_options_obj, name) else {
+        return None;
+    };
+    match value.variant() {
+        Variant::Int(i) if *i >= 0 => Some(*i as u64),
+        _ => {
+            warn!("$bg_seconds is not a positive integer");
+            None
+        }
+    }
+}
+
 impl Scheduler {
     pub fn new(database: Arc<dyn Database + Send + Sync>, config: Config) -> Self {
         let config = Arc::new(config);
@@ -167,6 +186,13 @@ impl Scheduler {
         let inner = TaskQ {
             tasks: Default::default(),
             suspended: Default::default(),
+        };
+        let default_server_options = ServerOptions {
+            bg_seconds: DEFAULT_BG_SECONDS,
+            bg_ticks: DEFAULT_BG_TICKS,
+            fg_seconds: DEFAULT_FG_SECONDS,
+            fg_ticks: DEFAULT_FG_TICKS,
+            max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
         };
         Self {
             running: Arc::new(AtomicBool::new(false)),
@@ -176,6 +202,7 @@ impl Scheduler {
             config,
             control_sender,
             control_receiver,
+            server_options: ArcSwap::new(Arc::new(default_server_options)),
         }
     }
 
@@ -184,6 +211,8 @@ impl Scheduler {
     pub fn run(self: Arc<Self>) {
         self.running.store(true, Ordering::SeqCst);
         info!("Starting scheduler loop");
+
+        self.reload_server_options();
         loop {
             let is_running = self.running.load(Ordering::SeqCst);
             if !is_running {
@@ -225,6 +254,56 @@ impl Scheduler {
             }
         }
         info!("Scheduler done.");
+    }
+
+    pub fn reload_server_options(&self) {
+        // Load the server options from the database, if possible.
+        let db = self
+            .database
+            .clone()
+            .world_state_source()
+            .expect("Could open database to read server properties");
+        let mut tx = db
+            .new_world_state()
+            .expect("Could not open transaction to read server properties");
+
+        let mut so = (*self.server_options.load().clone()).clone();
+
+        let Ok(server_options_obj) =
+            tx.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, "server_options")
+        else {
+            info!("No server options object found; using defaults");
+            tx.rollback().unwrap();
+            return;
+        };
+        let Variant::Obj(server_options_obj) = server_options_obj.variant() else {
+            info!("Server options property is not an object; using defaults");
+            tx.rollback().unwrap();
+            return;
+        };
+
+        if let Some(bg_seconds) = load_int_sysprop(*server_options_obj, "bg_seconds", tx.as_ref()) {
+            so.bg_seconds = bg_seconds;
+        }
+        if let Some(bg_ticks) = load_int_sysprop(*server_options_obj, "bg_ticks", tx.as_ref()) {
+            so.bg_ticks = bg_ticks as usize;
+        }
+        if let Some(fg_seconds) = load_int_sysprop(*server_options_obj, "fg_seconds", tx.as_ref()) {
+            so.fg_seconds = fg_seconds;
+        }
+        if let Some(fg_ticks) = load_int_sysprop(*server_options_obj, "fg_ticks", tx.as_ref()) {
+            so.fg_ticks = fg_ticks as usize;
+        }
+        if let Some(max_stack_depth) =
+            load_int_sysprop(*server_options_obj, "max_stack_depth", tx.as_ref())
+        {
+            so.max_stack_depth = max_stack_depth as usize;
+        }
+        tx.rollback().unwrap();
+
+        self.server_options.store(Arc::new(so));
+
+        info!("Server options refreshed.");
     }
 
     /// Submit a command to the scheduler for execution.
@@ -536,7 +615,12 @@ impl Scheduler {
                 // Ask the task to restart itself, using its stashed original start info, but with
                 // a brand new transaction.
                 let mut inner = self.task_q.lock().unwrap();
-                inner.retry_task(task, &self.control_sender, self.database.clone());
+                inner.retry_task(
+                    task,
+                    &self.control_sender,
+                    self.database.clone(),
+                    self.server_options.load().as_ref(),
+                );
             }
             SchedulerControlMsg::TaskVerbNotFound(this, verb) => {
                 // I'd make this 'warn' but `do_command` gets invoked for every command and
@@ -841,6 +925,9 @@ impl Scheduler {
                     error!(?e, "Could not start textdump thread");
                 }
             }
+            SchedulerControlMsg::RefreshServerOptions { .. } => {
+                self.reload_server_options();
+            }
         }
     }
 
@@ -911,6 +998,7 @@ impl Scheduler {
             delay_start,
             perms,
             is_background,
+            self.server_options.load().as_ref(),
             &self.control_sender,
             self.database.clone(),
         )
@@ -929,6 +1017,7 @@ impl TaskQ {
         delay_start: Option<Duration>,
         perms: Objid,
         is_background: bool,
+        server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, SchedulerControlMsg)>,
         database: Arc<dyn Database>,
     ) -> Result<TaskHandle, SchedulerError> {
@@ -945,6 +1034,7 @@ impl TaskQ {
             task_start,
             perms,
             is_background,
+            server_options,
             session.clone(),
             control_sender,
             kill_switch.clone(),
@@ -1115,6 +1205,7 @@ impl TaskQ {
         task: Task,
         control_sender: &Sender<(TaskId, SchedulerControlMsg)>,
         database: Arc<dyn Database>,
+        server_options: &ServerOptions,
     ) {
         // Make sure the old thread is dead.
         task.kill_switch.store(true, Ordering::SeqCst);
@@ -1138,6 +1229,7 @@ impl TaskQ {
             None,
             task.perms,
             false,
+            server_options,
             control_sender,
             database,
         ) {
