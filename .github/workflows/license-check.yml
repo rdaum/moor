@@ -1,0 +1,21 @@
+# Uses licensure to make sure the GPL3 blurb is at the top of every relevant file.
+
+name: License check
+
+on: [ push, pull_request ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check_license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install licensure
+        # this is slow because it has to compile the binary every time, it'd be nice if there was an image already
+        # set up with licensure installed.
+        # I tried using the precompiled binaries in their releases page and they had bad linkage for libssl, so poo.
+        run: cargo install licensure
+      - name: Check
+        run: licensure --check -p -v
