@@ -84,7 +84,7 @@ async fn main() -> Result<(), eyre::Error> {
         args.narrative_server.as_str(),
     );
 
-    info!("Host started.");
+    info!("Host started, listening @ {}...", args.telnet_address);
     select! {
         msg = listen_loop => {
             msg?;

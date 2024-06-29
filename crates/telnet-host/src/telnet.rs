@@ -353,7 +353,7 @@ pub async fn telnet_listen_loop(
                 "Accepted connection"
             );
 
-            let rcp_request_sock = request(&zmq_ctx)
+            let rpc_request_sock = request(&zmq_ctx)
                 .set_rcvtimeo(100)
                 .set_sndtimeo(100)
                 .connect(rpc_address.as_str())
@@ -362,7 +362,7 @@ pub async fn telnet_listen_loop(
             // And let the RPC server know we're here, and it should start sending events on the
             // narrative subscription.
             debug!(rpc_address, "Contacting RPC server to establish connection");
-            let mut rpc_client = RpcSendClient::new(rcp_request_sock);
+            let mut rpc_client = RpcSendClient::new(rpc_request_sock);
 
             let (token, connection_oid) = match rpc_client
                 .make_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))

@@ -421,7 +421,7 @@ impl TelnetMootRunner {
                     );
                     return client;
                 } else if start.elapsed() > Duration::from_secs(5) {
-                    panic!("Failed to connect to daemon");
+                    panic!("Failed to connect to server @ {}", self.port);
                 } else {
                     std::thread::sleep(Duration::from_millis(10));
                 }
