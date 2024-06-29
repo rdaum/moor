@@ -13,7 +13,9 @@
 //
 
 use crate::tasks::scheduler::TaskResult;
+use crate::vm::Fork;
 use bincode::{Decode, Encode};
+use moor_compiler::Program;
 use moor_values::var::{List, Objid};
 use std::fmt::Debug;
 use std::time::SystemTime;
@@ -24,7 +26,7 @@ pub mod sessions;
 
 pub(crate) mod scheduler_client;
 mod task;
-pub mod task_messages;
+pub mod task_scheduler_client;
 pub mod vm_host;
 
 pub type TaskId = usize;
@@ -127,18 +129,19 @@ pub mod vm_test_utils {
         F: FnOnce(&mut dyn WorldState, &mut VmHost),
     {
         let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
+        let task_scheduler_client =
+            crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
         let mut vm_host = VmHost::new(
             0,
             20,
             90_000,
             Duration::from_secs(5),
             session.clone(),
-            scs_tx,
+            task_scheduler_client.clone(),
         );
 
-        let (sched_send, _) = crossbeam_channel::unbounded();
         let _vm_exec_params = VmExecParams {
-            scheduler_sender: sched_send.clone(),
+            task_scheduler_client,
             max_stack_depth: 50,
         };
 
@@ -280,4 +283,30 @@ pub mod scheduler_test_utils {
     ) -> Result<Var, SchedulerError> {
         execute(|| scheduler.submit_eval_task(player, player, code, session))
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskStart {
+    /// The scheduler is telling the task to parse a command and execute whatever verbs are
+    /// associated with it.
+    StartCommandVerb { player: Objid, command: String },
+    /// The scheduler is telling the task to run a (method) verb.
+    StartVerb {
+        player: Objid,
+        vloc: Objid,
+        verb: String,
+        args: List,
+        argstr: String,
+    },
+    /// The scheduler is telling the task to run a task that was forked from another task.
+    /// ForkRequest contains the information on the fork vector and other information needed to
+    /// set up execution.
+    StartFork {
+        fork_request: Fork,
+        // If we're starting in a suspended state. If this is true, an explicit Resume from the
+        // scheduler will be required to start the task.
+        suspended: bool,
+    },
+    /// The scheduler is telling the task to evaluate a specific (MOO) program.
+    StartEval { player: Objid, program: Program },
 }

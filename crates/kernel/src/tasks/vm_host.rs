@@ -15,14 +15,13 @@
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::TaskControlMsg;
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
 use bytes::Bytes;
-use crossbeam_channel::Sender;
 use daumtils::PhantomUnsync;
 use moor_compiler::Program;
 use moor_compiler::{compile, Name};
@@ -72,7 +71,7 @@ pub struct VmHost {
     /// The maximum amount of time allotted to this task
     max_time: Duration,
     sessions: Arc<dyn Session>,
-    scheduler_control_sender: Sender<(TaskId, TaskControlMsg)>,
+    task_scheduler_client: TaskSchedulerClient,
     running: bool,
 
     unsync: PhantomUnsync,
@@ -96,7 +95,7 @@ impl VmHost {
         max_ticks: usize,
         max_time: Duration,
         sessions: Arc<dyn Session>,
-        scheduler_control_sender: Sender<(TaskId, TaskControlMsg)>,
+        task_scheduler_client: TaskSchedulerClient,
     ) -> Self {
         let vm = VM::new();
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
@@ -109,7 +108,7 @@ impl VmHost {
             max_ticks,
             max_time,
             sessions,
-            scheduler_control_sender,
+            task_scheduler_client,
             running: false,
             unsync: Default::default(),
         }
@@ -222,7 +221,7 @@ impl VmHost {
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
-            scheduler_sender: self.scheduler_control_sender.clone(),
+            task_scheduler_client: self.task_scheduler_client.clone(),
             max_stack_depth: self.max_stack_depth,
         };
 
@@ -309,7 +308,7 @@ impl VmHost {
                 } => {
                     let exec_params = VmExecParams {
                         max_stack_depth: self.max_stack_depth,
-                        scheduler_sender: self.scheduler_control_sender.clone(),
+                        task_scheduler_client: self.task_scheduler_client.clone(),
                     };
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.

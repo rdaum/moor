@@ -51,10 +51,10 @@ use crate::tasks::scheduler::SchedulerError::VerbProgramFailed;
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
-use crate::tasks::task_messages::{TaskControlMsg, TaskStart};
+use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::{
-    ServerOptions, TaskDescription, TaskHandle, TaskId, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS,
-    DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
+    ServerOptions, TaskDescription, TaskHandle, TaskId, TaskStart, DEFAULT_BG_SECONDS,
+    DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
 };
 use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
@@ -857,10 +857,7 @@ impl Scheduler {
                     error!(?e, "Could not send resume task result to requester");
                 }
             }
-            TaskControlMsg::BootPlayer {
-                player,
-                sender_permissions: _,
-            } => {
+            TaskControlMsg::BootPlayer { player } => {
                 // Task is asking to boot a player.
                 task_q.disconnect_task(task_id, player);
             }
@@ -1034,6 +1031,8 @@ impl TaskQ {
 
         let (sender, receiver) = oneshot::channel();
 
+        let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
+
         let kill_switch = Arc::new(AtomicBool::new(false));
         let mut task = Task::new(
             task_id,
@@ -1043,7 +1042,7 @@ impl TaskQ {
             is_background,
             server_options,
             session.clone(),
-            control_sender,
+            task_scheduler_client.clone(),
             kill_switch.clone(),
         );
 
@@ -1122,7 +1121,7 @@ impl TaskQ {
                     return;
                 }
 
-                Task::run_task_loop(task, control_sender, world_state);
+                Task::run_task_loop(task, &task_scheduler_client, world_state);
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
@@ -1165,6 +1164,7 @@ impl TaskQ {
         task.vm_host.resume_execution(resume_val);
         let thread_name = format!("moor-task-{}-player-{}", task_id, player);
         let control_sender = control_sender.clone();
+        let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
@@ -1177,7 +1177,7 @@ impl TaskQ {
                     }
                 };
 
-                Task::run_task_loop(task, control_sender, world_state);
+                Task::run_task_loop(task, &task_scheduler_client, world_state);
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");

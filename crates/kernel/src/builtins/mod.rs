@@ -14,7 +14,6 @@
 
 use std::sync::Arc;
 
-use crossbeam_channel::Sender;
 use thiserror::Error;
 
 use moor_values::model::Perms;
@@ -25,8 +24,7 @@ use moor_values::var::Objid;
 use moor_values::var::Var;
 
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::TaskControlMsg;
-use crate::tasks::TaskId;
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::{ExecutionResult, VMExecState};
 
 mod bf_list_sets;
@@ -52,7 +50,7 @@ pub struct BfCallState<'a> {
     /// For connection / message management.
     pub(crate) session: Arc<dyn Session>,
     /// For sending messages up to the scheduler
-    pub(crate) scheduler_sender: Sender<(TaskId, TaskControlMsg)>,
+    pub(crate) task_scheduler_client: TaskSchedulerClient,
 }
 
 impl BfCallState<'_> {
