@@ -335,7 +335,9 @@ fn main() -> Result<(), Report> {
     rpc_loop_thread.join().expect("RPC thread panicked");
     warn!("RPC thread exited. Departing...");
 
-    scheduler.stop().expect("Scheduler thread failed to stop");
+    scheduler
+        .submit_shutdown("System shutting down")
+        .expect("Scheduler thread failed to stop");
     scheduler_loop_jh.join().expect("Scheduler thread panicked");
     info!("Done.");
 

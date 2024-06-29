@@ -33,7 +33,7 @@ use moor_values::var::{v_listv, Error};
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::tasks::task_messages::SchedulerControlMsg;
+use crate::tasks::task_messages::TaskControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
 
@@ -75,7 +75,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::Notify {
+            TaskControlMsg::Notify {
                 player: *player,
                 event,
             },
@@ -276,10 +276,7 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     bf_args
         .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            SchedulerControlMsg::Shutdown(msg),
-        ))
+        .send((bf_args.exec_state.task_id, TaskControlMsg::Shutdown(msg)))
         .expect("scheduler is not listening");
 
     Ok(Ret(v_none()))
@@ -443,7 +440,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::RequestQueuedTasks(send),
+            TaskControlMsg::RequestQueuedTasks(send),
         ))
         .expect("scheduler is not listening");
     let tasks = receive.recv().expect("scheduler is not listening");
@@ -505,7 +502,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::KillTask {
+            TaskControlMsg::KillTask {
                 victim_task_id,
                 sender_permissions: bf_args.task_perms().map_err(world_state_bf_err)?,
                 result_sender: send,
@@ -549,7 +546,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::ResumeTask {
+            TaskControlMsg::ResumeTask {
                 queued_task_id: task_id,
                 sender_permissions: bf_args.task_perms().map_err(world_state_bf_err)?,
                 return_value,
@@ -621,7 +618,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::BootPlayer {
+            TaskControlMsg::BootPlayer {
                 player: *player,
                 sender_permissions: task_perms,
             },
@@ -844,7 +841,7 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .scheduler_sender
-        .send((bf_args.exec_state.task_id, SchedulerControlMsg::Checkpoint))
+        .send((bf_args.exec_state.task_id, TaskControlMsg::Checkpoint))
         .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
 
     Ok(Ret(v_bool(true)))
@@ -947,7 +944,7 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .scheduler_sender
         .send((
             bf_args.exec_state.task_id,
-            SchedulerControlMsg::RefreshServerOptions {
+            TaskControlMsg::RefreshServerOptions {
                 player: bf_args.exec_state.top().player,
             },
         ))

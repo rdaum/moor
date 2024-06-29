@@ -15,7 +15,7 @@
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::SchedulerControlMsg;
+use crate::tasks::task_messages::TaskControlMsg;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
@@ -72,7 +72,7 @@ pub struct VmHost {
     /// The maximum amount of time allotted to this task
     max_time: Duration,
     sessions: Arc<dyn Session>,
-    scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
+    scheduler_control_sender: Sender<(TaskId, TaskControlMsg)>,
     running: bool,
 
     unsync: PhantomUnsync,
@@ -96,7 +96,7 @@ impl VmHost {
         max_ticks: usize,
         max_time: Duration,
         sessions: Arc<dyn Session>,
-        scheduler_control_sender: Sender<(TaskId, SchedulerControlMsg)>,
+        scheduler_control_sender: Sender<(TaskId, TaskControlMsg)>,
     ) -> Self {
         let vm = VM::new();
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
