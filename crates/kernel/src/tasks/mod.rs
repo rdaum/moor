@@ -20,6 +20,8 @@ use moor_values::var::{List, Objid};
 use std::fmt::Debug;
 use std::time::SystemTime;
 
+pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
+
 pub mod command_parse;
 pub mod scheduler;
 pub mod sessions;
@@ -27,6 +29,7 @@ pub mod sessions;
 pub(crate) mod scheduler_client;
 mod task;
 pub mod task_scheduler_client;
+mod tasks_db;
 pub mod vm_host;
 
 pub type TaskId = usize;
@@ -309,4 +312,10 @@ pub enum TaskStart {
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
     StartEval { player: Objid, program: Program },
+}
+
+impl TaskStart {
+    pub fn is_background(&self) -> bool {
+        matches!(self, TaskStart::StartFork { .. })
+    }
 }

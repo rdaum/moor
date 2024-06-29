@@ -36,6 +36,7 @@ use crate::rpc_server::zmq_loop;
 
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxDatabaseBuilder;
+use moor_kernel::tasks::NoopTasksDb;
 
 mod connections;
 
@@ -271,6 +272,8 @@ fn main() -> Result<(), Report> {
         textdump_output: args.textdump_out,
     };
 
+    let tasks_db = Box::new(NoopTasksDb {});
+
     let state_source = db_source
         .clone()
         .world_state_source()
@@ -278,7 +281,7 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(db_source, config);
+    let scheduler = Scheduler::new(db_source, tasks_db, config);
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:

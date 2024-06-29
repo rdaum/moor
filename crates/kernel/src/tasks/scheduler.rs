@@ -52,6 +52,7 @@ use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
+use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
     ServerOptions, TaskDescription, TaskHandle, TaskId, TaskStart, DEFAULT_BG_SECONDS,
     DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
@@ -107,7 +108,7 @@ struct RunningTaskControl {
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
 /// When tasks are not running they are moved into these.
-struct SuspendedTask {
+pub struct SuspendedTask {
     wake_condition: WakeCondition,
     task: Task,
     session: Arc<dyn Session>,
@@ -126,8 +127,21 @@ enum WakeCondition {
 
 /// The internal state of the task queue.
 struct TaskQ {
+    /// Information about the active, running tasks. The actual `Task` is owned by the task thread
+    /// and this is just a control record for communicating with it.
     tasks: HashMap<TaskId, RunningTaskControl>,
-    suspended: HashMap<TaskId, SuspendedTask>,
+    /// Tasks in various types of suspension:
+    ///     Forked background tasks that will execute someday
+    ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
+    ///     Suspended tasks waiting for input from the player
+    suspended: SuspensionQ,
+}
+
+/// Ties the local storage for suspended tasks in with a reference to the tasks DB, to allow for
+/// keeping them in sync.
+struct SuspensionQ {
+    tasks: HashMap<TaskId, SuspendedTask>,
+    tasks_database: Box<dyn TasksDb>,
 }
 
 /// Reasons a task might be aborted for a 'limit'
@@ -187,12 +201,20 @@ fn load_int_sysprop(server_options_obj: Objid, name: &str, tx: &dyn WorldState) 
 }
 
 impl Scheduler {
-    pub fn new(database: Arc<dyn Database + Send + Sync>, config: Config) -> Self {
+    pub fn new(
+        database: Arc<dyn Database + Send + Sync>,
+        tasks_database: Box<dyn TasksDb>,
+        config: Config,
+    ) -> Self {
         let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
         let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
+        let suspension_q = SuspensionQ {
+            tasks: Default::default(),
+            tasks_database,
+        };
         let task_q = TaskQ {
             tasks: Default::default(),
-            suspended: Default::default(),
+            suspended: suspension_q,
         };
         let default_server_options = ServerOptions {
             bg_seconds: DEFAULT_BG_SECONDS,
@@ -218,28 +240,18 @@ impl Scheduler {
     /// Execute the scheduler loop, run from the server process.
     #[instrument(skip(self))]
     pub fn run(mut self) {
+        // Rehydrate suspended tasks.
+        self.task_q.suspended.load_tasks();
+
         self.running = true;
         info!("Starting scheduler loop");
 
         self.reload_server_options();
         while self.running {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-            let now = Instant::now();
-
-            // We need to take the tasks that need waking out of the suspended list, and then
-            // rehydrate them.
-            let to_wake = self
-                .task_q
-                .suspended
-                .iter()
-                .filter_map(|(task_id, sr)| match &sr.wake_condition {
-                    WakeCondition::Time(t) => (*t <= now).then_some(*task_id),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-
-            for task_id in to_wake {
-                let sr = self.task_q.suspended.remove(&task_id).unwrap();
+            let to_wake = self.task_q.suspended.collect_wake_tasks();
+            for sr in to_wake {
+                let task_id = sr.task.task_id;
                 if let Err(e) = self.task_q.resume_task_thread(
                     sr.task,
                     v_int(0),
@@ -251,7 +263,6 @@ impl Scheduler {
                     error!(?task_id, ?e, "Error resuming task");
                 }
             }
-
             // Handle any scheduler submissions...
             if let Ok(msg) = self.scheduler_receiver.try_recv() {
                 self.handle_scheduler_msg(msg);
@@ -262,7 +273,11 @@ impl Scheduler {
                 self.handle_task_msg(task_id, msg);
             }
         }
-        info!("Scheduler done.");
+
+        // Write out all the suspended tasks to the database.
+        info!("Scheduler done; saving suspended tasks");
+        self.task_q.suspended.save_tasks();
+        info!("Saved.");
     }
 
     pub fn reload_server_options(&mut self) {
@@ -468,42 +483,16 @@ impl Scheduler {
                 trace!(?input_request_id, ?input, "Received input for task");
 
                 // Find the task that requested this input, if any
-                let Some((task_id, perms)) = task_q.suspended.iter().find_map(|(task_id, sr)| {
-                    if let WakeCondition::Input(request_id) = &sr.wake_condition {
-                        if *request_id == input_request_id {
-                            Some((*task_id, sr.task.perms))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                }) else {
+                let Some(sr) = task_q
+                    .suspended
+                    .pull_task_for_input(input_request_id, player)
+                else {
                     warn!(?input_request_id, "Input request not found");
                     reply
                         .send(Err(InputRequestNotFound(input_request_id.as_u128())))
                         .expect("Could not send input request not found reply");
                     return;
                 };
-
-                // If the player doesn't match, we'll pretend we didn't even see it.
-                if perms != player {
-                    warn!(
-                        ?task_id,
-                        ?input_request_id,
-                        ?player,
-                        "Task input request received for wrong player"
-                    );
-                    reply
-                        .send(Err(InputRequestNotFound(input_request_id.as_u128())))
-                        .expect("Could not send input request not found reply");
-                    return;
-                }
-
-                let sr = task_q
-                    .suspended
-                    .remove(&task_id)
-                    .expect("Corrupt task list");
 
                 // Wake and bake.
                 let response = task_q.resume_task_thread(
@@ -755,15 +744,9 @@ impl Scheduler {
                     None => WakeCondition::Never,
                 };
 
-                task_q.suspended.insert(
-                    task_id,
-                    SuspendedTask {
-                        wake_condition,
-                        task,
-                        session: tc.session,
-                        result_sender: tc.result_sender,
-                    },
-                );
+                task_q
+                    .suspended
+                    .add_task(wake_condition, task, tc.session, tc.result_sender);
 
                 debug!(task_id, "Task suspended");
             }
@@ -788,41 +771,18 @@ impl Scheduler {
                     warn!("Could not request input from session; aborting task");
                     return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
                 };
-                task_q.suspended.insert(
-                    task_id,
-                    SuspendedTask {
-                        wake_condition: WakeCondition::Input(input_request_id),
-                        task,
-                        session: tc.session,
-                        result_sender: tc.result_sender,
-                    },
+                task_q.suspended.add_task(
+                    WakeCondition::Input(input_request_id),
+                    task,
+                    tc.session,
+                    tc.result_sender,
                 );
 
                 trace!(?task_id, "Task suspended waiting for input");
             }
             TaskControlMsg::RequestQueuedTasks(reply) => {
                 // Task is asking for a description of all other tasks.
-                let mut tasks = Vec::new();
-
-                // Suspended tasks.
-                for (_, sr) in task_q.suspended.iter() {
-                    let start_time = match sr.wake_condition {
-                        WakeCondition::Time(t) => {
-                            let distance_from_now = t.duration_since(Instant::now());
-                            Some(SystemTime::now() + distance_from_now)
-                        }
-                        _ => None,
-                    };
-                    tasks.push(TaskDescription {
-                        task_id: sr.task.task_id,
-                        start_time,
-                        permissions: sr.task.perms,
-                        verb_name: sr.task.vm_host.verb_name().clone(),
-                        verb_definer: sr.task.vm_host.verb_definer(),
-                        line_number: sr.task.vm_host.line_number(),
-                        this: sr.task.vm_host.this(),
-                    });
-                }
+                let tasks = self.task_q.suspended.tasks();
                 if let Err(e) = reply.send(tasks) {
                     error!(?e, "Could not send task description to requester");
                     // TODO: murder this errant task
@@ -1039,7 +999,6 @@ impl TaskQ {
             player,
             task_start,
             perms,
-            is_background,
             server_options,
             session.clone(),
             task_scheduler_client.clone(),
@@ -1076,16 +1035,8 @@ impl TaskQ {
                 }
             }
             let wake_condition = WakeCondition::Time(Instant::now() + delay);
-            self.suspended.insert(
-                task_id,
-                SuspendedTask {
-                    // (suspend_until, task, session)
-                    wake_condition,
-                    task,
-                    session,
-                    result_sender: Some(sender),
-                },
-            );
+            self.suspended
+                .add_task(wake_condition, task, session, Some(sender));
             return Ok(TaskHandle(task_id, receiver));
         }
 
@@ -1249,10 +1200,10 @@ impl TaskQ {
         // We need to do perms check first, which means checking both running and suspended tasks,
         // and getting their permissions. And may as well remember whether it was in suspended or
         // active at the same time.
-        let (perms, is_suspended) = match self.suspended.get(&victim_task_id) {
-            Some(sr) => (sr.task.perms, true),
+        let (perms, is_suspended) = match self.suspended.perms_check(victim_task_id, false) {
+            Some(perms) => (perms, true),
             None => match self.tasks.get(&victim_task_id) {
-                Some(task) => (task.player, false),
+                Some(tc) => (tc.player, false),
                 None => {
                     return v_err(E_INVARG);
                 }
@@ -1276,7 +1227,7 @@ impl TaskQ {
 
         // If suspended we can just remove completely and move on.
         if is_suspended {
-            if self.suspended.remove(&victim_task_id).is_none() {
+            if self.suspended.remove_task(victim_task_id).is_none() {
                 error!(
                     task = victim_task_id,
                     "Task not found in suspended list for kill request"
@@ -1318,21 +1269,11 @@ impl TaskQ {
             return v_err(E_INVARG);
         }
 
-        let perms = match self.suspended.get(&queued_task_id) {
-            Some(SuspendedTask {
-                wake_condition: WakeCondition::Never,
-                task,
-                ..
-            }) => task.perms,
-            Some(SuspendedTask {
-                wake_condition: WakeCondition::Time(_),
-                task,
-                ..
-            }) => task.perms,
-            _ => {
-                return v_err(E_INVARG);
-            }
+        let Some(perms) = self.suspended.perms_check(queued_task_id, true) else {
+            error!(task = queued_task_id, "Task not found for resume request");
+            return v_err(E_INVARG);
         };
+
         // No permissions.
         if !sender_permissions
             .check_is_wizard()
@@ -1342,7 +1283,7 @@ impl TaskQ {
             return v_err(E_PERM);
         }
 
-        let sr = self.suspended.remove(&queued_task_id).unwrap();
+        let sr = self.suspended.remove_task(queued_task_id).unwrap();
 
         if self
             .resume_task_thread(
@@ -1389,19 +1330,172 @@ impl TaskQ {
             );
             tc.kill_switch.store(true, Ordering::SeqCst);
         }
-        // Likewise, suspended tasks.
+        // Prune out non-background tasks for the player.
+        self.suspended.prune_foreground_tasks(player);
+    }
+}
+
+impl SuspensionQ {
+    /// Load all tasks from the tasks database. Called on startup to reconstitute the task list
+    /// from the database.
+    fn load_tasks(&mut self) {
+        // LambdaMOO doesn't do anything special to filter out tasks that are too old, or tasks that
+        // are related to disconnected players, or anything like that.
+        // We'll just start them all up and let the scheduler handle them.
+        // This could in theory lead to a sudden glut of starting tasks firing up when the server
+        // restarts, but we'll just have to live with that for now.
+        let tasks = self
+            .tasks_database
+            .load_tasks()
+            .expect("Unable to reconstitute tasks from tasks database");
+        for task in tasks {
+            self.tasks.insert(task.task.task_id, task);
+        }
+    }
+
+    /// Add a task to the set of suspended tasks.
+    fn add_task(
+        &mut self,
+        wake_condition: WakeCondition,
+        task: Task,
+        session: Arc<dyn Session>,
+        result_sender: Option<oneshot::Sender<TaskResult>>,
+    ) {
+        let task_id = task.task_id;
+        let sr = SuspendedTask {
+            wake_condition,
+            task,
+            session,
+            result_sender,
+        };
+        if let Err(e) = self.tasks_database.save_task(&sr) {
+            error!(?e, "Could not save suspended task");
+        }
+        self.tasks.insert(task_id, sr);
+    }
+
+    /// Remove a task from the set of suspended tasks.
+    fn remove_task(&mut self, task_id: TaskId) -> Option<SuspendedTask> {
+        let task = self.tasks.remove(&task_id);
+        if task.is_some() {
+            if let Err(e) = self.tasks_database.delete_task(task_id) {
+                error!(?e, "Could not delete suspended task from tasks database");
+            }
+        }
+        task
+    }
+
+    /// Synchronize the suspended tasks with the tasks database. Called on shutdown.
+    fn save_tasks(&self) {
+        for (_, st) in self.tasks.iter() {
+            if let Err(e) = self.tasks_database.save_task(st) {
+                error!(?e, "Could not save suspended task");
+            }
+        }
+    }
+
+    /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
+    fn collect_wake_tasks(&mut self) -> Vec<SuspendedTask> {
+        let now = Instant::now();
+        let to_wake = self
+            .tasks
+            .iter()
+            .filter_map(move |(task_id, sr)| match &sr.wake_condition {
+                WakeCondition::Time(t) => (*t <= now).then_some(*task_id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut tasks = vec![];
+        for task_id in to_wake {
+            let sr = self.tasks.remove(&task_id).unwrap();
+            tasks.push(sr);
+        }
+        tasks
+    }
+
+    /// Pull a task from the suspended list that is waiting for input, for the given player.
+    fn pull_task_for_input(
+        &mut self,
+        input_request_id: Uuid,
+        player: Objid,
+    ) -> Option<SuspendedTask> {
+        let (task_id, perms) = self.tasks.iter().find_map(|(task_id, sr)| {
+            if let WakeCondition::Input(request_id) = &sr.wake_condition {
+                if *request_id == input_request_id {
+                    Some((*task_id, sr.task.perms))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })?;
+
+        // If the player doesn't match, we'll pretend we didn't even see it.
+        if perms != player {
+            warn!(
+                ?task_id,
+                ?input_request_id,
+                ?player,
+                "Task input request received for wrong player"
+            );
+            return None;
+        };
+
+        let sr = self.remove_task(task_id).expect("Corrupt task list");
+        Some(sr)
+    }
+
+    /// Get a nice friendly list of all tasks in suspension state.
+    fn tasks(&self) -> Vec<TaskDescription> {
+        let mut tasks = Vec::new();
+
+        // Suspended tasks.
+        for (_, sr) in self.tasks.iter() {
+            let start_time = match sr.wake_condition {
+                WakeCondition::Time(t) => {
+                    let distance_from_now = t.duration_since(Instant::now());
+                    Some(SystemTime::now() + distance_from_now)
+                }
+                _ => None,
+            };
+            tasks.push(TaskDescription {
+                task_id: sr.task.task_id,
+                start_time,
+                permissions: sr.task.perms,
+                verb_name: sr.task.vm_host.verb_name().clone(),
+                verb_definer: sr.task.vm_host.verb_definer(),
+                line_number: sr.task.vm_host.line_number(),
+                this: sr.task.vm_host.this(),
+            });
+        }
+        tasks
+    }
+
+    /// Check if the task is suspended, and if so, return its permissions.
+    /// If `filter_input` is true, filter out WaitingInput tasks.
+    fn perms_check(&self, task_id: TaskId, filter_input: bool) -> Option<Objid> {
+        let sr = self.tasks.get(&task_id)?;
+        if filter_input {
+            if let WakeCondition::Input(_) = sr.wake_condition {
+                return None;
+            }
+        }
+        Some(sr.task.perms)
+    }
+
+    /// Remove all non-background tasks for the given player.
+    fn prune_foreground_tasks(&mut self, player: Objid) {
         let to_remove = self
-            .suspended
+            .tasks
             .iter()
             .filter_map(|(task_id, sr)| {
-                if sr.task.player != player {
-                    return None;
-                }
-                Some(*task_id)
+                (!sr.task.task_start.is_background() && sr.task.player == player)
+                    .then_some(*task_id)
             })
             .collect::<Vec<_>>();
         for task_id in to_remove {
-            self.suspended.remove(&task_id);
+            self.remove_task(task_id);
         }
     }
 }

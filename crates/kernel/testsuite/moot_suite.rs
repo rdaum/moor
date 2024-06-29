@@ -36,6 +36,7 @@ use moor_values::var::{v_none, Objid, Var};
 
 #[cfg(feature = "relbox")]
 use common::create_relbox_db;
+use moor_kernel::tasks::NoopTasksDb;
 
 #[derive(Clone)]
 struct SchedulerMootRunner {
@@ -123,7 +124,8 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
     if path.is_dir() {
         return;
     }
-    let scheduler = Scheduler::new(db, Config::default());
+    let tasks_db = Box::new(NoopTasksDb {});
+    let scheduler = Scheduler::new(db, tasks_db, Config::default());
     let scheduler_client = scheduler.client().unwrap();
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
