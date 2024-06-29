@@ -88,7 +88,7 @@ struct Args {
         long,
         value_name = "rpc-listen",
         help = "RPC server address",
-        default_value = "tcp://0.0.0.0:7899"
+        default_value = "ipc:///tmp/moor_rpc.sock"
     )]
     rpc_listen: String,
 
@@ -96,7 +96,7 @@ struct Args {
         long,
         value_name = "narrative-listen",
         help = "Narrative server address",
-        default_value = "tcp://0.0.0.0:7898"
+        default_value = "ipc:///tmp/moor_narrative.sock"
     )]
     narrative_listen: String,
 
