@@ -14,6 +14,7 @@
 
 use crate::GlobalName;
 use bincode::{Decode, Encode};
+use moor_values::var::Symbol;
 use strum::IntoEnumIterator;
 
 /// A JumpLabel is what a labels resolve to in the program.
@@ -53,7 +54,7 @@ pub struct Name(pub u16);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Names {
-    pub names: Vec<String>,
+    pub names: Vec<Symbol>,
 }
 
 impl Default for Names {
@@ -83,14 +84,11 @@ impl Names {
     }
 
     pub fn find_or_add_name(&mut self, name: &str) -> Name {
-        match self
-            .names
-            .iter()
-            .position(|n| n.to_lowercase().as_str() == name.to_lowercase())
-        {
+        let name = Symbol::mk_case_insensitive(name);
+        match self.names.iter().position(|n| *n == name) {
             None => {
                 let pos = self.names.len();
-                self.names.push(String::from(name));
+                self.names.push(name);
                 Name(pos as u16)
             }
             Some(n) => Name(n as u16),
@@ -102,18 +100,17 @@ impl Names {
     }
 
     pub fn find_name_offset(&self, name: &str) -> Option<usize> {
-        self.names
-            .iter()
-            .position(|x| x.to_lowercase() == name.to_lowercase())
+        let name = Symbol::mk_case_insensitive(name);
+        self.names.iter().position(|x| *x == name)
     }
     pub fn width(&self) -> usize {
         self.names.len()
     }
 
-    pub fn name_of(&self, name: &Name) -> Option<&str> {
+    pub fn name_of(&self, name: &Name) -> Option<Symbol> {
         if name.0 as usize >= self.names.len() {
             return None;
         }
-        Some(&self.names[name.0 as usize])
+        Some(self.names[name.0 as usize])
     }
 }

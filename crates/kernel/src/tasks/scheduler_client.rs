@@ -18,6 +18,7 @@ use crate::tasks::sessions::Session;
 use crate::tasks::TaskHandle;
 use crossbeam_channel::Sender;
 use moor_compiler::{compile, Program};
+use moor_values::var::Symbol;
 use moor_values::var::{Objid, Var};
 use std::sync::Arc;
 use std::time::Duration;
@@ -83,7 +84,7 @@ impl SchedulerClient {
             .send(SchedulerClientMsg::SubmitVerbTask {
                 player,
                 vloc,
-                verb,
+                verb: Symbol::mk_case_insensitive(verb.as_str()),
                 args,
                 argstr,
                 perms,
@@ -195,9 +196,9 @@ impl SchedulerClient {
         player: Objid,
         perms: Objid,
         object_name: String,
-        verb_name: String,
+        verb_name: Symbol,
         code: Vec<String>,
-    ) -> Result<(Objid, String), SchedulerError> {
+    ) -> Result<(Objid, Symbol), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitProgramVerb {
@@ -228,7 +229,7 @@ pub enum SchedulerClientMsg {
     SubmitVerbTask {
         player: Objid,
         vloc: Objid,
-        verb: String,
+        verb: Symbol,
         args: Vec<Var>,
         argstr: String,
         perms: Objid,
@@ -263,9 +264,9 @@ pub enum SchedulerClientMsg {
         player: Objid,
         perms: Objid,
         object_name: String,
-        verb_name: String,
+        verb_name: Symbol,
         code: Vec<String>,
-        reply: oneshot::Sender<Result<(Objid, String), SchedulerError>>,
+        reply: oneshot::Sender<Result<(Objid, Symbol), SchedulerError>>,
     },
     /// Submit a (non-task specific) request to shutdown the scheduler
     Shutdown(String, oneshot::Sender<Result<(), SchedulerError>>),

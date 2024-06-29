@@ -33,7 +33,7 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::util::BitEnum;
-use moor_values::var::List;
+use moor_values::var::{List, Symbol};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 fn create_worldstate() -> WiredTigerDB {
@@ -64,6 +64,7 @@ pub fn prepare_call_verb(
         task_scheduler_client,
     );
 
+    let verb_name = Symbol::mk(verb_name);
     let vi = world_state
         .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
         .unwrap();
@@ -72,7 +73,7 @@ pub fn prepare_call_verb(
         SYSTEM_OBJECT,
         vi,
         VerbCall {
-            verb_name: verb_name.to_string(),
+            verb_name,
             location: SYSTEM_OBJECT,
             this: SYSTEM_OBJECT,
             player: SYSTEM_OBJECT,
@@ -94,7 +95,7 @@ fn prepare_vm_execution(
     tx.add_verb(
         SYSTEM_OBJECT,
         SYSTEM_OBJECT,
-        vec!["test".to_string()],
+        vec![Symbol::mk("test")],
         SYSTEM_OBJECT,
         VerbFlag::rxd(),
         VerbArgsSpec::this_none_this(),

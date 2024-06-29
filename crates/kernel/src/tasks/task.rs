@@ -25,6 +25,7 @@
 //!
 use crossbeam_channel::Sender;
 
+use lazy_static::lazy_static;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,6 +38,7 @@ use moor_values::model::WorldState;
 use moor_values::model::{CommandError, CommitResult, WorldStateError};
 use moor_values::util::parse_into_words;
 use moor_values::var::v_int;
+use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
 use moor_values::NOTHING;
 
@@ -48,6 +50,10 @@ use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
 use crate::tasks::{ServerOptions, TaskId, TaskStart, VerbCall};
+
+lazy_static! {
+    static ref HUH_SYM: Symbol = Symbol::mk("huh");
+}
 
 #[derive(Debug)]
 pub struct Task {
@@ -152,7 +158,7 @@ impl Task {
                 trace!(?verb, ?player, ?vloc, ?args, "Starting verb");
 
                 let verb_call = VerbCall {
-                    verb_name: verb.clone(),
+                    verb_name: *verb,
                     location: *vloc,
                     this: *vloc,
                     player: *player,
@@ -164,11 +170,11 @@ impl Task {
                 match world_state.find_method_verb_on(
                     self.perms,
                     verb_call.this,
-                    verb_call.verb_name.as_str(),
+                    verb_call.verb_name,
                 ) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         trace!(task_id = ?self.task_id, this = ?verb_call.this,
-                              verb = verb_call.verb_name, "Verb not found");
+                              verb = ?verb_call.verb_name, "Verb not found");
                         control_sender
                             .send((
                                 self.task_id,
@@ -182,7 +188,7 @@ impl Task {
                     }
                     Err(e) => {
                         error!(task_id = ?self.task_id, this = ?verb_call.this,
-                               verb = verb_call.verb_name,
+                               verb = ?verb_call.verb_name,
                                "World state error while resolving verb: {:?}", e);
                         panic!("Could not resolve verb: {:?}", e);
                     }
@@ -449,7 +455,7 @@ impl Task {
                 // Try to find :huh. If it exists, we'll dispatch to that, instead.
                 // If we don't find it, that's the end of the line.
                 let Ok(verb_info) =
-                    world_state.find_method_verb_on(self.perms, player_location, "huh")
+                    world_state.find_method_verb_on(self.perms, player_location, *HUH_SYM)
                 else {
                     return Some(TaskControlMsg::TaskCommandError(
                         CommandError::NoCommandMatch,
@@ -463,7 +469,7 @@ impl Task {
             }
         };
         let verb_call = VerbCall {
-            verb_name: parsed_command.verb.clone(),
+            verb_name: Symbol::mk_case_insensitive(parsed_command.verb.as_str()),
             location: target,
             this: target,
             player,
@@ -498,7 +504,7 @@ fn find_verb_for_command(
         let match_result = ws.find_command_verb_on(
             player,
             target,
-            pc.verb.as_str(),
+            Symbol::mk_case_insensitive(pc.verb.as_str()),
             pc.dobj.unwrap_or(NOTHING),
             pc.prep,
             pc.iobj.unwrap_or(NOTHING),
@@ -535,6 +541,7 @@ mod tests {
     use moor_values::model::{Event, WorldState, WorldStateSource};
     use moor_values::util::BitEnum;
     use moor_values::var::Error::E_DIV;
+    use moor_values::var::Symbol;
     use moor_values::var::{v_int, v_str};
     use moor_values::{NOTHING, SYSTEM_OBJECT};
     use std::sync::atomic::AtomicBool;
@@ -583,11 +590,11 @@ mod tests {
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, "name", &v_str("system"))
+        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("name"), &v_str("system"))
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, "programmer", &v_int(1))
+        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("programmer"), &v_int(1))
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, "wizard", &v_int(1))
+        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("wizard"), &v_int(1))
             .unwrap();
 
         task.setup_task_start(&control_sender, tx.as_mut());

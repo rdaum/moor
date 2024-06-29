@@ -13,11 +13,9 @@
 //
 
 use bincode::{Decode, Encode};
+use std::fmt::Debug;
 use std::time::SystemTime;
 use strum::Display;
-
-use crate::AsByteBuffer;
-use thiserror::Error;
 
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
 pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
@@ -30,9 +28,12 @@ pub use crate::model::verb_info::VerbInfo;
 pub use crate::model::verbdef::{VerbDef, VerbDefs};
 pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};
 pub use crate::model::world_state::{WorldState, WorldStateSource};
+use crate::AsByteBuffer;
+use thiserror::Error;
 
 use crate::var::Error;
 use crate::var::Objid;
+use crate::var::Symbol;
 
 mod defset;
 mod r#match;
@@ -85,11 +86,11 @@ pub enum WorldStateError {
     InvalidVerb(Vid),
 
     #[error("Invalid verb, decode error: {0}:{1}")]
-    VerbDecodeError(Objid, String),
+    VerbDecodeError(Objid, Symbol),
     #[error("Verb permission denied")]
     VerbPermissionDenied,
     #[error("Verb already exists: {0}:{1}")]
-    DuplicateVerb(Objid, String),
+    DuplicateVerb(Objid, Symbol),
 
     #[error("Failed object match: {0}")]
     FailedMatch(String),

@@ -16,6 +16,7 @@ use crate::encode::{DecodingError, EncodingError};
 use crate::model::r#match::VerbArgsSpec;
 use crate::util::BitEnum;
 use crate::var::Objid;
+use crate::var::Symbol;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;
@@ -120,7 +121,7 @@ impl LayoutAs<u8> for BinaryType {
 pub struct VerbAttrs {
     pub definer: Option<Objid>,
     pub owner: Option<Objid>,
-    pub names: Option<Vec<String>>,
+    pub names: Option<Vec<Symbol>>,
     pub flags: Option<BitEnum<VerbFlag>>,
     pub args_spec: Option<VerbArgsSpec>,
     pub binary_type: Option<BinaryType>,

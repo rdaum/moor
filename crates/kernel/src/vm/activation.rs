@@ -14,6 +14,7 @@
 
 use bytes::Bytes;
 use daumtils::{BitArray, Bitset16};
+use lazy_static::lazy_static;
 use moor_values::var::{v_empty_str, List, Variant};
 use moor_values::NOTHING;
 use uuid::Uuid;
@@ -34,12 +35,16 @@ use crate::vm::VerbExecutionRequest;
 use moor_compiler::Program;
 use moor_compiler::{Label, Name};
 use moor_compiler::{Op, EMPTY_PROGRAM};
+use moor_values::var::Symbol;
 
+lazy_static! {
+    static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");
+}
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
 pub struct Caller {
     pub this: Objid,
-    pub verb_name: String,
+    pub verb_name: Symbol,
     pub programmer: Objid,
     pub definer: Objid,
     pub player: Objid,
@@ -105,7 +110,7 @@ pub(crate) struct Activation {
     /// The arguments to the verb or bf being called.
     pub(crate) args: List,
     /// The name of the verb that is currently being executed.
-    pub(crate) verb_name: String,
+    pub(crate) verb_name: Symbol,
     /// The extended information about the verb that is currently being executed.
     pub(crate) verb_info: VerbInfo,
     /// This is the "task perms" for the current activation. It is the "who" the verb is acting on
@@ -329,7 +334,7 @@ impl Activation {
             this: verb_call_request.call.this,
             player: verb_call_request.call.player,
             verb_info: verb_call_request.resolved_verb,
-            verb_name: verb_call_request.call.verb_name.clone(),
+            verb_name: verb_call_request.call.verb_name,
             command: verb_call_request.command.clone(),
             bf_index: None,
             bf_trampoline: None,
@@ -383,7 +388,7 @@ impl Activation {
             this: player,
             player,
             verb_info,
-            verb_name: "eval".to_string(),
+            verb_name: *EVAL_SYMBOL,
             command: None,
             bf_index: None,
             bf_trampoline: None,
@@ -394,7 +399,7 @@ impl Activation {
     }
     pub fn for_bf_call(
         bf_index: usize,
-        bf_name: &str,
+        bf_name: Symbol,
         args: List,
         _verb_flags: BitEnum<VerbFlag>,
         player: Objid,
@@ -405,7 +410,7 @@ impl Activation {
                 Uuid::new_v4(),
                 NOTHING,
                 NOTHING,
-                &[bf_name],
+                &[bf_name.as_str()],
                 BitEnum::new_with(VerbFlag::Exec),
                 BinaryType::None,
                 VerbArgsSpec::this_none_this(),
@@ -427,7 +432,7 @@ impl Activation {
             this: NOTHING,
             player,
             verb_info,
-            verb_name: bf_name.to_string(),
+            verb_name: bf_name,
             command: None,
             bf_index: Some(bf_index),
             bf_trampoline: None,

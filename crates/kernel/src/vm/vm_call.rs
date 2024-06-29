@@ -33,6 +33,7 @@ use crate::vm::{VMExecState, VmExecParams};
 use moor_compiler::Program;
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_values::model::VerbInfo;
+use moor_values::var::Symbol;
 
 pub(crate) fn args_literal(args: &List) -> String {
     args.iter()
@@ -67,11 +68,11 @@ impl VM {
         vm_state: &mut VMExecState,
         world_state: &mut dyn WorldState,
         this: Objid,
-        verb_name: &str,
+        verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
         let call = VerbCall {
-            verb_name: verb_name.to_string(),
+            verb_name,
             location: this,
             this,
             player: vm_state.top().player,
@@ -146,12 +147,12 @@ impl VM {
             }
             Err(e) => return self.raise_error(vm_state, e.to_error_code()),
         };
-        let verb = vm_state.top().verb_name.to_string();
+        let verb = vm_state.top().verb_name;
 
         // call verb on parent, but with our current 'this'
-        trace!(task_id = vm_state.task_id, verb, ?definer, ?parent);
+        trace!(task_id = vm_state.task_id, ?verb, ?definer, ?parent);
 
-        let vi = match world_state.find_method_verb_on(permissions, parent, verb.as_str()) {
+        let vi = match world_state.find_method_verb_on(permissions, parent, verb) {
             Ok(vi) => vi,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::RollbackRestart;
@@ -258,7 +259,7 @@ impl VM {
         let flags = vm_state.top().verb_info.verbdef().flags();
         vm_state.stack.push(Activation::for_bf_call(
             bf_func_num,
-            BUILTIN_DESCRIPTORS[bf_func_num].name.as_str(),
+            BUILTIN_DESCRIPTORS[bf_func_num].name,
             args.clone(),
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
@@ -267,7 +268,7 @@ impl VM {
         ));
         let mut bf_args = BfCallState {
             exec_state: vm_state,
-            name: BUILTIN_DESCRIPTORS[bf_func_num].name.clone(),
+            name: BUILTIN_DESCRIPTORS[bf_func_num].name,
             world_state,
             session: session.clone(),
             // TODO: avoid copy here by using List inside BfCallState
@@ -311,7 +312,7 @@ impl VM {
         };
 
         let bf = self.builtins[vm_state.top().bf_index.unwrap()].clone();
-        let verb_name = vm_state.top().verb_name.clone();
+        let verb_name = vm_state.top().verb_name;
         let sessions = session.clone();
         let args = vm_state.top().args.clone();
         let mut bf_args = BfCallState {

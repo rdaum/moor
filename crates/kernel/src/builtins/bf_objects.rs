@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use lazy_static::lazy_static;
 use std::sync::Arc;
 
 use tracing::{debug, error, trace};
@@ -23,6 +24,7 @@ use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::var::v_listv;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
+use moor_values::var::Symbol;
 use moor_values::var::{v_bool, v_int, v_none, v_objid, v_str};
 use moor_values::var::{List, Variant};
 use moor_values::NOTHING;
@@ -34,6 +36,14 @@ use crate::tasks::VerbCall;
 use crate::vm::ExecutionResult::ContinueVerb;
 use crate::vm::VM;
 
+lazy_static! {
+    static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");
+    static ref EXITFUNC_SYM: Symbol = Symbol::mk("exitfunc");
+    static ref ENTERFUNC_SYM: Symbol = Symbol::mk("enterfunc");
+    static ref CREATE_SYM: Symbol = Symbol::mk("create");
+    static ref RECYCLE_SYM: Symbol = Symbol::mk("recycle");
+    static ref ACCEPT_SYM: Symbol = Symbol::mk("accept");
+}
 /*
 Function: int valid (obj object)
 Returns a non-zero integer (i.e., a true value) if object is a valid object (one that has been created and not yet recycled) and zero (i.e., a false value) otherwise.
@@ -147,7 +157,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let Ok(initialize) = bf_args.world_state.find_method_verb_on(
                 bf_args.task_perms_who(),
                 new_obj,
-                "initialize",
+                *INITIALIZE_SYM,
             ) else {
                 return Ok(Ret(v_objid(new_obj)));
             };
@@ -156,7 +166,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb: initialize,
                 call: VerbCall {
-                    verb_name: "initialize".to_string(),
+                    verb_name: *INITIALIZE_SYM,
                     location: new_obj,
                     this: new_obj,
                     player: bf_args.exec_state.top().player,
@@ -240,7 +250,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     match bf_args.world_state.find_method_verb_on(
                         bf_args.task_perms_who(),
                         o,
-                        "exitfunc",
+                        *EXITFUNC_SYM,
                     ) {
                         Ok(_) => {
                             contents.push(v_objid(o));
@@ -256,14 +266,14 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
                     *obj,
-                    "recycle",
+                    *RECYCLE_SYM,
                 ) {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
-                                verb_name: "recycle".to_string(),
+                                verb_name: *RECYCLE_SYM,
                                 location: *obj,
                                 this: *obj,
                                 player: bf_args.exec_state.top().player,
@@ -315,7 +325,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     let Ok(exitfunc) = bf_args.world_state.find_method_verb_on(
                         bf_args.task_perms_who(),
                         *head_obj,
-                        "exitfunc",
+                        *EXITFUNC_SYM,
                     ) else {
                         // If there's no :exitfunc, we can just move on to the next object.
                         bf_args.exec_state.top_mut().bf_trampoline_arg = Some(contents);
@@ -326,7 +336,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         permissions: bf_args.task_perms_who(),
                         resolved_verb: exitfunc,
                         call: VerbCall {
-                            verb_name: "exitfunc".to_string(),
+                            verb_name: *EXITFUNC_SYM,
                             location: *head_obj,
                             this: *head_obj,
                             player: bf_args.exec_state.top().player,
@@ -419,14 +429,14 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
                     *whereto,
-                    "accept",
+                    *ACCEPT_SYM,
                 ) {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
-                                verb_name: "accept".to_string(),
+                                verb_name: *ACCEPT_SYM,
                                 location: *whereto,
                                 this: *whereto,
                                 player: bf_args.exec_state.top().player,
@@ -495,14 +505,14 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
                     original_location,
-                    "exitfunc",
+                    *EXITFUNC_SYM,
                 ) {
                     Ok(dispatch) => {
                         let continuation = ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
-                                verb_name: "exitfunc".to_string(),
+                                verb_name: *EXITFUNC_SYM,
                                 location: original_location,
                                 this: original_location,
                                 player: bf_args.exec_state.top().player,
@@ -539,14 +549,14 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
                     *whereto,
-                    "enterfunc",
+                    *ENTERFUNC_SYM,
                 ) {
                     Ok(dispatch) => {
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
-                                verb_name: "enterfunc".to_string(),
+                                verb_name: *ENTERFUNC_SYM,
                                 location: *whereto,
                                 this: *whereto,
                                 player: bf_args.exec_state.top().player,

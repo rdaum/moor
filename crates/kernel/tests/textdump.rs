@@ -31,6 +31,7 @@ mod test {
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
 
+    use moor_values::var::Symbol;
     use std::sync::Arc;
     use text_diff::assert_diff;
 
@@ -199,7 +200,7 @@ mod test {
         );
 
         let dlc = tx
-            .get_verb(Objid(3), SYSTEM_OBJECT, "do_login_command")
+            .get_verb(Objid(3), SYSTEM_OBJECT, Symbol::mk("do_login_command"))
             .unwrap();
         assert_eq!(dlc.owner(), Objid(3));
         assert_eq!(dlc.flags(), VerbFlag::rxd());

@@ -29,6 +29,7 @@ use moor_values::model::{VerbInfo, WorldStateError};
 use moor_values::var::Error::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_MAXREC, E_RANGE, E_TYPE, E_VARNF,
 };
+use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
 use moor_values::var::{v_float, Objid};
@@ -603,8 +604,8 @@ impl VM {
                     let Variant::Obj(obj) = obj.variant() else {
                         return self.push_error(state, E_INVIND);
                     };
-                    let result =
-                        world_state.retrieve_property(a.permissions, *obj, propname.as_str());
+                    let propname = Symbol::mk_case_insensitive(propname.as_str());
+                    let result = world_state.retrieve_property(a.permissions, *obj, propname);
                     match result {
                         Ok(v) => {
                             f.poke(0, v);
@@ -628,8 +629,8 @@ impl VM {
                     let Variant::Obj(obj) = obj.variant() else {
                         return self.push_error(state, E_INVIND);
                     };
-                    let result =
-                        world_state.retrieve_property(a.permissions, *obj, propname.as_str());
+                    let propname = Symbol::mk_case_insensitive(propname.as_str());
+                    let result = world_state.retrieve_property(a.permissions, *obj, propname);
                     match result {
                         Ok(v) => {
                             f.push(v);
@@ -653,12 +654,9 @@ impl VM {
                         }
                     };
 
-                    let update_result = world_state.update_property(
-                        a.permissions,
-                        *obj,
-                        propname.as_str(),
-                        &rhs.clone(),
-                    );
+                    let propname = Symbol::mk_case_insensitive(propname.as_str());
+                    let update_result =
+                        world_state.update_property(a.permissions, *obj, propname, &rhs.clone());
 
                     match update_result {
                         Ok(()) => {
@@ -715,13 +713,8 @@ impl VM {
                             return self.push_error(state, E_TYPE);
                         }
                     };
-                    return self.prepare_call_verb(
-                        state,
-                        world_state,
-                        *obj,
-                        verb.as_str(),
-                        args.clone(),
-                    );
+                    let verb = Symbol::mk_case_insensitive(verb.as_str());
+                    return self.prepare_call_verb(state, world_state, *obj, verb, args.clone());
                 }
                 Op::Return => {
                     let ret_val = f.pop();

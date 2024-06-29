@@ -37,6 +37,7 @@ use uuid::Uuid;
 
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxWorldState;
+use moor_values::var::Symbol;
 
 #[allow(dead_code)]
 pub fn testsuite_dir() -> PathBuf {
@@ -72,10 +73,11 @@ pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) 
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec().unwrap();
+        let verb_name = Symbol::mk(verb_name);
         tx.add_verb(
             Objid(3),
             SYSTEM_OBJECT,
-            vec![(*verb_name).to_string()],
+            vec![verb_name],
             Objid(3),
             VerbFlag::rx(),
             VerbArgsSpec::this_none_this(),
@@ -93,6 +95,7 @@ pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) 
     // And then verify that again in a new transaction.
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, _) in verbs {
+        let verb_name = Symbol::mk(verb_name);
         let verb = tx.get_verb(Objid(3), SYSTEM_OBJECT, verb_name).unwrap();
         assert!(verb.matches_name(verb_name));
     }

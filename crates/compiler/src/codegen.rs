@@ -16,6 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use moor_values::var::Symbol;
 use tracing::error;
 
 use moor_values::var::Var;
@@ -50,13 +51,13 @@ pub struct CodegenState {
     pub(crate) saved_stack: Option<Offset>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
-    pub(crate) builtins: HashMap<String, Name>,
+    pub(crate) builtins: HashMap<Symbol, Name>,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
 }
 
 impl CodegenState {
-    pub fn new(var_names: Names, builtins: HashMap<String, Name>) -> Self {
+    pub fn new(var_names: Names, builtins: HashMap<Symbol, Name>) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
@@ -114,8 +115,8 @@ impl CodegenState {
                 false
             }
         }) else {
-            let loop_name = self.var_names.names[loop_label.0 as usize].clone();
-            return Err(CompileError::UnknownLoopLabel(loop_name));
+            let loop_name = self.var_names.names[loop_label.0 as usize];
+            return Err(CompileError::UnknownLoopLabel(loop_name.to_string()));
         };
         Ok(l)
     }
@@ -415,7 +416,7 @@ impl CodegenState {
                 // Lookup builtin.
                 let Some(builtin) = self.builtins.get(function) else {
                     error!("Unknown builtin function: {}({:?}", function, args);
-                    return Err(CompileError::UnknownBuiltinFunction(function.clone()));
+                    return Err(CompileError::UnknownBuiltinFunction(function.to_string()));
                 };
                 let builtin = *builtin;
                 self.generate_arg_list(args)?;

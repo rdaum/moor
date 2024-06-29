@@ -109,6 +109,7 @@ owo-colors = "3.5"
 rustyline = "14.0.0"
 strum = { version = "0.26.2", features = ["derive"] }
 text-diff = "0.4.0"
+ustr = "1.0.0"
 uuid = { version = "1.8.0", features = ["v4"] }
 
 ## Required for MOO builtins.

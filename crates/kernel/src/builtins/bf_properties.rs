@@ -18,6 +18,7 @@ use moor_compiler::offset_for_builtin;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string};
 use moor_values::var::{v_empty_list, List};
@@ -42,7 +43,11 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let (_, perms) = bf_args
         .world_state
-        .get_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str())
+        .get_property_info(
+            bf_args.task_perms_who(),
+            *obj,
+            Symbol::mk_case_insensitive(prop_name.as_str()),
+        )
         .map_err(world_state_bf_err)?;
     let owner = perms.owner();
     let flags = perms.flags();
@@ -133,7 +138,12 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .world_state
-        .set_property_info(bf_args.task_perms_who(), *obj, prop_name.as_str(), attrs)
+        .set_property_info(
+            bf_args.task_perms_who(),
+            *obj,
+            Symbol::mk_case_insensitive(prop_name.as_str()),
+            attrs,
+        )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
@@ -151,7 +161,11 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let is_clear = bf_args
         .world_state
-        .is_property_clear(bf_args.task_perms_who(), *obj, prop_name.as_str())
+        .is_property_clear(
+            bf_args.task_perms_who(),
+            *obj,
+            Symbol::mk_case_insensitive(prop_name.as_str()),
+        )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_bool(is_clear)))
 }
@@ -169,7 +183,11 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     bf_args
         .world_state
-        .clear_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
+        .clear_property(
+            bf_args.task_perms_who(),
+            *obj,
+            Symbol::mk_case_insensitive(prop_name.as_str()),
+        )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
@@ -203,7 +221,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             bf_args.task_perms_who(),
             *location,
             *location,
-            name.as_str(),
+            Symbol::mk_case_insensitive(name.as_str()),
             attrs.owner.unwrap(),
             attrs.flags.unwrap(),
             Some(value),
@@ -225,7 +243,11 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     bf_args
         .world_state
-        .delete_property(bf_args.task_perms_who(), *obj, prop_name.as_str())
+        .delete_property(
+            bf_args.task_perms_who(),
+            *obj,
+            Symbol::mk_case_insensitive(prop_name.as_str()),
+        )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }

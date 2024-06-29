@@ -16,6 +16,7 @@ use crate::tasks::scheduler::TaskResult;
 use crate::vm::Fork;
 use bincode::{Decode, Encode};
 use moor_compiler::Program;
+use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
 use std::fmt::Debug;
 use std::time::SystemTime;
@@ -65,7 +66,7 @@ impl TaskHandle {
 /// The minimum set of information needed to make a *resolution* call for a verb.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbCall {
-    pub verb_name: String,
+    pub verb_name: Symbol,
     pub location: Objid,
     pub this: Objid,
     pub player: Objid,
@@ -80,7 +81,7 @@ pub struct TaskDescription {
     pub task_id: TaskId,
     pub start_time: Option<SystemTime>,
     pub permissions: Objid,
-    pub verb_name: String,
+    pub verb_name: Symbol,
     pub verb_definer: Objid,
     pub line_number: usize,
     pub this: Objid,
@@ -120,6 +121,7 @@ pub mod vm_test_utils {
     use crate::vm::VmExecParams;
     use moor_compiler::Program;
     use moor_values::model::WorldState;
+    use moor_values::var::Symbol;
     use moor_values::var::{List, Objid, Var};
     use moor_values::SYSTEM_OBJECT;
     use std::sync::Arc;
@@ -191,6 +193,7 @@ pub mod vm_test_utils {
         args: Vec<Var>,
     ) -> ExecResult {
         execute(world_state, session, |world_state, vm_host| {
+            let verb_name = Symbol::mk_case_insensitive(verb_name);
             let vi = world_state
                 .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
                 .unwrap();
@@ -199,7 +202,7 @@ pub mod vm_test_utils {
                 SYSTEM_OBJECT,
                 vi,
                 VerbCall {
-                    verb_name: verb_name.to_string(),
+                    verb_name,
                     location: SYSTEM_OBJECT,
                     this: SYSTEM_OBJECT,
                     player: SYSTEM_OBJECT,
@@ -297,7 +300,7 @@ pub enum TaskStart {
     StartVerb {
         player: Objid,
         vloc: Objid,
-        verb: String,
+        verb: Symbol,
         args: List,
         argstr: String,
     },

@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_values::var::Symbol;
 use std::collections::{HashMap, VecDeque};
 
 use moor_values::var::{v_err, v_int, v_none, v_objid, Var};
@@ -50,7 +51,7 @@ struct Decompile {
     /// The current position in the opcode stream as it is being decompiled.
     position: usize,
     expr_stack: VecDeque<Expr>,
-    builtins: HashMap<Name, String>,
+    builtins: HashMap<Name, Symbol>,
     statements: Vec<Stmt>,
 }
 
@@ -518,7 +519,7 @@ impl Decompile {
                     ));
                 };
                 self.push_expr(Expr::Call {
-                    function: builtin.clone(),
+                    function: *builtin,
                     args,
                 })
             }

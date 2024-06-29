@@ -19,6 +19,7 @@ use crate::model::verbs::{BinaryType, VerbFlag};
 use crate::util::verbname_cmp;
 use crate::util::BitEnum;
 use crate::var::Objid;
+use crate::var::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
 use bytes::BufMut;
@@ -142,10 +143,10 @@ impl VerbDef {
 }
 
 impl Named for VerbDef {
-    fn matches_name(&self, name: &str) -> bool {
+    fn matches_name(&self, name: Symbol) -> bool {
         self.names()
             .iter()
-            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.to_lowercase().as_str()))
+            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.as_str()))
     }
 
     #[must_use]

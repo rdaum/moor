@@ -21,6 +21,7 @@ use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::var::Error;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::Var;
 
 use crate::tasks::sessions::Session;
@@ -39,7 +40,7 @@ mod bf_verbs;
 /// The arguments and other state passed to a built-in function.
 pub struct BfCallState<'a> {
     /// The name of the invoked function.
-    pub(crate) name: String,
+    pub(crate) name: Symbol,
     /// Arguments passed to the function.
     pub(crate) args: Vec<Var>,
     /// The current execution state of this task in this VM, including the stack

@@ -26,6 +26,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use crossbeam_channel::Receiver;
+use lazy_static::lazy_static;
 use std::thread::yield_now;
 
 use moor_compiler::compile;
@@ -35,6 +36,7 @@ use moor_values::model::{BinaryType, CommandError, HasUuid, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
 use moor_values::model::{VerbProgramError, WorldState};
 use moor_values::var::Error::{E_INVARG, E_PERM};
+use moor_values::var::Symbol;
 use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
 use moor_values::var::{Objid, Variant};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
@@ -66,6 +68,15 @@ const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 /// Number of times to retry a program compilation transaction in case of conflict, before giving up.
 const NUM_VERB_PROGRAM_ATTEMPTS: usize = 5;
 
+lazy_static! {
+    static ref SERVER_OPTIONS: Symbol = Symbol::mk("server_options");
+    static ref BG_SECONDS: Symbol = Symbol::mk("bg_seconds");
+    static ref BG_TICKS: Symbol = Symbol::mk("bg_ticks");
+    static ref FG_SECONDS: Symbol = Symbol::mk("fg_seconds");
+    static ref FG_TICKS: Symbol = Symbol::mk("fg_ticks");
+    static ref MAX_STACK_DEPTH: Symbol = Symbol::mk("max_stack_depth");
+    static ref DO_OUT_OF_BAND_COMMAND: Symbol = Symbol::mk("do_out_of_band_command");
+}
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
 pub struct Scheduler {
@@ -187,7 +198,7 @@ pub enum SchedulerError {
     VerbProgramFailed(VerbProgramError),
 }
 
-fn load_int_sysprop(server_options_obj: Objid, name: &str, tx: &dyn WorldState) -> Option<u64> {
+fn load_int_sysprop(server_options_obj: Objid, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
     let Ok(value) = tx.retrieve_property(SYSTEM_OBJECT, server_options_obj, name) else {
         return None;
     };
@@ -294,7 +305,7 @@ impl Scheduler {
         let mut so = self.server_options.clone();
 
         let Ok(server_options_obj) =
-            tx.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, "server_options")
+            tx.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, *SERVER_OPTIONS)
         else {
             info!("No server options object found; using defaults");
             tx.rollback().unwrap();
@@ -306,20 +317,20 @@ impl Scheduler {
             return;
         };
 
-        if let Some(bg_seconds) = load_int_sysprop(*server_options_obj, "bg_seconds", tx.as_ref()) {
+        if let Some(bg_seconds) = load_int_sysprop(*server_options_obj, *BG_SECONDS, tx.as_ref()) {
             so.bg_seconds = bg_seconds;
         }
-        if let Some(bg_ticks) = load_int_sysprop(*server_options_obj, "bg_ticks", tx.as_ref()) {
+        if let Some(bg_ticks) = load_int_sysprop(*server_options_obj, *BG_TICKS, tx.as_ref()) {
             so.bg_ticks = bg_ticks as usize;
         }
-        if let Some(fg_seconds) = load_int_sysprop(*server_options_obj, "fg_seconds", tx.as_ref()) {
+        if let Some(fg_seconds) = load_int_sysprop(*server_options_obj, *FG_SECONDS, tx.as_ref()) {
             so.fg_seconds = fg_seconds;
         }
-        if let Some(fg_ticks) = load_int_sysprop(*server_options_obj, "fg_ticks", tx.as_ref()) {
+        if let Some(fg_ticks) = load_int_sysprop(*server_options_obj, *FG_TICKS, tx.as_ref()) {
             so.fg_ticks = fg_ticks as usize;
         }
         if let Some(max_stack_depth) =
-            load_int_sysprop(*server_options_obj, "max_stack_depth", tx.as_ref())
+            load_int_sysprop(*server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
         {
             so.max_stack_depth = max_stack_depth as usize;
         }
@@ -343,9 +354,9 @@ impl Scheduler {
         player: Objid,
         perms: Objid,
         object_name: String,
-        verb_name: String,
+        verb_name: Symbol,
         code: Vec<String>,
-    ) -> Result<(Objid, String), SchedulerError> {
+    ) -> Result<(Objid, Symbol), SchedulerError> {
         let db = self.database.clone().world_state_source().unwrap();
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
             let mut tx = db.new_world_state().unwrap();
@@ -364,7 +375,7 @@ impl Scheduler {
             };
 
             let vi = tx
-                .find_method_verb_on(perms, o, &verb_name)
+                .find_method_verb_on(perms, o, verb_name)
                 .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
 
             if vi.verbdef().location() != o {
@@ -516,7 +527,7 @@ impl Scheduler {
                 let task_start = Arc::new(TaskStart::StartVerb {
                     player,
                     vloc: SYSTEM_OBJECT,
-                    verb: "do_out_of_band_command".to_string(),
+                    verb: *DO_OUT_OF_BAND_COMMAND,
                     args: List::from_slice(&args),
                     argstr,
                 });
@@ -620,7 +631,7 @@ impl Scheduler {
             TaskControlMsg::TaskVerbNotFound(this, verb) => {
                 // I'd make this 'warn' but `do_command` gets invoked for every command and
                 // many cores don't have it at all. So it would just be way too spammy.
-                trace!(this = ?this, verb, ?task_id, "Verb not found, task cancelled");
+                trace!(this = ?this, ?verb, ?task_id, "Verb not found, task cancelled");
                 task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
             }
             TaskControlMsg::TaskCommandError(parse_command_error) => {
@@ -1465,7 +1476,7 @@ impl SuspensionQ {
                 task_id: sr.task.task_id,
                 start_time,
                 permissions: sr.task.perms,
-                verb_name: sr.task.vm_host.verb_name().clone(),
+                verb_name: sr.task.vm_host.verb_name(),
                 verb_definer: sr.task.vm_host.verb_definer(),
                 line_number: sr.task.vm_host.line_number(),
                 this: sr.task.vm_host.this(),

@@ -20,6 +20,7 @@ mod tests {
     use crate::CompileError;
     use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
     use moor_values::var::Objid;
+    use moor_values::var::Symbol;
     use moor_values::SYSTEM_OBJECT;
 
     use crate::opcode::Op::*;
@@ -914,7 +915,7 @@ mod tests {
         */
         let raise_num = BUILTIN_DESCRIPTORS
             .iter()
-            .position(|b| b.name == "raise")
+            .position(|b| b.name == Symbol::mk("raise"))
             .unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),

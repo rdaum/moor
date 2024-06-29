@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_values::var::Symbol;
 use std::fmt::Display;
 
 use moor_values::var::Var;
@@ -139,7 +140,7 @@ pub enum Expr {
         property: Box<Expr>,
     },
     Call {
-        function: String,
+        function: Symbol,
         args: Vec<Arg>,
     },
     Verb {

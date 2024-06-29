@@ -26,6 +26,7 @@ use moor_values::model::{HasUuid, PropPerms, ValSet};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::Var;
 
 use crate::db_worldstate::DbTxWorldState;
@@ -61,7 +62,10 @@ impl LoaderInterface for DbTxWorldState {
         self.tx.add_object_verb(
             obj,
             owner,
-            names.iter().map(|s| s.to_string()).collect(),
+            names
+                .iter()
+                .map(|s| Symbol::mk_case_insensitive(s))
+                .collect(),
             binary,
             BinaryType::LambdaMoo18X,
             flags,
@@ -79,8 +83,14 @@ impl LoaderInterface for DbTxWorldState {
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
-        self.tx
-            .define_property(definer, objid, propname.to_string(), owner, flags, value)?;
+        self.tx.define_property(
+            definer,
+            objid,
+            Symbol::mk_case_insensitive(propname),
+            owner,
+            flags,
+            value,
+        )?;
         Ok(())
     }
     fn set_property(
@@ -92,7 +102,9 @@ impl LoaderInterface for DbTxWorldState {
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
         // First find the property.
-        let (propdef, _, _, _) = self.tx.resolve_property(objid, propname.to_string())?;
+        let (propdef, _, _, _) = self
+            .tx
+            .resolve_property(objid, Symbol::mk_case_insensitive(propname))?;
 
         // Now set the value if provided.
         if let Some(value) = value {

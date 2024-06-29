@@ -26,6 +26,7 @@ use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESC
 use moor_values::model::ObjFlag;
 use moor_values::model::{NarrativeEvent, WorldStateError};
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
+use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
 use moor_values::var::{v_listv, Error};
@@ -44,7 +45,7 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Err(BfErr::Raise(
         E_INVIND,
         Some(format!("Builtin {} is not implemented", bf_args.name)),
-        Some(v_str(&bf_args.name)),
+        Some(v_str(bf_args.name.as_str())),
     ))
 }
 bf_declare!(noop, bf_noop);
@@ -155,7 +156,7 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // this
                     v_objid(c.this),
                     // verb name
-                    v_string(c.verb_name.clone()),
+                    v_string(c.verb_name.to_string()),
                     // 'programmer'
                     v_objid(c.programmer),
                     // verb location
@@ -443,7 +444,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let y = v_none();
             let programmer = v_objid(task.permissions);
             let verb_loc = v_objid(task.verb_definer);
-            let verb_name = v_string(task.verb_name.clone());
+            let verb_name = v_str(task.verb_name.as_str());
             let line = v_int(task.line_number as i64);
             let this = v_objid(task.this);
             v_list(&[
@@ -596,7 +597,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let args = &bf_args.args[1..];
 
     // Find the function id for the given function name.
-    let func_name: &str = func_name.as_str();
+    let func_name = Symbol::mk_case_insensitive(func_name.as_str());
     let Some(func_offset) = BUILTIN_DESCRIPTORS
         .iter()
         .position(|bf| bf.name == func_name)
@@ -699,9 +700,10 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(func_name) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
+        let func_name = Symbol::mk_case_insensitive(func_name.as_str());
         let bf = BUILTIN_DESCRIPTORS
             .iter()
-            .find(|bf| bf.name == func_name.as_str())
+            .find(|bf| bf.name == func_name)
             .map(bf_function_info_to_list);
         let Some(desc) = bf else {
             return Err(BfErr::Code(E_ARGS));

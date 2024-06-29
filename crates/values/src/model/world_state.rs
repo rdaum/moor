@@ -26,6 +26,7 @@ use crate::model::WorldStateError;
 use crate::model::{CommitResult, PropPerms};
 use crate::util::BitEnum;
 use crate::var::Objid;
+use crate::var::Symbol;
 use crate::var::Var;
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's
@@ -113,7 +114,7 @@ pub trait WorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<Var, WorldStateError>;
 
     /// Get information about a property, without walking the inheritance tree.
@@ -122,14 +123,14 @@ pub trait WorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<(PropDef, PropPerms), WorldStateError>;
 
     fn set_property_info(
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError>;
 
@@ -138,7 +139,7 @@ pub trait WorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
         value: &Var,
     ) -> Result<(), WorldStateError>;
 
@@ -147,7 +148,7 @@ pub trait WorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<bool, WorldStateError>;
 
     /// Clear a property on the given object. That is, remove its local value, if any, and
@@ -156,7 +157,7 @@ pub trait WorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<(), WorldStateError>;
 
     /// Add a property for the given object.
@@ -167,7 +168,7 @@ pub trait WorldState {
         perms: Objid,
         definer: Objid,
         location: Objid,
-        pname: &str,
+        pname: Symbol,
         owner: Objid,
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
@@ -177,7 +178,7 @@ pub trait WorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<(), WorldStateError>;
 
     /// Add a verb to the given object.
@@ -187,7 +188,7 @@ pub trait WorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        names: Vec<String>,
+        names: Vec<Symbol>,
         owner: Objid,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
@@ -203,7 +204,7 @@ pub trait WorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        vname: &str,
+        vname: Symbol,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError>;
 
@@ -225,7 +226,8 @@ pub trait WorldState {
     ) -> Result<(), WorldStateError>;
 
     /// Get the verbdef with the given name on the given object. Without doing inheritance resolution.
-    fn get_verb(&self, perms: Objid, obj: Objid, vname: &str) -> Result<VerbDef, WorldStateError>;
+    fn get_verb(&self, perms: Objid, obj: Objid, vname: Symbol)
+        -> Result<VerbDef, WorldStateError>;
 
     /// Get the verbdef at numbered offset on the given object.
     fn get_verb_at_index(
@@ -248,7 +250,7 @@ pub trait WorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        vname: &str,
+        vname: Symbol,
     ) -> Result<VerbInfo, WorldStateError>;
 
     /// Seek the verb referenced by the given command on the given object.
@@ -256,7 +258,7 @@ pub trait WorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        command_verb: &str,
+        command_verb: Symbol,
         dobj: Objid,
         prep: PrepSpec,
         iobj: Objid,
