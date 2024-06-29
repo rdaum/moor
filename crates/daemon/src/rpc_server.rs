@@ -89,6 +89,8 @@ impl RpcServer {
             "Creating new RPC server; with {} ZMQ IO threads...",
             zmq_context.get_io_threads().unwrap()
         );
+
+        // The socket for publishing narrative events.
         let publish = zmq_context
             .socket(SocketType::PUB)
             .expect("Unable to create ZMQ PUB socket");
@@ -1088,8 +1090,7 @@ pub(crate) fn zmq_loop(
             t_rpc_server.ping_pong().expect("Unable to play ping-pong");
         })?;
 
-    // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
-    // are visible...
+    // Listen on the RPC socket for incoming requests, so that we can reply.
     let rpc_socket = zmq_ctx.socket(zmq::REP)?;
     rpc_socket.bind(&rpc_endpoint)?;
 
