@@ -160,16 +160,6 @@ impl LoaderInterface for DbTxWorldState {
         self.tx.retrieve_property(obj, uuid)
     }
 
-    // propvals in textdumps have wonky logic which resolve relative to position of propdefs
-    // in the inheritance hierarchy of the object
-    // So we need to walk ourselves up to the root of the inheritance hierarchy, and then return
-    // the values for each of the properties defined by that object, in the order of the properties
-    // defined by that object.
-    // This should then map the the propdefs for each of those properties.
-    // The bulk of this work should be done by the loader_client, which will give us that entire
-    // hierarchy in a single call.
-    // Really this is just a way of reordering our local propdefs to match the inheritance hierarchy.
-    // which is something LambdaMOO does automagically internally, but we don't bother to.
     #[allow(clippy::type_complexity)]
     fn get_all_property_values(
         &self,
@@ -178,7 +168,7 @@ impl LoaderInterface for DbTxWorldState {
         // First get the entire inheritance hierarchy.
         let hierarchy = self.tx.ancestors(this)?;
 
-        // Now get the property definitions for each of those objects, but only for the props which
+        // Now get the property values for each of those objects, but only for the props which
         // are defined by that object.
         // At the same time, get the values.
         let mut properties = vec![];
