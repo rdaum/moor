@@ -35,12 +35,13 @@ use moor_values::var::List;
 use moor_values::var::Objid;
 use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
-use moor_values::var::{v_listv, Error};
+use moor_values::var::{Error, v_listv};
 use moor_values::AsByteBuffer;
+use moor_values::var::Symbol;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
 use crate::vm::VM;
 
@@ -64,7 +65,7 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let verb_info = match bf_args.args[1].variant() {
         Variant::Str(verb_desc) => bf_args
             .world_state
-            .get_verb(bf_args.task_perms_who(), *obj, verb_desc.as_str())
+            .get_verb(bf_args.task_perms_who(), *obj, Symbol::mk_case_insensitive(verb_desc.as_str()))
             .map_err(world_state_bf_err)?,
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -110,7 +111,7 @@ bf_declare!(verb_info, bf_verb_info);
 fn get_verbdef(obj: Objid, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<VerbDef, BfErr> {
     let verbspec_result = match verbspec.variant() {
         Variant::Str(verb_desc) => {
-            let verb_desc = verb_desc.as_str();
+            let verb_desc = Symbol::mk_case_insensitive(verb_desc.as_str());
             bf_args
                 .world_state
                 .get_verb(bf_args.task_perms_who(), obj, verb_desc)
@@ -158,11 +159,11 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
                 }
             }
 
-            // Split the names string into a list of strings.
+            // Split the names string into a list of symbols
             let name_strings = names
                 .as_str()
                 .split(' ')
-                .map(|s| s.into())
+                .map(Symbol::mk_case_insensitive)
                 .collect::<Vec<_>>();
 
             Ok(VerbAttrs {
@@ -210,7 +211,7 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .update_verb(
                     bf_args.task_perms_who(),
                     *obj,
-                    verb_name.as_str(),
+                    Symbol::mk_case_insensitive(verb_name.as_str()),
                     update_attrs,
                 )
                 .map_err(world_state_bf_err)?;
@@ -327,7 +328,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .update_verb(
                     bf_args.task_perms_who(),
                     *obj,
-                    verb_name.as_str(),
+                    Symbol::mk_case_insensitive(verb_name.as_str()),
                     update_attrs,
                 )
                 .map_err(world_state_bf_err)?;

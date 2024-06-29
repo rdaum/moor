@@ -22,6 +22,7 @@ use crossbeam_channel::Sender;
 use moor_values::model::Perms;
 use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::Var;
 use std::time::Instant;
 
@@ -64,7 +65,7 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the verb to be executed was not found.
-    pub fn verb_not_found(&self, objid: Objid, verb: String) {
+    pub fn verb_not_found(&self, objid: Objid, verb: Symbol) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskVerbNotFound(objid, verb)))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -217,7 +218,7 @@ pub enum TaskControlMsg {
     /// A 'StartCommandVerb' type task failed to parse or match the command.
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.
-    TaskVerbNotFound(Objid, String),
+    TaskVerbNotFound(Objid, Symbol),
     /// An exception was thrown while executing the verb.
     TaskException(UncaughtException),
     /// The task is requesting that it be forked.

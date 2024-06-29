@@ -18,6 +18,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use moor_values::var::Symbol;
 use moor_values::SYSTEM_OBJECT;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
@@ -259,7 +260,7 @@ fn parse_expr(
                 let bf = inner.next().unwrap().as_str();
                 let args = parse_arglist(names.clone(), inner.next().unwrap().into_inner())?;
                 Ok(Expr::Call {
-                    function: bf.to_string(),
+                    function: Symbol::mk_case_insensitive(bf),
                     args,
                 })
             }
@@ -845,6 +846,7 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 #[cfg(test)]
 mod tests {
     use moor_values::var::Error::{E_INVARG, E_PROPNF, E_VARNF};
+    use moor_values::var::Symbol;
     use moor_values::var::{v_err, v_float, v_int, v_obj, v_str};
 
     use crate::ast::Arg::{Normal, Splice};
@@ -931,7 +933,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
             StmtNode::Expr(Call {
-                function: "notify".to_string(),
+                function: Symbol::mk("notify"),
                 args: vec![Normal(Value(v_str("test")))],
             })
         );
@@ -1494,7 +1496,7 @@ mod tests {
             vec![StmtNode::Return(Some(Expr::List(vec![
                 Splice(Id(results)),
                 Normal(Call {
-                    function: "frozzbozz".to_string(),
+                    function: Symbol::mk("frozzbozz"),
                     args: vec![Splice(Id(args))],
                 }),
             ])))]
@@ -1799,7 +1801,7 @@ mod tests {
                 Box::new(Expr::Assign {
                     left: Box::new(Id(len)),
                     right: Box::new(Call {
-                        function: "length".to_string(),
+                        function: Symbol::mk("length"),
                         args: vec![Normal(Id(text))],
                     }),
                 }),
@@ -1854,7 +1856,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Call {
-                function: "raise".to_string(),
+                function: Symbol::mk("raise"),
                 args: vec![Normal(Id(parse.names.find_name("E_PERMS").unwrap()))]
             })]
         );
@@ -1912,7 +1914,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Catch {
                 trye: Box::new(Call {
-                    function: "raise".to_string(),
+                    function: Symbol::mk("raise"),
                     args: vec![invarg]
                 }),
                 codes: CatchCodes::Any,

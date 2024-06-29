@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use lazy_static::lazy_static;
 use uuid::Uuid;
 
 use moor_values::model::HasUuid;
@@ -28,12 +29,28 @@ use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
+use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_int, v_objid, Var};
 use moor_values::var::{v_listv, Objid};
 use moor_values::NOTHING;
 
 use crate::worldstate_transaction::WorldStateTransaction;
+
+lazy_static! {
+    static ref NAME_SYM: Symbol = Symbol::mk("name");
+    static ref LOCATION_SYM: Symbol = Symbol::mk("location");
+    static ref CONTENTS_SYM: Symbol = Symbol::mk("contents");
+    static ref OWNER_SYM: Symbol = Symbol::mk("owner");
+    static ref CHILDREN_SYM: Symbol = Symbol::mk("children");
+    static ref PARENT_SYM: Symbol = Symbol::mk("parent");
+    static ref PROGRAMMER_SYM: Symbol = Symbol::mk("programmer");
+    static ref WIZARD_SYM: Symbol = Symbol::mk("wizard");
+    static ref R_SYM: Symbol = Symbol::mk("r");
+    static ref W_SYM: Symbol = Symbol::mk("w");
+    static ref F_SYM: Symbol = Symbol::mk("f");
+    static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
+}
 
 pub struct DbTxWorldState {
     pub tx: Box<dyn WorldStateTransaction>,
@@ -204,51 +221,51 @@ impl WorldState for DbTxWorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<Var, WorldStateError> {
         if obj == NOTHING || !self.valid(obj)? {
             return Err(WorldStateError::ObjectNotFound(obj));
         }
 
         // Special properties like namnne, location, and contents get treated specially.
-        if pname == "name" {
+        if pname == *NAME_SYM {
             return self.names_of(perms, obj).map(|(name, _)| Var::from(name));
-        } else if pname == "location" {
+        } else if pname == *LOCATION_SYM {
             return self.location_of(perms, obj).map(Var::from);
-        } else if pname == "contents" {
+        } else if pname == *CONTENTS_SYM {
             let contents: Vec<_> = self.contents_of(perms, obj)?.iter().map(v_objid).collect();
             return Ok(v_listv(contents));
-        } else if pname == "owner" {
+        } else if pname == *OWNER_SYM {
             return self.owner_of(obj).map(Var::from);
-        } else if pname == "programmer" {
+        } else if pname == *PROGRAMMER_SYM {
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Programmer) {
                 Ok(v_int(1))
             } else {
                 Ok(v_int(0))
             };
-        } else if pname == "wizard" {
+        } else if pname == *WIZARD_SYM {
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Wizard) {
                 Ok(v_int(1))
             } else {
                 Ok(v_int(0))
             };
-        } else if pname == "r" {
+        } else if pname == *R_SYM {
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Read) {
                 Ok(v_int(1))
             } else {
                 Ok(v_int(0))
             };
-        } else if pname == "w" {
+        } else if pname == *W_SYM {
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Write) {
                 Ok(v_int(1))
             } else {
                 Ok(v_int(0))
             };
-        } else if pname == "f" {
+        } else if pname == *F_SYM {
             let flags = self.flags_of(obj)?;
             return if flags.contains(ObjFlag::Fertile) {
                 Ok(v_int(1))
@@ -257,7 +274,7 @@ impl WorldState for DbTxWorldState {
             };
         }
 
-        let (_, value, propperms, _) = self.tx.resolve_property(obj, pname.to_string())?;
+        let (_, value, propperms, _) = self.tx.resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
         Ok(value)
@@ -267,12 +284,12 @@ impl WorldState for DbTxWorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<(PropDef, PropPerms), WorldStateError> {
         let properties = self.tx.get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+            .ok_or(WorldStateError::PropertyNotFound(obj, pname.to_string()))?;
         let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
@@ -284,13 +301,13 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
         let properties = self.tx.get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+            .ok_or(WorldStateError::PropertyNotFound(obj, pname.to_string()))?;
 
         let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
@@ -311,21 +328,30 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
         value: &Var,
     ) -> Result<(), WorldStateError> {
         // You have to use move/chparent for this kinda fun.
-        if pname == "location" || pname == "contents" || pname == "parent" || pname == "children" {
+        if pname == *LOCATION_SYM
+            || pname == *CONTENTS_SYM
+            || pname == *PARENT_SYM
+            || pname == *CHILDREN_SYM
+        {
             return Err(WorldStateError::PropertyPermissionDenied);
         }
 
-        if pname == "name" || pname == "owner" || pname == "r" || pname == "w" || pname == "f" {
+        if pname == *NAME_SYM
+            || pname == *OWNER_SYM
+            || pname == *R_SYM
+            || pname == *W_SYM
+            || pname == *F_SYM
+        {
             let (mut flags, objowner) = (self.flags_of(obj)?, self.owner_of(obj)?);
 
             // User is either wizard or owner
             self.perms(perms)?
                 .check_object_allows(objowner, flags, ObjFlag::Write.into())?;
-            if pname == "name" {
+            if pname == *NAME_SYM {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
@@ -333,7 +359,7 @@ impl WorldState for DbTxWorldState {
                 return Ok(());
             }
 
-            if pname == "owner" {
+            if pname == *OWNER_SYM {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
@@ -341,7 +367,7 @@ impl WorldState for DbTxWorldState {
                 return Ok(());
             }
 
-            if pname == "r" {
+            if pname == *R_SYM {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
@@ -354,7 +380,7 @@ impl WorldState for DbTxWorldState {
                 return Ok(());
             }
 
-            if pname == "w" {
+            if pname == *W_SYM {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
@@ -367,7 +393,7 @@ impl WorldState for DbTxWorldState {
                 return Ok(());
             }
 
-            if pname == "f" {
+            if pname == *F_SYM {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
@@ -381,19 +407,19 @@ impl WorldState for DbTxWorldState {
             }
         }
 
-        if pname == "programmer" || pname == "wizard" {
+        if pname == *PROGRAMMER_SYM || pname == *WIZARD_SYM {
             // Caller *must* be a wizard for either of these.
             self.perms(perms)?.check_wizard()?;
 
             // Gott get and then set flags
             let mut flags = self.flags_of(obj)?;
-            if pname == "programmer" {
+            if pname == *PROGRAMMER_SYM {
                 if value.is_true() {
                     flags.set(ObjFlag::Programmer);
                 } else {
                     flags.clear(ObjFlag::Programmer);
                 }
-            } else if pname == "wizard" {
+            } else if pname == *WIZARD_SYM {
                 if value.is_true() {
                     flags.set(ObjFlag::Wizard);
                 } else {
@@ -405,7 +431,7 @@ impl WorldState for DbTxWorldState {
             return Ok(());
         }
 
-        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname.to_string())?;
+        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
@@ -417,9 +443,9 @@ impl WorldState for DbTxWorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<bool, WorldStateError> {
-        let (_, _, propperms, clear) = self.tx.resolve_property(obj, pname.to_string())?;
+        let (_, _, propperms, clear) = self.tx.resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
         Ok(clear)
@@ -429,11 +455,11 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<(), WorldStateError> {
         // This is just deleting the local *value* portion of the property.
         // First seek the property handle.
-        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname.to_string())?;
+        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
         self.tx.clear_property(obj, pdef.uuid())?;
@@ -446,7 +472,7 @@ impl WorldState for DbTxWorldState {
         perms: Objid,
         definer: Objid,
         location: Objid,
-        pname: &str,
+        pname: Symbol,
         propowner: Objid,
         prop_flags: BitEnum<PropFlag>,
         initial_value: Option<Var>,
@@ -461,7 +487,7 @@ impl WorldState for DbTxWorldState {
         self.tx.define_property(
             definer,
             location,
-            pname.to_string(),
+            pname,
             propowner,
             prop_flags,
             initial_value,
@@ -474,12 +500,12 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        pname: &str,
+        pname: Symbol,
     ) -> Result<(), WorldStateError> {
         let properties = self.tx.get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(obj, pname.into()))?;
+            .ok_or(WorldStateError::PropertyNotFound(obj, pname.to_string()))?;
         let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
@@ -492,7 +518,7 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        names: Vec<String>,
+        names: Vec<Symbol>,
         owner: Objid,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
@@ -526,10 +552,10 @@ impl WorldState for DbTxWorldState {
         &mut self,
         perms: Objid,
         obj: Objid,
-        vname: &str,
+        vname: Symbol,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let vh = self.tx.get_verb_by_name(obj, vname.to_string())?;
+        let vh = self.tx.get_verb_by_name(obj, vname)?;
         self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
@@ -559,12 +585,17 @@ impl WorldState for DbTxWorldState {
     }
 
     #[tracing::instrument(skip(self))]
-    fn get_verb(&self, perms: Objid, obj: Objid, vname: &str) -> Result<VerbDef, WorldStateError> {
+    fn get_verb(
+        &self,
+        perms: Objid,
+        obj: Objid,
+        vname: Symbol,
+    ) -> Result<VerbDef, WorldStateError> {
         if !self.tx.object_valid(obj)? {
             return Err(WorldStateError::ObjectNotFound(obj));
         }
 
-        let vh = self.tx.get_verb_by_name(obj, vname.to_string())?;
+        let vh = self.tx.get_verb_by_name(obj, vname)?;
         self.perms(perms)?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
@@ -604,9 +635,9 @@ impl WorldState for DbTxWorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        vname: &str,
+        vname: Symbol,
     ) -> Result<VerbInfo, WorldStateError> {
-        let vh = self.tx.resolve_verb(obj, vname.to_string(), None)?;
+        let vh = self.tx.resolve_verb(obj, vname, None)?;
         self.perms(perms)?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
@@ -619,7 +650,7 @@ impl WorldState for DbTxWorldState {
         &self,
         perms: Objid,
         obj: Objid,
-        command_verb: &str,
+        command_verb: Symbol,
         dobj: Objid,
         prep: PrepSpec,
         iobj: Objid,
@@ -646,9 +677,7 @@ impl WorldState for DbTxWorldState {
         let iobj = spec_for_fn(obj, iobj);
         let argspec = VerbArgsSpec { dobj, prep, iobj };
 
-        let vh = self
-            .tx
-            .resolve_verb(obj, command_verb.to_string(), Some(argspec));
+        let vh = self.tx.resolve_verb(obj, command_verb, Some(argspec));
         let vh = match vh {
             Ok(vh) => vh,
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -719,7 +748,7 @@ impl WorldState for DbTxWorldState {
         let name = self.tx.get_object_name(obj)?;
 
         // Then grab aliases property.
-        let aliases = match self.retrieve_property(perms, obj, "aliases") {
+        let aliases = match self.retrieve_property(perms, obj, *ALIASES_SYM) {
             Ok(a) => match a.variant() {
                 Variant::List(a) => a.iter().map(|v| v.to_string()).collect(),
                 _ => {

@@ -24,6 +24,7 @@ use moor_values::model::{
     WorldStateError,
 };
 use moor_values::util::BitEnum;
+use moor_values::var::Symbol;
 use moor_values::var::{v_none, Objid, Var};
 use moor_values::NOTHING;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -663,18 +664,18 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         Ok(Bytes::from(bh.0))
     }
 
-    fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError> {
+    fn get_verb_by_name(&self, obj: Objid, name: Symbol) -> Result<VerbDef, WorldStateError> {
         let verbdefs: VerbDefs = self
             .tx
             .as_ref()
             .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectVerbs, obj)
             .map_err(err_map)?
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.clone()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj, name.to_string()))?;
         Ok(verbdefs
-            .find_named(name.as_str())
+            .find_named(name)
             .first()
-            .ok_or(WorldStateError::VerbNotFound(obj, name))?
+            .ok_or(WorldStateError::VerbNotFound(obj, name.to_string()))?
             .clone())
     }
 
@@ -693,7 +694,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn resolve_verb(
         &self,
         obj: Objid,
-        name: String,
+        name: Symbol,
         argspec: Option<VerbArgsSpec>,
     ) -> Result<VerbDef, WorldStateError> {
         let mut search_o = obj;
@@ -706,7 +707,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .map_err(err_map)?
             {
                 // If we found the verb, return it.
-                let name_matches = verbdefs.find_named(name.as_str());
+                let name_matches = verbdefs.find_named(name);
                 for verb in name_matches {
                     match argspec {
                         Some(argspec) => {
@@ -735,7 +736,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 Some(parent) => parent,
             };
         }
-        Err(WorldStateError::VerbNotFound(obj, name))
+        Err(WorldStateError::VerbNotFound(obj, name.to_string()))
     }
 
     fn update_verb(
@@ -797,7 +798,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         &self,
         oid: Objid,
         owner: Objid,
-        names: Vec<String>,
+        names: Vec<Symbol>,
         binary: Vec<u8>,
         binary_type: BinaryType,
         flags: BitEnum<VerbFlag>,
@@ -899,7 +900,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         &self,
         definer: Objid,
         location: Objid,
-        name: String,
+        name: Symbol,
         owner: Objid,
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
@@ -916,8 +917,11 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         {
             None => PropDefs::empty(),
             Some(propdefs) => {
-                if propdefs.find_first_named(name.as_str()).is_some() {
-                    return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
+                if propdefs.find_first_named(name).is_some() {
+                    return Err(WorldStateError::DuplicatePropertyDefinition(
+                        location,
+                        name.to_string(),
+                    ));
                 }
                 propdefs
             }
@@ -933,8 +937,11 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .map_err(err_map)?
             {
                 // Verify we don't already have a property with this name. If we do, return an error.
-                if descendant_props.find_first_named(name.as_str()).is_some() {
-                    return Err(WorldStateError::DuplicatePropertyDefinition(location, name));
+                if descendant_props.find_first_named(name).is_some() {
+                    return Err(WorldStateError::DuplicatePropertyDefinition(
+                        location,
+                        name.to_string(),
+                    ));
                 }
             }
         }
@@ -1132,14 +1139,12 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn resolve_property(
         &self,
         obj: Objid,
-        name: String,
+        name: Symbol,
     ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError> {
         // Walk up the inheritance tree looking for the property definition.
         let mut search_obj = obj;
         let propdef = loop {
-            let propdef = self
-                .get_properties(search_obj)?
-                .find_first_named(name.as_str());
+            let propdef = self.get_properties(search_obj)?.find_first_named(name);
 
             if let Some(propdef) = propdef {
                 break propdef;
@@ -1156,7 +1161,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 continue;
             };
 
-            return Err(WorldStateError::PropertyNotFound(obj, name));
+            return Err(WorldStateError::PropertyNotFound(obj, name.to_string()));
         };
 
         // Now that we have the propdef, we can look for the value & owner.

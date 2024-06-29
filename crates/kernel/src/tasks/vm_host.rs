@@ -28,6 +28,7 @@ use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
+use moor_values::var::Symbol;
 use moor_values::var::Var;
 use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
@@ -408,8 +409,8 @@ impl VmHost {
     pub fn permissions(&self) -> Objid {
         self.vm_exec_state.top().permissions
     }
-    pub fn verb_name(&self) -> String {
-        self.vm_exec_state.top().verb_name.clone()
+    pub fn verb_name(&self) -> Symbol {
+        self.vm_exec_state.top().verb_name
     }
     pub fn verb_definer(&self) -> Objid {
         self.vm_exec_state.top().verb_definer()

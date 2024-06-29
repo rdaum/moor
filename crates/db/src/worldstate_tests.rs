@@ -24,6 +24,7 @@ use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, PropFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::{v_int, v_str};
 use moor_values::NOTHING;
 
@@ -372,13 +373,15 @@ where
     tx.define_property(
         oid,
         oid,
-        "test".into(),
+        Symbol::mk_case_insensitive("test"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test")),
     )
     .unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(oid, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(oid, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test"));
     assert_eq!(perms.owner(), NOTHING);
@@ -402,7 +405,7 @@ where
     tx.add_object_verb(
         oid,
         oid,
-        vec!["test".into()],
+        vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
         BitEnum::new(),
@@ -410,7 +413,9 @@ where
     )
     .unwrap();
     // resolve the verb to its vh.
-    let vh = tx.resolve_verb(oid, "test".into(), None).unwrap();
+    let vh = tx
+        .resolve_verb(oid, Symbol::mk_case_insensitive("test"), None)
+        .unwrap();
     assert_eq!(vh.names(), vec!["test"]);
     // Verify it's actually on the object when we get verbs.
     let verbs = tx.get_verbs(oid).unwrap();
@@ -423,7 +428,7 @@ where
         VerbAttrs {
             definer: None,
             owner: None,
-            names: Some(vec!["test2".into()]),
+            names: Some(vec![Symbol::mk_case_insensitive("test2")]),
             flags: None,
             args_spec: None,
             binary_type: None,
@@ -432,13 +437,17 @@ where
     )
     .unwrap();
     // resolve with the new name.
-    let vh = tx.resolve_verb(oid, "test2".into(), None).unwrap();
+    let vh = tx
+        .resolve_verb(oid, Symbol::mk_case_insensitive("test2"), None)
+        .unwrap();
     assert_eq!(vh.names(), vec!["test2"]);
 
     // Now commit, and try to resolve again.
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
     let mut tx = begin_tx();
-    let vh = tx.resolve_verb(oid, "test2".into(), None).unwrap();
+    let vh = tx
+        .resolve_verb(oid, Symbol::mk_case_insensitive("test2"), None)
+        .unwrap();
     assert_eq!(vh.names(), vec!["test2"]);
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
@@ -467,13 +476,15 @@ where
     tx.define_property(
         a,
         a,
-        "test".into(),
+        Symbol::mk_case_insensitive("test"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
     .unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -490,10 +501,10 @@ where
 
     tx.set_object_parent(b, c).unwrap();
 
-    let result = tx.resolve_property(b, "test".into());
+    let result = tx.resolve_property(b, Symbol::mk_case_insensitive("test"));
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::PropertyNotFound(b, "test".into())
+        WorldStateError::PropertyNotFound(b, "test".to_string())
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
@@ -522,13 +533,15 @@ where
     tx.define_property(
         a,
         a,
-        "test".into(),
+        Symbol::mk_case_insensitive("test"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
     .unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -538,7 +551,9 @@ where
     tx.set_property(b, prop.uuid(), v_int(666)).unwrap();
 
     // Verify the new value is present.
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_int(666));
     assert_eq!(perms.owner(), NOTHING);
@@ -546,7 +561,9 @@ where
 
     // Now clear, and we should get the old value, but with clear status.
     tx.clear_property(b, prop.uuid()).unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -561,7 +578,9 @@ where
         None,
     )
     .unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), b);
@@ -570,7 +589,9 @@ where
 
     // Setting the value again makes it not clear
     tx.set_property(b, prop.uuid(), v_int(666)).unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_int(666));
     assert_eq!(perms.owner(), b);
@@ -604,7 +625,7 @@ where
         .define_property(
             a,
             a,
-            "test".into(),
+            Symbol::mk_case_insensitive("test"),
             NOTHING,
             BitEnum::new(),
             Some(v_str("test_value")),
@@ -616,7 +637,9 @@ where
         .unwrap();
 
     // And now resolve that new name on the child.
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "a_new_name".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("a_new_name"))
+        .unwrap();
     assert_eq!(prop.name(), "a_new_name");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -654,13 +677,15 @@ where
     tx.define_property(
         a,
         a,
-        "test".into(),
+        Symbol::mk_case_insensitive("test"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
     .unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -671,7 +696,7 @@ where
         .define_property(
             b,
             b,
-            "test2".into(),
+            Symbol::mk_case_insensitive("test2"),
             NOTHING,
             BitEnum::new(),
             Some(v_str("test_value2")),
@@ -704,7 +729,7 @@ where
     tx.add_object_verb(
         a,
         a,
-        vec!["test".into()],
+        vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
         BitEnum::new(),
@@ -713,25 +738,34 @@ where
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(a, "test".into(), None).unwrap().names(),
-        vec!["test"]
-    );
-
-    assert_eq!(
-        tx.resolve_verb(a, "test".into(), Some(VerbArgsSpec::this_none_this()))
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("test"), None)
             .unwrap()
             .names(),
         vec!["test"]
     );
 
-    let v_uuid = tx.resolve_verb(a, "test".into(), None).unwrap().uuid();
+    assert_eq!(
+        tx.resolve_verb(
+            a,
+            Symbol::mk_case_insensitive("test"),
+            Some(VerbArgsSpec::this_none_this())
+        )
+        .unwrap()
+        .names(),
+        vec!["test"]
+    );
+
+    let v_uuid = tx
+        .resolve_verb(a, Symbol::mk_case_insensitive("test"), None)
+        .unwrap()
+        .uuid();
     assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
 
     // Add a second verb with a different name
     tx.add_object_verb(
         a,
         a,
-        vec!["test2".into()],
+        vec![Symbol::mk_case_insensitive("test2")],
         vec![],
         BinaryType::LambdaMoo18X,
         BitEnum::new(),
@@ -741,7 +775,9 @@ where
 
     // Verify we can get it
     assert_eq!(
-        tx.resolve_verb(a, "test2".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("test2"), None)
+            .unwrap()
+            .names(),
         vec!["test2"]
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -749,11 +785,15 @@ where
     // Verify existence in a new transaction.
     let mut tx = begin_tx();
     assert_eq!(
-        tx.resolve_verb(a, "test".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("test"), None)
+            .unwrap()
+            .names(),
         vec!["test"]
     );
     assert_eq!(
-        tx.resolve_verb(a, "test2".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("test2"), None)
+            .unwrap()
+            .names(),
         vec!["test2"]
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -783,7 +823,7 @@ where
     tx.add_object_verb(
         a,
         a,
-        vec!["test".into()],
+        vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
         BitEnum::new(),
@@ -792,18 +832,27 @@ where
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(b, "test".into(), None).unwrap().names(),
-        vec!["test"]
-    );
-
-    assert_eq!(
-        tx.resolve_verb(b, "test".into(), Some(VerbArgsSpec::this_none_this()))
+        tx.resolve_verb(b, Symbol::mk_case_insensitive("test"), None)
             .unwrap()
             .names(),
         vec!["test"]
     );
 
-    let v_uuid = tx.resolve_verb(b, "test".into(), None).unwrap().uuid();
+    assert_eq!(
+        tx.resolve_verb(
+            b,
+            Symbol::mk_case_insensitive("test"),
+            Some(VerbArgsSpec::this_none_this())
+        )
+        .unwrap()
+        .names(),
+        vec!["test"]
+    );
+
+    let v_uuid = tx
+        .resolve_verb(b, Symbol::mk_case_insensitive("test"), None)
+        .unwrap()
+        .uuid();
     assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
@@ -825,7 +874,10 @@ where
     tx.add_object_verb(
         a,
         a,
-        verb_names.iter().map(|s| s.to_string()).collect(),
+        verb_names
+            .iter()
+            .map(|s| Symbol::mk_case_insensitive(s))
+            .collect(),
         vec![],
         BinaryType::LambdaMoo18X,
         BitEnum::new(),
@@ -834,22 +886,30 @@ where
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(a, "dname".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("dname"), None)
+            .unwrap()
+            .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(a, "dnamec".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("dnamec"), None)
+            .unwrap()
+            .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(a, "iname".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("iname"), None)
+            .unwrap()
+            .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(a, "inamec".into(), None).unwrap().names(),
+        tx.resolve_verb(a, Symbol::mk_case_insensitive("inamec"), None)
+            .unwrap()
+            .names(),
         verb_names
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -884,7 +944,7 @@ where
     tx.define_property(
         a,
         a,
-        "test".into(),
+        Symbol::mk_case_insensitive("test"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
@@ -892,13 +952,17 @@ where
     .unwrap();
 
     // Verify it's on B & C
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
     assert!(is_clear);
 
-    let (prop, v, perms, is_clear) = tx.resolve_property(c, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(c, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -915,24 +979,24 @@ where
     tx.set_object_parent(b, d).unwrap();
 
     // Verify the property is no longer on B
-    let result = tx.resolve_property(b, "test".into());
+    let result = tx.resolve_property(b, Symbol::mk_case_insensitive("test"));
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::PropertyNotFound(b, "test".into())
+        WorldStateError::PropertyNotFound(b, "test".to_string())
     );
 
     // Or C.
-    let result = tx.resolve_property(c, "test".into());
+    let result = tx.resolve_property(c, Symbol::mk_case_insensitive("test"));
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::PropertyNotFound(c, "test".into())
+        WorldStateError::PropertyNotFound(c, "test".to_string())
     );
 
     // Now add new property on D
     tx.define_property(
         d,
         d,
-        "test2".into(),
+        Symbol::mk_case_insensitive("test2"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value2")),
@@ -940,13 +1004,17 @@ where
     .unwrap();
 
     // Verify it's on B and C
-    let (prop, v, perms, is_clear) = tx.resolve_property(b, "test2".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(b, Symbol::mk_case_insensitive("test2"))
+        .unwrap();
     assert_eq!(prop.name(), "test2");
     assert_eq!(v, v_str("test_value2"));
     assert_eq!(perms.owner(), NOTHING);
     assert!(is_clear);
 
-    let (prop, v, perms, is_clear) = tx.resolve_property(c, "test2".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(c, Symbol::mk_case_insensitive("test2"))
+        .unwrap();
     assert_eq!(prop.name(), "test2");
     assert_eq!(v, v_str("test_value2"));
     assert_eq!(perms.owner(), NOTHING);
@@ -954,7 +1022,9 @@ where
 
     // And now reparent C to A again, and verify it's back to having the first property.
     tx.set_object_parent(c, a).unwrap();
-    let (prop, v, perms, is_clear) = tx.resolve_property(c, "test".into()).unwrap();
+    let (prop, v, perms, is_clear) = tx
+        .resolve_property(c, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -1013,7 +1083,7 @@ where
     tx.define_property(
         a,
         a,
-        "test".into(),
+        Symbol::mk_case_insensitive("test"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
@@ -1031,7 +1101,9 @@ where
     assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(c));
 
     // Verify the property is still there.
-    let (prop, v, perms, _) = tx.resolve_property(a, "test".into()).unwrap();
+    let (prop, v, perms, _) = tx
+        .resolve_property(a, Symbol::mk_case_insensitive("test"))
+        .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
     assert_eq!(perms.owner(), NOTHING);
@@ -1046,7 +1118,7 @@ where
     tx.define_property(
         a,
         a,
-        "test2".into(),
+        Symbol::mk_case_insensitive("test2"),
         NOTHING,
         BitEnum::new(),
         Some(v_str("test_value2")),
@@ -1065,9 +1137,9 @@ where
     assert_eq!(tx.get_object_parent(d).unwrap(), NOTHING);
 
     // We should not have the property, it came from our parent.
-    let result = tx.resolve_property(d, "test2".into());
+    let result = tx.resolve_property(d, Symbol::mk_case_insensitive("test2"));
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::PropertyNotFound(d, "test2".into())
+        WorldStateError::PropertyNotFound(d, "test2".to_string())
     );
 }

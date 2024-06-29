@@ -14,6 +14,7 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
+use crate::var::Symbol;
 use crate::AsByteBuffer;
 use bytes::BufMut;
 use bytes::Bytes;
@@ -27,7 +28,7 @@ pub trait HasUuid {
 }
 
 pub trait Named {
-    fn matches_name(&self, name: &str) -> bool;
+    fn matches_name(&self, name: Symbol) -> bool;
     fn names(&self) -> Vec<&str>;
 }
 
@@ -152,11 +153,13 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         self.iter().find(|p| &p.uuid() == uuid)
     }
     #[must_use]
-    pub fn find_named(&self, name: &str) -> Vec<T> {
-        self.iter().filter(|p| p.matches_name(name)).collect()
+    pub fn find_named(&self, name: Symbol) -> Vec<T> {
+        self.iter()
+            .filter(|p| p.matches_name(name))
+            .collect()
     }
     #[must_use]
-    pub fn find_first_named(&self, name: &str) -> Option<T> {
+    pub fn find_first_named(&self, name: Symbol) -> Option<T> {
         self.iter().find(|p| p.matches_name(name))
     }
     #[must_use]

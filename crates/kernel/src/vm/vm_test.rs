@@ -40,6 +40,7 @@ mod tests {
     use moor_compiler::Op::*;
     use moor_compiler::Program;
     use moor_db_wiredtiger::WiredTigerDB;
+    use moor_values::var::Symbol;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -60,11 +61,11 @@ mod tests {
         let sysobj = tx
             .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, "name", &v_str("system"))
+        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("name"), &v_str("system"))
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, "programmer", &v_int(1))
+        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("programmer"), &v_int(1))
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, "wizard", &v_int(1))
+        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("wizard"), &v_int(1))
             .unwrap();
 
         // Add $test
@@ -72,7 +73,7 @@ mod tests {
             SYSTEM_OBJECT,
             sysobj,
             sysobj,
-            "test",
+            Symbol::mk("test"),
             SYSTEM_OBJECT,
             BitEnum::all(),
             Some(v_int(1)),
@@ -84,7 +85,7 @@ mod tests {
             tx.add_verb(
                 SYSTEM_OBJECT,
                 sysobj,
-                vec![verb_name.to_string()],
+                vec![Symbol::mk(verb_name)],
                 sysobj,
                 VerbFlag::rxd(),
                 VerbArgsSpec::this_none_this(),
@@ -318,7 +319,7 @@ mod tests {
                     Objid(0),
                     Objid(0),
                     Objid(0),
-                    "test_prop",
+                    Symbol::mk("test_prop"),
                     Objid(0),
                     BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
                     Some(v_int(666)),

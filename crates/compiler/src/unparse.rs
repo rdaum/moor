@@ -215,7 +215,7 @@ impl Unparse {
             }
             Expr::Call { function, args } => {
                 let mut buffer = String::new();
-                buffer.push_str(function);
+                buffer.push_str(function.as_str());
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args)?.as_str());
                 buffer.push(')');
@@ -282,7 +282,8 @@ impl Unparse {
                     buffer.push_str(
                         self.names
                             .name_of(&var.id)
-                            .ok_or(DecompileError::NameNotFound(var.id))?,
+                            .ok_or(DecompileError::NameNotFound(var.id))?
+                            .as_str(),
                     );
                     if let Some(expr) = &var.expr {
                         buffer.push_str(" = ");
@@ -378,7 +379,8 @@ impl Unparse {
                     base_str.push_str(
                         self.names
                             .name_of(id)
-                            .ok_or(DecompileError::NameNotFound(*id))?,
+                            .ok_or(DecompileError::NameNotFound(*id))?
+                            .as_str(),
                     );
                 }
                 stmt_lines.push(format!("{}({})", base_str, cond_frag));
@@ -397,7 +399,8 @@ impl Unparse {
                     base_str.push_str(
                         self.names
                             .name_of(id)
-                            .ok_or(DecompileError::NameNotFound(*id))?,
+                            .ok_or(DecompileError::NameNotFound(*id))?
+                            .as_str(),
                     );
                 }
                 stmt_lines.push(format!("{} ({})", base_str, delay_frag));
@@ -419,7 +422,8 @@ impl Unparse {
                         base_str.push_str(
                             self.names
                                 .name_of(id)
-                                .ok_or(DecompileError::NameNotFound(*id))?,
+                                .ok_or(DecompileError::NameNotFound(*id))?
+                                .as_str(),
                         );
                         base_str.push(' ');
                     }
@@ -450,7 +454,8 @@ impl Unparse {
                     base_str.push_str(
                         self.names
                             .name_of(exit)
-                            .ok_or(DecompileError::NameNotFound(*exit))?,
+                            .ok_or(DecompileError::NameNotFound(*exit))?
+                            .as_str(),
                     );
                 }
                 base_str.push(';');
@@ -463,7 +468,8 @@ impl Unparse {
                     base_str.push_str(
                         self.names
                             .name_of(exit)
-                            .ok_or(DecompileError::NameNotFound(*exit))?,
+                            .ok_or(DecompileError::NameNotFound(*exit))?
+                            .as_str(),
                     );
                 }
                 base_str.push(';');

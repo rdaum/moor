@@ -40,6 +40,7 @@ use moor_values::model::NarrativeEvent;
 use moor_values::model::WorldStateSource;
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::Var;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_objid, v_str, v_string};
@@ -446,8 +447,9 @@ impl RpcServer {
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
-        let Ok(sysprop) =
-            world_state.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object.as_str())
+        let object = Symbol::mk_case_insensitive(object.as_str());
+        let property = Symbol::mk_case_insensitive(property.as_str());
+        let Ok(sysprop) = world_state.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object)
         else {
             return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
                 "could not access system object".to_string(),
@@ -460,8 +462,7 @@ impl RpcServer {
             ));
         };
 
-        let Ok(property_value) =
-            world_state.retrieve_property(SYSTEM_OBJECT, *sysprop, property.as_str())
+        let Ok(property_value) = world_state.retrieve_property(SYSTEM_OBJECT, *sysprop, property)
         else {
             return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
                 "could not sysprop".to_string(),
@@ -795,12 +796,13 @@ impl RpcServer {
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
+        let verb = Symbol::mk_case_insensitive(verb.as_str());
         match self
             .clone()
             .scheduler
             .program_verb(connection, connection, object, verb, code)
         {
-            Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb)),
+            Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb.to_string())),
             Err(SchedulerError::VerbProgramFailed(e)) => Err(RpcRequestError::VerbProgramFailed(e)),
             Err(e) => {
                 error!(error = ?e, "Error processing increment");

@@ -34,6 +34,7 @@ pub use crate::var::error::{Error, ErrorPack};
 pub use crate::var::list::List;
 pub use crate::var::objid::Objid;
 pub use crate::var::string::Str;
+pub use crate::var::symbol::Symbol;
 pub use crate::var::variant::Variant;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 
@@ -45,6 +46,7 @@ mod list_impl_buffer;
 mod list_impl_vector;
 mod objid;
 mod string;
+mod symbol;
 mod variant;
 mod varops;
 

@@ -24,6 +24,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if",
+ "getrandom",
  "once_cell",
  "version_check",
  "zerocopy",
@@ -1720,6 +1721,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "daumtils",
+ "lazy_static",
  "moor-values",
  "strum",
  "tempfile",
@@ -1857,6 +1859,7 @@ dependencies = [
  "paste",
  "strum",
  "thiserror",
+ "ustr",
  "uuid",
 ]
 
@@ -3460,6 +3463,18 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+]
+
+[[package]]
+name = "ustr"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e904a2279a4a36d2356425bb20be271029cc650c335bc82af8bfae30085a3d0"
+dependencies = [
+ "ahash",
+ "byteorder",
+ "lazy_static",
+ "parking_lot",
 ]
 
 [[package]]

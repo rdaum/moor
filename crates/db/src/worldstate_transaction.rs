@@ -25,6 +25,7 @@ use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::Var;
 
 /// A trait defining a generic interface to a database for storing the per-attribute values
@@ -99,7 +100,7 @@ pub trait WorldStateTransaction {
     fn get_verb_binary(&self, obj: Objid, uuid: Uuid) -> Result<Bytes, WorldStateError>;
 
     /// Find & get the verb with the given name on the given object.
-    fn get_verb_by_name(&self, obj: Objid, name: String) -> Result<VerbDef, WorldStateError>;
+    fn get_verb_by_name(&self, obj: Objid, name: Symbol) -> Result<VerbDef, WorldStateError>;
 
     /// Find the Nth verb on the given object. Order is set by the time of creation.
     fn get_verb_by_index(&self, obj: Objid, index: usize) -> Result<VerbDef, WorldStateError>;
@@ -109,7 +110,7 @@ pub trait WorldStateTransaction {
     fn resolve_verb(
         &self,
         obj: Objid,
-        name: String,
+        name: Symbol,
         argspec: Option<VerbArgsSpec>,
     ) -> Result<VerbDef, WorldStateError>;
 
@@ -128,7 +129,7 @@ pub trait WorldStateTransaction {
         &self,
         location: Objid,
         owner: Objid,
-        names: Vec<String>,
+        names: Vec<Symbol>,
         binary: Vec<u8>,
         binary_type: BinaryType,
         flags: BitEnum<VerbFlag>,
@@ -149,7 +150,7 @@ pub trait WorldStateTransaction {
         &self,
         definer: Objid,
         location: Objid,
-        name: String,
+        name: Symbol,
         owner: Objid,
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
@@ -194,7 +195,7 @@ pub trait WorldStateTransaction {
     fn resolve_property(
         &self,
         obj: Objid,
-        name: String,
+        name: Symbol,
     ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError>;
 
     /// Return the (rough) size of the database in bytes.

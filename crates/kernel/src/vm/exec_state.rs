@@ -66,7 +66,7 @@ impl VMExecState {
 
         let mut callers = vec![];
         for activation in callers_iter {
-            let verb_name = activation.verb_name.clone();
+            let verb_name = activation.verb_name;
             let definer = activation.verb_definer();
             let player = activation.player;
             // TODO: Line numbers in 'callers' stack is not implemented
