@@ -135,7 +135,7 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
     );
 
     scheduler
-        .submit_shutdown(0, Some("Test is done".to_string()))
+        .submit_shutdown("Test is done")
         .expect("Failed to shut down scheduler");
     scheduler_loop_jh
         .join()

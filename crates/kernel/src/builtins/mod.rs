@@ -25,7 +25,7 @@ use moor_values::var::Objid;
 use moor_values::var::Var;
 
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::SchedulerControlMsg;
+use crate::tasks::task_messages::TaskControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VMExecState};
 
@@ -52,7 +52,7 @@ pub struct BfCallState<'a> {
     /// For connection / message management.
     pub(crate) session: Arc<dyn Session>,
     /// For sending messages up to the scheduler
-    pub(crate) scheduler_sender: Sender<(TaskId, SchedulerControlMsg)>,
+    pub(crate) scheduler_sender: Sender<(TaskId, TaskControlMsg)>,
 }
 
 impl BfCallState<'_> {

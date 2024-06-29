@@ -45,7 +45,7 @@ use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
 
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::{SchedulerControlMsg, TaskStart};
+use crate::tasks::task_messages::{TaskControlMsg, TaskStart};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
 use crate::tasks::{ServerOptions, TaskId, VerbCall};
 
@@ -76,7 +76,7 @@ impl Task {
         is_background: bool,
         server_options: &ServerOptions,
         session: Arc<dyn Session>,
-        control_sender: &Sender<(TaskId, SchedulerControlMsg)>,
+        control_sender: &Sender<(TaskId, TaskControlMsg)>,
         kill_switch: Arc<AtomicBool>,
     ) -> Self {
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
@@ -105,7 +105,7 @@ impl Task {
 
     pub fn run_task_loop(
         mut task: Task,
-        control_sender: Sender<(TaskId, SchedulerControlMsg)>,
+        control_sender: Sender<(TaskId, TaskControlMsg)>,
         mut world_state: Box<dyn WorldState>,
     ) {
         while task.vm_host.is_running() {
@@ -113,7 +113,7 @@ impl Task {
             if task.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
                 trace!(task_id = ?task.task_id, "Task killed");
                 control_sender
-                    .send((task.task_id, SchedulerControlMsg::TaskAbortCancelled))
+                    .send((task.task_id, TaskControlMsg::TaskAbortCancelled))
                     .expect("Could not send kill message");
                 break;
             }
@@ -129,7 +129,7 @@ impl Task {
     /// Set the task up to start executing, based on the task start configuration.
     pub(crate) fn setup_task_start(
         &mut self,
-        control_sender: &Sender<(TaskId, SchedulerControlMsg)>,
+        control_sender: &Sender<(TaskId, TaskControlMsg)>,
         world_state: &mut dyn WorldState,
     ) -> bool {
         match self.task_start.clone().as_ref() {
@@ -173,7 +173,7 @@ impl Task {
                         control_sender
                             .send((
                                 self.task_id,
-                                SchedulerControlMsg::TaskVerbNotFound(
+                                TaskControlMsg::TaskVerbNotFound(
                                     verb_call.this,
                                     verb_call.verb_name,
                                 ),
@@ -223,7 +223,7 @@ impl Task {
     /// return None, otherwise we will return ourselves.
     fn vm_dispatch(
         mut self,
-        control_sender: &Sender<(TaskId, SchedulerControlMsg)>,
+        control_sender: &Sender<(TaskId, TaskControlMsg)>,
         world_state: &mut dyn WorldState,
     ) -> Option<Self> {
         // Call the VM
@@ -242,7 +242,7 @@ impl Task {
                 control_sender
                     .send((
                         self.task_id,
-                        SchedulerControlMsg::TaskRequestFork(fork_request, send),
+                        TaskControlMsg::TaskRequestFork(fork_request, send),
                     ))
                     .expect("Could not send fork request");
                 let task_id = reply.recv().expect("Could not get fork reply");
@@ -262,7 +262,7 @@ impl Task {
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
                     control_sender
-                        .send((self.task_id, SchedulerControlMsg::TaskConflictRetry(self)))
+                        .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
                         .expect("Could not send conflict retry");
                     return None;
                 }
@@ -279,10 +279,7 @@ impl Task {
                 let resume_time = delay.map(|delay| Instant::now() + delay);
 
                 control_sender
-                    .send((
-                        self.task_id,
-                        SchedulerControlMsg::TaskSuspend(resume_time, self),
-                    ))
+                    .send((self.task_id, TaskControlMsg::TaskSuspend(resume_time, self)))
                     .expect("Could not send suspend message");
                 None
             }
@@ -298,7 +295,7 @@ impl Task {
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
                     control_sender
-                        .send((self.task_id, SchedulerControlMsg::TaskConflictRetry(self)))
+                        .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
                         .expect("Could not send conflict retry");
                     return None;
                 }
@@ -308,7 +305,7 @@ impl Task {
 
                 // Consume us, passing back to the scheduler that we're waiting for input.
                 control_sender
-                    .send((self.task_id, SchedulerControlMsg::TaskRequestInput(self)))
+                    .send((self.task_id, TaskControlMsg::TaskRequestInput(self)))
                     .expect("Could not send suspend message");
                 None
             }
@@ -320,7 +317,7 @@ impl Task {
                 else {
                     warn!("Conflict during commit before complete, asking scheduler to retry task");
                     control_sender
-                        .send((self.task_id, SchedulerControlMsg::TaskConflictRetry(self)))
+                        .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
                         .expect("Could not send conflict retry");
                     return None;
                 };
@@ -328,7 +325,7 @@ impl Task {
                 self.vm_host.stop();
 
                 control_sender
-                    .send((self.task_id, SchedulerControlMsg::TaskSuccess(result)))
+                    .send((self.task_id, TaskControlMsg::TaskSuccess(result)))
                     .expect("Could not send success message");
                 Some(self)
             }
@@ -342,7 +339,7 @@ impl Task {
                 self.vm_host.stop();
 
                 control_sender
-                    .send((self.task_id, SchedulerControlMsg::TaskAbortCancelled))
+                    .send((self.task_id, TaskControlMsg::TaskAbortCancelled))
                     .expect("Could not send abort message");
                 Some(self)
             }
@@ -362,7 +359,7 @@ impl Task {
                 control_sender
                     .send((
                         self.task_id,
-                        SchedulerControlMsg::TaskException(exception.clone()),
+                        TaskControlMsg::TaskException(exception.clone()),
                     ))
                     .expect("Could not send exception message");
                 Some(self)
@@ -375,10 +372,7 @@ impl Task {
                     .rollback()
                     .expect("Could not rollback world state");
                 control_sender
-                    .send((
-                        self.task_id,
-                        SchedulerControlMsg::TaskAbortLimitsReached(reason),
-                    ))
+                    .send((self.task_id, TaskControlMsg::TaskAbortLimitsReached(reason)))
                     .expect("Could not send abort limit message");
                 Some(self)
             }
@@ -390,7 +384,7 @@ impl Task {
                     .rollback()
                     .expect("Could not rollback world state");
                 control_sender
-                    .send((self.task_id, SchedulerControlMsg::TaskConflictRetry(self)))
+                    .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
                     .expect("Could not send rollback retry message");
                 None
             }
@@ -402,7 +396,7 @@ impl Task {
         player: Objid,
         command: &str,
         world_state: &mut dyn WorldState,
-    ) -> Option<SchedulerControlMsg> {
+    ) -> Option<TaskControlMsg> {
         // Command execution is a multi-phase process:
         //   1. Lookup $do_command. If we have the verb, execute it.
         //   2. If it returns a boolean `true`, we're done, let scheduler know, otherwise:
@@ -429,10 +423,10 @@ impl Task {
             Err(WorldStateError::VerbPermissionDenied)
             | Err(WorldStateError::ObjectPermissionDenied)
             | Err(WorldStateError::PropertyPermissionDenied) => {
-                return Some(SchedulerControlMsg::TaskCommandError(PermissionDenied));
+                return Some(TaskControlMsg::TaskCommandError(PermissionDenied));
             }
             Err(wse) => {
-                return Some(SchedulerControlMsg::TaskCommandError(
+                return Some(TaskControlMsg::TaskCommandError(
                     CommandError::DatabaseError(wse),
                 ));
             }
@@ -447,10 +441,10 @@ impl Task {
         let parsed_command = match parse_command(command, matcher) {
             Ok(pc) => pc,
             Err(ParseCommandError::PermissionDenied) => {
-                return Some(SchedulerControlMsg::TaskCommandError(PermissionDenied));
+                return Some(TaskControlMsg::TaskCommandError(PermissionDenied));
             }
             Err(_) => {
-                return Some(SchedulerControlMsg::TaskCommandError(
+                return Some(TaskControlMsg::TaskCommandError(
                     CommandError::CouldNotParseCommand,
                 ));
             }
@@ -461,7 +455,7 @@ impl Task {
             match find_verb_for_command(player, player_location, &parsed_command, world_state) {
                 Ok(results) => results,
                 Err(e) => {
-                    return Some(SchedulerControlMsg::TaskCommandError(e));
+                    return Some(TaskControlMsg::TaskCommandError(e));
                 }
             };
         let (verb_info, target) = match parse_results {
@@ -479,7 +473,7 @@ impl Task {
             // Otherwise, we want to try to call :huh, if it exists.
             None => {
                 if player_location == NOTHING {
-                    return Some(SchedulerControlMsg::TaskCommandError(
+                    return Some(TaskControlMsg::TaskCommandError(
                         CommandError::NoCommandMatch,
                     ));
                 }
@@ -489,7 +483,7 @@ impl Task {
                 let Ok(verb_info) =
                     world_state.find_method_verb_on(self.perms, player_location, "huh")
                 else {
-                    return Some(SchedulerControlMsg::TaskCommandError(
+                    return Some(TaskControlMsg::TaskCommandError(
                         CommandError::NoCommandMatch,
                     ));
                 };
@@ -565,7 +559,7 @@ fn find_verb_for_command(
 mod tests {
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::task::Task;
-    use crate::tasks::task_messages::{SchedulerControlMsg, TaskStart};
+    use crate::tasks::task_messages::{TaskControlMsg, TaskStart};
     use crate::tasks::{ServerOptions, TaskId};
     use crossbeam_channel::{unbounded, Receiver, Sender};
     use moor_compiler::compile;
@@ -586,8 +580,8 @@ mod tests {
         Task,
         WiredTigerDB,
         Box<dyn WorldState>,
-        Sender<(TaskId, SchedulerControlMsg)>,
-        Receiver<(TaskId, SchedulerControlMsg)>,
+        Sender<(TaskId, TaskControlMsg)>,
+        Receiver<(TaskId, TaskControlMsg)>,
     ) {
         let program = compile(program).unwrap();
         let task_start = Arc::new(TaskStart::StartEval {
@@ -645,7 +639,7 @@ mod tests {
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result) = msg else {
             panic!("Expected TaskSuccess, got {:?}", msg);
         };
         assert_eq!(result, v_int(2));
@@ -662,7 +656,7 @@ mod tests {
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskException(exception) = msg else {
+        let TaskControlMsg::TaskException(exception) = msg else {
             panic!("Expected TaskException, got {:?}", msg);
         };
         assert_eq!(exception.code, E_DIV);
@@ -679,7 +673,7 @@ mod tests {
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::Notify { player, event } = msg else {
+        let TaskControlMsg::Notify { player, event } = msg else {
             panic!("Expected Notify, got {:?}", msg);
         };
         assert_eq!(player, SYSTEM_OBJECT);
@@ -689,7 +683,7 @@ mod tests {
         // Also scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result) = msg else {
             panic!("Expected TaskSuccess, got {:?}", msg);
         };
         assert_eq!(result, v_int(123));
@@ -706,7 +700,7 @@ mod tests {
         // Scheduler should have received a TaskSuspend message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskSuspend(instant, mut resume_task) = msg else {
+        let TaskControlMsg::TaskSuspend(instant, mut resume_task) = msg else {
             panic!("Expected TaskSuspend, got {:?}", msg);
         };
         assert_eq!(resume_task.task_id, 1);
@@ -719,7 +713,7 @@ mod tests {
         Task::run_task_loop(resume_task, control_sender, tx);
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result) = msg else {
             panic!("Expected TaskSuccess, got {:?}", msg);
         };
         assert_eq!(result, v_int(123));
@@ -736,7 +730,7 @@ mod tests {
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskRequestInput(mut resume_task) = msg else {
+        let TaskControlMsg::TaskRequestInput(mut resume_task) = msg else {
             panic!("Expected TaskRequestInput, got {:?}", msg);
         };
         assert_eq!(resume_task.task_id, 1);
@@ -751,7 +745,7 @@ mod tests {
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result) = msg else {
             panic!("Expected TaskSuccess, got {:?}", msg);
         };
         assert_eq!(result, v_str("hello, world!"));
@@ -780,7 +774,7 @@ mod tests {
         // Scheduler should have received a TaskRequestFork message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
+        let TaskControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
             panic!("Expected TaskRequestFork, got {:?}", msg);
         };
         assert_eq!(fork_request.task_id, None);
@@ -796,7 +790,7 @@ mod tests {
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let SchedulerControlMsg::TaskSuccess(result) = msg else {
+        let TaskControlMsg::TaskSuccess(result) = msg else {
             panic!("Expected TaskSuccess, got {:?}", msg);
         };
         assert_eq!(result, v_int(123));

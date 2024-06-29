@@ -15,6 +15,7 @@
 use crate::tasks::scheduler::TaskResult;
 use bincode::{Decode, Encode};
 use moor_values::var::{List, Objid};
+use std::fmt::Debug;
 use std::time::SystemTime;
 
 pub mod command_parse;
@@ -35,6 +36,15 @@ pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 /// Just a handle to a task, with a receiver for the result.
 pub struct TaskHandle(TaskId, oneshot::Receiver<TaskResult>);
+
+impl Debug for TaskHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskHandle")
+            .field("task_id", &self.0)
+            .finish()
+    }
+}
+
 impl TaskHandle {
     pub fn task_id(&self) -> TaskId {
         self.0

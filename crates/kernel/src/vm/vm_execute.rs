@@ -21,7 +21,7 @@ use moor_compiler::{Name, Offset};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::SchedulerControlMsg;
+use crate::tasks::task_messages::TaskControlMsg;
 use crate::tasks::{TaskId, VerbCall};
 use moor_compiler::Program;
 use moor_compiler::{Op, ScatterLabel};
@@ -64,7 +64,7 @@ pub struct Fork {
 
 /// Represents the set of parameters passed to the VM for execution.
 pub struct VmExecParams {
-    pub scheduler_sender: Sender<(TaskId, SchedulerControlMsg)>,
+    pub scheduler_sender: Sender<(TaskId, TaskControlMsg)>,
     pub max_stack_depth: usize,
 }
 #[derive(PartialEq, Debug, Clone)]
