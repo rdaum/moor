@@ -73,12 +73,13 @@ impl Task {
         player: Objid,
         task_start: Arc<TaskStart>,
         perms: Objid,
-        is_background: bool,
         server_options: &ServerOptions,
         session: Arc<dyn Session>,
         task_scheduler_client: TaskSchedulerClient,
         kill_switch: Arc<AtomicBool>,
     ) -> Self {
+        let is_background = task_start.is_background();
+
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
         // the DB or from default constants.
         let (max_seconds, max_ticks, max_stack_depth) = server_options.max_vm_values(is_background);
@@ -571,7 +572,6 @@ mod tests {
             SYSTEM_OBJECT,
             task_start.clone(),
             SYSTEM_OBJECT,
-            false,
             &server_options,
             noop_session.clone(),
             task_scheduler_client.clone(),
