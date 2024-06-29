@@ -25,6 +25,7 @@ use moor_compiler::compile;
 use moor_db_wiredtiger::WiredTigerDB;
 use moor_kernel::tasks::scheduler::AbortLimitReason;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
+use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
 use moor_kernel::tasks::vm_host::{VMHostResponse, VmHost};
 use moor_kernel::tasks::VerbCall;
 use moor_values::model::CommitResult;
@@ -53,13 +54,14 @@ pub fn prepare_call_verb(
     max_ticks: usize,
 ) -> VmHost {
     let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
+    let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
     let mut vm_host = VmHost::new(
         0,
         20,
         max_ticks,
         Duration::from_secs(15),
         session.clone(),
-        scs_tx,
+        task_scheduler_client,
     );
 
     let vi = world_state

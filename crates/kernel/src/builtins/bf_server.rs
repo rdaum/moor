@@ -33,7 +33,6 @@ use moor_values::var::{v_listv, Error};
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::tasks::task_messages::TaskControlMsg;
 use crate::tasks::TaskId;
 use crate::vm::{ExecutionResult, VM};
 
@@ -71,16 +70,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
-    bf_args
-        .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            TaskControlMsg::Notify {
-                player: *player,
-                event,
-            },
-        ))
-        .expect("Unable to contact scheduler for Notify");
+    bf_args.task_scheduler_client.notify(*player, event);
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -274,10 +264,8 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?
         .check_wizard()
         .map_err(world_state_bf_err)?;
-    bf_args
-        .scheduler_sender
-        .send((bf_args.exec_state.task_id, TaskControlMsg::Shutdown(msg)))
-        .expect("scheduler is not listening");
+
+    bf_args.task_scheduler_client.shutdown(msg.clone());
 
     Ok(Ret(v_none()))
 }
@@ -434,16 +422,8 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
-    let (send, receive) = oneshot::channel();
     debug!("sending DescribeOtherTasks to scheduler");
-    bf_args
-        .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            TaskControlMsg::RequestQueuedTasks(send),
-        ))
-        .expect("scheduler is not listening");
-    let tasks = receive.recv().expect("scheduler is not listening");
+    let tasks = bf_args.task_scheduler_client.request_queued_tasks();
 
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
@@ -497,20 +477,10 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
     }
 
-    let (send, receive) = oneshot::channel();
-    bf_args
-        .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            TaskControlMsg::KillTask {
-                victim_task_id,
-                sender_permissions: bf_args.task_perms().map_err(world_state_bf_err)?,
-                result_sender: send,
-            },
-        ))
-        .expect("scheduler is not listening");
-
-    let result = receive.recv().expect("scheduler is not listening");
+    let result = bf_args.task_scheduler_client.kill_task(
+        victim_task_id,
+        bf_args.task_perms().map_err(world_state_bf_err)?,
+    );
     if let Variant::Err(err) = result.variant() {
         return Err(BfErr::Code(*err));
     }
@@ -541,21 +511,11 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let (send, receive) = oneshot::channel();
-    bf_args
-        .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            TaskControlMsg::ResumeTask {
-                queued_task_id: task_id,
-                sender_permissions: bf_args.task_perms().map_err(world_state_bf_err)?,
-                return_value,
-                result_sender: send,
-            },
-        ))
-        .expect("scheduler is not listening");
-
-    let result = receive.recv().expect("scheduler is not listening");
+    let result = bf_args.task_scheduler_client.resume_task(
+        task_id,
+        bf_args.task_perms().map_err(world_state_bf_err)?,
+        return_value.clone(),
+    );
     if let Variant::Err(err) = result.variant() {
         return Err(BfErr::Code(*err));
     }
@@ -614,16 +574,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_PERM));
     }
 
-    bf_args
-        .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            TaskControlMsg::BootPlayer {
-                player: *player,
-                sender_permissions: task_perms,
-            },
-        ))
-        .expect("scheduler is not listening");
+    bf_args.task_scheduler_client.boot_player(*player);
 
     Ok(Ret(v_none()))
 }
@@ -839,10 +790,7 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    bf_args
-        .scheduler_sender
-        .send((bf_args.exec_state.task_id, TaskControlMsg::Checkpoint))
-        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
+    bf_args.task_scheduler_client.checkpoint();
 
     Ok(Ret(v_bool(true)))
 }
@@ -940,15 +888,7 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    bf_args
-        .scheduler_sender
-        .send((
-            bf_args.exec_state.task_id,
-            TaskControlMsg::RefreshServerOptions {
-                player: bf_args.exec_state.top().player,
-            },
-        ))
-        .expect("scheduler is not listening");
+    bf_args.task_scheduler_client.refresh_server_options();
 
     Ok(Ret(v_none()))
 }

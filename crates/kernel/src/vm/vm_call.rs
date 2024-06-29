@@ -272,7 +272,7 @@ impl VM {
             session: session.clone(),
             // TODO: avoid copy here by using List inside BfCallState
             args: args.iter().collect(),
-            scheduler_sender: exec_args.scheduler_sender.clone(),
+            task_scheduler_client: exec_args.task_scheduler_client.clone(),
         };
 
         let call_results = match bf.call(&mut bf_args) {
@@ -321,7 +321,7 @@ impl VM {
             session: sessions,
             // TODO: avoid copy here by using List inside BfCallState
             args: args.iter().collect(),
-            scheduler_sender: exec_args.scheduler_sender.clone(),
+            task_scheduler_client: exec_args.task_scheduler_client.clone(),
         };
 
         match bf.call(&mut bf_args) {

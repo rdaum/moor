@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::debug;
@@ -21,8 +20,8 @@ use moor_compiler::{Name, Offset};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::TaskControlMsg;
-use crate::tasks::{TaskId, VerbCall};
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::tasks::VerbCall;
 use moor_compiler::Program;
 use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::WorldState;
@@ -64,7 +63,7 @@ pub struct Fork {
 
 /// Represents the set of parameters passed to the VM for execution.
 pub struct VmExecParams {
-    pub scheduler_sender: Sender<(TaskId, TaskControlMsg)>,
+    pub task_scheduler_client: TaskSchedulerClient,
     pub max_stack_depth: usize,
 }
 #[derive(PartialEq, Debug, Clone)]

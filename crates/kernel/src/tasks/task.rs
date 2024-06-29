@@ -45,9 +45,9 @@ use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
 
 use crate::tasks::sessions::Session;
-use crate::tasks::task_messages::{TaskControlMsg, TaskStart};
+use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
-use crate::tasks::{ServerOptions, TaskId, VerbCall};
+use crate::tasks::{ServerOptions, TaskId, TaskStart, VerbCall};
 
 #[derive(Debug)]
 pub struct Task {
@@ -76,21 +76,20 @@ impl Task {
         is_background: bool,
         server_options: &ServerOptions,
         session: Arc<dyn Session>,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        task_scheduler_client: TaskSchedulerClient,
         kill_switch: Arc<AtomicBool>,
     ) -> Self {
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
         // the DB or from default constants.
         let (max_seconds, max_ticks, max_stack_depth) = server_options.max_vm_values(is_background);
 
-        let scheduler_control_sender = control_sender.clone();
         let vm_host = VmHost::new(
             task_id,
             max_stack_depth,
             max_ticks,
             Duration::from_secs(max_seconds),
             session.clone(),
-            scheduler_control_sender.clone(),
+            task_scheduler_client,
         );
 
         Task {
@@ -105,19 +104,18 @@ impl Task {
 
     pub fn run_task_loop(
         mut task: Task,
-        control_sender: Sender<(TaskId, TaskControlMsg)>,
+        task_scheduler_client: &TaskSchedulerClient,
         mut world_state: Box<dyn WorldState>,
     ) {
         while task.vm_host.is_running() {
             // Check kill switch.
             if task.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
                 trace!(task_id = ?task.task_id, "Task killed");
-                control_sender
-                    .send((task.task_id, TaskControlMsg::TaskAbortCancelled))
-                    .expect("Could not send kill message");
+                task_scheduler_client.abort_cancelled();
                 break;
             }
-            if let Some(continuation_task) = task.vm_dispatch(&control_sender, world_state.as_mut())
+            if let Some(continuation_task) =
+                task.vm_dispatch(task_scheduler_client, world_state.as_mut())
             {
                 task = continuation_task;
             } else {
@@ -223,7 +221,7 @@ impl Task {
     /// return None, otherwise we will return ourselves.
     fn vm_dispatch(
         mut self,
-        control_sender: &Sender<(TaskId, TaskControlMsg)>,
+        task_scheduler_client: &TaskSchedulerClient,
         world_state: &mut dyn WorldState,
     ) -> Option<Self> {
         // Call the VM
@@ -237,15 +235,8 @@ impl Task {
                 // send a message back asking it to fork the task and return the new task id on a
                 // reply channel.
                 // We will then take the new task id and send it back to the caller.
-                let (send, reply) = oneshot::channel();
                 let task_id_var = fork_request.task_id;
-                control_sender
-                    .send((
-                        self.task_id,
-                        TaskControlMsg::TaskRequestFork(fork_request, send),
-                    ))
-                    .expect("Could not send fork request");
-                let task_id = reply.recv().expect("Could not get fork reply");
+                let task_id = task_scheduler_client.request_fork(fork_request);
                 if let Some(task_id_var) = task_id_var {
                     self.vm_host
                         .set_variable(&task_id_var, v_int(task_id as i64));
@@ -261,9 +252,7 @@ impl Task {
                     .expect("Could not commit world state before suspend");
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
-                    control_sender
-                        .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
-                        .expect("Could not send conflict retry");
+                    task_scheduler_client.conflict_retry(self);
                     return None;
                 }
 
@@ -277,10 +266,7 @@ impl Task {
                 // rather than sleep here, which would make this thread unresponsive to other
                 // messages.
                 let resume_time = delay.map(|delay| Instant::now() + delay);
-
-                control_sender
-                    .send((self.task_id, TaskControlMsg::TaskSuspend(resume_time, self)))
-                    .expect("Could not send suspend message");
+                task_scheduler_client.suspend(resume_time, self);
                 None
             }
             VMHostResponse::SuspendNeedInput => {
@@ -294,9 +280,7 @@ impl Task {
                     .expect("Could not commit world state before suspend");
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
-                    control_sender
-                        .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
-                        .expect("Could not send conflict retry");
+                    task_scheduler_client.conflict_retry(self);
                     return None;
                 }
 
@@ -304,9 +288,7 @@ impl Task {
                 self.vm_host.stop();
 
                 // Consume us, passing back to the scheduler that we're waiting for input.
-                control_sender
-                    .send((self.task_id, TaskControlMsg::TaskRequestInput(self)))
-                    .expect("Could not send suspend message");
+                task_scheduler_client.request_input(self);
                 None
             }
             VMHostResponse::ContinueOk => Some(self),
@@ -316,17 +298,13 @@ impl Task {
                 let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
                 else {
                     warn!("Conflict during commit before complete, asking scheduler to retry task");
-                    control_sender
-                        .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
-                        .expect("Could not send conflict retry");
+                    task_scheduler_client.conflict_retry(self);
                     return None;
                 };
 
                 self.vm_host.stop();
 
-                control_sender
-                    .send((self.task_id, TaskControlMsg::TaskSuccess(result)))
-                    .expect("Could not send success message");
+                task_scheduler_client.success(result);
                 Some(self)
             }
             VMHostResponse::CompleteAbort => {
@@ -338,9 +316,7 @@ impl Task {
 
                 self.vm_host.stop();
 
-                control_sender
-                    .send((self.task_id, TaskControlMsg::TaskAbortCancelled))
-                    .expect("Could not send abort message");
+                task_scheduler_client.abort_cancelled();
                 Some(self)
             }
             VMHostResponse::CompleteException(exception) => {
@@ -356,12 +332,7 @@ impl Task {
                 warn!(task_id = self.task_id, "Task exception");
                 self.vm_host.stop();
 
-                control_sender
-                    .send((
-                        self.task_id,
-                        TaskControlMsg::TaskException(exception.clone()),
-                    ))
-                    .expect("Could not send exception message");
+                task_scheduler_client.exception(exception);
                 Some(self)
             }
             VMHostResponse::AbortLimit(reason) => {
@@ -371,9 +342,7 @@ impl Task {
                 world_state
                     .rollback()
                     .expect("Could not rollback world state");
-                control_sender
-                    .send((self.task_id, TaskControlMsg::TaskAbortLimitsReached(reason)))
-                    .expect("Could not send abort limit message");
+                task_scheduler_client.abort_limits_reached(reason);
                 Some(self)
             }
             VMHostResponse::RollbackRetry => {
@@ -383,9 +352,7 @@ impl Task {
                 world_state
                     .rollback()
                     .expect("Could not rollback world state");
-                control_sender
-                    .send((self.task_id, TaskControlMsg::TaskConflictRetry(self)))
-                    .expect("Could not send rollback retry message");
+                task_scheduler_client.conflict_retry(self);
                 None
             }
         }
@@ -559,9 +526,9 @@ fn find_verb_for_command(
 mod tests {
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::task::Task;
-    use crate::tasks::task_messages::{TaskControlMsg, TaskStart};
-    use crate::tasks::{ServerOptions, TaskId};
-    use crossbeam_channel::{unbounded, Receiver, Sender};
+    use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
+    use crate::tasks::{ServerOptions, TaskId, TaskStart};
+    use crossbeam_channel::{unbounded, Receiver};
     use moor_compiler::compile;
     use moor_db_wiredtiger::WiredTigerDB;
     use moor_values::model::{Event, WorldState, WorldStateSource};
@@ -580,7 +547,7 @@ mod tests {
         Task,
         WiredTigerDB,
         Box<dyn WorldState>,
-        Sender<(TaskId, TaskControlMsg)>,
+        TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,
     ) {
         let program = compile(program).unwrap();
@@ -598,6 +565,7 @@ mod tests {
             fg_ticks: 50000,
             max_stack_depth: 5,
         };
+        let task_scheduler_client = TaskSchedulerClient::new(1, control_sender.clone());
         let mut task = Task::new(
             1,
             SYSTEM_OBJECT,
@@ -606,7 +574,7 @@ mod tests {
             false,
             &server_options,
             noop_session.clone(),
-            &control_sender,
+            task_scheduler_client.clone(),
             kill_switch.clone(),
         );
         let (db, _) = WiredTigerDB::open(None);
@@ -624,17 +592,24 @@ mod tests {
 
         task.setup_task_start(&control_sender, tx.as_mut());
 
-        (kill_switch, task, db, tx, control_sender, control_receiver)
+        (
+            kill_switch,
+            task,
+            db,
+            tx,
+            task_scheduler_client,
+            control_receiver,
+        )
     }
 
     /// Test that we can start a task and run it to completion and it sends the right message with
     /// the result back to the scheduler.
     #[test]
     fn test_simple_run_return() {
-        let (_kill_switch, task, _db, tx, control_sender, control_receiver) =
+        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("return 1 + 1;");
 
-        Task::run_task_loop(task, control_sender, tx);
+        Task::run_task_loop(task, &task_scheduler_client, tx);
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -648,10 +623,10 @@ mod tests {
     /// Trigger a MOO VM exception, and verify it gets sent to scheduler
     #[test]
     fn test_simple_run_exception() {
-        let (_kill_switch, task, _db, tx, control_sender, control_receiver) =
+        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("return 1 / 0;");
 
-        Task::run_task_loop(task, control_sender, tx);
+        Task::run_task_loop(task, &task_scheduler_client, tx);
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -665,10 +640,10 @@ mod tests {
     // notify() will dispatch to the scheduler
     #[test]
     fn test_notify_invocation() {
-        let (_kill_switch, task, _db, tx, control_sender, control_receiver) =
+        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env(r#"notify(#0, "12345"); return 123;"#);
 
-        Task::run_task_loop(task, control_sender, tx);
+        Task::run_task_loop(task, &task_scheduler_client, tx);
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -692,10 +667,10 @@ mod tests {
     /// Trigger a task-suspend-resume
     #[test]
     fn test_simple_run_suspend() {
-        let (_kill_switch, task, db, tx, control_sender, control_receiver) =
+        let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("suspend(1); return 123;");
 
-        Task::run_task_loop(task, control_sender.clone(), tx);
+        Task::run_task_loop(task, &task_scheduler_client, tx);
 
         // Scheduler should have received a TaskSuspend message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -710,7 +685,7 @@ mod tests {
         resume_task.vm_host.resume_execution(v_int(0));
 
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(resume_task, control_sender, tx);
+        Task::run_task_loop(resume_task, &task_scheduler_client, tx);
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
@@ -722,10 +697,10 @@ mod tests {
     /// Trigger a simulated read()
     #[test]
     fn test_simple_run_read() {
-        let (_kill_switch, task, db, tx, control_sender, control_receiver) =
+        let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("return read();");
 
-        Task::run_task_loop(task, control_sender.clone(), tx);
+        Task::run_task_loop(task, &task_scheduler_client, tx);
 
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -740,7 +715,7 @@ mod tests {
 
         // And run its task loop again, with a new transaction.
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(resume_task, control_sender, tx);
+        Task::run_task_loop(resume_task, &task_scheduler_client, tx);
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -754,7 +729,7 @@ mod tests {
     /// Trigger a task-fork
     #[test]
     fn test_simple_run_fork() {
-        let (_kill_switch, task, db, mut tx, control_sender, control_receiver) =
+        let (_kill_switch, task, db, mut tx, task_scheduler_client, control_receiver) =
             setup_test_env("fork (1) return 1 + 1; endfork return 123;");
         tx.commit().unwrap();
 
@@ -768,7 +743,7 @@ mod tests {
         // our fake scheduler.
         let jh = std::thread::spawn(move || {
             let tx = db.new_world_state().unwrap();
-            Task::run_task_loop(task, control_sender, tx)
+            Task::run_task_loop(task, &task_scheduler_client, tx)
         });
 
         // Scheduler should have received a TaskRequestFork message.
