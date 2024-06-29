@@ -29,6 +29,7 @@ use moor_kernel::{
         scheduler_test_utils,
         sessions::{NoopClientSession, Session},
     },
+    SchedulerClient,
 };
 use moor_moot::{execute_moot_test, MootRunner};
 use moor_values::var::{v_none, Objid, Var};
@@ -38,12 +39,12 @@ use common::create_relbox_db;
 
 #[derive(Clone)]
 struct SchedulerMootRunner {
-    scheduler: Arc<Scheduler>,
+    scheduler: SchedulerClient,
     session: Arc<dyn Session>,
     eval_result: Option<Var>,
 }
 impl SchedulerMootRunner {
-    fn new(scheduler: Arc<Scheduler>, session: Arc<dyn Session>) -> Self {
+    fn new(scheduler: SchedulerClient, session: Arc<dyn Session>) -> Self {
         Self {
             scheduler,
             session,
@@ -122,19 +123,19 @@ fn test(db: Arc<dyn Database + Send + Sync>, path: &Path) {
     if path.is_dir() {
         return;
     }
-    let scheduler = Arc::new(Scheduler::new(db, Config::default()));
-    let loop_scheduler = scheduler.clone();
+    let scheduler = Scheduler::new(db, Config::default());
+    let scheduler_client = scheduler.client().unwrap();
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
-        .spawn(move || loop_scheduler.run())
+        .spawn(move || scheduler.run())
         .expect("Failed to spawn scheduler");
 
     execute_moot_test(
-        SchedulerMootRunner::new(scheduler.clone(), Arc::new(NoopClientSession::new())),
+        SchedulerMootRunner::new(scheduler_client.clone(), Arc::new(NoopClientSession::new())),
         path,
     );
 
-    scheduler
+    scheduler_client
         .submit_shutdown("Test is done")
         .expect("Failed to shut down scheduler");
     scheduler_loop_jh

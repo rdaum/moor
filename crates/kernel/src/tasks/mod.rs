@@ -22,6 +22,7 @@ pub mod command_parse;
 pub mod scheduler;
 pub mod sessions;
 
+pub(crate) mod scheduler_client;
 mod task;
 pub mod task_messages;
 pub mod vm_host;
@@ -217,6 +218,7 @@ pub mod vm_test_utils {
 }
 
 pub mod scheduler_test_utils {
+    use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
     use crate::vm::UncaughtException;
     use moor_values::model::CommandError;
@@ -224,7 +226,7 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use super::scheduler::{Scheduler, SchedulerError, TaskResult};
+    use super::scheduler::{SchedulerError, TaskResult};
     use super::TaskHandle;
     use crate::tasks::scheduler_test_utils::SchedulerError::{
         CommandExecutionError, TaskAbortedException,
@@ -262,7 +264,7 @@ pub mod scheduler_test_utils {
     }
 
     pub fn call_command(
-        scheduler: Arc<Scheduler>,
+        scheduler: SchedulerClient,
         session: Arc<dyn Session>,
         player: Objid,
         command: &str,
@@ -271,7 +273,7 @@ pub mod scheduler_test_utils {
     }
 
     pub fn call_eval(
-        scheduler: Arc<Scheduler>,
+        scheduler: SchedulerClient,
         session: Arc<dyn Session>,
         player: Objid,
         code: String,

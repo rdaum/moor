@@ -12,22 +12,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::scheduler::{AbortLimitReason, SchedulerError};
-use crate::tasks::{TaskDescription, TaskHandle, TaskId};
+use crate::tasks::scheduler::AbortLimitReason;
+use crate::tasks::{TaskDescription, TaskId};
 use crate::vm::vm_unwind::UncaughtException;
 use crate::vm::Fork;
-use std::sync::Arc;
 
 use moor_compiler::Program;
 
-use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
 use moor_values::model::Perms;
 use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::var::Var;
 use moor_values::var::{List, Objid};
 use std::time::Instant;
-use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub enum TaskStart {
@@ -53,52 +50,6 @@ pub enum TaskStart {
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
     StartEval { player: Objid, program: Program },
-}
-
-pub enum SchedulerMsg {
-    /// Submit a command to be executed by the player.
-    SubmitCommandTask {
-        player: Objid,
-        command: String,
-        session: Arc<dyn Session>,
-        reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
-    },
-    /// Submit a top-level verb (method) invocation to be executed on behalf of the player.
-    SubmitVerbTask {
-        player: Objid,
-        vloc: Objid,
-        verb: String,
-        args: Vec<Var>,
-        argstr: String,
-        perms: Objid,
-        session: Arc<dyn Session>,
-        reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
-    },
-    /// Submit input to a task that is waiting for it.
-    SubmitTaskInput {
-        player: Objid,
-        input_request_id: Uuid,
-        input: String,
-        reply: oneshot::Sender<Result<(), SchedulerError>>,
-    },
-    /// Submit an out-of-band task to be executed
-    SubmitOobTask {
-        player: Objid,
-        command: Vec<String>,
-        argstr: String,
-        session: Arc<dyn Session>,
-        reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
-    },
-    /// Submit an eval task
-    SubmitEvalTask {
-        player: Objid,
-        perms: Objid,
-        program: Program,
-        sessions: Arc<dyn Session>,
-        reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
-    },
-    /// Submit a (non-task specific) request to shutdown the scheduler
-    Shutdown(String, oneshot::Sender<Result<(), SchedulerError>>),
 }
 
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
