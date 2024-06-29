@@ -1068,7 +1068,9 @@ impl TaskQ {
                 };
 
                 if !task.setup_task_start(&control_sender, world_state.as_mut()) {
-                    error!(task_id, "Could not setup task start");
+                    // Log level should be low here as this happens on every command if `do_command`
+                    // is not found.
+                    trace!(task_start = ?task.task_start, task_id, "Could not setup task start");
                     return;
                 }
 
