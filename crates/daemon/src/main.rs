@@ -278,13 +278,13 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Arc::new(Scheduler::new(db_source, config));
+    let scheduler = Scheduler::new(db_source, config);
+    let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:
-    let loop_scheduler = scheduler.clone();
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
-        .spawn(move || loop_scheduler.run())?;
+        .spawn(move || scheduler.run())?;
 
     let kill_switch = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -308,7 +308,7 @@ fn main() -> Result<(), Report> {
     let rpc_kill_switch = kill_switch.clone();
     let rpc_listen = args.rpc_listen.clone();
     let rpc_narrative_listen = args.narrative_listen.clone();
-    let rpc_scheduler = scheduler.clone();
+    let rpc_scheduler_client = scheduler_client.clone();
     let rpc_loop_thread = std::thread::Builder::new()
         .name("moor-rpc".to_string())
         .spawn(move || {
@@ -316,7 +316,7 @@ fn main() -> Result<(), Report> {
                 keypair,
                 args.connections_file,
                 state_source,
-                rpc_scheduler,
+                rpc_scheduler_client,
                 rpc_listen,
                 rpc_narrative_listen,
                 Some(args.num_io_threads),
@@ -335,7 +335,7 @@ fn main() -> Result<(), Report> {
     rpc_loop_thread.join().expect("RPC thread panicked");
     warn!("RPC thread exited. Departing...");
 
-    scheduler
+    scheduler_client
         .submit_shutdown("System shutting down")
         .expect("Scheduler thread failed to stop");
     scheduler_loop_jh.join().expect("Scheduler thread panicked");

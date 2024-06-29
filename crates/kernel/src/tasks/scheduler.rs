@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -25,9 +25,7 @@ use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use arc_swap::ArcSwap;
 use crossbeam_channel::Receiver;
-use std::sync::Mutex;
 use std::thread::yield_now;
 
 use moor_compiler::compile;
@@ -41,8 +39,8 @@ use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
 use moor_values::var::{Objid, Variant};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use SchedulerError::{
-    CommandExecutionError, CompilationError, InputRequestNotFound, TaskAbortedCancelled,
-    TaskAbortedError, TaskAbortedException, TaskAbortedLimit,
+    CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
+    TaskAbortedException, TaskAbortedLimit,
 };
 
 use crate::config::Config;
@@ -50,9 +48,10 @@ use crate::matching::match_env::MatchEnvironmentParseMatcher;
 use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::ParseMatcher;
 use crate::tasks::scheduler::SchedulerError::VerbProgramFailed;
+use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::Session;
 use crate::tasks::task::Task;
-use crate::tasks::task_messages::{SchedulerMsg, TaskControlMsg, TaskStart};
+use crate::tasks::task_messages::{TaskControlMsg, TaskStart};
 use crate::tasks::{
     ServerOptions, TaskDescription, TaskHandle, TaskId, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS,
     DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
@@ -72,22 +71,22 @@ pub struct Scheduler {
     task_control_sender: Sender<(TaskId, TaskControlMsg)>,
     task_control_receiver: Receiver<(TaskId, TaskControlMsg)>,
 
-    scheduler_sender: Sender<SchedulerMsg>,
-    scheduler_receiver: Receiver<SchedulerMsg>,
+    scheduler_sender: Sender<SchedulerClientMsg>,
+    scheduler_receiver: Receiver<SchedulerClientMsg>,
 
-    config: Arc<Config>,
+    config: Config,
 
-    running: Arc<AtomicBool>,
+    running: bool,
     database: Arc<dyn Database + Send + Sync>,
-    next_task_id: AtomicUsize,
+    next_task_id: usize,
 
-    server_options: ArcSwap<ServerOptions>,
+    server_options: ServerOptions,
 
     /// The internal task queue which holds our suspended tasks, and control records for actively
     /// running tasks.
     /// This is in a lock to allow interior mutability for the scheduler loop, but is only ever
     /// accessed by the scheduler thread.
-    task_q: Arc<Mutex<TaskQ>>,
+    task_q: TaskQ,
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -189,7 +188,6 @@ fn load_int_sysprop(server_options_obj: Objid, name: &str, tx: &dyn WorldState) 
 
 impl Scheduler {
     pub fn new(database: Arc<dyn Database + Send + Sync>, config: Config) -> Self {
-        let config = Arc::new(config);
         let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
         let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
         let task_q = TaskQ {
@@ -204,43 +202,34 @@ impl Scheduler {
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
         };
         Self {
-            running: Arc::new(AtomicBool::new(false)),
+            running: false,
             database,
             next_task_id: Default::default(),
-            task_q: Arc::new(Mutex::new(task_q)),
+            task_q,
             config,
             task_control_sender,
             task_control_receiver,
             scheduler_sender,
             scheduler_receiver,
-            server_options: ArcSwap::new(Arc::new(default_server_options)),
+            server_options: default_server_options,
         }
     }
 
     /// Execute the scheduler loop, run from the server process.
     #[instrument(skip(self))]
-    pub fn run(self: Arc<Self>) {
-        self.running.store(true, Ordering::SeqCst);
+    pub fn run(mut self) {
+        self.running = true;
         info!("Starting scheduler loop");
 
         self.reload_server_options();
-        loop {
-            let is_running = self.running.load(Ordering::SeqCst);
-            if !is_running {
-                warn!("Scheduler stopping");
-                break;
-            }
-            let mut task_q = self
-                .task_q
-                .try_lock()
-                .expect("Task queue lock already taken, this should never happen (scheduler loop being run twice?)");
-
+        while self.running {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
             let now = Instant::now();
 
             // We need to take the tasks that need waking out of the suspended list, and then
             // rehydrate them.
-            let to_wake = task_q
+            let to_wake = self
+                .task_q
                 .suspended
                 .iter()
                 .filter_map(|(task_id, sr)| match &sr.wake_condition {
@@ -250,8 +239,8 @@ impl Scheduler {
                 .collect::<Vec<_>>();
 
             for task_id in to_wake {
-                let sr = task_q.suspended.remove(&task_id).unwrap();
-                if let Err(e) = task_q.resume_task_thread(
+                let sr = self.task_q.suspended.remove(&task_id).unwrap();
+                if let Err(e) = self.task_q.resume_task_thread(
                     sr.task,
                     v_int(0),
                     sr.session,
@@ -265,18 +254,18 @@ impl Scheduler {
 
             // Handle any scheduler submissions...
             if let Ok(msg) = self.scheduler_receiver.try_recv() {
-                self.handle_scheduler_msg(msg, &mut task_q);
+                self.handle_scheduler_msg(msg);
             }
 
             if let Ok((task_id, msg)) = self.task_control_receiver.recv_timeout(SCHEDULER_TICK_TIME)
             {
-                self.handle_task_msg(task_id, msg, &mut task_q);
+                self.handle_task_msg(task_id, msg);
             }
         }
         info!("Scheduler done.");
     }
 
-    pub fn reload_server_options(&self) {
+    pub fn reload_server_options(&mut self) {
         // Load the server options from the database, if possible.
         let db = self
             .database
@@ -287,7 +276,7 @@ impl Scheduler {
             .new_world_state()
             .expect("Could not open transaction to read server properties");
 
-        let mut so = (*self.server_options.load().clone()).clone();
+        let mut so = self.server_options.clone();
 
         let Ok(server_options_obj) =
             tx.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, "server_options")
@@ -321,169 +310,20 @@ impl Scheduler {
         }
         tx.rollback().unwrap();
 
-        self.server_options.store(Arc::new(so));
+        self.server_options = so;
 
         info!("Server options refreshed.");
     }
 
-    /// Submit a command to the scheduler for execution.
-    #[instrument(skip(self, session))]
-    pub fn submit_command_task(
-        &self,
-        player: Objid,
-        command: &str,
-        session: Arc<dyn Session>,
-    ) -> Result<TaskHandle, SchedulerError> {
-        trace!(?player, ?command, "Command submitting");
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerMsg::SubmitCommandTask {
-                player,
-                command: command.to_string(),
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        let reply = receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-    }
-
-    /// Submit a verb task to the scheduler for execution.
-    /// (This path is really only used for the invocations from the serving processes like login,
-    /// user_connected, or the do_command invocation which precedes an internal parser attempt.)
-    #[instrument(skip(self, session))]
-    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
-    #[allow(clippy::too_many_arguments)]
-    pub fn submit_verb_task(
-        &self,
-        player: Objid,
-        vloc: Objid,
-        verb: String,
-        args: Vec<Var>,
-        argstr: String,
-        perms: Objid,
-        session: Arc<dyn Session>,
-    ) -> Result<TaskHandle, SchedulerError> {
-        trace!(?player, ?verb, ?args, "Verb submitting");
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerMsg::SubmitVerbTask {
-                player,
-                vloc,
-                verb,
-                args,
-                argstr,
-                perms,
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        let reply = receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-    }
-
-    /// Receive input that the (suspended) task previously requested, using the given
-    /// `input_request_id`.
-    /// The request is identified by the `input_request_id`, and given the input and resumed under
-    /// a new transaction.
-    pub fn submit_requested_input(
-        &self,
-        player: Objid,
-        input_request_id: Uuid,
-        input: String,
-    ) -> Result<(), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerMsg::SubmitTaskInput {
-                player,
-                input_request_id,
-                input,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        let reply = receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-    }
-
-    #[instrument(skip(self, session))]
-    pub fn submit_out_of_band_task(
-        &self,
-        player: Objid,
-        command: Vec<String>,
-        argstr: String,
-        session: Arc<dyn Session>,
-    ) -> Result<TaskHandle, SchedulerError> {
-        trace!(?player, ?command, "Out-of-band task submitting");
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerMsg::SubmitOobTask {
-                player,
-                command,
-                argstr,
-                session,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        let reply = receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-    }
-
-    /// Submit an eval task to the scheduler for execution.
-    #[instrument(skip(self, sessions))]
-    pub fn submit_eval_task(
-        &self,
-        player: Objid,
-        perms: Objid,
-        code: String,
-        sessions: Arc<dyn Session>,
-    ) -> Result<TaskHandle, SchedulerError> {
-        // Compile the text into a verb.
-        let program = match compile(code.as_str()) {
-            Ok(b) => b,
-            Err(e) => return Err(CompilationError(e)),
-        };
-
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerMsg::SubmitEvalTask {
-                player,
-                perms,
-                program,
-                sessions,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        let reply = receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-    }
-
-    #[instrument(skip(self))]
-    pub fn submit_shutdown(&self, msg: &str) -> Result<(), SchedulerError> {
-        // If we can't deliver a shutdown message, that's really a cause for panic!
-        let (send, reply) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerMsg::Shutdown(msg.to_string(), send))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
-        reply
-            .recv()
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    pub fn client(&self) -> Result<SchedulerClient, SchedulerError> {
+        Ok(SchedulerClient::new(self.scheduler_sender.clone()))
     }
 
     /// Start a transaction, match the object name and verb name, and if it exists and the
     /// permissions are correct, program the verb with the given code.
     // TODO: this probably doesn't belong on scheduler
     #[instrument(skip(self))]
-    pub fn program_verb(
+    fn program_verb(
         &self,
         player: Objid,
         perms: Objid,
@@ -550,9 +390,10 @@ impl Scheduler {
 }
 
 impl Scheduler {
-    fn handle_scheduler_msg(&self, msg: SchedulerMsg, task_q: &mut TaskQ) {
+    fn handle_scheduler_msg(&mut self, msg: SchedulerClientMsg) {
+        let task_q = &mut self.task_q;
         match msg {
-            SchedulerMsg::SubmitCommandTask {
+            SchedulerClientMsg::SubmitCommandTask {
                 player,
                 command,
                 session,
@@ -563,7 +404,8 @@ impl Scheduler {
                     command: command.to_string(),
                 });
 
-                let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -572,7 +414,7 @@ impl Scheduler {
                     None,
                     player,
                     false,
-                    self.server_options.load().as_ref(),
+                    &self.server_options,
                     &self.task_control_sender,
                     self.database.clone(),
                 );
@@ -580,7 +422,7 @@ impl Scheduler {
                     .send(result)
                     .expect("Could not send task handle reply");
             }
-            SchedulerMsg::SubmitVerbTask {
+            SchedulerClientMsg::SubmitVerbTask {
                 player,
                 vloc,
                 verb,
@@ -597,7 +439,8 @@ impl Scheduler {
                     args: List::from_slice(&args),
                     argstr,
                 });
-                let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -606,7 +449,7 @@ impl Scheduler {
                     None,
                     perms,
                     false,
-                    self.server_options.load().as_ref(),
+                    &self.server_options,
                     &self.task_control_sender,
                     self.database.clone(),
                 );
@@ -614,7 +457,7 @@ impl Scheduler {
                     .send(result)
                     .expect("Could not send task handle reply");
             }
-            SchedulerMsg::SubmitTaskInput {
+            SchedulerClientMsg::SubmitTaskInput {
                 player,
                 input_request_id,
                 input,
@@ -673,7 +516,7 @@ impl Scheduler {
                 );
                 reply.send(response).expect("Could not send input reply");
             }
-            SchedulerMsg::SubmitOobTask {
+            SchedulerClientMsg::SubmitOobTask {
                 player,
                 command,
                 argstr,
@@ -688,7 +531,8 @@ impl Scheduler {
                     args: List::from_slice(&args),
                     argstr,
                 });
-                let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -697,7 +541,7 @@ impl Scheduler {
                     None,
                     player,
                     false,
-                    self.server_options.load().as_ref(),
+                    &self.server_options,
                     &self.task_control_sender,
                     self.database.clone(),
                 );
@@ -705,7 +549,7 @@ impl Scheduler {
                     .send(result)
                     .expect("Could not send task handle reply");
             }
-            SchedulerMsg::SubmitEvalTask {
+            SchedulerClientMsg::SubmitEvalTask {
                 player,
                 perms,
                 program,
@@ -713,7 +557,8 @@ impl Scheduler {
                 reply,
             } => {
                 let task_start = Arc::new(TaskStart::StartEval { player, program });
-                let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
@@ -722,7 +567,7 @@ impl Scheduler {
                     None,
                     perms,
                     false,
-                    self.server_options.load().as_ref(),
+                    &self.server_options,
                     &self.task_control_sender,
                     self.database.clone(),
                 );
@@ -730,19 +575,33 @@ impl Scheduler {
                     .send(result)
                     .expect("Could not send task handle reply");
             }
-            SchedulerMsg::Shutdown(msg, reply) => {
+            SchedulerClientMsg::Shutdown(msg, reply) => {
                 // Send shutdown notifications to all live tasks.
 
-                let result = self.stop(Some(msg), task_q);
+                let result = self.stop(Some(msg));
                 reply.send(result).expect("Could not send shutdown reply");
+            }
+            SchedulerClientMsg::SubmitProgramVerb {
+                player,
+                perms,
+                object_name,
+                verb_name,
+                code,
+                reply,
+            } => {
+                let result = self.program_verb(player, perms, object_name, verb_name, code);
+                reply
+                    .send(result)
+                    .expect("Could not send program verb reply");
             }
         }
     }
 
     /// Handle task control messages inbound from tasks.
     /// Note: this function should never be allowed to panic, as it is called from the scheduler main loop.
-    #[instrument(skip(self, task_q))]
-    fn handle_task_msg(&self, task_id: TaskId, msg: TaskControlMsg, task_q: &mut TaskQ) {
+    #[instrument(skip(self))]
+    fn handle_task_msg(&mut self, task_id: TaskId, msg: TaskControlMsg) {
+        let task_q = &mut self.task_q;
         match msg {
             TaskControlMsg::TaskSuccess(value) => {
                 // Commit the session.
@@ -766,7 +625,7 @@ impl Scheduler {
                     task,
                     &self.task_control_sender,
                     self.database.clone(),
-                    self.server_options.load().as_ref(),
+                    &self.server_options,
                 );
             }
             TaskControlMsg::TaskVerbNotFound(this, verb) => {
@@ -871,7 +730,7 @@ impl Scheduler {
                     };
                     task.session.clone()
                 };
-                self.process_fork_request(fork_request, reply, new_session, task_q);
+                self.process_fork_request(fork_request, reply, new_session);
             }
             TaskControlMsg::TaskSuspend(resume_time, task) => {
                 debug!(task_id, "Handling task suspension until {:?}", resume_time);
@@ -1018,7 +877,7 @@ impl Scheduler {
             }
             TaskControlMsg::Shutdown(msg) => {
                 info!("Shutting down scheduler. Reason: {msg:?}");
-                self.stop(msg, task_q)
+                self.stop(msg)
                     .expect("Could not shutdown scheduler cleanly");
             }
             TaskControlMsg::Checkpoint => {
@@ -1072,13 +931,12 @@ impl Scheduler {
         }
     }
 
-    #[instrument(skip(self, session, task_q))]
+    #[instrument(skip(self, session))]
     fn process_fork_request(
-        &self,
+        &mut self,
         fork_request: Fork,
         reply: oneshot::Sender<TaskId>,
         session: Arc<dyn Session>,
-        task_q: &mut TaskQ,
     ) {
         let mut to_remove = vec![];
 
@@ -1094,8 +952,9 @@ impl Scheduler {
             fork_request,
             suspended,
         });
-        let task_id = self.next_task_id.fetch_add(1, Ordering::SeqCst);
-        match task_q.start_task_thread(
+        let task_id = self.next_task_id;
+        self.next_task_id += 1;
+        match self.task_q.start_task_thread(
             task_id,
             task_start,
             player,
@@ -1103,7 +962,7 @@ impl Scheduler {
             delay,
             progr,
             false,
-            self.server_options.load().as_ref(),
+            &self.server_options,
             &self.task_control_sender,
             self.database.clone(),
         ) {
@@ -1122,15 +981,15 @@ impl Scheduler {
     }
 
     /// Stop the scheduler run loop.
-    fn stop(&self, msg: Option<String>, task_q: &mut TaskQ) -> Result<(), SchedulerError> {
+    fn stop(&mut self, msg: Option<String>) -> Result<(), SchedulerError> {
         // Send shutdown notification to all live tasks.
-        for (_, task) in task_q.tasks.iter() {
+        for (_, task) in self.task_q.tasks.iter() {
             let _ = task.session.shutdown(msg.clone());
         }
         warn!("Issuing clean shutdown...");
         {
             // Send shut down to all the tasks.
-            for (_, task) in task_q.tasks.drain() {
+            for (_, task) in self.task_q.tasks.drain() {
                 task.kill_switch.store(true, Ordering::SeqCst);
             }
         }
@@ -1139,7 +998,7 @@ impl Scheduler {
         // Then spin until they're all done.
         loop {
             {
-                if task_q.tasks.is_empty() {
+                if self.task_q.tasks.is_empty() {
                     break;
                 }
             }
@@ -1147,7 +1006,7 @@ impl Scheduler {
         }
 
         warn!("All tasks finished.  Stopping scheduler.");
-        self.running.store(false, Ordering::SeqCst);
+        self.running = false;
 
         Ok(())
     }
