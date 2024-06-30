@@ -75,10 +75,6 @@ impl Database for RelBoxWorldState {
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
-
-    fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError> {
-        Ok(self)
-    }
 }
 
 #[cfg(test)]

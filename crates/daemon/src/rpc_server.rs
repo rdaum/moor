@@ -21,7 +21,7 @@ use std::time::SystemTime;
 
 use eyre::{Context, Error};
 
-use moor_db::DatabaseFlavour;
+use moor_db::{Database, DatabaseFlavour};
 use moor_kernel::SchedulerClient;
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -37,7 +37,6 @@ use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::TaskHandle;
 use moor_values::model::NarrativeEvent;
-use moor_values::model::WorldStateSource;
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use moor_values::var::Symbol;
@@ -62,7 +61,7 @@ use crate::connections_rb::ConnectionsRb;
 pub struct RpcServer {
     keypair: Key<64>,
     publish: Arc<Mutex<Socket>>,
-    world_state_source: Arc<dyn WorldStateSource>,
+    world_state_source: Arc<dyn Database>,
     scheduler: SchedulerClient,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
 }
@@ -80,7 +79,7 @@ impl RpcServer {
         connections_db_path: PathBuf,
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
-        wss: Arc<dyn WorldStateSource>,
+        wss: Arc<dyn Database>,
         scheduler: SchedulerClient,
         // For determining the flavor for the connections database.
         db_flavor: DatabaseFlavour,
@@ -1056,7 +1055,7 @@ impl RpcServer {
 pub(crate) fn zmq_loop(
     keypair: Key<64>,
     connections_db_path: PathBuf,
-    wss: Arc<dyn WorldStateSource>,
+    db: Arc<dyn Database>,
     scheduler_client: SchedulerClient,
     rpc_endpoint: String,
     narrative_endpoint: String,
@@ -1074,7 +1073,7 @@ pub(crate) fn zmq_loop(
         connections_db_path,
         zmq_ctx.clone(),
         &narrative_endpoint,
-        wss,
+        db,
         scheduler_client,
         db_flavour,
     ));

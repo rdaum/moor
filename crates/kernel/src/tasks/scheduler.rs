@@ -89,7 +89,7 @@ pub struct Scheduler {
     config: Config,
 
     running: bool,
-    database: Arc<dyn Database + Send + Sync>,
+    database: Arc<dyn Database>,
     next_task_id: usize,
 
     server_options: ServerOptions,
@@ -293,12 +293,8 @@ impl Scheduler {
 
     pub fn reload_server_options(&mut self) {
         // Load the server options from the database, if possible.
-        let db = self
+        let mut tx = self
             .database
-            .clone()
-            .world_state_source()
-            .expect("Could open database to read server properties");
-        let mut tx = db
             .new_world_state()
             .expect("Could not open transaction to read server properties");
 
@@ -357,9 +353,8 @@ impl Scheduler {
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Objid, Symbol), SchedulerError> {
-        let db = self.database.clone().world_state_source().unwrap();
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
-            let mut tx = db.new_world_state().unwrap();
+            let mut tx = self.database.new_world_state().unwrap();
 
             let match_env = WsMatchEnv {
                 ws: tx.as_mut(),
@@ -996,10 +991,6 @@ impl TaskQ {
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: Arc<dyn Database>,
     ) -> Result<TaskHandle, SchedulerError> {
-        let state_source = database
-            .world_state_source()
-            .expect("Unable to instantiate database");
-
         let (sender, receiver) = oneshot::channel();
 
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
@@ -1020,7 +1011,7 @@ impl TaskQ {
         if let Some(delay) = delay_start {
             // However we'll need the task to be in a resumable state, which means executing
             //  setup_task_start in a transaction.
-            let mut world_state = match state_source.new_world_state() {
+            let mut world_state = match database.new_world_state() {
                 Ok(ws) => ws,
                 Err(e) => {
                     error!(error = ?e, "Could not start transaction for delayed task");
@@ -1070,7 +1061,7 @@ impl TaskQ {
                 trace!(?task_id, "Starting up task");
                 // Start the db transaction, which will initially be used to resolve the verb before the task
                 // starts executing.
-                let mut world_state = match state_source.new_world_state() {
+                let mut world_state = match database.new_world_state() {
                     Ok(ws) => ws,
                     Err(e) => {
                         error!(error = ?e, "Could not start transaction for task");
@@ -1109,11 +1100,6 @@ impl TaskQ {
         //   Start a new transaction
         //   Create a new control record
         //   Push resume-value into the task
-
-        let state_source = database
-            .world_state_source()
-            .expect("Unable to instantiate database");
-
         let task_id = task.task_id;
         let player = task.perms;
         let kill_switch = task.kill_switch.clone();
@@ -1133,7 +1119,7 @@ impl TaskQ {
             .name(thread_name)
             .spawn(move || {
                 // Start its new transaction...
-                let world_state = match state_source.new_world_state() {
+                let world_state = match database.new_world_state() {
                     Ok(ws) => ws,
                     Err(e) => {
                         error!(error = ?e, "Could not start transaction for task resumption");

@@ -229,7 +229,7 @@ fn main() -> Result<(), Report> {
     };
 
     info!("Daemon starting...");
-    let (db_source, freshly_made) = match args.db_flavour {
+    let (database, freshly_made) = match args.db_flavour {
         DatabaseFlavour::WiredTiger => {
             let db_source_builder = WiredTigerDatabaseBuilder::new().with_path(args.db.clone());
             let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
@@ -255,7 +255,7 @@ fn main() -> Result<(), Report> {
         } else {
             info!("Loading textdump...");
             let start = std::time::Instant::now();
-            let mut loader_interface = db_source
+            let mut loader_interface = database
                 .clone()
                 .loader_client()
                 .expect("Unable to get loader interface from database");
@@ -274,14 +274,10 @@ fn main() -> Result<(), Report> {
 
     let tasks_db = Box::new(NoopTasksDb {});
 
-    let state_source = db_source
-        .clone()
-        .world_state_source()
-        .expect("Could not get world state source from db");
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(db_source, tasks_db, config);
+    let scheduler = Scheduler::new(database.clone(), tasks_db, config);
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:
@@ -293,7 +289,7 @@ fn main() -> Result<(), Report> {
 
     // Background DB checkpoint thread.
     let checkpoint_kill_switch = kill_switch.clone();
-    let checkpoint_state_source = state_source.clone();
+    let checkpoint_state_source = database.clone();
     let _checkpoint_thread = std::thread::Builder::new()
         .name("moor-checkpoint".to_string())
         .spawn(move || loop {
@@ -318,7 +314,7 @@ fn main() -> Result<(), Report> {
             let _ = zmq_loop(
                 keypair,
                 args.connections_file,
-                state_source,
+                database,
                 rpc_scheduler_client,
                 rpc_listen,
                 rpc_narrative_listen,

@@ -37,9 +37,8 @@ pub use relational_worldstate::RelationalWorldStateTransaction;
 pub use worldstate_tables::{WorldStateSequence, WorldStateTable};
 pub use worldstate_tests::*;
 
-pub trait Database {
+pub trait Database: Send + Sync + WorldStateSource {
     fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
-    fn world_state_source(self: Arc<Self>) -> Result<Arc<dyn WorldStateSource>, WorldStateError>;
 }
 
 /// Possible backend storage engines.

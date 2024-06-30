@@ -54,14 +54,14 @@ pub fn load_textdump(db: Arc<dyn Database>) {
 }
 
 #[cfg(feature = "relbox")]
-pub fn create_relbox_db() -> Arc<dyn Database + Send + Sync> {
+pub fn create_relbox_db() -> Arc<dyn Database> {
     let (db, _) = RelBoxWorldState::open(None, 1 << 30);
     let db = Arc::new(db);
     load_textdump(db.clone());
     db
 }
 
-pub fn create_wiredtiger_db() -> Arc<dyn Database + Send + Sync> {
+pub fn create_wiredtiger_db() -> Arc<dyn Database> {
     let (db, _) = WiredTigerDB::open(None);
     let db = Arc::new(db);
     load_textdump(db.clone());
@@ -69,7 +69,7 @@ pub fn create_wiredtiger_db() -> Arc<dyn Database + Send + Sync> {
 }
 
 #[allow(dead_code)]
-pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) {
+pub fn compile_verbs(db: Arc<dyn Database>, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec().unwrap();
@@ -103,7 +103,7 @@ pub fn compile_verbs(db: Arc<dyn WorldStateSource>, verbs: &[(&str, &Program)]) 
 }
 
 #[allow(dead_code)]
-pub fn run_as_verb(db: Arc<dyn WorldStateSource>, expression: &str) -> ExecResult {
+pub fn run_as_verb(db: Arc<dyn Database>, expression: &str) -> ExecResult {
     let binary = compile(expression).unwrap();
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db.clone(), &[(&verb_uuid, &binary)]);
@@ -136,13 +136,10 @@ pub fn eval(
 pub trait AssertRunAsVerb {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T);
 }
-impl AssertRunAsVerb for Arc<dyn Database + Send + Sync> {
+impl AssertRunAsVerb for Arc<dyn Database> {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T) {
         let expected = expected.into();
-        let actual = run_as_verb(
-            self.clone().world_state_source().unwrap(),
-            expression.as_ref(),
-        );
+        let actual = run_as_verb(self.clone(), expression.as_ref());
         assert_eq!(actual, expected, "{}", expression.as_ref());
     }
 }
