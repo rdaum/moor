@@ -14,11 +14,13 @@
 
 use moor_moot::{test_db_path, ManagedChild};
 use serial_test::serial;
+use std::net::TcpListener;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex, OnceLock},
 };
+use uuid::Uuid;
 
 /// The current DB implementation reserves this much RAM. Default is 1TB, and
 /// we rely on `vm.overcommit_memory` to allow this to be allocated. Instead of
@@ -41,13 +43,22 @@ fn daemon_host_bin() -> &'static PathBuf {
     })
 }
 
-fn start_daemon(workdir: &Path) -> ManagedChild {
+/// Base path for the PUB/SUB IPC sockets used by the daemon, a unique UUID is appended to this.
+const NARRATIVE_PATH_ROOT: &str = "ipc:///tmp/narrative-moor-moot-daemon-";
+/// Base path for the RPC IPC sockets used by the daemon, a unique UUID is appended to this.
+const RPC_PATH_ROOT: &str = "ipc:///tmp/rpc-moor-moot-daemon.sock-";
+
+fn start_daemon(workdir: &Path, uuid: Uuid) -> ManagedChild {
     ManagedChild::new(
         "daemon",
         Command::new(daemon_host_bin())
             .arg("--textdump")
             .arg(test_db_path())
             .arg("--generate-keypair")
+            .arg("--narrative-listen")
+            .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
+            .arg("--rpc-listen")
+            .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
             .arg("--max-buffer-pool-bytes")
             .arg(MAX_BUFFER_POOL_BYTES.to_string())
             .arg("test.db")
@@ -73,10 +84,16 @@ fn telnet_host_bin() -> &'static PathBuf {
     })
 }
 
-fn start_telnet_host() -> ManagedChild {
+fn start_telnet_host(uuid: Uuid, port: u16) -> ManagedChild {
     ManagedChild::new(
         "telnet-host",
         Command::new(telnet_host_bin())
+            .arg("--narrative-server")
+            .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
+            .arg("--rpc-server")
+            .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
+            .arg("--telnet-address")
+            .arg(format!("0.0.0.0:{}", port))
             .arg("--debug")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -91,9 +108,19 @@ fn start_telnet_host() -> ManagedChild {
 fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     use moor_moot::{execute_moot_test, TelnetMootRunner};
 
+    // Assign our unique identifier for this test run to be used in the paths for the IPC sockets.
+    let uuid = Uuid::new_v4();
+
     let daemon_workdir = tempfile::TempDir::new().expect("Failed to create temporary directory");
-    let daemon = Arc::new(Mutex::new(start_daemon(daemon_workdir.path())));
-    let telnet_host = Arc::new(Mutex::new(start_telnet_host()));
+
+    let daemon = Arc::new(Mutex::new(start_daemon(daemon_workdir.path(), uuid)));
+
+    // Ask the OS for a random unused port. Then immediately drop the listener and use the port
+    // for the telnet host.
+    let listener = TcpListener::bind("0.0.0.0:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let telnet_host = Arc::new(Mutex::new(start_telnet_host(uuid, port)));
 
     let daemon_clone = daemon.clone();
     let telnet_host_clone = telnet_host.clone();
@@ -103,7 +130,7 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     };
 
     execute_moot_test(
-        TelnetMootRunner::new(8080),
+        TelnetMootRunner::new(port),
         &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests/moot")
             .join(moot_file)
