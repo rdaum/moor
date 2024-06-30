@@ -40,7 +40,7 @@ type Result<T> = std::result::Result<T, RelationalError>;
 
 impl<Tables> WiredTigerRelTransaction<Tables>
 where
-    Tables: WiredTigerRelation,
+    Tables: WiredTigerRelation + Send,
 {
     pub(crate) fn new(session: Session, sequences: Arc<[AtomicI64; MAX_NUM_SEQUENCES]>) -> Self {
         WiredTigerRelTransaction {
@@ -88,7 +88,7 @@ fn err_map(e: Error) -> RelationalError {
 
 impl<Tables> RelationalTransaction<Tables> for WiredTigerRelTransaction<Tables>
 where
-    Tables: WiredTigerRelation,
+    Tables: WiredTigerRelation + Send,
 {
     fn commit(&self) -> CommitResult {
         match self.session.commit() {

@@ -16,6 +16,7 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr::null;
+use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 
 use tracing::info;
@@ -23,7 +24,9 @@ use tracing::info;
 use crate::bindings;
 use crate::bindings::open_config::OpenConfig;
 use crate::bindings::session_config::SessionConfig;
-use crate::bindings::{session, wiredtiger::WT_CONNECTION, wiredtiger::WT_EVENT_HANDLER, Error};
+use crate::bindings::{
+    session, wiredtiger::WT_CONNECTION, wiredtiger::WT_EVENT_HANDLER, Error, Session,
+};
 
 pub struct Connection {
     connection: *mut WT_CONNECTION,
@@ -74,10 +77,7 @@ impl Connection {
         if result != 0 {
             return Err(result as u8);
         }
-        Ok(session::Session {
-            session,
-            _connection: self.clone(),
-        })
+        Ok(Session::new(session, self))
     }
 
     pub fn close(&self) -> Result<(), Error> {

@@ -30,7 +30,7 @@ pub const MAX_NUM_SEQUENCES: usize = 32;
 pub struct WiredTigerRelDb<TableType>
 where
     TableType: WiredTigerRelation,
-    TableType: Copy,
+    TableType: Copy + Send,
 {
     connection: Arc<Connection>,
     sequence_table: TableType,
@@ -43,7 +43,7 @@ where
 impl<TableType> WiredTigerRelDb<TableType>
 where
     TableType: WiredTigerRelation,
-    TableType: Copy,
+    TableType: Copy + Send,
 {
     pub fn new(path: &Path, sequence_table: TableType, transient: bool) -> Arc<Self> {
         // The directory needs to exist if not already there.
@@ -166,9 +166,10 @@ where
     }
 }
 
-impl<TableType: Copy> Drop for WiredTigerRelDb<TableType>
+impl<TableType> Drop for WiredTigerRelDb<TableType>
 where
     TableType: WiredTigerRelation,
+    TableType: Copy + Send,
 {
     fn drop(&mut self) {
         debug!("Synchronizing sequences...");

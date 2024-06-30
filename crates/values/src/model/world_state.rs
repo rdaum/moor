@@ -37,7 +37,7 @@ use crate::var::Var;
 /// Each world state is expected to have a consistent shapshotted view of the world, and to
 /// commit any changes to the world at the end of the transaction, or be capable of rolling back
 /// on failure.
-pub trait WorldState {
+pub trait WorldState: Send {
     // TODO: Combine worlstate owner & flags check into one call, to make perms check more efficient
 
     /// Get the set of all objects which are 'players' in the world.

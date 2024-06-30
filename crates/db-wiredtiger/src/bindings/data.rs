@@ -15,6 +15,7 @@
 use std::ffi::CString;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 
 use crate::bindings::cursor::Datum;
 use crate::bindings::wiredtiger::{
@@ -113,7 +114,7 @@ impl Unpack {
         let data = datum.as_ref();
         let err = unsafe {
             wiredtiger_unpack_start(
-                session.session,
+                session.session.load(Ordering::Relaxed),
                 format.as_ptr(),
                 data.as_slice().as_ptr() as _,
                 data.len(),
@@ -200,7 +201,7 @@ impl Pack {
         let buffer = Pin::new(buffer);
         let err = unsafe {
             wiredtiger_pack_start(
-                session.session,
+                session.session.load(Ordering::Relaxed),
                 format.as_ptr(),
                 buffer.as_ptr() as _,
                 buffer_size,

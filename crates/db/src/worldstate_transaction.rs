@@ -31,7 +31,7 @@ use moor_values::var::Var;
 /// A trait defining a generic interface to a database for storing the per-attribute values
 /// of our objects and their properties and verbs.  Used by DbTxWorldState.
 /// One instance per transaction.
-pub trait WorldStateTransaction {
+pub trait WorldStateTransaction: Send {
     /// Check the validity of the given object.
     fn object_valid(&self, obj: Objid) -> Result<bool, WorldStateError>;
 

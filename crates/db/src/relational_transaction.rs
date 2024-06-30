@@ -39,7 +39,7 @@ impl Display for RelationalError {
 impl Error for RelationalError {}
 
 /// Traits defining a generic quasi binary-relational database transaction.
-pub trait RelationalTransaction<Relation> {
+pub trait RelationalTransaction<Relation>: Send {
     fn commit(&self) -> CommitResult;
     fn rollback(&self);
 

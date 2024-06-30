@@ -20,12 +20,12 @@ use moor_values::{AsByteBuffer, EncodingError};
 use relbox::{RelationError, Transaction};
 use std::fmt::Debug;
 
-pub struct RelboxTransaction<T> {
+pub struct RelboxTransaction<T: Send> {
     tx: Transaction,
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T> RelboxTransaction<T> {
+impl<T: Send> RelboxTransaction<T> {
     pub fn new(tx: Transaction) -> Self {
         Self {
             tx,
@@ -87,7 +87,7 @@ impl<DomainA: AsByteBuffer, DomainB: AsByteBuffer> Composite<DomainA, DomainB> {
 
 impl<T> RelationalTransaction<T> for RelboxTransaction<T>
 where
-    T: Into<usize>,
+    T: Into<usize> + Send,
 {
     fn commit(&self) -> CommitResult {
         if self.tx.commit().is_err() {
