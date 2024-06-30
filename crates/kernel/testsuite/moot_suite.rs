@@ -120,7 +120,7 @@ fn test_wiredtiger(path: &Path) {
 }
 test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
 
-fn test(db: Arc<dyn Database>, path: &Path) {
+fn test(db: Box<dyn Database>, path: &Path) {
     if path.is_dir() {
         return;
     }

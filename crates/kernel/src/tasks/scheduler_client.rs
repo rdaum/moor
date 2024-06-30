@@ -191,7 +191,7 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
-    pub fn program_verb(
+    pub fn submit_verb_program(
         &self,
         player: Objid,
         perms: Objid,
@@ -209,6 +209,38 @@ impl SchedulerClient {
                 code,
                 reply,
             })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    pub fn request_system_property(
+        &self,
+        player: Objid,
+        object: Symbol,
+        property: Symbol,
+    ) -> Result<Var, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestSystemProperty {
+                player,
+                object,
+                property,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    pub fn request_checkpoint(&self) -> Result<(), SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::Checkpoint(reply))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
 
         receive
@@ -268,6 +300,16 @@ pub enum SchedulerClientMsg {
         code: Vec<String>,
         reply: oneshot::Sender<Result<(Objid, Symbol), SchedulerError>>,
     },
+    /// Request the value of a $property.
+    /// (Used by the login process)
+    RequestSystemProperty {
+        player: Objid,
+        object: Symbol,
+        property: Symbol,
+        reply: oneshot::Sender<Result<Var, SchedulerError>>,
+    },
+    /// Submit a request to checkpoint the database.
+    Checkpoint(oneshot::Sender<Result<(), SchedulerError>>),
     /// Submit a (non-task specific) request to shutdown the scheduler
     Shutdown(String, oneshot::Sender<Result<(), SchedulerError>>),
 }

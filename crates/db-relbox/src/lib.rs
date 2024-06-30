@@ -13,7 +13,6 @@
 //
 
 use moor_db::Database;
-use std::sync::Arc;
 
 mod rb_worldstate;
 mod rel_transaction;
@@ -46,10 +45,10 @@ impl RelBoxDatabaseBuilder {
 
     /// Returns a new database instance. The second value in the result tuple is true if the
     /// database was newly created, and false if it was already present.
-    pub fn open_db(&self) -> Result<(Arc<dyn Database>, bool), String> {
+    pub fn open_db(&self) -> Result<(Box<dyn Database>, bool), String> {
         let (db, fresh) =
             RelBoxWorldState::open(self.path.clone(), self.memory_size.unwrap_or(1 << 40));
-        Ok((Arc::new(db), fresh))
+        Ok((Box::new(db), fresh))
     }
 }
 

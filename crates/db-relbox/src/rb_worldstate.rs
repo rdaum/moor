@@ -69,7 +69,7 @@ impl WorldStateSource for RelBoxWorldState {
 }
 
 impl Database for RelBoxWorldState {
-    fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
+    fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.clone().start_tx();
         let tx = RelboxTransaction::new(tx);
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });

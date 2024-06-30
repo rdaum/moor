@@ -47,29 +47,29 @@ pub fn testsuite_dir() -> PathBuf {
 
 /// Create a minimal Db to support the test harness.
 #[allow(dead_code)]
-pub fn load_textdump(db: Arc<dyn Database>) {
+pub fn load_textdump(db: &dyn Database) {
     let mut tx = db.loader_client().unwrap();
     textdump_load(tx.as_ref(), test_db_path()).expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
 #[cfg(feature = "relbox")]
-pub fn create_relbox_db() -> Arc<dyn Database> {
+pub fn create_relbox_db() -> Box<dyn Database> {
     let (db, _) = RelBoxWorldState::open(None, 1 << 30);
-    let db = Arc::new(db);
-    load_textdump(db.clone());
+    let db = Box::new(db);
+    load_textdump(db.as_ref());
     db
 }
 
-pub fn create_wiredtiger_db() -> Arc<dyn Database> {
+pub fn create_wiredtiger_db() -> Box<dyn Database> {
     let (db, _) = WiredTigerDB::open(None);
-    let db = Arc::new(db);
-    load_textdump(db.clone());
+    let db = Box::new(db);
+    load_textdump(db.as_ref());
     db
 }
 
 #[allow(dead_code)]
-pub fn compile_verbs(db: Arc<dyn Database>, verbs: &[(&str, &Program)]) {
+pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
         let binary = program.make_copy_as_vec().unwrap();
@@ -103,10 +103,10 @@ pub fn compile_verbs(db: Arc<dyn Database>, verbs: &[(&str, &Program)]) {
 }
 
 #[allow(dead_code)]
-pub fn run_as_verb(db: Arc<dyn Database>, expression: &str) -> ExecResult {
+pub fn run_as_verb(db: &dyn Database, expression: &str) -> ExecResult {
     let binary = compile(expression).unwrap();
     let verb_uuid = Uuid::new_v4().to_string();
-    compile_verbs(db.clone(), &[(&verb_uuid, &binary)]);
+    compile_verbs(db, &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
     let result = vm_test_utils::call_verb(
         state.as_mut(),
@@ -136,10 +136,10 @@ pub fn eval(
 pub trait AssertRunAsVerb {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T);
 }
-impl AssertRunAsVerb for Arc<dyn Database> {
+impl AssertRunAsVerb for Box<dyn Database> {
     fn assert_run_as_verb<T: Into<ExecResult>, S: AsRef<str>>(&self, expression: S, expected: T) {
         let expected = expected.into();
-        let actual = run_as_verb(self.clone(), expression.as_ref());
+        let actual = run_as_verb(self.as_ref(), expression.as_ref());
         assert_eq!(actual, expected, "{}", expression.as_ref());
     }
 }

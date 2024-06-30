@@ -14,7 +14,6 @@
 
 use bytes::Bytes;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use moor_values::model::WorldStateError;
@@ -37,8 +36,8 @@ pub use relational_worldstate::RelationalWorldStateTransaction;
 pub use worldstate_tables::{WorldStateSequence, WorldStateTable};
 pub use worldstate_tests::*;
 
-pub trait Database: Send + Sync + WorldStateSource {
-    fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
+pub trait Database: Send + WorldStateSource {
+    fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
 }
 
 /// Possible backend storage engines.

@@ -256,7 +256,6 @@ fn main() -> Result<(), Report> {
             info!("Loading textdump...");
             let start = std::time::Instant::now();
             let mut loader_interface = database
-                .clone()
                 .loader_client()
                 .expect("Unable to get loader interface from database");
             textdump_load(loader_interface.as_ref(), textdump).unwrap();
@@ -277,7 +276,7 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(database.clone(), tasks_db, config);
+    let scheduler = Scheduler::new(database, tasks_db, config);
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:
@@ -289,7 +288,7 @@ fn main() -> Result<(), Report> {
 
     // Background DB checkpoint thread.
     let checkpoint_kill_switch = kill_switch.clone();
-    let checkpoint_state_source = database.clone();
+    let checkpoint_scheduler_client = scheduler_client.clone();
     let _checkpoint_thread = std::thread::Builder::new()
         .name("moor-checkpoint".to_string())
         .spawn(move || loop {
@@ -299,9 +298,9 @@ fn main() -> Result<(), Report> {
             if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
                 break;
             }
-            checkpoint_state_source
-                .checkpoint()
-                .expect("Checkpoint failed");
+            checkpoint_scheduler_client
+                .request_checkpoint()
+                .expect("Failed to submit checkpoint");
         })?;
 
     let rpc_kill_switch = kill_switch.clone();
@@ -314,7 +313,6 @@ fn main() -> Result<(), Report> {
             let _ = zmq_loop(
                 keypair,
                 args.connections_file,
-                database,
                 rpc_scheduler_client,
                 rpc_listen,
                 rpc_narrative_listen,

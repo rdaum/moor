@@ -295,7 +295,7 @@ pub trait WorldState: Send {
     fn rollback(&mut self) -> Result<(), WorldStateError>;
 }
 
-pub trait WorldStateSource: Send + Sync {
+pub trait WorldStateSource: Send {
     /// Create a new world state for the given player.
     /// Returns the world state, and a permissions context for the player.
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError>;

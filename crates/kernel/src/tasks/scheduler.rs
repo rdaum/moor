@@ -89,7 +89,7 @@ pub struct Scheduler {
     config: Config,
 
     running: bool,
-    database: Arc<dyn Database>,
+    database: Box<dyn Database>,
     next_task_id: usize,
 
     server_options: ServerOptions,
@@ -213,7 +213,7 @@ fn load_int_sysprop(server_options_obj: Objid, name: Symbol, tx: &dyn WorldState
 
 impl Scheduler {
     pub fn new(
-        database: Arc<dyn Database + Send + Sync>,
+        database: Box<dyn Database>,
         tasks_database: Box<dyn TasksDb>,
         config: Config,
     ) -> Self {
@@ -269,7 +269,7 @@ impl Scheduler {
                     sr.session,
                     sr.result_sender,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 ) {
                     error!(?task_id, ?e, "Error resuming task");
                 }
@@ -437,7 +437,7 @@ impl Scheduler {
                     false,
                     &self.server_options,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 );
                 reply
                     .send(result)
@@ -472,7 +472,7 @@ impl Scheduler {
                     false,
                     &self.server_options,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 );
                 reply
                     .send(result)
@@ -507,7 +507,7 @@ impl Scheduler {
                     sr.session,
                     sr.result_sender,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 );
                 reply.send(response).expect("Could not send input reply");
             }
@@ -538,7 +538,7 @@ impl Scheduler {
                     false,
                     &self.server_options,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 );
                 reply
                     .send(result)
@@ -564,7 +564,7 @@ impl Scheduler {
                     false,
                     &self.server_options,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 );
                 reply
                     .send(result)
@@ -588,6 +588,59 @@ impl Scheduler {
                 reply
                     .send(result)
                     .expect("Could not send program verb reply");
+            }
+            SchedulerClientMsg::RequestSystemProperty {
+                player: _,
+                object,
+                property,
+                reply,
+            } => {
+                // TODO: check perms here
+
+                let world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        reply
+                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
+                            .expect("Could not send system property reply");
+                        return;
+                    }
+                };
+
+                let object = Symbol::mk_case_insensitive(object.as_str());
+                let property = Symbol::mk_case_insensitive(property.as_str());
+                let Ok(sysprop) =
+                    world_state.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object)
+                else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send system property reply");
+                    return;
+                };
+
+                let Variant::Obj(sysprop) = sysprop.variant() else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send system property reply");
+                    return;
+                };
+
+                let Ok(property_value) =
+                    world_state.retrieve_property(SYSTEM_OBJECT, *sysprop, property)
+                else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send system property reply");
+                    return;
+                };
+
+                reply
+                    .send(Ok(property_value))
+                    .expect("Could not send system property reply");
+            }
+            SchedulerClientMsg::Checkpoint(reply) => {
+                let result = self.checkpoint();
+                reply.send(result).expect("Could not send checkpoint reply");
             }
         }
     }
@@ -619,7 +672,7 @@ impl Scheduler {
                 task_q.retry_task(
                     task,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                     &self.server_options,
                 );
             }
@@ -817,7 +870,7 @@ impl Scheduler {
                     sender_permissions,
                     return_value,
                     &self.task_control_sender,
-                    self.database.clone(),
+                    self.database.as_ref(),
                 );
                 if let Err(e) = result_sender.send(rr) {
                     error!(?e, "Could not send resume task result to requester");
@@ -844,48 +897,8 @@ impl Scheduler {
                     .expect("Could not shutdown scheduler cleanly");
             }
             TaskControlMsg::Checkpoint => {
-                let Some(textdump_path) = self.config.textdump_output.clone() else {
-                    error!("Cannot textdump as textdump_file not configured");
-                    return;
-                };
-
-                let db = self.database.clone();
-                let tr = std::thread::Builder::new()
-                    .name("textdump-thread".to_string())
-                    .spawn(move || {
-                        let loader_client = {
-                            match db.loader_client() {
-                                Ok(tx) => tx,
-                                Err(e) => {
-                                    error!(?e, "Could not start transaction for checkpoint");
-                                    return;
-                                }
-                            }
-                        };
-
-                        let Ok(mut output) = File::create(&textdump_path) else {
-                            error!("Could not open textdump file for writing");
-                            return;
-                        };
-
-                        info!("Creating textdump...");
-                        let textdump = make_textdump(
-                            loader_client.as_ref(),
-                            // just to be compatible with LambdaMOO import for now, hopefully.
-                            Some("** LambdaMOO Database, Format Version 4 **"),
-                        );
-
-                        info!("Writing textdump to {}", textdump_path.display());
-
-                        let mut writer = TextdumpWriter::new(&mut output);
-                        if let Err(e) = writer.write_textdump(&textdump) {
-                            error!(?e, "Could not write textdump");
-                            return;
-                        }
-                        info!("Textdump written to {}", textdump_path.display());
-                    });
-                if let Err(e) = tr {
-                    error!(?e, "Could not start textdump thread");
+                if let Err(e) = self.checkpoint() {
+                    error!(?e, "Could not checkpoint");
                 }
             }
             TaskControlMsg::RefreshServerOptions { .. } => {
@@ -894,6 +907,52 @@ impl Scheduler {
         }
     }
 
+    fn checkpoint(&self) -> Result<(), SchedulerError> {
+        let Some(textdump_path) = self.config.textdump_output.clone() else {
+            error!("Cannot textdump as textdump_file not configured");
+            return Err(SchedulerError::CouldNotStartTask);
+        };
+
+        let loader_client = {
+            match self.database.loader_client() {
+                Ok(tx) => tx,
+                Err(e) => {
+                    error!(?e, "Could not start transaction for checkpoint");
+                    return Err(SchedulerError::CouldNotStartTask);
+                }
+            }
+        };
+
+        let tr = std::thread::Builder::new()
+            .name("textdump-thread".to_string())
+            .spawn(move || {
+                let Ok(mut output) = File::create(&textdump_path) else {
+                    error!("Could not open textdump file for writing");
+                    return;
+                };
+
+                info!("Creating textdump...");
+                let textdump = make_textdump(
+                    loader_client.as_ref(),
+                    // just to be compatible with LambdaMOO import for now, hopefully.
+                    Some("** LambdaMOO Database, Format Version 4 **"),
+                );
+
+                info!("Writing textdump to {}", textdump_path.display());
+
+                let mut writer = TextdumpWriter::new(&mut output);
+                if let Err(e) = writer.write_textdump(&textdump) {
+                    error!(?e, "Could not write textdump");
+                    return;
+                }
+                info!("Textdump written to {}", textdump_path.display());
+            });
+        if let Err(e) = tr {
+            error!(?e, "Could not start textdump thread");
+        }
+
+        Ok(())
+    }
     #[instrument(skip(self, session))]
     fn process_fork_request(
         &mut self,
@@ -927,7 +986,7 @@ impl Scheduler {
             false,
             &self.server_options,
             &self.task_control_sender,
-            self.database.clone(),
+            self.database.as_ref(),
         ) {
             Ok(th) => th,
             Err(e) => {
@@ -989,7 +1048,7 @@ impl TaskQ {
         is_background: bool,
         server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
-        database: Arc<dyn Database>,
+        database: &dyn Database,
     ) -> Result<TaskHandle, SchedulerError> {
         let (sender, receiver) = oneshot::channel();
 
@@ -1055,20 +1114,20 @@ impl TaskQ {
 
         let thread_name = format!("moor-task-{}-player-{}", task_id, player);
         let control_sender = control_sender.clone();
+
+        let mut world_state = match database.new_world_state() {
+            Ok(ws) => ws,
+            Err(e) => {
+                error!(error = ?e, "Could not start transaction for task due to DB error");
+                return Err(SchedulerError::CouldNotStartTask);
+            }
+        };
         std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
                 trace!(?task_id, "Starting up task");
                 // Start the db transaction, which will initially be used to resolve the verb before the task
                 // starts executing.
-                let mut world_state = match database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        error!(error = ?e, "Could not start transaction for task");
-                        return;
-                    }
-                };
-
                 if !task.setup_task_start(&control_sender, world_state.as_mut()) {
                     // Log level should be low here as this happens on every command if `do_command`
                     // is not found.
@@ -1093,13 +1152,23 @@ impl TaskQ {
         session: Arc<dyn Session>,
         result_sender: Option<oneshot::Sender<TaskResult>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
-        database: Arc<dyn Database>,
+        database: &dyn Database,
     ) -> Result<(), SchedulerError> {
         // Take a task out of a suspended state and start running it again.
         // Means:
         //   Start a new transaction
         //   Create a new control record
         //   Push resume-value into the task
+
+        // Start its new transaction...
+        let world_state = match database.new_world_state() {
+            Ok(ws) => ws,
+            Err(e) => {
+                error!(error = ?e, "Could not start transaction for task resumption due to DB error");
+                return Err(SchedulerError::CouldNotStartTask);
+            }
+        };
+
         let task_id = task.task_id;
         let player = task.perms;
         let kill_switch = task.kill_switch.clone();
@@ -1118,15 +1187,6 @@ impl TaskQ {
         std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
-                // Start its new transaction...
-                let world_state = match database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        error!(error = ?e, "Could not start transaction for task resumption");
-                        return;
-                    }
-                };
-
                 Task::run_task_loop(task, &task_scheduler_client, world_state);
                 trace!(?task_id, "Completed task");
             })
@@ -1161,7 +1221,7 @@ impl TaskQ {
         &mut self,
         task: Task,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
-        database: Arc<dyn Database>,
+        database: &dyn Database,
         server_options: &ServerOptions,
     ) {
         // Make sure the old thread is dead.
@@ -1256,7 +1316,7 @@ impl TaskQ {
         sender_permissions: Perms,
         return_value: Var,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
-        database: Arc<dyn Database>,
+        database: &dyn Database,
     ) -> Var {
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
         // request.

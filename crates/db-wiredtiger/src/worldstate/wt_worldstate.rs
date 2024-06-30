@@ -94,7 +94,7 @@ impl WorldStateSource for WiredTigerDB {
 }
 
 impl Database for WiredTigerDB {
-    fn loader_client(self: Arc<Self>) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
+    fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.start_tx();
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))

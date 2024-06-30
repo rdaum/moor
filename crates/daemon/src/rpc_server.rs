@@ -21,7 +21,7 @@ use std::time::SystemTime;
 
 use eyre::{Context, Error};
 
-use moor_db::{Database, DatabaseFlavour};
+use moor_db::DatabaseFlavour;
 use moor_kernel::SchedulerClient;
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -32,11 +32,12 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
 
+use moor_kernel::tasks::scheduler::SchedulerError::CommandExecutionError;
 use moor_kernel::tasks::scheduler::{SchedulerError, TaskResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::TaskHandle;
-use moor_values::model::NarrativeEvent;
+use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use moor_values::var::Symbol;
@@ -61,7 +62,6 @@ use crate::connections_rb::ConnectionsRb;
 pub struct RpcServer {
     keypair: Key<64>,
     publish: Arc<Mutex<Socket>>,
-    world_state_source: Arc<dyn Database>,
     scheduler: SchedulerClient,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
 }
@@ -79,7 +79,6 @@ impl RpcServer {
         connections_db_path: PathBuf,
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
-        wss: Arc<dyn Database>,
         scheduler: SchedulerClient,
         // For determining the flavor for the connections database.
         db_flavor: DatabaseFlavour,
@@ -105,7 +104,6 @@ impl RpcServer {
         );
         Self {
             keypair,
-            world_state_source: wss,
             scheduler,
             connections,
             publish: Arc::new(Mutex::new(publish)),
@@ -195,7 +193,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                make_response(self.clone().request_sys_prop(object, property))
+                make_response(self.clone().request_sys_prop(connection, object, property))
             }
             RpcRequest::LoginCommand(token, args, attach) => {
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
@@ -439,36 +437,30 @@ impl RpcServer {
 
     fn request_sys_prop(
         self: Arc<Self>,
+        player: Objid,
         object: String,
         property: String,
     ) -> Result<RpcResponse, RpcRequestError> {
-        let Ok(world_state) = self.world_state_source.new_world_state() else {
-            return Err(RpcRequestError::CreateSessionFailed);
-        };
-
         let object = Symbol::mk_case_insensitive(object.as_str());
         let property = Symbol::mk_case_insensitive(property.as_str());
-        let Ok(sysprop) = world_state.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object)
-        else {
-            return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
-                "could not access system object".to_string(),
-            ));
+
+        let pv = match self
+            .scheduler
+            .request_system_property(player, object, property)
+        {
+            Ok(pv) => pv,
+            Err(CommandExecutionError(CommandError::NoObjectMatch)) => {
+                return Ok(RpcResponse::SysPropValue(None));
+            }
+            Err(e) => {
+                error!(error = ?e, "Error requesting system property");
+                return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
+                    "error requesting system property".to_string(),
+                ));
+            }
         };
 
-        let Variant::Obj(sysprop) = sysprop.variant() else {
-            return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
-                "system object invalid".to_string(),
-            ));
-        };
-
-        let Ok(property_value) = world_state.retrieve_property(SYSTEM_OBJECT, *sysprop, property)
-        else {
-            return Err(RpcRequestError::ErrorCouldNotRetrieveSysProp(
-                "could not sysprop".to_string(),
-            ));
-        };
-
-        Ok(RpcResponse::SysPropValue(Some(property_value)))
+        Ok(RpcResponse::SysPropValue(Some(pv)))
     }
 
     fn perform_login(
@@ -799,7 +791,7 @@ impl RpcServer {
         match self
             .clone()
             .scheduler
-            .program_verb(connection, connection, object, verb, code)
+            .submit_verb_program(connection, connection, object, verb, code)
         {
             Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb.to_string())),
             Err(SchedulerError::VerbProgramFailed(e)) => Err(RpcRequestError::VerbProgramFailed(e)),
@@ -1055,7 +1047,6 @@ impl RpcServer {
 pub(crate) fn zmq_loop(
     keypair: Key<64>,
     connections_db_path: PathBuf,
-    db: Arc<dyn Database>,
     scheduler_client: SchedulerClient,
     rpc_endpoint: String,
     narrative_endpoint: String,
@@ -1073,7 +1064,6 @@ pub(crate) fn zmq_loop(
         connections_db_path,
         zmq_ctx.clone(),
         &narrative_endpoint,
-        db,
         scheduler_client,
         db_flavour,
     ));
