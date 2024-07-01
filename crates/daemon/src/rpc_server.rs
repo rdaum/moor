@@ -35,7 +35,7 @@ use zmq::{Socket, SocketType};
 use moor_kernel::tasks::scheduler::SchedulerError::CommandExecutionError;
 use moor_kernel::tasks::scheduler::{SchedulerError, TaskResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
-use moor_kernel::tasks::sessions::{Session, SessionError};
+use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_kernel::tasks::TaskHandle;
 use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::util::parse_into_words;
@@ -60,9 +60,9 @@ use crate::rpc_session::RpcSession;
 use crate::connections_rb::ConnectionsRb;
 
 pub struct RpcServer {
+    zmq_context: zmq::Context,
     keypair: Key<64>,
     publish: Arc<Mutex<Socket>>,
-    scheduler: SchedulerClient,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
 }
 
@@ -73,13 +73,13 @@ pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Vec
     };
     bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
 }
+
 impl RpcServer {
     pub fn new(
         keypair: Key<64>,
         connections_db_path: PathBuf,
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
-        scheduler: SchedulerClient,
         // For determining the flavor for the connections database.
         db_flavor: DatabaseFlavour,
     ) -> Self {
@@ -106,14 +106,120 @@ impl RpcServer {
         );
         Self {
             keypair,
-            scheduler,
             connections,
             publish: Arc::new(Mutex::new(publish)),
+            zmq_context,
+        }
+    }
+
+    pub(crate) fn zmq_loop(
+        self: Arc<Self>,
+        rpc_endpoint: String,
+        scheduler_client: SchedulerClient,
+        kill_switch: Arc<AtomicBool>,
+    ) -> eyre::Result<()> {
+        // Start up the ping-ponger timer in a background thread...
+        let t_rpc_server = self.clone();
+        std::thread::Builder::new()
+            .name("rpc-ping-pong".to_string())
+            .spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                t_rpc_server.ping_pong().expect("Unable to play ping-pong");
+            })?;
+
+        // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
+        // are visible...
+        let rpc_socket = self.zmq_context.socket(zmq::REP)?;
+        rpc_socket.bind(&rpc_endpoint)?;
+
+        info!(
+            "0mq server listening on {} with {} IO threads",
+            rpc_endpoint,
+            self.zmq_context.get_io_threads().unwrap()
+        );
+
+        let this = self.clone();
+        loop {
+            if kill_switch.load(Ordering::Relaxed) {
+                info!("Kill switch activated, exiting");
+                return Ok(());
+            }
+            let poll_result = rpc_socket
+                .poll(zmq::POLLIN, 100)
+                .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
+            if poll_result == 0 {
+                continue;
+            }
+            match rpc_socket.recv_multipart(0) {
+                Err(_) => {
+                    info!("ZMQ socket closed, exiting");
+                    return Ok(());
+                }
+                Ok(request) => {
+                    trace!(num_parts = request.len(), "ZQM Request received");
+
+                    // Components are:
+                    if request.len() != 2 {
+                        error!("Invalid request received, ignoring");
+
+                        rpc_socket.send_multipart(
+                            vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                            0,
+                        )?;
+                        continue;
+                    }
+
+                    if request.len() != 2 {
+                        rpc_socket.send_multipart(
+                            vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                            0,
+                        )?;
+                        continue;
+                    }
+
+                    let (client_id, request_body) = (&request[0], &request[1]);
+
+                    let Ok(client_id) = Uuid::from_slice(client_id) else {
+                        rpc_socket.send_multipart(
+                            vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                            0,
+                        )?;
+                        continue;
+                    };
+
+                    // Decode 'request_body' as a bincode'd ClientEvent.
+                    let request =
+                        match bincode::decode_from_slice(request_body, bincode::config::standard())
+                        {
+                            Ok((request, _)) => request,
+                            Err(_) => {
+                                rpc_socket.send_multipart(
+                                    vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                                    0,
+                                )?;
+
+                                continue;
+                            }
+                        };
+
+                    // The remainder of the payload are all the request arguments, which vary depending
+                    // on the type.
+                    let response =
+                        this.clone()
+                            .process_request(scheduler_client.clone(), client_id, request);
+                    rpc_socket.send_multipart(vec![response], 0)?;
+                }
+            }
         }
     }
 
     /// Process a request (originally ZMQ REQ) and produce a reply (becomes ZMQ REP)
-    pub fn process_request(self: Arc<Self>, client_id: Uuid, request: RpcRequest) -> Vec<u8> {
+    pub fn process_request(
+        self: Arc<Self>,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        request: RpcRequest,
+    ) -> Vec<u8> {
         match request {
             RpcRequest::ConnectionEstablish(hostname) => {
                 match self.connections.new_connection(client_id, hostname, None) {
@@ -141,10 +247,12 @@ impl RpcServer {
 
                 if let Some(connect_type) = connect_type {
                     trace!(?player, "Submitting user_connected task");
-                    if let Err(e) =
-                        self.clone()
-                            .submit_connected_task(client_id, player, connect_type)
-                    {
+                    if let Err(e) = self.clone().submit_connected_task(
+                        scheduler_client,
+                        client_id,
+                        player,
+                        connect_type,
+                    ) {
                         error!(error = ?e, "Error submitting user_connected task");
 
                         // Note we still continue to return a successful login result here, hoping for the best
@@ -195,7 +303,12 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                make_response(self.clone().request_sys_prop(connection, object, property))
+                make_response(self.clone().request_sys_prop(
+                    scheduler_client,
+                    connection,
+                    object,
+                    property,
+                ))
             }
             RpcRequest::LoginCommand(token, args, attach) => {
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
@@ -211,10 +324,13 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                make_response(
-                    self.clone()
-                        .perform_login(client_id, connection, args, attach),
-                )
+                make_response(self.clone().perform_login(
+                    scheduler_client,
+                    client_id,
+                    connection,
+                    args,
+                    attach,
+                ))
             }
             RpcRequest::Command(token, auth_token, command) => {
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
@@ -239,7 +355,12 @@ impl RpcServer {
                     );
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
-                make_response(self.clone().perform_command(client_id, connection, command))
+                make_response(self.clone().perform_command(
+                    scheduler_client,
+                    client_id,
+                    connection,
+                    command,
+                ))
             }
             RpcRequest::RequestedInput(token, auth_token, request_id, input) => {
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
@@ -265,10 +386,13 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
                 let request_id = Uuid::from_u128(request_id);
-                make_response(
-                    self.clone()
-                        .respond_input(client_id, connection, request_id, input),
-                )
+                make_response(self.clone().respond_input(
+                    scheduler_client,
+                    client_id,
+                    connection,
+                    request_id,
+                    input,
+                ))
             }
             RpcRequest::OutOfBand(token, auth_token, command) => {
                 let Some(connection) = self.connections.connection_object_for_client(client_id)
@@ -293,10 +417,12 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                make_response(
-                    self.clone()
-                        .perform_out_of_band(client_id, connection, command),
-                )
+                make_response(self.clone().perform_out_of_band(
+                    scheduler_client,
+                    client_id,
+                    connection,
+                    command,
+                ))
             }
 
             RpcRequest::Eval(token, auth_token, evalstr) => {
@@ -322,7 +448,10 @@ impl RpcServer {
                     );
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
-                make_response(self.clone().eval(client_id, connection, evalstr))
+                make_response(
+                    self.clone()
+                        .eval(scheduler_client, client_id, connection, evalstr),
+                )
             }
             RpcRequest::Detach(token) => {
                 let Ok(_) = self.validate_client_token(token, client_id) else {
@@ -365,10 +494,14 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                make_response(
-                    self.clone()
-                        .program_verb(client_id, connection, object, verb, code),
-                )
+                make_response(self.clone().program_verb(
+                    scheduler_client,
+                    client_id,
+                    connection,
+                    object,
+                    verb,
+                    code,
+                ))
             }
         }
     }
@@ -439,6 +572,7 @@ impl RpcServer {
 
     fn request_sys_prop(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         player: Objid,
         object: String,
         property: String,
@@ -446,10 +580,7 @@ impl RpcServer {
         let object = Symbol::mk_case_insensitive(object.as_str());
         let property = Symbol::mk_case_insensitive(property.as_str());
 
-        let pv = match self
-            .scheduler
-            .request_system_property(player, object, property)
-        {
+        let pv = match scheduler_client.request_system_property(player, object, property) {
             Ok(pv) => pv,
             Err(CommandExecutionError(CommandError::NoObjectMatch)) => {
                 return Ok(RpcResponse::SysPropValue(None));
@@ -467,6 +598,7 @@ impl RpcServer {
 
     fn perform_login(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
         args: Vec<String>,
@@ -487,7 +619,7 @@ impl RpcServer {
         let Ok(session) = self.clone().new_session(client_id, connection) else {
             return Err(RpcRequestError::CreateSessionFailed);
         };
-        let task_handle = match self.clone().scheduler.submit_verb_task(
+        let task_handle = match scheduler_client.submit_verb_task(
             connection,
             SYSTEM_OBJECT,
             "do_login_command".to_string(),
@@ -546,10 +678,12 @@ impl RpcServer {
 
         if attach {
             trace!(?player, "Submitting user_connected task");
-            if let Err(e) = self
-                .clone()
-                .submit_connected_task(client_id, player, connect_type)
-            {
+            if let Err(e) = self.clone().submit_connected_task(
+                scheduler_client,
+                client_id,
+                player,
+                connect_type,
+            ) {
                 error!(error = ?e, "Error submitting user_connected task");
 
                 // Note we still continue to return a successful login result here, hoping for the best
@@ -564,6 +698,7 @@ impl RpcServer {
 
     fn submit_connected_task(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         player: Objid,
         initiation_type: ConnectType,
@@ -578,7 +713,7 @@ impl RpcServer {
             ConnectType::Reconnected => "user_reconnected".to_string(),
             ConnectType::Created => "user_created".to_string(),
         };
-        self.scheduler
+        scheduler_client
             .submit_verb_task(
                 player,
                 SYSTEM_OBJECT,
@@ -594,6 +729,7 @@ impl RpcServer {
 
     fn perform_command(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
         command: String,
@@ -614,7 +750,7 @@ impl RpcServer {
 
         let arguments = parse_into_words(command.as_str());
 
-        if let Ok(do_command_task_handle) = self.clone().scheduler.submit_verb_task(
+        if let Ok(do_command_task_handle) = scheduler_client.submit_verb_task(
             connection,
             SYSTEM_OBJECT,
             "do_command".to_string(),
@@ -640,11 +776,7 @@ impl RpcServer {
             "Invoking submit_command_task"
         );
         let parse_command_task_handle =
-            match self
-                .clone()
-                .scheduler
-                .submit_command_task(connection, command.as_str(), session)
-            {
+            match scheduler_client.submit_command_task(connection, command.as_str(), session) {
                 Ok(t) => t,
                 Err(SchedulerError::CommandExecutionError(e)) => {
                     return Err(RpcRequestError::CommandError(e));
@@ -662,6 +794,7 @@ impl RpcServer {
 
     fn respond_input(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
         input_request_id: Uuid,
@@ -675,10 +808,7 @@ impl RpcServer {
         };
 
         // Pass this back over to the scheduler to handle.
-        if let Err(e) =
-            self.clone()
-                .scheduler
-                .submit_requested_input(connection, input_request_id, input)
+        if let Err(e) = scheduler_client.submit_requested_input(connection, input_request_id, input)
         {
             error!(error = ?e, "Error submitting requested input");
             return Err(RpcRequestError::InternalError(e.to_string()));
@@ -709,6 +839,7 @@ impl RpcServer {
     /// Call $do_out_of_band(command)
     fn perform_out_of_band(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
         command: String,
@@ -718,7 +849,7 @@ impl RpcServer {
         };
 
         let command_components = parse_into_words(command.as_str());
-        let task_handle = match self.clone().scheduler.submit_out_of_band_task(
+        let task_handle = match scheduler_client.submit_out_of_band_task(
             connection,
             command_components,
             command,
@@ -740,6 +871,7 @@ impl RpcServer {
 
     fn eval(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
         expression: String,
@@ -748,17 +880,14 @@ impl RpcServer {
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
-        let task_handle = match self
-            .clone()
-            .scheduler
-            .submit_eval_task(connection, connection, expression, session)
-        {
-            Ok(t) => t,
-            Err(e) => {
-                error!(error = ?e, "Error submitting eval task");
-                return Err(RpcRequestError::InternalError(e.to_string()));
-            }
-        };
+        let task_handle =
+            match scheduler_client.submit_eval_task(connection, connection, expression, session) {
+                Ok(t) => t,
+                Err(e) => {
+                    error!(error = ?e, "Error submitting eval task");
+                    return Err(RpcRequestError::InternalError(e.to_string()));
+                }
+            };
         match task_handle.into_receiver().recv() {
             Ok(TaskResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(TaskResult::Error(SchedulerError::CommandExecutionError(e))) => {
@@ -779,6 +908,7 @@ impl RpcServer {
 
     fn program_verb(
         self: Arc<Self>,
+        scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
         object: String,
@@ -790,11 +920,7 @@ impl RpcServer {
         };
 
         let verb = Symbol::mk_case_insensitive(verb.as_str());
-        match self
-            .clone()
-            .scheduler
-            .submit_verb_program(connection, connection, object, verb, code)
-        {
+        match scheduler_client.submit_verb_program(connection, connection, object, verb, code) {
             Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb.to_string())),
             Err(SchedulerError::VerbProgramFailed(e)) => Err(RpcRequestError::VerbProgramFailed(e)),
             Err(e) => {
@@ -1045,117 +1171,11 @@ impl RpcServer {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn zmq_loop(
-    keypair: Key<64>,
-    connections_db_path: PathBuf,
-    scheduler_client: SchedulerClient,
-    rpc_endpoint: String,
-    narrative_endpoint: String,
-    num_threads: Option<i32>,
-    kill_switch: Arc<AtomicBool>,
-    db_flavour: DatabaseFlavour,
-) -> eyre::Result<()> {
-    let zmq_ctx = zmq::Context::new();
-    if let Some(num_threads) = num_threads {
-        zmq_ctx.set_io_threads(num_threads)?;
-    }
-
-    let rpc_server = Arc::new(RpcServer::new(
-        keypair,
-        connections_db_path,
-        zmq_ctx.clone(),
-        &narrative_endpoint,
-        scheduler_client,
-        db_flavour,
-    ));
-
-    // Start up the ping-ponger timer in a background thread...
-    let t_rpc_server = rpc_server.clone();
-    std::thread::Builder::new()
-        .name("rpc-ping-pong".to_string())
-        .spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            t_rpc_server.ping_pong().expect("Unable to play ping-pong");
-        })?;
-
-    // Listen on the RPC socket for incoming requests, so that we can reply.
-    let rpc_socket = zmq_ctx.socket(zmq::REP)?;
-    rpc_socket.bind(&rpc_endpoint)?;
-
-    info!(
-        "0mq server listening on {} with {} IO threads",
-        rpc_endpoint,
-        zmq_ctx.get_io_threads().unwrap()
-    );
-
-    loop {
-        if kill_switch.load(Ordering::Relaxed) {
-            info!("Kill switch activated, exiting");
-            return Ok(());
-        }
-        let poll_result = rpc_socket
-            .poll(zmq::POLLIN, 100)
-            .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
-        if poll_result == 0 {
-            continue;
-        }
-        match rpc_socket.recv_multipart(0) {
-            Err(_) => {
-                info!("ZMQ socket closed, exiting");
-                return Ok(());
-            }
-            Ok(request) => {
-                trace!(num_parts = request.len(), "ZQM Request received");
-
-                // Components are:
-                if request.len() != 2 {
-                    error!("Invalid request received, ignoring");
-
-                    rpc_socket.send_multipart(
-                        vec![make_response(Err(RpcRequestError::InvalidRequest))],
-                        0,
-                    )?;
-                    continue;
-                }
-
-                if request.len() != 2 {
-                    rpc_socket.send_multipart(
-                        vec![make_response(Err(RpcRequestError::InvalidRequest))],
-                        0,
-                    )?;
-                    continue;
-                }
-
-                let (client_id, request_body) = (&request[0], &request[1]);
-
-                let Ok(client_id) = Uuid::from_slice(client_id) else {
-                    rpc_socket.send_multipart(
-                        vec![make_response(Err(RpcRequestError::InvalidRequest))],
-                        0,
-                    )?;
-                    continue;
-                };
-
-                // Decode 'request_body' as a bincode'd ClientEvent.
-                let request =
-                    match bincode::decode_from_slice(request_body, bincode::config::standard()) {
-                        Ok((request, _)) => request,
-                        Err(_) => {
-                            rpc_socket.send_multipart(
-                                vec![make_response(Err(RpcRequestError::InvalidRequest))],
-                                0,
-                            )?;
-
-                            continue;
-                        }
-                    };
-
-                // The remainder of the payload are all the request arguments, which vary depending
-                // on the type.
-                let response = rpc_server.clone().process_request(client_id, request);
-                rpc_socket.send_multipart(vec![response], 0)?;
-            }
-        }
+impl SessionFactory for RpcServer {
+    fn mk_background_session(
+        self: Arc<Self>,
+        player: Objid,
+    ) -> Result<Arc<dyn Session>, SessionError> {
+        self.clone().new_session(Uuid::new_v4(), player)
     }
 }
