@@ -15,6 +15,10 @@
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::verbdef::VerbDef;
 use crate::AsByteBuffer;
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use bytes::{BufMut, Bytes};
 use std::convert::TryInto;
 
@@ -49,6 +53,27 @@ impl VerbInfo {
         // The binary is after the verbdef, which is prefixed with a u32 length.
         let vd_len = u32::from_le_bytes(self.0[0..4].try_into().unwrap()) as usize;
         self.0.slice(4 + vd_len..)
+    }
+}
+
+impl Encode for VerbInfo {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let bytes = self.0.to_vec();
+        bytes.encode(encoder)
+    }
+}
+
+impl Decode for VerbInfo {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let bytes_vec: Vec<u8> = Vec::decode(decoder)?;
+        Ok(Self(Bytes::from(bytes_vec)))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for VerbInfo {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let bytes_vec: Vec<u8> = Vec::borrow_decode(decoder)?;
+        Ok(Self(Bytes::from(bytes_vec)))
     }
 }
 

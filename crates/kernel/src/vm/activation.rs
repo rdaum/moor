@@ -12,6 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use daumtils::{BitArray, Bitset16};
 use lazy_static::lazy_static;
@@ -55,14 +59,14 @@ pub struct Caller {
 // That is:
 //   when created, the stack's current size is stored in `valstack_pos`
 //   when popped off in unwind, the valstack's size is eaten back to pos.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub(crate) enum HandlerType {
     Catch(usize),
     CatchLabel(Label),
     Finally(Label),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub(crate) struct HandlerLabel {
     pub(crate) handler_type: HandlerType,
     pub(crate) valstack_pos: usize,
@@ -98,8 +102,83 @@ pub(crate) struct Frame {
     pub(crate) temp: Var,
 }
 
+impl Encode for Frame {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.program.encode(encoder)?;
+        self.pc.encode(encoder)?;
+
+        // Environment is custom, is not bincodable, so we need to encode it manually, but we just
+        // do it as an array of Option<Var>
+        let mut env = vec![None; self.environment.len()];
+        let env_iter = self.environment.iter();
+        for (i, v) in env_iter {
+            env[i] = Some(v.clone())
+        }
+        env.encode(encoder)?;
+        self.valstack.encode(encoder)?;
+        self.handler_stack.encode(encoder)?;
+        self.temp.encode(encoder)
+    }
+}
+
+impl Decode for Frame {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let program = Program::decode(decoder)?;
+        let pc = usize::decode(decoder)?;
+
+        let env: Vec<Option<Var>> = Vec::decode(decoder)?;
+        let mut environment = BitArray::new();
+        for (i, v) in env.iter().enumerate() {
+            if let Some(v) = v {
+                environment.set(i, v.clone());
+            }
+        }
+
+        let valstack = Vec::decode(decoder)?;
+        let handler_stack = Vec::decode(decoder)?;
+        let temp = Var::decode(decoder)?;
+
+        Ok(Self {
+            program,
+            pc,
+            environment,
+            valstack,
+            handler_stack,
+            temp,
+        })
+    }
+}
+
+impl<'de> BorrowDecode<'de> for Frame {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let program = Program::borrow_decode(decoder)?;
+        let pc = usize::borrow_decode(decoder)?;
+
+        let env: Vec<Option<Var>> = Vec::borrow_decode(decoder)?;
+        let mut environment = BitArray::new();
+        for (i, v) in env.iter().enumerate() {
+            if let Some(v) = v {
+                environment.set(i, v.clone());
+            }
+        }
+
+        let valstack = Vec::borrow_decode(decoder)?;
+        let handler_stack = Vec::borrow_decode(decoder)?;
+        let temp = Var::borrow_decode(decoder)?;
+
+        Ok(Self {
+            program,
+            pc,
+            environment,
+            valstack,
+            handler_stack,
+            temp,
+        })
+    }
+}
+
 /// Activation frame for the call stack.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub(crate) struct Activation {
     /// Frame
     pub(crate) frame: Frame,
