@@ -289,7 +289,7 @@ pub mod scheduler_test_utils {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum TaskStart {
     /// The scheduler is telling the task to parse a command and execute whatever verbs are
     /// associated with it.

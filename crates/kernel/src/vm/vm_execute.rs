@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bincode::{Decode, Encode};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::debug;
@@ -40,7 +41,7 @@ use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{VMExecState, VM};
 
 /// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Fork {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit
