@@ -28,8 +28,8 @@ pub mod scheduler;
 pub mod sessions;
 
 pub(crate) mod scheduler_client;
-mod suspension;
-mod task;
+pub(crate) mod suspension;
+pub(crate) mod task;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod vm_host;
