@@ -71,8 +71,6 @@ pub struct VmHost {
     max_ticks: usize,
     /// The maximum amount of time allotted to this task
     max_time: Duration,
-    sessions: Arc<dyn Session>,
-    task_scheduler_client: TaskSchedulerClient,
     running: bool,
 
     unsync: PhantomUnsync,
@@ -95,8 +93,6 @@ impl VmHost {
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
-        sessions: Arc<dyn Session>,
-        task_scheduler_client: TaskSchedulerClient,
     ) -> Self {
         let vm = VM::new();
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
@@ -108,8 +104,6 @@ impl VmHost {
             max_stack_depth,
             max_ticks,
             max_time,
-            sessions,
-            task_scheduler_client,
             running: false,
             unsync: Default::default(),
         }
@@ -218,11 +212,13 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
+        task_scheduler_client: TaskSchedulerClient,
+        session: Arc<dyn Session>,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
-            task_scheduler_client: self.task_scheduler_client.clone(),
+            task_scheduler_client: task_scheduler_client.clone(),
             max_stack_depth: self.max_stack_depth,
         };
 
@@ -247,7 +243,7 @@ impl VmHost {
             &exec_params,
             &mut self.vm_exec_state,
             world_state,
-            self.sessions.clone(),
+            session.clone(),
         );
 
         let post_exec_tick_count = self.vm_exec_state.tick_count;
@@ -309,7 +305,7 @@ impl VmHost {
                 } => {
                     let exec_params = VmExecParams {
                         max_stack_depth: self.max_stack_depth,
-                        task_scheduler_client: self.task_scheduler_client.clone(),
+                        task_scheduler_client: task_scheduler_client.clone(),
                     };
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.
@@ -320,7 +316,7 @@ impl VmHost {
                         List::from_slice(&args),
                         &exec_params,
                         world_state,
-                        self.sessions.clone(),
+                        session.clone(),
                     );
                     continue;
                 }
