@@ -136,17 +136,10 @@ pub mod vm_test_utils {
         let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
         let task_scheduler_client =
             crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
-        let mut vm_host = VmHost::new(
-            0,
-            20,
-            90_000,
-            Duration::from_secs(5),
-            session.clone(),
-            task_scheduler_client.clone(),
-        );
+        let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
 
         let _vm_exec_params = VmExecParams {
-            task_scheduler_client,
+            task_scheduler_client: task_scheduler_client.clone(),
             max_stack_depth: 50,
         };
 
@@ -154,7 +147,12 @@ pub mod vm_test_utils {
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
-            match vm_host.exec_interpreter(0, world_state) {
+            match vm_host.exec_interpreter(
+                0,
+                world_state,
+                task_scheduler_client.clone(),
+                session.clone(),
+            ) {
                 VMHostResponse::ContinueOk => {
                     continue;
                 }

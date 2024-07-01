@@ -48,21 +48,11 @@ fn create_worldstate() -> WiredTigerDB {
 
 pub fn prepare_call_verb(
     world_state: &mut dyn WorldState,
-    session: Arc<dyn Session>,
     verb_name: &str,
     args: List,
     max_ticks: usize,
 ) -> VmHost {
-    let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
-    let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
-    let mut vm_host = VmHost::new(
-        0,
-        20,
-        max_ticks,
-        Duration::from_secs(15),
-        session.clone(),
-        task_scheduler_client,
-    );
+    let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(15));
 
     let verb_name = Symbol::mk(verb_name);
     let vi = world_state
@@ -103,20 +93,29 @@ fn prepare_vm_execution(
         BinaryType::LambdaMoo18X,
     )
     .unwrap();
-    let session = Arc::new(NoopClientSession::new());
-    let vm_host = prepare_call_verb(tx.as_mut(), session, "test", List::new(), max_ticks);
+    let vm_host = prepare_call_verb(tx.as_mut(), "test", List::new(), max_ticks);
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     vm_host
 }
 
 /// Run the vm host until it runs out of ticks
-fn execute(world_state: &mut dyn WorldState, vm_host: &mut VmHost) -> bool {
+fn execute(
+    world_state: &mut dyn WorldState,
+    task_scheduler_client: TaskSchedulerClient,
+    session: Arc<dyn Session>,
+    vm_host: &mut VmHost,
+) -> bool {
     vm_host.reset_ticks();
     vm_host.reset_time();
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
-        match vm_host.exec_interpreter(0, world_state) {
+        match vm_host.exec_interpreter(
+            0,
+            world_state,
+            task_scheduler_client.clone(),
+            session.clone(),
+        ) {
             VMHostResponse::ContinueOk => {
                 continue;
             }
@@ -157,9 +156,18 @@ fn do_program(program: &str, max_ticks: usize, iters: u64) -> Duration {
     let mut state_source = create_worldstate();
     let mut vm_host = prepare_vm_execution(&mut state_source, program, max_ticks);
     let mut tx = state_source.new_world_state().unwrap();
+    let session = Arc::new(NoopClientSession::new());
+    let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
+    let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
+
     for _ in 0..iters {
         let start = std::time::Instant::now();
-        let _ = execute(tx.as_mut(), &mut vm_host);
+        let _ = execute(
+            tx.as_mut(),
+            task_scheduler_client.clone(),
+            session.clone(),
+            &mut vm_host,
+        );
         let end = std::time::Instant::now();
         cumulative += end - start;
     }
