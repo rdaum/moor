@@ -62,7 +62,7 @@ lazy_static! {
 #[derive(Debug)]
 pub struct Task {
     /// My unique task id.
-    pub(crate) task_id: TaskId,
+    pub task_id: TaskId,
     /// What I was asked to do.
     pub(crate) task_start: Arc<TaskStart>,
     /// The player on behalf of whom this task is running. Who owns this task.
