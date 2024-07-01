@@ -1,13 +1,13 @@
 <div style="display: flex; justify-content: flex-start;">
   <div style="width: 200px; background-color: #f0f0f0; padding: 10px; margin: 10px; border-radius: 10px;">
-    <p style="font-size: 1.5em; margin: 0; padding: 0; font-family: 'Fantasque Sans Mono'">
+    <p style="font-size: 1.5em; margin: 0; padding: 0; font-family: 'Fantasque Sans Mono',sans-serif">
       <b>M</b>ultiuser<br/>
       &nbsp;<b>O</b>nline<br/>
       &nbsp;&nbsp;<b>O</b>bjects &<br/>
       &nbsp;&nbsp;&nbsp;<b>R</b>elations
     </p>
   </div>
-  <img src="doc/logo.jpg" width="200px" />
+  <img src="doc/logo.jpg" width="200px" alt="Moor logo" />
 </div>
 
 ## What is this?
@@ -16,15 +16,16 @@
 
 - A system for building shared, programmable, Internet-accessible virtual _social spaces_
 - A programming and authoring _tool_ for shared environments.
-- Fully compatible with [LambdaMOO](https://en.wikipedia.org/wiki/MOO) 1.8.x
+- Compatible with [LambdaMOO](https://en.wikipedia.org/wiki/MOO) 1.8.x
 
 _Moor_ provides (from the bottom layer up...)
 
-- A fast, durable, transactional database with object and relational characteristics
+- A fast, durable, transactional networked database with object and relational characteristics
 - A runtime for securely live-authoring and hosting programs and content that run persistently on that database
 - An authentication and authorization system for controlling access to said programs ("verbs") and content.
 - A programming language for building objects and verbs, along with the ability to plug in other languages / runtimes.
 - Tools and user environments for interacting with the system and writing verbs and editing content.
+- Compatibility with the classic LambdaMOO programming language and runtime.
 
 And it is designed to be used for:
 
@@ -35,22 +36,42 @@ And it is designed to be used for:
 - Interactive fiction
 - Your entertainment and delight
 
+### Why?
+
+Socializing, authoring, and creating on the Internet is in many ways broken. We want to make it better, by giving people
+tools to create their _own_ spaces, and to create their own _things_ and _tools_ within those spaces.
+
+It should be fun, it should be easy, it should be accessible, it should be open, it should be collaborative, it should
+be programmable, it should be extensible, it should be secure, it should be private, it should be free.
+
+This kind of environment is our take on how we can make that happen:
+
+- Shared, self-authored, spaces
+- Where you make things together
+- Easy to learn tools
+- Easy to share what you make
+- Secure, and as private as you want it to be
+- Driven around a shared narrative
+
+In short: Build your own village.
+
 ### Background
 
-Launching in the early 1990s [LambdaMOO](https://en.wikipedia.org/wiki/LambdaMOO) is an online social environment, as well
-as an open source software package for building such environments for yourself.
+Launching in the early 1990s [LambdaMOO](https://en.wikipedia.org/wiki/LambdaMOO) is an online social environment, as
+well as an open source software package for building such environments for yourself.
 
-LambdaMOO -- the place -- still exists today, with an unbroken 30+ year history, and a small but dedicated community of users and
-developers continue to use it -- both [LambdaMOO the place](https://lambda.moo.mud.org/), and
+LambdaMOO -- the place -- still exists today, with an unbroken 30+ year history, and a small but dedicated community of
+users and developers continue to use it -- both [LambdaMOO the place](https://lambda.moo.mud.org/), and
 [MOO the server software](https://github.com/wrog/lambdamoo) for other communities.
 
 MOO predates "social media", predates Facebook, Twitter, MySpace, Friendster, Tumblr, GeoCities, and... everything else.
 
 In fact, it predates the world-wide web itself, and offers a very different kind of interaction with the Internet, one
-that is synchronous and live, text-based, not graphical, and is based around an evolving narrative that the users themselves create.
+that is synchronous and live, text-based, not graphical, and is based around an evolving narrative that the users
+themselves create.
 
-It is a multiuser virtual world, a MUD, a narrative "game", a chat room, a virtual environment, a social network, a programming environment,
-and a platform for collaborative fiction -- all in one.
+It is a multiuser virtual world, a MUD, a narrative "game", a chat room, a virtual environment, a social network, a
+programming environment, and a platform for collaborative fiction -- all in one.
 
 It is a place where people can meet, talk, and build things together. And it's kind of awesome.
 
@@ -80,14 +101,6 @@ extensions to the runtime to make it more adaptable to modern use cases:
   lock on the database, as in MOO. This allows for theoretically greater scalability.
 - A flexible, pluggable virtual machine environment which allows "verbs" to be written in alternative languages,
   such as JavaScript or WebAssembly modules (WIP).
-
-### Why?
-
-Socializing, authoring, and creating on the Internet is in many ways broken. We want to make it better, by giving people
-tools to create their _own_ spaces, and to create their own _tools_ within those spaces.
-
-It should be fun, it should be easy, it should be accessible, it should be open, it should be collaborative, it should
-be programmable, it should be extensible, it should be secure, it should be private, it should be free.
 
 ### How do I use it?
 
@@ -132,22 +145,27 @@ For a high level architecture description plus a more detailed breakdown on how 
 
 _Moor_ is licensed under the GNU General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
 
-Why the GPL?
+You can make modifications as you like, but if you distribute those modifications, you must also distribute the source
+code for those modifications under the same license.
 
-_But "The GPL isn't very popular these days", "my employer forbids me to contribute to GPL projects" ..._
+The choice to use the GPL was made to ensure that the software remains open and free, and that any modifications to it
+are also open and free. This is in keeping with the spirit of the original LambdaMOO server, which was also under the
+GPL license.
 
-- LambdaMOO itself is licensed under the GPL (version 2). And while the question of whether Moor is a derived work of
-  it is a matter of debate (I did read its source code while developing), I see it as _ethical_ to keep the same license.
-- The GPL encourages sharing of upstream work and collaboration, and that's what we want to do.
-- I don't get paid to work on this, and while it's unlikely, I don't want to see it turned into a proprietary product
-  that I can't use or contribute to. I want to see it used and improved by as many people as possible.
+Further, since portions of the code inside `moor` are based on readings of the LambdaMOO server code, staying with
+the GPL is the right thing to do.
 
 ### Who made this?
 
-Most of the work on this has been done by myself, Ryan Daum <ryan.daum@gmail.com>. Large chunks of the decompiler, and
-various other pieces of code including code cleanliness and testing contributions, were done by Norman Nunley.
+The bulk of development has been by [myself](https://github.com/rdaum).
 
-And there's been plenty of inspiration and help from a community of fellow old-school MOO
+Extensive work on the decompiler/unparser, along with general testing, code santiation, and cleanup has been done by
+[Norman Nunley](https://github.com/nnunley).
+
+Implementation of a robust integration testing framework, along with porting a pile of tests from ToastStunt, and
+generally finding bugs and helping with the fixing of them has been done by [Zoltán Nagy](https://github.com/abesto).
+
+There's been plenty of inspiration and help from a community of fellow old-school MOO
 (and [ColdMUD](https://muds.fandom.com/wiki/ColdMUD)!) folks that I've known since the 90s.
 
 Finally, LambdaMOO _itself_ was primarily authored by Pavel Curtis, with the original LambdaMOO server being written by
@@ -155,21 +173,29 @@ Stephen White. Successive versions and forks have been maintained by a number of
 
 ### What's done?
 
-At this point `Moor` is capable of executing the full LambdaMOO 1.8.x language, and is capable of running existing
-LambdaMOO databases. With some caveats:
+At this point `Moor` is capable of executing msot of the LambdaMOO 1.8.x system, and is capable of running existing
+LambdaMOO databases. This includes support for the full language, the bulk of builtin functions (enough to run the cores
+I've tried),
+the scheduler including forked and suspended tasks (including persisting them between restarts), importing and exporting
+existing LambdaMOO compatible textdumps, the `read()` builtin and user input, and a network layer that supports both
+telnet and websockets,
+and can be extended to support other protocols.
 
-- Persistent tasks are not yet implemented.
+With some caveats:
+
 - Outbound network connections are not supported.
-- Extensions present in ToastStunt, Stunt, etc. including map types, WAIFs, etc. are not supported.
+- Extensions present in ToastStunt, Stunt, etc. including map types, WAIFs, etc. are not supported. Some of these are
+  possible to add in the future, others do not fit the design philosophy of the system going forward.
 
 For a list of the status of the implementation of standard LambdaMOO builtin functions, see
 [builtin_functions_status.md](./doc/builtin_functions_status.md).
 
-![Moore screenshot](./doc/moor-session.png)
+![Telnet session screenshot](./doc/moor-session.png)
 
 ### What's next?
 
-There's a lot of work to do. We're looking for contributors, testers, and users. We're also looking for feedback, ideas, and use cases.
+There's a lot of work to do. We're looking for contributors, testers, and users. We're also looking for feedback, ideas,
+and use cases.
 
 We're also looking for funding, and for partners who want to build things on top of Moor.
 
@@ -177,11 +203,9 @@ The immediate horizon is to get the initial release out, which will be a drop-in
 some additional features. This will include a web-based client. To get there the following is still required
 
 - Robustness and stability work.
-- .... In particular around the custom in-memory database. This needs a lot of testing
-  both in correctness and performance
 - Correctness testing using tools like Jepsen and Stateright to prove out the transactional model & scheduler
 - Performance testing to ensure that the system can handle a large number of users and objects.
-- Support for persistent tasks
+- Documentation, including a user manual, a developer manual, and a system administrator manual.
 - And maybe outbound network connections, but that's a _maybe_.
 
 The intent is to get to a 1.0 release after these are done. This 1.0 release will be fully compatible with existing
@@ -193,7 +217,7 @@ The roadmap for **future** _features_ after the initial 1.0 release include:
   it's still very early. The intent is to provide a more modern, graphical, and interactive experience, while
   still retaining the narrative and creative aspects of a MOO. It will additionally provide modern authoring
   tools like a syntax highlighting, auto-indenting editor, a Smalltalk-style object browser, and a debugger.
-  Some work on this has already been done.
+  Some prototype work on this has already been done:
   ![Example browser screenshot](./doc/browser-screenshot.png)
 - Support for alternative languages and runtimes for verbs. The initial plan is to support JavaScript as a verb
   authoring language in addition to MOO. Verbs written in other languages will have access to the same object
@@ -209,3 +233,10 @@ The roadmap for **future** _features_ after the initial 1.0 release include:
   interface for managing permissions. MOO-style fixed, knowable object numbers (`#123` style) will be replaced or
   subsumed by object-capability references. The challenge being to maintain backwards compatibility with existing
   cores.
+
+### Join us!
+
+If you're interested in helping out, or just want to chat, please join us on
+our [Discord server](https://discord.gg/NTHB2ZQE).
+
+Note: When the time is right the Discord will be replaced by a running instance of `moor` itself.
