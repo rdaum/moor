@@ -14,6 +14,7 @@
 
 use crate::tasks::TaskId;
 use crate::vm::activation::{Activation, Caller};
+use bincode::{Decode, Encode};
 use daumtils::PhantomUnsync;
 use moor_values::var::Objid;
 use moor_values::var::Var;
@@ -24,6 +25,7 @@ use std::time::{Duration, SystemTime};
 /// The actual "VM" remains stateless and could be potentially re-used for multiple tasks,
 /// and swapped out at each level of the activation stack for different runtimes.
 /// e.g. a MOO VM, a WASM VM, a JS VM, etc. but all having access to the same shared state.
+#[derive(Encode, Decode)]
 pub struct VMExecState {
     /// The task ID of the task that for current stack of activations.
     pub(crate) task_id: TaskId,
