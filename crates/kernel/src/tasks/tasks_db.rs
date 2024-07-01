@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::scheduler::SuspendedTask;
+use crate::tasks::suspension::SuspendedTask;
 use crate::tasks::TaskId;
 
 #[derive(Debug, thiserror::Error)]
