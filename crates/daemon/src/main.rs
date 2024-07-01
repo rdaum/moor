@@ -36,7 +36,9 @@ use crate::rpc_server::zmq_loop;
 
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxDatabaseBuilder;
+#[cfg(feature = "relbox")]
 use moor_kernel::tasks::NoopTasksDb;
+use moor_kernel::tasks::TasksDb;
 
 mod connections;
 
@@ -45,6 +47,7 @@ mod connections_rb;
 mod connections_wt;
 mod rpc_server;
 mod rpc_session;
+mod tasks_wt;
 
 #[macro_export]
 macro_rules! clap_enum_variants {
@@ -83,6 +86,16 @@ struct Args {
         default_value = "connections.db"
     )]
     connections_file: PathBuf,
+
+    #[arg(
+        short = 'x',
+        long,
+        value_name = "tasks-db",
+        help = "Path to persistent tasks database to use or create",
+        value_hint = ValueHint::FilePath,
+        default_value = "tasks.db"
+    )]
+    tasks_db: PathBuf,
 
     #[arg(
         long,
@@ -271,7 +284,17 @@ fn main() -> Result<(), Report> {
         textdump_output: args.textdump_out,
     };
 
-    let tasks_db = Box::new(NoopTasksDb {});
+    let tasks_db: Box<dyn TasksDb> = match args.db_flavour {
+        DatabaseFlavour::WiredTiger => {
+            let (tasks_db, _) = tasks_wt::WiredTigerTasksDb::open(Some(&args.tasks_db));
+            Box::new(tasks_db)
+        }
+        #[cfg(feature = "relbox")]
+        DatabaseFlavour::RelBox => {
+            warn!("RelBox does not support tasks persistence yet. Using a no-op tasks database. Suspended tasks will not resume on restart.");
+            Box::new(NoopTasksDb {})
+        }
+    };
 
     // The pieces from core we're going to use:
     //   Our DB.

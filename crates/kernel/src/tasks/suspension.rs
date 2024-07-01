@@ -1,3 +1,17 @@
+// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, version 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 use crate::tasks::scheduler::TaskResult;
 use crate::tasks::sessions::{NoopClientSession, Session};
 use crate::tasks::task::Task;
@@ -10,19 +24,20 @@ use moor_values::var::Objid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{error, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
 /// When tasks are not running they are moved into these.
 pub struct SuspendedTask {
-    wake_condition: WakeCondition,
-    pub(crate) task: Task,
-    pub(crate) session: Arc<dyn Session>,
-    pub(crate) result_sender: Option<oneshot::Sender<TaskResult>>,
+    pub wake_condition: WakeCondition,
+    pub task: Task,
+    pub session: Arc<dyn Session>,
+    pub result_sender: Option<oneshot::Sender<TaskResult>>,
 }
 
 /// Possible conditions in which a suspended task can wake from suspension.
+#[derive(Debug)]
 pub enum WakeCondition {
     /// This task will never wake up on its own, and must be manually woken with `bf_resume`
     Never,
@@ -30,6 +45,24 @@ pub enum WakeCondition {
     Time(Instant),
     /// This task will wake up when the given input request is fulfilled.
     Input(Uuid),
+}
+
+#[repr(u8)]
+#[derive(Encode, Decode, Debug)]
+pub enum WakeConditionType {
+    NEVER = 0,
+    TIME = 1,
+    INPUT = 2,
+}
+
+impl WakeCondition {
+    pub fn condition_type(&self) -> WakeConditionType {
+        match self {
+            WakeCondition::Never => WakeConditionType::NEVER,
+            WakeCondition::Time(_) => WakeConditionType::TIME,
+            WakeCondition::Input(_) => WakeConditionType::INPUT,
+        }
+    }
 }
 
 /// Ties the local storage for suspended tasks in with a reference to the tasks DB, to allow for
@@ -59,9 +92,13 @@ impl SuspensionQ {
             .tasks_database
             .load_tasks()
             .expect("Unable to reconstitute tasks from tasks database");
+        let num_tasks = tasks.len();
         for task in tasks {
+            debug!(wake_condition = ?task.wake_condition, task_id = task.task.task_id,
+                start = ?task.task.task_start , "Loaded suspended task from tasks database");
             self.tasks.insert(task.task.task_id, task);
         }
+        info!(?num_tasks, "Loaded suspended tasks from tasks database")
     }
 
     /// Add a task to the set of suspended tasks.
@@ -211,29 +248,6 @@ impl SuspensionQ {
     }
 }
 
-impl Encode for WakeCondition {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let type_code = match self {
-            WakeCondition::Never => 0,
-            WakeCondition::Time(_) => 1,
-            WakeCondition::Input(_) => 2,
-        };
-        type_code.encode(encoder)?;
-        match self {
-            WakeCondition::Never => Ok(()),
-            WakeCondition::Time(t) => {
-                // Convert to a time since epoch and encode as micros.
-                let time_since_epoch_systime =
-                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-                let from_now_instant = t.duration_since(Instant::now());
-                let time_to_wake = time_since_epoch_systime + from_now_instant;
-                time_to_wake.as_micros().encode(encoder)
-            }
-            WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
-        }
-    }
-}
-
 fn from_epoch_micros_to_instant(time_since_epoch_micros: u128) -> Instant {
     let time_since_epoch_systime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
@@ -279,40 +293,57 @@ impl<'de> BorrowDecode<'de> for SuspendedTask {
     }
 }
 
+impl Encode for WakeCondition {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let type_code = self.condition_type();
+        type_code.encode(encoder)?;
+        match self {
+            WakeCondition::Never => Ok(()),
+            WakeCondition::Time(t) => {
+                // Convert to a time since epoch and encode as micros.
+                let time_since_epoch_systime =
+                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                let from_now_instant = t.duration_since(Instant::now());
+                let time_to_wake = time_since_epoch_systime + from_now_instant;
+                time_to_wake.as_micros().encode(encoder)
+            }
+            WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
+        }
+    }
+}
+
 impl Decode for WakeCondition {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let type_code: u8 = Decode::decode(decoder)?;
+        let type_code: WakeConditionType = Decode::decode(decoder)?;
         match type_code {
-            0 => Ok(WakeCondition::Never),
-            1 => {
+            WakeConditionType::NEVER => Ok(WakeCondition::Never),
+            WakeConditionType::TIME => {
                 let time_since_epoch_micros: u128 = Decode::decode(decoder)?;
                 let wake_time = from_epoch_micros_to_instant(time_since_epoch_micros);
                 Ok(WakeCondition::Time(wake_time))
             }
-            2 => {
+            WakeConditionType::INPUT => {
                 let uuid = Uuid::from_u128(Decode::decode(decoder)?);
                 Ok(WakeCondition::Input(uuid))
             }
-            _ => Err(DecodeError::Other("Invalid wake condition")),
         }
     }
 }
 
 impl<'de> BorrowDecode<'de> for WakeCondition {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let type_code: u8 = BorrowDecode::borrow_decode(decoder)?;
+        let type_code: WakeConditionType = Decode::decode(decoder)?;
         match type_code {
-            0 => Ok(WakeCondition::Never),
-            1 => {
-                let time_since_epoch_micros: u128 = BorrowDecode::borrow_decode(decoder)?;
+            WakeConditionType::NEVER => Ok(WakeCondition::Never),
+            WakeConditionType::TIME => {
+                let time_since_epoch_micros: u128 = Decode::decode(decoder)?;
                 let wake_time = from_epoch_micros_to_instant(time_since_epoch_micros);
                 Ok(WakeCondition::Time(wake_time))
             }
-            2 => {
-                let uuid = Uuid::from_u128(BorrowDecode::borrow_decode(decoder)?);
+            WakeConditionType::INPUT => {
+                let uuid = Uuid::from_u128(Decode::decode(decoder)?);
                 Ok(WakeCondition::Input(uuid))
             }
-            _ => Err(DecodeError::Other("Invalid wake condition")),
         }
     }
 }

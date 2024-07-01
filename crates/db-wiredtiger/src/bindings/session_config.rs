@@ -30,6 +30,7 @@ impl Isolation {
     }
 }
 
+#[derive(Clone)]
 pub struct SessionConfig {
     cache_cursors: Option<bool>,
     cache_max_wait_ms: Option<i64>,
