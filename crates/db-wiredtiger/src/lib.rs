@@ -19,6 +19,8 @@ pub use crate::worldstate::wt_worldstate::WiredTigerDB;
 pub use crate::wtrel::rel_db::WiredTigerRelDb;
 pub use crate::wtrel::rel_transaction::WiredTigerRelTransaction;
 
+pub use crate::bindings::*;
+
 #[allow(dead_code, unused_imports)]
 mod bindings;
 mod worldstate;

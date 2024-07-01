@@ -32,11 +32,13 @@ use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::textdump_load;
 
-use crate::rpc_server::zmq_loop;
+use crate::rpc_server::RpcServer;
 
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxDatabaseBuilder;
+#[cfg(feature = "relbox")]
 use moor_kernel::tasks::NoopTasksDb;
+use moor_kernel::tasks::TasksDb;
 
 mod connections;
 
@@ -45,6 +47,7 @@ mod connections_rb;
 mod connections_wt;
 mod rpc_server;
 mod rpc_session;
+mod tasks_wt;
 
 #[macro_export]
 macro_rules! clap_enum_variants {
@@ -83,6 +86,16 @@ struct Args {
         default_value = "connections.db"
     )]
     connections_file: PathBuf,
+
+    #[arg(
+        short = 'x',
+        long,
+        value_name = "tasks-db",
+        help = "Path to persistent tasks database to use or create",
+        value_hint = ValueHint::FilePath,
+        default_value = "tasks.db"
+    )]
+    tasks_db: PathBuf,
 
     #[arg(
         long,
@@ -271,7 +284,17 @@ fn main() -> Result<(), Report> {
         textdump_output: args.textdump_out,
     };
 
-    let tasks_db = Box::new(NoopTasksDb {});
+    let tasks_db: Box<dyn TasksDb> = match args.db_flavour {
+        DatabaseFlavour::WiredTiger => {
+            let (tasks_db, _) = tasks_wt::WiredTigerTasksDb::open(Some(&args.tasks_db));
+            Box::new(tasks_db)
+        }
+        #[cfg(feature = "relbox")]
+        DatabaseFlavour::RelBox => {
+            warn!("RelBox does not support tasks persistence yet. Using a no-op tasks database. Suspended tasks will not resume on restart.");
+            Box::new(NoopTasksDb {})
+        }
+    };
 
     // The pieces from core we're going to use:
     //   Our DB.
@@ -279,10 +302,26 @@ fn main() -> Result<(), Report> {
     let scheduler = Scheduler::new(database, tasks_db, config);
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
+    // We have to create the RpcServer before starting the scheduler because we need to pass it in
+    // as a parameter to the scheduler for background session construction.
+
+    let zmq_ctx = zmq::Context::new();
+    zmq_ctx
+        .set_io_threads(args.num_io_threads)
+        .expect("Failed to set number of IO threads");
+    let rpc_server = Arc::new(RpcServer::new(
+        keypair,
+        args.connections_file,
+        zmq_ctx.clone(),
+        args.narrative_listen.as_str(),
+        args.db_flavour,
+    ));
+
     // The scheduler thread:
+    let scheduler_rpc_server = rpc_server.clone();
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
-        .spawn(move || scheduler.run())?;
+        .spawn(move || scheduler.run(scheduler_rpc_server))?;
 
     let kill_switch = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -304,22 +343,15 @@ fn main() -> Result<(), Report> {
         })?;
 
     let rpc_kill_switch = kill_switch.clone();
+
+    let rpc_loop_scheduler_client = scheduler_client.clone();
     let rpc_listen = args.rpc_listen.clone();
-    let rpc_narrative_listen = args.narrative_listen.clone();
-    let rpc_scheduler_client = scheduler_client.clone();
     let rpc_loop_thread = std::thread::Builder::new()
         .name("moor-rpc".to_string())
         .spawn(move || {
-            let _ = zmq_loop(
-                keypair,
-                args.connections_file,
-                rpc_scheduler_client,
-                rpc_listen,
-                rpc_narrative_listen,
-                Some(args.num_io_threads),
-                rpc_kill_switch,
-                args.db_flavour,
-            );
+            rpc_server
+                .zmq_loop(rpc_listen, rpc_loop_scheduler_client, rpc_kill_switch)
+                .expect("RPC thread failed");
         })?;
 
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;

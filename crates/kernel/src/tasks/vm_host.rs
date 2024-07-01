@@ -21,6 +21,10 @@ use crate::tasks::{TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use daumtils::PhantomUnsync;
 use moor_compiler::Program;
@@ -71,8 +75,6 @@ pub struct VmHost {
     max_ticks: usize,
     /// The maximum amount of time allotted to this task
     max_time: Duration,
-    sessions: Arc<dyn Session>,
-    task_scheduler_client: TaskSchedulerClient,
     running: bool,
 
     unsync: PhantomUnsync,
@@ -95,8 +97,6 @@ impl VmHost {
         max_stack_depth: usize,
         max_ticks: usize,
         max_time: Duration,
-        sessions: Arc<dyn Session>,
-        task_scheduler_client: TaskSchedulerClient,
     ) -> Self {
         let vm = VM::new();
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
@@ -108,8 +108,6 @@ impl VmHost {
             max_stack_depth,
             max_ticks,
             max_time,
-            sessions,
-            task_scheduler_client,
             running: false,
             unsync: Default::default(),
         }
@@ -218,11 +216,13 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
+        task_scheduler_client: TaskSchedulerClient,
+        session: Arc<dyn Session>,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
-            task_scheduler_client: self.task_scheduler_client.clone(),
+            task_scheduler_client: task_scheduler_client.clone(),
             max_stack_depth: self.max_stack_depth,
         };
 
@@ -247,7 +247,7 @@ impl VmHost {
             &exec_params,
             &mut self.vm_exec_state,
             world_state,
-            self.sessions.clone(),
+            session.clone(),
         );
 
         let post_exec_tick_count = self.vm_exec_state.tick_count;
@@ -309,7 +309,7 @@ impl VmHost {
                 } => {
                     let exec_params = VmExecParams {
                         max_stack_depth: self.max_stack_depth,
-                        task_scheduler_client: self.task_scheduler_client.clone(),
+                        task_scheduler_client: task_scheduler_client.clone(),
                     };
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.
@@ -320,7 +320,7 @@ impl VmHost {
                         List::from_slice(&args),
                         &exec_params,
                         world_state,
-                        self.sessions.clone(),
+                        session.clone(),
                     );
                     continue;
                 }
@@ -434,5 +434,59 @@ impl VmHost {
     }
     pub fn args(&self) -> List {
         self.vm_exec_state.top().args.clone()
+    }
+}
+
+impl Encode for VmHost {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // The VM is not something we need to serialize.
+        self.vm_exec_state.encode(encoder)?;
+        self.max_stack_depth.encode(encoder)?;
+        self.max_ticks.encode(encoder)?;
+        self.max_time.as_secs().encode(encoder)?;
+
+        // 'running' is a transient state, so we don't encode it, it will always be `true`
+        // when we decode
+        Ok(())
+    }
+}
+
+impl Decode for VmHost {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let vm = VM::new();
+        let vm_exec_state = VMExecState::decode(decoder)?;
+        let max_stack_depth = Decode::decode(decoder)?;
+        let max_ticks = Decode::decode(decoder)?;
+        let max_time = Duration::from_secs(Decode::decode(decoder)?);
+
+        Ok(Self {
+            vm,
+            vm_exec_state,
+            max_stack_depth,
+            max_ticks,
+            max_time,
+            running: true,
+            unsync: Default::default(),
+        })
+    }
+}
+
+impl<'de> BorrowDecode<'de> for VmHost {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let vm = VM::new();
+        let vm_exec_state = VMExecState::borrow_decode(decoder)?;
+        let max_stack_depth = BorrowDecode::borrow_decode(decoder)?;
+        let max_ticks = BorrowDecode::borrow_decode(decoder)?;
+        let max_time = Duration::from_secs(BorrowDecode::borrow_decode(decoder)?);
+
+        Ok(Self {
+            vm,
+            vm_exec_state,
+            max_stack_depth,
+            max_ticks,
+            max_time,
+            running: true,
+            unsync: Default::default(),
+        })
     }
 }

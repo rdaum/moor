@@ -28,7 +28,8 @@ pub mod scheduler;
 pub mod sessions;
 
 pub(crate) mod scheduler_client;
-mod task;
+pub(crate) mod suspension;
+pub(crate) mod task;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod vm_host;
@@ -136,17 +137,10 @@ pub mod vm_test_utils {
         let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
         let task_scheduler_client =
             crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
-        let mut vm_host = VmHost::new(
-            0,
-            20,
-            90_000,
-            Duration::from_secs(5),
-            session.clone(),
-            task_scheduler_client.clone(),
-        );
+        let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
 
         let _vm_exec_params = VmExecParams {
-            task_scheduler_client,
+            task_scheduler_client: task_scheduler_client.clone(),
             max_stack_depth: 50,
         };
 
@@ -154,7 +148,12 @@ pub mod vm_test_utils {
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
-            match vm_host.exec_interpreter(0, world_state) {
+            match vm_host.exec_interpreter(
+                0,
+                world_state,
+                task_scheduler_client.clone(),
+                session.clone(),
+            ) {
                 VMHostResponse::ContinueOk => {
                     continue;
                 }
@@ -291,7 +290,7 @@ pub mod scheduler_test_utils {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum TaskStart {
     /// The scheduler is telling the task to parse a command and execute whatever verbs are
     /// associated with it.

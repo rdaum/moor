@@ -25,6 +25,10 @@
 //!
 use crossbeam_channel::Sender;
 
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use lazy_static::lazy_static;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -58,7 +62,7 @@ lazy_static! {
 #[derive(Debug)]
 pub struct Task {
     /// My unique task id.
-    pub(crate) task_id: TaskId,
+    pub task_id: TaskId,
     /// What I was asked to do.
     pub(crate) task_start: Arc<TaskStart>,
     /// The player on behalf of whom this task is running. Who owns this task.
@@ -80,8 +84,6 @@ impl Task {
         task_start: Arc<TaskStart>,
         perms: Objid,
         server_options: &ServerOptions,
-        session: Arc<dyn Session>,
-        task_scheduler_client: TaskSchedulerClient,
         kill_switch: Arc<AtomicBool>,
     ) -> Self {
         let is_background = task_start.is_background();
@@ -95,8 +97,6 @@ impl Task {
             max_stack_depth,
             max_ticks,
             Duration::from_secs(max_seconds),
-            session.clone(),
-            task_scheduler_client,
         );
 
         Task {
@@ -112,6 +112,7 @@ impl Task {
     pub fn run_task_loop(
         mut task: Task,
         task_scheduler_client: &TaskSchedulerClient,
+        session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
     ) {
         while task.vm_host.is_running() {
@@ -122,7 +123,7 @@ impl Task {
                 break;
             }
             if let Some(continuation_task) =
-                task.vm_dispatch(task_scheduler_client, world_state.as_mut())
+                task.vm_dispatch(task_scheduler_client, session.clone(), world_state.as_mut())
             {
                 task = continuation_task;
             } else {
@@ -229,10 +230,16 @@ impl Task {
     fn vm_dispatch(
         mut self,
         task_scheduler_client: &TaskSchedulerClient,
+        session: Arc<dyn Session>,
         world_state: &mut dyn WorldState,
     ) -> Option<Self> {
         // Call the VM
-        let vm_exec_result = self.vm_host.exec_interpreter(self.task_id, world_state);
+        let vm_exec_result = self.vm_host.exec_interpreter(
+            self.task_id,
+            world_state,
+            task_scheduler_client.clone(),
+            session,
+        );
 
         // Having done that, what should we now do?
         match vm_exec_result {
@@ -527,6 +534,55 @@ fn find_verb_for_command(
     Ok(None)
 }
 
+impl Encode for Task {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // We encode everything but the kill switch, which is transient and always decoded to 'true'
+        self.task_id.encode(encoder)?;
+        self.player.encode(encoder)?;
+        self.task_start.encode(encoder)?;
+        self.vm_host.encode(encoder)?;
+        self.perms.encode(encoder)
+    }
+}
+
+impl Decode for Task {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let task_id = TaskId::decode(decoder)?;
+        let player = Objid::decode(decoder)?;
+        let task_start = Arc::decode(decoder)?;
+        let vm_host = VmHost::decode(decoder)?;
+        let perms = Objid::decode(decoder)?;
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        Ok(Task {
+            task_id,
+            player,
+            task_start,
+            vm_host,
+            perms,
+            kill_switch,
+        })
+    }
+}
+
+impl<'de> BorrowDecode<'de> for Task {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let task_id = TaskId::borrow_decode(decoder)?;
+        let player = Objid::borrow_decode(decoder)?;
+        let task_start = Arc::borrow_decode(decoder)?;
+        let vm_host = VmHost::borrow_decode(decoder)?;
+        let perms = Objid::borrow_decode(decoder)?;
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        Ok(Task {
+            task_id,
+            player,
+            task_start,
+            vm_host,
+            perms,
+            kill_switch,
+        })
+    }
+}
+
 // TODO: a battery of unit tests here. Which will likely involve setting up a standalone VM running
 //   a simple program.
 #[cfg(test)]
@@ -563,7 +619,6 @@ mod tests {
             player: SYSTEM_OBJECT,
             program,
         });
-        let noop_session = Arc::new(NoopClientSession::new());
         let (control_sender, control_receiver) = unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
         let server_options = ServerOptions {
@@ -580,8 +635,6 @@ mod tests {
             task_start.clone(),
             SYSTEM_OBJECT,
             &server_options,
-            noop_session.clone(),
-            task_scheduler_client.clone(),
             kill_switch.clone(),
         );
         let (db, _) = WiredTigerDB::open(None);
@@ -616,7 +669,8 @@ mod tests {
         let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("return 1 + 1;");
 
-        Task::run_task_loop(task, &task_scheduler_client, tx);
+        let session = Arc::new(NoopClientSession::new());
+        Task::run_task_loop(task, &task_scheduler_client, session, tx);
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -633,7 +687,8 @@ mod tests {
         let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("return 1 / 0;");
 
-        Task::run_task_loop(task, &task_scheduler_client, tx);
+        let session = Arc::new(NoopClientSession::new());
+        Task::run_task_loop(task, &task_scheduler_client, session, tx);
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -650,7 +705,8 @@ mod tests {
         let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
             setup_test_env(r#"notify(#0, "12345"); return 123;"#);
 
-        Task::run_task_loop(task, &task_scheduler_client, tx);
+        let session = Arc::new(NoopClientSession::new());
+        Task::run_task_loop(task, &task_scheduler_client, session, tx);
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -677,7 +733,8 @@ mod tests {
         let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("suspend(1); return 123;");
 
-        Task::run_task_loop(task, &task_scheduler_client, tx);
+        let session = Arc::new(NoopClientSession::new());
+        Task::run_task_loop(task, &task_scheduler_client, session.clone(), tx);
 
         // Scheduler should have received a TaskSuspend message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -692,7 +749,7 @@ mod tests {
         resume_task.vm_host.resume_execution(v_int(0));
 
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(resume_task, &task_scheduler_client, tx);
+        Task::run_task_loop(resume_task, &task_scheduler_client, session, tx);
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
@@ -707,7 +764,8 @@ mod tests {
         let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env("return read();");
 
-        Task::run_task_loop(task, &task_scheduler_client, tx);
+        let session = Arc::new(NoopClientSession::new());
+        Task::run_task_loop(task, &task_scheduler_client, session.clone(), tx);
 
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -722,7 +780,7 @@ mod tests {
 
         // And run its task loop again, with a new transaction.
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(resume_task, &task_scheduler_client, tx);
+        Task::run_task_loop(resume_task, &task_scheduler_client, session, tx);
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -750,7 +808,8 @@ mod tests {
         // our fake scheduler.
         let jh = std::thread::spawn(move || {
             let tx = db.new_world_state().unwrap();
-            Task::run_task_loop(task, &task_scheduler_client, tx)
+            let session = Arc::new(NoopClientSession::new());
+            Task::run_task_loop(task, &task_scheduler_client, session, tx);
         });
 
         // Scheduler should have received a TaskRequestFork message.

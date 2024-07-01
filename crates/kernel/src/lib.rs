@@ -20,3 +20,6 @@ pub mod textdump;
 pub mod vm;
 
 pub use crate::tasks::scheduler_client::SchedulerClient;
+pub use crate::tasks::suspension::{SuspendedTask, WakeCondition};
+pub use crate::tasks::task::Task;
+pub use crate::tasks::{ServerOptions, TaskId};
