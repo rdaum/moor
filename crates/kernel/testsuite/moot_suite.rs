@@ -36,6 +36,7 @@ use moor_values::var::{v_none, Objid, Var};
 
 #[cfg(feature = "relbox")]
 use common::create_relbox_db;
+use moor_kernel::tasks::sessions::{SessionError, SessionFactory};
 use moor_kernel::tasks::NoopTasksDb;
 
 #[derive(Clone)]
@@ -120,6 +121,16 @@ fn test_wiredtiger(path: &Path) {
 }
 test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
 
+struct NoopSessionFactory {}
+impl SessionFactory for NoopSessionFactory {
+    fn mk_background_session(
+        self: Arc<Self>,
+        _player: Objid,
+    ) -> Result<Arc<dyn Session>, SessionError> {
+        Ok(Arc::new(NoopClientSession::new()))
+    }
+}
+
 fn test(db: Box<dyn Database>, path: &Path) {
     if path.is_dir() {
         return;
@@ -127,9 +138,10 @@ fn test(db: Box<dyn Database>, path: &Path) {
     let tasks_db = Box::new(NoopTasksDb {});
     let scheduler = Scheduler::new(db, tasks_db, Config::default());
     let scheduler_client = scheduler.client().unwrap();
+    let session_factory = Arc::new(NoopSessionFactory {});
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
-        .spawn(move || scheduler.run())
+        .spawn(move || scheduler.run(session_factory.clone()))
         .expect("Failed to spawn scheduler");
 
     execute_moot_test(

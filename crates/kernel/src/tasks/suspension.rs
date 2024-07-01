@@ -13,7 +13,7 @@
 //
 
 use crate::tasks::scheduler::TaskResult;
-use crate::tasks::sessions::{NoopClientSession, Session};
+use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;
 use crate::tasks::{TaskDescription, TaskId, TasksDb};
 use bincode::de::{BorrowDecoder, Decoder};
@@ -82,7 +82,7 @@ impl SuspensionQ {
 
     /// Load all tasks from the tasks database. Called on startup to reconstitute the task list
     /// from the database.
-    pub(crate) fn load_tasks(&mut self) {
+    pub(crate) fn load_tasks(&mut self, bg_session_factory: Arc<dyn SessionFactory>) {
         // LambdaMOO doesn't do anything special to filter out tasks that are too old, or tasks that
         // are related to disconnected players, or anything like that.
         // We'll just start them all up and let the scheduler handle them.
@@ -93,10 +93,18 @@ impl SuspensionQ {
             .load_tasks()
             .expect("Unable to reconstitute tasks from tasks database");
         let num_tasks = tasks.len();
-        for task in tasks {
+        for mut task in tasks {
             debug!(wake_condition = ?task.wake_condition, task_id = task.task.task_id,
                 start = ?task.task.task_start , "Loaded suspended task from tasks database");
+            task.session = bg_session_factory
+                .clone()
+                .mk_background_session(task.task.player)
+                .expect("Unable to create new background session for suspended task");
             self.tasks.insert(task.task.task_id, task);
+        }
+        // Now delete them from the database.
+        if let Err(e) = self.tasks_database.delete_all_tasks() {
+            error!(?e, "Could not delete suspended tasks from tasks database");
         }
         info!(?num_tasks, "Loaded suspended tasks from tasks database")
     }
