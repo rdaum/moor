@@ -27,6 +27,7 @@ pub trait TasksDb: Send {
     fn load_tasks(&self) -> Result<Vec<SuspendedTask>, TasksDbError>;
     fn save_task(&self, task: &SuspendedTask) -> Result<(), TasksDbError>;
     fn delete_task(&self, task_id: TaskId) -> Result<(), TasksDbError>;
+    fn delete_all_tasks(&self) -> Result<(), TasksDbError>;
 }
 
 pub struct NoopTasksDb {}
@@ -41,6 +42,10 @@ impl TasksDb for NoopTasksDb {
     }
 
     fn delete_task(&self, _task_id: TaskId) -> Result<(), TasksDbError> {
+        Ok(())
+    }
+
+    fn delete_all_tasks(&self) -> Result<(), TasksDbError> {
         Ok(())
     }
 }

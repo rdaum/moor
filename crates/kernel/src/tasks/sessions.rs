@@ -101,6 +101,14 @@ pub trait Session: Send + Sync {
     fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError>;
 }
 
+/// A factory for creating background sessions, usually on task resumption on server restart.
+pub trait SessionFactory {
+    fn mk_background_session(
+        self: Arc<Self>,
+        player: Objid,
+    ) -> Result<Arc<dyn Session>, SessionError>;
+}
+
 #[derive(Debug, Error)]
 pub enum SessionError {
     #[error("No connection for player {0}")]

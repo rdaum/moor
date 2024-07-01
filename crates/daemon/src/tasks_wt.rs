@@ -245,6 +245,55 @@ impl TasksDb for WiredTigerTasksDb {
 
         Ok(())
     }
+
+    fn delete_all_tasks(&self) -> Result<(), TasksDbError> {
+        // Scan the entire tasks table, deserializing each record into a SuspendedTask
+        let session = self
+            .connection
+            .clone()
+            .open_session(self.session_config.clone())
+            .map_err(|e| {
+                error!("Failed to open session: {:?}", e);
+                TasksDbError::CouldNotLoadTasks
+            })?;
+
+        session.begin_transaction(None).unwrap();
+        let cursor = session
+            .open_cursor(&self.tasks_table, Some(CursorConfig::new().raw(true)))
+            .map_err(|e| {
+                error!("Failed to open cursor: {:?}", e);
+                TasksDbError::CouldNotLoadTasks
+            })?;
+
+        cursor.reset().map_err(|e| {
+            error!("Failed to reset cursor to start: {:?}", e);
+            TasksDbError::CouldNotLoadTasks
+        })?;
+
+        loop {
+            match cursor.next() {
+                Ok(_) => {}
+                Err(Error::NotFound) => {
+                    break;
+                }
+                Err(e) => {
+                    error!("Failed to advance cursor: {:?}", e);
+                    return Err(TasksDbError::CouldNotLoadTasks);
+                }
+            }
+
+            cursor.remove().map_err(|e| {
+                error!("Failed to remove record: {:?}", e);
+                TasksDbError::CouldNotLoadTasks
+            })?;
+        }
+
+        session.commit().map_err(|e| {
+            error!("Failed to commit transaction: {:?}", e);
+            TasksDbError::CouldNotLoadTasks
+        })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

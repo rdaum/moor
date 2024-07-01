@@ -51,7 +51,7 @@ use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::ParseMatcher;
 use crate::tasks::scheduler::SchedulerError::VerbProgramFailed;
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
-use crate::tasks::sessions::Session;
+use crate::tasks::sessions::{Session, SessionFactory};
 use crate::tasks::suspension::{SuspensionQ, WakeCondition};
 use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
@@ -221,10 +221,10 @@ impl Scheduler {
     }
 
     /// Execute the scheduler loop, run from the server process.
-    #[instrument(skip(self))]
-    pub fn run(mut self) {
+    #[instrument(skip(self, bg_session_factory))]
+    pub fn run(mut self, bg_session_factory: Arc<dyn SessionFactory>) {
         // Rehydrate suspended tasks.
-        self.task_q.suspended.load_tasks();
+        self.task_q.suspended.load_tasks(bg_session_factory);
 
         self.running = true;
         info!("Starting scheduler loop");
