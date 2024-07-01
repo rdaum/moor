@@ -21,6 +21,10 @@ use crate::tasks::{TaskId, VerbCall};
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use daumtils::PhantomUnsync;
 use moor_compiler::Program;
@@ -430,5 +434,59 @@ impl VmHost {
     }
     pub fn args(&self) -> List {
         self.vm_exec_state.top().args.clone()
+    }
+}
+
+impl Encode for VmHost {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // The VM is not something we need to serialize.
+        self.vm_exec_state.encode(encoder)?;
+        self.max_stack_depth.encode(encoder)?;
+        self.max_ticks.encode(encoder)?;
+        self.max_time.as_secs().encode(encoder)?;
+
+        // 'running' is a transient state, so we don't encode it, it will always be `true`
+        // when we decode
+        Ok(())
+    }
+}
+
+impl Decode for VmHost {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let vm = VM::new();
+        let vm_exec_state = VMExecState::decode(decoder)?;
+        let max_stack_depth = Decode::decode(decoder)?;
+        let max_ticks = Decode::decode(decoder)?;
+        let max_time = Duration::from_secs(Decode::decode(decoder)?);
+
+        Ok(Self {
+            vm,
+            vm_exec_state,
+            max_stack_depth,
+            max_ticks,
+            max_time,
+            running: true,
+            unsync: Default::default(),
+        })
+    }
+}
+
+impl<'de> BorrowDecode<'de> for VmHost {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let vm = VM::new();
+        let vm_exec_state = VMExecState::borrow_decode(decoder)?;
+        let max_stack_depth = BorrowDecode::borrow_decode(decoder)?;
+        let max_ticks = BorrowDecode::borrow_decode(decoder)?;
+        let max_time = Duration::from_secs(BorrowDecode::borrow_decode(decoder)?);
+
+        Ok(Self {
+            vm,
+            vm_exec_state,
+            max_stack_depth,
+            max_ticks,
+            max_time,
+            running: true,
+            unsync: Default::default(),
+        })
     }
 }
