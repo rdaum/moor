@@ -50,17 +50,17 @@ pub enum WakeCondition {
 #[repr(u8)]
 #[derive(Encode, Decode, Debug)]
 pub enum WakeConditionType {
-    NEVER = 0,
-    TIME = 1,
-    INPUT = 2,
+    Never = 0,
+    Time = 1,
+    Input = 2,
 }
 
 impl WakeCondition {
     pub fn condition_type(&self) -> WakeConditionType {
         match self {
-            WakeCondition::Never => WakeConditionType::NEVER,
-            WakeCondition::Time(_) => WakeConditionType::TIME,
-            WakeCondition::Input(_) => WakeConditionType::INPUT,
+            WakeCondition::Never => WakeConditionType::Never,
+            WakeCondition::Time(_) => WakeConditionType::Time,
+            WakeCondition::Input(_) => WakeConditionType::Input,
         }
     }
 }
@@ -316,13 +316,13 @@ impl Decode for WakeCondition {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let type_code: WakeConditionType = Decode::decode(decoder)?;
         match type_code {
-            WakeConditionType::NEVER => Ok(WakeCondition::Never),
-            WakeConditionType::TIME => {
+            WakeConditionType::Never => Ok(WakeCondition::Never),
+            WakeConditionType::Time => {
                 let time_since_epoch_micros: u128 = Decode::decode(decoder)?;
                 let wake_time = from_epoch_micros_to_instant(time_since_epoch_micros);
                 Ok(WakeCondition::Time(wake_time))
             }
-            WakeConditionType::INPUT => {
+            WakeConditionType::Input => {
                 let uuid = Uuid::from_u128(Decode::decode(decoder)?);
                 Ok(WakeCondition::Input(uuid))
             }
@@ -334,13 +334,13 @@ impl<'de> BorrowDecode<'de> for WakeCondition {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let type_code: WakeConditionType = Decode::decode(decoder)?;
         match type_code {
-            WakeConditionType::NEVER => Ok(WakeCondition::Never),
-            WakeConditionType::TIME => {
+            WakeConditionType::Never => Ok(WakeCondition::Never),
+            WakeConditionType::Time => {
                 let time_since_epoch_micros: u128 = Decode::decode(decoder)?;
                 let wake_time = from_epoch_micros_to_instant(time_since_epoch_micros);
                 Ok(WakeCondition::Time(wake_time))
             }
-            WakeConditionType::INPUT => {
+            WakeConditionType::Input => {
                 let uuid = Uuid::from_u128(Decode::decode(decoder)?);
                 Ok(WakeCondition::Input(uuid))
             }
