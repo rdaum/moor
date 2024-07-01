@@ -434,7 +434,6 @@ impl Scheduler {
                     session,
                     None,
                     player,
-                    false,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -469,7 +468,6 @@ impl Scheduler {
                     session,
                     None,
                     perms,
-                    false,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -535,7 +533,6 @@ impl Scheduler {
                     session,
                     None,
                     player,
-                    false,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -561,7 +558,6 @@ impl Scheduler {
                     sessions,
                     None,
                     perms,
-                    false,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -983,7 +979,6 @@ impl Scheduler {
             forked_session,
             delay,
             progr,
-            false,
             &self.server_options,
             &self.task_control_sender,
             self.database.as_ref(),
@@ -1045,7 +1040,6 @@ impl TaskQ {
         session: Arc<dyn Session>,
         delay_start: Option<Duration>,
         perms: Objid,
-        is_background: bool,
         server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
@@ -1061,8 +1055,6 @@ impl TaskQ {
             task_start,
             perms,
             server_options,
-            session.clone(),
-            task_scheduler_client.clone(),
             kill_switch.clone(),
         );
 
@@ -1105,7 +1097,7 @@ impl TaskQ {
         let task_control = RunningTaskControl {
             player,
             kill_switch,
-            session,
+            session: session.clone(),
             result_sender: Some(sender),
         };
 
@@ -1135,7 +1127,7 @@ impl TaskQ {
                     return;
                 }
 
-                Task::run_task_loop(task, &task_scheduler_client, world_state);
+                Task::run_task_loop(task, &task_scheduler_client, session, world_state);
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
@@ -1175,7 +1167,7 @@ impl TaskQ {
         let task_control = RunningTaskControl {
             player,
             kill_switch,
-            session,
+            session: session.clone(),
             result_sender,
         };
 
@@ -1187,7 +1179,7 @@ impl TaskQ {
         std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
-                Task::run_task_loop(task, &task_scheduler_client, world_state);
+                Task::run_task_loop(task, &task_scheduler_client, session, world_state);
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
@@ -1245,7 +1237,6 @@ impl TaskQ {
             old_tc.session,
             None,
             task.perms,
-            false,
             server_options,
             control_sender,
             database,
