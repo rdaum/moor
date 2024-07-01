@@ -25,6 +25,10 @@
 //!
 use crossbeam_channel::Sender;
 
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use lazy_static::lazy_static;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -528,6 +532,55 @@ fn find_verb_for_command(
         }
     }
     Ok(None)
+}
+
+impl Encode for Task {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // We encode everything but the kill switch, which is transient and always decoded to 'true'
+        self.task_id.encode(encoder)?;
+        self.player.encode(encoder)?;
+        self.task_start.encode(encoder)?;
+        self.vm_host.encode(encoder)?;
+        self.perms.encode(encoder)
+    }
+}
+
+impl Decode for Task {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let task_id = TaskId::decode(decoder)?;
+        let player = Objid::decode(decoder)?;
+        let task_start = Arc::decode(decoder)?;
+        let vm_host = VmHost::decode(decoder)?;
+        let perms = Objid::decode(decoder)?;
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        Ok(Task {
+            task_id,
+            player,
+            task_start,
+            vm_host,
+            perms,
+            kill_switch,
+        })
+    }
+}
+
+impl<'de> BorrowDecode<'de> for Task {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let task_id = TaskId::borrow_decode(decoder)?;
+        let player = Objid::borrow_decode(decoder)?;
+        let task_start = Arc::borrow_decode(decoder)?;
+        let vm_host = VmHost::borrow_decode(decoder)?;
+        let perms = Objid::borrow_decode(decoder)?;
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        Ok(Task {
+            task_id,
+            player,
+            task_start,
+            vm_host,
+            perms,
+            kill_switch,
+        })
+    }
 }
 
 // TODO: a battery of unit tests here. Which will likely involve setting up a standalone VM running
