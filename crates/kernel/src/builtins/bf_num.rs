@@ -25,7 +25,6 @@ use moor_values::var::{v_float, v_int, v_str};
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::vm::VM;
 
 fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -365,28 +364,26 @@ fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(trunc, bf_trunc);
 
-impl VM {
-    pub(crate) fn register_bf_num(&mut self) {
-        self.builtins[offset_for_builtin("abs")] = Arc::new(BfAbs {});
-        self.builtins[offset_for_builtin("min")] = Arc::new(BfMin {});
-        self.builtins[offset_for_builtin("max")] = Arc::new(BfMax {});
-        self.builtins[offset_for_builtin("random")] = Arc::new(BfRandom {});
-        self.builtins[offset_for_builtin("floatstr")] = Arc::new(BfFloatstr {});
-        self.builtins[offset_for_builtin("sqrt")] = Arc::new(BfSqrt {});
-        self.builtins[offset_for_builtin("sin")] = Arc::new(BfSin {});
-        self.builtins[offset_for_builtin("cos")] = Arc::new(BfCos {});
-        self.builtins[offset_for_builtin("tan")] = Arc::new(BfTan {});
-        self.builtins[offset_for_builtin("asin")] = Arc::new(BfAsin {});
-        self.builtins[offset_for_builtin("acos")] = Arc::new(BfAcos {});
-        self.builtins[offset_for_builtin("atan")] = Arc::new(BfAtan {});
-        self.builtins[offset_for_builtin("sinh")] = Arc::new(BfSinh {});
-        self.builtins[offset_for_builtin("cosh")] = Arc::new(BfCosh {});
-        self.builtins[offset_for_builtin("tanh")] = Arc::new(BfTanh {});
-        self.builtins[offset_for_builtin("exp")] = Arc::new(BfExp {});
-        self.builtins[offset_for_builtin("log")] = Arc::new(BfLog {});
-        self.builtins[offset_for_builtin("log10")] = Arc::new(BfLog10 {});
-        self.builtins[offset_for_builtin("ceil")] = Arc::new(BfCeil {});
-        self.builtins[offset_for_builtin("floor")] = Arc::new(BfFloor {});
-        self.builtins[offset_for_builtin("trunc")] = Arc::new(BfTrunc {});
-    }
+pub(crate) fn register_bf_num(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("abs")] = Arc::new(BfAbs {});
+    builtins[offset_for_builtin("min")] = Arc::new(BfMin {});
+    builtins[offset_for_builtin("max")] = Arc::new(BfMax {});
+    builtins[offset_for_builtin("random")] = Arc::new(BfRandom {});
+    builtins[offset_for_builtin("floatstr")] = Arc::new(BfFloatstr {});
+    builtins[offset_for_builtin("sqrt")] = Arc::new(BfSqrt {});
+    builtins[offset_for_builtin("sin")] = Arc::new(BfSin {});
+    builtins[offset_for_builtin("cos")] = Arc::new(BfCos {});
+    builtins[offset_for_builtin("tan")] = Arc::new(BfTan {});
+    builtins[offset_for_builtin("asin")] = Arc::new(BfAsin {});
+    builtins[offset_for_builtin("acos")] = Arc::new(BfAcos {});
+    builtins[offset_for_builtin("atan")] = Arc::new(BfAtan {});
+    builtins[offset_for_builtin("sinh")] = Arc::new(BfSinh {});
+    builtins[offset_for_builtin("cosh")] = Arc::new(BfCosh {});
+    builtins[offset_for_builtin("tanh")] = Arc::new(BfTanh {});
+    builtins[offset_for_builtin("exp")] = Arc::new(BfExp {});
+    builtins[offset_for_builtin("log")] = Arc::new(BfLog {});
+    builtins[offset_for_builtin("log10")] = Arc::new(BfLog10 {});
+    builtins[offset_for_builtin("ceil")] = Arc::new(BfCeil {});
+    builtins[offset_for_builtin("floor")] = Arc::new(BfFloor {});
+    builtins[offset_for_builtin("trunc")] = Arc::new(BfTrunc {});
 }

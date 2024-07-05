@@ -25,7 +25,6 @@ use moor_values::AsByteBuffer;
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::vm::VM;
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];
@@ -188,20 +187,18 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(object_bytes, bf_object_bytes);
 
-impl VM {
-    pub(crate) fn register_bf_values(&mut self) {
-        self.builtins[offset_for_builtin("typeof")] = Arc::new(BfTypeof {});
-        self.builtins[offset_for_builtin("tostr")] = Arc::new(BfTostr {});
-        self.builtins[offset_for_builtin("toliteral")] = Arc::new(BfToliteral {});
-        self.builtins[offset_for_builtin("toint")] = Arc::new(BfToint {});
-        self.builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
-        self.builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
-        self.builtins[offset_for_builtin("toobj")] = Arc::new(BfToobj {});
-        self.builtins[offset_for_builtin("tofloat")] = Arc::new(BfTofloat {});
-        self.builtins[offset_for_builtin("equal")] = Arc::new(BfEqual {});
-        self.builtins[offset_for_builtin("value_bytes")] = Arc::new(BfValueBytes {});
-        self.builtins[offset_for_builtin("object_bytes")] = Arc::new(BfObjectBytes {});
-        self.builtins[offset_for_builtin("value_hash")] = Arc::new(BfValueHash {});
-        self.builtins[offset_for_builtin("length")] = Arc::new(BfLength {});
-    }
+pub(crate) fn register_bf_values(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("typeof")] = Arc::new(BfTypeof {});
+    builtins[offset_for_builtin("tostr")] = Arc::new(BfTostr {});
+    builtins[offset_for_builtin("toliteral")] = Arc::new(BfToliteral {});
+    builtins[offset_for_builtin("toint")] = Arc::new(BfToint {});
+    builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
+    builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
+    builtins[offset_for_builtin("toobj")] = Arc::new(BfToobj {});
+    builtins[offset_for_builtin("tofloat")] = Arc::new(BfTofloat {});
+    builtins[offset_for_builtin("equal")] = Arc::new(BfEqual {});
+    builtins[offset_for_builtin("value_bytes")] = Arc::new(BfValueBytes {});
+    builtins[offset_for_builtin("object_bytes")] = Arc::new(BfObjectBytes {});
+    builtins[offset_for_builtin("value_hash")] = Arc::new(BfValueHash {});
+    builtins[offset_for_builtin("length")] = Arc::new(BfLength {});
 }

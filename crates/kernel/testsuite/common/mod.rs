@@ -37,6 +37,7 @@ use uuid::Uuid;
 
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxWorldState;
+use moor_kernel::builtins::BuiltinRegistry;
 use moor_values::var::Symbol;
 
 #[allow(dead_code)]
@@ -108,9 +109,11 @@ pub fn run_as_verb(db: &dyn Database, expression: &str) -> ExecResult {
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db, &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
+    let builtin_registry = Arc::new(BuiltinRegistry::new());
     let result = vm_test_utils::call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
+        builtin_registry,
         &verb_uuid,
         vec![],
     );
@@ -127,7 +130,9 @@ pub fn eval(
 ) -> eyre::Result<ExecResult> {
     let binary = compile(expression)?;
     let mut state = db.new_world_state()?;
-    let result = vm_test_utils::call_eval_builtin(state.as_mut(), session, player, binary);
+    let builtin_registry = Arc::new(BuiltinRegistry::new());
+    let result =
+        vm_test_utils::call_eval_builtin(state.as_mut(), session, builtin_registry, player, binary);
     state.commit()?;
     Ok(result)
 }

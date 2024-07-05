@@ -27,7 +27,6 @@ use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::vm_execute::one_to_zero_index;
-use crate::vm::VM;
 
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -424,19 +423,17 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(substitute, bf_substitute);
 
-impl VM {
-    pub(crate) fn register_bf_list_sets(&mut self) {
-        self.builtins[offset_for_builtin("is_member")] = Arc::new(BfIsMember {});
-        self.builtins[offset_for_builtin("listinsert")] = Arc::new(BfListinsert {});
-        self.builtins[offset_for_builtin("listappend")] = Arc::new(BfListappend {});
-        self.builtins[offset_for_builtin("listdelete")] = Arc::new(BfListdelete {});
-        self.builtins[offset_for_builtin("listset")] = Arc::new(BfListset {});
-        self.builtins[offset_for_builtin("setadd")] = Arc::new(BfSetadd {});
-        self.builtins[offset_for_builtin("setremove")] = Arc::new(BfSetremove {});
-        self.builtins[offset_for_builtin("match")] = Arc::new(BfMatch {});
-        self.builtins[offset_for_builtin("rmatch")] = Arc::new(BfRmatch {});
-        self.builtins[offset_for_builtin("substitute")] = Arc::new(BfSubstitute {});
-    }
+pub(crate) fn register_bf_list_sets(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("is_member")] = Arc::new(BfIsMember {});
+    builtins[offset_for_builtin("listinsert")] = Arc::new(BfListinsert {});
+    builtins[offset_for_builtin("listappend")] = Arc::new(BfListappend {});
+    builtins[offset_for_builtin("listdelete")] = Arc::new(BfListdelete {});
+    builtins[offset_for_builtin("listset")] = Arc::new(BfListset {});
+    builtins[offset_for_builtin("setadd")] = Arc::new(BfSetadd {});
+    builtins[offset_for_builtin("setremove")] = Arc::new(BfSetremove {});
+    builtins[offset_for_builtin("match")] = Arc::new(BfMatch {});
+    builtins[offset_for_builtin("rmatch")] = Arc::new(BfRmatch {});
+    builtins[offset_for_builtin("substitute")] = Arc::new(BfSubstitute {});
 }
 
 #[cfg(test)]

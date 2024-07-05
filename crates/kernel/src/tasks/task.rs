@@ -36,6 +36,7 @@ use std::time::{Duration, Instant};
 
 use tracing::{error, trace, warn};
 
+use crate::builtins::BuiltinRegistry;
 use moor_values::model::CommandError::PermissionDenied;
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
@@ -114,6 +115,7 @@ impl Task {
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) {
         while task.vm_host.is_running() {
             // Check kill switch.
@@ -122,9 +124,12 @@ impl Task {
                 task_scheduler_client.abort_cancelled();
                 break;
             }
-            if let Some(continuation_task) =
-                task.vm_dispatch(task_scheduler_client, session.clone(), world_state.as_mut())
-            {
+            if let Some(continuation_task) = task.vm_dispatch(
+                task_scheduler_client,
+                session.clone(),
+                world_state.as_mut(),
+                builtin_registry.clone(),
+            ) {
                 task = continuation_task;
             } else {
                 break;
@@ -232,6 +237,7 @@ impl Task {
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
         world_state: &mut dyn WorldState,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) -> Option<Self> {
         // Call the VM
         let vm_exec_result = self.vm_host.exec_interpreter(
@@ -239,6 +245,7 @@ impl Task {
             world_state,
             task_scheduler_client.clone(),
             session,
+            builtin_registry,
         );
 
         // Having done that, what should we now do?
@@ -587,6 +594,7 @@ impl<'de> BorrowDecode<'de> for Task {
 //   a simple program.
 #[cfg(test)]
 mod tests {
+    use crate::builtins::BuiltinRegistry;
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::task::Task;
     use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
@@ -671,7 +679,13 @@ mod tests {
             setup_test_env("return 1 + 1;");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(task, &task_scheduler_client, session, tx);
+        Task::run_task_loop(
+            task,
+            &task_scheduler_client,
+            session,
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -689,7 +703,13 @@ mod tests {
             setup_test_env("return 1 / 0;");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(task, &task_scheduler_client, session, tx);
+        Task::run_task_loop(
+            task,
+            &task_scheduler_client,
+            session,
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -707,7 +727,13 @@ mod tests {
             setup_test_env(r#"notify(#0, "12345"); return 123;"#);
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(task, &task_scheduler_client, session, tx);
+        Task::run_task_loop(
+            task,
+            &task_scheduler_client,
+            session,
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
 
         // Scheduler should have received a TaskException message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -735,7 +761,13 @@ mod tests {
             setup_test_env("suspend(1); return 123;");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(task, &task_scheduler_client, session.clone(), tx);
+        Task::run_task_loop(
+            task,
+            &task_scheduler_client,
+            session.clone(),
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
 
         // Scheduler should have received a TaskSuspend message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -750,7 +782,13 @@ mod tests {
         resume_task.vm_host.resume_execution(v_int(0));
 
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(resume_task, &task_scheduler_client, session, tx);
+        Task::run_task_loop(
+            resume_task,
+            &task_scheduler_client,
+            session,
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
@@ -766,7 +804,13 @@ mod tests {
             setup_test_env("return read();");
 
         let session = Arc::new(NoopClientSession::new());
-        Task::run_task_loop(task, &task_scheduler_client, session.clone(), tx);
+        Task::run_task_loop(
+            task,
+            &task_scheduler_client,
+            session.clone(),
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
 
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -781,7 +825,13 @@ mod tests {
 
         // And run its task loop again, with a new transaction.
         let tx = db.new_world_state().unwrap();
-        Task::run_task_loop(resume_task, &task_scheduler_client, session, tx);
+        Task::run_task_loop(
+            resume_task,
+            &task_scheduler_client,
+            session,
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
 
         // Scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -810,7 +860,13 @@ mod tests {
         let jh = std::thread::spawn(move || {
             let tx = db.new_world_state().unwrap();
             let session = Arc::new(NoopClientSession::new());
-            Task::run_task_loop(task, &task_scheduler_client, session, tx);
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                tx,
+                Arc::new(BuiltinRegistry::new()),
+            );
         });
 
         // Scheduler should have received a TaskRequestFork message.

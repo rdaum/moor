@@ -27,7 +27,6 @@ use crate::bf_declare;
 use crate::builtins::BfErr::Code;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::vm::VM;
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }
@@ -252,13 +251,12 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_empty_list()))
 }
 bf_declare!(delete_property, bf_delete_property);
-impl VM {
-    pub(crate) fn register_bf_properties(&mut self) {
-        self.builtins[offset_for_builtin("property_info")] = Arc::new(BfPropertyInfo {});
-        self.builtins[offset_for_builtin("set_property_info")] = Arc::new(BfSetPropertyInfo {});
-        self.builtins[offset_for_builtin("is_clear_property")] = Arc::new(BfIsClearProperty {});
-        self.builtins[offset_for_builtin("clear_property")] = Arc::new(BfSetClearProperty {});
-        self.builtins[offset_for_builtin("add_property")] = Arc::new(BfAddProperty {});
-        self.builtins[offset_for_builtin("delete_property")] = Arc::new(BfDeleteProperty {});
-    }
+
+pub(crate) fn register_bf_properties(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("property_info")] = Arc::new(BfPropertyInfo {});
+    builtins[offset_for_builtin("set_property_info")] = Arc::new(BfSetPropertyInfo {});
+    builtins[offset_for_builtin("is_clear_property")] = Arc::new(BfIsClearProperty {});
+    builtins[offset_for_builtin("clear_property")] = Arc::new(BfSetClearProperty {});
+    builtins[offset_for_builtin("add_property")] = Arc::new(BfAddProperty {});
+    builtins[offset_for_builtin("delete_property")] = Arc::new(BfDeleteProperty {});
 }

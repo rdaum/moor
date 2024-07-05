@@ -29,6 +29,7 @@ use crossbeam_channel::Receiver;
 use lazy_static::lazy_static;
 use std::thread::yield_now;
 
+use crate::builtins::BuiltinRegistry;
 use moor_compiler::compile;
 use moor_compiler::CompileError;
 use moor_db::Database;
@@ -94,6 +95,8 @@ pub struct Scheduler {
     next_task_id: usize,
 
     server_options: ServerOptions,
+
+    builtin_registry: Arc<BuiltinRegistry>,
 
     /// The internal task queue which holds our suspended tasks, and control records for actively
     /// running tasks.
@@ -206,6 +209,7 @@ impl Scheduler {
             fg_ticks: DEFAULT_FG_TICKS,
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
         };
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
         Self {
             running: false,
             database,
@@ -216,6 +220,7 @@ impl Scheduler {
             task_control_receiver,
             scheduler_sender,
             scheduler_receiver,
+            builtin_registry,
             server_options: default_server_options,
         }
     }
@@ -242,6 +247,7 @@ impl Scheduler {
                     sr.result_sender,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 ) {
                     error!(?task_id, ?e, "Error resuming task");
                 }
@@ -409,6 +415,7 @@ impl Scheduler {
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 );
                 reply
                     .send(result)
@@ -443,6 +450,7 @@ impl Scheduler {
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 );
                 reply
                     .send(result)
@@ -478,6 +486,7 @@ impl Scheduler {
                     sr.result_sender,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 );
                 reply.send(response).expect("Could not send input reply");
             }
@@ -508,6 +517,7 @@ impl Scheduler {
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 );
                 reply
                     .send(result)
@@ -533,6 +543,7 @@ impl Scheduler {
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 );
                 reply
                     .send(result)
@@ -642,6 +653,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     &self.server_options,
+                    self.builtin_registry.clone(),
                 );
             }
             TaskControlMsg::TaskVerbNotFound(this, verb) => {
@@ -839,6 +851,7 @@ impl Scheduler {
                     return_value,
                     &self.task_control_sender,
                     self.database.as_ref(),
+                    self.builtin_registry.clone(),
                 );
                 if let Err(e) = result_sender.send(rr) {
                     error!(?e, "Could not send resume task result to requester");
@@ -954,6 +967,7 @@ impl Scheduler {
             &self.server_options,
             &self.task_control_sender,
             self.database.as_ref(),
+            self.builtin_registry.clone(),
         ) {
             Ok(th) => th,
             Err(e) => {
@@ -1003,7 +1017,7 @@ impl Scheduler {
 
 impl TaskQ {
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, control_sender, database, session))]
+    #[instrument(skip(self, control_sender, database, session, builtin_registry))]
     fn start_task_thread(
         &mut self,
         task_id: TaskId,
@@ -1015,6 +1029,7 @@ impl TaskQ {
         server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) -> Result<TaskHandle, SchedulerError> {
         let (sender, receiver) = oneshot::channel();
 
@@ -1099,7 +1114,13 @@ impl TaskQ {
                     return;
                 }
 
-                Task::run_task_loop(task, &task_scheduler_client, session, world_state);
+                Task::run_task_loop(
+                    task,
+                    &task_scheduler_client,
+                    session,
+                    world_state,
+                    builtin_registry,
+                );
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
@@ -1108,7 +1129,14 @@ impl TaskQ {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, result_sender, control_sender, database, session))]
+    #[instrument(skip(
+        self,
+        result_sender,
+        control_sender,
+        database,
+        session,
+        builtin_registry
+    ))]
     fn resume_task_thread(
         &mut self,
         mut task: Task,
@@ -1117,6 +1145,7 @@ impl TaskQ {
         result_sender: Option<oneshot::Sender<TaskResult>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) -> Result<(), SchedulerError> {
         // Take a task out of a suspended state and start running it again.
         // Means:
@@ -1151,7 +1180,13 @@ impl TaskQ {
         std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
-                Task::run_task_loop(task, &task_scheduler_client, session, world_state);
+                Task::run_task_loop(
+                    task,
+                    &task_scheduler_client,
+                    session,
+                    world_state,
+                    builtin_registry,
+                );
                 trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
@@ -1180,13 +1215,14 @@ impl TaskQ {
         }
     }
 
-    #[instrument(skip(self, control_sender, database))]
+    #[instrument(skip(self, control_sender, builtin_registry, database))]
     fn retry_task(
         &mut self,
         task: Task,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         server_options: &ServerOptions,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) {
         // Make sure the old thread is dead.
         task.kill_switch.store(true, Ordering::SeqCst);
@@ -1212,6 +1248,7 @@ impl TaskQ {
             server_options,
             control_sender,
             database,
+            builtin_registry,
         ) {
             error!(?e, "Could not restart task");
         }
@@ -1271,7 +1308,7 @@ impl TaskQ {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, control_sender, database))]
+    #[instrument(skip(self, control_sender, database, builtin_registry))]
     fn resume_task(
         &mut self,
         requesting_task_id: TaskId,
@@ -1280,6 +1317,7 @@ impl TaskQ {
         return_value: Var,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) -> Var {
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
         // request.
@@ -1315,6 +1353,7 @@ impl TaskQ {
                 sr.result_sender,
                 control_sender,
                 database,
+                builtin_registry,
             )
             .is_err()
         {

@@ -17,13 +17,6 @@
 //! Aims to be semantically identical, so as to be able to run existing LambdaMOO compatible cores
 //! without blocking issues.
 
-use std::sync::Arc;
-
-use moor_compiler::BUILTIN_DESCRIPTORS;
-
-use crate::builtins::bf_server::BfNoop;
-use crate::builtins::BuiltinFunction;
-
 pub(crate) mod activation;
 pub(crate) mod exec_state;
 pub(crate) mod vm_call;
@@ -31,44 +24,101 @@ pub(crate) mod vm_execute;
 pub(crate) mod vm_unwind;
 
 // Exports to the rest of the kernel
+use crate::builtins::BuiltinRegistry;
+use crate::tasks::command_parse::ParsedCommand;
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::tasks::VerbCall;
+use crate::vm::activation::Activation;
+use bincode::{Decode, Encode};
 pub use exec_state::VMExecState;
+use moor_compiler::{Name, Offset, Program};
+use moor_values::model::VerbInfo;
+use moor_values::var::{Objid, Var};
+use std::sync::Arc;
+use std::time::Duration;
 pub use vm_call::VerbExecutionRequest;
-pub use vm_execute::{ExecutionResult, Fork, VmExecParams};
+pub use vm_execute::VM;
 pub use vm_unwind::{FinallyReason, UncaughtException};
 
 mod frame;
 #[cfg(test)]
 mod vm_test;
 
-pub struct VM {
-    /// The set of built-in functions, indexed by their Name offset in the variable stack.
-    pub(crate) builtins: Vec<Arc<dyn BuiltinFunction>>,
+/// The set of parameters for a VM-requested fork.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct Fork {
+    /// The player. This is in the activation as well, but it's nicer to have it up here and
+    /// explicit
+    pub(crate) player: Objid,
+    /// The permissions context for the forked task.
+    pub(crate) progr: Objid,
+    /// The task ID of the task that forked us
+    pub(crate) parent_task_id: usize,
+    /// The time to delay before starting the forked task, if any.
+    pub(crate) delay: Option<Duration>,
+    /// A copy of the activation record from the task that forked us.
+    pub(crate) activation: Activation,
+    /// The unique fork vector offset into the fork vector for the executing binary held in the
+    /// activation record.  This is copied into the main vector and execution proceeds from there,
+    /// instead.
+    pub(crate) fork_vector_offset: Offset,
+    /// The (optional) variable label where the task ID of the new task should be stored, in both
+    /// the parent activation and the new task's activation.
+    pub task_id: Option<Name>,
 }
 
-impl Default for VM {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Represents the set of parameters passed to the VM for execution.
+pub struct VmExecParams {
+    pub task_scheduler_client: TaskSchedulerClient,
+    pub builtin_registry: Arc<BuiltinRegistry>,
+    pub max_stack_depth: usize,
 }
 
-impl VM {
-    pub fn new() -> Self {
-        let mut builtins: Vec<Arc<dyn BuiltinFunction>> =
-            Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
-        for _ in 0..BUILTIN_DESCRIPTORS.len() {
-            builtins.push(Arc::new(BfNoop {}))
-        }
-        let mut vm = Self { builtins };
-
-        vm.register_bf_server();
-        vm.register_bf_num();
-        vm.register_bf_values();
-        vm.register_bf_strings();
-        vm.register_bf_list_sets();
-        vm.register_bf_objects();
-        vm.register_bf_verbs();
-        vm.register_bf_properties();
-
-        vm
-    }
+#[derive(Debug, Clone)]
+pub enum ExecutionResult {
+    /// Execution of this call stack is complete.
+    Complete(Var),
+    /// All is well. The task should let the VM continue executing.
+    More,
+    /// An exception was raised during execution.
+    Exception(FinallyReason),
+    /// Request dispatch to another verb
+    ContinueVerb {
+        /// The applicable permissions context.
+        permissions: Objid,
+        /// The requested verb.
+        resolved_verb: VerbInfo,
+        /// The call parameters that were used to resolve the verb.
+        call: VerbCall,
+        /// The parsed user command that led to this verb dispatch, if any.
+        command: Option<ParsedCommand>,
+    },
+    /// Request dispatch of a new task as a fork
+    DispatchFork(Fork),
+    /// Request dispatch of a builtin function with the given arguments.
+    ContinueBuiltin {
+        bf_func_num: usize,
+        arguments: Vec<Var>,
+    },
+    /// Request that this task be suspended for a duration of time.
+    /// This leads to the task performing a commit, being suspended for a delay, and then being
+    /// resumed under a new transaction.
+    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
+    /// resumed using `resume()` or `kill_task()`.
+    Suspend(Option<Duration>),
+    /// Request input from the client.
+    NeedInput,
+    /// Request `eval` execution, which is a kind of special activation creation where we've already
+    /// been given the program to execute instead of having to look it up.
+    PerformEval {
+        /// The permissions context for the eval.
+        permissions: Objid,
+        /// The player who is performing the eval.
+        player: Objid,
+        /// The program to execute.
+        program: Program,
+    },
+    /// Rollback the current transaction and restart the task in a new transaction.
+    /// This can happen when a conflict occurs during execution, independent of a commit.
+    RollbackRestart,
 }

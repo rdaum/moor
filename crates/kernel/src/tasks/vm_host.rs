@@ -12,12 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::builtins::{BuiltinRegistry};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::{TaskId, VerbCall};
+use crate::vm::activation::VmStackFrame;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
@@ -27,13 +29,14 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use daumtils::PhantomUnsync;
-use moor_compiler::Program;
 use moor_compiler::{compile, Name};
+use moor_compiler::{Program};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
-use moor_values::var::Symbol;
+use moor_values::var::Error::E_MAXREC;
 use moor_values::var::Var;
+use moor_values::var::{v_none, Symbol};
 use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
 use std::fmt::{Debug, Formatter};
@@ -98,7 +101,7 @@ impl VmHost {
         max_ticks: usize,
         max_time: Duration,
     ) -> Self {
-        let vm = VM::new();
+        let vm = VM {};
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
 
         // Created in an initial suspended state.
@@ -163,8 +166,7 @@ impl VmHost {
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
-        self.vm
-            .exec_fork_vector(&mut self.vm_exec_state, fork_request.clone());
+        self.vm_exec_state.exec_fork_vector(fork_request.clone());
         self.running = !suspended;
     }
 
@@ -178,8 +180,7 @@ impl VmHost {
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
-        self.vm
-            .exec_call_request(&mut self.vm_exec_state, verb_execution_request);
+        self.vm_exec_state.exec_call_request(verb_execution_request);
         self.running = true;
     }
 
@@ -206,8 +207,8 @@ impl VmHost {
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
-        self.vm
-            .exec_eval_request(&mut self.vm_exec_state, player, player, program);
+        self.vm_exec_state
+            .exec_eval_request(player, player, program);
         self.running = true;
     }
 
@@ -218,11 +219,13 @@ impl VmHost {
         world_state: &mut dyn WorldState,
         task_scheduler_client: TaskSchedulerClient,
         session: Arc<dyn Session>,
+        builtin_registry: Arc<BuiltinRegistry>,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
             task_scheduler_client: task_scheduler_client.clone(),
+            builtin_registry,
             max_stack_depth: self.max_stack_depth,
         };
 
@@ -243,12 +246,7 @@ impl VmHost {
         let pre_exec_tick_count = self.vm_exec_state.tick_count;
 
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
-        let mut result = self.vm.exec(
-            &exec_params,
-            &mut self.vm_exec_state,
-            world_state,
-            session.clone(),
-        );
+        let mut result = self.run_interpreter(&exec_params, world_state, session.clone());
 
         let post_exec_tick_count = self.vm_exec_state.tick_count;
         trace!(
@@ -281,8 +279,7 @@ impl VmHost {
                         program,
                     };
 
-                    self.vm
-                        .exec_call_request(&mut self.vm_exec_state, call_request);
+                    self.vm_exec_state.exec_call_request(call_request);
                     return ContinueOk;
                 }
                 ExecutionResult::PerformEval {
@@ -290,27 +287,18 @@ impl VmHost {
                     player,
                     program,
                 } => {
-                    self.vm.exec_eval_request(
-                        &mut self.vm_exec_state,
-                        permissions,
-                        player,
-                        program,
-                    );
+                    self.vm_exec_state
+                        .exec_eval_request(permissions, player, program);
                     return ContinueOk;
                 }
                 ExecutionResult::ContinueBuiltin {
                     bf_func_num: bf_offset,
                     arguments: args,
                 } => {
-                    let exec_params = VmExecParams {
-                        max_stack_depth: self.max_stack_depth,
-                        task_scheduler_client: task_scheduler_client.clone(),
-                    };
                     // Ask the VM to execute the builtin function.
                     // This will push the result onto the stack.
                     // After this we will loop around and check the result.
-                    result = self.vm.call_builtin_function(
-                        &mut self.vm_exec_state,
+                    result = self.vm_exec_state.call_builtin_function(
                         bf_offset,
                         List::from_slice(&args),
                         &exec_params,
@@ -359,6 +347,46 @@ impl VmHost {
         // asked to stop by the scheduler.
         warn!(task_id, "VM host stopped by task");
         VMHostResponse::CompleteAbort
+    }
+
+    pub fn run_interpreter(
+        &mut self,
+        vm_exec_params: &VmExecParams,
+        world_state: &mut dyn WorldState,
+        session: Arc<dyn Session>,
+    ) -> ExecutionResult {
+        // No activations? Nothing to do.
+        if self.vm_exec_state.stack.is_empty() {
+            return ExecutionResult::Complete(v_none());
+        }
+
+        // Before executing, check stack depth...
+        if self.vm_exec_state.stack.len() >= vm_exec_params.max_stack_depth {
+            // Absolutely raise-unwind an error here instead of just offering it as a potential
+            // return value if this is a non-d verb. At least I think this the right thing to do?
+            return self.vm_exec_state.throw_error(E_MAXREC);
+        }
+
+        // Pick the right kind of execution flow depending on the activation -- builtin or MOO?
+        // (To avoid borrow issues on the exec state, we won't actually pull the frame out, just look
+        // at its type and execute the right function which will have to unpack the frame itself.
+        // this is a bit not-ideal but it's the best I can do right now.)
+        let result = match &self.vm_exec_state.top().frame {
+            VmStackFrame::Moo(_) => {
+                return self.vm.exec(
+                    vm_exec_params,
+                    &mut self.vm_exec_state,
+                    world_state,
+                    session.clone(),
+                );
+            }
+            VmStackFrame::Bf(_) => {
+                self.vm_exec_state
+                    .reenter_builtin_function(vm_exec_params, world_state, session)
+            }
+        };
+
+        result
     }
 
     /// Resume what you were doing after suspension.
@@ -445,7 +473,7 @@ impl Encode for VmHost {
 
 impl Decode for VmHost {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let vm = VM::new();
+        let vm = VM {};
         let vm_exec_state = VMExecState::decode(decoder)?;
         let max_stack_depth = Decode::decode(decoder)?;
         let max_ticks = Decode::decode(decoder)?;
@@ -465,7 +493,7 @@ impl Decode for VmHost {
 
 impl<'de> BorrowDecode<'de> for VmHost {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let vm = VM::new();
+        let vm = VM {};
         let vm_exec_state = VMExecState::borrow_decode(decoder)?;
         let max_stack_depth = BorrowDecode::borrow_decode(decoder)?;
         let max_ticks = BorrowDecode::borrow_decode(decoder)?;

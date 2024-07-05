@@ -35,7 +35,7 @@ use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::tasks::TaskId;
-use crate::vm::{ExecutionResult, VM};
+use crate::vm::ExecutionResult;
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -897,39 +897,37 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(load_server_options, load_server_options);
 
-impl VM {
-    pub(crate) fn register_bf_server(&mut self) {
-        self.builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
-        self.builtins[offset_for_builtin("connected_players")] = Arc::new(BfConnectedPlayers {});
-        self.builtins[offset_for_builtin("is_player")] = Arc::new(BfIsPlayer {});
-        self.builtins[offset_for_builtin("caller_perms")] = Arc::new(BfCallerPerms {});
-        self.builtins[offset_for_builtin("set_task_perms")] = Arc::new(BfSetTaskPerms {});
-        self.builtins[offset_for_builtin("callers")] = Arc::new(BfCallers {});
-        self.builtins[offset_for_builtin("task_id")] = Arc::new(BfTaskId {});
-        self.builtins[offset_for_builtin("idle_seconds")] = Arc::new(BfIdleSeconds {});
-        self.builtins[offset_for_builtin("connected_seconds")] = Arc::new(BfConnectedSeconds {});
-        self.builtins[offset_for_builtin("connection_name")] = Arc::new(BfConnectionName {});
-        self.builtins[offset_for_builtin("time")] = Arc::new(BfTime {});
-        self.builtins[offset_for_builtin("ctime")] = Arc::new(BfCtime {});
-        self.builtins[offset_for_builtin("raise")] = Arc::new(BfRaise {});
-        self.builtins[offset_for_builtin("server_version")] = Arc::new(BfServerVersion {});
-        self.builtins[offset_for_builtin("shutdown")] = Arc::new(BfShutdown {});
-        self.builtins[offset_for_builtin("suspend")] = Arc::new(BfSuspend {});
-        self.builtins[offset_for_builtin("queued_tasks")] = Arc::new(BfQueuedTasks {});
-        self.builtins[offset_for_builtin("kill_task")] = Arc::new(BfKillTask {});
-        self.builtins[offset_for_builtin("resume")] = Arc::new(BfResume {});
-        self.builtins[offset_for_builtin("ticks_left")] = Arc::new(BfTicksLeft {});
-        self.builtins[offset_for_builtin("seconds_left")] = Arc::new(BfSecondsLeft {});
-        self.builtins[offset_for_builtin("boot_player")] = Arc::new(BfBootPlayer {});
-        self.builtins[offset_for_builtin("call_function")] = Arc::new(BfCallFunction {});
-        self.builtins[offset_for_builtin("server_log")] = Arc::new(BfServerLog {});
-        self.builtins[offset_for_builtin("function_info")] = Arc::new(BfFunctionInfo {});
-        self.builtins[offset_for_builtin("listeners")] = Arc::new(BfListeners {});
-        self.builtins[offset_for_builtin("eval")] = Arc::new(BfEval {});
-        self.builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
-        self.builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
-        self.builtins[offset_for_builtin("memory_usage")] = Arc::new(BfMemoryUsage {});
-        self.builtins[offset_for_builtin("db_disk_size")] = Arc::new(BfDbDiskSize {});
-        self.builtins[offset_for_builtin("load_server_options")] = Arc::new(BfLoadServerOptions {});
-    }
+pub(crate) fn register_bf_server(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
+    builtins[offset_for_builtin("connected_players")] = Arc::new(BfConnectedPlayers {});
+    builtins[offset_for_builtin("is_player")] = Arc::new(BfIsPlayer {});
+    builtins[offset_for_builtin("caller_perms")] = Arc::new(BfCallerPerms {});
+    builtins[offset_for_builtin("set_task_perms")] = Arc::new(BfSetTaskPerms {});
+    builtins[offset_for_builtin("callers")] = Arc::new(BfCallers {});
+    builtins[offset_for_builtin("task_id")] = Arc::new(BfTaskId {});
+    builtins[offset_for_builtin("idle_seconds")] = Arc::new(BfIdleSeconds {});
+    builtins[offset_for_builtin("connected_seconds")] = Arc::new(BfConnectedSeconds {});
+    builtins[offset_for_builtin("connection_name")] = Arc::new(BfConnectionName {});
+    builtins[offset_for_builtin("time")] = Arc::new(BfTime {});
+    builtins[offset_for_builtin("ctime")] = Arc::new(BfCtime {});
+    builtins[offset_for_builtin("raise")] = Arc::new(BfRaise {});
+    builtins[offset_for_builtin("server_version")] = Arc::new(BfServerVersion {});
+    builtins[offset_for_builtin("shutdown")] = Arc::new(BfShutdown {});
+    builtins[offset_for_builtin("suspend")] = Arc::new(BfSuspend {});
+    builtins[offset_for_builtin("queued_tasks")] = Arc::new(BfQueuedTasks {});
+    builtins[offset_for_builtin("kill_task")] = Arc::new(BfKillTask {});
+    builtins[offset_for_builtin("resume")] = Arc::new(BfResume {});
+    builtins[offset_for_builtin("ticks_left")] = Arc::new(BfTicksLeft {});
+    builtins[offset_for_builtin("seconds_left")] = Arc::new(BfSecondsLeft {});
+    builtins[offset_for_builtin("boot_player")] = Arc::new(BfBootPlayer {});
+    builtins[offset_for_builtin("call_function")] = Arc::new(BfCallFunction {});
+    builtins[offset_for_builtin("server_log")] = Arc::new(BfServerLog {});
+    builtins[offset_for_builtin("function_info")] = Arc::new(BfFunctionInfo {});
+    builtins[offset_for_builtin("listeners")] = Arc::new(BfListeners {});
+    builtins[offset_for_builtin("eval")] = Arc::new(BfEval {});
+    builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
+    builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
+    builtins[offset_for_builtin("memory_usage")] = Arc::new(BfMemoryUsage {});
+    builtins[offset_for_builtin("db_disk_size")] = Arc::new(BfDbDiskSize {});
+    builtins[offset_for_builtin("load_server_options")] = Arc::new(BfLoadServerOptions {});
 }
