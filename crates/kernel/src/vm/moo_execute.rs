@@ -479,15 +479,6 @@ pub fn moo_frame_execute(
                     }
                 }
             }
-            Op::GPut { id } => {
-                f.set_env(id, f.peek_top().clone());
-            }
-            Op::GPush { id } => {
-                let Some(v) = f.get_env(id) else {
-                    return state.push_error(E_VARNF);
-                };
-                f.push(v.clone());
-            }
             Op::Length(offset) => {
                 let v = f.peek_abs(offset.0 as usize);
                 match v.len() {

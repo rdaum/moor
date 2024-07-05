@@ -794,17 +794,6 @@ impl Decompile {
                 let e = Expr::List(vec![Arg::Splice(sp_expr)]);
                 self.push_expr(e);
             }
-            Op::GPut { id } => {
-                let e = Expr::Assign {
-                    left: Box::new(Expr::Id(id)),
-                    right: Box::new(self.pop_expr()?),
-                };
-                self.push_expr(e);
-            }
-            Op::GPush { id } => {
-                let e = Expr::Id(id);
-                self.push_expr(e)
-            }
             Op::PutProp => {
                 let rvalue = self.pop_expr()?;
                 let propname = self.pop_expr()?;

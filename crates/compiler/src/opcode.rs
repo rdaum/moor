@@ -40,8 +40,6 @@ pub enum Op {
     ForRange { id: Name, end_label: Label },
     Fork { fv_offset: Offset, id: Option<Name> },
     FuncCall { id: Name },
-    GPush { id: Name },
-    GPut { id: Name },
     Ge,
     GetProp,
     Gt,
