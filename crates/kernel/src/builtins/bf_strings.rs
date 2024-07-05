@@ -26,7 +26,6 @@ use moor_values::var::{v_int, v_str, v_string};
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::vm::VM;
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
@@ -220,16 +219,14 @@ fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(binary_hash, bf_binary_hash);
 
-impl VM {
-    pub(crate) fn register_bf_strings(&mut self) {
-        self.builtins[offset_for_builtin("strsub")] = Arc::new(BfStrsub {});
-        self.builtins[offset_for_builtin("index")] = Arc::new(BfIndex {});
-        self.builtins[offset_for_builtin("rindex")] = Arc::new(BfRindex {});
-        self.builtins[offset_for_builtin("strcmp")] = Arc::new(BfStrcmp {});
-        self.builtins[offset_for_builtin("crypt")] = Arc::new(BfCrypt {});
-        self.builtins[offset_for_builtin("string_hash")] = Arc::new(BfStringHash {});
-        self.builtins[offset_for_builtin("binary_hash")] = Arc::new(BfBinaryHash {});
-    }
+pub(crate) fn register_bf_strings(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("strsub")] = Arc::new(BfStrsub {});
+    builtins[offset_for_builtin("index")] = Arc::new(BfIndex {});
+    builtins[offset_for_builtin("rindex")] = Arc::new(BfRindex {});
+    builtins[offset_for_builtin("strcmp")] = Arc::new(BfStrcmp {});
+    builtins[offset_for_builtin("crypt")] = Arc::new(BfCrypt {});
+    builtins[offset_for_builtin("string_hash")] = Arc::new(BfStringHash {});
+    builtins[offset_for_builtin("binary_hash")] = Arc::new(BfBinaryHash {});
 }
 
 #[cfg(test)]

@@ -23,6 +23,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use moor_compiler::compile;
 use moor_db_wiredtiger::WiredTigerDB;
+use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::tasks::scheduler::AbortLimitReason;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
@@ -115,6 +116,7 @@ fn execute(
             world_state,
             task_scheduler_client.clone(),
             session.clone(),
+            Arc::new(BuiltinRegistry::new()),
         ) {
             VMHostResponse::ContinueOk => {
                 continue;

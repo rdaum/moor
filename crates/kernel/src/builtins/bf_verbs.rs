@@ -43,7 +43,6 @@ use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
-use crate::vm::VM;
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -700,16 +699,14 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(disassemble, bf_disassemble);
 
-impl VM {
-    pub(crate) fn register_bf_verbs(&mut self) {
-        self.builtins[offset_for_builtin("verb_info")] = Arc::new(BfVerbInfo {});
-        self.builtins[offset_for_builtin("set_verb_info")] = Arc::new(BfSetVerbInfo {});
-        self.builtins[offset_for_builtin("verb_args")] = Arc::new(BfVerbArgs {});
-        self.builtins[offset_for_builtin("set_verb_args")] = Arc::new(BfSetVerbArgs {});
-        self.builtins[offset_for_builtin("verb_code")] = Arc::new(BfVerbCode {});
-        self.builtins[offset_for_builtin("set_verb_code")] = Arc::new(BfSetVerbCode {});
-        self.builtins[offset_for_builtin("add_verb")] = Arc::new(BfAddVerb {});
-        self.builtins[offset_for_builtin("delete_verb")] = Arc::new(BfDeleteVerb {});
-        self.builtins[offset_for_builtin("disassemble")] = Arc::new(BfDisassemble {});
+    pub(crate) fn register_bf_verbs(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+        builtins[offset_for_builtin("verb_info")] = Arc::new(BfVerbInfo {});
+        builtins[offset_for_builtin("set_verb_info")] = Arc::new(BfSetVerbInfo {});
+        builtins[offset_for_builtin("verb_args")] = Arc::new(BfVerbArgs {});
+        builtins[offset_for_builtin("set_verb_args")] = Arc::new(BfSetVerbArgs {});
+        builtins[offset_for_builtin("verb_code")] = Arc::new(BfVerbCode {});
+        builtins[offset_for_builtin("set_verb_code")] = Arc::new(BfSetVerbCode {});
+        builtins[offset_for_builtin("add_verb")] = Arc::new(BfAddVerb {});
+        builtins[offset_for_builtin("delete_verb")] = Arc::new(BfDeleteVerb {});
+        builtins[offset_for_builtin("disassemble")] = Arc::new(BfDisassemble {});
     }
-}

@@ -27,7 +27,7 @@ use crate::tasks::sessions::Session;
 use crate::tasks::VerbCall;
 use crate::vm::activation::{Activation, VmStackFrame};
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, Fork, VM};
+use crate::vm::{ExecutionResult, Fork};
 use crate::vm::{VMExecState, VmExecParams};
 use moor_compiler::Program;
 use moor_compiler::BUILTIN_DESCRIPTORS;
@@ -56,15 +56,14 @@ pub struct VerbExecutionRequest {
     pub program: Program,
 }
 
-impl VM {
+impl VMExecState {
     /// Entry point for preparing a verb call for execution, invoked from the CallVerb opcode
     /// Seek the verb and prepare the call parameters.
     /// All parameters for player, caller, etc. are pulled off the stack.
     /// The call params will be returned back to the task in the scheduler, which will then dispatch
     /// back through to `do_method_call`
     pub(crate) fn prepare_call_verb(
-        &self,
-        vm_state: &mut VMExecState,
+        &mut self,
         world_state: &mut dyn WorldState,
         this: Objid,
         verb_name: Symbol,
@@ -74,39 +73,36 @@ impl VM {
             verb_name,
             location: this,
             this,
-            player: vm_state.top().player,
+            player: self.top().player,
             args,
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
             argstr: "".to_string(),
-            caller: vm_state.caller(),
+            caller: self.caller(),
         };
 
         let self_valid = world_state
             .valid(this)
             .expect("Error checking object validity");
         if !self_valid {
-            return self.push_error(vm_state, E_INVIND);
+            return self.push_error(E_INVIND);
         }
         // Find the callable verb ...
         let verb_info =
-            match world_state.find_method_verb_on(vm_state.top().permissions, this, verb_name) {
+            match world_state.find_method_verb_on(self.top().permissions, this, verb_name) {
                 Ok(vi) => vi,
                 Err(WorldStateError::ObjectPermissionDenied) => {
-                    return self.push_error(vm_state, E_PERM);
+                    return self.push_error(E_PERM);
                 }
                 Err(WorldStateError::RollbackRetry) => {
                     return ExecutionResult::RollbackRestart;
                 }
                 Err(WorldStateError::VerbPermissionDenied) => {
-                    return self.push_error(vm_state, E_PERM);
+                    return self.push_error(E_PERM);
                 }
                 Err(WorldStateError::VerbNotFound(_, _)) => {
-                    return self.push_error_msg(
-                        vm_state,
-                        E_VERBNF,
-                        format!("Verb \"{}\" not found", verb_name),
-                    );
+                    return self
+                        .push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
                 }
                 Err(e) => {
                     panic!("Unexpected error from find_method_verb_on: {:?}", e)
@@ -120,7 +116,7 @@ impl VM {
             permissions,
             resolved_verb: verb_info,
             call,
-            command: vm_state.top().command.clone(),
+            command: self.top().command.clone(),
         }
     }
 
@@ -128,41 +124,40 @@ impl VM {
     /// version.
     /// TODO this should be done up in task.rs instead. let's add a new ExecutionResult for it.
     pub(crate) fn prepare_pass_verb(
-        &self,
-        vm_state: &mut VMExecState,
+        &mut self,
         world_state: &mut dyn WorldState,
         args: &List,
     ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
-        let definer = vm_state.top().verb_definer();
-        let permissions = vm_state.top().permissions;
+        let definer = self.top().verb_definer();
+        let permissions = self.top().permissions;
 
         let parent = match world_state.parent_of(permissions, definer) {
             Ok(parent) => parent,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::RollbackRestart;
             }
-            Err(e) => return self.raise_error(vm_state, e.to_error_code()),
+            Err(e) => return self.raise_error(e.to_error_code()),
         };
-        let verb = vm_state.top().verb_name;
+        let verb = self.top().verb_name;
 
         // call verb on parent, but with our current 'this'
-        trace!(task_id = vm_state.task_id, ?verb, ?definer, ?parent);
+        trace!(task_id = self.task_id, ?verb, ?definer, ?parent);
 
         let vi = match world_state.find_method_verb_on(permissions, parent, verb) {
             Ok(vi) => vi,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::RollbackRestart;
             }
-            Err(e) => return self.raise_error(vm_state, e.to_error_code()),
+            Err(e) => return self.raise_error(e.to_error_code()),
         };
 
-        let caller = vm_state.caller();
+        let caller = self.caller();
         let call = VerbCall {
             verb_name: verb,
             location: parent,
-            this: vm_state.top().this,
-            player: vm_state.top().player,
+            this: self.top().this,
+            player: self.top().player,
             args: args.clone(),
             argstr: "".to_string(),
             caller,
@@ -172,39 +167,29 @@ impl VM {
             permissions,
             resolved_verb: vi,
             call,
-            command: vm_state.top().command.clone(),
+            command: self.top().command.clone(),
         }
     }
 
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
-    pub fn exec_call_request(
-        &self,
-        vm_state: &mut VMExecState,
-        call_request: VerbExecutionRequest,
-    ) {
+    pub fn exec_call_request(&mut self, call_request: VerbExecutionRequest) {
         let a = Activation::for_call(call_request);
-        vm_state.stack.push(a);
+        self.stack.push(a);
     }
 
-    pub fn exec_eval_request(
-        &self,
-        vm_state: &mut VMExecState,
-        permissions: Objid,
-        player: Objid,
-        program: Program,
-    ) {
+    pub fn exec_eval_request(&mut self, permissions: Objid, player: Objid, program: Program) {
         let a = Activation::for_eval(permissions, player, program);
 
-        vm_state.stack.push(a);
+        self.stack.push(a);
     }
 
     /// Prepare a new stack & call hierarchy for invocation of a forked task.
     /// Called (ultimately) from the scheduler as the result of a fork() call.
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
-    pub(crate) fn exec_fork_vector(&self, vm_state: &mut VMExecState, fork_request: Fork) {
+    pub(crate) fn exec_fork_vector(&mut self, fork_request: Fork) {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
 
@@ -220,50 +205,49 @@ impl VM {
         frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             frame
-                .set_var_offset(&task_id_name, v_int(vm_state.task_id as i64))
+                .set_var_offset(&task_id_name, v_int(self.task_id as i64))
                 .expect("Unable to set task_id in activation frame");
         }
 
         // TODO how to set the task_id in the parent activation, as we no longer have a reference
         // to it?
-        vm_state.stack = vec![a];
+        self.stack = vec![a];
     }
 
     /// Call into a builtin function.
     pub(crate) fn call_builtin_function(
-        &self,
-        vm_state: &mut VMExecState,
+        &mut self,
         bf_func_num: usize,
         args: List,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
-        if bf_func_num >= self.builtins.len() {
-            return self.raise_error(vm_state, E_VARNF);
+        if bf_func_num >= exec_args.builtin_registry.builtins.len() {
+            return self.raise_error(E_VARNF);
         }
-        let bf = self.builtins[bf_func_num].clone();
+        let bf = exec_args.builtin_registry.builtins[bf_func_num].clone();
 
         trace!(
             "Calling builtin: {}({}) caller_perms: {}",
             BUILTIN_DESCRIPTORS[bf_func_num].name,
             args_literal(&args),
-            vm_state.top().permissions
+            self.top().permissions
         );
 
         // Push an activation frame for the builtin function.
-        let flags = vm_state.top().verb_info.verbdef().flags();
-        vm_state.stack.push(Activation::for_bf_call(
+        let flags = self.top().verb_info.verbdef().flags();
+        self.stack.push(Activation::for_bf_call(
             bf_func_num,
             BUILTIN_DESCRIPTORS[bf_func_num].name,
             args.clone(),
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
             flags,
-            vm_state.top().player,
+            self.top().player,
         ));
         let mut bf_args = BfCallState {
-            exec_state: vm_state,
+            exec_state: self,
             name: BUILTIN_DESCRIPTORS[bf_func_num].name,
             world_state,
             session: session.clone(),
@@ -273,11 +257,9 @@ impl VM {
         };
 
         let call_results = match bf.call(&mut bf_args) {
-            Ok(BfRet::Ret(result)) => {
-                self.unwind_stack(vm_state, FinallyReason::Return(result.clone()))
-            }
-            Err(BfErr::Code(e)) => self.push_bf_error(vm_state, e, None, None),
-            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(vm_state, e, msg, value),
+            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
+            Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
+            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
             Err(BfErr::Rollback) => ExecutionResult::RollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         };
@@ -288,13 +270,12 @@ impl VM {
 
     /// We're returning into a builtin function, which is all set up at the top of the stack.
     pub(crate) fn reenter_builtin_function(
-        &self,
-        vm_state: &mut VMExecState,
+        &mut self,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
-        let bf_frame = match vm_state.top().frame {
+        let bf_frame = match self.top().frame {
             VmStackFrame::Bf(ref frame) => frame,
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
@@ -304,17 +285,17 @@ impl VM {
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
         let Some(_) = bf_frame.bf_trampoline else {
-            let return_value = vm_state.top_mut().frame.return_value();
+            let return_value = self.top_mut().frame.return_value();
 
-            return self.unwind_stack(vm_state, FinallyReason::Return(return_value));
+            return self.unwind_stack(FinallyReason::Return(return_value));
         };
 
-        let bf = self.builtins[bf_frame.bf_index].clone();
-        let verb_name = vm_state.top().verb_name;
+        let bf = exec_args.builtin_registry.builtins[bf_frame.bf_index].clone();
+        let verb_name = self.top().verb_name;
         let sessions = session.clone();
-        let args = vm_state.top().args.clone();
+        let args = self.top().args.clone();
         let mut bf_args = BfCallState {
-            exec_state: vm_state,
+            exec_state: self,
             name: verb_name,
             world_state,
             session: sessions,
@@ -324,11 +305,9 @@ impl VM {
         };
 
         match bf.call(&mut bf_args) {
-            Ok(BfRet::Ret(result)) => {
-                self.unwind_stack(vm_state, FinallyReason::Return(result.clone()))
-            }
-            Err(BfErr::Code(e)) => self.push_bf_error(vm_state, e, None, None),
-            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(vm_state, e, msg, value),
+            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
+            Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
+            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
 
             Err(BfErr::Rollback) => ExecutionResult::RollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,

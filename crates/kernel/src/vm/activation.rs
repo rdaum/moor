@@ -145,10 +145,7 @@ fn set_constants(f: &mut VmStackFrame) {
 
 impl Activation {
     pub fn is_builtin_frame(&self) -> bool {
-        match self.frame {
-            VmStackFrame::Bf(_) => true,
-            _ => false,
-        }
+        matches!(self.frame, VmStackFrame::Bf(_))
     }
 
     pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {

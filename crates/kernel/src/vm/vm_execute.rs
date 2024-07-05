@@ -12,111 +12,25 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::debug;
 
-use moor_compiler::{Name, Offset};
-
-use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::tasks::VerbCall;
-use moor_compiler::Program;
 use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::WorldState;
-use moor_values::model::{VerbInfo, WorldStateError};
-use moor_values::var::Error::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_MAXREC, E_RANGE, E_TYPE, E_VARNF,
-};
+use moor_values::model::WorldStateError;
+use moor_values::var::v_float;
+use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
-use moor_values::var::{v_float, Objid};
 use moor_values::var::{v_listv, Error};
 
-use crate::vm::activation::{Activation, VmStackFrame};
+use crate::vm::activation::VmStackFrame;
 use crate::vm::frame::HandlerType;
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
-use crate::vm::{VMExecState, VM};
-
-/// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Fork {
-    /// The player. This is in the activation as well, but it's nicer to have it up here and
-    /// explicit
-    pub(crate) player: Objid,
-    /// The permissions context for the forked task.
-    pub(crate) progr: Objid,
-    /// The task ID of the task that forked us
-    pub(crate) parent_task_id: usize,
-    /// The time to delay before starting the forked task, if any.
-    pub(crate) delay: Option<Duration>,
-    /// A copy of the activation record from the task that forked us.
-    pub(crate) activation: Activation,
-    /// The unique fork vector offset into the fork vector for the executing binary held in the
-    /// activation record.  This is copied into the main vector and execution proceeds from there,
-    /// instead.
-    pub(crate) fork_vector_offset: Offset,
-    /// The (optional) variable label where the task ID of the new task should be stored, in both
-    /// the parent activation and the new task's activation.
-    pub task_id: Option<Name>,
-}
-
-/// Represents the set of parameters passed to the VM for execution.
-pub struct VmExecParams {
-    pub task_scheduler_client: TaskSchedulerClient,
-    pub max_stack_depth: usize,
-}
-#[derive(Debug, Clone)]
-pub enum ExecutionResult {
-    /// Execution of this call stack is complete.
-    Complete(Var),
-    /// All is well. The task should let the VM continue executing.
-    More,
-    /// An exception was raised during execution.
-    Exception(FinallyReason),
-    /// Request dispatch to another verb
-    ContinueVerb {
-        /// The applicable permissions context.
-        permissions: Objid,
-        /// The requested verb.
-        resolved_verb: VerbInfo,
-        /// The call parameters that were used to resolve the verb.
-        call: VerbCall,
-        /// The parsed user command that led to this verb dispatch, if any.
-        command: Option<ParsedCommand>,
-    },
-    /// Request dispatch of a new task as a fork
-    DispatchFork(Fork),
-    /// Request dispatch of a builtin function with the given arguments.
-    ContinueBuiltin {
-        bf_func_num: usize,
-        arguments: Vec<Var>,
-    },
-    /// Request that this task be suspended for a duration of time.
-    /// This leads to the task performing a commit, being suspended for a delay, and then being
-    /// resumed under a new transaction.
-    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
-    /// resumed using `resume()` or `kill_task()`.
-    Suspend(Option<Duration>),
-    /// Request input from the client.
-    NeedInput,
-    /// Request `eval` execution, which is a kind of special activation creation where we've already
-    /// been given the program to execute instead of having to look it up.
-    PerformEval {
-        /// The permissions context for the eval.
-        permissions: Objid,
-        /// The player who is performing the eval.
-        player: Objid,
-        /// The program to execute.
-        program: Program,
-    },
-    /// Rollback the current transaction and restart the task in a new transaction.
-    /// This can happen when a conflict occurs during execution, independent of a commit.
-    RollbackRestart,
-}
+use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
 
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
@@ -136,7 +50,7 @@ macro_rules! binary_var_op {
             Ok(result) => $f.poke(0, result),
             Err(err_code) => {
                 $f.pop();
-                return $vm.push_error($state, err_code);
+                return $state.push_error(err_code);
             }
         }
     };
@@ -154,8 +68,10 @@ pub(crate) fn one_to_zero_index(v: &Var) -> Result<usize, Error> {
     Ok(index as usize)
 }
 
+pub struct VM {}
+
 impl VM {
-    /// Main VM opcode execution. The actual meat of the machine.
+    /// Main VM opcode execution for MOO stack frames. The actual meat of the MOO virtual machine.
     pub fn exec(
         &self,
         exec_params: &VmExecParams,
@@ -163,23 +79,6 @@ impl VM {
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
-        // Before executing, check stack depth...
-        if state.stack.len() >= exec_params.max_stack_depth {
-            // Absolutely raise-unwind an error here instead of just offering it as a potential
-            // return value if this is a non-d verb. At least I think this the right thing to do?
-            return self.throw_error(state, E_MAXREC);
-        }
-
-        // If the current activation frame is a builtin function, we need to jump back into it,
-        // but increment the trampoline counter, as it means we're returning into it after
-        // executing elsewhere. It will be up to the function to interpret the counter.
-        // Functions that did not set a trampoline are assumed to be complete.
-        // TODO: this should be accomplished by dispatching to a different `exec` for different
-        //   types of frames. But as a transition we'll doo this.
-        if !state.stack.is_empty() && state.top().is_builtin_frame() {
-            return self.reenter_builtin_function(state, exec_params, world_state, session);
-        }
-
         let opcodes = {
             // Check the frame type to verify it's MOO, before doing anything else
             let a = state.top_mut();
@@ -254,7 +153,7 @@ impl VM {
                         // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                         // So we preemptively jump (here and below for List) and then raise the error.
                         f.jump(end_label);
-                        return self.raise_error(state, E_TYPE);
+                        return state.raise_error(E_TYPE);
                     };
                     let count = *count as usize;
                     let Variant::List(l) = list.variant() else {
@@ -262,7 +161,7 @@ impl VM {
                         f.pop();
 
                         f.jump(end_label);
-                        return self.raise_error(state, E_TYPE);
+                        return state.raise_error(E_TYPE);
                     };
 
                     // If we've exhausted the list, pop the count and list and jump out.
@@ -318,7 +217,7 @@ impl VM {
                                 // the loop (with a messed up stack) otherwise.
                                 f.jump(end_label);
 
-                                return self.raise_error(state, E_TYPE);
+                                return state.raise_error(E_TYPE);
                             }
                         };
                         (from.clone(), next_val)
@@ -371,7 +270,7 @@ impl VM {
                     let (tail, list) = (f.pop(), f.peek_top_mut());
                     let Variant::List(ref mut list) = list.variant_mut() else {
                         f.pop();
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
 
                     // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
@@ -384,13 +283,13 @@ impl VM {
                     let Variant::List(list) = list.variant_mut() else {
                         f.pop();
 
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
 
                     let Variant::List(tail) = tail.take_variant() else {
                         f.pop();
 
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
 
                     let new_list = list.append(&tail);
@@ -402,7 +301,7 @@ impl VM {
                         Ok(i) => i,
                         Err(e) => {
                             f.pop();
-                            return self.push_error(state, e);
+                            return state.push_error(e);
                         }
                     };
                     match lhs.index_set(i, rhs) {
@@ -411,7 +310,7 @@ impl VM {
                         }
                         Err(e) => {
                             f.pop();
-                            return self.push_error(state, e);
+                            return state.push_error(e);
                         }
                     }
                 }
@@ -450,7 +349,7 @@ impl VM {
                     let r = lhs.index_in(rhs);
                     if let Variant::Err(e) = r.variant() {
                         f.pop();
-                        return self.push_error(state, *e);
+                        return state.push_error(*e);
                     }
                     f.poke(0, r);
                 }
@@ -466,7 +365,7 @@ impl VM {
                     // `inf`.
                     let divargs = f.peek_range(2);
                     if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
-                        return self.push_error(state, E_DIV);
+                        return state.push_error(E_DIV);
                     };
                     binary_var_op!(self, f, state, div);
                 }
@@ -479,7 +378,7 @@ impl VM {
                 Op::Mod => {
                     let divargs = f.peek_range(2);
                     if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
-                        return self.push_error(state, E_DIV);
+                        return state.push_error(E_DIV);
                     };
                     binary_var_op!(self, f, state, modulus);
                 }
@@ -508,14 +407,14 @@ impl VM {
                     match v.negative() {
                         Err(e) => {
                             f.pop();
-                            return self.push_error(state, e);
+                            return state.push_error(e);
                         }
                         Ok(v) => f.poke(0, v),
                     }
                 }
                 Op::Push(ident) => {
                     let Some(v) = f.get_env(ident) else {
-                        return self.push_error(state, E_VARNF);
+                        return state.push_error(E_VARNF);
                     };
                     f.push(v.clone());
                 }
@@ -527,10 +426,10 @@ impl VM {
                     let (index, list) = f.peek2();
                     let index = match one_to_zero_index(index) {
                         Ok(i) => i,
-                        Err(e) => return self.push_error(state, e),
+                        Err(e) => return state.push_error(e),
                     };
                     match list.index(index) {
-                        Err(e) => return self.push_error(state, e),
+                        Err(e) => return state.push_error(e),
                         Ok(v) => f.push(v),
                     }
                 }
@@ -540,14 +439,14 @@ impl VM {
                         Ok(i) => i,
                         Err(e) => {
                             f.pop();
-                            return self.push_error(state, e);
+                            return state.push_error(e);
                         }
                     };
 
                     match l.index(index) {
                         Err(e) => {
                             f.pop();
-                            return self.push_error(state, e);
+                            return state.push_error(e);
                         }
                         Ok(v) => f.poke(0, v),
                     }
@@ -558,11 +457,11 @@ impl VM {
                         (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
                             Err(e) => {
                                 f.pop();
-                                return self.push_error(state, e);
+                                return state.push_error(e);
                             }
                             Ok(v) => f.poke(0, v),
                         },
-                        (_, _) => return self.push_error(state, E_TYPE),
+                        (_, _) => return state.push_error(E_TYPE),
                     };
                 }
                 Op::RangeSet => {
@@ -572,14 +471,14 @@ impl VM {
                             match base.rangeset(value, *from, *to) {
                                 Err(e) => {
                                     f.pop();
-                                    return self.push_error(state, e);
+                                    return state.push_error(e);
                                 }
                                 Ok(v) => f.poke(0, v),
                             }
                         }
                         _ => {
                             f.pop();
-                            return self.push_error(state, E_TYPE);
+                            return state.push_error(E_TYPE);
                         }
                     }
                 }
@@ -588,7 +487,7 @@ impl VM {
                 }
                 Op::GPush { id } => {
                     let Some(v) = f.get_env(id) else {
-                        return self.push_error(state, E_VARNF);
+                        return state.push_error(E_VARNF);
                     };
                     f.push(v.clone());
                 }
@@ -596,18 +495,18 @@ impl VM {
                     let v = f.peek_abs(offset.0 as usize);
                     match v.len() {
                         Ok(l) => f.push(l),
-                        Err(e) => return self.push_error(state, e),
+                        Err(e) => return state.push_error(e),
                     }
                 }
                 Op::GetProp => {
                     let (propname, obj) = (f.pop(), f.peek_top());
 
                     let Variant::Str(propname) = propname.variant() else {
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
 
                     let Variant::Obj(obj) = obj.variant() else {
-                        return self.push_error(state, E_INVIND);
+                        return state.push_error(E_INVIND);
                     };
                     let propname = Symbol::mk_case_insensitive(propname.as_str());
                     let result = world_state.retrieve_property(a.permissions, *obj, propname);
@@ -620,7 +519,7 @@ impl VM {
                         }
                         Err(e) => {
                             debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                            return self.push_error(state, e.to_error_code());
+                            return state.push_error(e.to_error_code());
                         }
                     };
                 }
@@ -628,11 +527,11 @@ impl VM {
                     let (propname, obj) = f.peek2();
 
                     let Variant::Str(propname) = propname.variant() else {
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
 
                     let Variant::Obj(obj) = obj.variant() else {
-                        return self.push_error(state, E_INVIND);
+                        return state.push_error(E_INVIND);
                     };
                     let propname = Symbol::mk_case_insensitive(propname.as_str());
                     let result = world_state.retrieve_property(a.permissions, *obj, propname);
@@ -645,7 +544,7 @@ impl VM {
                         }
                         Err(e) => {
                             debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                            return self.push_error(state, e.to_error_code());
+                            return state.push_error(e.to_error_code());
                         }
                     };
                 }
@@ -655,7 +554,7 @@ impl VM {
                     let (propname, obj) = match (propname.variant(), obj.variant()) {
                         (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
                         (_, _) => {
-                            return self.push_error(state, E_TYPE);
+                            return state.push_error(E_TYPE);
                         }
                     };
 
@@ -671,7 +570,7 @@ impl VM {
                             return ExecutionResult::RollbackRestart
                         }
                         Err(e) => {
-                            return self.push_error(state, e.to_error_code());
+                            return state.push_error(e.to_error_code());
                         }
                     }
                 }
@@ -683,12 +582,12 @@ impl VM {
                         Variant::Int(time) => *time as f64,
                         Variant::Float(time) => *time,
                         _ => {
-                            return self.push_error(state, E_TYPE);
+                            return state.push_error(E_TYPE);
                         }
                     };
 
                     if time < 0.0 {
-                        return self.push_error(state, E_INVARG);
+                        return state.push_error(E_INVARG);
                     }
                     let delay = (time != 0.0).then(|| Duration::from_secs_f64(time));
                     let new_activation = a.clone();
@@ -706,39 +605,38 @@ impl VM {
                 Op::Pass => {
                     let args = f.pop();
                     let Variant::List(args) = args.variant() else {
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
-                    return self.prepare_pass_verb(state, world_state, args);
+                    return state.prepare_pass_verb(world_state, args);
                 }
                 Op::CallVerb => {
                     let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                     let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
                         (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l, s, o),
                         _ => {
-                            return self.push_error(state, E_TYPE);
+                            return state.push_error(E_TYPE);
                         }
                     };
                     let verb = Symbol::mk_case_insensitive(verb.as_str());
-                    return self.prepare_call_verb(state, world_state, *obj, verb, args.clone());
+                    return state.prepare_call_verb(world_state, *obj, verb, args.clone());
                 }
                 Op::Return => {
                     let ret_val = f.pop();
-                    return self.unwind_stack(state, FinallyReason::Return(ret_val));
+                    return state.unwind_stack(FinallyReason::Return(ret_val));
                 }
                 Op::Return0 => {
-                    return self.unwind_stack(state, FinallyReason::Return(v_int(0)));
+                    return state.unwind_stack(FinallyReason::Return(v_int(0)));
                 }
                 Op::Done => {
-                    return self.unwind_stack(state, FinallyReason::Return(v_none()));
+                    return state.unwind_stack(FinallyReason::Return(v_none()));
                 }
                 Op::FuncCall { id } => {
                     // Pop arguments, should be a list.
                     let args = f.pop();
                     let Variant::List(args) = args.variant() else {
-                        return self.push_error(state, E_ARGS);
+                        return state.push_error(E_ARGS);
                     };
-                    return self.call_builtin_function(
-                        state,
+                    return state.call_builtin_function(
                         id.0 as usize,
                         args.clone(),
                         exec_params,
@@ -803,7 +701,7 @@ impl VM {
                         | FinallyReason::Uncaught(UncaughtException { .. })
                         | FinallyReason::Return(_)
                         | FinallyReason::Exit { .. } => {
-                            return self.unwind_stack(state, why);
+                            return state.unwind_stack(why);
                         }
                         FinallyReason::Abort => {
                             panic!("Unexpected FINALLY_ABORT in Continue")
@@ -815,13 +713,10 @@ impl VM {
                     continue;
                 }
                 Op::Exit { stack, label } => {
-                    return self.unwind_stack(
-                        state,
-                        FinallyReason::Exit {
-                            stack: *stack,
-                            label: *label,
-                        },
-                    );
+                    return state.unwind_stack(FinallyReason::Exit {
+                        stack: *stack,
+                        label: *label,
+                    });
                 }
                 Op::Scatter(sa) => {
                     // TODO: this could do with some attention. a lot of the complexity here has to
@@ -846,7 +741,7 @@ impl VM {
                         let rhs = f.peek_top();
                         let Variant::List(rhs_values) = rhs.variant() else {
                             f.pop();
-                            return self.push_error(state, E_TYPE);
+                            return state.push_error(E_TYPE);
                         };
                         rhs_values.clone()
                     };
@@ -854,7 +749,7 @@ impl VM {
                     let len = rhs_values.len();
                     if len < nreq || !have_rest && len > nargs {
                         f.pop();
-                        return self.push_error(state, E_ARGS);
+                        return state.push_error(E_ARGS);
                     }
                     let mut nopt_avail = len - nreq;
                     let nrest = if have_rest && len >= nargs {
@@ -880,7 +775,7 @@ impl VM {
                             }
                             ScatterLabel::Required(id) => {
                                 let Some(arg) = args_iter.next() else {
-                                    return self.push_error(state, E_ARGS);
+                                    return state.push_error(E_ARGS);
                                 };
 
                                 f.set_env(id, arg.clone());
@@ -889,7 +784,7 @@ impl VM {
                                 if nopt_avail > 0 {
                                     nopt_avail -= 1;
                                     let Some(arg) = args_iter.next() else {
-                                        return self.push_error(state, E_ARGS);
+                                        return state.push_error(E_ARGS);
                                     };
                                     f.set_env(id, arg.clone());
                                 } else if jump_where.is_none() && jump_to.is_some() {
@@ -906,7 +801,7 @@ impl VM {
                 Op::CheckListForSplice => {
                     let Variant::List(_) = f.peek_top().variant() else {
                         f.pop();
-                        return self.push_error(state, E_TYPE);
+                        return state.push_error(E_TYPE);
                     };
                 }
             }

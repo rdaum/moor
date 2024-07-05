@@ -34,7 +34,6 @@ use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::tasks::VerbCall;
 use crate::vm::ExecutionResult::ContinueVerb;
-use crate::vm::VM;
 
 lazy_static! {
     static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");
@@ -705,19 +704,17 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(players, bf_players);
 
-impl VM {
-    pub(crate) fn register_bf_objects(&mut self) {
-        self.builtins[offset_for_builtin("create")] = Arc::new(BfCreate {});
-        self.builtins[offset_for_builtin("valid")] = Arc::new(BfValid {});
-        self.builtins[offset_for_builtin("verbs")] = Arc::new(BfVerbs {});
-        self.builtins[offset_for_builtin("properties")] = Arc::new(BfProperties {});
-        self.builtins[offset_for_builtin("parent")] = Arc::new(BfParent {});
-        self.builtins[offset_for_builtin("children")] = Arc::new(BfChildren {});
-        self.builtins[offset_for_builtin("move")] = Arc::new(BfMove {});
-        self.builtins[offset_for_builtin("chparent")] = Arc::new(BfChparent {});
-        self.builtins[offset_for_builtin("set_player_flag")] = Arc::new(BfSetPlayerFlag {});
-        self.builtins[offset_for_builtin("recycle")] = Arc::new(BfRecycle {});
-        self.builtins[offset_for_builtin("max_object")] = Arc::new(BfMaxObject {});
-        self.builtins[offset_for_builtin("players")] = Arc::new(BfPlayers {});
-    }
+pub(crate) fn register_bf_objects(builtins: &mut [Arc<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("create")] = Arc::new(BfCreate {});
+    builtins[offset_for_builtin("valid")] = Arc::new(BfValid {});
+    builtins[offset_for_builtin("verbs")] = Arc::new(BfVerbs {});
+    builtins[offset_for_builtin("properties")] = Arc::new(BfProperties {});
+    builtins[offset_for_builtin("parent")] = Arc::new(BfParent {});
+    builtins[offset_for_builtin("children")] = Arc::new(BfChildren {});
+    builtins[offset_for_builtin("move")] = Arc::new(BfMove {});
+    builtins[offset_for_builtin("chparent")] = Arc::new(BfChparent {});
+    builtins[offset_for_builtin("set_player_flag")] = Arc::new(BfSetPlayerFlag {});
+    builtins[offset_for_builtin("recycle")] = Arc::new(BfRecycle {});
+    builtins[offset_for_builtin("max_object")] = Arc::new(BfMaxObject {});
+    builtins[offset_for_builtin("players")] = Arc::new(BfPlayers {});
 }

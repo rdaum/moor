@@ -115,11 +115,12 @@ impl ServerOptions {
 }
 
 pub mod vm_test_utils {
+    use crate::builtins::BuiltinRegistry;
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
     use crate::vm::UncaughtException;
-    use crate::vm::VmExecParams;
+    
     use moor_compiler::Program;
     use moor_values::model::WorldState;
     use moor_values::var::Symbol;
@@ -130,7 +131,12 @@ pub mod vm_test_utils {
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
-    fn execute<F>(world_state: &mut dyn WorldState, session: Arc<dyn Session>, fun: F) -> ExecResult
+    fn execute<F>(
+        world_state: &mut dyn WorldState,
+        session: Arc<dyn Session>,
+        builtins: Arc<BuiltinRegistry>,
+        fun: F,
+    ) -> ExecResult
     where
         F: FnOnce(&mut dyn WorldState, &mut VmHost),
     {
@@ -138,11 +144,6 @@ pub mod vm_test_utils {
         let task_scheduler_client =
             crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
         let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));
-
-        let _vm_exec_params = VmExecParams {
-            task_scheduler_client: task_scheduler_client.clone(),
-            max_stack_depth: 50,
-        };
 
         fun(world_state, &mut vm_host);
 
@@ -153,6 +154,7 @@ pub mod vm_test_utils {
                 world_state,
                 task_scheduler_client.clone(),
                 session.clone(),
+                builtins.clone(),
             ) {
                 VMHostResponse::ContinueOk => {
                     continue;
@@ -188,10 +190,11 @@ pub mod vm_test_utils {
     pub fn call_verb(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
+        builtins: Arc<BuiltinRegistry>,
         verb_name: &str,
         args: Vec<Var>,
     ) -> ExecResult {
-        execute(world_state, session, |world_state, vm_host| {
+        execute(world_state, session, builtins, |world_state, vm_host| {
             let verb_name = Symbol::mk_case_insensitive(verb_name);
             let vi = world_state
                 .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
@@ -216,10 +219,12 @@ pub mod vm_test_utils {
     pub fn call_eval_builtin(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
+        builtins: Arc<BuiltinRegistry>,
+
         player: Objid,
         program: Program,
     ) -> ExecResult {
-        execute(world_state, session, |world_state, vm_host| {
+        execute(world_state, session, builtins, |world_state, vm_host| {
             vm_host.start_eval(0, player, program, world_state);
         })
     }
