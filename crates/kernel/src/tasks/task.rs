@@ -591,6 +591,7 @@ mod tests {
     use crate::tasks::task::Task;
     use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
     use crate::tasks::{ServerOptions, TaskId, TaskStart};
+    use crate::vm::activation::VmStackFrame;
     use crossbeam_channel::{unbounded, Receiver};
     use moor_compiler::compile;
     use moor_db_wiredtiger::WiredTigerDB;
@@ -820,7 +821,14 @@ mod tests {
         };
         assert_eq!(fork_request.task_id, None);
         assert_eq!(fork_request.parent_task_id, 1);
-        assert_eq!(fork_request.activation.frame.program, *program);
+
+        let VmStackFrame::Moo(moo_frame) = &fork_request.activation.frame else {
+            panic!(
+                "Expected Moo frame, got {:?}",
+                fork_request.activation.frame
+            );
+        };
+        assert_eq!(moo_frame.program, *program);
 
         // Reply back with the new task id.
         reply_channel.send(2).unwrap();

@@ -774,8 +774,8 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }));
         }
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
-            // Value must be on stack,  and we then wrap that up in the {success, value} tuple.
-            let value = bf_args.exec_state.pop();
+            // Value must be on in our activation's "return value"
+            let value = bf_args.exec_state.top().frame.return_value();
             Ok(Ret(v_listv(vec![v_bool(true), value])))
         }
         _ => {

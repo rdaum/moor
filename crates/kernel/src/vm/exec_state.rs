@@ -157,16 +157,10 @@ impl VMExecState {
         self.top_mut().permissions = perms;
     }
 
-    /// Pop a value off the value stack.
-    #[inline]
-    pub(crate) fn pop(&mut self) -> Var {
-        self.top_mut().frame.pop()
-    }
-
     /// Push a value onto the value stack
     #[inline]
-    pub(crate) fn push(&mut self, v: Var) {
-        self.top_mut().frame.push(v)
+    pub(crate) fn set_return_value(&mut self, v: Var) {
+        self.top_mut().frame.set_return_value(v);
     }
 
     pub(crate) fn time_left(&self) -> Option<Duration> {
