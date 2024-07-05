@@ -37,7 +37,6 @@ use moor_values::var::{Objid, Var};
 use std::sync::Arc;
 use std::time::Duration;
 pub use vm_call::VerbExecutionRequest;
-pub use vm_execute::VM;
 pub use vm_unwind::{FinallyReason, UncaughtException};
 
 mod frame;
