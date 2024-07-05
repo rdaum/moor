@@ -747,14 +747,14 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let Variant::Str(program_code) = bf_args.args[0].variant() else {
+    let Variant::Str(program_code) = bf_args.args[0].variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
     let tramp = bf_args
-        .exec_state
-        .top()
+        .bf_frame_mut()
         .bf_trampoline
+        .take()
         .unwrap_or(BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE);
 
     match tramp {
@@ -764,7 +764,8 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Ok(program) => program,
                 Err(e) => return Ok(Ret(v_listv(vec![v_int(0), v_string(e.to_string())]))),
             };
-
+            let bf_frame = bf_args.bf_frame_mut();
+            bf_frame.bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
             // Now we have to construct things to set up for eval. Which means tramping through with a
             // setup-for-eval result here.
             return Ok(VmInstr(ExecutionResult::PerformEval {

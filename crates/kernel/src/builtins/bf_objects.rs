@@ -126,29 +126,29 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let Variant::Obj(parent) = bf_args.args[0].variant() else {
+    let Variant::Obj(parent) = bf_args.args[0].variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
     let owner = if bf_args.args.len() == 2 {
-        let Variant::Obj(owner) = bf_args.args[1].variant() else {
+        let Variant::Obj(owner) = bf_args.args[1].variant().clone() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *owner
+        owner
     } else {
         bf_args.task_perms_who()
     };
 
     let tramp = bf_args
-        .exec_state
-        .top()
+        .bf_frame_mut()
         .bf_trampoline
+        .take()
         .unwrap_or(BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE);
 
     match tramp {
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
             let new_obj = bf_args
                 .world_state
-                .create_object(bf_args.task_perms_who(), *parent, owner, BitEnum::new())
+                .create_object(bf_args.task_perms_who(), parent, owner, BitEnum::new())
                 .map_err(world_state_bf_err)?;
 
             // We're going to try to call :initialize on the new object.
@@ -162,6 +162,9 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 return Ok(Ret(v_objid(new_obj)));
             };
 
+            let bf_frame = bf_args.bf_frame_mut();
+            bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
+            bf_frame.bf_trampoline_arg = Some(v_objid(new_obj));
             return Ok(VmInstr(ContinueVerb {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb: initialize,
@@ -174,16 +177,15 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this,
                 },
-                trampoline: Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE),
                 command: None,
-                trampoline_arg: Some(v_objid(new_obj)),
             }));
         }
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
             // The trampoline argument is the object we just created.
-            let Some(new_obj) = bf_args.exec_state.top().bf_trampoline_arg.clone() else {
+            let Some(new_obj) = bf_args.bf_frame().bf_trampoline_arg.clone() else {
                 panic!("Missing/invalid trampoline argument for bf_create");
             };
+
             Ok(Ret(new_obj))
         }
         _ => {
@@ -205,11 +207,11 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+    let Variant::Obj(obj) = bf_args.args[0].variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let valid = bf_args.world_state.valid(*obj);
+    let valid = bf_args.world_state.valid(obj);
     if valid == Ok(false)
         || valid
             .err()
@@ -222,7 +224,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Check if the given task perms can control the object before continuing.
     if !bf_args
         .world_state
-        .controls(bf_args.task_perms_who(), *obj)
+        .controls(bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?
     {
         return Err(BfErr::Code(E_PERM));
@@ -233,7 +235,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // object, so we'll do it manually here.
 
     'outer: loop {
-        let tramp = bf_args.exec_state.top().bf_trampoline;
+        let tramp = bf_args.bf_frame_mut().bf_trampoline.take();
         match tramp {
             None => {
                 // Starting out, we need to call "recycle" on the object, if it exists.
@@ -242,7 +244,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // now
                 let object_contents = bf_args
                     .world_state
-                    .contents_of(bf_args.task_perms_who(), *obj)
+                    .contents_of(bf_args.task_perms_who(), obj)
                     .map_err(world_state_bf_err)?;
                 // Filter contents for objects that have an :exitfunc verb.
                 let mut contents = vec![];
@@ -265,32 +267,35 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 let contents = v_listv(contents);
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
-                    *obj,
+                    obj,
                     *RECYCLE_SYM,
                 ) {
                     Ok(dispatch) => {
+                        let bf_frame = bf_args.bf_frame_mut();
+                        bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
+                        bf_frame.bf_trampoline_arg = Some(contents);
+
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
                                 verb_name: *RECYCLE_SYM,
-                                location: *obj,
-                                this: *obj,
+                                location: obj,
+                                this: obj,
                                 player: bf_args.exec_state.top().player,
                                 args: List::new(),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
-                            trampoline: Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC),
-                            trampoline_arg: Some(contents),
                             command: None,
                         }));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.
-                        bf_args.exec_state.top_mut().bf_trampoline =
-                            Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
-                        bf_args.exec_state.top_mut().bf_trampoline_arg = Some(contents);
+                        let bf_frame = bf_args.bf_frame_mut();
+
+                        bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
+                        bf_frame.bf_trampoline_arg = Some(contents);
                         // Fall through to the next case.
                     }
                     Err(e) => {
@@ -303,16 +308,17 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // Check the arguments, which must be a list of objects. IF it's empty, we can
                 // move onto DONE_MOVE, if not, take the head of the list, and call :exitfunc on it
                 // (if it exists), and then back to this state.
-                let contents = bf_args.exec_state.top().bf_trampoline_arg.clone().unwrap();
+
+                let contents = bf_args.bf_frame().bf_trampoline_arg.clone().unwrap();
                 let Variant::List(contents) = contents.variant() else {
                     panic!("Invalid trampoline argument for bf_recycle");
                 };
                 'inner: loop {
                     debug!(?obj, contents = ?contents, "Calling :exitfunc for objects contents");
                     if contents.is_empty() {
-                        bf_args.exec_state.top_mut().bf_trampoline_arg = None;
-                        bf_args.exec_state.top_mut().bf_trampoline =
-                            Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE);
+                        let bf_frame = bf_args.bf_frame_mut();
+                        bf_frame.bf_trampoline_arg = None;
+                        bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE);
                         continue 'outer;
                     }
                     let (head_obj, contents) = contents.pop_front();
@@ -328,9 +334,14 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         *EXITFUNC_SYM,
                     ) else {
                         // If there's no :exitfunc, we can just move on to the next object.
-                        bf_args.exec_state.top_mut().bf_trampoline_arg = Some(contents);
+                        let bf_frame = bf_args.bf_frame_mut();
+                        bf_frame.bf_trampoline_arg = Some(contents);
                         continue 'inner;
                     };
+                    let bf_frame = bf_args.bf_frame_mut();
+                    bf_frame.bf_trampoline_arg = Some(contents);
+                    bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
+
                     // Call :exitfunc on the head object.
                     return Ok(VmInstr(ContinueVerb {
                         permissions: bf_args.task_perms_who(),
@@ -340,21 +351,19 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             location: *head_obj,
                             this: *head_obj,
                             player: bf_args.exec_state.top().player,
-                            args: List::from_slice(&[v_objid(*obj)]),
+                            args: List::from_slice(&[v_objid(obj)]),
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this,
                         },
-                        trampoline: Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC),
-                        trampoline_arg: Some(contents),
                         command: None,
                     }));
                 }
             }
             Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE) => {
-                debug!(obj = ?*obj, "Recycling object");
+                debug!(obj = ?obj, "Recycling object");
                 bf_args
                     .world_state
-                    .recycle_object(bf_args.task_perms_who(), *obj)
+                    .recycle_object(bf_args.task_perms_who(), obj)
                     .map_err(world_state_bf_err)?;
                 return Ok(Ret(v_int(0)));
             }
@@ -387,10 +396,10 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let Variant::Obj(what) = bf_args.args[0].variant() else {
+    let Variant::Obj(what) = bf_args.args[0].variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Variant::Obj(whereto) = bf_args.args[1].variant() else {
+    let Variant::Obj(whereto) = bf_args.args[1].variant().clone() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
@@ -409,43 +418,44 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //    2    => set tramp to 3, call :enterfunc on the destination if it exists, result is ignored.
     //    3    => return v_none
 
-    let mut tramp = bf_args
-        .exec_state
-        .top()
+    let bf_frame = bf_args.bf_frame_mut();
+    let mut tramp = bf_frame
         .bf_trampoline
+        .take()
         .unwrap_or(BF_MOVE_TRAMPOLINE_START_ACCEPT);
-    trace!(what = ?what, where_to = ?*whereto, tramp, "move: looking up :accept verb");
+    trace!(what = ?what, where_to = ?whereto, tramp, "move: looking up :accept verb");
 
     let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     let mut shortcircuit = false;
     loop {
         match tramp {
             BF_MOVE_TRAMPOLINE_START_ACCEPT => {
-                if *whereto == NOTHING {
+                if whereto == NOTHING {
                     shortcircuit = true;
                     tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
                     continue;
                 }
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
-                    *whereto,
+                    whereto,
                     *ACCEPT_SYM,
                 ) {
                     Ok(dispatch) => {
+                        let bf_frame = bf_args.bf_frame_mut();
+                        bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC);
+                        bf_frame.bf_trampoline_arg = None;
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
                                 verb_name: *ACCEPT_SYM,
-                                location: *whereto,
-                                this: *whereto,
+                                location: whereto,
+                                this: whereto,
                                 player: bf_args.exec_state.top().player,
-                                args: List::from_slice(&[v_objid(*what)]),
+                                args: List::from_slice(&[v_objid(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
-                            trampoline: Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC),
-                            trampoline_arg: None,
                             command: None,
                         }));
                     }
@@ -465,7 +475,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
             }
             BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC => {
-                trace!(what = ?what, where_to = ?*whereto, tramp, "move: moving object, calling exitfunc");
+                trace!(what = ?what, where_to = ?whereto, tramp, "move: moving object, calling exitfunc");
 
                 // Accept verb has been called, and returned. Check the result. Should be in our
                 // activation's return-value.
@@ -481,17 +491,17 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
 
                 // Otherwise, ask the world state to move the object.
-                trace!(what = ?what, where_to = ?*whereto, tramp, "move: moving object & calling enterfunc");
+                trace!(what = ?what, where_to = ?whereto, tramp, "move: moving object & calling enterfunc");
 
                 let original_location = bf_args
                     .world_state
-                    .location_of(bf_args.task_perms_who(), *what)
+                    .location_of(bf_args.task_perms_who(), what)
                     .map_err(world_state_bf_err)?;
 
                 // Failure here is likely due to permissions, so we'll just propagate that error.
                 bf_args
                     .world_state
-                    .move_object(bf_args.task_perms_who(), *what, *whereto)
+                    .move_object(bf_args.task_perms_who(), what, whereto)
                     .map_err(world_state_bf_err)?;
 
                 // If the object has no location, then we can move on to the enterfunc.
@@ -507,6 +517,10 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     *EXITFUNC_SYM,
                 ) {
                     Ok(dispatch) => {
+                        let bf_frame = bf_args.bf_frame_mut();
+                        bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC);
+                        bf_frame.bf_trampoline_arg = None;
+
                         let continuation = ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
@@ -515,13 +529,11 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: original_location,
                                 this: original_location,
                                 player: bf_args.exec_state.top().player,
-                                args: List::from_slice(&[v_objid(*what)]),
+                                args: List::from_slice(&[v_objid(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
                             command: None,
-                            trampoline: Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC),
-                            trampoline_arg: None,
                         };
                         return Ok(VmInstr(continuation));
                     }
@@ -537,35 +549,37 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
             }
             BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC => {
-                if *whereto == NOTHING {
+                if whereto == NOTHING {
                     tramp = BF_MOVE_TRAMPOLINE_DONE;
                     continue;
                 }
-                trace!(what = ?what, where_to = ?*whereto, tramp, "move: calling enterfunc");
+                trace!(what = ?what, where_to = ?whereto, tramp, "move: calling enterfunc");
 
                 // Exitfunc has been called, and returned. Result is irrelevant. Prepare to call
                 // :enterfunc on the destination.
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
-                    *whereto,
+                    whereto,
                     *ENTERFUNC_SYM,
                 ) {
                     Ok(dispatch) => {
+                        let bf_frame = bf_args.bf_frame_mut();
+                        bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_DONE);
+                        bf_frame.bf_trampoline_arg = None;
+
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb: dispatch,
                             call: VerbCall {
                                 verb_name: *ENTERFUNC_SYM,
-                                location: *whereto,
-                                this: *whereto,
+                                location: whereto,
+                                this: whereto,
                                 player: bf_args.exec_state.top().player,
-                                args: List::from_slice(&[v_objid(*what)]),
+                                args: List::from_slice(&[v_objid(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
                             command: None,
-                            trampoline: Some(3),
-                            trampoline_arg: None,
                         }));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -580,7 +594,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
             }
             BF_MOVE_TRAMPOLINE_DONE => {
-                trace!(what = ?what, where_to = ?*whereto, tramp, "move: completed");
+                trace!(what = ?what, where_to = ?whereto, tramp, "move: completed");
 
                 // Enter func was called, and returned. Result is irrelevant. We're done.
                 // Return v_none.

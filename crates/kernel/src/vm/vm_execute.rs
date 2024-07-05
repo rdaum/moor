@@ -87,15 +87,6 @@ pub enum ExecutionResult {
         call: VerbCall,
         /// The parsed user command that led to this verb dispatch, if any.
         command: Option<ParsedCommand>,
-        /// What to set the 'trampoline' to (if anything) when the verb returns.
-        /// If this is set, the builtin function that issued this ContinueVerb will be re-called
-        /// and the bf_trampoline argument on its activation record will be set to this value.
-        /// This is usually used to drive a state machine through a series of actions on a builtin
-        /// as it calls out to verbs.
-        trampoline: Option<usize>,
-        /// Likewise, along with the trampoline # above, this can be set with an optional argument
-        /// that can be used to pass data back to the builtin function that issued this request.
-        trampoline_arg: Option<Var>,
     },
     /// Request dispatch of a new task as a fork
     DispatchFork(Fork),
@@ -183,7 +174,9 @@ impl VM {
         // but increment the trampoline counter, as it means we're returning into it after
         // executing elsewhere. It will be up to the function to interpret the counter.
         // Functions that did not set a trampoline are assumed to be complete.
-        if !state.stack.is_empty() && state.top().bf_index.is_some() {
+        // TODO: this should be accomplished by dispatching to a different `exec` for different
+        //   types of frames. But as a transition we'll doo this.
+        if !state.stack.is_empty() && state.top().is_builtin_frame() {
             return self.reenter_builtin_function(state, exec_params, world_state, session);
         }
 
