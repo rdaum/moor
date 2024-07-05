@@ -26,7 +26,7 @@ use crate::builtins::{BfCallState, BfErr, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
 use crate::tasks::VerbCall;
-use crate::vm::activation::Activation;
+use crate::vm::activation::{Activation, VmStackFrame};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VM};
 use crate::vm::{VMExecState, VmExecParams};
@@ -218,12 +218,19 @@ impl VM {
     pub(crate) fn exec_fork_vector(&self, vm_state: &mut VMExecState, fork_request: Fork) {
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
-        a.frame.program.main_vector = Arc::new(
-            a.frame.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone(),
+
+        // This makes sense only for a MOO stack frame, and could only be initiated from there,
+        // so anything else is a legit panic, we shouldn't have gotten here.
+        let VmStackFrame::Moo(ref mut frame) = a.frame else {
+            panic!("Attempt to fork a non-MOO frame");
+        };
+
+        frame.program.main_vector = Arc::new(
+            frame.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone(),
         );
-        a.frame.pc = 0;
+        frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
-            a.frame
+            frame
                 .set_var_offset(&task_id_name, v_int(vm_state.task_id as i64))
                 .expect("Unable to set task_id in activation frame");
         }
@@ -306,7 +313,7 @@ impl VM {
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
         let Some(_) = vm_state.top_mut().bf_trampoline else {
-            let return_value = vm_state.top_mut().frame.pop();
+            let return_value = vm_state.top_mut().frame.return_value();
 
             return self.unwind_stack(vm_state, FinallyReason::Return(return_value));
         };

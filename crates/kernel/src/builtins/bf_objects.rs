@@ -467,12 +467,11 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC => {
                 trace!(what = ?what, where_to = ?*whereto, tramp, "move: moving object, calling exitfunc");
 
-                // Accept verb has been called, and returned. Check the result. Should be on stack,
-                // unless short-circuited, in which case we assume *false*
-                // TODO directly pushing into the stack like this is going to be a problem for
-                //  non-MOO interpreters. we need a more generic way of doing this
+                // Accept verb has been called, and returned. Check the result. Should be in our
+                // activation's return-value.
+                // Unless short-circuited, in which case we assume *false*
                 let result = if !shortcircuit {
-                    bf_args.exec_state.top().frame.peek_top().clone()
+                    bf_args.exec_state.top().frame.return_value()
                 } else {
                     v_int(0)
                 };

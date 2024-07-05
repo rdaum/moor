@@ -376,7 +376,7 @@ impl VmHost {
         if !self.vm_exec_state.stack.is_empty() {
             // coming back from any suspend, we need a return value to feed back to `bf_suspend` or
             // `bf_read()`
-            self.vm_exec_state.top_mut().frame.push(value);
+            self.vm_exec_state.set_return_value(value);
         }
 
         debug!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
@@ -403,9 +403,10 @@ impl VmHost {
         self.vm_exec_state
             .top_mut()
             .frame
-            .set_var_offset(task_id_var, value)
+            .set_variable(task_id_var, value)
             .expect("Could not set forked task id");
     }
+
     pub fn permissions(&self) -> Objid {
         self.vm_exec_state.top().permissions
     }
@@ -419,11 +420,7 @@ impl VmHost {
         self.vm_exec_state.top().this
     }
     pub fn line_number(&self) -> usize {
-        self.vm_exec_state
-            .top()
-            .frame
-            .find_line_no(self.vm_exec_state.top().frame.pc)
-            .unwrap_or(0)
+        self.vm_exec_state.top().frame.find_line_no().unwrap_or(0)
     }
 
     pub fn reset_ticks(&mut self) {

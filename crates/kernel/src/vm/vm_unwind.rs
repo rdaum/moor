@@ -23,7 +23,7 @@ use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
 
-use crate::vm::activation::Activation;
+use crate::vm::activation::{Activation, VmStackFrame};
 use crate::vm::frame::HandlerType;
 use crate::vm::{ExecutionResult, VMExecState, VM};
 use moor_compiler::BUILTIN_DESCRIPTORS;
@@ -99,48 +99,51 @@ impl VM {
     /// Then return the stack offset (from now) of the activation frame containing the handler.
     fn find_handler_active(&self, state: &mut VMExecState, raise_code: Error) -> Option<usize> {
         // Scan activation frames and their stacks, looking for the first _Catch we can find.
-        let mut frame = state.stack.len() - 1;
+        let mut activation_num = state.stack.len() - 1;
         loop {
-            let activation = &state.stack.get(frame)?;
-            for handler in &activation.frame.handler_stack {
-                if let HandlerType::Catch(cnt) = handler.handler_type {
-                    // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
-                    // non-list value, or a list containing the error code.
-                    // TODO check for 'cnt' being too large. not sure how to handle, tho
-                    // TODO this actually i think is wrong, it needs to pull two values off the stack
-                    let i = handler.valstack_pos;
-                    for j in (i - cnt)..i {
-                        if let Variant::List(codes) = &activation.frame.valstack[j].variant() {
-                            if !codes.contains(&v_err(raise_code)) {
-                                continue;
+            let activation = &state.stack.get(activation_num)?;
+            // Skip non-MOO frames.
+            if let VmStackFrame::Moo(ref frame) = activation.frame {
+                for handler in &frame.handler_stack {
+                    if let HandlerType::Catch(cnt) = handler.handler_type {
+                        // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
+                        // non-list value, or a list containing the error code.
+                        // TODO check for 'cnt' being too large. not sure how to handle, tho
+                        // TODO this actually i think is wrong, it needs to pull two values off the stack
+                        let i = handler.valstack_pos;
+                        for j in (i - cnt)..i {
+                            if let Variant::List(codes) = &frame.valstack[j].variant() {
+                                if !codes.contains(&v_err(raise_code)) {
+                                    continue;
+                                }
                             }
+                            return Some(activation_num);
                         }
-                        return Some(frame);
                     }
                 }
             }
-            if frame == 0 {
+            if activation_num == 0 {
                 break;
             }
-            frame -= 1;
+            activation_num -= 1;
         }
         None
     }
 
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
     /// upwards.
-    fn make_stack_list(&self, frames: &[Activation], start_frame_num: usize) -> Vec<Var> {
+    fn make_stack_list(&self, activations: &[Activation], start_frame_num: usize) -> Vec<Var> {
         // TODO LambdaMOO had logic in here about 'root_vector' and 'line_numbers_too' that I haven't included yet.
 
         let mut stack_list = vec![];
-        for (i, a) in frames.iter().rev().enumerate() {
+        for (i, a) in activations.iter().rev().enumerate() {
             if i < start_frame_num {
                 continue;
             }
             // Produce traceback line for each activation frame and append to stack_list
             // Should include line numbers (if possible), the name of the currently running verb,
             // its definer, its location, and the current player, and 'this'.
-            let line_no = match a.frame.find_line_no(a.frame.pc) {
+            let line_no = match a.frame.find_line_no() {
                 None => v_none(),
                 Some(l) => v_int(l as i64),
             };
@@ -193,11 +196,8 @@ impl VM {
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));
             }
-            if a.frame.find_line_no(a.frame.pc).is_some() {
-                pieces.push(format!(
-                    " (line {})",
-                    a.frame.find_line_no(a.frame.pc).unwrap()
-                ));
+            if let Some(line_num) = a.frame.find_line_no() {
+                pieces.push(format!(" (line {})", line_num));
             }
             if i == 0 {
                 pieces.push(format!(": {}", raise_msg));
@@ -242,7 +242,7 @@ impl VM {
     /// Push an error to the stack and raise it.
     pub(crate) fn push_error(&self, state: &mut VMExecState, code: Error) -> ExecutionResult {
         trace!(?code, "push_error");
-        state.push(v_err(code));
+        state.set_return_value(v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = state.stack.last() {
             if activation
@@ -270,7 +270,10 @@ impl VM {
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
         // function. If we stack_unwind, it will propagate to parent. Otherwise, it will be popped
         // by the parent anyways.
-        state.parent_activation_mut().frame.push(v_err(code));
+        state
+            .parent_activation_mut()
+            .frame
+            .set_return_value(v_err(code));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
@@ -298,7 +301,7 @@ impl VM {
         msg: String,
     ) -> ExecutionResult {
         trace!(?code, msg, "push_error_msg");
-        state.push(v_err(code));
+        state.set_return_value(v_err(code));
 
         self.raise_error(state, code)
     }
@@ -342,60 +345,63 @@ impl VM {
     ) -> ExecutionResult {
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = state.stack.last_mut() {
-            while a.frame.valstack.pop().is_some() {
-                // Check the handler stack to see if we've hit a finally or catch handler that
-                // was registered for this position in the value stack.
-                let Some(handler) = a.frame.pop_applicable_handler() else {
-                    continue;
-                };
+            if let VmStackFrame::Moo(frame) = &mut a.frame {
+                while frame.valstack.pop().is_some() {
+                    // Check the handler stack to see if we've hit a finally or catch handler that
+                    // was registered for this position in the value stack.
+                    let Some(handler) = frame.pop_applicable_handler() else {
+                        continue;
+                    };
 
-                match handler.handler_type {
-                    HandlerType::Finally(label) => {
-                        let why_code = why.code();
-                        if why_code == FinallyReason::Abort.code() {
-                            continue;
-                        }
-                        // Jump to the label pointed to by the finally label and then continue on
-                        // executing.
-                        a.frame.jump(&label);
-                        a.frame.push(v_int(why_code as i64));
-                        trace!(jump = ?label, ?why, "matched finally handler");
-                        return ExecutionResult::More;
-                    }
-                    HandlerType::Catch(_) => {
-                        let FinallyReason::Raise { code, .. } = &why else {
-                            continue;
-                        };
-
-                        let Some(handler) = a.frame.pop_applicable_handler() else {
-                            continue;
-                        };
-                        let HandlerType::CatchLabel(pushed_label) = &handler.handler_type else {
-                            panic!("Expected CatchLabel");
-                        };
-
-                        // The value at the top of the stack could be the error codes list.
-                        let v = a.frame.pop();
-                        let found = match v.variant() {
-                            Variant::List(error_codes) => error_codes.contains(&v_err(*code)),
-                            _ => true,
-                        };
-                        if found {
-                            a.frame.jump(pushed_label);
-                            a.frame.push(v_list(&[v_err(*code)]));
+                    match handler.handler_type {
+                        HandlerType::Finally(label) => {
+                            let why_code = why.code();
+                            if why_code == FinallyReason::Abort.code() {
+                                continue;
+                            }
+                            // Jump to the label pointed to by the finally label and then continue on
+                            // executing.
+                            frame.jump(&label);
+                            frame.push(v_int(why_code as i64));
+                            trace!(jump = ?label, ?why, "matched finally handler");
                             return ExecutionResult::More;
                         }
-                    }
-                    HandlerType::CatchLabel(_) => {
-                        unreachable!("CatchLabel where we didn't expect it...")
+                        HandlerType::Catch(_) => {
+                            let FinallyReason::Raise { code, .. } = &why else {
+                                continue;
+                            };
+
+                            let Some(handler) = frame.pop_applicable_handler() else {
+                                continue;
+                            };
+                            let HandlerType::CatchLabel(pushed_label) = &handler.handler_type
+                            else {
+                                panic!("Expected CatchLabel");
+                            };
+
+                            // The value at the top of the stack could be the error codes list.
+                            let v = frame.pop();
+                            let found = match v.variant() {
+                                Variant::List(error_codes) => error_codes.contains(&v_err(*code)),
+                                _ => true,
+                            };
+                            if found {
+                                frame.jump(pushed_label);
+                                frame.push(v_list(&[v_err(*code)]));
+                                return ExecutionResult::More;
+                            }
+                        }
+                        HandlerType::CatchLabel(_) => {
+                            unreachable!("CatchLabel where we didn't expect it...")
+                        }
                     }
                 }
-            }
 
-            // Exit with a jump.. let's go...
-            if let FinallyReason::Exit { label, .. } = why {
-                a.frame.jump(&label);
-                return ExecutionResult::More;
+                // Exit with a jump.. let's go...
+                if let FinallyReason::Exit { label, .. } = why {
+                    frame.jump(&label);
+                    return ExecutionResult::More;
+                }
             }
 
             // If we're doing a return, and this is the last activation, we're done and just pass
@@ -416,14 +422,14 @@ impl VM {
             if state.stack.is_empty() {
                 return ExecutionResult::Complete(v_none());
             }
+
             // TODO builtin function unwinding stuff
 
-            // If it was a return that brought us here, stick it onto the end of the next
-            // activation's value stack.
+            // If it was an explicit return that brought us here, set the return value explicitly.
             // (Unless we're the final activation, in which case that should have been handled
             // above)
             if let FinallyReason::Return(value) = &why {
-                state.push(value.clone());
+                state.set_return_value(value.clone());
                 return ExecutionResult::More;
             }
         }

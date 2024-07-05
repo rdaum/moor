@@ -15,11 +15,11 @@
 use bincode::{Decode, Encode};
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use moor_values::var::{v_empty_str, List, Variant};
+use moor_values::var::{v_empty_str, Error, List, Variant};
 use moor_values::NOTHING;
 use uuid::Uuid;
 
-use moor_compiler::GlobalName;
+use moor_compiler::{GlobalName, Name};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
@@ -44,7 +44,7 @@ lazy_static! {
 #[derive(Debug, Clone, Encode, Decode)]
 pub(crate) struct Activation {
     /// Frame
-    pub(crate) frame: Frame,
+    pub(crate) frame: VmStackFrame,
     /// The object that is the receiver of the current verb call.
     pub(crate) this: Objid,
     /// The object that is the 'player' role; that is, the active user of this task.
@@ -62,6 +62,8 @@ pub(crate) struct Activation {
     pub(crate) permissions: Objid,
     /// The command that triggered this verb call, if any.
     pub(crate) command: Option<ParsedCommand>,
+
+    //  TODO: Move these onto a VmStackFrame::BfFrame variant.
     /// If the activation is a call to a built-in function, the index of that function, in which
     /// case "verb_name", "verb_info", etc. are meaningless
     pub(crate) bf_index: Option<usize>,
@@ -70,6 +72,46 @@ pub(crate) struct Activation {
     pub(crate) bf_trampoline: Option<usize>,
     /// And an optional argument that can be passed with the above...
     pub(crate) bf_trampoline_arg: Option<Var>,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+pub enum VmStackFrame {
+    Moo(Frame),
+}
+
+impl VmStackFrame {
+    /// What is the line number of the currently executing stack frame, if any?
+    pub fn find_line_no(&self) -> Option<usize> {
+        match self {
+            VmStackFrame::Moo(frame) => frame.find_line_no(frame.pc),
+        }
+    }
+
+    pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
+        match self {
+            VmStackFrame::Moo(frame) => frame.set_var_offset(name, value),
+        }
+    }
+
+    pub fn set_global_variable(&mut self, gname: GlobalName, value: Var) {
+        match self {
+            VmStackFrame::Moo(frame) => frame.set_gvar(gname, value),
+        }
+    }
+
+    pub fn set_return_value(&mut self, value: Var) {
+        match self {
+            VmStackFrame::Moo(ref mut frame) => {
+                frame.push(value);
+            }
+        }
+    }
+
+    pub fn return_value(&self) -> Var {
+        match self {
+            VmStackFrame::Moo(ref frame) => frame.peek_top().clone(),
+        }
+    }
 }
 
 /// Set global constants into stack frame.
@@ -140,6 +182,8 @@ impl Activation {
             frame.set_gvar(GlobalName::iobjstr, v_str(""));
         }
 
+        let frame = VmStackFrame::Moo(frame);
+
         Self {
             frame,
             this: verb_call_request.call.this,
@@ -185,6 +229,8 @@ impl Activation {
         frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
         frame.set_gvar(GlobalName::iobjstr, v_empty_str());
 
+        let frame = VmStackFrame::Moo(frame);
+
         Self {
             frame,
             this: player,
@@ -224,6 +270,8 @@ impl Activation {
         // Frame doesn't really matter.
         // TODO: replace with a BfFrame once that's a thing.
         let frame = Frame::new(EMPTY_PROGRAM.clone());
+        let frame = VmStackFrame::Moo(frame);
+
         Self {
             frame,
             this: NOTHING,

@@ -36,7 +36,7 @@ use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj
 use moor_values::var::{v_float, Objid};
 use moor_values::var::{v_listv, Error};
 
-use crate::vm::activation::Activation;
+use crate::vm::activation::{Activation, VmStackFrame};
 use crate::vm::frame::HandlerType;
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{VMExecState, VM};
@@ -187,9 +187,17 @@ impl VM {
             return self.reenter_builtin_function(state, exec_params, world_state, session);
         }
 
-        // Try to consume & execute as many opcodes as we can without returning back to the task
-        // scheduler, for efficiency reasons...
-        let opcodes = state.top_mut().frame.program.main_vector.clone();
+        let opcodes = {
+            // Check the frame type to verify it's MOO, before doing anything else
+            let a = state.top_mut();
+            let VmStackFrame::Moo(ref mut f) = a.frame else {
+                panic!("Unsupported VM stack frame type");
+            };
+
+            // Try to consume & execute as many opcodes as we can without returning back to the task
+            // scheduler, for efficiency reasons...
+            f.program.main_vector.clone()
+        };
 
         // Special case for empty opcodes set, just return v_none() immediately.
         if opcodes.is_empty() {
@@ -213,7 +221,9 @@ impl VM {
 
             // Borrow the top of the activation stack for the lifetime of this execution.
             let a = state.top_mut();
-            let f = &mut a.frame;
+            let VmStackFrame::Moo(ref mut f) = a.frame else {
+                panic!("Unsupported VM stack frame type");
+            };
 
             // Otherwise, start poppin' opcodes.
             // We panic here if we run out of opcodes, as that means there's a bug in either the
