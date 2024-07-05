@@ -98,34 +98,31 @@ impl VMExecState {
     /// Find the currently active catch handler for a given error code, if any.
     /// Then return the stack offset (from now) of the activation frame containing the handler.
     fn find_handler_active(&mut self, raise_code: Error) -> Option<usize> {
-        // Scan activation frames and their stacks, looking for the first _Catch we can find.
-        let mut activation_num = self.stack.len() - 1;
-        loop {
-            let activation = &self.stack.get(activation_num)?;
-            // Skip non-MOO frames.
-            if let Frame::Moo(ref frame) = activation.frame {
-                for handler in &frame.handler_stack {
-                    if let HandlerType::Catch(cnt) = handler.handler_type {
-                        // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
-                        // non-list value, or a list containing the error code.
-                        // TODO check for 'cnt' being too large. not sure how to handle, tho
-                        // TODO this actually i think is wrong, it needs to pull two values off the stack
-                        let i = handler.valstack_pos;
-                        for j in (i - cnt)..i {
-                            if let Variant::List(codes) = &frame.valstack[j].variant() {
-                                if !codes.contains(&v_err(raise_code)) {
-                                    continue;
-                                }
+        // Scan activation frames and their stacks, looking for the first catch handler that matches
+        // the error code.
+        // Iterate backwards.
+        for activation in self.stack.iter().rev() {
+            // Skip non-MOO frames, they can't have catch handlers.
+            let Frame::Moo(ref frame) = activation.frame else {
+                continue;
+            };
+            for handler in &frame.handler_stack {
+                if let HandlerType::Catch(cnt) = handler.handler_type {
+                    // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
+                    // non-list value, or a list containing the error code.
+                    // TODO check for 'cnt' being too large. not sure how to handle, tho
+                    // TODO this actually i think is wrong, it needs to pull two values off the stack
+                    let i = handler.valstack_pos;
+                    for j in (i - cnt)..i {
+                        if let Variant::List(codes) = &frame.valstack[j].variant() {
+                            if !codes.contains(&v_err(raise_code)) {
+                                continue;
                             }
-                            return Some(activation_num);
                         }
+                        return Some(i);
                     }
                 }
             }
-            if activation_num == 0 {
-                break;
-            }
-            activation_num -= 1;
         }
         None
     }
@@ -133,8 +130,6 @@ impl VMExecState {
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
     /// upwards.
     fn make_stack_list(&self, activations: &[Activation], start_frame_num: usize) -> Vec<Var> {
-        // TODO LambdaMOO had logic in here about 'root_vector' and 'line_numbers_too' that I haven't included yet.
-
         let mut stack_list = vec![];
         for (i, a) in activations.iter().rev().enumerate() {
             if i < start_frame_num {
@@ -147,7 +142,7 @@ impl VMExecState {
                 None => v_none(),
                 Some(l) => v_int(l as i64),
             };
-            // TODO: abstract this a bit further, putting its construction onto the frame itself.
+            // TODO: abstract this a bit further, putting its construction onto the activation/frame
             let traceback_entry = match &a.frame {
                 Frame::Moo(_) => {
                     vec![
@@ -207,8 +202,6 @@ impl VMExecState {
             if i == 0 {
                 pieces.push(format!(": {}", raise_msg));
             }
-            // TODO builtin-function name if a builtin
-
             let piece = pieces.join("");
             backtrace_list.push(v_str(&piece))
         }
