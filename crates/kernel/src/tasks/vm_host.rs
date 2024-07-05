@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::builtins::{BuiltinRegistry};
+use crate::builtins::BuiltinRegistry;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::scheduler::AbortLimitReason;
 use crate::tasks::sessions::Session;
@@ -20,7 +20,8 @@ use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::VmStackFrame;
-use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest, VM};
+use crate::vm::vm_execute::moo_frame_execute;
+use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::vm::{UncaughtException, VmExecParams};
 use bincode::de::{BorrowDecoder, Decoder};
@@ -29,8 +30,8 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use daumtils::PhantomUnsync;
+use moor_compiler::Program;
 use moor_compiler::{compile, Name};
-use moor_compiler::{Program};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
@@ -68,8 +69,6 @@ pub enum VMHostResponse {
 
 /// A 'host' for running the MOO virtual machine inside a task.
 pub struct VmHost {
-    /// The VM we're running for the current execution.
-    vm: VM,
     /// Where we store current execution state for this host.
     vm_exec_state: VMExecState,
     /// The maximum stack depth for this task
@@ -101,12 +100,10 @@ impl VmHost {
         max_ticks: usize,
         max_time: Duration,
     ) -> Self {
-        let vm = VM {};
         let vm_exec_state = VMExecState::new(task_id, max_ticks);
 
         // Created in an initial suspended state.
         Self {
-            vm,
             vm_exec_state,
             max_stack_depth,
             max_ticks,
@@ -373,7 +370,7 @@ impl VmHost {
         // this is a bit not-ideal but it's the best I can do right now.)
         let result = match &self.vm_exec_state.top().frame {
             VmStackFrame::Moo(_) => {
-                return self.vm.exec(
+                return moo_frame_execute(
                     vm_exec_params,
                     &mut self.vm_exec_state,
                     world_state,
@@ -473,14 +470,12 @@ impl Encode for VmHost {
 
 impl Decode for VmHost {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let vm = VM {};
         let vm_exec_state = VMExecState::decode(decoder)?;
         let max_stack_depth = Decode::decode(decoder)?;
         let max_ticks = Decode::decode(decoder)?;
         let max_time = Duration::from_secs(Decode::decode(decoder)?);
 
         Ok(Self {
-            vm,
             vm_exec_state,
             max_stack_depth,
             max_ticks,
@@ -493,14 +488,12 @@ impl Decode for VmHost {
 
 impl<'de> BorrowDecode<'de> for VmHost {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let vm = VM {};
         let vm_exec_state = VMExecState::borrow_decode(decoder)?;
         let max_stack_depth = BorrowDecode::borrow_decode(decoder)?;
         let max_ticks = BorrowDecode::borrow_decode(decoder)?;
         let max_time = Duration::from_secs(BorrowDecode::borrow_decode(decoder)?);
 
         Ok(Self {
-            vm,
             vm_exec_state,
             max_stack_depth,
             max_ticks,
