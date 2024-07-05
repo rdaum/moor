@@ -13,8 +13,6 @@
 //
 
 use lazy_static::lazy_static;
-use std::sync::Arc;
-
 use tracing::{debug, error, trace};
 
 use moor_compiler::offset_for_builtin;
@@ -704,17 +702,17 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(players, bf_players);
 
-pub(crate) fn register_bf_objects(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("create")] = Arc::new(BfCreate {});
-    builtins[offset_for_builtin("valid")] = Arc::new(BfValid {});
-    builtins[offset_for_builtin("verbs")] = Arc::new(BfVerbs {});
-    builtins[offset_for_builtin("properties")] = Arc::new(BfProperties {});
-    builtins[offset_for_builtin("parent")] = Arc::new(BfParent {});
-    builtins[offset_for_builtin("children")] = Arc::new(BfChildren {});
-    builtins[offset_for_builtin("move")] = Arc::new(BfMove {});
-    builtins[offset_for_builtin("chparent")] = Arc::new(BfChparent {});
-    builtins[offset_for_builtin("set_player_flag")] = Arc::new(BfSetPlayerFlag {});
-    builtins[offset_for_builtin("recycle")] = Arc::new(BfRecycle {});
-    builtins[offset_for_builtin("max_object")] = Arc::new(BfMaxObject {});
-    builtins[offset_for_builtin("players")] = Arc::new(BfPlayers {});
+pub(crate) fn register_bf_objects(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("create")] = Box::new(BfCreate {});
+    builtins[offset_for_builtin("valid")] = Box::new(BfValid {});
+    builtins[offset_for_builtin("verbs")] = Box::new(BfVerbs {});
+    builtins[offset_for_builtin("properties")] = Box::new(BfProperties {});
+    builtins[offset_for_builtin("parent")] = Box::new(BfParent {});
+    builtins[offset_for_builtin("children")] = Box::new(BfChildren {});
+    builtins[offset_for_builtin("move")] = Box::new(BfMove {});
+    builtins[offset_for_builtin("chparent")] = Box::new(BfChparent {});
+    builtins[offset_for_builtin("set_player_flag")] = Box::new(BfSetPlayerFlag {});
+    builtins[offset_for_builtin("recycle")] = Box::new(BfRecycle {});
+    builtins[offset_for_builtin("max_object")] = Box::new(BfMaxObject {});
+    builtins[offset_for_builtin("players")] = Box::new(BfPlayers {});
 }

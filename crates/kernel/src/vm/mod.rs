@@ -17,11 +17,17 @@
 //! Aims to be semantically identical, so as to be able to run existing LambdaMOO compatible cores
 //! without blocking issues.
 
-pub(crate) mod activation;
-pub(crate) mod exec_state;
-pub(crate) mod vm_call;
-pub(crate) mod vm_execute;
-pub(crate) mod vm_unwind;
+use std::sync::Arc;
+use std::time::Duration;
+
+use bincode::{Decode, Encode};
+
+pub use exec_state::VMExecState;
+use moor_compiler::{Name, Offset, Program};
+use moor_values::model::VerbInfo;
+use moor_values::var::{Objid, Var};
+pub use vm_call::VerbExecutionRequest;
+pub use vm_unwind::{FinallyReason, UncaughtException};
 
 // Exports to the rest of the kernel
 use crate::builtins::BuiltinRegistry;
@@ -29,17 +35,14 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
-use bincode::{Decode, Encode};
-pub use exec_state::VMExecState;
-use moor_compiler::{Name, Offset, Program};
-use moor_values::model::VerbInfo;
-use moor_values::var::{Objid, Var};
-use std::sync::Arc;
-use std::time::Duration;
-pub use vm_call::VerbExecutionRequest;
-pub use vm_unwind::{FinallyReason, UncaughtException};
 
-mod frame;
+pub(crate) mod activation;
+pub(crate) mod exec_state;
+pub(crate) mod moo_execute;
+pub(crate) mod vm_call;
+pub(crate) mod vm_unwind;
+
+mod moo_frame;
 #[cfg(test)]
 mod vm_test;
 

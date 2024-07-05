@@ -12,16 +12,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::scheduler::TaskResult;
-use crate::vm::Fork;
-use bincode::{Decode, Encode};
-use moor_compiler::Program;
-use moor_values::var::Symbol;
-use moor_values::var::{List, Objid};
 use std::fmt::Debug;
 use std::time::SystemTime;
 
+use bincode::{Decode, Encode};
+
+use moor_compiler::Program;
+use moor_values::var::Symbol;
+use moor_values::var::{List, Objid};
+
+use crate::tasks::scheduler::TaskResult;
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
+use crate::vm::Fork;
 
 pub mod command_parse;
 pub mod scheduler;
@@ -115,19 +117,20 @@ impl ServerOptions {
 }
 
 pub mod vm_test_utils {
-    use crate::builtins::BuiltinRegistry;
-    use crate::tasks::sessions::Session;
-    use crate::tasks::vm_host::{VMHostResponse, VmHost};
-    use crate::tasks::VerbCall;
-    use crate::vm::UncaughtException;
-    
+    use std::sync::Arc;
+    use std::time::Duration;
+
     use moor_compiler::Program;
     use moor_values::model::WorldState;
     use moor_values::var::Symbol;
     use moor_values::var::{List, Objid, Var};
     use moor_values::SYSTEM_OBJECT;
-    use std::sync::Arc;
-    use std::time::Duration;
+
+    use crate::builtins::BuiltinRegistry;
+    use crate::tasks::sessions::Session;
+    use crate::tasks::vm_host::{VMHostResponse, VmHost};
+    use crate::tasks::VerbCall;
+    use crate::vm::UncaughtException;
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
@@ -231,19 +234,21 @@ pub mod vm_test_utils {
 }
 
 pub mod scheduler_test_utils {
-    use crate::tasks::scheduler_client::SchedulerClient;
-    use crate::tasks::sessions::Session;
-    use crate::vm::UncaughtException;
-    use moor_values::model::CommandError;
-    use moor_values::var::{Error::E_VERBNF, Objid, Var};
     use std::sync::Arc;
     use std::time::Duration;
 
-    use super::scheduler::{SchedulerError, TaskResult};
-    use super::TaskHandle;
+    use moor_values::model::CommandError;
+    use moor_values::var::{Error::E_VERBNF, Objid, Var};
+
+    use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::scheduler_test_utils::SchedulerError::{
         CommandExecutionError, TaskAbortedException,
     };
+    use crate::tasks::sessions::Session;
+    use crate::vm::UncaughtException;
+
+    use super::scheduler::{SchedulerError, TaskResult};
+    use super::TaskHandle;
 
     pub type ExecResult = Result<Var, UncaughtException>;
 

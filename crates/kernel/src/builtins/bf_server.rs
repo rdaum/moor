@@ -13,7 +13,6 @@
 //
 
 use std::io::Read;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, Local, TimeZone};
@@ -897,37 +896,37 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(load_server_options, load_server_options);
 
-pub(crate) fn register_bf_server(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("notify")] = Arc::new(BfNotify {});
-    builtins[offset_for_builtin("connected_players")] = Arc::new(BfConnectedPlayers {});
-    builtins[offset_for_builtin("is_player")] = Arc::new(BfIsPlayer {});
-    builtins[offset_for_builtin("caller_perms")] = Arc::new(BfCallerPerms {});
-    builtins[offset_for_builtin("set_task_perms")] = Arc::new(BfSetTaskPerms {});
-    builtins[offset_for_builtin("callers")] = Arc::new(BfCallers {});
-    builtins[offset_for_builtin("task_id")] = Arc::new(BfTaskId {});
-    builtins[offset_for_builtin("idle_seconds")] = Arc::new(BfIdleSeconds {});
-    builtins[offset_for_builtin("connected_seconds")] = Arc::new(BfConnectedSeconds {});
-    builtins[offset_for_builtin("connection_name")] = Arc::new(BfConnectionName {});
-    builtins[offset_for_builtin("time")] = Arc::new(BfTime {});
-    builtins[offset_for_builtin("ctime")] = Arc::new(BfCtime {});
-    builtins[offset_for_builtin("raise")] = Arc::new(BfRaise {});
-    builtins[offset_for_builtin("server_version")] = Arc::new(BfServerVersion {});
-    builtins[offset_for_builtin("shutdown")] = Arc::new(BfShutdown {});
-    builtins[offset_for_builtin("suspend")] = Arc::new(BfSuspend {});
-    builtins[offset_for_builtin("queued_tasks")] = Arc::new(BfQueuedTasks {});
-    builtins[offset_for_builtin("kill_task")] = Arc::new(BfKillTask {});
-    builtins[offset_for_builtin("resume")] = Arc::new(BfResume {});
-    builtins[offset_for_builtin("ticks_left")] = Arc::new(BfTicksLeft {});
-    builtins[offset_for_builtin("seconds_left")] = Arc::new(BfSecondsLeft {});
-    builtins[offset_for_builtin("boot_player")] = Arc::new(BfBootPlayer {});
-    builtins[offset_for_builtin("call_function")] = Arc::new(BfCallFunction {});
-    builtins[offset_for_builtin("server_log")] = Arc::new(BfServerLog {});
-    builtins[offset_for_builtin("function_info")] = Arc::new(BfFunctionInfo {});
-    builtins[offset_for_builtin("listeners")] = Arc::new(BfListeners {});
-    builtins[offset_for_builtin("eval")] = Arc::new(BfEval {});
-    builtins[offset_for_builtin("read")] = Arc::new(BfRead {});
-    builtins[offset_for_builtin("dump_database")] = Arc::new(BfDumpDatabase {});
-    builtins[offset_for_builtin("memory_usage")] = Arc::new(BfMemoryUsage {});
-    builtins[offset_for_builtin("db_disk_size")] = Arc::new(BfDbDiskSize {});
-    builtins[offset_for_builtin("load_server_options")] = Arc::new(BfLoadServerOptions {});
+pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("notify")] = Box::new(BfNotify {});
+    builtins[offset_for_builtin("connected_players")] = Box::new(BfConnectedPlayers {});
+    builtins[offset_for_builtin("is_player")] = Box::new(BfIsPlayer {});
+    builtins[offset_for_builtin("caller_perms")] = Box::new(BfCallerPerms {});
+    builtins[offset_for_builtin("set_task_perms")] = Box::new(BfSetTaskPerms {});
+    builtins[offset_for_builtin("callers")] = Box::new(BfCallers {});
+    builtins[offset_for_builtin("task_id")] = Box::new(BfTaskId {});
+    builtins[offset_for_builtin("idle_seconds")] = Box::new(BfIdleSeconds {});
+    builtins[offset_for_builtin("connected_seconds")] = Box::new(BfConnectedSeconds {});
+    builtins[offset_for_builtin("connection_name")] = Box::new(BfConnectionName {});
+    builtins[offset_for_builtin("time")] = Box::new(BfTime {});
+    builtins[offset_for_builtin("ctime")] = Box::new(BfCtime {});
+    builtins[offset_for_builtin("raise")] = Box::new(BfRaise {});
+    builtins[offset_for_builtin("server_version")] = Box::new(BfServerVersion {});
+    builtins[offset_for_builtin("shutdown")] = Box::new(BfShutdown {});
+    builtins[offset_for_builtin("suspend")] = Box::new(BfSuspend {});
+    builtins[offset_for_builtin("queued_tasks")] = Box::new(BfQueuedTasks {});
+    builtins[offset_for_builtin("kill_task")] = Box::new(BfKillTask {});
+    builtins[offset_for_builtin("resume")] = Box::new(BfResume {});
+    builtins[offset_for_builtin("ticks_left")] = Box::new(BfTicksLeft {});
+    builtins[offset_for_builtin("seconds_left")] = Box::new(BfSecondsLeft {});
+    builtins[offset_for_builtin("boot_player")] = Box::new(BfBootPlayer {});
+    builtins[offset_for_builtin("call_function")] = Box::new(BfCallFunction {});
+    builtins[offset_for_builtin("server_log")] = Box::new(BfServerLog {});
+    builtins[offset_for_builtin("function_info")] = Box::new(BfFunctionInfo {});
+    builtins[offset_for_builtin("listeners")] = Box::new(BfListeners {});
+    builtins[offset_for_builtin("eval")] = Box::new(BfEval {});
+    builtins[offset_for_builtin("read")] = Box::new(BfRead {});
+    builtins[offset_for_builtin("dump_database")] = Box::new(BfDumpDatabase {});
+    builtins[offset_for_builtin("memory_usage")] = Box::new(BfMemoryUsage {});
+    builtins[offset_for_builtin("db_disk_size")] = Box::new(BfDbDiskSize {});
+    builtins[offset_for_builtin("load_server_options")] = Box::new(BfLoadServerOptions {});
 }

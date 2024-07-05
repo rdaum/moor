@@ -13,7 +13,6 @@
 //
 
 use std::ops::BitOr;
-use std::sync::Arc;
 
 use onig::{Region, SearchOptions, SyntaxOperator};
 
@@ -26,7 +25,7 @@ use moor_values::var::{v_listv, Error};
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::vm::vm_execute::one_to_zero_index;
+use crate::vm::moo_execute::one_to_zero_index;
 
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -423,17 +422,17 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(substitute, bf_substitute);
 
-pub(crate) fn register_bf_list_sets(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("is_member")] = Arc::new(BfIsMember {});
-    builtins[offset_for_builtin("listinsert")] = Arc::new(BfListinsert {});
-    builtins[offset_for_builtin("listappend")] = Arc::new(BfListappend {});
-    builtins[offset_for_builtin("listdelete")] = Arc::new(BfListdelete {});
-    builtins[offset_for_builtin("listset")] = Arc::new(BfListset {});
-    builtins[offset_for_builtin("setadd")] = Arc::new(BfSetadd {});
-    builtins[offset_for_builtin("setremove")] = Arc::new(BfSetremove {});
-    builtins[offset_for_builtin("match")] = Arc::new(BfMatch {});
-    builtins[offset_for_builtin("rmatch")] = Arc::new(BfRmatch {});
-    builtins[offset_for_builtin("substitute")] = Arc::new(BfSubstitute {});
+pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("is_member")] = Box::new(BfIsMember {});
+    builtins[offset_for_builtin("listinsert")] = Box::new(BfListinsert {});
+    builtins[offset_for_builtin("listappend")] = Box::new(BfListappend {});
+    builtins[offset_for_builtin("listdelete")] = Box::new(BfListdelete {});
+    builtins[offset_for_builtin("listset")] = Box::new(BfListset {});
+    builtins[offset_for_builtin("setadd")] = Box::new(BfSetadd {});
+    builtins[offset_for_builtin("setremove")] = Box::new(BfSetremove {});
+    builtins[offset_for_builtin("match")] = Box::new(BfMatch {});
+    builtins[offset_for_builtin("rmatch")] = Box::new(BfRmatch {});
+    builtins[offset_for_builtin("substitute")] = Box::new(BfSubstitute {});
 }
 
 #[cfg(test)]

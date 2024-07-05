@@ -12,25 +12,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::builtins::BuiltinRegistry;
-use crate::tasks::command_parse::ParsedCommand;
-use crate::tasks::scheduler::AbortLimitReason;
-use crate::tasks::sessions::Session;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
-use crate::tasks::{TaskId, VerbCall};
-use crate::vm::activation::VmStackFrame;
-use crate::vm::vm_call::VerbProgram;
-use crate::vm::vm_execute::moo_frame_execute;
-use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
-use crate::vm::{FinallyReason, VMExecState};
-use crate::vm::{UncaughtException, VmExecParams};
+use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use daumtils::PhantomUnsync;
+use tracing::{debug, error, trace, warn};
+
 use moor_compiler::Program;
 use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
@@ -41,10 +34,20 @@ use moor_values::var::Var;
 use moor_values::var::{v_none, Symbol};
 use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use tracing::{debug, error, trace, warn};
+
+use crate::builtins::BuiltinRegistry;
+use crate::tasks::command_parse::ParsedCommand;
+use crate::tasks::scheduler::AbortLimitReason;
+use crate::tasks::sessions::Session;
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
+use crate::tasks::{TaskId, VerbCall};
+use crate::vm::activation::Frame;
+use crate::vm::moo_execute::moo_frame_execute;
+use crate::vm::vm_call::VerbProgram;
+use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
+use crate::vm::{FinallyReason, VMExecState};
+use crate::vm::{UncaughtException, VmExecParams};
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
@@ -371,7 +374,7 @@ impl VmHost {
         // at its type and execute the right function which will have to unpack the frame itself.
         // this is a bit not-ideal but it's the best I can do right now.)
         let result = match &self.vm_exec_state.top().frame {
-            VmStackFrame::Moo(_) => {
+            Frame::Moo(_) => {
                 return moo_frame_execute(
                     vm_exec_params,
                     &mut self.vm_exec_state,
@@ -379,7 +382,7 @@ impl VmHost {
                     session.clone(),
                 );
             }
-            VmStackFrame::Bf(_) => {
+            Frame::Bf(_) => {
                 self.vm_exec_state
                     .reenter_builtin_function(vm_exec_params, world_state, session)
             }
@@ -415,7 +418,7 @@ impl VmHost {
 
     pub fn decode_program(binary_type: BinaryType, binary_bytes: Bytes) -> VerbProgram {
         match binary_type {
-            BinaryType::LambdaMoo18X => VerbProgram::MOO(
+            BinaryType::LambdaMoo18X => VerbProgram::Moo(
                 Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),
             ),
             _ => panic!("Unsupported binary type {:?}", binary_type),

@@ -16,12 +16,16 @@
 //!
 //! See example.moot for a full-fledged example
 
-mod common;
 use std::{path::Path, sync::Arc};
 
-use common::{create_wiredtiger_db, testsuite_dir};
 use eyre::Context;
+
+#[cfg(feature = "relbox")]
+use common::create_relbox_db;
+use common::{create_wiredtiger_db, testsuite_dir};
 use moor_db::Database;
+use moor_kernel::tasks::sessions::{SessionError, SessionFactory};
+use moor_kernel::tasks::NoopTasksDb;
 use moor_kernel::{
     config::Config,
     tasks::{
@@ -34,10 +38,7 @@ use moor_kernel::{
 use moor_moot::{execute_moot_test, MootRunner};
 use moor_values::var::{v_none, Objid, Var};
 
-#[cfg(feature = "relbox")]
-use common::create_relbox_db;
-use moor_kernel::tasks::sessions::{SessionError, SessionFactory};
-use moor_kernel::tasks::NoopTasksDb;
+mod common;
 
 #[derive(Clone)]
 struct SchedulerMootRunner {

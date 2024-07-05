@@ -17,18 +17,18 @@ use std::fmt::Display;
 use bincode::{Decode, Encode};
 use tracing::trace;
 
+use moor_compiler::BUILTIN_DESCRIPTORS;
+use moor_compiler::{Label, Offset};
+use moor_values::model::Named;
 use moor_values::model::VerbFlag;
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
 
-use crate::vm::activation::{Activation, VmStackFrame};
-use crate::vm::frame::HandlerType;
+use crate::vm::activation::{Activation, Frame};
+use crate::vm::moo_frame::HandlerType;
 use crate::vm::{ExecutionResult, VMExecState};
-use moor_compiler::BUILTIN_DESCRIPTORS;
-use moor_compiler::{Label, Offset};
-use moor_values::model::Named;
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct UncaughtException {
@@ -103,7 +103,7 @@ impl VMExecState {
         loop {
             let activation = &self.stack.get(activation_num)?;
             // Skip non-MOO frames.
-            if let VmStackFrame::Moo(ref frame) = activation.frame {
+            if let Frame::Moo(ref frame) = activation.frame {
                 for handler in &frame.handler_stack {
                     if let HandlerType::Catch(cnt) = handler.handler_type {
                         // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
@@ -149,7 +149,7 @@ impl VMExecState {
             };
             // TODO: abstract this a bit further, putting its construction onto the frame itself.
             let traceback_entry = match &a.frame {
-                VmStackFrame::Moo(_) => {
+                Frame::Moo(_) => {
                     vec![
                         v_objid(a.this),
                         v_str(a.verb_info.verbdef().names().join(" ").as_str()),
@@ -159,7 +159,7 @@ impl VMExecState {
                         line_no,
                     ]
                 }
-                VmStackFrame::Bf(bf_frame) => {
+                Frame::Bf(bf_frame) => {
                     vec![
                         v_objid(a.this),
                         v_str(BUILTIN_DESCRIPTORS[bf_frame.bf_index].name.as_str()),
@@ -188,10 +188,10 @@ impl VMExecState {
             }
             // TODO: abstract this a bit further, putting it onto the frame itself
             match &a.frame {
-                VmStackFrame::Moo(_) => {
+                Frame::Moo(_) => {
                     pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
                 }
-                VmStackFrame::Bf(bf_frame) => {
+                Frame::Bf(bf_frame) => {
                     pieces.push(format!(
                         "builtin {}",
                         BUILTIN_DESCRIPTORS[bf_frame.bf_index].name.as_str()
@@ -342,7 +342,7 @@ impl VMExecState {
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             match &mut a.frame {
-                VmStackFrame::Moo(frame) => {
+                Frame::Moo(frame) => {
                     while frame.valstack.pop().is_some() {
                         // Check the handler stack to see if we've hit a finally or catch handler that
                         // was registered for this position in the value stack.
@@ -402,7 +402,7 @@ impl VMExecState {
                         return ExecutionResult::More;
                     }
                 }
-                VmStackFrame::Bf(_) => {
+                Frame::Bf(_) => {
                     // TODO: unwind builtin function frames here in a way that takes their
                     //   `return_value` (and maybe error state/) and propagates it up the stack.
                     //   This way things like push_bf_err can be removed.

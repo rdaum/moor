@@ -12,8 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::sync::Arc;
-
 use strum::EnumCount;
 use tracing::{error, warn};
 
@@ -33,15 +31,15 @@ use moor_values::util::BitEnum;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_values::var::List;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
-use moor_values::var::{Error, v_listv};
+use moor_values::var::{v_listv, Error};
 use moor_values::AsByteBuffer;
-use moor_values::var::Symbol;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::tasks::command_parse::{parse_preposition_spec, preposition_to_string};
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
@@ -64,7 +62,11 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let verb_info = match bf_args.args[1].variant() {
         Variant::Str(verb_desc) => bf_args
             .world_state
-            .get_verb(bf_args.task_perms_who(), *obj, Symbol::mk_case_insensitive(verb_desc.as_str()))
+            .get_verb(
+                bf_args.task_perms_who(),
+                *obj,
+                Symbol::mk_case_insensitive(verb_desc.as_str()),
+            )
             .map_err(world_state_bf_err)?,
         Variant::Int(verb_index) => {
             let verb_index = *verb_index;
@@ -699,14 +701,14 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(disassemble, bf_disassemble);
 
-    pub(crate) fn register_bf_verbs(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-        builtins[offset_for_builtin("verb_info")] = Arc::new(BfVerbInfo {});
-        builtins[offset_for_builtin("set_verb_info")] = Arc::new(BfSetVerbInfo {});
-        builtins[offset_for_builtin("verb_args")] = Arc::new(BfVerbArgs {});
-        builtins[offset_for_builtin("set_verb_args")] = Arc::new(BfSetVerbArgs {});
-        builtins[offset_for_builtin("verb_code")] = Arc::new(BfVerbCode {});
-        builtins[offset_for_builtin("set_verb_code")] = Arc::new(BfSetVerbCode {});
-        builtins[offset_for_builtin("add_verb")] = Arc::new(BfAddVerb {});
-        builtins[offset_for_builtin("delete_verb")] = Arc::new(BfDeleteVerb {});
-        builtins[offset_for_builtin("disassemble")] = Arc::new(BfDisassemble {});
-    }
+pub(crate) fn register_bf_verbs(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("verb_info")] = Box::new(BfVerbInfo {});
+    builtins[offset_for_builtin("set_verb_info")] = Box::new(BfSetVerbInfo {});
+    builtins[offset_for_builtin("verb_args")] = Box::new(BfVerbArgs {});
+    builtins[offset_for_builtin("set_verb_args")] = Box::new(BfSetVerbArgs {});
+    builtins[offset_for_builtin("verb_code")] = Box::new(BfVerbCode {});
+    builtins[offset_for_builtin("set_verb_code")] = Box::new(BfSetVerbCode {});
+    builtins[offset_for_builtin("add_verb")] = Box::new(BfAddVerb {});
+    builtins[offset_for_builtin("delete_verb")] = Box::new(BfDeleteVerb {});
+    builtins[offset_for_builtin("disassemble")] = Box::new(BfDisassemble {});
+}

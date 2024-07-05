@@ -13,8 +13,6 @@
 //
 
 use md5::Digest;
-use std::sync::Arc;
-
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 
@@ -219,14 +217,14 @@ fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(binary_hash, bf_binary_hash);
 
-pub(crate) fn register_bf_strings(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("strsub")] = Arc::new(BfStrsub {});
-    builtins[offset_for_builtin("index")] = Arc::new(BfIndex {});
-    builtins[offset_for_builtin("rindex")] = Arc::new(BfRindex {});
-    builtins[offset_for_builtin("strcmp")] = Arc::new(BfStrcmp {});
-    builtins[offset_for_builtin("crypt")] = Arc::new(BfCrypt {});
-    builtins[offset_for_builtin("string_hash")] = Arc::new(BfStringHash {});
-    builtins[offset_for_builtin("binary_hash")] = Arc::new(BfBinaryHash {});
+pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("strsub")] = Box::new(BfStrsub {});
+    builtins[offset_for_builtin("index")] = Box::new(BfIndex {});
+    builtins[offset_for_builtin("rindex")] = Box::new(BfRindex {});
+    builtins[offset_for_builtin("strcmp")] = Box::new(BfStrcmp {});
+    builtins[offset_for_builtin("crypt")] = Box::new(BfCrypt {});
+    builtins[offset_for_builtin("string_hash")] = Box::new(BfStringHash {});
+    builtins[offset_for_builtin("binary_hash")] = Box::new(BfBinaryHash {});
 }
 
 #[cfg(test)]

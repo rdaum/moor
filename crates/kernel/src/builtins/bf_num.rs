@@ -12,8 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::sync::Arc;
-
 use decorum::R64;
 use rand::Rng;
 
@@ -364,26 +362,26 @@ fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(trunc, bf_trunc);
 
-pub(crate) fn register_bf_num(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("abs")] = Arc::new(BfAbs {});
-    builtins[offset_for_builtin("min")] = Arc::new(BfMin {});
-    builtins[offset_for_builtin("max")] = Arc::new(BfMax {});
-    builtins[offset_for_builtin("random")] = Arc::new(BfRandom {});
-    builtins[offset_for_builtin("floatstr")] = Arc::new(BfFloatstr {});
-    builtins[offset_for_builtin("sqrt")] = Arc::new(BfSqrt {});
-    builtins[offset_for_builtin("sin")] = Arc::new(BfSin {});
-    builtins[offset_for_builtin("cos")] = Arc::new(BfCos {});
-    builtins[offset_for_builtin("tan")] = Arc::new(BfTan {});
-    builtins[offset_for_builtin("asin")] = Arc::new(BfAsin {});
-    builtins[offset_for_builtin("acos")] = Arc::new(BfAcos {});
-    builtins[offset_for_builtin("atan")] = Arc::new(BfAtan {});
-    builtins[offset_for_builtin("sinh")] = Arc::new(BfSinh {});
-    builtins[offset_for_builtin("cosh")] = Arc::new(BfCosh {});
-    builtins[offset_for_builtin("tanh")] = Arc::new(BfTanh {});
-    builtins[offset_for_builtin("exp")] = Arc::new(BfExp {});
-    builtins[offset_for_builtin("log")] = Arc::new(BfLog {});
-    builtins[offset_for_builtin("log10")] = Arc::new(BfLog10 {});
-    builtins[offset_for_builtin("ceil")] = Arc::new(BfCeil {});
-    builtins[offset_for_builtin("floor")] = Arc::new(BfFloor {});
-    builtins[offset_for_builtin("trunc")] = Arc::new(BfTrunc {});
+pub(crate) fn register_bf_num(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("abs")] = Box::new(BfAbs {});
+    builtins[offset_for_builtin("min")] = Box::new(BfMin {});
+    builtins[offset_for_builtin("max")] = Box::new(BfMax {});
+    builtins[offset_for_builtin("random")] = Box::new(BfRandom {});
+    builtins[offset_for_builtin("floatstr")] = Box::new(BfFloatstr {});
+    builtins[offset_for_builtin("sqrt")] = Box::new(BfSqrt {});
+    builtins[offset_for_builtin("sin")] = Box::new(BfSin {});
+    builtins[offset_for_builtin("cos")] = Box::new(BfCos {});
+    builtins[offset_for_builtin("tan")] = Box::new(BfTan {});
+    builtins[offset_for_builtin("asin")] = Box::new(BfAsin {});
+    builtins[offset_for_builtin("acos")] = Box::new(BfAcos {});
+    builtins[offset_for_builtin("atan")] = Box::new(BfAtan {});
+    builtins[offset_for_builtin("sinh")] = Box::new(BfSinh {});
+    builtins[offset_for_builtin("cosh")] = Box::new(BfCosh {});
+    builtins[offset_for_builtin("tanh")] = Box::new(BfTanh {});
+    builtins[offset_for_builtin("exp")] = Box::new(BfExp {});
+    builtins[offset_for_builtin("log")] = Box::new(BfLog {});
+    builtins[offset_for_builtin("log10")] = Box::new(BfLog10 {});
+    builtins[offset_for_builtin("ceil")] = Box::new(BfCeil {});
+    builtins[offset_for_builtin("floor")] = Box::new(BfFloor {});
+    builtins[offset_for_builtin("trunc")] = Box::new(BfTrunc {});
 }

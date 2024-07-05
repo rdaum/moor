@@ -14,6 +14,14 @@
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
+    use std::fs::File;
+    use std::io::{BufReader, Read};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use text_diff::assert_diff;
+
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
@@ -25,15 +33,8 @@ mod test {
     use moor_values::model::{CommitResult, ValSet};
     use moor_values::model::{HasUuid, Named};
     use moor_values::var::Objid;
-    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-    use std::collections::BTreeSet;
-    use std::fs::File;
-    use std::io::{BufReader, Read};
-    use std::path::PathBuf;
-
     use moor_values::var::Symbol;
-    use std::sync::Arc;
-    use text_diff::assert_diff;
+    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

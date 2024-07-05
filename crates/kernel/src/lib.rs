@@ -12,14 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub use crate::tasks::scheduler_client::SchedulerClient;
+pub use crate::tasks::suspension::{SuspendedTask, WakeCondition};
+pub use crate::tasks::task::Task;
+pub use crate::tasks::{ServerOptions, TaskId};
+
 pub mod builtins;
 pub mod config;
 pub mod matching;
 pub mod tasks;
 pub mod textdump;
 pub mod vm;
-
-pub use crate::tasks::scheduler_client::SchedulerClient;
-pub use crate::tasks::suspension::{SuspendedTask, WakeCondition};
-pub use crate::tasks::task::Task;
-pub use crate::tasks::{ServerOptions, TaskId};

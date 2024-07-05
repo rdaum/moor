@@ -12,18 +12,21 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::sync::Arc;
+use std::time::Duration;
+
+use crossbeam_channel::Sender;
+use tracing::{instrument, trace};
+use uuid::Uuid;
+
+use moor_compiler::{compile, Program};
+use moor_values::var::Symbol;
+use moor_values::var::{Objid, Var};
+
 use crate::tasks::scheduler::SchedulerError;
 use crate::tasks::scheduler::SchedulerError::CompilationError;
 use crate::tasks::sessions::Session;
 use crate::tasks::TaskHandle;
-use crossbeam_channel::Sender;
-use moor_compiler::{compile, Program};
-use moor_values::var::Symbol;
-use moor_values::var::{Objid, Var};
-use std::sync::Arc;
-use std::time::Duration;
-use tracing::{instrument, trace};
-use uuid::Uuid;
 
 /// A handle for talking to the scheduler from the outside world.
 /// This is not meant to be used by running tasks, but by the rpc daemon, tests, etc.

@@ -14,8 +14,16 @@
 
 use std::sync::Arc;
 
-use moor_compiler::BUILTIN_DESCRIPTORS;
 use thiserror::Error;
+
+use moor_compiler::BUILTIN_DESCRIPTORS;
+use moor_values::model::Perms;
+use moor_values::model::WorldState;
+use moor_values::model::WorldStateError;
+use moor_values::var::Error;
+use moor_values::var::Objid;
+use moor_values::var::Symbol;
+use moor_values::var::Var;
 
 use crate::builtins::bf_list_sets::register_bf_list_sets;
 use crate::builtins::bf_num::register_bf_num;
@@ -25,17 +33,9 @@ use crate::builtins::bf_server::{register_bf_server, BfNoop};
 use crate::builtins::bf_strings::register_bf_strings;
 use crate::builtins::bf_values::register_bf_values;
 use crate::builtins::bf_verbs::register_bf_verbs;
-use moor_values::model::Perms;
-use moor_values::model::WorldState;
-use moor_values::model::WorldStateError;
-use moor_values::var::Error;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::Var;
-
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::vm::activation::{BfFrame, VmStackFrame};
+use crate::vm::activation::{BfFrame, Frame};
 use crate::vm::{ExecutionResult, VMExecState};
 
 mod bf_list_sets;
@@ -50,7 +50,7 @@ mod bf_verbs;
 /// The bundle of builtins are stored here, and passed around globally.
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
-    pub(crate) builtins: Arc<Vec<Arc<dyn BuiltinFunction>>>,
+    pub(crate) builtins: Arc<Vec<Box<dyn BuiltinFunction>>>,
 }
 
 impl Default for BuiltinRegistry {
@@ -61,10 +61,10 @@ impl Default for BuiltinRegistry {
 
 impl BuiltinRegistry {
     pub fn new() -> Self {
-        let mut builtins: Vec<Arc<dyn BuiltinFunction>> =
+        let mut builtins: Vec<Box<dyn BuiltinFunction>> =
             Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
         for _ in 0..BUILTIN_DESCRIPTORS.len() {
-            builtins.push(Arc::new(BfNoop {}))
+            builtins.push(Box::new(BfNoop {}))
         }
 
         register_bf_server(&mut builtins);
@@ -113,7 +113,7 @@ impl BfCallState<'_> {
     }
 
     pub fn bf_frame(&self) -> &BfFrame {
-        let VmStackFrame::Bf(frame) = &self.exec_state.top().frame else {
+        let Frame::Bf(frame) = &self.exec_state.top().frame else {
             panic!("Expected a BF frame at the top of the stack");
         };
 
@@ -121,7 +121,7 @@ impl BfCallState<'_> {
     }
 
     pub fn bf_frame_mut(&mut self) -> &mut BfFrame {
-        let VmStackFrame::Bf(frame) = &mut self.exec_state.top_mut().frame else {
+        let Frame::Bf(frame) = &mut self.exec_state.top_mut().frame else {
             panic!("Expected a BF frame at the top of the stack");
         };
 
