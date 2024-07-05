@@ -147,8 +147,9 @@ impl VM {
                 None => v_none(),
                 Some(l) => v_int(l as i64),
             };
-            let traceback_entry = match a.bf_index {
-                None => {
+            // TODO: abstract this a bit further, putting its construction onto the frame itself.
+            let traceback_entry = match &a.frame {
+                VmStackFrame::Moo(_) => {
                     vec![
                         v_objid(a.this),
                         v_str(a.verb_info.verbdef().names().join(" ").as_str()),
@@ -158,10 +159,10 @@ impl VM {
                         line_no,
                     ]
                 }
-                Some(bf_index) => {
+                VmStackFrame::Bf(bf_frame) => {
                     vec![
                         v_objid(a.this),
-                        v_str(BUILTIN_DESCRIPTORS[bf_index].name.as_str()),
+                        v_str(BUILTIN_DESCRIPTORS[bf_frame.bf_index].name.as_str()),
                         v_objid(NOTHING),
                         v_objid(NOTHING),
                         v_objid(a.player),
@@ -185,13 +186,17 @@ impl VM {
             if i != 0 {
                 pieces.push("... called from ".to_string());
             }
-            if a.bf_index.is_none() {
-                pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
-            } else {
-                pieces.push(format!(
-                    "builtin {}",
-                    BUILTIN_DESCRIPTORS[a.bf_index.unwrap()].name.as_str()
-                ));
+            // TODO: abstract this a bit further, putting it onto the frame itself
+            match &a.frame {
+                VmStackFrame::Moo(_) => {
+                    pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
+                }
+                VmStackFrame::Bf(bf_frame) => {
+                    pieces.push(format!(
+                        "builtin {}",
+                        BUILTIN_DESCRIPTORS[bf_frame.bf_index].name.as_str()
+                    ));
+                }
             }
             if a.verb_definer() != a.this {
                 pieces.push(format!(" (this == #{})", a.this.0));
@@ -265,11 +270,14 @@ impl VM {
         msg: Option<String>,
         value: Option<Var>,
     ) -> ExecutionResult {
+        // TODO: revisit this now that Bf frames are a thing...
+        //   We should be able to come up with a way to propagate and unwind for any kind of frame...
+        //   And not have a special case here
+
         trace!(?code, "push_bf_error");
         // No matter what, the error value has to be on the stack of the *calling* verb, not on this
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
-        // function. If we stack_unwind, it will propagate to parent. Otherwise, it will be popped
-        // by the parent anyways.
+        // function.
         state
             .parent_activation_mut()
             .frame
@@ -277,7 +285,7 @@ impl VM {
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
-        let verb_frame = state.stack.iter().rev().find(|a| a.bf_index.is_none());
+        let verb_frame = state.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame {
             if activation
                 .verb_info
@@ -313,7 +321,7 @@ impl VM {
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
-        let verb_frame = state.stack.iter().rev().find(|a| a.bf_index.is_none());
+        let verb_frame = state.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame {
             if activation
                 .verb_info
@@ -345,62 +353,72 @@ impl VM {
     ) -> ExecutionResult {
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = state.stack.last_mut() {
-            if let VmStackFrame::Moo(frame) = &mut a.frame {
-                while frame.valstack.pop().is_some() {
-                    // Check the handler stack to see if we've hit a finally or catch handler that
-                    // was registered for this position in the value stack.
-                    let Some(handler) = frame.pop_applicable_handler() else {
-                        continue;
-                    };
+            match &mut a.frame {
+                VmStackFrame::Moo(frame) => {
+                    while frame.valstack.pop().is_some() {
+                        // Check the handler stack to see if we've hit a finally or catch handler that
+                        // was registered for this position in the value stack.
+                        let Some(handler) = frame.pop_applicable_handler() else {
+                            continue;
+                        };
 
-                    match handler.handler_type {
-                        HandlerType::Finally(label) => {
-                            let why_code = why.code();
-                            if why_code == FinallyReason::Abort.code() {
-                                continue;
-                            }
-                            // Jump to the label pointed to by the finally label and then continue on
-                            // executing.
-                            frame.jump(&label);
-                            frame.push(v_int(why_code as i64));
-                            trace!(jump = ?label, ?why, "matched finally handler");
-                            return ExecutionResult::More;
-                        }
-                        HandlerType::Catch(_) => {
-                            let FinallyReason::Raise { code, .. } = &why else {
-                                continue;
-                            };
-
-                            let Some(handler) = frame.pop_applicable_handler() else {
-                                continue;
-                            };
-                            let HandlerType::CatchLabel(pushed_label) = &handler.handler_type
-                            else {
-                                panic!("Expected CatchLabel");
-                            };
-
-                            // The value at the top of the stack could be the error codes list.
-                            let v = frame.pop();
-                            let found = match v.variant() {
-                                Variant::List(error_codes) => error_codes.contains(&v_err(*code)),
-                                _ => true,
-                            };
-                            if found {
-                                frame.jump(pushed_label);
-                                frame.push(v_list(&[v_err(*code)]));
+                        match handler.handler_type {
+                            HandlerType::Finally(label) => {
+                                let why_code = why.code();
+                                if why_code == FinallyReason::Abort.code() {
+                                    continue;
+                                }
+                                // Jump to the label pointed to by the finally label and then continue on
+                                // executing.
+                                frame.jump(&label);
+                                frame.push(v_int(why_code as i64));
+                                trace!(jump = ?label, ?why, "matched finally handler");
                                 return ExecutionResult::More;
                             }
-                        }
-                        HandlerType::CatchLabel(_) => {
-                            unreachable!("CatchLabel where we didn't expect it...")
+                            HandlerType::Catch(_) => {
+                                let FinallyReason::Raise { code, .. } = &why else {
+                                    continue;
+                                };
+
+                                let Some(handler) = frame.pop_applicable_handler() else {
+                                    continue;
+                                };
+                                let HandlerType::CatchLabel(pushed_label) = &handler.handler_type
+                                else {
+                                    panic!("Expected CatchLabel");
+                                };
+
+                                // The value at the top of the stack could be the error codes list.
+                                let v = frame.pop();
+                                let found = match v.variant() {
+                                    Variant::List(error_codes) => {
+                                        error_codes.contains(&v_err(*code))
+                                    }
+                                    _ => true,
+                                };
+                                if found {
+                                    frame.jump(pushed_label);
+                                    frame.push(v_list(&[v_err(*code)]));
+                                    return ExecutionResult::More;
+                                }
+                            }
+                            HandlerType::CatchLabel(_) => {
+                                unreachable!("CatchLabel where we didn't expect it...")
+                            }
                         }
                     }
-                }
 
-                // Exit with a jump.. let's go...
-                if let FinallyReason::Exit { label, .. } = why {
-                    frame.jump(&label);
-                    return ExecutionResult::More;
+                    // Exit with a jump.. let's go...
+                    if let FinallyReason::Exit { label, .. } = why {
+                        frame.jump(&label);
+                        return ExecutionResult::More;
+                    }
+                }
+                VmStackFrame::Bf(_) => {
+                    // TODO: unwind builtin function frames here in a way that takes their
+                    //   `return_value` (and maybe error state/) and propagates it up the stack.
+                    //   This way things like push_bf_err can be removed.
+                    //   This might involve encompassing some of the stuff below, too.
                 }
             }
 

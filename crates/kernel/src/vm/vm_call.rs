@@ -21,7 +21,6 @@ use moor_values::var::v_int;
 use moor_values::var::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
 use moor_values::var::{List, Objid};
 
-use crate::builtins::bf_server::BF_SERVER_EVAL_TRAMPOLINE_RESUME;
 use crate::builtins::{BfCallState, BfErr, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
@@ -122,8 +121,6 @@ impl VM {
             resolved_verb: verb_info,
             call,
             command: vm_state.top().command.clone(),
-            trampoline: None,
-            trampoline_arg: None,
         }
     }
 
@@ -176,8 +173,6 @@ impl VM {
             resolved_verb: vi,
             call,
             command: vm_state.top().command.clone(),
-            trampoline: None,
-            trampoline_arg: None,
         }
     }
 
@@ -200,12 +195,6 @@ impl VM {
         player: Objid,
         program: Program,
     ) {
-        if !vm_state.stack.is_empty() {
-            // We need to set up a trampoline to return back into `bf_eval`
-            vm_state.top_mut().bf_trampoline_arg = None;
-            vm_state.top_mut().bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
-        }
-
         let a = Activation::for_eval(permissions, player, program);
 
         vm_state.stack.push(a);
@@ -305,20 +294,22 @@ impl VM {
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
-        trace!(
-            bf_index = vm_state.top().bf_index,
-            "Reentering builtin function"
-        );
+        let bf_frame = match vm_state.top().frame {
+            VmStackFrame::Bf(ref frame) => frame,
+            _ => panic!("Expected a BF frame at the top of the stack"),
+        };
+
+        trace!(bf_index = bf_frame.bf_index, "Reentering builtin function");
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
-        let Some(_) = vm_state.top_mut().bf_trampoline else {
+        let Some(_) = bf_frame.bf_trampoline else {
             let return_value = vm_state.top_mut().frame.return_value();
 
             return self.unwind_stack(vm_state, FinallyReason::Return(return_value));
         };
 
-        let bf = self.builtins[vm_state.top().bf_index.unwrap()].clone();
+        let bf = self.builtins[bf_frame.bf_index].clone();
         let verb_name = vm_state.top().verb_name;
         let sessions = session.clone();
         let args = vm_state.top().args.clone();

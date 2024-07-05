@@ -13,7 +13,7 @@
 //
 
 use crate::tasks::TaskId;
-use crate::vm::activation::Activation;
+use crate::vm::activation::{Activation, VmStackFrame};
 use bincode::{Decode, Encode};
 use daumtils::PhantomUnsync;
 use moor_values::var::Var;
@@ -87,10 +87,9 @@ impl VMExecState {
             let line_number = 0;
             let this = activation.this;
             let perms = activation.permissions;
-            let programmer = if activation.bf_index.is_some() {
-                NOTHING
-            } else {
-                perms
+            let programmer = match activation.frame {
+                VmStackFrame::Bf(_) => NOTHING,
+                _ => perms,
             };
             callers.push(Caller {
                 verb_name,
@@ -117,8 +116,10 @@ impl VMExecState {
     /// Return the object that called the current activation.
     pub(crate) fn caller(&self) -> Objid {
         let stack_iter = self.stack.iter().rev();
+
+        // Skip builtin-frames (for now?)
         for activation in stack_iter {
-            if activation.bf_index.is_some() {
+            if let VmStackFrame::Bf(_) = activation.frame {
                 continue;
             }
             return activation.this;
@@ -136,8 +137,8 @@ impl VMExecState {
 
     /// Return the permissions of the caller of the current activation.
     pub(crate) fn caller_perms(&self) -> Objid {
-        // Filter out builtins.
-        let mut stack_iter = self.stack.iter().rev().filter(|a| a.bf_index.is_none());
+        // Filter out builtin frames, and then take the next one.
+        let mut stack_iter = self.stack.iter().rev().filter(|a| !a.is_builtin_frame());
         // caller is the frame just before us.
         stack_iter.next();
         stack_iter.next().map(|a| a.permissions).unwrap_or(NOTHING)
@@ -147,7 +148,7 @@ impl VMExecState {
     /// permissions of the current task, but note that this can be modified by
     /// the `set_task_perms` built-in function.
     pub(crate) fn task_perms(&self) -> Objid {
-        let stack_top = self.stack.iter().rev().find(|a| a.bf_index.is_none());
+        let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         stack_top.map(|a| a.permissions).unwrap_or(NOTHING)
     }
 

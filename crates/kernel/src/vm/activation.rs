@@ -32,7 +32,6 @@ use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::frame::Frame;
 use crate::vm::VerbExecutionRequest;
 use moor_compiler::Program;
-use moor_compiler::EMPTY_PROGRAM;
 use moor_values::var::Symbol;
 
 lazy_static! {
@@ -62,21 +61,12 @@ pub(crate) struct Activation {
     pub(crate) permissions: Objid,
     /// The command that triggered this verb call, if any.
     pub(crate) command: Option<ParsedCommand>,
-
-    //  TODO: Move these onto a VmStackFrame::BfFrame variant.
-    /// If the activation is a call to a built-in function, the index of that function, in which
-    /// case "verb_name", "verb_info", etc. are meaningless
-    pub(crate) bf_index: Option<usize>,
-    /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
-    /// in, which can be used by the bf to figure out how to resume where it left off.
-    pub(crate) bf_trampoline: Option<usize>,
-    /// And an optional argument that can be passed with the above...
-    pub(crate) bf_trampoline_arg: Option<Var>,
 }
 
 #[derive(Clone, Debug, Encode, Decode)]
 pub enum VmStackFrame {
     Moo(Frame),
+    Bf(BfFrame),
 }
 
 impl VmStackFrame {
@@ -84,18 +74,25 @@ impl VmStackFrame {
     pub fn find_line_no(&self) -> Option<usize> {
         match self {
             VmStackFrame::Moo(frame) => frame.find_line_no(frame.pc),
+            VmStackFrame::Bf(_) => None,
         }
     }
 
     pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
         match self {
             VmStackFrame::Moo(frame) => frame.set_var_offset(name, value),
+            VmStackFrame::Bf(_) => {
+                panic!("set_variable called for a built-in function frame")
+            }
         }
     }
 
     pub fn set_global_variable(&mut self, gname: GlobalName, value: Var) {
         match self {
             VmStackFrame::Moo(frame) => frame.set_gvar(gname, value),
+            VmStackFrame::Bf(_) => {
+                panic!("set_global_variable called for a built-in function frame")
+            }
         }
     }
 
@@ -104,66 +101,94 @@ impl VmStackFrame {
             VmStackFrame::Moo(ref mut frame) => {
                 frame.push(value);
             }
+            VmStackFrame::Bf(bf_frame) => {
+                bf_frame.return_value = Some(value);
+            }
         }
     }
 
     pub fn return_value(&self) -> Var {
         match self {
             VmStackFrame::Moo(ref frame) => frame.peek_top().clone(),
+            VmStackFrame::Bf(bf_frame) => bf_frame
+                .return_value
+                .clone()
+                .expect("No return value set for built-in function"),
         }
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+pub struct BfFrame {
+    /// The index of the built-in function being called.
+    pub(crate) bf_index: usize,
+    /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
+    /// in, which can be used by the bf to figure out how to resume where it left off.
+    pub(crate) bf_trampoline: Option<usize>,
+    /// And an optional argument that can be passed with the above...
+    pub(crate) bf_trampoline_arg: Option<Var>,
+
+    /// Return value into this frame.
+    pub(crate) return_value: Option<Var>,
+}
+
 /// Set global constants into stack frame.
-fn set_constants(f: &mut Frame) {
-    f.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
-    f.set_gvar(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
-    f.set_gvar(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
-    f.set_gvar(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
-    f.set_gvar(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
-    f.set_gvar(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
-    f.set_gvar(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
+fn set_constants(f: &mut VmStackFrame) {
+    f.set_global_variable(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
+    f.set_global_variable(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
+    f.set_global_variable(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
+    f.set_global_variable(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
+    f.set_global_variable(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
+    f.set_global_variable(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
+    f.set_global_variable(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
 }
 
 impl Activation {
+    pub fn is_builtin_frame(&self) -> bool {
+        match self.frame {
+            VmStackFrame::Bf(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
-        let mut frame = Frame::new(program);
-
+        let frame = Frame::new(program);
+        let mut frame = VmStackFrame::Moo(frame);
         set_constants(&mut frame);
-        frame.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
-        frame.set_gvar(GlobalName::player, v_objid(verb_call_request.call.player));
-        frame.set_gvar(GlobalName::caller, v_objid(verb_call_request.call.caller));
-        frame.set_gvar(
+        frame.set_global_variable(GlobalName::this, v_objid(verb_call_request.call.this));
+        frame.set_global_variable(GlobalName::player, v_objid(verb_call_request.call.player));
+        frame.set_global_variable(GlobalName::caller, v_objid(verb_call_request.call.caller));
+        frame.set_global_variable(
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
         );
-        frame.set_gvar(
+        frame.set_global_variable(
             GlobalName::args,
             Var::new(Variant::List(verb_call_request.call.args.clone())),
         );
 
         // From the command, if any...
         if let Some(ref command) = verb_call_request.command {
-            frame.set_gvar(GlobalName::argstr, v_string(command.argstr.clone()));
-            frame.set_gvar(GlobalName::dobj, v_objid(command.dobj.unwrap_or(NOTHING)));
-            frame.set_gvar(
+            frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
+            frame.set_global_variable(GlobalName::dobj, v_objid(command.dobj.unwrap_or(NOTHING)));
+            frame.set_global_variable(
                 GlobalName::dobjstr,
                 command
                     .dobjstr
                     .as_ref()
                     .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
-            frame.set_gvar(
+            frame.set_global_variable(
                 GlobalName::prepstr,
                 command
                     .prepstr
                     .as_ref()
                     .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
-            frame.set_gvar(GlobalName::iobj, v_objid(command.iobj.unwrap_or(NOTHING)));
-            frame.set_gvar(
+            frame.set_global_variable(GlobalName::iobj, v_objid(command.iobj.unwrap_or(NOTHING)));
+            frame.set_global_variable(
                 GlobalName::iobjstr,
                 command
                     .iobjstr
@@ -171,18 +196,16 @@ impl Activation {
                     .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
         } else {
-            frame.set_gvar(
+            frame.set_global_variable(
                 GlobalName::argstr,
                 v_string(verb_call_request.call.argstr.clone()),
             );
-            frame.set_gvar(GlobalName::dobj, v_objid(NOTHING));
-            frame.set_gvar(GlobalName::dobjstr, v_str(""));
-            frame.set_gvar(GlobalName::prepstr, v_str(""));
-            frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
-            frame.set_gvar(GlobalName::iobjstr, v_str(""));
+            frame.set_global_variable(GlobalName::dobj, v_objid(NOTHING));
+            frame.set_global_variable(GlobalName::dobjstr, v_str(""));
+            frame.set_global_variable(GlobalName::prepstr, v_str(""));
+            frame.set_global_variable(GlobalName::iobj, v_objid(NOTHING));
+            frame.set_global_variable(GlobalName::iobjstr, v_str(""));
         }
-
-        let frame = VmStackFrame::Moo(frame);
 
         Self {
             frame,
@@ -191,9 +214,6 @@ impl Activation {
             verb_info: verb_call_request.resolved_verb,
             verb_name: verb_call_request.call.verb_name,
             command: verb_call_request.command.clone(),
-            bf_index: None,
-            bf_trampoline: None,
-            bf_trampoline_arg: None,
             args: verb_call_request.call.args.clone(),
             permissions: verb_owner,
         }
@@ -215,21 +235,21 @@ impl Activation {
             Bytes::new(),
         );
 
-        let mut frame = Frame::new(program);
-        set_constants(&mut frame);
-        frame.set_gvar(GlobalName::this, v_objid(NOTHING));
-        frame.set_gvar(GlobalName::player, v_objid(player));
-        frame.set_gvar(GlobalName::caller, v_objid(player));
-        frame.set_gvar(GlobalName::verb, v_empty_str());
-        frame.set_gvar(GlobalName::args, v_empty_list());
-        frame.set_gvar(GlobalName::argstr, v_empty_str());
-        frame.set_gvar(GlobalName::dobj, v_objid(NOTHING));
-        frame.set_gvar(GlobalName::dobjstr, v_empty_str());
-        frame.set_gvar(GlobalName::prepstr, v_empty_str());
-        frame.set_gvar(GlobalName::iobj, v_objid(NOTHING));
-        frame.set_gvar(GlobalName::iobjstr, v_empty_str());
+        let frame = Frame::new(program);
+        let mut frame = VmStackFrame::Moo(frame);
 
-        let frame = VmStackFrame::Moo(frame);
+        set_constants(&mut frame);
+        frame.set_global_variable(GlobalName::this, v_objid(NOTHING));
+        frame.set_global_variable(GlobalName::player, v_objid(player));
+        frame.set_global_variable(GlobalName::caller, v_objid(player));
+        frame.set_global_variable(GlobalName::verb, v_empty_str());
+        frame.set_global_variable(GlobalName::args, v_empty_list());
+        frame.set_global_variable(GlobalName::argstr, v_empty_str());
+        frame.set_global_variable(GlobalName::dobj, v_objid(NOTHING));
+        frame.set_global_variable(GlobalName::dobjstr, v_empty_str());
+        frame.set_global_variable(GlobalName::prepstr, v_empty_str());
+        frame.set_global_variable(GlobalName::iobj, v_objid(NOTHING));
+        frame.set_global_variable(GlobalName::iobjstr, v_empty_str());
 
         Self {
             frame,
@@ -238,9 +258,6 @@ impl Activation {
             verb_info,
             verb_name: *EVAL_SYMBOL,
             command: None,
-            bf_index: None,
-            bf_trampoline: None,
-            bf_trampoline_arg: None,
             args: List::new(),
             permissions,
         }
@@ -267,11 +284,13 @@ impl Activation {
             Bytes::new(),
         );
 
-        // Frame doesn't really matter.
-        // TODO: replace with a BfFrame once that's a thing.
-        let frame = Frame::new(EMPTY_PROGRAM.clone());
-        let frame = VmStackFrame::Moo(frame);
-
+        let bf_frame = BfFrame {
+            bf_index,
+            bf_trampoline: None,
+            bf_trampoline_arg: None,
+            return_value: None,
+        };
+        let frame = VmStackFrame::Bf(bf_frame);
         Self {
             frame,
             this: NOTHING,
@@ -279,19 +298,15 @@ impl Activation {
             verb_info,
             verb_name: bf_name,
             command: None,
-            bf_index: Some(bf_index),
-            bf_trampoline: None,
-            bf_trampoline_arg: None,
             args,
             permissions: NOTHING,
         }
     }
 
     pub fn verb_definer(&self) -> Objid {
-        if self.bf_index.is_none() {
-            self.verb_info.verbdef().location()
-        } else {
-            NOTHING
+        match self.frame {
+            VmStackFrame::Bf(_) => NOTHING,
+            _ => self.verb_info.verbdef().location(),
         }
     }
 

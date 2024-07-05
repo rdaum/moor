@@ -265,13 +265,8 @@ impl VmHost {
                     resolved_verb,
                     call,
                     command,
-                    trampoline,
-                    trampoline_arg,
                 } => {
                     trace!(task_id, call = ?call, "Task continue, call into verb");
-
-                    self.vm_exec_state.top_mut().bf_trampoline_arg = trampoline_arg;
-                    self.vm_exec_state.top_mut().bf_trampoline = trampoline;
 
                     let program = Self::decode_program(
                         resolved_verb.verbdef().binary_type(),

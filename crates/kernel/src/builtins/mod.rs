@@ -26,6 +26,7 @@ use moor_values::var::Var;
 
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::vm::activation::{BfFrame, VmStackFrame};
 use crate::vm::{ExecutionResult, VMExecState};
 
 mod bf_list_sets;
@@ -66,6 +67,22 @@ impl BfCallState<'_> {
         let who = self.task_perms_who();
         let flags = self.world_state.flags_of(who)?;
         Ok(Perms { who, flags })
+    }
+
+    pub fn bf_frame(&self) -> &BfFrame {
+        let VmStackFrame::Bf(frame) = &self.exec_state.top().frame else {
+            panic!("Expected a BF frame at the top of the stack");
+        };
+
+        frame
+    }
+
+    pub fn bf_frame_mut(&mut self) -> &mut BfFrame {
+        let VmStackFrame::Bf(frame) = &mut self.exec_state.top_mut().frame else {
+            panic!("Expected a BF frame at the top of the stack");
+        };
+
+        frame
     }
 }
 
