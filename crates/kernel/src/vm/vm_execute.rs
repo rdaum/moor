@@ -36,12 +36,13 @@ use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj
 use moor_values::var::{v_float, Objid};
 use moor_values::var::{v_listv, Error};
 
-use crate::vm::activation::{Activation, HandlerType};
+use crate::vm::activation::Activation;
+use crate::vm::frame::HandlerType;
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{VMExecState, VM};
 
 /// The set of parameters for a VM-requested fork.
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct Fork {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit
@@ -68,7 +69,7 @@ pub struct VmExecParams {
     pub task_scheduler_client: TaskSchedulerClient,
     pub max_stack_depth: usize,
 }
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum ExecutionResult {
     /// Execution of this call stack is complete.
     Complete(Var),

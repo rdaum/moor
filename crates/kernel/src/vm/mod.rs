@@ -36,6 +36,7 @@ pub use vm_call::VerbExecutionRequest;
 pub use vm_execute::{ExecutionResult, Fork, VmExecParams};
 pub use vm_unwind::{FinallyReason, UncaughtException};
 
+mod frame;
 #[cfg(test)]
 mod vm_test;
 

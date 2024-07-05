@@ -12,12 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{Decode, Encode};
 use bytes::Bytes;
-use daumtils::{BitArray, Bitset16};
 use lazy_static::lazy_static;
 use moor_values::var::{v_empty_str, List, Variant};
 use moor_values::NOTHING;
@@ -29,156 +25,23 @@ use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Error;
-use moor_values::var::Error::E_VARNF;
 use moor_values::var::Objid;
-use moor_values::var::{v_empty_list, v_int, v_none, v_objid, v_str, v_string, Var, VarType};
+use moor_values::var::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarType};
 
 use crate::tasks::command_parse::ParsedCommand;
+use crate::vm::frame::Frame;
 use crate::vm::VerbExecutionRequest;
 use moor_compiler::Program;
-use moor_compiler::{Label, Name};
-use moor_compiler::{Op, EMPTY_PROGRAM};
+use moor_compiler::EMPTY_PROGRAM;
 use moor_values::var::Symbol;
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");
 }
-// {this, verb-name, programmer, verb-loc, player, line-number}
-#[derive(Clone)]
-pub struct Caller {
-    pub this: Objid,
-    pub verb_name: Symbol,
-    pub programmer: Objid,
-    pub definer: Objid,
-    pub player: Objid,
-    pub line_number: usize,
-}
 
-// A Label that exists in a separate stack but is *relevant* only for the `valstack_pos`
-// That is:
-//   when created, the stack's current size is stored in `valstack_pos`
-//   when popped off in unwind, the valstack's size is eaten back to pos.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub(crate) enum HandlerType {
-    Catch(usize),
-    CatchLabel(Label),
-    Finally(Label),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub(crate) struct HandlerLabel {
-    pub(crate) handler_type: HandlerType,
-    pub(crate) valstack_pos: usize,
-}
-
-/// The MOO stack-frame specific portions of the activation:
-///   the value stack, local variables, program, program counter, handler stack, etc.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Frame {
-    /// The program of the verb that is currently being executed.
-    pub(crate) program: Program,
-    /// The program counter.
-    pub(crate) pc: usize,
-    // TODO: Language enhancement: Introduce lexical scopes to the MOO language:
-    //      add a 'with' keyword to the language which introduces a new scope, similar to ML's "let":
-    //              with x = 1 in
-    //                     ...
-    //              endlet
-    //      Multiple variables can be introduced at once:
-    //              with x = 1, y = 2 in ...
-    //      Variables not declared with 'with' are verb-scoped as they are now
-    //      'with' variables that shadow already-known verb-scoped variables override the verb-scope
-    //      Add LetBegin and LetEnd opcodes to the language.
-    //      Make the environment have a width, and expand and contract as scopes are entered and exited.
-    //      Likewise, Names in Program should be scope delimited somehow
-    /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
-    /// The value stack.
-    pub(crate) valstack: Vec<Var>,
-    /// A stack of active error handlers, each relative to a position in the valstack.
-    pub(crate) handler_stack: Vec<HandlerLabel>,
-    /// Scratch space for PushTemp and PutTemp opcodes.
-    pub(crate) temp: Var,
-}
-
-impl Encode for Frame {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.program.encode(encoder)?;
-        self.pc.encode(encoder)?;
-
-        // Environment is custom, is not bincodable, so we need to encode it manually, but we just
-        // do it as an array of Option<Var>
-        let mut env = vec![None; self.environment.len()];
-        let env_iter = self.environment.iter();
-        for (i, v) in env_iter {
-            env[i] = Some(v.clone())
-        }
-        env.encode(encoder)?;
-        self.valstack.encode(encoder)?;
-        self.handler_stack.encode(encoder)?;
-        self.temp.encode(encoder)
-    }
-}
-
-impl Decode for Frame {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::decode(decoder)?;
-        let pc = usize::decode(decoder)?;
-
-        let env: Vec<Option<Var>> = Vec::decode(decoder)?;
-        let mut environment = BitArray::new();
-        for (i, v) in env.iter().enumerate() {
-            if let Some(v) = v {
-                environment.set(i, v.clone());
-            }
-        }
-
-        let valstack = Vec::decode(decoder)?;
-        let handler_stack = Vec::decode(decoder)?;
-        let temp = Var::decode(decoder)?;
-
-        Ok(Self {
-            program,
-            pc,
-            environment,
-            valstack,
-            handler_stack,
-            temp,
-        })
-    }
-}
-
-impl<'de> BorrowDecode<'de> for Frame {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::borrow_decode(decoder)?;
-        let pc = usize::borrow_decode(decoder)?;
-
-        let env: Vec<Option<Var>> = Vec::borrow_decode(decoder)?;
-        let mut environment = BitArray::new();
-        for (i, v) in env.iter().enumerate() {
-            if let Some(v) = v {
-                environment.set(i, v.clone());
-            }
-        }
-
-        let valstack = Vec::borrow_decode(decoder)?;
-        let handler_stack = Vec::borrow_decode(decoder)?;
-        let temp = Var::borrow_decode(decoder)?;
-
-        Ok(Self {
-            program,
-            pc,
-            environment,
-            valstack,
-            handler_stack,
-            temp,
-        })
-    }
-}
-
-/// Activation frame for the call stack.
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+/// Activation frame for the call stack of verb executions.
+/// Holds the current VM stack frame, along with the current verb activation information.
+#[derive(Debug, Clone, Encode, Decode)]
 pub(crate) struct Activation {
     /// Frame
     pub(crate) frame: Frame,
@@ -209,128 +72,6 @@ pub(crate) struct Activation {
     pub(crate) bf_trampoline_arg: Option<Var>,
 }
 
-impl Frame {
-    pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
-        if self.program.line_number_spans.is_empty() {
-            return None;
-        }
-        // Seek through the line # spans looking for the first offset (first part of tuple) which is
-        // equal to or higher than `pc`. If we don't find one, return the last one.
-        let mut last_line_num = 1;
-        for (offset, line_no) in &self.program.line_number_spans {
-            if *offset >= pc {
-                return Some(last_line_num);
-            }
-            last_line_num = *line_no
-        }
-        Some(last_line_num)
-    }
-
-    #[inline]
-    pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
-        self.environment.set(gname as usize, value);
-    }
-
-    #[inline]
-    pub fn set_env(&mut self, id: &Name, v: Var) {
-        self.environment.set(id.0 as usize, v);
-    }
-
-    /// Return the value of a local variable.
-    #[inline]
-    pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
-        self.environment.get(id.0 as usize)
-    }
-
-    #[inline]
-    pub fn set_var_offset(&mut self, offset: &Name, value: Var) -> Result<(), Error> {
-        if offset.0 as usize >= self.environment.len() {
-            return Err(E_VARNF);
-        }
-        self.environment.set(offset.0 as usize, value);
-        Ok(())
-    }
-
-    #[inline]
-    pub fn lookahead(&self) -> Option<Op> {
-        self.program.main_vector.get(self.pc).cloned()
-    }
-
-    #[inline]
-    pub fn skip(&mut self) {
-        self.pc += 1;
-    }
-
-    #[inline]
-    pub fn pop(&mut self) -> Var {
-        self.valstack
-            .pop()
-            .unwrap_or_else(|| panic!("stack underflow @ PC: {}", self.pc))
-    }
-
-    #[inline]
-    pub fn push(&mut self, v: Var) {
-        self.valstack.push(v)
-    }
-
-    #[inline]
-    pub fn peek_top(&self) -> &Var {
-        self.valstack.last().expect("stack underflow")
-    }
-
-    #[inline]
-    pub fn peek_top_mut(&mut self) -> &mut Var {
-        self.valstack.last_mut().expect("stack underflow")
-    }
-
-    #[inline]
-    pub fn peek_range(&self, width: usize) -> Vec<Var> {
-        let l = self.valstack.len();
-        Vec::from(&self.valstack[l - width..])
-    }
-
-    #[inline]
-    pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
-        &self.valstack[amt]
-    }
-
-    #[inline]
-    pub fn peek2(&self) -> (&Var, &Var) {
-        let l = self.valstack.len();
-        let (a, b) = (&self.valstack[l - 1], &self.valstack[l - 2]);
-        (a, b)
-    }
-
-    #[inline]
-    pub fn poke(&mut self, amt: usize, v: Var) {
-        let l = self.valstack.len();
-        self.valstack[l - amt - 1] = v;
-    }
-
-    #[inline]
-    pub fn jump(&mut self, label_id: &Label) {
-        let label = &self.program.jump_labels[label_id.0 as usize];
-        self.pc = label.position.0 as usize;
-    }
-
-    pub fn push_handler_label(&mut self, handler_type: HandlerType) {
-        self.handler_stack.push(HandlerLabel {
-            handler_type,
-            valstack_pos: self.valstack.len(),
-        });
-    }
-
-    pub fn pop_applicable_handler(&mut self) -> Option<HandlerLabel> {
-        if self.handler_stack.is_empty() {
-            return None;
-        }
-        if self.handler_stack[self.handler_stack.len() - 1].valstack_pos != self.valstack.len() {
-            return None;
-        }
-        self.handler_stack.pop()
-    }
-}
-
 /// Set global constants into stack frame.
 fn set_constants(f: &mut Frame) {
     f.set_gvar(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
@@ -345,17 +86,8 @@ fn set_constants(f: &mut Frame) {
 impl Activation {
     pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
-        let environment = BitArray::new();
-
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
-        let mut frame = Frame {
-            program,
-            environment,
-            valstack: vec![],
-            handler_stack: vec![],
-            pc: 0,
-            temp: v_none(),
-        };
+        let mut frame = Frame::new(program);
 
         set_constants(&mut frame);
         frame.set_gvar(GlobalName::this, v_objid(verb_call_request.call.this));
@@ -424,8 +156,6 @@ impl Activation {
     }
 
     pub fn for_eval(permissions: Objid, player: Objid, program: Program) -> Self {
-        let environment = BitArray::new();
-
         let verb_info = VerbInfo::new(
             // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
             // Might need to clean up the requirement for a VerbInfo in Activation.
@@ -441,14 +171,7 @@ impl Activation {
             Bytes::new(),
         );
 
-        let mut frame = Frame {
-            program,
-            environment,
-            valstack: vec![],
-            handler_stack: vec![],
-            pc: 0,
-            temp: v_none(),
-        };
+        let mut frame = Frame::new(program);
         set_constants(&mut frame);
         frame.set_gvar(GlobalName::this, v_objid(NOTHING));
         frame.set_gvar(GlobalName::player, v_objid(player));
@@ -476,6 +199,7 @@ impl Activation {
             permissions,
         }
     }
+
     pub fn for_bf_call(
         bf_index: usize,
         bf_name: Symbol,
@@ -498,14 +222,8 @@ impl Activation {
         );
 
         // Frame doesn't really matter.
-        let frame = Frame {
-            program: EMPTY_PROGRAM.clone(),
-            environment: BitArray::new(),
-            valstack: vec![],
-            handler_stack: vec![],
-            pc: 0,
-            temp: v_none(),
-        };
+        // TODO: replace with a BfFrame once that's a thing.
+        let frame = Frame::new(EMPTY_PROGRAM.clone());
         Self {
             frame,
             this: NOTHING,

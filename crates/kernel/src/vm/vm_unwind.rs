@@ -23,7 +23,8 @@ use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
 
-use crate::vm::activation::{Activation, HandlerType};
+use crate::vm::activation::Activation;
+use crate::vm::frame::HandlerType;
 use crate::vm::{ExecutionResult, VMExecState, VM};
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_compiler::{Label, Offset};

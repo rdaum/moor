@@ -13,13 +13,24 @@
 //
 
 use crate::tasks::TaskId;
-use crate::vm::activation::{Activation, Caller};
+use crate::vm::activation::Activation;
 use bincode::{Decode, Encode};
 use daumtils::PhantomUnsync;
-use moor_values::var::Objid;
 use moor_values::var::Var;
+use moor_values::var::{Objid, Symbol};
 use moor_values::NOTHING;
 use std::time::{Duration, SystemTime};
+
+// {this, verb-name, programmer, verb-loc, player, line-number}
+#[derive(Clone)]
+pub struct Caller {
+    pub this: Objid,
+    pub verb_name: Symbol,
+    pub programmer: Objid,
+    pub definer: Objid,
+    pub player: Objid,
+    pub line_number: usize,
+}
 
 /// Represents the state of VM execution.
 /// The actual "VM" remains stateless and could be potentially re-used for multiple tasks,
