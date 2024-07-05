@@ -14,9 +14,9 @@
 
 use std::sync::Arc;
 use std::time::Duration;
+
 use tracing::debug;
 
-use crate::tasks::sessions::Session;
 use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
@@ -27,8 +27,9 @@ use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
 use moor_values::var::{v_listv, Error};
 
-use crate::vm::activation::VmStackFrame;
-use crate::vm::frame::HandlerType;
+use crate::tasks::sessions::Session;
+use crate::vm::activation::Frame;
+use crate::vm::moo_frame::HandlerType;
 use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
 
@@ -78,12 +79,12 @@ pub fn moo_frame_execute(
     let opcodes = {
         // Check the frame type to verify it's MOO, before doing anything else
         let a = state.top_mut();
-        let VmStackFrame::Moo(ref mut f) = a.frame else {
+        let Frame::Moo(ref mut f) = a.frame else {
             panic!("Unsupported VM stack frame type");
         };
 
-        // Try to consume & execute as many opcodes as we can without returning back to the task
-        // scheduler, for efficiency reasons...
+        // We clone the main vector here to avoid borrowing issues with the frame later, as we
+        // need to modify the program counter.
         f.program.main_vector.clone()
     };
 
@@ -109,7 +110,7 @@ pub fn moo_frame_execute(
 
         // Borrow the top of the activation stack for the lifetime of this execution.
         let a = state.top_mut();
-        let VmStackFrame::Moo(ref mut f) = a.frame else {
+        let Frame::Moo(ref mut f) = a.frame else {
             panic!("Unsupported VM stack frame type");
         };
 

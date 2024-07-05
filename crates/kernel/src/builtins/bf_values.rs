@@ -14,7 +14,6 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 use moor_compiler::offset_for_builtin;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
@@ -187,18 +186,18 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(object_bytes, bf_object_bytes);
 
-pub(crate) fn register_bf_values(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("typeof")] = Arc::new(BfTypeof {});
-    builtins[offset_for_builtin("tostr")] = Arc::new(BfTostr {});
-    builtins[offset_for_builtin("toliteral")] = Arc::new(BfToliteral {});
-    builtins[offset_for_builtin("toint")] = Arc::new(BfToint {});
-    builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
-    builtins[offset_for_builtin("tonum")] = Arc::new(BfToint {});
-    builtins[offset_for_builtin("toobj")] = Arc::new(BfToobj {});
-    builtins[offset_for_builtin("tofloat")] = Arc::new(BfTofloat {});
-    builtins[offset_for_builtin("equal")] = Arc::new(BfEqual {});
-    builtins[offset_for_builtin("value_bytes")] = Arc::new(BfValueBytes {});
-    builtins[offset_for_builtin("object_bytes")] = Arc::new(BfObjectBytes {});
-    builtins[offset_for_builtin("value_hash")] = Arc::new(BfValueHash {});
-    builtins[offset_for_builtin("length")] = Arc::new(BfLength {});
+pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("typeof")] = Box::new(BfTypeof {});
+    builtins[offset_for_builtin("tostr")] = Box::new(BfTostr {});
+    builtins[offset_for_builtin("toliteral")] = Box::new(BfToliteral {});
+    builtins[offset_for_builtin("toint")] = Box::new(BfToint {});
+    builtins[offset_for_builtin("tonum")] = Box::new(BfToint {});
+    builtins[offset_for_builtin("tonum")] = Box::new(BfToint {});
+    builtins[offset_for_builtin("toobj")] = Box::new(BfToobj {});
+    builtins[offset_for_builtin("tofloat")] = Box::new(BfTofloat {});
+    builtins[offset_for_builtin("equal")] = Box::new(BfEqual {});
+    builtins[offset_for_builtin("value_bytes")] = Box::new(BfValueBytes {});
+    builtins[offset_for_builtin("object_bytes")] = Box::new(BfObjectBytes {});
+    builtins[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
+    builtins[offset_for_builtin("length")] = Box::new(BfLength {});
 }

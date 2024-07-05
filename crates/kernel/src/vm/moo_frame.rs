@@ -17,6 +17,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use daumtils::{BitArray, Bitset16};
+
 use moor_compiler::{GlobalName, Label, Name, Op, Program};
 use moor_values::var::Error::E_VARNF;
 use moor_values::var::{v_none, Error, Var};
@@ -24,7 +25,7 @@ use moor_values::var::{v_none, Error, Var};
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Frame {
+pub(crate) struct MooStackFrame {
     /// The program of the verb that is currently being executed.
     pub(crate) program: Program,
     /// The program counter.
@@ -68,7 +69,7 @@ pub(crate) struct HandlerLabel {
     pub(crate) valstack_pos: usize,
 }
 
-impl Encode for Frame {
+impl Encode for MooStackFrame {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.program.encode(encoder)?;
         self.pc.encode(encoder)?;
@@ -87,7 +88,7 @@ impl Encode for Frame {
     }
 }
 
-impl Decode for Frame {
+impl Decode for MooStackFrame {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let program = Program::decode(decoder)?;
         let pc = usize::decode(decoder)?;
@@ -115,7 +116,7 @@ impl Decode for Frame {
     }
 }
 
-impl<'de> BorrowDecode<'de> for Frame {
+impl<'de> BorrowDecode<'de> for MooStackFrame {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let program = Program::borrow_decode(decoder)?;
         let pc = usize::borrow_decode(decoder)?;
@@ -143,7 +144,7 @@ impl<'de> BorrowDecode<'de> for Frame {
     }
 }
 
-impl Frame {
+impl MooStackFrame {
     pub(crate) fn new(program: Program) -> Self {
         let environment = BitArray::new();
 

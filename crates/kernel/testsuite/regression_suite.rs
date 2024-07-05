@@ -12,11 +12,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod common;
 use common::{create_wiredtiger_db, AssertRunAsVerb};
 
 #[cfg(feature = "relbox")]
 use crate::common::create_relbox_db;
+
+mod common;
 
 #[cfg(feature = "relbox")]
 #[test]

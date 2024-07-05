@@ -12,14 +12,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::TaskId;
-use crate::vm::activation::{Activation, VmStackFrame};
+use std::time::{Duration, SystemTime};
+
 use bincode::{Decode, Encode};
 use daumtils::PhantomUnsync;
+
 use moor_values::var::Var;
 use moor_values::var::{Objid, Symbol};
 use moor_values::NOTHING;
-use std::time::{Duration, SystemTime};
+
+use crate::tasks::TaskId;
+use crate::vm::activation::{Activation, Frame};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -88,7 +91,7 @@ impl VMExecState {
             let this = activation.this;
             let perms = activation.permissions;
             let programmer = match activation.frame {
-                VmStackFrame::Bf(_) => NOTHING,
+                Frame::Bf(_) => NOTHING,
                 _ => perms,
             };
             callers.push(Caller {
@@ -119,7 +122,7 @@ impl VMExecState {
 
         // Skip builtin-frames (for now?)
         for activation in stack_iter {
-            if let VmStackFrame::Bf(_) = activation.frame {
+            if let Frame::Bf(_) = activation.frame {
                 continue;
             }
             return activation.this;

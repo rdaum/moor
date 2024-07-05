@@ -13,26 +13,27 @@
 //
 
 use std::sync::Arc;
+
 use tracing::trace;
 
+use moor_compiler::Program;
+use moor_compiler::BUILTIN_DESCRIPTORS;
+use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::var::v_int;
 use moor_values::var::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
+use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
 
 use crate::builtins::{BfCallState, BfErr, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
 use crate::tasks::VerbCall;
-use crate::vm::activation::{Activation, VmStackFrame};
+use crate::vm::activation::{Activation, Frame};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use crate::vm::{VMExecState, VmExecParams};
-use moor_compiler::Program;
-use moor_compiler::BUILTIN_DESCRIPTORS;
-use moor_values::model::VerbInfo;
-use moor_values::var::Symbol;
 
 pub(crate) fn args_literal(args: &List) -> String {
     args.iter()
@@ -58,7 +59,7 @@ pub struct VerbExecutionRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerbProgram {
-    MOO(Program),
+    Moo(Program),
 }
 
 impl VMExecState {
@@ -200,7 +201,7 @@ impl VMExecState {
 
         // This makes sense only for a MOO stack frame, and could only be initiated from there,
         // so anything else is a legit panic, we shouldn't have gotten here.
-        let VmStackFrame::Moo(ref mut frame) = a.frame else {
+        let Frame::Moo(ref mut frame) = a.frame else {
             panic!("Attempt to fork a non-MOO frame");
         };
 
@@ -231,7 +232,7 @@ impl VMExecState {
         if bf_func_num >= exec_args.builtin_registry.builtins.len() {
             return self.raise_error(E_VARNF);
         }
-        let bf = exec_args.builtin_registry.builtins[bf_func_num].clone();
+        let bf = exec_args.builtin_registry.builtins[bf_func_num].as_ref();
 
         trace!(
             "Calling builtin: {}({}) caller_perms: {}",
@@ -281,7 +282,7 @@ impl VMExecState {
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
         let bf_frame = match self.top().frame {
-            VmStackFrame::Bf(ref frame) => frame,
+            Frame::Bf(ref frame) => frame,
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
 
@@ -295,7 +296,7 @@ impl VMExecState {
             return self.unwind_stack(FinallyReason::Return(return_value));
         };
 
-        let bf = exec_args.builtin_registry.builtins[bf_frame.bf_index].clone();
+        let bf = exec_args.builtin_registry.builtins[bf_frame.bf_index].as_ref();
         let verb_name = self.top().verb_name;
         let sessions = session.clone();
         let args = self.top().args.clone();

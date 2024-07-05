@@ -16,20 +16,17 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread::yield_now;
 use std::time::{Duration, Instant};
 
 use bincode::{Decode, Encode};
+use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
-
+use lazy_static::lazy_static;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use crossbeam_channel::Receiver;
-use lazy_static::lazy_static;
-use std::thread::yield_now;
-
-use crate::builtins::BuiltinRegistry;
 use moor_compiler::compile;
 use moor_compiler::CompileError;
 use moor_db::Database;
@@ -46,6 +43,7 @@ use SchedulerError::{
     TaskAbortedException, TaskAbortedLimit,
 };
 
+use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
 use crate::matching::match_env::MatchEnvironmentParseMatcher;
 use crate::matching::ws_match_env::WsMatchEnv;

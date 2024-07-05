@@ -15,17 +15,17 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read};
 
-use moor_values::model::WorldStateError;
 use text_io::scan;
 use tracing::info;
 
 use moor_compiler::CompileError;
+use moor_compiler::Label;
+use moor_values::model::WorldStateError;
 use moor_values::var::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_none, v_objid, v_str, Var, VarType};
 use moor_values::var::{v_listv, Error};
 
 use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
-use moor_compiler::Label;
 
 pub const TYPE_CLEAR: i64 = 5;
 

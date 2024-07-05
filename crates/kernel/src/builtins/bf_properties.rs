@@ -12,8 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::sync::Arc;
-
 use moor_compiler::offset_for_builtin;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
@@ -252,11 +250,11 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(delete_property, bf_delete_property);
 
-pub(crate) fn register_bf_properties(builtins: &mut [Arc<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("property_info")] = Arc::new(BfPropertyInfo {});
-    builtins[offset_for_builtin("set_property_info")] = Arc::new(BfSetPropertyInfo {});
-    builtins[offset_for_builtin("is_clear_property")] = Arc::new(BfIsClearProperty {});
-    builtins[offset_for_builtin("clear_property")] = Arc::new(BfSetClearProperty {});
-    builtins[offset_for_builtin("add_property")] = Arc::new(BfAddProperty {});
-    builtins[offset_for_builtin("delete_property")] = Arc::new(BfDeleteProperty {});
+pub(crate) fn register_bf_properties(builtins: &mut [Box<dyn BuiltinFunction>]) {
+    builtins[offset_for_builtin("property_info")] = Box::new(BfPropertyInfo {});
+    builtins[offset_for_builtin("set_property_info")] = Box::new(BfSetPropertyInfo {});
+    builtins[offset_for_builtin("is_clear_property")] = Box::new(BfIsClearProperty {});
+    builtins[offset_for_builtin("clear_property")] = Box::new(BfSetClearProperty {});
+    builtins[offset_for_builtin("add_property")] = Box::new(BfAddProperty {});
+    builtins[offset_for_builtin("delete_property")] = Box::new(BfDeleteProperty {});
 }

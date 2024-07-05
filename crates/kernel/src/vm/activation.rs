@@ -15,10 +15,9 @@
 use bincode::{Decode, Encode};
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use moor_values::var::{v_empty_str, Error, List, Variant};
-use moor_values::NOTHING;
 use uuid::Uuid;
 
+use moor_compiler::Program;
 use moor_compiler::{GlobalName, Name};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
@@ -26,14 +25,15 @@ use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
 use moor_values::var::Objid;
+use moor_values::var::Symbol;
 use moor_values::var::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarType};
+use moor_values::var::{v_empty_str, Error, List, Variant};
+use moor_values::NOTHING;
 
 use crate::tasks::command_parse::ParsedCommand;
-use crate::vm::frame::Frame;
+use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
 use crate::vm::VerbExecutionRequest;
-use moor_compiler::Program;
-use moor_values::var::Symbol;
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");
@@ -43,8 +43,9 @@ lazy_static! {
 /// Holds the current VM stack frame, along with the current verb activation information.
 #[derive(Debug, Clone, Encode, Decode)]
 pub(crate) struct Activation {
-    /// Frame
-    pub(crate) frame: VmStackFrame,
+    /// The current stack frame, which holds the current execution state for the interpreter
+    /// running this activation.
+    pub(crate) frame: Frame,
     /// The object that is the receiver of the current verb call.
     pub(crate) this: Objid,
     /// The object that is the 'player' role; that is, the active user of this task.
@@ -65,24 +66,24 @@ pub(crate) struct Activation {
 }
 
 #[derive(Clone, Debug, Encode, Decode)]
-pub enum VmStackFrame {
-    Moo(Frame),
+pub enum Frame {
+    Moo(MooStackFrame),
     Bf(BfFrame),
 }
 
-impl VmStackFrame {
+impl Frame {
     /// What is the line number of the currently executing stack frame, if any?
     pub fn find_line_no(&self) -> Option<usize> {
         match self {
-            VmStackFrame::Moo(frame) => frame.find_line_no(frame.pc),
-            VmStackFrame::Bf(_) => None,
+            Frame::Moo(frame) => frame.find_line_no(frame.pc),
+            Frame::Bf(_) => None,
         }
     }
 
     pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
         match self {
-            VmStackFrame::Moo(frame) => frame.set_var_offset(name, value),
-            VmStackFrame::Bf(_) => {
+            Frame::Moo(frame) => frame.set_var_offset(name, value),
+            Frame::Bf(_) => {
                 panic!("set_variable called for a built-in function frame")
             }
         }
@@ -90,8 +91,8 @@ impl VmStackFrame {
 
     pub fn set_global_variable(&mut self, gname: GlobalName, value: Var) {
         match self {
-            VmStackFrame::Moo(frame) => frame.set_gvar(gname, value),
-            VmStackFrame::Bf(_) => {
+            Frame::Moo(frame) => frame.set_gvar(gname, value),
+            Frame::Bf(_) => {
                 panic!("set_global_variable called for a built-in function frame")
             }
         }
@@ -99,10 +100,10 @@ impl VmStackFrame {
 
     pub fn set_return_value(&mut self, value: Var) {
         match self {
-            VmStackFrame::Moo(ref mut frame) => {
+            Frame::Moo(ref mut frame) => {
                 frame.push(value);
             }
-            VmStackFrame::Bf(bf_frame) => {
+            Frame::Bf(bf_frame) => {
                 bf_frame.return_value = Some(value);
             }
         }
@@ -110,8 +111,8 @@ impl VmStackFrame {
 
     pub fn return_value(&self) -> Var {
         match self {
-            VmStackFrame::Moo(ref frame) => frame.peek_top().clone(),
-            VmStackFrame::Bf(bf_frame) => bf_frame
+            Frame::Moo(ref frame) => frame.peek_top().clone(),
+            Frame::Bf(bf_frame) => bf_frame
                 .return_value
                 .clone()
                 .expect("No return value set for built-in function"),
@@ -134,7 +135,7 @@ pub struct BfFrame {
 }
 
 /// Set global constants into stack frame.
-fn set_constants(f: &mut VmStackFrame) {
+fn set_constants(f: &mut Frame) {
     f.set_global_variable(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
     f.set_global_variable(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
     f.set_global_variable(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
@@ -146,7 +147,7 @@ fn set_constants(f: &mut VmStackFrame) {
 
 impl Activation {
     pub fn is_builtin_frame(&self) -> bool {
-        matches!(self.frame, VmStackFrame::Bf(_))
+        matches!(self.frame, Frame::Bf(_))
     }
 
     #[allow(irrefutable_let_patterns)] // We know this is a Moo frame. We're just making room
@@ -154,11 +155,11 @@ impl Activation {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
 
-        let VerbProgram::MOO(program) = program else {
+        let VerbProgram::Moo(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
-        let frame = Frame::new(program);
-        let mut frame = VmStackFrame::Moo(frame);
+        let frame = MooStackFrame::new(program);
+        let mut frame = Frame::Moo(frame);
         set_constants(&mut frame);
         frame.set_global_variable(GlobalName::this, v_objid(verb_call_request.call.this));
         frame.set_global_variable(GlobalName::player, v_objid(verb_call_request.call.player));
@@ -238,8 +239,8 @@ impl Activation {
             Bytes::new(),
         );
 
-        let frame = Frame::new(program);
-        let mut frame = VmStackFrame::Moo(frame);
+        let frame = MooStackFrame::new(program);
+        let mut frame = Frame::Moo(frame);
 
         set_constants(&mut frame);
         frame.set_global_variable(GlobalName::this, v_objid(NOTHING));
@@ -293,7 +294,7 @@ impl Activation {
             bf_trampoline_arg: None,
             return_value: None,
         };
-        let frame = VmStackFrame::Bf(bf_frame);
+        let frame = Frame::Bf(bf_frame);
         Self {
             frame,
             this: NOTHING,
@@ -308,7 +309,7 @@ impl Activation {
 
     pub fn verb_definer(&self) -> Objid {
         match self.frame {
-            VmStackFrame::Bf(_) => NOTHING,
+            Frame::Bf(_) => NOTHING,
             _ => self.verb_info.verbdef().location(),
         }
     }

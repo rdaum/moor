@@ -23,20 +23,18 @@
 //! A task is generally tied 1:1 with a player connection, and usually come from one command, but
 //! they can also be 'forked' from other tasks.
 //!
-use crossbeam_channel::Sender;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
 use tracing::{error, trace, warn};
 
-use crate::builtins::BuiltinRegistry;
 use moor_values::model::CommandError::PermissionDenied;
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
@@ -47,10 +45,10 @@ use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
 use moor_values::NOTHING;
 
+use crate::builtins::BuiltinRegistry;
 use crate::matching::match_env::MatchEnvironmentParseMatcher;
 use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
-
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
@@ -594,13 +592,11 @@ impl<'de> BorrowDecode<'de> for Task {
 //   a simple program.
 #[cfg(test)]
 mod tests {
-    use crate::builtins::BuiltinRegistry;
-    use crate::tasks::sessions::NoopClientSession;
-    use crate::tasks::task::Task;
-    use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
-    use crate::tasks::{ServerOptions, TaskId, TaskStart};
-    use crate::vm::activation::VmStackFrame;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
     use crossbeam_channel::{unbounded, Receiver};
+
     use moor_compiler::compile;
     use moor_db_wiredtiger::WiredTigerDB;
     use moor_values::model::{Event, WorldState, WorldStateSource};
@@ -609,8 +605,13 @@ mod tests {
     use moor_values::var::Symbol;
     use moor_values::var::{v_int, v_str};
     use moor_values::{NOTHING, SYSTEM_OBJECT};
-    use std::sync::atomic::AtomicBool;
-    use std::sync::Arc;
+
+    use crate::builtins::BuiltinRegistry;
+    use crate::tasks::sessions::NoopClientSession;
+    use crate::tasks::task::Task;
+    use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
+    use crate::tasks::{ServerOptions, TaskId, TaskStart};
+    use crate::vm::activation::Frame;
 
     /// Build a simple test environment with an Eval task (since that is simplest to setup)
     fn setup_test_env(
@@ -878,7 +879,7 @@ mod tests {
         assert_eq!(fork_request.task_id, None);
         assert_eq!(fork_request.parent_task_id, 1);
 
-        let VmStackFrame::Moo(moo_frame) = &fork_request.activation.frame else {
+        let Frame::Moo(moo_frame) = &fork_request.activation.frame else {
             panic!(
                 "Expected Moo frame, got {:?}",
                 fork_request.activation.frame

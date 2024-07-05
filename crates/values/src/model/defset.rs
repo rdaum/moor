@@ -154,9 +154,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
     }
     #[must_use]
     pub fn find_named(&self, name: Symbol) -> Vec<T> {
-        self.iter()
-            .filter(|p| p.matches_name(name))
-            .collect()
+        self.iter().filter(|p| p.matches_name(name)).collect()
     }
     #[must_use]
     pub fn find_first_named(&self, name: Symbol) -> Option<T> {

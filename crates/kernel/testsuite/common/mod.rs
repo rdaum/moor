@@ -12,11 +12,19 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use pretty_assertions::assert_eq;
+use uuid::Uuid;
+
 use moor_compiler::compile;
 use moor_compiler::Program;
 use moor_db::Database;
-
+#[cfg(feature = "relbox")]
+use moor_db_relbox::RelBoxWorldState;
 use moor_db_wiredtiger::WiredTigerDB;
+use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils;
@@ -29,16 +37,8 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::var::Objid;
-use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-use pretty_assertions::assert_eq;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use uuid::Uuid;
-
-#[cfg(feature = "relbox")]
-use moor_db_relbox::RelBoxWorldState;
-use moor_kernel::builtins::BuiltinRegistry;
 use moor_values::var::Symbol;
+use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
 #[allow(dead_code)]
 pub fn testsuite_dir() -> PathBuf {
