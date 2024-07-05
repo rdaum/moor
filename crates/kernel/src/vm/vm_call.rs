@@ -53,7 +53,12 @@ pub struct VerbExecutionRequest {
     /// The parsed user command that led to this verb dispatch, if any.
     pub command: Option<ParsedCommand>,
     /// The decoded MOO Binary that contains the verb to be executed.
-    pub program: Program,
+    pub program: VerbProgram,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VerbProgram {
+    MOO(Program),
 }
 
 impl VMExecState {

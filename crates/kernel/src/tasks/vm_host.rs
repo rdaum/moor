@@ -20,6 +20,7 @@ use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::{TaskId, VerbCall};
 use crate::vm::activation::VmStackFrame;
+use crate::vm::vm_call::VerbProgram;
 use crate::vm::vm_execute::moo_frame_execute;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
@@ -67,9 +68,10 @@ pub enum VMHostResponse {
     RollbackRetry,
 }
 
-/// A 'host' for running the MOO virtual machine inside a task.
+/// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
-    /// Where we store current execution state for this host.
+    /// Where we store current execution state for this host. Includes all all activations and the
+    /// interpreter-specific frames inside them.
     vm_exec_state: VMExecState,
     /// The maximum stack depth for this task
     max_stack_depth: usize,
@@ -124,13 +126,13 @@ impl VmHost {
         command: ParsedCommand,
         permissions: Objid,
     ) {
-        let binary = Self::decode_program(vi.verbdef().binary_type(), vi.binary());
+        let program = Self::decode_program(vi.verbdef().binary_type(), vi.binary());
         let call_request = VerbExecutionRequest {
             permissions,
             resolved_verb: vi,
             call: verb_call,
             command: Some(command),
-            program: binary,
+            program,
         };
 
         self.start_execution(task_id, call_request)
@@ -411,11 +413,11 @@ impl VmHost {
         self.running = false;
     }
 
-    pub fn decode_program(binary_type: BinaryType, binary_bytes: Bytes) -> Program {
+    pub fn decode_program(binary_type: BinaryType, binary_bytes: Bytes) -> VerbProgram {
         match binary_type {
-            BinaryType::LambdaMoo18X => {
-                Program::from_bytes(binary_bytes).expect("Could not decode MOO program")
-            }
+            BinaryType::LambdaMoo18X => VerbProgram::MOO(
+                Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),
+            ),
             _ => panic!("Unsupported binary type {:?}", binary_type),
         }
     }

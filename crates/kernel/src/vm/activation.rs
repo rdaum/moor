@@ -30,6 +30,7 @@ use moor_values::var::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarTy
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::frame::Frame;
+use crate::vm::vm_call::VerbProgram;
 use crate::vm::VerbExecutionRequest;
 use moor_compiler::Program;
 use moor_values::var::Symbol;
@@ -148,9 +149,14 @@ impl Activation {
         matches!(self.frame, VmStackFrame::Bf(_))
     }
 
+    #[allow(irrefutable_let_patterns)] // We know this is a Moo frame. We're just making room
     pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
+
+        let VerbProgram::MOO(program) = program else {
+            unimplemented!("Only MOO programs are supported")
+        };
         let frame = Frame::new(program);
         let mut frame = VmStackFrame::Moo(frame);
         set_constants(&mut frame);
