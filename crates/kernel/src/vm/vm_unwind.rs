@@ -403,26 +403,13 @@ impl VMExecState {
                 }
             }
 
-            // If we're doing a return, and this is the last activation, we're done and just pass
-            // the returned value up out of the interpreter loop.
-            // Otherwise pop off this activation, and continue unwinding.
-            if let FinallyReason::Return(value) = &why {
-                if self.stack.len() == 1 {
-                    return ExecutionResult::Complete(value.clone());
-                }
-            }
-
-            if let FinallyReason::Uncaught(UncaughtException { .. }) = &why {
-                return ExecutionResult::Exception(why);
-            }
-
+            // No match in the frame, so we pop it.
             self.stack.pop().expect("Stack underflow");
 
+            // No more frames to unwind, so break out and handle final exit.
             if self.stack.is_empty() {
-                return ExecutionResult::Complete(v_none());
+                break;
             }
-
-            // TODO builtin function unwinding stuff
 
             // If it was an explicit return that brought us here, set the return value explicitly.
             // (Unless we're the final activation, in which case that should have been handled
@@ -433,7 +420,10 @@ impl VMExecState {
             }
         }
 
-        // We realistically should not get here...
-        unreachable!("Unwound stack to empty, but no exit condition was hit");
+        match why {
+            FinallyReason::Return(r) => ExecutionResult::Complete(r),
+            FinallyReason::Fallthrough => ExecutionResult::Complete(v_none()),
+            _ => ExecutionResult::Exception(why),
+        }
     }
 }
