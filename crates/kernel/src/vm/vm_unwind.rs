@@ -101,26 +101,27 @@ impl VMExecState {
         // Scan activation frames and their stacks, looking for the first catch handler that matches
         // the error code.
         // Iterate backwards.
-        for activation in self.stack.iter().rev() {
+        for (a, activation) in self.stack.iter().rev().enumerate() {
             // Skip non-MOO frames, they can't have catch handlers.
             let Frame::Moo(ref frame) = activation.frame else {
                 continue;
             };
             for handler in &frame.handler_stack {
-                if let HandlerType::Catch(cnt) = handler.handler_type {
-                    // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
-                    // non-list value, or a list containing the error code.
-                    // TODO check for 'cnt' being too large. not sure how to handle, tho
-                    // TODO this actually i think is wrong, it needs to pull two values off the stack
-                    let i = handler.valstack_pos;
-                    for j in (i - cnt)..i {
-                        if let Variant::List(codes) = &frame.valstack[j].variant() {
-                            if !codes.contains(&v_err(raise_code)) {
-                                continue;
-                            }
+                let HandlerType::Catch(cnt) = handler.handler_type else {
+                    continue;
+                };
+                // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
+                // non-list value, or a list containing the error code.
+                // TODO check for 'cnt' being too large. not sure how to handle, tho
+                // TODO this actually i think is wrong, it needs to pull two values off the stack
+                let i = handler.valstack_pos;
+                for j in (i - cnt)..i {
+                    if let Variant::List(codes) = &frame.valstack[j].variant() {
+                        if !codes.contains(&v_err(raise_code)) {
+                            continue;
                         }
-                        return Some(i);
                     }
+                    return Some(a);
                 }
             }
         }
