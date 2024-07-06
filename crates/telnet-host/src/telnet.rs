@@ -30,7 +30,7 @@ use uuid::Uuid;
 
 use moor_values::model::{CommandError, VerbProgramError};
 use moor_values::util::parse_into_words;
-use moor_values::var::Objid;
+use moor_values::var::{Objid, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, narrative_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
@@ -138,9 +138,15 @@ impl TelnetConnection {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::Narrative(_author, event) => {
-                            let msg = event.event();
-                            let moor_values::model::Event::TextNotify(msg_text) = msg;
-                            self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
+                            let moor_values::model::Event::Notify(msg, _content_type) = event.event();
+                            // TODO: Handle non text/plain content type
+                            let msg_text = match msg.variant() {
+                                Variant::Str(s) => s.as_str().to_string(),
+                                _ => {
+                                    msg.to_string()
+                                }
+                            };
+                            self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(_request_id) => {
                             bail!("RequestInput before login");
@@ -311,9 +317,15 @@ impl TelnetConnection {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::Narrative(_author, event) => {
-                            let msg = event.event();
-                            let moor_values::model::Event::TextNotify(msg_text) = msg;
-                            self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
+                            let moor_values::model::Event::Notify(msg, _content_type) = event.event();
+                            // TODO: Handle non text/plain content type
+                            let msg_text = match msg.variant() {
+                                Variant::Str(s) => s.as_str().to_string(),
+                                _ => {
+                                    msg.to_string()
+                                }
+                            };
+                            self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(request_id) => {
                             // Server is requesting that the next line of input get sent through as a response to this request.

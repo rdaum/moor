@@ -50,17 +50,44 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(noop, bf_noop);
 
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 2 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let msg = bf_args.args[1].variant();
-    let Variant::Str(msg) = msg else {
-        return Err(BfErr::Code(E_TYPE));
+
+    // Optional 3rd argument is content-type.
+    let content_type = if bf_args.args.len() == 3 {
+        let content_type = bf_args.args[2].variant();
+        let Variant::Str(content_type) = content_type else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        Some(content_type.as_str().to_string())
+    } else {
+        None
     };
+
+    // The message is the 2nd argument.
+    // If content-type is text/* anything (or default) this must be a string, and is validated as such
+    // up-front. We do this to remain compatible with existing MOO core assumptions.
+    // Otherwise, we pass on the Var value unmodified.
+    let msg = bf_args.args[1].variant();
+
+    let must_be_str = if content_type.is_none() {
+        true
+    } else if let Some(content_type) = &content_type {
+        content_type.starts_with("text/")
+    } else {
+        false
+    };
+
+    if must_be_str {
+        let Variant::Str(_) = msg else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+    }
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args
@@ -69,7 +96,11 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_obj_owner_perms(*player)
         .map_err(world_state_bf_err)?;
 
-    let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
+    let event = NarrativeEvent::notify(
+        bf_args.exec_state.caller(),
+        bf_args.args[1].clone(),
+        content_type,
+    );
     bf_args.task_scheduler_client.notify(*player, event);
 
     // MOO docs say this should return none, but in reality it returns 1?

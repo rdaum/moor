@@ -31,9 +31,9 @@ pub use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::AsByteBuffer;
 use thiserror::Error;
 
-use crate::var::Error;
 use crate::var::Objid;
 use crate::var::Symbol;
+use crate::var::{Error, Var};
 
 mod defset;
 mod r#match;
@@ -167,7 +167,12 @@ pub struct NarrativeEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum Event {
     /// The typical "something happened" descriptive event.
-    TextNotify(String),
+    /// Text +content-type
+    ///  - "text/plain" for plain text
+    ///  - "text/html" for HTML
+    ///  - "text/markdown" for Markdown
+    /// etc.
+    Notify(Var, String),
     // TODO: Other Event types on Session stream
     //   other events that might happen here would be things like (local) "object moved" or "object
     //   created."
@@ -175,11 +180,11 @@ pub enum Event {
 
 impl NarrativeEvent {
     #[must_use]
-    pub fn notify_text(author: Objid, event: String) -> Self {
+    pub fn notify(author: Objid, event: Var, content_type: Option<String>) -> Self {
         Self {
             timestamp: SystemTime::now(),
             author,
-            event: Event::TextNotify(event),
+            event: Event::Notify(event, content_type.unwrap_or("text/plain".to_string())),
         }
     }
 

@@ -19,7 +19,8 @@ use std::time::SystemTime;
 use clap::Parser;
 use clap_derive::Parser;
 use color_eyre::owo_colors::OwoColorize;
-use moor_values::var::Objid;
+use moor_values::model::Event::Notify;
+use moor_values::var::{Objid, Variant};
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::{ColorMode, DefaultEditor, ExternalPrinter};
@@ -243,14 +244,13 @@ fn console_loop(
         .spawn(move || loop {
             match narrative_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
-                    printer
-                        .print(
-                            (match msg.event() {
-                                moor_values::model::Event::TextNotify(s) => s,
-                            })
-                            .to_string(),
-                        )
-                        .unwrap();
+                    let Notify(msg, _content_type) = msg.event();
+                    // TODO: Handle non text/plain content type
+                    let msg_text = match msg.variant() {
+                        Variant::Str(s) => s.as_str().to_string(),
+                        _ => msg.to_literal(),
+                    };
+                    printer.print(msg_text).unwrap();
                 }
                 Ok(ConnectionEvent::SystemMessage(o, msg)) => {
                     printer

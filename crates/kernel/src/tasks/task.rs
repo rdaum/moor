@@ -744,7 +744,10 @@ mod tests {
         };
         assert_eq!(player, SYSTEM_OBJECT);
         assert_eq!(event.author(), SYSTEM_OBJECT);
-        assert_eq!(event.event, Event::TextNotify("12345".to_string()));
+        assert_eq!(
+            event.event,
+            Event::Notify(v_str("12345"), "text/plain".to_string())
+        );
 
         // Also scheduler should have received a TaskSuccess message.
         let (task_id, msg) = control_receiver.recv().unwrap();

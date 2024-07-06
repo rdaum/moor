@@ -12,10 +12,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::host::var_as_json;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use moor_values::model::CommandError;
+use moor_values::model::{CommandError, Event};
 use moor_values::var::Objid;
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::narrative_recv;
@@ -25,12 +26,14 @@ use rpc_common::ConnectionEvent;
 use rpc_common::{
     AuthToken, ClientToken, ConnectType, RpcRequest, RpcRequestError, RpcResponse, RpcResult,
 };
+use serde_json::Value;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 use tmq::subscribe::Subscribe;
 use tokio::select;
 use tracing::{debug, error, info, trace};
 use uuid::Uuid;
+
 pub struct WebSocketConnection {
     pub(crate) player: Objid,
     pub(crate) peer_addr: SocketAddr,
@@ -49,7 +52,8 @@ pub struct NarrativeOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     system_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+    message: Option<Value>,
+    content_type: String,
     server_time: SystemTime,
 }
 
@@ -69,6 +73,7 @@ impl WebSocketConnection {
                 origin_player: self.player.0,
                 system_message: Some(connect_message.to_string()),
                 message: None,
+                content_type: "text/plain".to_string(),
                 server_time: SystemTime::now(),
             },
         )
@@ -103,17 +108,18 @@ impl WebSocketConnection {
                                 origin_player: author.0,
                                 system_message: Some(msg),
                                 message: None,
+                                content_type: "text/plain".to_string(),
                                 server_time: SystemTime::now(),
                             }).await;
                         }
                         ConnectionEvent::Narrative(author, event) => {
                             let msg = event.event();
+                            let Event::Notify(msg, content_type) = msg;
                             Self::emit_event(&mut ws_sender, NarrativeOutput {
                                 origin_player: author.0,
                                 system_message: None,
-                                message: Some(match msg {
-                                    moor_values::model::Event::TextNotify(msg) => msg,
-                                }),
+                                message: Some(var_as_json(&msg)),
+                                content_type,
                                 server_time: event.timestamp(),
                             }).await;
                         }
@@ -125,6 +131,7 @@ impl WebSocketConnection {
                                 origin_player: self.player.0,
                                 system_message: Some("** Disconnected **".to_string()),
                                 message: None,
+                                content_type: "text/plain".to_string(),
                                 server_time: SystemTime::now(),
                             }).await;
                             ws_sender.close().await.expect("Unable to close connection");
@@ -183,6 +190,7 @@ impl WebSocketConnection {
                         origin_player: self.player.0,
                         system_message: Some("I don't understand that.".to_string()),
                         message: None,
+                        content_type: "text/plain".to_string(),
                         server_time: SystemTime::now(),
                     },
                 )
@@ -195,6 +203,7 @@ impl WebSocketConnection {
                         origin_player: self.player.0,
                         system_message: Some("I don't know what you're talking about.".to_string()),
                         message: None,
+                        content_type: "text/plain".to_string(),
                         server_time: SystemTime::now(),
                     },
                 )
@@ -207,6 +216,7 @@ impl WebSocketConnection {
                         origin_player: self.player.0,
                         system_message: Some("I don't know how to do that.".to_string()),
                         message: None,
+                        content_type: "text/plain".to_string(),
                         server_time: SystemTime::now(),
                     },
                 )
@@ -219,6 +229,7 @@ impl WebSocketConnection {
                         origin_player: self.player.0,
                         system_message: Some("You can't do that.".to_string()),
                         message: None,
+                        content_type: "text/plain".to_string(),
                         server_time: SystemTime::now(),
                     },
                 )
