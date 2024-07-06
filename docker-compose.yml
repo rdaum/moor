@@ -30,7 +30,7 @@ services:
     working_dir: /moor
     command: >
         sh -c "RUST_BACKTRACE=1 cargo watch -w crates/kernel -w crates/rpc-common -w crates/daemon -w crates/values -w crates/db -x 
-        'run -p moor-daemon -- development.db --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db'"
+        'run -p moor-daemon -- development.db --rpc-listen=tcp://0.0.0.0:7899 --narrative-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db'"
     ports:
       # ZMQ ports
       - "7899:7899"
