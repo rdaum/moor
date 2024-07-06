@@ -159,7 +159,7 @@ the GPL is the right thing to do.
 
 The bulk of development has been by [myself](https://github.com/rdaum).
 
-Extensive work on the decompiler/unparser, along with general testing, code santiation, and cleanup has been done by
+Extensive work on the decompiler/unparser, along with general testing, code sanitization, and cleanup has been done by
 [Norman Nunley](https://github.com/nnunley).
 
 Implementation of a robust integration testing framework, along with porting a pile of tests from ToastStunt, and
@@ -173,7 +173,7 @@ Stephen White. Successive versions and forks have been maintained by a number of
 
 ### What's done?
 
-At this point `Moor` is capable of executing msot of the LambdaMOO 1.8.x system, and is capable of running existing
+At this point `Moor` is capable of executing most of the LambdaMOO 1.8.x system, and is capable of running existing
 LambdaMOO databases. This includes support for the full language, the bulk of builtin functions (enough to run the cores
 I've tried),
 the scheduler including forked and suspended tasks (including persisting them between restarts), importing and exporting
