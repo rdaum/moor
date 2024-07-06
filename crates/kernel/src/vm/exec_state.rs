@@ -85,9 +85,7 @@ impl VMExecState {
             let verb_name = activation.verb_name;
             let definer = activation.verb_definer();
             let player = activation.player;
-            // TODO: Line numbers in 'callers' stack is not implemented
-            //   Should be possible now that we have decompilation
-            let line_number = 0;
+            let line_number = activation.frame.find_line_no().unwrap_or(0);
             let this = activation.this;
             let perms = activation.permissions;
             let programmer = match activation.frame {
