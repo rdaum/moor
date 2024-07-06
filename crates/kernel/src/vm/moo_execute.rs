@@ -95,7 +95,7 @@ pub fn moo_frame_execute(
 
     // The per-execution slice count. This is used to limit the amount of work we do in a single
     // execution slice for this task.
-    // We should not execute more than `tick_slice` in a single VM intruction fetch/execute
+    // We should not execute more than `tick_slice` in a single VM instruction fetch/execute
     // run. This is to allow us to be responsive to the task scheduler.
     // Note this is not the same as the total amount of ticks aportioned to the task -- that's
     // `max_ticks` on the task itself.

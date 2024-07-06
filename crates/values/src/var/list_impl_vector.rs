@@ -397,14 +397,14 @@ mod tests {
     }
 
     #[test]
-    fn test_list_contains_case_insenstive() {
+    fn test_list_contains_case_insensitive() {
         let l = ListImplVector::from_slice(&[v_string("foo".into()), v_string("bar".into())]);
         assert!(l.contains(&v_string("FOO".into())));
         assert!(l.contains(&v_string("BAR".into())));
     }
 
     #[test]
-    fn test_list_contains_case_senstive() {
+    fn test_list_contains_case_sensitive() {
         let l = ListImplVector::from_slice(&[v_string("foo".into()), v_string("bar".into())]);
         assert!(!l.contains_case_sensitive(&v_string("FOO".into())));
         assert!(!l.contains_case_sensitive(&v_string("BAR".into())));
