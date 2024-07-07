@@ -1,0 +1,4 @@
+// The test core doesn't define a `huh` verb.
+// Test that we get the correct default `huh` message.
+% discombobulate
+=I couldn't understand that.
