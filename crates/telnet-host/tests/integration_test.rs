@@ -155,3 +155,10 @@ fn test_echo() {
 fn test_suspend_read_notify() {
     test_moot_with_telnet_host("suspend_read_notify");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial(telnet_host)]
+fn test_huh() {
+    test_moot_with_telnet_host("huh");
+}

@@ -331,7 +331,7 @@ impl TelnetConnection {
         match task_error {
             SchedulerError::CommandExecutionError(CommandError::CouldNotParseCommand) => {
                 self.write
-                    .send("I don't understand that.".to_string())
+                    .send("I couldn't understand that.".to_string())
                     .await?;
             }
             SchedulerError::CommandExecutionError(CommandError::NoObjectMatch) => {
@@ -341,7 +341,7 @@ impl TelnetConnection {
             }
             SchedulerError::CommandExecutionError(CommandError::NoCommandMatch) => {
                 self.write
-                    .send("I don't understand that.".to_string())
+                    .send("I couldn't understand that.".to_string())
                     .await?;
             }
             SchedulerError::CommandExecutionError(CommandError::PermissionDenied) => {
