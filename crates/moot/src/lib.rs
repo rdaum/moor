@@ -369,19 +369,23 @@ impl MootClient {
     where
         S: AsRef<str>,
     {
-        eprintln!("{} >> {}", self.port(), s.as_ref());
         let port = self.port();
         let mut writer = BufWriter::new(&mut self.stream);
-        writer
+        let result = writer
             .write_all(s.as_ref().as_bytes())
             .and_then(|_| writer.write_all(b"\n"))
-            .wrap_err_with(|| format!("writing port={port}"))
+            .wrap_err_with(|| format!("writing port={port}"));
+        eprintln!("{} >> {}", port, s.as_ref());
+        result
     }
 
     fn read_line(&self) -> eyre::Result<Option<String>> {
         let mut buf = String::new();
         match BufReader::new(&self.stream).read_line(&mut buf) {
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                eprintln!("{} read timeout", self.port());
+                Ok(None)
+            }
             Err(e) => {
                 Err(e).wrap_err_with(|| format!("MootClient::read_line port={}", self.port()))
             }
