@@ -305,6 +305,11 @@ pub enum TaskStart {
     /// The scheduler is telling the task to parse a command and execute whatever verbs are
     /// associated with it.
     StartCommandVerb { player: Objid, command: String },
+    /// The task start has been turned into an invocation to $do_command, which is a verb on the
+    /// system object that is called when a player types a command. If it returns true, all is
+    /// well and we just return. If it returns false, we intercept and turn it back into a
+    /// StartCommandVerb and dispatch it as an old school parsed command.
+    StartDoCommand { player: Objid, command: String },
     /// The scheduler is telling the task to run a (method) verb.
     StartVerb {
         player: Objid,
